@@ -9,6 +9,21 @@
 
 ## Active Terminals
 
+<!-- opus-relevance-funnel (2026-06-05): Phase 4 (forgetting) DONE — committed + pushed (measure-first;
+     actual deletion HELD for user approval per destructive-ops protocol). Also ran the dependabot audit:
+     cargo audit = 0 real vulns (18 unmaintained warnings, all transitive GTK3/Tauri — unfixable by us);
+     pnpm audit = 2 dev-only (vitest critical needs 3→4 major bump; brace-expansion moderate → override).
+     PHASE 4 relevance-aware forgetting: existing run_maintenance prunes by last_seen age (backwards —
+     re-listed noise never ages out). New db::{count_prunable_noise, get_prunable_noise_sample, prune_noise}
+     (shared predicate) forget CONFIRMED noise (relevance<thresh, scored, created_at>N days) while
+     protecting high-stakes (security/breaking/CVE) + anything ≥ threshold. Bounded per call. Commands
+     measure_noise_prune (dry-run) + run_noise_prune (bounded delete). 1 test. LIVE dry-run: default
+     (0.05,90d)=0 (corpus ~40d young, safe); (0.05,30d)=114 candidates, all genuine off-stack noise
+     (TS/Angular Qs, HF models, unused npm/go pkgs), 0 dep-matched/high-stakes. NOT auto-wired; deletion
+     awaits approval. Files: db/history.rs, autophagy_commands.rs, lib.rs, src/lib/commands.ts.
+     STAGED: upstream source filtering (fetch-time dep filter for registries — the bigger intake lever). -->
+     <!-- Commit Lock RELEASED (opus-relevance-funnel) -->
+
 <!-- opus-relevance-funnel (2026-06-05): Phase 1+2 DONE — committed + pushed. Builds on Phase 0 (2aee268c).
      PHASE 2 (backfill worker): the analysis path only scores a recent window, so ~88% of the corpus
      (31k items, 22k >7d old) was NEVER scored. New analysis_backfill::backfill_unscored_cycle scores

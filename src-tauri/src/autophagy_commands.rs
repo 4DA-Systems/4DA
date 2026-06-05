@@ -252,6 +252,80 @@ pub async fn set_cleanup_retention(days: u32) -> Result<()> {
 }
 
 // ============================================================================
+// Relevance-aware forgetting (Phase 4) — measure-first, then bounded prune
+// ============================================================================
+
+/// Conservative defaults: only items scored as near-zero noise, older than a
+/// quarter, and never high-stakes. Tunable per call.
+const DEFAULT_NOISE_THRESHOLD: f64 = 0.05;
+const DEFAULT_MIN_AGE_DAYS: i64 = 90;
+/// Per-call delete cap — keeps each transaction bounded; call repeatedly to converge.
+const DEFAULT_MAX_DELETE: usize = 2000;
+
+/// Dry-run report for relevance-aware forgetting.
+#[derive(Debug, Clone, Serialize)]
+pub struct NoisePruneReport {
+    pub noise_threshold: f64,
+    pub min_age_days: i64,
+    pub total_items: i64,
+    pub prunable_count: i64,
+    pub prunable_pct: f64,
+    pub sample: Vec<crate::db::PrunableSample>,
+}
+
+/// DRY-RUN: report exactly what relevance-aware forgetting would delete, without
+/// deleting anything. Use this to review the policy before enabling the prune.
+#[tauri::command]
+pub async fn measure_noise_prune(
+    noise_threshold: Option<f64>,
+    min_age_days: Option<i64>,
+) -> Result<NoisePruneReport> {
+    let t = noise_threshold.unwrap_or(DEFAULT_NOISE_THRESHOLD);
+    let age = min_age_days.unwrap_or(DEFAULT_MIN_AGE_DAYS);
+    let db = crate::get_database().context("database not initialized")?;
+    let total_items = db.get_db_stats().map_err(FourDaError::Db)?.source_items;
+    let prunable_count = db.count_prunable_noise(t, age).map_err(FourDaError::Db)?;
+    let sample = db
+        .get_prunable_noise_sample(t, age, 25)
+        .map_err(FourDaError::Db)?;
+    let prunable_pct = if total_items > 0 {
+        (prunable_count as f64 / total_items as f64) * 1000.0_f64.round() / 10.0
+    } else {
+        0.0
+    };
+    Ok(NoisePruneReport {
+        noise_threshold: t,
+        min_age_days: age,
+        total_items,
+        prunable_count,
+        prunable_pct,
+        sample,
+    })
+}
+
+/// Delete a bounded batch of confirmed-noise items (worst+oldest first). DESTRUCTIVE —
+/// items are re-fetchable from their source, but this removes rows. Bounded by
+/// `max_delete`; returns the number deleted. Run `measure_noise_prune` first.
+#[tauri::command]
+pub async fn run_noise_prune(
+    noise_threshold: Option<f64>,
+    min_age_days: Option<i64>,
+    max_delete: Option<usize>,
+) -> Result<usize> {
+    let t = noise_threshold.unwrap_or(DEFAULT_NOISE_THRESHOLD);
+    let age = min_age_days.unwrap_or(DEFAULT_MIN_AGE_DAYS);
+    let cap = max_delete.unwrap_or(DEFAULT_MAX_DELETE);
+    let db = crate::get_database().context("database not initialized")?;
+    let deleted = db.prune_noise(t, age, cap).map_err(FourDaError::Db)?;
+    info!(
+        target: "4da::autophagy",
+        deleted, noise_threshold = t, min_age_days = age,
+        "Relevance-aware noise prune completed"
+    );
+    Ok(deleted)
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 

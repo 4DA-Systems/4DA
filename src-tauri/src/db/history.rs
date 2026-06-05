@@ -24,6 +24,17 @@ pub struct MaintenanceResult {
     pub vacuumed: bool,
 }
 
+/// One item that relevance-aware forgetting (Phase 4) would delete — surfaced by the
+/// dry-run so the policy can be inspected before any deletion is enabled.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PrunableSample {
+    pub id: i64,
+    pub title: String,
+    pub source_type: String,
+    pub relevance_score: f64,
+    pub created_at: String,
+}
+
 #[derive(Debug, Clone, Default, serde::Serialize, TS)]
 #[ts(export, export_to = "bindings/")]
 #[cfg_attr(test, derive(PartialEq))]
@@ -175,6 +186,110 @@ impl Database {
             deleted_necessity,
             vacuumed: true,
         })
+    }
+
+    // ========================================================================
+    // Relevance-aware forgetting (Phase 4 of the scoring relevance funnel)
+    // ========================================================================
+    //
+    // The blunt `run_maintenance` prune deletes by `last_seen` age regardless of
+    // value — but firehose noise keeps getting re-listed by its source, so its
+    // `last_seen` stays fresh and it never ages out, while a quiet-but-relevant
+    // dependency item would. That's backwards. This forgets CONFIRMED noise
+    // (scored below `noise_threshold`) by `created_at` age, while structurally
+    // protecting anything that could matter: high-stakes items (security/breaking/
+    // CVE) and anything that scored at or above the threshold are never touched.
+    // Items are re-fetchable from their source, so this is a cache eviction of
+    // proven-irrelevant content, not a loss of signal.
+
+    /// The shared WHERE clause for relevance-aware forgetting. Kept in one place so
+    /// the dry-run count, the sample, and the actual delete can never diverge.
+    fn noise_prune_predicate(noise_threshold: f64, min_age_days: i64) -> String {
+        format!(
+            "relevance_score IS NOT NULL \
+               AND relevance_score < {noise_threshold} \
+               AND scored_pipeline_version >= 1 \
+               AND created_at < datetime('now', '-{min_age_days} days') \
+               AND cve_ids IS NULL \
+               AND (content_type IS NULL \
+                    OR content_type NOT IN ('security_advisory', 'breaking_change'))"
+        )
+    }
+
+    /// DRY-RUN: how many items the relevance-aware forget would delete. Read-only.
+    pub fn count_prunable_noise(
+        &self,
+        noise_threshold: f64,
+        min_age_days: i64,
+    ) -> SqliteResult<i64> {
+        let conn = self.conn.lock();
+        let sql = format!(
+            "SELECT COUNT(*) FROM source_items WHERE {}",
+            Self::noise_prune_predicate(noise_threshold, min_age_days)
+        );
+        conn.query_row(&sql, [], |r| r.get(0))
+    }
+
+    /// DRY-RUN: a sample of the worst+oldest items the forget would delete, for
+    /// inspection before enabling deletion. Read-only.
+    pub fn get_prunable_noise_sample(
+        &self,
+        noise_threshold: f64,
+        min_age_days: i64,
+        limit: usize,
+    ) -> SqliteResult<Vec<PrunableSample>> {
+        let conn = self.conn.lock();
+        let sql = format!(
+            "SELECT id, title, source_type, relevance_score, created_at
+             FROM source_items WHERE {}
+             ORDER BY relevance_score ASC, created_at ASC
+             LIMIT ?1",
+            Self::noise_prune_predicate(noise_threshold, min_age_days)
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            Ok(PrunableSample {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                source_type: row.get(2)?,
+                relevance_score: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Delete a bounded batch of confirmed-noise items (worst+oldest first).
+    /// Bounded by `max_delete` so a single call can never run an unbounded
+    /// transaction; call repeatedly to converge. ON DELETE CASCADE handles
+    /// dependent rows; orphaned `source_vec` embeddings are swept too. Returns the
+    /// number of source_items deleted.
+    pub fn prune_noise(
+        &self,
+        noise_threshold: f64,
+        min_age_days: i64,
+        max_delete: usize,
+    ) -> SqliteResult<usize> {
+        let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
+        let deleted = tx.execute(
+            &format!(
+                "DELETE FROM source_items WHERE id IN (
+                     SELECT id FROM source_items WHERE {}
+                     ORDER BY relevance_score ASC, created_at ASC
+                     LIMIT ?1
+                 )",
+                Self::noise_prune_predicate(noise_threshold, min_age_days)
+            ),
+            params![max_delete as i64],
+        )?;
+        // Sweep embeddings orphaned by the delete (source_vec has no FK cascade).
+        let _ = tx.execute(
+            "DELETE FROM source_vec WHERE rowid NOT IN (SELECT id FROM source_items)",
+            [],
+        );
+        tx.commit()?;
+        Ok(deleted)
     }
 
     /// Get database statistics
@@ -548,5 +663,57 @@ mod tests {
         // vacuum_if_needed should not error
         db.vacuum_if_needed(deleted, 100).unwrap(); // threshold not met, no vacuum
         db.vacuum_if_needed(deleted, 1).unwrap(); // threshold met, runs vacuum
+    }
+
+    /// Relevance-aware forgetting must delete ONLY confirmed old noise, and must
+    /// structurally protect: relevant items, high-stakes items, and recent items.
+    #[test]
+    fn test_relevance_aware_noise_prune() {
+        let db = test_db();
+
+        let old_noise = insert_test_item(&db, "hackernews", "noise1", "old junk", "x");
+        let relevant = insert_test_item(&db, "crates_io", "rel1", "your stack release", "x");
+        let high_stakes = insert_test_item(&db, "cve", "cve1", "old advisory", "x");
+        let recent_noise = insert_test_item(&db, "reddit", "noise2", "fresh junk", "x");
+
+        {
+            let conn = db.conn.lock();
+            // old, near-zero noise → PRUNABLE
+            conn.execute(
+                "UPDATE source_items SET relevance_score=0.02, scored_pipeline_version=5, created_at=datetime('now','-120 days') WHERE id=?1",
+                rusqlite::params![old_noise],
+            ).unwrap();
+            // old but RELEVANT → protected (score >= threshold)
+            conn.execute(
+                "UPDATE source_items SET relevance_score=0.62, scored_pipeline_version=5, created_at=datetime('now','-120 days') WHERE id=?1",
+                rusqlite::params![relevant],
+            ).unwrap();
+            // old, low score, but HIGH-STAKES → protected (content_type carve-out)
+            conn.execute(
+                "UPDATE source_items SET relevance_score=0.02, scored_pipeline_version=5, content_type='security_advisory', created_at=datetime('now','-120 days') WHERE id=?1",
+                rusqlite::params![high_stakes],
+            ).unwrap();
+            // low score but RECENT → protected (inside the age window)
+            conn.execute(
+                "UPDATE source_items SET relevance_score=0.02, scored_pipeline_version=5, created_at=datetime('now','-10 days') WHERE id=?1",
+                rusqlite::params![recent_noise],
+            ).unwrap();
+        }
+
+        // Dry-run: exactly one item qualifies.
+        assert_eq!(db.count_prunable_noise(0.05, 90).unwrap(), 1);
+        let sample = db.get_prunable_noise_sample(0.05, 90, 10).unwrap();
+        assert_eq!(sample.len(), 1);
+        assert_eq!(sample[0].id, old_noise);
+
+        // Actual prune removes only the old noise; the protected three survive.
+        let deleted = db.prune_noise(0.05, 90, 100).unwrap();
+        assert_eq!(deleted, 1);
+        assert_eq!(db.total_item_count().unwrap(), 3);
+        assert_eq!(
+            db.count_prunable_noise(0.05, 90).unwrap(),
+            0,
+            "nothing left to prune after the sweep"
+        );
     }
 }
