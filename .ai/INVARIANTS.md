@@ -111,6 +111,14 @@ const LEARNED_LAYER_WEIGHT: f32 = 0.6;
 - NO transmission of API keys to any remote service (except the intended API)
 - Users own their keys entirely
 - **Verification:** Network traffic analysis
+- **Decision (2026-06) — cloud-LLM consent is informed-disclosure, not an enforced gate.** The BYOK
+  setup UI (onboarding + Settings → AI Provider) discloses what is sent to the provider; configuring
+  a cloud provider with a key records that acceptance (`cloud_llm_disclosure_accepted`, set at
+  configure-time in `settings/manager.rs`, never silently at call-time). We deliberately do NOT block
+  cloud calls behind an acknowledgment gate: it is the user's own key and data with no third-party
+  recipient — 4DA receives nothing — so a hard gate would add friction to the recommended BYOK path
+  for no protective benefit. Zero-retention defaults: first-party OpenAI requests send `store:false`;
+  other providers are governed by their own policy (documented in `NETWORK.md` §2a).
 
 ### INV-032: Local-First Architecture
 - Core functionality MUST work completely offline (with Ollama)

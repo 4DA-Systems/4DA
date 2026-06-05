@@ -137,6 +137,13 @@ embeddings) — with no key configured, zero LLM network calls leave the machine
   titles with **no** snippet body; default `full` sends the 2000-char-capped snippet.
 - **Auth:** your key, sent as `x-api-key` (Anthropic) or `Authorization: Bearer` (OpenAI-compatible).
   Keys are stored only on your machine (keychain) and never sent anywhere but the provider you chose.
+- **Retention (zero-retention defaults):** first-party **OpenAI** requests send `store: false`,
+  opting out of OpenAI storing the completion for their dashboard/retrieval. **Anthropic** has no
+  per-request retention control — zero-data-retention is an account-level agreement you make with
+  Anthropic. **OpenAI-compatible** providers (Groq, Mistral, OpenRouter, …) are governed by each
+  provider's own data policy; `store` is OpenAI-specific and is deliberately *not* sent to them
+  (they may reject unknown fields, and it would have no effect). In every case your data goes only to
+  the provider you chose — never to 4DA.
 - **Fallback:** on a cloud failure (network, not rate-limit) 4DA falls back to local Ollama.
 - **Disable:** remove the API key / select Ollama as the provider.
 

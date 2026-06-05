@@ -9,6 +9,14 @@
 
 ## Active Terminals
 
+<!-- opus-relevance-funnel (2026-06-05): ALL DONE + PUSHED (origin/main @ 61bf34de, 0/0 sync). The
+     scoring relevance funnel is COMPLETE: Phase 0 triage gate+audit (2aee268c), Phase 1+2 coverage+
+     backfill (743d68ac, robustness a6f23162), Phase 4 forgetting/manual-only (2b27db15), Phase 5
+     per-developer calibration (79cf28ba), Phase 3 re-examination + cache.rs→scoring_queries.rs split
+     (61bf34de). NO active claims; all funnel files free. Remaining work is OPTIONAL (Phase 5b /
+     source-selection / dependabot tidy) — see .claude/plans/PENDING-DECISION.md + scoring-relevance-funnel.md.
+     Terminal closing for compaction. -->
+
 ### Terminal: opus-privacy-truth (started 2026-06-05)
 Working on: privacy-claim accuracy hardening (research-driven). Truth-fixing false "data never
 leaves / zero telemetry" claims, making the cloud-LLM consent gate real, zero-retention defaults,
@@ -27,9 +35,11 @@ audit-proof NETWORK.md, positioning doc. NONE of these overlap the scoring/triag
 **Status**: Wave 1a DONE — committed local @ c164edf3 (Sentry fully removed; local Export Diagnostics
 + log_frontend_error; scrubber w/ 10 tests; crash_reporting_opt_in purged). Push HELD for user.
 NOW: Wave 1b (truth-fix BYOK "data never leaves" claims in hardcoded components + 13 locales + docs).
-**Commit Lock**: RELEASED (opus-privacy-truth). ALL DONE + PUSHED (origin/main): privacy waves
-(c164edf3..3045be30) + repo/website consistency (4b1e4be7) + settings BYOK disclosure (851ca4fc)
-+ install-doc polish (this commit). audit:public-ready clean; app live-verified healthy. Claim cleared.
+**Commit Lock**: HELD (opus-privacy-truth) — A+ closing commit (consent ADR + retention test + NETWORK line).
+ALL DONE + PUSHED: privacy waves (c164edf3..3045be30) + repo/website consistency (4b1e4be7) + settings
+BYOK disclosure (851ca4fc) + install-doc polish (e411b38f). Website live-verified on 4da.ai. A+ closers:
+INVARIANTS INV-031 consent decision, NETWORK §2a per-provider retention, apply_openai_retention helper
++ 3 tests (llm.rs/llm_stream.rs). audit:public-ready clean. NOT touching other terminal's scoring_queries.rs.
 ALL WAVES DONE + PUSHED (origin/main @ 3045be30). Consistency pass: site/src/*.njk (8) + ~22 docs +
 tauri.conf.json listing. NEXT: commit, then A+ Tier-1 (settings disclosure, zero-retention completeness).
 --- prior ---
