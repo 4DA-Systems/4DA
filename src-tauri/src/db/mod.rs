@@ -16,6 +16,7 @@ pub(crate) mod hybrid_search;
 pub(crate) mod llm_judgments;
 pub(crate) mod migrations;
 mod osv_advisories;
+mod scoring_queries;
 pub mod source_item_deps;
 mod sources;
 #[cfg(test)]
@@ -25,6 +26,7 @@ pub use cache::*;
 pub use dep_snapshots::*;
 pub use dependencies::*;
 pub use history::*;
+pub use scoring_queries::*;
 pub use sources::*;
 
 use chrono::{DateTime, Utc};

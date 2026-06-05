@@ -71,6 +71,8 @@ pub struct MonitoringState {
     pub last_backfill: AtomicU64,
     /// Last per-developer calibration-monitor timestamp (unix seconds)
     pub last_calibration_check: AtomicU64,
+    /// Last dependency-change re-examination timestamp (unix seconds)
+    pub last_reexamination: AtomicU64,
     /// When true, the briefing is waiting for a fresh analysis before firing.
     /// Set by the briefing-due check; cleared after the briefing fires.
     pub briefing_needs_fresh_data: AtomicBool,
@@ -97,6 +99,7 @@ impl Default for MonitoringState {
             last_dep_health_check: AtomicU64::new(0),
             last_backfill: AtomicU64::new(0),
             last_calibration_check: AtomicU64::new(0),
+            last_reexamination: AtomicU64::new(0),
             briefing_needs_fresh_data: AtomicBool::new(false),
             briefing_wait_ticks: AtomicU64::new(0),
         }
@@ -242,6 +245,9 @@ const BACKFILL_INTERVAL: u64 = 120; // 2 minutes
                                     // Per-developer calibration monitor — measures whether scoring is calibrated for THIS
                                     // developer from their own feedback. Drift is slow; 6h is ample and cheap (pure reads).
 const CALIBRATION_CHECK_INTERVAL: u64 = 21600; // 6 hours
+                                               // Re-examination — checks hourly whether the dependency graph changed; only does work
+                                               // (re-queues buried releases/advisories of now-tracked deps) when it actually changed.
+const REEXAMINATION_CHECK_INTERVAL: u64 = 3600; // 1 hour
 
 /// Sovereign Cold Boot — adaptive grace period (default).
 ///
@@ -613,6 +619,51 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
                         Err(e) => {
                             tracing::debug!(target: "4da::calibration", error = %e, "Calibration snapshot failed");
+                        }
+                    }
+                }
+            }
+
+            // Re-examination — "yesterday's noise becomes tomorrow's signal". When the
+            // developer's dependency graph changes, re-queue buried releases/advisories of
+            // now-tracked deps so the backfill re-scores them against the new profile.
+            // Checks hourly but only does work when the dep-set epoch HASH actually changes,
+            // so it's a no-op almost every time. The run timestamp is in-memory only (a
+            // no-op extra run after restart is harmless); DEP_EPOCH persists the hash.
+            let last_reexam = state.last_reexamination.load(Ordering::Relaxed);
+            if now - last_reexam
+                >= crate::scheduler_gate::effective_interval(REEXAMINATION_CHECK_INTERVAL)
+                && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Low)
+            {
+                state.last_reexamination.store(now, Ordering::Relaxed);
+                if let Ok(db) = crate::get_database() {
+                    match crate::scoring::build_scoring_context(db).await {
+                        Ok(ctx) => {
+                            let epoch = crate::scoring::reexamination::dep_epoch_hash(&ctx);
+                            let prev = crate::scheduler_state::get_persisted_timestamp(
+                                crate::scheduler_state::jobs::DEP_EPOCH,
+                            );
+                            if epoch != prev {
+                                let threshold = crate::get_relevance_threshold();
+                                let requeued =
+                                    crate::scoring::reexamination::requeue_reexaminable_items(
+                                        db, &ctx, threshold,
+                                    );
+                                crate::scheduler_state::persist_run(
+                                    crate::scheduler_state::jobs::DEP_EPOCH,
+                                    epoch,
+                                );
+                                if requeued > 0 {
+                                    info!(
+                                        target: "4da::reexamination",
+                                        requeued,
+                                        "Dependency graph changed — re-queued buried items for re-scoring"
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::debug!(target: "4da::reexamination", error = %e, "Re-examination skipped (context build failed)");
                         }
                     }
                 }

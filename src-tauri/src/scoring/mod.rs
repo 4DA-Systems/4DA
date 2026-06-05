@@ -26,6 +26,7 @@ mod pipeline_signals;
 mod pipeline_v2;
 #[allow(dead_code, unused_imports)]
 pub(crate) mod query_weighting;
+pub(crate) mod reexamination;
 mod semantic;
 #[cfg(test)]
 mod simulation;

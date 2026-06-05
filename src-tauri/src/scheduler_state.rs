@@ -50,6 +50,9 @@ pub mod jobs {
     pub const TEMPORAL_SNAPSHOT: &str = "temporal_snapshot";
     pub const BACKFILL: &str = "scoring_backfill";
     pub const CALIBRATION_MONITOR: &str = "calibration_monitor";
+    /// Stores the dependency-set epoch HASH (not a timestamp) — when it changes, the
+    /// re-examination job re-queues buried releases/advisories of now-tracked deps.
+    pub const DEP_EPOCH: &str = "dep_epoch_hash";
 }
 
 /// Hydrate in-memory monitoring atomics from persisted scheduler_state.
