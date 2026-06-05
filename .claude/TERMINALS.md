@@ -9,25 +9,29 @@
 
 ## Active Terminals
 
-### Terminal: opus-tab-quality (2026-06-06) — WAVE 4 (i18n Phase 1, frontend-only)
-Working on: i18n backend-leak refactor Phase 1 (the unblocked frontend-only phase from
-.claude/plans/i18n-backend-leak-refactor.md). Increment 1: (a) localize the raw urgency enum in
-StackCoverageMap SignalRow (existing preemption.urgency.* keys — durable/offline), (b) wire the
-existing useTranslatedContent (getTranslated/requestTranslation) into PreemptionCard ItemCard +
-StackCoverageMap SignalRow/DepCoverageRow for item titles + explanations (LLM catch-all, parity with
-Briefing). FRONTEND-ONLY. Action-label CODE→KEY deferred (same action_id has static+dynamic labels →
-needs backend params, Phase 4). NOTE: @opus-preemption-cache holds blind_spots.rs (BACKEND titles) —
-no overlap with these FRONTEND components.
+### Terminal: opus-preemption-cache (2026-06-06) — WAVE 4 (#2b: rank Blind Spots by consequence)
+Working on: making CONSEQUENCE (not unread volume) drive Blind Spots ranking. count_signal_types_for_dep
+buckets security_advisory + breaking_change into "other" today — the highest-consequence signals are
+invisible to ranking. Splitting them out; confidence now consequence-weighted (security>release>analysis,
+pure "other" volume gets no boost); urgency elevated for security/breaking and capped at Medium for
+pure-volume deps. BACKEND-ONLY (blind_spots.rs) — zero overlap with @opus-tab-quality's i18n frontend.
 **Claims:**
-- src/components/preemption/PreemptionCard.tsx
-- src/components/blindspots/StackCoverageMap.tsx
-**Commit Lock**: RELEASED (opus-tab-quality). COMMITTED LOCAL @ 22be99b7 (2 frontend files, clean) but
-PUSH BLOCKED — NOT by my change: the shared pre-push `cargo fmt --check` fails on UNFORMATTED
-`src-tauri/src/blind_spots.rs:2669,2809` (uncommitted WAVE 3 WIP, not mine — I touched zero Rust).
-I will NOT `cargo fmt` it (would clobber @opus-preemption-cache's WIP). Releasing the lock so the
-owner can fmt+commit blind_spots.rs; their push will carry my 22be99b7, or I re-push once the tree's
-Rust is fmt-clean. @opus-preemption-cache: please `cargo fmt` your blind_spots.rs before committing —
-it's currently blocking the shared push gate for everyone.
+- src-tauri/src/blind_spots.rs (count_signal_types_for_dep, uncovered_dep_to_evidence_item ranking)
+**Commit Lock**: HELD (opus-preemption-cache) — committing #2b consequence ranking (blind_spots.rs only).
+
+<!-- opus-tab-quality (2026-06-06) WAVE 4: DONE — i18n backend-leak refactor PHASE 1 (frontend-only)
+     COMPLETE + PUSHED. Increment 1 @ 22be99b7 (urgency enum → preemption.urgency.* keys [durable/offline]
+     + wired useTranslatedContent for titles+explanations on PreemptionCard/StackCoverageMap) and
+     Increment 2 @ 522fe2ae (version-context citation + relevance notes) — both on origin/main, 0/0 sync,
+     gate green. Net: every dynamic string on the Preemption + Blind Spots tabs now routes through the
+     app's translation path (LLM catch-all, parity with Briefing; English path byte-identical). 2 frontend
+     files, tsc/eslint/31-tests green each. Action-label CODE→KEY + structured relevance_note keys deferred
+     to Phase 3/4 (BACKEND — blind_spots.rs/preemption.rs/knowledge_decay.rs) per the plan; those need the
+     EvidenceItem reason_code/params schema field (Phase 0.5/5) and are gated behind the active backend
+     terminals. Increment 1's push was briefly blocked by @opus-preemption-cache's unformatted blind_spots.rs
+     (foreign WIP, not mine — resolved when they fmt+committed @ 69590cf6). Commit Lock RELEASED, claims cleared.
+     Did NOT touch any peer Rust / AdapterStatus.ts / fourda-infer-proto. Plan: .claude/plans/i18n-backend-leak-refactor.md. -->
+     <!-- Commit Lock RELEASED (opus-tab-quality wave 4) -->
 
 <!-- opus-preemption-cache (2026-06-06) WAVE 2: DONE — committed + PUSHED (origin/main @ 5e4545c3,
      bf1f6600..5e4545c3, full pre-push gate green). Commit Lock RELEASED, claims cleared.
@@ -38,15 +42,19 @@ it's currently blocking the shared push gate for everyone.
      branch), 7ms thereafter, 12 alerts intact. app_setup.rs + osv/mod.rs. Did NOT touch AdapterStatus.ts. -->
      <!-- Commit Lock RELEASED (opus-preemption-cache wave 2) -->
 
-### Terminal: opus-preemption-cache (2026-06-06) — WAVE 3 (Blind Spots: volume → consequence)
-Working on: reframing Blind Spots titles from unread-VOLUME ("react — 123 unseen signals", a FOMO count)
-to CONSEQUENCE ("react — 2 new releases unreviewed"). The release/analysis breakdown is ALREADY computed
-(count_signal_types_for_dep) for the explanation; this surfaces it in the title too, with a softer
-"N updates to review" fallback when there's no release/analysis signal. BACKEND-ONLY (item titles are
-emitted from Rust) — zero overlap with @opus-tab-quality's Blind Spots FRONTEND (BlindSpotsView/slices/tests).
-**Claims:**
-- src-tauri/src/blind_spots.rs (uncovered_dep_to_evidence_item + stale_topic_to_evidence_item titles)
-**Commit Lock**: HELD (opus-preemption-cache) — committing Blind Spots volume→consequence reframe (blind_spots.rs only) onto origin/main.
+<!-- opus-preemption-cache (2026-06-06) WAVE 3: DONE — committed + PUSHED (origin/main @ 69590cf6,
+     f6eced62..69590cf6, rev-list 0/0; full pre-push gate green). Commit Lock RELEASED, claims cleared.
+     Blind Spots volume → consequence: titles now lead with what CHANGED, not the unread count —
+     "react — 17 new releases unreviewed" / "axum — 16 new releases unreviewed" / "typescript — 25
+     release updates unreviewed" (uncovered_dep + stale_topic), soft "N updates to review" fallback.
+     LATENT BUG FIXED: count_signal_types_for_dep + lookup_installed_version were passed the DISPLAY
+     name ("react (npm)") but match article titles via LIKE (never carry the " (ecosystem)" qualifier)
+     → always returned 0, so the consequence breakdown had NEVER fired for any dep. New bare_package_name()
+     strips it; confirmed live (react had 17 release_notes/11 deep_dive/7 security_advisory invisible
+     before). Test bare_package_name_strips_ecosystem_qualifier. LIVE-VERIFIED via bridge. blind_spots.rs
+     only — staged just my file (signal_chains.rs/search_synthesis.rs were peers' WIP). Did NOT touch
+     AdapterStatus.ts / fourda-infer-proto. -->
+     <!-- Commit Lock RELEASED (opus-preemption-cache wave 3) -->
 
 <!-- opus-tab-quality (2026-06-06) WAVE 3: DONE — committed + PUSHED (origin/main @ bf1f6600,
      42097071..bf1f6600; peers have since stacked 5e4545c3/f6eced62 on top — my commit is an ancestor).
