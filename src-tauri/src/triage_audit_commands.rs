@@ -57,6 +57,73 @@ pub(crate) struct DroppedSample {
     pub similarity: f32,
 }
 
+/// Lightweight scoring-coverage snapshot (Phase 1 observability). Cheap COUNT queries
+/// only — no scoring-context build — so it can be called frequently / by the UI as the
+/// safety net that makes silent coverage collapse (the class of bug behind the i64::MAX
+/// stale-drain) visible.
+#[derive(Serialize)]
+pub(crate) struct ScoringCoverage {
+    pub total: i64,
+    pub scored: i64,
+    pub unscored: i64,
+    pub unscored_over_7d: i64,
+    pub on_current_version: i64,
+    pub current_pipeline_version: i32,
+    /// % of the whole corpus scored under the CURRENT pipeline — the number that was
+    /// ~2.6% when the stale-drain was silently empty.
+    pub current_version_coverage_pct: f32,
+    pub version_histogram: Vec<(i32, i64)>,
+}
+
+#[tauri::command]
+pub(crate) async fn get_scoring_coverage() -> Result<ScoringCoverage> {
+    let db = get_database()?;
+    let conn = db.conn.lock();
+    let total: i64 = conn.query_row("SELECT COUNT(*) FROM source_items", [], |r| r.get(0))?;
+    let scored: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM source_items WHERE relevance_score IS NOT NULL",
+        [],
+        |r| r.get(0),
+    )?;
+    let unscored_over_7d: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM source_items WHERE relevance_score IS NULL \
+         AND created_at < datetime('now','-7 days')",
+        [],
+        |r| r.get(0),
+    )?;
+    let on_current_version: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM source_items WHERE scored_pipeline_version = ?1",
+        [scoring::PIPELINE_VERSION],
+        |r| r.get(0),
+    )?;
+    let mut histogram: Vec<(i32, i64)> = Vec::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT scored_pipeline_version, COUNT(*) FROM source_items \
+             WHERE relevance_score IS NOT NULL GROUP BY scored_pipeline_version ORDER BY 1",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        for row in rows {
+            histogram.push(row?);
+        }
+    }
+    let current_version_coverage_pct = if total > 0 {
+        on_current_version as f32 / total as f32 * 100.0
+    } else {
+        0.0
+    };
+    Ok(ScoringCoverage {
+        total,
+        scored,
+        unscored: total - scored,
+        unscored_over_7d,
+        on_current_version,
+        current_pipeline_version: scoring::PIPELINE_VERSION,
+        current_version_coverage_pct,
+        version_histogram: histogram,
+    })
+}
+
 fn reason_label(r: TriageReason) -> &'static str {
     match r {
         TriageReason::HighStakes => "high_stakes",

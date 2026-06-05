@@ -9,18 +9,32 @@
 
 ## Active Terminals
 
-### Terminal: opus-relevance-funnel (started 2026-06-05)
-Working on: scoring relevance funnel — Phase 0 (measure before build). New cheap relevance-triage gate
-+ coverage/recall-audit harness, validated against the live 36k corpus BEFORE any pipeline wiring.
-Goal reframe: not "score everything" but "never miss what's relevant, score cheaply, full-score the few".
-**Claims:**
-- src-tauri/src/scoring/triage.rs (NEW — cheap gate + coverage metrics + unit tests)
-- src-tauri/src/scoring/mod.rs (register triage module + re-exports ONLY — append-only)
-- src-tauri/src/triage_audit_commands.rs (NEW — dev measurement/recall-audit command, crate root)
-- src-tauri/src/lib.rs (register the one new command — append-only)
-- src-tauri/src/db/cache.rs (NEW read-only get_triage_audit_rows for the recall audit)
-NO overlap with opus-score-orb-redesign (all frontend). NOT touching Cargo.lock / fourda-infer-proto.
-**Commit Lock**: not held.
+<!-- opus-relevance-funnel (2026-06-05): Phase 1+2 DONE — committed + pushed. Builds on Phase 0 (2aee268c).
+     PHASE 2 (backfill worker): the analysis path only scores a recent window, so ~88% of the corpus
+     (31k items, 22k >7d old) was NEVER scored. New analysis_backfill::backfill_unscored_cycle scores
+     the never-scored backlog in PRIORITY order (high-stakes → releases → recency via new
+     db::get_unscored_backlog_chunk), persists + stamps version, convergent + resumable, NO LLM (cheap
+     pipeline only), side-effect-free vs UI. Wired into the monitoring scheduler as a LOW-priority job
+     every 120s (chunk 250), gated by scheduler_gate + cold-boot grace; idles to no-op once drained.
+     PHASE 1 (observability): get_scoring_coverage command (cheap counts: total/scored/unscored/
+     on-current-version %/version histogram) — the safety net that makes silent coverage collapse visible.
+     LIVE-PROVEN: scheduler fires autonomously every 120s (dev log "Scoring backfill cycle" scored=250),
+     unscored 31,726 → 28,413, on_current_version 1,263 → 4,863, zero manual calls. ~7.5k/hr → drains in ~4h.
+     Files: db/cache.rs (2 methods + test), analysis_backfill.rs (NEW), triage_audit_commands.rs (+coverage),
+     scheduler_state.rs (BACKFILL job), monitoring.rs (field+default+interval+job block), lib.rs (mod+3 cmds),
+     src/lib/commands.ts (3 contracts). 6 cache tests + 8 triage tests green. NOT touching Cargo.lock /
+     fourda-infer-proto / any frontend. Plan: .claude/plans/scoring-relevance-funnel.md (Phases 3-5 staged). -->
+     <!-- Commit Lock RELEASED (opus-relevance-funnel) -->
+
+<!-- opus-relevance-funnel (2026-06-05): Phase 0 DONE — committed + PUSHED (origin/main @ 2aee268c).
+     Scoring relevance funnel Phase 0 (measure before build). Shipped: scoring/triage.rs (cheap gate:
+     dep-match + taste/topic cosine + high-stakes carve-out, defer-not-delete, 8 tests), db::
+     get_triage_audit_rows, triage_audit_commands::measure_triage_recall (+ commands.ts contract).
+     MEASURED live 36k sweep: semantic gate has NO good operating point (0.45/0.55 keeps 84%; 0.55/0.65
+     drops 15% relevant). PIVOT: prioritize don't filter — only dep-match/high-stakes are safe hard-keep;
+     semantic = backfill priority, never a drop. Plan + curve: .claude/plans/scoring-relevance-funnel.md.
+     My files are FREE. Did NOT touch Cargo.lock / fourda-infer-proto / any frontend (no orb-redesign overlap). -->
+     <!-- Commit Lock RELEASED (opus-relevance-funnel) -->
 
 <!-- opus-score-orb-redesign (2026-06-05): DONE — committed locally (push held for user), Commit Lock RELEASED.
      Full GAME web-component purge in 4 waves (frontend only; ZERO overlap with opus-relevance-funnel's backend):
@@ -38,7 +52,9 @@ NO overlap with opus-score-orb-redesign (all frontend). NOT touching Cargo.lock 
      Platonic visual language survives 100% as native SVG in components/geometry/. No WebGPU/WebGL anywhere.
      Verified: tsc 0, eslint 0, 126 tests across the 8 touched suites green. Waves 2-4 live-visual pending
      (app was down — opus-relevance-funnel rebuilding the Rust backend). Did NOT touch their in-flight
-     src-tauri files / Cargo.lock / fourda-infer-proto. NOT pushed (per user's commit-now / push-later). -->
+     src-tauri files / Cargo.lock / fourda-infer-proto.
+     PUSHED: origin/main e9931ce9..be664e86 (rev-list 0/0). Full pre-push gate passed (tsc, full frontend
+     suite, cargo fmt --check + clippy --lib on the shared tree). Terminal closing. -->
      <!-- Commit Lock RELEASED (opus-score-orb-redesign) -->
 
 <!-- opus-stale-drain-ordering (2026-06-05): DONE — committed locally (push held for user).

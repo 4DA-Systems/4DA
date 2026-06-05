@@ -67,6 +67,8 @@ pub struct MonitoringState {
     pub last_cve_scan: AtomicU64,
     /// Last dependency health check timestamp (unix seconds)
     pub last_dep_health_check: AtomicU64,
+    /// Last scoring-backfill cycle timestamp (unix seconds)
+    pub last_backfill: AtomicU64,
     /// When true, the briefing is waiting for a fresh analysis before firing.
     /// Set by the briefing-due check; cleared after the briefing fires.
     pub briefing_needs_fresh_data: AtomicBool,
@@ -91,6 +93,7 @@ impl Default for MonitoringState {
             last_morning_briefing_date: parking_lot::Mutex::new(None),
             last_cve_scan: AtomicU64::new(0),
             last_dep_health_check: AtomicU64::new(0),
+            last_backfill: AtomicU64::new(0),
             briefing_needs_fresh_data: AtomicBool::new(false),
             briefing_wait_ticks: AtomicU64::new(0),
         }
@@ -229,6 +232,10 @@ const ACCURACY_RECORD_INTERVAL: u64 = 604800; // 7 days
 const CVE_SCAN_INTERVAL: u64 = 3600; // 1 hour (was 30 min — advisory DBs update hourly)
 const DB_MAINTENANCE_INTERVAL: u64 = 3600; // 1 hour — WAL checkpoint + optimize (was 4h, too infrequent for startup spike recovery)
 const DEP_HEALTH_INTERVAL: u64 = 21600; // 6 hours — dependency health check (Layer 5)
+                                        // Scoring backfill — drains the never-scored backlog (Phase 2). Frequent + low-priority:
+                                        // each cycle scores a bounded chunk via the cheap pipeline (no LLM), so it converges the
+                                        // ~88%-unscored corpus over a few hours, then idles (cycles become no-ops once drained).
+const BACKFILL_INTERVAL: u64 = 120; // 2 minutes
 
 /// Sovereign Cold Boot — adaptive grace period (default).
 ///
@@ -514,6 +521,37 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     }
                     Err(e) => {
                         warn!(target: "4da::monitor", error = %e, "Anomaly detection failed");
+                    }
+                }
+            }
+
+            // Scoring backfill — drive the never-scored backlog to the current pipeline
+            // version, highest-priority items first (security/breaking → releases → recent).
+            // LOW priority so it yields to user-facing work under load; idles to a no-op
+            // once the backlog is drained. Bounded chunk per cycle keeps CPU modest.
+            let last_backfill = state.last_backfill.load(Ordering::Relaxed);
+            if now - last_backfill >= crate::scheduler_gate::effective_interval(BACKFILL_INTERVAL)
+                && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Low)
+            {
+                mark_job_complete(
+                    &state.last_backfill,
+                    now,
+                    crate::scheduler_state::jobs::BACKFILL,
+                );
+                match crate::analysis_backfill::backfill_unscored_cycle(250).await {
+                    Ok(progress) => {
+                        if progress.scored_this_cycle > 0 {
+                            info!(
+                                target: "4da::monitor",
+                                scored = progress.scored_this_cycle,
+                                relevant = progress.relevant_this_cycle,
+                                remaining = progress.remaining_unscored,
+                                "Scoring backfill cycle"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::monitor", error = %e, "Scoring backfill cycle failed");
                     }
                 }
             }
