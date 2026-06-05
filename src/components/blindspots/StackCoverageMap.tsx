@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useEffect } from 'react';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { useTranslation } from 'react-i18next';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import { recordTrustEvent } from '../../lib/trust-feedback';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import { ArticleReader } from '../ArticleReader';
 import {
   type DepRow, STATUS_CONFIG, URGENCY_COLORS, MAX_SIGNALS_PER_DEP, extractItemId,
@@ -17,8 +18,13 @@ const SignalRow = memo(function SignalRow({
   onDismiss?: (id: string) => void;
 }) {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
   const cite = item.evidence[0];
   const numericId = extractItemId(item.id);
+  useEffect(() => {
+    requestTranslation([{ id: item.id, text: item.title }]);
+  }, [item.id, item.title, requestTranslation]);
+  const displayTitle = getTranslated(item.id, item.title);
   const freshness = (() => {
     if (!cite || cite.freshness_days <= 0) return t('preemption.freshness.today');
     const d = Math.round(cite.freshness_days);
@@ -44,13 +50,13 @@ const SignalRow = memo(function SignalRow({
                   sourceType: 'missed_signal', topic: item.title, notes: 'blind_spot_click',
                 })}
               >
-                {item.title}
+                {displayTitle}
               </a>
             ) : (
-              <span className="text-sm text-white leading-snug truncate">{item.title}</span>
+              <span className="text-sm text-white leading-snug truncate">{displayTitle}</span>
             )}
             <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${URGENCY_COLORS[item.urgency]}`}>
-              {item.urgency}
+              {t(`preemption.urgency.${item.urgency}`)}
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs text-text-muted">
@@ -99,10 +105,15 @@ const DepCoverageRow = memo(function DepCoverageRow({
   onAddWatch?: (packageName: string, ecosystem: string) => void;
 }) {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
   const [expanded, setExpanded] = useState(false);
   const [showAllSignals, setShowAllSignals] = useState(false);
   const cfg = STATUS_CONFIG[dep.status];
   const hasContent = dep.signals.length > 0 || dep.gap !== null;
+  useEffect(() => {
+    if (dep.gap) requestTranslation([{ id: `${dep.gap.id}:expl`, text: dep.gap.explanation }]);
+  }, [dep.gap, requestTranslation]);
+  const gapExplanation = dep.gap ? getTranslated(`${dep.gap.id}:expl`, dep.gap.explanation) : '';
 
   const handleToggle = useCallback(() => {
     if (!hasContent) return;
@@ -132,7 +143,7 @@ const DepCoverageRow = memo(function DepCoverageRow({
         <span className="text-sm font-medium text-white shrink-0">{dep.name}</span>
         {dep.gap && !expanded && (
           <span className="text-[11px] text-text-muted truncate flex-1">
-            — {dep.gap.explanation}
+            — {gapExplanation}
           </span>
         )}
         {!dep.gap && <span className="flex-1" />}
@@ -157,7 +168,7 @@ const DepCoverageRow = memo(function DepCoverageRow({
           {dep.gap && (
             <div className={`px-4 py-2.5 group/gap ${dep.signals.length > 0 ? 'border-b border-border/30' : ''}`}>
               <div className="flex items-start gap-2">
-                <p className="text-xs text-text-muted flex-1">{dep.gap.explanation}</p>
+                <p className="text-xs text-text-muted flex-1">{gapExplanation}</p>
                 {/* eslint-disable i18next/no-literal-string */}
                 {onAddWatch && dep.gap.id.startsWith('bs_uncov_') && (() => {
                   const parts = dep.gap.id.replace('bs_uncov_', '').split('_');
