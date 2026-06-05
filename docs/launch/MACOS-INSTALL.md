@@ -37,7 +37,7 @@ If the hash matches, the file is genuine. If it doesn't, **do not open it** — 
 
 ### 4. First launch
 
-Open **4DA** from Applications or Spotlight. On first run, 4DA scans your local projects to learn your stack — nothing is uploaded; everything stays on your machine. Within 60 seconds you will see your first results.
+Open **4DA** from Applications or Spotlight. On first run, 4DA scans your local projects to learn your stack — nothing is uploaded; your project file contents stay on your machine. Your first results appear once the initial scan and scoring finish.
 
 ## Code signing and notarization
 

@@ -27,7 +27,9 @@ audit-proof NETWORK.md, positioning doc. NONE of these overlap the scoring/triag
 **Status**: Wave 1a DONE — committed local @ c164edf3 (Sentry fully removed; local Export Diagnostics
 + log_frontend_error; scrubber w/ 10 tests; crash_reporting_opt_in purged). Push HELD for user.
 NOW: Wave 1b (truth-fix BYOK "data never leaves" claims in hardcoded components + 13 locales + docs).
-**Commit Lock**: HELD (opus-privacy-truth) — committing repo+website claim-consistency pass.
+**Commit Lock**: RELEASED (opus-privacy-truth). ALL DONE + PUSHED (origin/main): privacy waves
+(c164edf3..3045be30) + repo/website consistency (4b1e4be7) + settings BYOK disclosure (851ca4fc)
++ install-doc polish (this commit). audit:public-ready clean; app live-verified healthy. Claim cleared.
 ALL WAVES DONE + PUSHED (origin/main @ 3045be30). Consistency pass: site/src/*.njk (8) + ~22 docs +
 tauri.conf.json listing. NEXT: commit, then A+ Tier-1 (settings disclosure, zero-retention completeness).
 --- prior ---

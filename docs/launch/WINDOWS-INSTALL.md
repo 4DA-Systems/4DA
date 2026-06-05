@@ -40,7 +40,7 @@ Double-click the `.exe`. Windows will show the publisher as **4DA Systems Pty Lt
 
 ### 4. First launch
 
-Launch **4DA** from the Start menu. On first run, 4DA will scan your local projects to learn your stack — nothing is uploaded; everything stays on your machine. Within 60 seconds you will see your first results.
+Launch **4DA** from the Start menu. On first run, 4DA will scan your local projects to learn your stack — nothing is uploaded; your project file contents stay on your machine. Your first results appear once the initial scan and scoring finish.
 
 ## Code signing
 
