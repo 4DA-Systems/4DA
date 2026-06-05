@@ -512,3 +512,94 @@ fn windows_process_memory_counters_layout() {
         "ProcessMemoryCounters size should match Win32 PROCESS_MEMORY_COUNTERS"
     );
 }
+
+// ---------------------------------------------------------------
+// Diagnostic-report scrubber (security-critical: this output is
+// designed to be shared by users, so usernames and secrets MUST go)
+// ---------------------------------------------------------------
+
+mod scrubber {
+    use super::super::{is_keygen_key, scrub};
+
+    #[test]
+    fn redacts_windows_username_path() {
+        let input = r"error opening C:\Users\antony\AppData\Local\4DA\data\4da.db";
+        let out = scrub(input);
+        assert!(out.contains(r"C:\Users\<user>\"), "got: {out}");
+        assert!(!out.contains("antony"), "username leaked: {out}");
+    }
+
+    #[test]
+    fn redacts_macos_and_linux_username_paths() {
+        let mac = scrub("loading /Users/jane/Library/4da.db");
+        assert!(mac.contains("/Users/<user>/"), "got: {mac}");
+        assert!(!mac.contains("jane"));
+
+        let linux = scrub("loading /home/dev42/.local/share/4da/4da.db");
+        assert!(linux.contains("/home/<user>/"), "got: {linux}");
+        assert!(!linux.contains("dev42"));
+    }
+
+    #[test]
+    fn redaction_is_idempotent_on_already_redacted_paths() {
+        let once = scrub(r"C:\Users\bob\x");
+        let twice = scrub(&once);
+        assert_eq!(
+            once, twice,
+            "scrubbing an already-scrubbed path must be stable"
+        );
+        assert!(twice.contains(r"C:\Users\<user>\x"));
+    }
+
+    #[test]
+    fn redacts_openai_and_anthropic_key_shapes() {
+        // Deliberately short, obviously-fake values: the scrubber redacts on the
+        // prefix alone, so we never embed anything resembling a real key.
+        assert_eq!(scrub("key sk-FAKEKEY"), "key <redacted>");
+        assert_eq!(scrub("pub pk_FAKEKEY"), "pub <redacted>");
+    }
+
+    #[test]
+    fn redacts_bearer_tokens_and_4da_license() {
+        assert!(scrub("Authorization: bearer-FAKE").contains("<redacted>"));
+        assert!(scrub("license 4da-FAKE").contains("<redacted>"));
+    }
+
+    #[test]
+    fn redacts_keygen_license_format() {
+        assert!(is_keygen_key("BE1234-567890-ABCDEF"));
+        let out = scrub("validating BE1234-567890-ABCDEF now");
+        assert!(out.contains("<redacted>"), "got: {out}");
+        assert!(!out.contains("BE1234-567890-ABCDEF"));
+    }
+
+    #[test]
+    fn preserves_key_label_when_redacting() {
+        assert_eq!(scrub("api_key=sk-FAKEKEY"), "api_key=<redacted>");
+    }
+
+    #[test]
+    fn preserves_debugging_identifiers() {
+        // Commit hashes, item IDs, version strings, ordinary words must survive
+        // so the report stays useful — only secret-shaped tokens are redacted.
+        let input = "commit 9f3a1c2d4e5b6a7f at v1.0.0 item 42 rust react tokio";
+        assert_eq!(scrub(input), input);
+    }
+
+    #[test]
+    fn handles_multiline_logs() {
+        let input = "line1 C:\\Users\\amy\\f\nline2 sk-FAKEKEY\nline3 ok";
+        let out = scrub(input);
+        assert!(out.contains("C:\\Users\\<user>\\f"));
+        assert!(out.contains("<redacted>"));
+        assert!(out.contains("line3 ok"));
+        assert_eq!(out.lines().count(), 3);
+    }
+
+    #[test]
+    fn keygen_guard_rejects_non_keygen() {
+        assert!(!is_keygen_key("BElow")); // too short / not hex
+        assert!(!is_keygen_key("hello-world-1234")); // not hex, no BE prefix
+        assert!(!is_keygen_key("BE1234567890ABCD")); // no hyphen
+    }
+}

@@ -538,6 +538,31 @@ pub(crate) async fn get_diagnostics() -> Result<crate::diagnostics::DiagnosticsS
     Ok(crate::diagnostics::collect_diagnostics(db, &db_path))
 }
 
+/// Build a scrubbed, local diagnostic report (health snapshot + recent log
+/// tail) and write it to `<data_dir>/diagnostics/`. NOTHING is transmitted —
+/// this is the local-first replacement for third-party crash reporting. The
+/// user reviews the returned text and chooses whether to attach it to a bug
+/// report.
+#[tauri::command]
+pub(crate) async fn export_diagnostics() -> Result<crate::diagnostics::DiagnosticReport> {
+    let db = get_database()?;
+    let db_path = db.db_path().to_path_buf();
+    let snapshot = crate::diagnostics::collect_diagnostics(db, &db_path);
+    crate::diagnostics::export_diagnostic_report(&snapshot)
+}
+
+/// Record a frontend error into the LOCAL rotating log (never transmitted).
+/// Production frontend errors land in the same on-device log that
+/// `export_diagnostics` bundles — so a user can share them deliberately.
+/// Inputs are scrubbed of usernames and secret-shaped tokens before logging.
+#[tauri::command]
+pub(crate) async fn log_frontend_error(context: String, message: String) -> Result<()> {
+    let safe_ctx = crate::diagnostics::scrub(&context);
+    let safe_msg = crate::diagnostics::scrub(&message);
+    tracing::error!(target: "4da::frontend", context = %safe_ctx, "{safe_msg}");
+    Ok(())
+}
+
 // ============================================================================
 // Score Tuning Snapshot (dev-time batch autopsy for LLM-assisted tuning)
 // ============================================================================

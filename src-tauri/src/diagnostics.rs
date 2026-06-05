@@ -272,6 +272,253 @@ fn get_process_memory_linux() -> u64 {
         .unwrap_or(0)
 }
 
+// ============================================================================
+// Local diagnostic report export (replaces third-party crash reporting)
+//
+// Nothing here transmits anywhere. The report is assembled from the local
+// diagnostics snapshot plus a tail of the on-device rotating log, scrubbed of
+// usernames and secret-shaped tokens, and written to disk for the user to
+// review and *choose* to attach to a bug report. This is the local-first
+// replacement for the removed Sentry integration.
+// ============================================================================
+
+/// A diagnostic report the user can review and choose to share.
+#[derive(Debug, Clone, Serialize)]
+pub struct DiagnosticReport {
+    /// The full, scrubbed, human-readable report text (safe to share).
+    pub report: String,
+    /// Absolute path the report was written to (for the UI only — NOT included
+    /// in `report`, because the path contains the local username).
+    pub saved_path: String,
+}
+
+/// Redact usernames in filesystem paths and secret-shaped tokens from text
+/// before it goes into an exportable, user-shareable diagnostic report.
+///
+/// Defense-in-depth: most secrets are already redacted at their log site
+/// (`sanitize_api_error` in `llm.rs`, `SensitiveString` Debug impls), but a
+/// bundle a user might post publicly must not rely on that alone.
+pub fn scrub(input: &str) -> String {
+    redact_secret_tokens(&redact_user_paths(input))
+}
+
+/// Replace the path segment immediately following a known user-dir marker
+/// (`C:\Users\name`, `/Users/name`, `/home/name`) with `<user>`.
+fn redact_user_paths(input: &str) -> String {
+    input
+        .split('\n')
+        .map(redact_user_paths_in_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn redact_user_paths_in_line(line: &str) -> String {
+    const MARKERS: &[&str] = &["\\Users\\", "/Users/", "/home/"];
+    let mut out = line.to_string();
+    for marker in MARKERS {
+        let mut search_from = 0;
+        while let Some(rel) = out[search_from..].find(marker) {
+            let seg_start = search_from + rel + marker.len();
+            let rest = &out[seg_start..];
+            let seg_end_rel = rest
+                .find(|c: char| {
+                    c == '/' || c == '\\' || c.is_whitespace() || c == '"' || c == '\'' || c == ':'
+                })
+                .unwrap_or(rest.len());
+            let seg = &rest[..seg_end_rel];
+            if seg.is_empty() || seg == "<user>" {
+                // Already redacted or empty — advance past it to avoid looping.
+                search_from = seg_start + seg_end_rel;
+                continue;
+            }
+            let suffix = out[seg_start + seg.len()..].to_string();
+            out = format!("{}<user>{suffix}", &out[..seg_start]);
+            search_from = seg_start + "<user>".len();
+        }
+    }
+    out
+}
+
+/// Replace whitespace-delimited tokens that match a known secret shape with
+/// `<redacted>` (preserving any `key=` label). Conservative on purpose so
+/// debugging identifiers (commit hashes, item IDs) survive.
+fn redact_secret_tokens(input: &str) -> String {
+    input
+        .split('\n')
+        .map(|line| {
+            line.split(' ')
+                .map(redact_token)
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn redact_token(token: &str) -> String {
+    // `key=value` form: inspect the value (the secret usually lives there) and
+    // redact while preserving the label.
+    if let Some(eq) = token.find('=') {
+        let value = &token[eq + 1..];
+        let core = value.trim_matches(|c: char| !c.is_ascii_alphanumeric());
+        if looks_like_secret(core) {
+            return format!("{}=<redacted>", &token[..eq]);
+        }
+    }
+    // Bare token: test the alphanumeric core (strip surrounding punctuation).
+    let core = token.trim_matches(|c: char| !c.is_ascii_alphanumeric());
+    if looks_like_secret(core) {
+        return "<redacted>".to_string();
+    }
+    token.to_string()
+}
+
+fn looks_like_secret(s: &str) -> bool {
+    let lower = s.to_ascii_lowercase();
+    lower.starts_with("sk-")
+        || lower.starts_with("pk_")
+        || lower.starts_with("4da-")
+        || lower.starts_with("bearer")
+        || lower.starts_with("ghp_")
+        || is_keygen_key(s)
+}
+
+/// Keygen license format: `BE####-######-…` (uppercase hex groups, hyphens).
+fn is_keygen_key(s: &str) -> bool {
+    s.len() >= 14
+        && s.starts_with("BE")
+        && s.contains('-')
+        && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// Read the newest rotating log file's last `max_lines` lines from the log dir.
+fn read_recent_log_tail(max_lines: usize) -> String {
+    let dir = crate::log_retention::log_dir();
+    let newest = std::fs::read_dir(&dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_file()
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with(crate::log_retention::LOG_FILE_STEM))
+        })
+        .max_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
+
+    let Some(path) = newest else {
+        return "(no log file found)".to_string();
+    };
+    match std::fs::read_to_string(&path) {
+        Ok(content) => {
+            let lines: Vec<&str> = content.lines().collect();
+            let start = lines.len().saturating_sub(max_lines);
+            lines[start..].join("\n")
+        }
+        Err(e) => format!("(could not read log file: {e})"),
+    }
+}
+
+fn format_source_health(health: &[SourceHealthSummary]) -> String {
+    if health.is_empty() {
+        return "  (none)".to_string();
+    }
+    health
+        .iter()
+        .map(|h| {
+            format!(
+                "  {} — {} ({} consecutive failures)",
+                h.source_type, h.status, h.consecutive_failures
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Number of trailing log lines included in an exported report.
+const REPORT_LOG_LINES: usize = 400;
+
+/// Build a scrubbed diagnostic report and write it to
+/// `<data_dir>/diagnostics/4da-diagnostics-<unix>.txt`. NOTHING is transmitted.
+pub fn export_diagnostic_report(
+    snapshot: &DiagnosticsSnapshot,
+) -> crate::error::Result<DiagnosticReport> {
+    let unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let body = format!(
+        "4DA Diagnostic Report\n\
+         =====================\n\
+         Generated (unix): {unix}\n\
+         App version: {ver}\n\
+         OS / arch: {os} / {arch}\n\
+         Uptime (s): {uptime}\n\
+         \n\
+         -- Database --\n\
+         Schema version: {schema}\n\
+         DB size (bytes): {dbsize}{warn}\n\
+         Source items: {items}\n\
+         Context chunks: {chunks}\n\
+         Feedback records: {fb}\n\
+         Process memory (bytes): {mem}\n\
+         \n\
+         -- Source health --\n\
+         {health}\n\
+         \n\
+         -- Recent log (last {n} lines, scrubbed) --\n\
+         {log}\n\
+         \n\
+         (Nothing in this report was transmitted. It was written to disk for you\n\
+         to review and attach to a bug report if you choose.)\n",
+        ver = env!("CARGO_PKG_VERSION"),
+        os = std::env::consts::OS,
+        arch = std::env::consts::ARCH,
+        uptime = snapshot.uptime_secs,
+        schema = snapshot.schema_version,
+        dbsize = snapshot.db_size_bytes,
+        warn = if snapshot.db_size_warning {
+            " (WARNING: exceeds 500MB)"
+        } else {
+            ""
+        },
+        items = snapshot.source_item_count,
+        chunks = snapshot.context_chunk_count,
+        fb = snapshot.feedback_count,
+        mem = snapshot.memory_bytes,
+        health = format_source_health(&snapshot.source_health),
+        n = REPORT_LOG_LINES,
+        log = read_recent_log_tail(REPORT_LOG_LINES),
+    );
+
+    // Scrub the entire report (the log tail is the main risk surface).
+    let report = scrub(&body);
+
+    let dir = crate::runtime_paths::RuntimePaths::get()
+        .data_dir
+        .join("diagnostics");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join(format!("4da-diagnostics-{unix}.txt"));
+
+    match std::fs::write(&path, &report) {
+        Ok(()) => Ok(DiagnosticReport {
+            report,
+            saved_path: path.display().to_string(),
+        }),
+        Err(e) => {
+            tracing::warn!(target: "4da::diagnostics", error = %e, "Failed to write diagnostic report file");
+            // Still hand back the text even if the disk write failed.
+            Ok(DiagnosticReport {
+                report,
+                saved_path: String::new(),
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "diagnostics_tests.rs"]
 mod tests;

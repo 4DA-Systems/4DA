@@ -33,7 +33,7 @@ test.describe("Privacy Disclosure Fix", () => {
               digest: { enabled: false, time: "08:00", format: "email", smtp_host: "", smtp_port: 587, smtp_user: "", smtp_pass: "", use_tls: true, recipient: "" },
               locale: "en",
               ace: { scan_directories: [], excluded_patterns: [], auto_discover: true },
-              privacy: { telemetry_enabled: false, anonymize_queries: false, cloud_llm_disclosure_accepted: false, crash_reporting_opt_in: false, activity_tracking_opt_in: false, llm_content_level: "full" },
+              privacy: { telemetry_enabled: false, anonymize_queries: false, cloud_llm_disclosure_accepted: false, activity_tracking_opt_in: false, llm_content_level: "full" },
               display: { theme: "dark" },
             };
           }

@@ -9,6 +9,23 @@
 
 ## Active Terminals
 
+### Terminal: opus-privacy-truth (started 2026-06-05)
+Working on: privacy-claim accuracy hardening (research-driven). Truth-fixing false "data never
+leaves / zero telemetry" claims, making the cloud-LLM consent gate real, zero-retention defaults,
+audit-proof NETWORK.md, positioning doc. NONE of these overlap the scoring/triage backend.
+**Claims (by wave):**
+- Wave 1 (copy truth-fix): src/components/framework/FrameworkSections.tsx, src/components/WaitlistSignup.tsx,
+  src/components/briefing/PersonalizeNudge.tsx, src/components/onboarding/OnboardingChoiceGate.tsx,
+  src/locales/*/ui.json (all 13), README.md, CHANGELOG.md, NETWORK.md
+- Wave 2 (real consent gate): src-tauri/src/llm.rs, src-tauri/src/settings/manager.rs,
+  src/components/onboarding/setup-ai-provider.tsx, src/components/onboarding/use-quick-setup.ts,
+  src/components/onboarding/quick-setup-utils.ts, src/components/settings/AIProviderSection.tsx
+- Wave 3 (zero-retention): src-tauri/src/llm.rs, src-tauri/src/llm_stream.rs,
+  src-tauri/src/embeddings_providers/openai.rs
+- Wave 4 (network doc): NETWORK.md, docs/NETWORK-TRANSPARENCY.md
+- Wave 5 (positioning): .claude/plans/ (gitignored)
+**Commit Lock**: HELD (opus-privacy-truth) — committing Wave 1a (Sentry removal + local Export Diagnostics).
+
 <!-- opus-relevance-funnel (2026-06-05): Phase 4 (forgetting) DONE — committed + pushed (measure-first;
      actual deletion HELD for user approval per destructive-ops protocol). Also ran the dependabot audit:
      cargo audit = 0 real vulns (18 unmaintained warnings, all transitive GTK3/Tauri — unfixable by us);

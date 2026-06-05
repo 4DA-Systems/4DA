@@ -111,7 +111,6 @@
   "privacy": {
     "llm_content_level": "full",
     "cloud_llm_disclosure_accepted": false,
-    "crash_reporting_opt_in": false,
     "activity_tracking_opt_in": false
   },
   "blind_spot_sensitivity": "normal"

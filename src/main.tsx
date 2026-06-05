@@ -8,25 +8,14 @@ import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
 import App from './App';
 import type { InstantBriefingSnapshot } from './store/types';
-import { initSentry } from './lib/sentry-init';
 
 // ============================================================================
-// Sentry — opt-in anonymous crash reporting (privacy-first)
+// Error handling: 4DA has NO third-party crash reporting and NO telemetry.
+// Production frontend errors are forwarded to the LOCAL rotating log via
+// `log_frontend_error` (see src/lib/error-reporter.ts) and never leave the
+// machine. The user can bundle them on demand via Settings → Privacy →
+// "Export diagnostics". This is the local-first replacement for Sentry.
 // ============================================================================
-// Initialized BEFORE React mounts so uncaught errors during first-paint
-// are captured. Reads the user's opt-in flag from settings via a privileged
-// Tauri command. If settings can't be read (first-run, non-Tauri env), opt-in
-// is treated as false and Sentry stays dormant.
-//
-// See src/lib/sentry-init.ts for the full privacy-stripping rules.
-// ============================================================================
-try {
-  const { cmd } = await import('./lib/commands');
-  const privacy = await cmd('get_privacy_config');
-  initSentry(Boolean(privacy?.crash_reporting_opt_in));
-} catch {
-  // Non-Tauri environment or settings unreadable — don't initialize Sentry
-}
 
 // ============================================================================
 // Sovereign Cold Boot — instant briefing first paint

@@ -240,10 +240,12 @@ interface CommandMap {
   index_context: { params: Record<string, never>; result: string };
   index_project_readmes: { params: Record<string, never>; result: string };
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
+  export_diagnostics: { params: Record<string, never>; result: { report: string; saved_path: string } };
+  log_frontend_error: { params: { context: string; message: string }; result: void };
 
   // -- Settings & Configuration --
-  get_privacy_config: { params: Record<string, never>; result: { llm_content_level: string; proxy_url: string | null; cloud_llm_disclosure_accepted: boolean; crash_reporting_opt_in: boolean; activity_tracking_opt_in: boolean } };
-  set_privacy_config: { params: { llmContentLevel?: string; cloudLlmDisclosureAccepted?: boolean; crashReportingOptIn?: boolean; activityTrackingOptIn?: boolean }; result: void };
+  get_privacy_config: { params: Record<string, never>; result: { llm_content_level: string; proxy_url: string | null; cloud_llm_disclosure_accepted: boolean; activity_tracking_opt_in: boolean } };
+  set_privacy_config: { params: { llmContentLevel?: string; cloudLlmDisclosureAccepted?: boolean; activityTrackingOptIn?: boolean }; result: void };
   get_settings: { params: Record<string, never>; result: Settings };
   get_llm_usage: { params: Record<string, never>; result: { used: number; limit: number; limit_reached: boolean; unlimited: boolean; cost_used_cents: number; cost_limit_cents: number; cost_limit_reached: boolean } };
   set_llm_provider: { params: { provider: string; apiKey: string; model: string; baseUrl: string | null; openaiApiKey?: string | null }; result: void };

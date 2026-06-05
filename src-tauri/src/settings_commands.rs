@@ -410,8 +410,8 @@ pub async fn validate_api_key(
 // Privacy Disclosure Commands
 // ============================================================================
 
-/// Get the current privacy configuration (content level, disclosure status,
-/// crash-reporting opt-in, activity-tracking opt-in).
+/// Get the current privacy configuration (content level, cloud-LLM disclosure
+/// status, activity-tracking opt-in).
 #[tauri::command]
 pub async fn get_privacy_config() -> Result<serde_json::Value> {
     let manager = get_settings_manager();
@@ -421,18 +421,16 @@ pub async fn get_privacy_config() -> Result<serde_json::Value> {
         "llm_content_level": settings.privacy.llm_content_level,
         "proxy_url": settings.network.proxy_url,
         "cloud_llm_disclosure_accepted": settings.privacy.cloud_llm_disclosure_accepted,
-        "crash_reporting_opt_in": settings.privacy.crash_reporting_opt_in,
         "activity_tracking_opt_in": settings.privacy.activity_tracking_opt_in,
     }))
 }
 
-/// Update privacy settings (content level, disclosure acceptance,
-/// crash-reporting opt-in, and/or activity-tracking opt-in).
+/// Update privacy settings (content level, cloud-LLM disclosure acceptance,
+/// and/or activity-tracking opt-in).
 #[tauri::command]
 pub async fn set_privacy_config(
     llm_content_level: Option<String>,
     cloud_llm_disclosure_accepted: Option<bool>,
-    crash_reporting_opt_in: Option<bool>,
     activity_tracking_opt_in: Option<bool>,
 ) -> Result<()> {
     if let Some(ref level) = llm_content_level {
@@ -451,9 +449,6 @@ pub async fn set_privacy_config(
     }
     if let Some(accepted) = cloud_llm_disclosure_accepted {
         guard.get_mut().privacy.cloud_llm_disclosure_accepted = accepted;
-    }
-    if let Some(opt_in) = crash_reporting_opt_in {
-        guard.get_mut().privacy.crash_reporting_opt_in = opt_in;
     }
     if let Some(opt_in) = activity_tracking_opt_in {
         guard.get_mut().privacy.activity_tracking_opt_in = opt_in;

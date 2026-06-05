@@ -962,6 +962,8 @@ pub fn run() {
             toolkit_export::toolkit_generate_export_pack,
             // Diagnostics
             commands::get_diagnostics,
+            commands::export_diagnostics,
+            commands::log_frontend_error,
             startup_health::get_startup_health,
             // Capability Health (Graceful Degradation Framework)
             capabilities::get_capability_states,
