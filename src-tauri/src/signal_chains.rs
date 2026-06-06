@@ -149,26 +149,31 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
         links.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
         links.truncate(5);
 
-        // Determine chain priority
         let has_security = links.iter().any(|l| l.signal_type == "security_alert");
         let has_breaking = links.iter().any(|l| l.signal_type == "breaking_change");
 
-        let priority = if has_security {
-            "critical"
-        } else if has_breaking {
-            "alert"
-        } else if links.len() >= 3 {
-            "advisory"
-        } else {
-            "watch"
-        };
+        // Verify installed-dependency relevance BEFORE assigning urgency. The
+        // security_alert / breaking_change signal_type is KEYWORD-INFERRED from titles
+        // (a "cve-" / "breaking change" substring), never OSV-verified — so it must not,
+        // on its own, mint a "critical" alert. A chain only earns critical/alert urgency
+        // (and full confidence) when it actually touches one of the user's installed
+        // dependencies. Otherwise it is ecosystem awareness, not a personal threat.
+        let dep_match = has_dependency_match(conn, topic);
+        let has_dep = dep_match > 0.0;
+        let policy = chain_policy(has_security, has_breaking, dep_match, links.len());
+        let priority = policy.priority;
+        let confidence = policy.confidence;
 
-        let action = if has_security {
-            format!("Review security implications for {topic} in your projects")
-        } else if has_breaking {
-            format!("Check if {topic} breaking changes affect your code")
-        } else {
-            format!("Multiple signals about {topic} - review the trend")
+        let action = match (has_security, has_breaking, has_dep) {
+            (true, _, true) => format!("Review security implications for {topic} in your projects"),
+            (true, _, false) => format!(
+                "Security activity around {topic} — not in your tracked dependencies, awareness only"
+            ),
+            (false, true, true) => format!("Check if {topic} breaking changes affect your code"),
+            (false, true, false) => {
+                format!("Breaking-change signals for {topic} — not currently in your stack")
+            }
+            _ => format!("Multiple signals about {topic} - review the trend"),
         };
 
         let chain_id = format!(
@@ -176,20 +181,6 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
             topic,
             dates.iter().min().unwrap_or(&String::new())
         );
-
-        let dep_match = has_dependency_match(conn, topic);
-        let corroboration = (links.len() as f64 / 5.0).min(1.0);
-        let severity = if has_security {
-            1.0
-        } else if has_breaking {
-            0.7
-        } else {
-            0.3
-        };
-        // Weighted confidence: dep relevance matters most (50%), corroboration
-        // from multiple sources adds credibility (30%), keyword-inferred
-        // severity is least reliable (20%).
-        let confidence = dep_match * 0.5 + corroboration * 0.3 + severity * 0.2;
 
         chains.push(SignalChain {
             id: chain_id,
@@ -224,6 +215,67 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
     chains.truncate(10);
     info!(target: "4da::signal_chains", chains = chains.len(), "Signal chain detection complete");
     Ok(chains)
+}
+
+/// Confidence ceiling for a chain whose topic is NOT one of the user's installed
+/// dependencies. Grounded chains start at ~0.43 (dep_match ≥ 0.5 → 0.25, plus the
+/// minimum corroboration/severity), so this cap keeps every ungrounded chain strictly
+/// below the grounded band — it can still surface as low-urgency awareness when
+/// well-corroborated, but never out-ranks (or masquerades as) a chain that actually
+/// touches the user's stack.
+const UNGROUNDED_CONFIDENCE_CAP: f64 = 0.35;
+
+/// Pure urgency/confidence policy for a detected chain, separated from DB access so the
+/// grounding rules are unit-testable without a live database.
+///
+/// `dep_match` is the installed-dependency relevance (0.0 when the chain's topic is not a
+/// tracked dependency). `has_security` / `has_breaking` are KEYWORD-INFERRED, so they only
+/// escalate urgency when there is also a dependency match; without one the chain is capped
+/// at `watch` and its confidence is held below the grounded band.
+struct ChainPolicy {
+    priority: &'static str,
+    confidence: f64,
+}
+
+fn chain_policy(
+    has_security: bool,
+    has_breaking: bool,
+    dep_match: f64,
+    links_len: usize,
+) -> ChainPolicy {
+    let has_dep = dep_match > 0.0;
+
+    let priority = if has_security && has_dep {
+        "critical"
+    } else if has_breaking && has_dep {
+        "alert"
+    } else if has_dep && links_len >= 3 {
+        "advisory"
+    } else {
+        // Ungrounded (no installed dep), or a thin grounded signal → awareness only.
+        "watch"
+    };
+
+    let corroboration = (links_len as f64 / 5.0).min(1.0);
+    let severity = if has_security {
+        1.0
+    } else if has_breaking {
+        0.7
+    } else {
+        0.3
+    };
+    // Weighted confidence: dep relevance matters most (50%), corroboration from
+    // multiple sources adds credibility (30%), keyword-inferred severity is least
+    // reliable (20%).
+    let mut confidence = dep_match * 0.5 + corroboration * 0.3 + severity * 0.2;
+    if !has_dep {
+        confidence = confidence.min(UNGROUNDED_CONFIDENCE_CAP);
+    }
+
+    ChainPolicy {
+        priority,
+        confidence,
+    }
 }
 
 fn has_dependency_match(conn: &rusqlite::Connection, topic: &str) -> f64 {
@@ -505,161 +557,11 @@ pub fn resolve_signal_chain(chain_id: String, resolution: String) -> Result<()> 
 }
 
 // ============================================================================
-// Tests — EvidenceItem conversion (Intelligence Reconciliation — Phase 5)
+// Tests — split into signal_chains_tests.rs to keep this file under the size
+// limit (test files are exempt). Included via #[path] so they stay a child
+// module with access to private items (chain_policy, UNGROUNDED_CONFIDENCE_CAP).
 // ============================================================================
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sample_link(signal_type: &str, title: &str) -> ChainLink {
-        ChainLink {
-            signal_type: signal_type.to_string(),
-            source_item_id: 1,
-            title: title.to_string(),
-            timestamp: "2026-04-15 12:00:00".to_string(),
-            description: format!("Signal from {signal_type}"),
-        }
-    }
-
-    fn sample_chain_with_prediction() -> SignalChainWithPrediction {
-        SignalChainWithPrediction {
-            chain: SignalChain {
-                id: "chain_tokio_cve".to_string(),
-                chain_name: "tokio CVE disclosure + patch sequence".to_string(),
-                links: vec![
-                    sample_link("cve", "CVE-2026-1234 disclosed"),
-                    sample_link("blog", "Tokio maintainers respond"),
-                    sample_link("release", "Tokio 1.37 released with fix"),
-                ],
-                overall_priority: "high".to_string(),
-                resolution: ChainResolution::Open,
-                suggested_action: "Upgrade tokio to 1.37 immediately.".to_string(),
-                confidence: 0.78,
-                created_at: "2026-04-15 00:00:00".to_string(),
-                updated_at: "2026-04-17 00:00:00".to_string(),
-                verified_dep: Some("tokio".to_string()),
-            },
-            prediction: ChainPrediction {
-                phase: ChainPhase::Escalating,
-                intervals_hours: vec![36.0, 24.0, 12.0],
-                acceleration: -0.3,
-                predicted_next_hours: Some(8.0),
-                confidence: 0.72,
-                forecast: "Escalating — expect patch guidance within the day.".to_string(),
-            },
-        }
-    }
-
-    #[test]
-    fn chain_maps_to_chain_kind() {
-        let item = sample_chain_with_prediction().to_evidence_item();
-        assert_eq!(item.kind, crate::evidence::EvidenceKind::Chain);
-    }
-
-    #[test]
-    fn chain_priority_maps_to_urgency() {
-        let mut c = sample_chain_with_prediction();
-        c.chain.overall_priority = "critical".to_string();
-        assert_eq!(
-            c.to_evidence_item().urgency,
-            crate::evidence::Urgency::Critical
-        );
-        c.chain.overall_priority = "high".to_string();
-        assert_eq!(c.to_evidence_item().urgency, crate::evidence::Urgency::High);
-        c.chain.overall_priority = "medium".to_string();
-        assert_eq!(
-            c.to_evidence_item().urgency,
-            crate::evidence::Urgency::Medium
-        );
-        c.chain.overall_priority = "low".to_string();
-        assert_eq!(
-            c.to_evidence_item().urgency,
-            crate::evidence::Urgency::Watch
-        );
-    }
-
-    #[test]
-    fn chain_forecast_is_explanation() {
-        let item = sample_chain_with_prediction().to_evidence_item();
-        assert!(item.explanation.contains("Escalating"));
-    }
-
-    #[test]
-    fn affected_deps_use_verified_dep_only_not_chain_name_tokens() {
-        // The chain_name is "tokio CVE disclosure + patch sequence" — the OLD regex split
-        // would have emitted ["tokio","cve","disclosure"] (boilerplate/topic words as fake
-        // deps). Now affected_deps is exactly the verified dependency, nothing else.
-        let item = sample_chain_with_prediction().to_evidence_item();
-        assert_eq!(item.affected_deps, vec!["tokio".to_string()]);
-
-        // When the topic was NOT a verified dependency, claim no affected dep at all
-        // (never fabricate one from the chain name).
-        let mut c = sample_chain_with_prediction();
-        c.chain.verified_dep = None;
-        c.chain.chain_name = "security vulnerability updates signal chain (3 events)".to_string();
-        let item = c.to_evidence_item();
-        assert!(
-            item.affected_deps.is_empty(),
-            "no verified dep → no fabricated affected deps, got {:?}",
-            item.affected_deps
-        );
-    }
-
-    #[test]
-    fn chain_falls_back_to_suggested_action_when_no_forecast() {
-        let mut c = sample_chain_with_prediction();
-        c.prediction.forecast.clear();
-        let item = c.to_evidence_item();
-        assert_eq!(item.explanation, "Upgrade tokio to 1.37 immediately.");
-    }
-
-    #[test]
-    fn chain_citations_built_from_links() {
-        let item = sample_chain_with_prediction().to_evidence_item();
-        assert_eq!(item.evidence.len(), 3);
-        assert_eq!(item.evidence[0].source, "cve");
-    }
-
-    #[test]
-    fn chain_without_links_synthesizes_citation() {
-        let mut c = sample_chain_with_prediction();
-        c.chain.links.clear();
-        let item = c.to_evidence_item();
-        assert_eq!(item.evidence.len(), 1);
-        assert_eq!(item.evidence[0].source, "signal-chain-detector");
-    }
-
-    #[test]
-    fn chain_caps_citations_at_5() {
-        let mut c = sample_chain_with_prediction();
-        c.chain.links = (0..10)
-            .map(|i| sample_link("hn", &format!("link #{i}")))
-            .collect();
-        let item = c.to_evidence_item();
-        assert_eq!(item.evidence.len(), 5);
-    }
-
-    #[test]
-    fn chain_lens_hints_preemption_and_evidence() {
-        let item = sample_chain_with_prediction().to_evidence_item();
-        assert!(item.lens_hints.preemption);
-        assert!(item.lens_hints.evidence);
-        assert!(!item.lens_hints.briefing);
-        assert!(!item.lens_hints.blind_spots);
-    }
-
-    #[test]
-    fn chain_passes_schema_validation() {
-        let item = sample_chain_with_prediction().to_evidence_item();
-        assert!(crate::evidence::validate_item(&item).is_ok());
-    }
-
-    #[test]
-    fn chain_confidence_clamps_out_of_range() {
-        let mut c = sample_chain_with_prediction();
-        c.prediction.confidence = 1.5;
-        let item = c.to_evidence_item();
-        assert!(item.confidence.value >= 0.0 && item.confidence.value <= 1.0);
-    }
-}
+#[path = "signal_chains_tests.rs"]
+mod tests;
