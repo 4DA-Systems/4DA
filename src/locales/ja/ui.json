@@ -952,7 +952,6 @@
   "proValue.startTrial": "分析を開始してインテリジェンス価値を確認",
   "proValue.trialCta": "最初の分析を実行して、4DAがワークフローにもたらす価値のトラッキングを開始しましょう。",
   "proValue.aiBriefings": "AIブリーフィング",
-  "proValue.signalChains": "シグナルチェーン",
   "proValue.gapsCaught": "検出されたギャップ",
   "proValue.predictions": "予測",
   "proValue.nlQueries": "自然言語クエリ",

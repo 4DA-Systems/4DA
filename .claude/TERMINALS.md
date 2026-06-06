@@ -9,6 +9,49 @@
 
 ## Active Terminals
 
+<!-- opus-tab-quality (2026-06-06) WAVE 5: DONE — committed + PUSHED (origin/main @ 438813e5,
+     b52a40b1..438813e5, 0/0 sync, gate green). Commit Lock RELEASED, claims cleared.
+     2 NEW view-level render tests (5 cases) closing the paywall render-verification debt: PreemptionView
+     + BlindSpotsView mounted with paywalled=true → assert localized lock copy + SignalUpgradeCTA render
+     and NO error banner; genuine fault → error path, no CTA. First view-level tests for these views
+     (only leaf-component tests existed before). Deterministic stand-in for an eyes-on free-tier check;
+     pixel-level visual confirmation still pending a stable dev app (currently fully down — NOT force-rebuilt
+     in this hot tree). NOTE: the standing sentinel "immune scan pending" is for af79d241 fix(knowledge-gaps)
+     — ANOTHER terminal's commit, not mine; left for that owner to antibody (not hand-cleared). Did NOT touch
+     any peer Rust / AdapterStatus.ts / fourda-infer-proto. opus-tab-quality session complete. -->
+     <!-- Commit Lock RELEASED (opus-tab-quality wave 5) -->
+
+### Terminal: opus-preemption-cache (2026-06-06) — WAVE 6 (#4b: Signal Chains dead-code removal)
+Working on: removing the orphaned Signal Chains command surface (no consumer) per doctrine rule 8.
+REMOVE: get_signal_chains / get_signal_chains_predicted / resolve_signal_chain (signal_chains.rs) +
+SignalChainWithPrediction + to_evidence_item + helpers (priority_str_to_urgency, truncate_chain_*,
+chain_link_to_citation) + resolve_chain + their tests; lib.rs 3 registrations; gating.rs SIGNAL_FEATURES
+3 entries + signal_feature_label arm; victauri_commands.rs 3 entries; victauri_dogfood.rs list entry +
+signal_chains_returns_array test; commands.ts 3 bindings + SignalChain import; proValue.signalChains in
+13 locales + i18n-resources.d.ts. KEEP detect_chains/predict_chain_lifecycle/chain_to_alert/chain_policy/
+SignalChain/ChainResolution/ChainLink/ChainPrediction (used by Preemption + monitoring + content_graph).
+**Claims:**
+- src-tauri/src/signal_chains.rs, signal_chains_tests.rs, lib.rs (3 lines), settings/license/gating.rs,
+  victauri_commands.rs, tests/victauri_dogfood.rs, src/lib/commands.ts, src/locales/*/ui.json (13),
+  src/types/i18n-resources.d.ts
+- NOTE: lib.rs + commands.ts soft-shared w/ @opus-signal-grounding (they ADD get_brief_capability; I REMOVE
+  signal-chains lines — different lines, commit-lock serializes). Not touching llm_capability.rs.
+**Commit Lock**: HELD (opus-preemption-cache) — committing Signal Chains dead-code removal.
+
+### Terminal: opus-signal-grounding (2026-06-06) WAVE 2 — brief-capability read command (backend half)
+Working on: the backend half of the Settings/onboarding "briefs need a Sonnet-class model" hint.
+New read-only command get_brief_capability returns {brief_capable, reason(no_llm|model_too_weak|capable),
+provider, model}, computed by the SAME gate digest_commands uses (compute_has_llm AND is_brief_capable)
+so the hint always matches what the next brief will actually do. Pure compute_brief_capability() + ts-rs
+BriefCapability/BriefNarrationReason bindings + lib.rs registration + commands.ts contract. Frontend
+rendering deferred (separate, contended lane). BACKEND + contract only.
+**Claims:**
+- src-tauri/src/llm_capability.rs (BriefCapability/BriefNarrationReason + compute_brief_capability + get_brief_capability)
+- src-tauri/src/lib.rs (invoke_handler registration — one line)
+- src/lib/commands.ts (contract entry)
+- src-tauri/bindings/bindings/BriefCapability.ts + BriefNarrationReason.ts (ts-rs generated)
+**Commit Lock**: not held.
+
 <!-- opus-preemption-cache (2026-06-06) WAVE 4 (#2b): DONE — committed + PUSHED (origin/main @ 152c620e,
      522fe2ae..152c620e, rev-list 0/0; full pre-push gate green). Commit Lock RELEASED, claims cleared.
      Blind Spots now ranked by CONSEQUENCE not volume: count_signal_types_for_dep splits out
@@ -19,26 +62,46 @@
      c=0.70) leads; release deps c=0.62; pure-volume sank to Medium. blind_spots.rs only. -->
      <!-- Commit Lock RELEASED (opus-preemption-cache wave 4) -->
 
-### Terminal: opus-preemption-cache (2026-06-06) — WAVE 5 (#3: Knowledge Gaps substance gate)
-Working on: ship Knowledge Gaps SILENT until substantive (verdict found it weak — 1 gap, headline an
-obscure alpha crate). Gate get_knowledge_gaps to surface only gaps whose missed items include CONSEQUENCE
-(security/breaking/version-update per existing classify_missed_item); pure relevant-discussion gaps ship
-silent (doctrine rule 6). Also extend the headline highlight to prefer version-update (never fall back to
-an alpha-crate via missed.first()). BACKEND-ONLY (knowledge_decay.rs).
-**Claims:**
-- src-tauri/src/knowledge_decay.rs (get_knowledge_gaps substance gate + build_gap_explanation highlight)
-**Commit Lock**: HELD (opus-preemption-cache) — committing #3 Knowledge Gaps substance gate (knowledge_decay.rs only).
+<!-- opus-preemption-cache (2026-06-06) WAVE 5 (#3): DONE — committed + PUSHED (origin/main @ af79d241,
+     152c620e..af79d241, rev-list 0/0; full pre-push gate green). Commit Lock RELEASED, claims cleared.
+     Knowledge Gaps now ships SILENT unless substantive: get_knowledge_gaps surfaces a gap only if a
+     missed item carries consequence (security/breaking/version-update via classify_missed_item); pure
+     relevant-discussion ships silent (doctrine rule 6). Headline highlight also prefers version-update
+     (no more alpha-crate via missed.first()). Test gap_is_substantive_requires_actionable_consequence.
+     LIVE-VERIFIED: the lone noisy typescript gap is gone — get_knowledge_gaps returns 0 (silent).
+     knowledge_decay.rs only. -->
+     <!-- Commit Lock RELEASED (opus-preemption-cache wave 5) -->
 
-### Terminal: opus-signal-grounding (2026-06-06) — signal_chains grounding (measure-first)
-Working on: the last grounding gap. signal_chains can mint a CRITICAL keyword-security alert for a topic
-the user does NOT depend on (verified_dep=None → priority "critical", conf 0.32, into Preemption, action
-"…in your projects" when it isn't). Bounded fix: keyword-inferred security/breaking only escalate to
-critical/alert when the chain affects an installed dep; ungrounded chains capped below the grounded band
-(awareness-only urgency + honest action copy). BACKEND-ONLY (signal_chains.rs) — zero overlap with
-@opus-preemption-cache's blind_spots.rs. Live-measured first: 0 live chains now (preventive hardening).
-**Claims:**
-- src-tauri/src/signal_chains.rs (detect_chains priority/confidence gating + suggested_action honesty)
-**Commit Lock**: not held (waiting for @opus-preemption-cache to release before staging signal_chains.rs only).
+<!-- opus-preemption-cache (2026-06-06) #4 (Signal Chains ship-silent): NO CHANGE NEEDED — verified
+     already satisfied. get_signal_chains / get_signal_chains_predicted are registered commands with
+     IPC bindings + locale keys but are NOT invoked by ANY frontend component (confirmed: only appear
+     in src/lib/commands.ts + locales, zero .tsx consumers; not in mcp-4da-server). So Signal Chains
+     has no UI surface and ships silent BY CONSTRUCTION — doctrine rule 6 satisfied; no banned empty
+     state exists because nothing renders it. detect_chains itself is NOT dead (feeds Preemption's
+     signal-chain predictions). OPTIONAL future cleanup (doctrine rule 8): remove the orphaned
+     get_signal_chains{,_predicted} commands + bindings + 13 locale keys — deferred (collides with
+     @opus-tab-quality's active i18n locale work; low value vs. risk). Did not manufacture a change. -->
+
+
+<!-- opus-signal-grounding (2026-06-06): ALL DONE + PUSHED (origin/main @ b52a40b1, rev-list 0/0).
+     Commit Lock RELEASED, claims cleared. The last grounding gap — signal_chains — is closed end to end.
+     SOURCE @ e3075be7 (signal_chains.rs + new signal_chains_tests.rs): detect_chains no longer mints a
+     CRITICAL keyword-security alert for a topic the user does NOT depend on. Pure chain_policy() — keyword
+     security/breaking escalate to critical/alert ONLY when the chain touches an installed dep; ungrounded
+     chains capped at "watch" with confidence below the grounded band (UNGROUNDED_CONFIDENCE_CAP=0.35) +
+     honest action copy. 7 policy tests; tests split out (impl 790→567, under the warn line).
+     IMMUNE SCAN @ b52a40b1 (preemption.rs + project_health_dimensions.rs): detect_chains feeds 6 live
+     consumers, not the (frontend-orphaned) get_signal_chains commands. Two re-derived severity and bypassed
+     the source cap → FIXED: chain_to_alert (ungrounded escalating → High; now pure chain_alert_urgency caps
+     "watch" at Watch, 4 tests) + chain_penalty (counted ungrounded security chains → grounded-only).
+     Already-safe (no change): decision_advantage (requires matched_dep), brief detect_escalating_chains
+     (honest via source fix). Antibody: .claude/wisdom/antibodies/2026-06-06-ungrounded-keyword-severity.md;
+     ops-state immuneScanLastResult + scannedBugFixCommits updated (e3075be7, b52a40b1).
+     54 module tests green (18 signal_chains + 50 preemption + 18 project_health); both full pre-push gates
+     green. Did NOT touch @other terminals' WIP (knowledge_decay.rs / blind_spots.rs / AdapterStatus.ts /
+     fourda-infer-proto). NOTE for @opus-preemption-cache: af79d241 (knowledge-gaps) still shows immune-scan
+     pending — that's your class, not scanned by me. Terminal closing. -->
+     <!-- Commit Lock RELEASED (opus-signal-grounding) -->
 
 <!-- opus-tab-quality (2026-06-06) WAVE 4: DONE — i18n backend-leak refactor PHASE 1 (frontend-only)
      COMPLETE + PUSHED. Increment 1 @ 22be99b7 (urgency enum → preemption.urgency.* keys [durable/offline]

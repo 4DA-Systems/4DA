@@ -3242,7 +3242,6 @@ async fn ipc_commands_never_panic() {
         "get_monitoring_status",
         "get_blind_spots",
         "get_knowledge_gaps",
-        "get_signal_chains",
         "get_void_signal",
         "get_developer_dna",
         "get_capability_states",
@@ -3692,24 +3691,6 @@ async fn knowledge_gaps_returns_evidence_feed() {
         gaps.get("items").is_some(),
         "knowledge gaps must have 'items' field, got keys: {:?}",
         gaps.as_object().map(|o| o.keys().collect::<Vec<_>>())
-    );
-}
-
-#[tokio::test]
-async fn signal_chains_returns_array() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = VictauriClient::discover().await.unwrap();
-    let chains = client
-        .invoke_command("get_signal_chains", None)
-        .await
-        .unwrap();
-
-    assert!(
-        chains.is_array(),
-        "signal chains must return an array, got: {chains}"
     );
 }
 
