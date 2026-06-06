@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
 import { APIKeyInput } from './APIKeyInput';
+import { BriefNarrationStatus } from './BriefNarrationStatus';
 import { ModelEvalSection } from './ModelEvalSection';
 import { ReRankingSection } from './ReRankingSection';
 import { UsageStatsSection } from './UsageStatsSection';
@@ -309,6 +310,8 @@ export function AIProviderSection({
               </div>
             </div>
           )}
+
+          <BriefNarrationStatus settings={settings} />
         </div>
       </div>
 
