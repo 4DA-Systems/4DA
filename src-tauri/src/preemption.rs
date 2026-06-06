@@ -903,17 +903,26 @@ fn has_project_relevance_column(conn: &rusqlite::Connection) -> bool {
 // Converters
 // ============================================================================
 
-/// Convert a signal chain + its lifecycle prediction into a preemption alert.
-fn chain_to_alert(
-    chain: &crate::signal_chains::SignalChain,
-    prediction: &crate::signal_chains::ChainPrediction,
-    conn: &rusqlite::Connection,
-) -> PreemptionAlert {
+/// Map a signal chain's grounded priority + lifecycle phase to a Preemption urgency.
+///
+/// A chain whose topic is NOT one of the user's installed dependencies is marked
+/// `overall_priority == "watch"` by `detect_chains` (its security/breaking signal_type
+/// is only keyword-inferred). Such a chain is ecosystem awareness, not a personal
+/// threat, so it must never reach High/Critical here — even when its timing phase is
+/// escalating. Only grounded chains (priority critical/alert/advisory) earn elevated
+/// urgency; everything else is capped at Watch.
+fn chain_alert_urgency(
+    overall_priority: &str,
+    phase: &crate::signal_chains::ChainPhase,
+) -> AlertUrgency {
     use crate::signal_chains::ChainPhase;
 
-    let urgency = match &prediction.phase {
+    if overall_priority == "watch" {
+        return AlertUrgency::Watch;
+    }
+    match phase {
         ChainPhase::Escalating | ChainPhase::Peak => {
-            if chain.overall_priority == "critical" {
+            if overall_priority == "critical" {
                 AlertUrgency::Critical
             } else {
                 AlertUrgency::High
@@ -921,7 +930,16 @@ fn chain_to_alert(
         }
         ChainPhase::Active => AlertUrgency::Medium,
         ChainPhase::Nascent | ChainPhase::Resolving => AlertUrgency::Watch,
-    };
+    }
+}
+
+/// Convert a signal chain + its lifecycle prediction into a preemption alert.
+fn chain_to_alert(
+    chain: &crate::signal_chains::SignalChain,
+    prediction: &crate::signal_chains::ChainPrediction,
+    conn: &rusqlite::Connection,
+) -> PreemptionAlert {
+    let urgency = chain_alert_urgency(&chain.overall_priority, &prediction.phase);
 
     let alert_type = classify_chain_type(&chain.chain_name);
 
@@ -1512,6 +1530,60 @@ mod tests {
             cached_preemption_feed().is_none(),
             "cleared cache must report a miss"
         );
+    }
+
+    // ─── Signal-chain urgency grounding ──────────────────────────────
+    // An ungrounded chain (topic not an installed dep → detect_chains marks it
+    // overall_priority "watch") must never reach High/Critical in Preemption, even
+    // when escalating. Grounded chains keep their phase-driven urgency.
+
+    #[test]
+    fn ungrounded_escalating_chain_capped_at_watch() {
+        use crate::signal_chains::ChainPhase;
+        assert!(matches!(
+            chain_alert_urgency("watch", &ChainPhase::Escalating),
+            AlertUrgency::Watch
+        ));
+        assert!(matches!(
+            chain_alert_urgency("watch", &ChainPhase::Peak),
+            AlertUrgency::Watch
+        ));
+    }
+
+    #[test]
+    fn grounded_critical_escalating_is_critical() {
+        use crate::signal_chains::ChainPhase;
+        assert!(matches!(
+            chain_alert_urgency("critical", &ChainPhase::Escalating),
+            AlertUrgency::Critical
+        ));
+    }
+
+    #[test]
+    fn grounded_noncritical_escalating_is_high() {
+        use crate::signal_chains::ChainPhase;
+        // "alert"/"advisory" are only ever assigned to grounded chains by detect_chains.
+        assert!(matches!(
+            chain_alert_urgency("alert", &ChainPhase::Peak),
+            AlertUrgency::High
+        ));
+        assert!(matches!(
+            chain_alert_urgency("advisory", &ChainPhase::Escalating),
+            AlertUrgency::High
+        ));
+    }
+
+    #[test]
+    fn chain_phase_active_and_nascent_map_low() {
+        use crate::signal_chains::ChainPhase;
+        assert!(matches!(
+            chain_alert_urgency("critical", &ChainPhase::Active),
+            AlertUrgency::Medium
+        ));
+        assert!(matches!(
+            chain_alert_urgency("critical", &ChainPhase::Nascent),
+            AlertUrgency::Watch
+        ));
     }
 
     // ─── Compound-prefix detection ───────────────────────────────────
