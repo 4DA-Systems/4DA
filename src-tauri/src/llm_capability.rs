@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tracing::{debug, info, warn};
+use ts_rs::TS;
 
 // Cache of probed model tiers, keyed by model identity string
 static TIER_CACHE: std::sync::LazyLock<Mutex<HashMap<String, ModelTier>>> =
@@ -227,6 +228,62 @@ pub(crate) fn is_brief_capable(settings: &LLMProvider) -> bool {
     }
 }
 
+/// Why the morning brief will (or won't) be AI-narrated. Drives the Settings/onboarding
+/// hint copy so the user understands what they're getting — and how to upgrade it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+#[serde(rename_all = "snake_case")]
+pub enum BriefNarrationReason {
+    /// No usable LLM configured → the deterministic, grounded brief is served.
+    NoLlm,
+    /// An LLM is configured but too weak for genuine narration (Haiku / *-mini / *-nano /
+    /// consumer-hardware local) → deterministic brief, never faked synthesis.
+    ModelTooWeak,
+    /// A Sonnet-class+ model is configured → the brief is AI-narrated.
+    Capable,
+}
+
+/// Whether the configured model can NARRATE the morning brief, and why. Mirrors the exact
+/// gate in `digest_commands` (`compute_has_llm` AND `is_brief_capable`) so the Settings hint
+/// always tells the truth about what the next brief will actually do.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub struct BriefCapability {
+    /// True → the brief is AI-narrated. False → the deterministic grounded floor is served
+    /// (always available, works offline, cannot hallucinate).
+    pub brief_capable: bool,
+    /// Classification for the UI to pick honest copy.
+    pub reason: BriefNarrationReason,
+    /// The configured provider (e.g. "anthropic", "ollama", "none").
+    pub provider: String,
+    /// The configured model id (empty when no provider is set).
+    pub model: String,
+}
+
+/// Compute brief-narration capability for a provider config. Separate from the Tauri
+/// command so it is unit-testable without a settings manager. The verdict is IDENTICAL to
+/// the one `digest_commands` uses to choose the brief path — keep them in lockstep.
+pub(crate) fn compute_brief_capability(settings: &LLMProvider) -> BriefCapability {
+    let has_llm = crate::content_personalization::context::compute_has_llm(
+        &settings.provider,
+        &settings.api_key,
+    );
+    let brief_capable = has_llm && is_brief_capable(settings);
+    let reason = if !has_llm {
+        BriefNarrationReason::NoLlm
+    } else if !brief_capable {
+        BriefNarrationReason::ModelTooWeak
+    } else {
+        BriefNarrationReason::Capable
+    };
+    BriefCapability {
+        brief_capable,
+        reason,
+        provider: settings.provider.clone(),
+        model: settings.model.clone(),
+    }
+}
+
 /// Probe the model's capability by sending a test prompt.
 ///
 /// This is expensive (1 API call) so should only be called:
@@ -411,6 +468,23 @@ pub async fn probe_llm_capability() -> Result<serde_json::Value> {
     }))
 }
 
+/// Tauri command: will the configured model narrate the morning brief, and if not, why?
+///
+/// Read-only. Surfaced in Settings/onboarding so the user knows whether they'll get an
+/// AI-narrated brief or the deterministic grounded floor — and what to change to upgrade.
+/// Hydrates keys first so the `has_llm` check sees the real API key, matching exactly what
+/// the brief itself evaluates.
+#[tauri::command]
+pub fn get_brief_capability() -> Result<BriefCapability> {
+    let settings = {
+        let manager = crate::get_settings_manager();
+        let mut guard = manager.lock();
+        guard.ensure_keys_hydrated();
+        guard.get().llm.clone()
+    };
+    Ok(compute_brief_capability(&settings))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,5 +564,71 @@ mod tests {
         assert!(!ModelTier::Basic.supports_reranking());
         assert!(!ModelTier::Basic.supports_adversarial());
         assert!(!ModelTier::Basic.supports_llm_explanations());
+    }
+
+    // ── Brief-narration capability (the Settings hint source of truth) ──
+    // Must stay in lockstep with the digest_commands gate: has_llm (compute_has_llm)
+    // AND is_brief_capable. These cases pin the reason classification the UI renders.
+
+    // LLMProvider impls Drop (zeroizes the key), so functional struct update
+    // (`..Default::default()`) is illegal — mutate a default instead (clippy would
+    // otherwise suggest the FRU form that won't compile here).
+    #[allow(clippy::field_reassign_with_default)]
+    fn provider(p: &str, key: &str, model: &str) -> LLMProvider {
+        let mut s = LLMProvider::default();
+        s.provider = p.to_string();
+        s.api_key = key.to_string();
+        s.model = model.to_string();
+        s
+    }
+
+    #[test]
+    fn brief_capability_no_provider_is_no_llm() {
+        let cap = compute_brief_capability(&provider("none", "", ""));
+        assert!(!cap.brief_capable);
+        assert_eq!(cap.reason, BriefNarrationReason::NoLlm);
+    }
+
+    #[test]
+    fn brief_capability_cloud_without_key_is_no_llm() {
+        // compute_has_llm requires a key for cloud providers, so a keyless Anthropic
+        // config has no usable LLM at all — not "model too weak".
+        let cap = compute_brief_capability(&provider("anthropic", "", "claude-sonnet-4-6"));
+        assert!(!cap.brief_capable);
+        assert_eq!(cap.reason, BriefNarrationReason::NoLlm);
+    }
+
+    #[test]
+    fn brief_capability_sonnet_is_capable() {
+        let cap =
+            compute_brief_capability(&provider("anthropic", "sk-ant-real", "claude-sonnet-4-6"));
+        assert!(cap.brief_capable);
+        assert_eq!(cap.reason, BriefNarrationReason::Capable);
+        assert_eq!(cap.provider, "anthropic");
+        assert_eq!(cap.model, "claude-sonnet-4-6");
+    }
+
+    #[test]
+    fn brief_capability_haiku_is_too_weak() {
+        // Has a usable LLM, but Haiku is below the brief bar → deterministic floor.
+        let cap =
+            compute_brief_capability(&provider("anthropic", "sk-ant-real", "claude-haiku-4-5"));
+        assert!(!cap.brief_capable);
+        assert_eq!(cap.reason, BriefNarrationReason::ModelTooWeak);
+    }
+
+    #[test]
+    fn brief_capability_small_local_is_too_weak() {
+        // Ollama is keyless (has_llm true) but a 3B model is Basic tier → too weak.
+        let cap = compute_brief_capability(&provider("ollama", "", "llama3.2:3b"));
+        assert!(!cap.brief_capable);
+        assert_eq!(cap.reason, BriefNarrationReason::ModelTooWeak);
+    }
+
+    #[test]
+    fn brief_capability_large_local_is_capable() {
+        let cap = compute_brief_capability(&provider("ollama", "", "llama3.1:70b"));
+        assert!(cap.brief_capable);
+        assert_eq!(cap.reason, BriefNarrationReason::Capable);
     }
 }
