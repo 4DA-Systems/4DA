@@ -1113,6 +1113,7 @@ pub fn run() {
             // LLM Capability Tier Detection
             llm_capability::get_llm_capability_tier,
             llm_capability::probe_llm_capability,
+            llm_capability::get_brief_capability,
             // Model Registry
             model_registry::get_model_registry,
             model_registry::refresh_model_registry,

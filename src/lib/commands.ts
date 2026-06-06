@@ -596,6 +596,12 @@ interface CommandMap {
   // -- LLM Capability Tier --
   get_llm_capability_tier: { params: Record<string, never>; result: { tier: string; supports_reranking: boolean; supports_adversarial: boolean; supports_llm_explanations: boolean; supports_briefing_synthesis: boolean; provider: string; model: string } };
   probe_llm_capability: { params: Record<string, never>; result: { tier: string; supports_reranking: boolean; supports_adversarial: boolean; supports_llm_explanations: boolean; supports_briefing_synthesis: boolean; probed: boolean } };
+  // Will the morning brief be AI-narrated, and if not, why? Mirrors the digest_commands
+  // gate (compute_has_llm AND is_brief_capable) so Settings/onboarding can honestly show
+  // whether briefs are narrated or served as the deterministic grounded floor. reason:
+  // 'no_llm' (no usable LLM) | 'model_too_weak' (Haiku/*-mini/consumer-local) | 'capable'
+  // (Sonnet-class+). Rust shape: BriefCapability in src-tauri/bindings/bindings/.
+  get_brief_capability: { params: Record<string, never>; result: { brief_capable: boolean; reason: 'no_llm' | 'model_too_weak' | 'capable'; provider: string; model: string } };
 
   // -- STREETS Localization --
   get_regional_data: { params: Record<string, never>; result: RegionalData };
