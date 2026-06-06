@@ -26,8 +26,6 @@ pub const SIGNAL_FEATURES: &[&str] = &[
     // Intelligence panels (original)
     "get_attention_report",
     "get_knowledge_gaps",
-    "get_signal_chains",
-    "get_signal_chains_predicted",
     "get_project_health",
     // Developer DNA un-gated (AD-026): free tier viral sharing of DNA cards
     // natural_language_query removed — BYOK: runs on user's API key at zero cost (AD-025)
@@ -37,7 +35,6 @@ pub const SIGNAL_FEATURES: &[&str] = &[
     // Additional panels added by LICENSE-GATING-AUDIT-2026-04-15
     "get_blind_spots",
     "get_preemption_alerts",
-    "resolve_signal_chain",
     "get_decision_health_report",
     // Cross-project intelligence
     "get_tech_convergence",
@@ -114,9 +111,6 @@ fn signal_feature_label(feature: &str) -> &'static str {
         "get_preemption_alerts" => "Preemption Radar",
         "get_blind_spots" => "Blind Spots",
         "get_knowledge_gaps" => "Knowledge Gaps",
-        "get_signal_chains" | "get_signal_chains_predicted" | "resolve_signal_chain" => {
-            "Signal Chains"
-        }
         "get_attention_report" => "Attention Report",
         "synthesize_search" => "Search Synthesis",
         "standing_queries" => "Standing Queries",

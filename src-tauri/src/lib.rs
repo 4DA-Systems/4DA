@@ -865,9 +865,6 @@ pub fn run() {
             source_health_diagnostics::get_source_health,
             knowledge_decay::get_knowledge_gaps,
             preemption::get_preemption_alerts,
-            signal_chains::get_signal_chains,
-            signal_chains::get_signal_chains_predicted,
-            signal_chains::resolve_signal_chain,
             // Content Graph
             content_graph::build_content_graph,
             semantic_diff::get_semantic_shifts,
