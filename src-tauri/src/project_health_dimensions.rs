@@ -71,11 +71,18 @@ pub(crate) fn compute_security(
         security_hits += count;
     }
 
-    // Factor in signal chain predictions — escalating security chains lower the score
+    // Factor in signal chain predictions — escalating security chains lower the score.
+    // Only GROUNDED chains count: a chain whose topic is one of the user's installed
+    // dependencies (verified_dep set by detect_chains). An ungrounded keyword-security
+    // chain about a topic the user does not depend on is ecosystem noise and must not
+    // penalize this project's health.
     let chain_penalty: i64 = if let Ok(chains) = crate::signal_chains::detect_chains(conn) {
         chains
             .iter()
             .filter(|c| {
+                if c.verified_dep.is_none() {
+                    return false;
+                }
                 let has_security = c.links.iter().any(|l| l.signal_type == "security_alert");
                 if !has_security {
                     return false;
