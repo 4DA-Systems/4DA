@@ -843,6 +843,21 @@ fn classify_missed_item(title: &str) -> &'static str {
     }
 }
 
+/// A knowledge gap is substantive only if at least one missed item carries
+/// CONSEQUENCE — a security advisory, breaking change, or version update. A gap
+/// that is purely roadmap chatter / general discussion is unread VOLUME, not a
+/// knowledge gap, and ships SILENT (intelligence-doctrine rule 6: no thin/noisy
+/// surfaces). This is what produced the old "typescript: 5 unread items" gap
+/// headlined by an obscure alpha crate — none of its items were actionable.
+fn gap_is_substantive(gap: &KnowledgeGap) -> bool {
+    gap.missed_items.iter().any(|m| {
+        matches!(
+            classify_missed_item(&m.title),
+            "security advisory" | "breaking change" | "version update"
+        )
+    })
+}
+
 fn missed_item_to_citation(m: &MissedItem) -> EvidenceCitation {
     let freshness_days = chrono::NaiveDateTime::parse_from_str(&m.created_at, "%Y-%m-%d %H:%M:%S")
         .map(|dt| {
@@ -931,7 +946,7 @@ fn build_gap_explanation(
         .iter()
         .find(|m| {
             let c = classify_missed_item(&m.title);
-            c == "security advisory" || c == "breaking change"
+            c == "security advisory" || c == "breaking change" || c == "version update"
         })
         .or_else(|| missed.first());
 
@@ -1049,6 +1064,9 @@ pub fn get_knowledge_gaps() -> Result<EvidenceFeed> {
     let items: Vec<EvidenceItem> = gaps
         .iter()
         .filter(|g| !g.missed_items.is_empty())
+        // Ship silent unless substantive: a gap must carry actionable consequence
+        // (security / breaking / version update), not just unread discussion.
+        .filter(|g| gap_is_substantive(g))
         .map(|g| g.to_evidence_item())
         .filter(|item| match crate::evidence::validate_item(item) {
             Ok(()) => true,
@@ -1197,6 +1215,33 @@ mod tests {
     fn knowledge_gap_maps_to_gap_kind() {
         let item = sample_gap().to_evidence_item();
         assert_eq!(item.kind, crate::evidence::EvidenceKind::Gap);
+    }
+
+    #[test]
+    fn gap_is_substantive_requires_actionable_consequence() {
+        // sample_gap carries a CVE + a release → substantive (surfaces).
+        assert!(gap_is_substantive(&sample_gap()));
+        // Pure general discussion (no security/breaking/version-update keywords)
+        // is unread volume, not a gap → ships silent. This is the exact shape of
+        // the weak "typescript: 5 unread items" gap headlined by an alpha crate.
+        let mut noisy = sample_gap();
+        noisy.missed_items = vec![
+            MissedItem {
+                item_id: 9,
+                title: "TypeScript: the practical guide for JS developers".to_string(),
+                url: None,
+                source_type: "devto".to_string(),
+                created_at: "2026-06-01 00:00:00".to_string(),
+            },
+            MissedItem {
+                item_id: 10,
+                title: "crates.io: code-split-plugin-typescript v1.0.0-alpha.4".to_string(),
+                url: None,
+                source_type: "crates_io".to_string(),
+                created_at: "2026-06-05 00:00:00".to_string(),
+            },
+        ];
+        assert!(!gap_is_substantive(&noisy));
     }
 
     #[test]

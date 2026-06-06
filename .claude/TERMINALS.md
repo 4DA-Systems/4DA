@@ -9,15 +9,36 @@
 
 ## Active Terminals
 
-### Terminal: opus-preemption-cache (2026-06-06) — WAVE 4 (#2b: rank Blind Spots by consequence)
-Working on: making CONSEQUENCE (not unread volume) drive Blind Spots ranking. count_signal_types_for_dep
-buckets security_advisory + breaking_change into "other" today — the highest-consequence signals are
-invisible to ranking. Splitting them out; confidence now consequence-weighted (security>release>analysis,
-pure "other" volume gets no boost); urgency elevated for security/breaking and capped at Medium for
-pure-volume deps. BACKEND-ONLY (blind_spots.rs) — zero overlap with @opus-tab-quality's i18n frontend.
+<!-- opus-preemption-cache (2026-06-06) WAVE 4 (#2b): DONE — committed + PUSHED (origin/main @ 152c620e,
+     522fe2ae..152c620e, rev-list 0/0; full pre-push gate green). Commit Lock RELEASED, claims cleared.
+     Blind Spots now ranked by CONSEQUENCE not volume: count_signal_types_for_dep splits out
+     security_advisory+breaking_change (were buried in "other"); title leads security>release>analysis;
+     confidence consequence-weighted (sec +0.20/rel +0.12/analysis +0.06/pure-volume +0.0); urgency
+     elevates security to ≥High and caps pure-volume at Medium. Tests: cap_urgency_at_medium_*,
+     urgency_min_means_*. LIVE-VERIFIED: "react — 8 security/breaking-change signals unreviewed" (high,
+     c=0.70) leads; release deps c=0.62; pure-volume sank to Medium. blind_spots.rs only. -->
+     <!-- Commit Lock RELEASED (opus-preemption-cache wave 4) -->
+
+### Terminal: opus-preemption-cache (2026-06-06) — WAVE 5 (#3: Knowledge Gaps substance gate)
+Working on: ship Knowledge Gaps SILENT until substantive (verdict found it weak — 1 gap, headline an
+obscure alpha crate). Gate get_knowledge_gaps to surface only gaps whose missed items include CONSEQUENCE
+(security/breaking/version-update per existing classify_missed_item); pure relevant-discussion gaps ship
+silent (doctrine rule 6). Also extend the headline highlight to prefer version-update (never fall back to
+an alpha-crate via missed.first()). BACKEND-ONLY (knowledge_decay.rs).
 **Claims:**
-- src-tauri/src/blind_spots.rs (count_signal_types_for_dep, uncovered_dep_to_evidence_item ranking)
-**Commit Lock**: HELD (opus-preemption-cache) — committing #2b consequence ranking (blind_spots.rs only).
+- src-tauri/src/knowledge_decay.rs (get_knowledge_gaps substance gate + build_gap_explanation highlight)
+**Commit Lock**: HELD (opus-preemption-cache) — committing #3 Knowledge Gaps substance gate (knowledge_decay.rs only).
+
+### Terminal: opus-signal-grounding (2026-06-06) — signal_chains grounding (measure-first)
+Working on: the last grounding gap. signal_chains can mint a CRITICAL keyword-security alert for a topic
+the user does NOT depend on (verified_dep=None → priority "critical", conf 0.32, into Preemption, action
+"…in your projects" when it isn't). Bounded fix: keyword-inferred security/breaking only escalate to
+critical/alert when the chain affects an installed dep; ungrounded chains capped below the grounded band
+(awareness-only urgency + honest action copy). BACKEND-ONLY (signal_chains.rs) — zero overlap with
+@opus-preemption-cache's blind_spots.rs. Live-measured first: 0 live chains now (preventive hardening).
+**Claims:**
+- src-tauri/src/signal_chains.rs (detect_chains priority/confidence gating + suggested_action honesty)
+**Commit Lock**: not held (waiting for @opus-preemption-cache to release before staging signal_chains.rs only).
 
 <!-- opus-tab-quality (2026-06-06) WAVE 4: DONE — i18n backend-leak refactor PHASE 1 (frontend-only)
      COMPLETE + PUSHED. Increment 1 @ 22be99b7 (urgency enum → preemption.urgency.* keys [durable/offline]
