@@ -81,12 +81,22 @@ pub fn complete_scheduled_check<R: Runtime>(
                 summary.critical_count, summary.high_count
             );
 
+            // I-20: header severity must reflect the ACTUAL counts. This summary fires whenever
+            // critical+high > cap, but with 0 critical it previously still rendered
+            // "{count} CRITICAL SIGNALS" (notification.js builds `{count} {priority} SIGNALS`)
+            // while the body honestly read "0 critical, N high". Use the true max severity —
+            // mirrors the threshold logic below (critical_count>0 → critical, else high).
+            let summary_priority = if summary.critical_count > 0 {
+                "critical"
+            } else {
+                "high"
+            };
             if notification_style() == "custom" {
                 crate::notification_window::show_notification(
                     app,
                     NotificationData {
                         variant: "multi".to_string(),
-                        priority: "critical".to_string(),
+                        priority: summary_priority.to_string(),
                         signal_type: Some("security_alert".to_string()),
                         title: title.clone(),
                         action: Some(crate::i18n::t("ui:notify.openForDetails", &flood_lang, &[])),
