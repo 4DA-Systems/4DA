@@ -54,9 +54,11 @@ impl ModelTier {
         matches!(self, ModelTier::Full | ModelTier::Good)
     }
 
-    pub fn supports_briefing_synthesis(self) -> bool {
-        matches!(self, ModelTier::Full | ModelTier::Good)
-    }
+    // NOTE: briefing-synthesis capability is NOT a coarse tier check. The morning brief is
+    // the headline surface and demands a genuine reasoning/writing model — Haiku is `Full`
+    // tier yet too weak to narrate it. The authoritative gate is `is_brief_capable()`; the
+    // capability commands report briefing synthesis through it so all three oracles
+    // (`get_brief_capability`, `get_llm_capability_tier`, `check_synthesis_capability`) agree.
 
     pub fn label(self) -> &'static str {
         match self {
@@ -441,7 +443,7 @@ pub async fn get_llm_capability_tier() -> Result<serde_json::Value> {
         "supports_reranking": tier.supports_reranking(),
         "supports_adversarial": tier.supports_adversarial(),
         "supports_llm_explanations": tier.supports_llm_explanations(),
-        "supports_briefing_synthesis": tier.supports_briefing_synthesis(),
+        "supports_briefing_synthesis": is_brief_capable(&settings),
         "provider": settings.provider,
         "model": settings.model,
     }))
@@ -463,7 +465,7 @@ pub async fn probe_llm_capability() -> Result<serde_json::Value> {
         "supports_reranking": tier.supports_reranking(),
         "supports_adversarial": tier.supports_adversarial(),
         "supports_llm_explanations": tier.supports_llm_explanations(),
-        "supports_briefing_synthesis": tier.supports_briefing_synthesis(),
+        "supports_briefing_synthesis": is_brief_capable(&settings),
         "probed": true,
     }))
 }
@@ -630,5 +632,30 @@ mod tests {
         let cap = compute_brief_capability(&provider("ollama", "", "llama3.1:70b"));
         assert!(cap.brief_capable);
         assert_eq!(cap.reason, BriefNarrationReason::Capable);
+    }
+
+    // I-2 regression: the `supports_briefing_synthesis` field emitted by get_llm_capability_tier
+    // / probe_llm_capability, and the brief-synthesis guidance in check_synthesis_capability, are
+    // now sourced from is_brief_capable — NOT the coarse ModelTier (which rated Haiku `Full` and
+    // claimed it could synthesize the brief, contradicting get_brief_capability). Haiku is a
+    // capable `Full`-tier model for general work but must report brief synthesis = false.
+    #[test]
+    fn briefing_synthesis_follows_brief_gate_not_coarse_tier() {
+        // Haiku: Full tier, yet NOT brief-capable. This is the exact contradiction I-2 closed.
+        assert_eq!(
+            lookup_known_tier("claude-haiku-4-5-20251001"),
+            Some(ModelTier::Full)
+        );
+        assert!(!is_brief_capable(&provider(
+            "anthropic",
+            "sk-ant-real",
+            "claude-haiku-4-5"
+        )));
+        // Sonnet: Full tier AND brief-capable.
+        assert!(is_brief_capable(&provider(
+            "anthropic",
+            "sk-ant-real",
+            "claude-sonnet-4-6"
+        )));
     }
 }

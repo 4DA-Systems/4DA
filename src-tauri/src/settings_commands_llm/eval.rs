@@ -41,8 +41,20 @@ pub(super) async fn check_synthesis_capability_impl() -> Result<serde_json::Valu
     let recommended = crate::model_allowlist::recommend_models(hw.ram_total_gb);
     let top_recommendation = recommended.first().map(|e| e.family);
 
-    let guidance = if capable {
+    // Briefing *narration* has a stricter bar than general synthesis: the morning brief is the
+    // headline surface and needs a Sonnet-class reasoning/writing model. `can_synthesize`
+    // (7B+/cloud) is true for Haiku, but Haiku won't narrate the brief — it falls to the
+    // deterministic grounded floor. Report the brief gate honestly so this command never
+    // contradicts `get_brief_capability`.
+    let brief_capable = crate::llm_capability::is_brief_capable(&llm_settings);
+
+    let guidance = if capable && brief_capable {
         "Your model supports AI-powered briefing synthesis.".to_string()
+    } else if capable {
+        "Your model handles summaries and explanations. The morning brief needs a Sonnet-class \
+         model, so yours will use the deterministic, grounded brief (always available, offline, \
+         cannot hallucinate)."
+            .to_string()
     } else if model_name.is_empty() {
         match top_recommendation {
             Some(rec) => format!(
@@ -63,6 +75,7 @@ pub(super) async fn check_synthesis_capability_impl() -> Result<serde_json::Valu
 
     Ok(serde_json::json!({
         "can_synthesize": capable,
+        "brief_capable": brief_capable,
         "can_explain": can_explain,
         "provider": provider,
         "model": model_name,
