@@ -12,7 +12,7 @@ import type { ModelRegistryData } from '../../store/types';
 // every new user to the deterministic floor. Anthropic defaults to Sonnet for that reason.
 export const curatedModels: Record<string, string[]> = {
   anthropic: ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'],
-  openai: ['gpt-4.1-nano', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'],
+  openai: ['gpt-4.1', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4o-mini', 'gpt-4.1-nano'],
   ollama: ['qwen3:14b', 'gemma3:12b', 'qwen3:8b', 'gemma3:4b', 'deepseek-r1', 'llama3.2', 'phi4'],
 };
 
