@@ -170,7 +170,7 @@ export default function ContentGraphView() {
     let cancelled = false;
     setLoading(true);
 
-    cmd('build_content_graph', { days, max_nodes: 150 })
+    cmd('build_content_graph', { days, maxNodes: 150 })
       .then((graph: ContentGraph) => {
         if (cancelled) return;
         setNodes(toFlowNodes(graph.nodes, graph.clusters));

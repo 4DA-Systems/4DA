@@ -30,15 +30,15 @@ export function useDwellTracking(
     const pattern = classifyInteractionPattern(dwellSeconds);
 
     void cmd('ace_record_interaction', {
-      item_id: itemIdRef.current,
-      action_type: 'click',
-      action_data: JSON.stringify({
+      itemId: itemIdRef.current,
+      actionType: 'click',
+      actionData: JSON.stringify({
         type: 'click',
         dwell_time_seconds: dwellSeconds,
         pattern,
       }),
-      item_topics: topics,
-      item_source: source,
+      itemTopics: topics,
+      itemSource: source,
     }).catch(() => {});
   }, [source, topics]);
 

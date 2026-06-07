@@ -321,13 +321,13 @@ interface CommandMap {
   get_composed_stack: { params: Record<string, never>; result: ComposedStackSummary };
 
   // -- ACE (Autonomous Context Engine) --
-  ace_record_interaction: { params: { item_id: number; action_type: string; action_data: string | null; item_topics: string[]; item_source: string }; result: void };
-  ace_record_accuracy_feedback: { params: { item_id: number; predicted_score: number; feedback_type: string }; result: void };
-  record_item_feedback: { params: { item_id: number; relevant: boolean }; result: void };
+  ace_record_interaction: { params: { itemId: number; actionType: string; actionData: string | null; itemTopics: string[]; itemSource: string }; result: void };
+  ace_record_accuracy_feedback: { params: { itemId: number; predictedScore: number; feedbackType: string }; result: void };
+  record_item_feedback: { params: { itemId: number; relevant: boolean }; result: void };
   triage_alert: { params: { itemId: number; action: string; advisoryId: string | null; reason: string | null; expiresAt: string | null }; result: void };
   get_triage_states: { params: { itemIds: number[] }; result: Array<{ item_id: number; advisory_id: string | null; action: string; reason: string | null; resolved_at: string; expires_at: string | null }> };
   ace_get_topic_affinities: { params: Record<string, never>; result: { affinities: Array<{ topic: string; positive_signals: number; negative_signals: number; affinity_score: number }>; count: number } };
-  ace_get_anti_topics: { params: { min_rejections: number }; result: { anti_topics: Array<{ topic: string; rejection_count: number; last_rejected: string }>; count: number } };
+  ace_get_anti_topics: { params: { minRejections: number }; result: { anti_topics: Array<{ topic: string; rejection_count: number; last_rejected: string }>; count: number } };
   ace_get_single_affinity: { params: { topic: string }; result: { affinity: { topic: string; positive_signals: number; negative_signals: number; affinity_score: number } | null } };
   get_learning_stats: { params: Record<string, never>; result: { total_topics_tracked: number; topics_above_exposure_threshold: number; total_interactions_processed: number; top_positive_affinities: Array<{ topic: string; affinity_score: number; confidence: number; total_exposures: number }>; top_negative_affinities: Array<{ topic: string; affinity_score: number; confidence: number; total_exposures: number }> } };
   ace_get_suggested_interests: { params: Record<string, never>; result: SuggestedInterest[] };
@@ -347,10 +347,10 @@ interface CommandMap {
 
   // -- Learned Preferences (P6) --
   get_learned_preferences: { params: Record<string, never>; result: { facets: Array<{ facet_id: string; class: string; key: string; value: string; stability: number; state: string; user_state: string; evidence_count: number; first_seen_at: number; last_seen_at: number }>; count: number } };
-  pin_preference: { params: { facet_id: string }; result: { success: boolean } };
-  forget_preference: { params: { facet_id: string }; result: { success: boolean } };
-  reset_preference: { params: { facet_id: string }; result: { success: boolean } };
-  get_preference_evidence: { params: { facet_id: string }; result: { facet_id: string; evidence: Array<{ cue_family: string; evidence_type: string; confidence: number; observed_at: number }>; count: number } };
+  pin_preference: { params: { facetId: string }; result: { success: boolean } };
+  forget_preference: { params: { facetId: string }; result: { success: boolean } };
+  reset_preference: { params: { facetId: string }; result: { success: boolean } };
+  get_preference_evidence: { params: { facetId: string }; result: { facet_id: string; evidence: Array<{ cue_family: string; evidence_type: string; confidence: number; observed_at: number }>; count: number } };
 
   // -- Context Directories --
   get_context_dirs: { params: Record<string, never>; result: string[] };
@@ -784,7 +784,7 @@ interface CommandMap {
   get_ai_cost_recommendation: { params: Record<string, never>; result: AiCostRecommendation };
 
   // -- Content Graph --
-  build_content_graph: { params: { days?: number; max_nodes?: number }; result: ContentGraph };
+  build_content_graph: { params: { days?: number; maxNodes?: number }; result: ContentGraph };
 
   // -- Waitlist --
   save_waitlist_signup: { params: { tier: string; email: string; name?: string | null; teamSize?: string | null; company?: string | null; role?: string | null }; result: { success: boolean; tier: string; email: string } };
@@ -1887,11 +1887,11 @@ type ParamCommands = Exclude<keyof CommandMap, NoParamCommands>;
  *
  * // With params:
  * const result = await cmd('ace_record_interaction', {
- *   item_id: 42,
- *   action_type: 'save',
- *   action_data: null,
- *   item_topics: ['rust'],
- *   item_source: 'hn',
+ *   itemId: 42,
+ *   actionType: 'save',
+ *   actionData: null,
+ *   itemTopics: ['rust'],
+ *   itemSource: 'hn',
  * });
  */
 export function cmd<K extends NoParamCommands>(

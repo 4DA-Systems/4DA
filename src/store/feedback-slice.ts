@@ -50,7 +50,7 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
   loadLearnedBehavior: async () => {
     const [affinityResult, antiResult] = await Promise.allSettled([
       cmd('ace_get_topic_affinities'),
-      cmd('ace_get_anti_topics', { min_rejections: 2 }),
+      cmd('ace_get_anti_topics', { minRejections: 2 }),
     ]);
 
     if (affinityResult.status === 'fulfilled' && affinityResult.value.affinities) {
@@ -88,20 +88,20 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
       // Backend calls are non-blocking: one failure doesn't prevent the others
       const results = await Promise.allSettled([
         cmd('ace_record_interaction', {
-          item_id: itemId,
-          action_type: actionType,
-          action_data: actionData,
-          item_topics: topics,
-          item_source: item.source_type || 'hackernews',
+          itemId: itemId,
+          actionType: actionType,
+          actionData: actionData,
+          itemTopics: topics,
+          itemSource: item.source_type || 'hackernews',
         }),
         cmd('ace_record_accuracy_feedback', {
-          item_id: itemId,
-          predicted_score: item.top_score,
-          feedback_type: feedbackTypeMap[actionType]!,
+          itemId: itemId,
+          predictedScore: item.top_score,
+          feedbackType: feedbackTypeMap[actionType]!,
         }),
         // Feed the main DB feedback table — powers autophagy calibration analysis
         cmd('record_item_feedback', {
-          item_id: itemId,
+          itemId: itemId,
           relevant: actionType === 'save' || actionType === 'click',
         }),
       ]);

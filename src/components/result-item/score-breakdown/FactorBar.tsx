@@ -32,11 +32,11 @@ export const FactorBar = memo(function FactorBar({
     setFeedbackGiven(vote);
     try {
       await cmd('ace_record_interaction', {
-        item_id: itemId,
-        action_type: vote === 'up' ? 'click' : 'dismiss',
-        action_data: JSON.stringify({ factor: factor.key, dwell_time_seconds: 0 }),
-        item_topics: [factor.key],
-        item_source: 'score_feedback',
+        itemId: itemId,
+        actionType: vote === 'up' ? 'click' : 'dismiss',
+        actionData: JSON.stringify({ factor: factor.key, dwell_time_seconds: 0 }),
+        itemTopics: [factor.key],
+        itemSource: 'score_feedback',
       });
       onFeedbackGiven(factor.key, vote);
     } catch {

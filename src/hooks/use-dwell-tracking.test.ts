@@ -28,11 +28,18 @@ describe('useDwellTracking', () => {
     vi.advanceTimersByTime(10_000);
     act(() => result.current.onHidden());
 
+    // I-1 regression guard: Tauri maps camelCase JS args -> snake_case Rust params.
+    // Passing snake_case keys (item_id/action_type/...) silently fails to bind and the
+    // interaction is never recorded. Keys MUST be camelCase.
     expect(cmd).toHaveBeenCalledWith('ace_record_interaction', expect.objectContaining({
-      item_id: 42,
-      action_type: 'click',
-      item_source: 'github',
+      itemId: 42,
+      actionType: 'click',
+      itemSource: 'github',
     }));
+    const args = (cmd as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]![1] as Record<string, unknown>;
+    expect(args).not.toHaveProperty('item_id');
+    expect(args).not.toHaveProperty('action_type');
+    expect(args).not.toHaveProperty('item_source');
   });
 
   it('ignores dwell under 2 seconds', () => {
