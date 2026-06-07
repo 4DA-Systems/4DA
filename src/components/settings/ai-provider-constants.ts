@@ -5,8 +5,13 @@ import type { ModelRegistryData } from '../../store/types';
 // Curated model lists — these are the models users should see.
 // Registry data (LiteLLM) is only used for pricing, not for dropdown population,
 // because it includes hundreds of old/deprecated model names.
+// NOTE: the FIRST entry per provider is the default selected when a user picks that
+// provider (AIProviderSection uses curatedModels[provider][0]). The default MUST be a
+// brief-capable model — the morning brief is the headline surface, and defaulting to a
+// model that can't narrate it (Haiku/-mini/-nano → is_brief_capable=false) silently drops
+// every new user to the deterministic floor. Anthropic defaults to Sonnet for that reason.
 export const curatedModels: Record<string, string[]> = {
-  anthropic: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-6'],
+  anthropic: ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'],
   openai: ['gpt-4.1-nano', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'],
   ollama: ['qwen3:14b', 'gemma3:12b', 'qwen3:8b', 'gemma3:4b', 'deepseek-r1', 'llama3.2', 'phi4'],
 };
