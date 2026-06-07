@@ -117,6 +117,12 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
 
                 db.record_source_health(&st, true, filtered as i64, 0, None)
                     .ok();
+                // I-5: stamp sources.last_fetch on the ACTIVE ingestion path. The legacy
+                // source_fetching/fetcher.rs path stamps it, but this parallel processor (the
+                // path that actually runs) did not — so sources.last_fetch went 25d+ stale while
+                // items kept arriving. The fetch-interval gate (fetcher.rs:133) and any "last
+                // updated" UI read this column, so a stale value misreports freshness.
+                db.update_source_fetch_time(&st).ok();
 
                 // Record per-feed health so DataFreshness.source_checks_last_24h updates
                 let mut feed_origins_seen = std::collections::HashSet::new();
