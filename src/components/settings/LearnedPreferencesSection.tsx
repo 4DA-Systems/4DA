@@ -135,7 +135,7 @@ export function LearnedPreferencesSection() {
 
   const handleAction = async (action: 'pin_preference' | 'forget_preference' | 'reset_preference', facetId: string) => {
     try {
-      await cmd(action, { facet_id: facetId });
+      await cmd(action, { facetId: facetId });
       await loadPreferences();
       const verb = action === 'pin_preference' ? 'pinned' : action === 'forget_preference' ? 'forgotten' : 'reset';
       setSettingsStatus(`Preference ${verb}`);

@@ -49,15 +49,15 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
   const recordTitleClick = useCallback(() => {
     const topics = extractTechTopics(item.title);
     cmd('ace_record_interaction', {
-      item_id: item.id,
-      action_type: 'click',
-      action_data: JSON.stringify({
+      itemId: item.id,
+      actionType: 'click',
+      actionData: JSON.stringify({
         type: 'click',
         dwell_time_seconds: 0,
         pattern: 'engaged',
       }),
-      item_topics: topics,
-      item_source: item.source_type || 'unknown',
+      itemTopics: topics,
+      itemSource: item.source_type || 'unknown',
     }).catch(() => {});
   }, [item.id, item.title, item.source_type]);
 

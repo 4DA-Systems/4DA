@@ -63,11 +63,11 @@ export function useViewTracking({
       }
 
       void cmd('ace_record_interaction', {
-        item_id: itemId,
-        action_type: 'scroll',
-        action_data: JSON.stringify(actionData),
-        item_topics: itemTopics,
-        item_source: sourceType,
+        itemId: itemId,
+        actionType: 'scroll',
+        actionData: JSON.stringify(actionData),
+        itemTopics: itemTopics,
+        itemSource: sourceType,
       }).catch((e) => console.debug('[view-tracking] record view:', e));
     },
     [itemId, sourceType, itemTopics, itemIndex, totalItems],
@@ -78,11 +78,11 @@ export function useViewTracking({
     ignoreRecorded.current = true;
 
     void cmd('ace_record_interaction', {
-      item_id: itemId,
-      action_type: 'ignore',
-      action_data: null,
-      item_topics: itemTopics,
-      item_source: sourceType,
+      itemId: itemId,
+      actionType: 'ignore',
+      actionData: null,
+      itemTopics: itemTopics,
+      itemSource: sourceType,
     }).catch((e) => console.debug('[view-tracking] record ignore:', e));
   }, [itemId, sourceType, hasExplicitFeedback, itemTopics]);
 
