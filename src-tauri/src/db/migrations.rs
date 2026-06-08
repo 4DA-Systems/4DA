@@ -600,7 +600,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 82;
+        const TARGET_VERSION: i64 = 83;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2939,6 +2939,26 @@ impl Database {
                         c.execute_batch(
                             "ALTER TABLE source_items ADD COLUMN signal_type TEXT;
                              ALTER TABLE source_items ADD COLUMN signal_priority TEXT;",
+                        )?;
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 83: backfill -1.0 precision sentinels to NULL. Earlier weekly
+            // precision computation stored -1.0 as an "insufficient data" sentinel;
+            // an impossible numeric in a REAL column corrupts every reader. Undefined
+            // precision is NULL (no-vanity-metric doctrine); the compute path now
+            // writes None, this cleans the historical rows.
+            if current_version < 83 {
+                Self::run_versioned_migration(
+                    &conn,
+                    82,
+                    83,
+                    "Phase 83: backfill precision_stats -1.0 sentinels to NULL",
+                    |c| {
+                        c.execute_batch(
+                            "UPDATE precision_stats SET precision = NULL WHERE precision < 0;",
                         )?;
                         Ok(())
                     },

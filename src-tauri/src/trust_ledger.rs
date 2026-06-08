@@ -394,10 +394,15 @@ pub fn compute_and_store_weekly_precision() -> Result<()> {
         // TP = validated only. acted_on is engagement, not confirmation.
         let true_positives = validated;
         let precision_denominator = true_positives + false_positives;
-        let precision = if precision_denominator >= MIN_PRECISION_DATA_POINTS {
-            true_positives as f32 / precision_denominator as f32
+        // Undefined precision is stored as NULL (None), never a -1.0 sentinel. An
+        // impossible numeric in a REAL column corrupts every reader (export, trend
+        // UI, query_db) and violates the no-vanity-metric doctrine: an undefined
+        // metric ships as NULL/silent, not as a fake value. The live read path
+        // (get_domain_precision) already uses Option<f32>; this aligns the stored path.
+        let precision: Option<f32> = if precision_denominator >= MIN_PRECISION_DATA_POINTS {
+            Some(true_positives as f32 / precision_denominator as f32)
         } else {
-            -1.0 // Insufficient data -- use sentinel value
+            None
         };
 
         let action_rate = if total > 0 {
@@ -1200,34 +1205,46 @@ mod tests {
     }
 
     #[test]
-    fn test_weekly_precision_sentinel_with_no_data() {
-        // When fewer than MIN_PRECISION_DATA_POINTS exist, the weekly precision
-        // computation stores -1.0 as a sentinel value. Verify the logic.
-        let validated: u32 = 0;
-        let false_positives: u32 = 0;
-        let precision_denominator = validated + false_positives;
-        let precision = if precision_denominator >= MIN_PRECISION_DATA_POINTS {
-            validated as f32 / precision_denominator as f32
-        } else {
-            -1.0 // Insufficient data sentinel
-        };
-        assert_eq!(
-            precision, -1.0,
-            "with zero data, precision sentinel must be -1.0"
-        );
+    fn test_weekly_precision_undefined_is_none_not_sentinel() {
+        // When fewer than MIN_PRECISION_DATA_POINTS exist, weekly precision is
+        // undefined and MUST be None (stored as SQL NULL) -- never a -1.0 sentinel,
+        // which would corrupt any reader and display an impossible value.
+        for (validated, false_positives) in [(0u32, 0u32), (2, 1)] {
+            let precision_denominator = validated + false_positives; // 0 and 3, both < 5
+            let precision: Option<f32> = if precision_denominator >= MIN_PRECISION_DATA_POINTS {
+                Some(validated as f32 / precision_denominator as f32)
+            } else {
+                None
+            };
+            assert_eq!(
+                precision, None,
+                "with {} data points (< {}), precision must be None, not a sentinel",
+                precision_denominator, MIN_PRECISION_DATA_POINTS
+            );
+        }
+    }
 
-        // Also verify with some data below threshold
-        let validated2: u32 = 2;
-        let false_positives2: u32 = 1;
-        let precision_denominator2 = validated2 + false_positives2; // 3 < 5
-        let precision2 = if precision_denominator2 >= MIN_PRECISION_DATA_POINTS {
-            validated2 as f32 / precision_denominator2 as f32
-        } else {
-            -1.0
-        };
-        assert_eq!(
-            precision2, -1.0,
-            "with 3 data points (below threshold of 5), sentinel must be -1.0"
-        );
+    #[test]
+    fn test_weekly_precision_never_negative() {
+        // Property: stored precision is either None or within [0.0, 1.0]. Never negative.
+        for validated in 0u32..=8 {
+            for false_positives in 0u32..=8 {
+                let precision_denominator = validated + false_positives;
+                let precision: Option<f32> = if precision_denominator >= MIN_PRECISION_DATA_POINTS {
+                    Some(validated as f32 / precision_denominator as f32)
+                } else {
+                    None
+                };
+                if let Some(p) = precision {
+                    assert!(
+                        (0.0..=1.0).contains(&p),
+                        "precision {} out of [0,1] for validated={} fp={}",
+                        p,
+                        validated,
+                        false_positives
+                    );
+                }
+            }
+        }
     }
 }
