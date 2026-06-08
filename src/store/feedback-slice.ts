@@ -85,38 +85,59 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         ? JSON.stringify({ type: 'click', dwell_time_seconds: 0, pattern: 'engaged' })
         : null;
 
-      // Backend calls are non-blocking: one failure doesn't prevent the others
-      const results = await Promise.allSettled([
-        cmd('ace_record_interaction', {
-          itemId: itemId,
-          actionType: actionType,
-          actionData: actionData,
-          itemTopics: topics,
-          itemSource: item.source_type || 'hackernews',
-        }),
-        cmd('ace_record_accuracy_feedback', {
-          itemId: itemId,
-          predictedScore: item.top_score,
-          feedbackType: feedbackTypeMap[actionType]!,
-        }),
-        // Feed the main DB feedback table — powers autophagy calibration analysis
-        cmd('record_item_feedback', {
-          itemId: itemId,
-          relevant: actionType === 'save' || actionType === 'click',
-        }),
-      ]);
+      // Backend calls are non-blocking: one failure doesn't prevent the others.
+      // Command names are tracked alongside the promises so a rejection is reported
+      // WITH the command that failed. Silent IPC contract drift (the I-1 class bug —
+      // camelCase/snake_case arg mismatches rejected and swallowed) must never again
+      // disappear into an anonymous warning.
+      const calls = [
+        {
+          name: 'ace_record_interaction',
+          promise: cmd('ace_record_interaction', {
+            itemId: itemId,
+            actionType: actionType,
+            actionData: actionData,
+            itemTopics: topics,
+            itemSource: item.source_type || 'hackernews',
+          }),
+        },
+        {
+          name: 'ace_record_accuracy_feedback',
+          promise: cmd('ace_record_accuracy_feedback', {
+            itemId: itemId,
+            predictedScore: item.top_score,
+            feedbackType: feedbackTypeMap[actionType]!,
+          }),
+        },
+        {
+          // Feed the main DB feedback table — powers autophagy calibration analysis
+          name: 'record_item_feedback',
+          promise: cmd('record_item_feedback', {
+            itemId: itemId,
+            relevant: actionType === 'save' || actionType === 'click',
+          }),
+        },
+      ];
+      const results = await Promise.allSettled(calls.map(c => c.promise));
 
-      // Log any individual failures without reverting the UI
-      for (const r of results) {
+      // Log any individual failures (named) without reverting the UI
+      const failedCommands: string[] = [];
+      results.forEach((r, i) => {
         if (r.status === 'rejected') {
-          console.warn('Feedback command failed (non-blocking):', r.reason);
+          failedCommands.push(calls[i]!.name);
+          console.warn(
+            `Feedback command '${calls[i]!.name}' failed (non-blocking):`,
+            r.reason,
+          );
         }
-      }
+      });
 
-      // Notify user if any backend feedback calls failed
-      const failCount = results.filter(r => r.status === 'rejected').length;
-      if (failCount > 0) {
-        get().addToast('warning', `${failCount} feedback action(s) failed to save`);
+      // Notify user if any backend feedback calls failed, naming the command(s)
+      if (failedCommands.length > 0) {
+        get().addToast(
+          'warning',
+          `Feedback not fully saved (${failedCommands.join(', ')} failed)`,
+        );
       }
 
       // Track what was just learned for the visible learning loop
