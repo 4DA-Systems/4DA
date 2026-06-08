@@ -570,8 +570,33 @@ pub(crate) fn app_context() -> tauri::Context {
 /// fetch+score pipeline without a GUI window. See `headless::run_headless`.
 pub use headless::{run_headless, HeadlessMode};
 
+/// Detect the headless-engine flags in the process arguments. Returns `Some((mode, force))` when
+/// `--engine-once` or `--engine-daemon` is present — so the already-shipped `fourda` binary can run
+/// the windowless refresh engine under a scheduler without bundling a separate executable — or
+/// `None` for a normal GUI launch. `--force` bypasses the freshness gate.
+fn parse_engine_args(args: impl IntoIterator<Item = String>) -> Option<(HeadlessMode, bool)> {
+    let mut mode = None;
+    let mut force = false;
+    for arg in args {
+        match arg.as_str() {
+            "--engine-once" => mode = Some(HeadlessMode::Once),
+            "--engine-daemon" => mode = Some(HeadlessMode::Daemon),
+            "--force" | "-f" => force = true,
+            _ => {}
+        }
+    }
+    mode.map(|m| (m, force))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Headless engine mode: `fourda --engine-once|--engine-daemon [--force]` runs the windowless
+    // refresh engine instead of the desktop GUI, so the binary that already ships can keep the
+    // database fresh under a scheduler — no separate bundled executable required. Diverges when matched.
+    if let Some((mode, force)) = parse_engine_args(std::env::args().skip(1)) {
+        run_headless(mode, force);
+    }
+
     // Must be set BEFORE any WebKitGTK initialization
     #[cfg(target_os = "linux")]
     {
