@@ -120,7 +120,13 @@ fn install_console_ctrl_handler() {
 /// Pre-Tauri initialization: logging, threshold, database, context engine, source registry.
 ///
 /// Must be called before `tauri::Builder` is constructed.
-pub(crate) fn initialize_pre_tauri() {
+///
+/// `acquire_single_instance` controls the GUI-only single-instance lock + crash-loop gate. The GUI
+/// passes `true` (only one window-owning process may run). The headless engine
+/// ([`crate::headless::run_headless`]) passes `false`: it is a legitimate concurrent process that
+/// shares the WAL database with a running GUI, and the crash-loop/safe-mode machinery is a
+/// frontend concern it has no window to surface.
+pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
     use crate::state::{
         get_context_dir, get_context_engine, get_relevance_threshold, get_source_registry,
     };
@@ -205,7 +211,10 @@ pub(crate) fn initialize_pre_tauri() {
     // Both are infallible-from-caller's-perspective (AlreadyRunning exits the
     // process immediately; everything else either succeeds or degrades
     // gracefully). See `acquire_instance_and_detect_crash_loop` for detail.
-    acquire_instance_and_detect_crash_loop();
+    // Skipped for the headless engine, which must coexist with a running GUI over the same DB.
+    if acquire_single_instance {
+        acquire_instance_and_detect_crash_loop();
+    }
 
     // Verify binary integrity (code signature, size sanity, permissions).
     // Runs after crash guard so any panics are handled. Logs only — never blocks.
@@ -1785,10 +1794,22 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
 
 /// Execute a scheduled analysis cycle (cache-first approach).
 async fn run_scheduled_analysis(handle: tauri::AppHandle) {
+    let started = std::time::Instant::now();
+    let mut receipt = crate::engine_runs::RunReceipt::begin("scheduled");
+
     // Step 1: Fill cache with deep fetch (background, no UI blocking)
     info!(target: "4da::monitor", "Step 1: Filling cache with deep fetch...");
-    if let Err(e) = fill_cache_background(&handle).await {
-        warn!(target: "4da::monitor", error = %e, "Cache fill failed, continuing with existing cache");
+    match fill_cache_background(&handle).await {
+        Ok(summary) => {
+            receipt.sources_succeeded = summary.succeeded;
+            receipt.sources_failed = summary.failed;
+            receipt.sources_skipped = summary.skipped_disabled;
+            receipt.new_items = summary.new_items;
+            receipt.cached_touches = summary.cached_touches;
+        }
+        Err(e) => {
+            warn!(target: "4da::monitor", error = %e, "Cache fill failed, continuing with existing cache");
+        }
     }
 
     // Step 2: Analyze cached content (INSTANT).
@@ -1800,6 +1821,13 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
     match analysis::analyze_cached_content_silent(&handle).await {
         Ok(results) => {
             let relevant_count = results.iter().filter(|r| r.relevant).count();
+
+            // Record this cycle's freshness receipt (engine_runs) so the MCP server and external
+            // verifiers can distinguish fresh data from stale — see engine_runs.rs.
+            receipt.items_scored = results.len();
+            receipt.relevant_count = relevant_count;
+            receipt.duration_ms = started.elapsed().as_millis() as u64;
+            crate::engine_runs::record(receipt);
 
             // Build signal summary for notifications
             let signal_summary = build_signal_summary(&results);
@@ -1866,6 +1894,10 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
         }
         Err(e) => {
             error!(target: "4da::monitor", error = %e, "Scheduled analysis failed");
+            receipt.ok = false;
+            receipt.error = Some(e.to_string());
+            receipt.duration_ms = started.elapsed().as_millis() as u64;
+            crate::engine_runs::record(receipt);
             events::void_signal_error(&handle);
             let state = get_monitoring_state();
             state

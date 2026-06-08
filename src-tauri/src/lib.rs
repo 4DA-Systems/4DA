@@ -257,6 +257,7 @@ mod briefing_quality;
 /// that every intelligence surface emits after Phases 3-5. Read
 /// `docs/strategy/INTELLIGENCE-RECONCILIATION.md` before touching intelligence.
 mod engagement_telemetry;
+mod engine_runs;
 mod evidence;
 mod external;
 pub mod extractors;
@@ -264,6 +265,7 @@ mod free_briefing;
 /// Intelligence Reconciliation Phase 7 — Cold Start Layer 1.
 mod git_decision_miner;
 mod hardware_detect;
+mod headless;
 mod health;
 mod health_commands;
 mod http_client;
@@ -557,6 +559,17 @@ fn detect_nvidia_gpu() -> bool {
     false
 }
 
+/// Build the Tauri context exactly once. Shared by the GUI entry point (`run`) and the headless
+/// engine (`headless::run_headless`) so the embedded frontend assets come from a single
+/// `generate_context!` site rather than being duplicated per entry point.
+pub(crate) fn app_context() -> tauri::Context {
+    tauri::generate_context!()
+}
+
+/// Headless engine entry point — re-exported so the `fourda-engine` binary can drive the
+/// fetch+score pipeline without a GUI window. See `headless::run_headless`.
+pub use headless::{run_headless, HeadlessMode};
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Must be set BEFORE any WebKitGTK initialization
@@ -641,7 +654,7 @@ pub fn run() {
     }
 
     // Pre-Tauri initialization (logging, threshold, DB, context, registry)
-    app_setup::initialize_pre_tauri();
+    app_setup::initialize_pre_tauri(true);
 
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
@@ -1164,7 +1177,7 @@ pub fn run() {
             preference_commands::get_preference_evidence,
         ])
         .setup(app_setup::setup_app)
-        .build(tauri::generate_context!())
+        .build(app_context())
         .expect("Failed to build Tauri application. Check tauri.conf.json and system permissions.")
         .run(app_setup::handle_run_event);
 }
