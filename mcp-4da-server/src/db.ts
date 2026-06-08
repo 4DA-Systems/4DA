@@ -130,6 +130,44 @@ export interface DatabaseValidationResult {
 }
 
 /**
+ * Live freshness state of the feed database, read from ground truth (`source_items`, `sources`,
+ * `engine_runs`). The MCP server reads the DB but cannot fetch or score — that pipeline lives in
+ * the 4DA app / `fourda-engine`. Attaching this to DB-backed tool responses stops the server from
+ * presenting stale data as if it were live. Mirrors the Rust `engine_runs::FreshnessSnapshot`.
+ */
+export interface DataFreshness {
+  /** Total rows in `source_items`. */
+  source_items_total: number;
+  /** Newest `source_items.created_at` (ingestion watermark, UTC), or null if empty. */
+  newest_item_at: string | null;
+  /** Newest `sources.last_fetch` across all sources (UTC), or null if nothing has fetched. */
+  last_fetch_at: string | null;
+  /** `completed_at` of the most recent engine run, or null if none / table absent. */
+  last_engine_run_at: string | null;
+  /** `trigger` of the most recent engine run (e.g. `scheduled`, `headless_once`). */
+  last_engine_run_trigger: string | null;
+  /** Whether the most recent engine run reported success. */
+  last_engine_run_ok: boolean | null;
+  /** Whole minutes since the last fetch, or null if never fetched. */
+  age_minutes: number | null;
+  /** True when the feed has not been refreshed within `STALE_AFTER_MINUTES`. */
+  is_stale: boolean;
+  /** Human-readable summary with the remedy when stale. */
+  note: string;
+}
+
+/** Minutes a feed may go without a fetch before DB-backed tools flag it stale. */
+const STALE_AFTER_MINUTES = 60;
+
+/** Whole minutes between a UTC `YYYY-MM-DD HH:MM:SS` timestamp and now, or null if unparseable. */
+function minutesSince(ts: string | null): number | null {
+  if (!ts) return null;
+  const ms = Date.parse(ts.replace(" ", "T") + "Z");
+  if (Number.isNaN(ms)) return null;
+  return Math.max(0, Math.round((Date.now() - ms) / 60000));
+}
+
+/**
  * 4DA Database accessor
  */
 export class FourDADatabase {
@@ -715,6 +753,73 @@ export class FourDADatabase {
       return this.getRelevantContentFromRust(minScore, sourceType, limit, sinceDate);
     }
     return this.getRelevantContentFallback(minScore, sourceType, limit, sinceDate);
+  }
+
+  /**
+   * Read the live freshness state of the feed database. Answered from ground truth, not from any
+   * claim that a refresh ran — so DB-backed tools can tell the caller whether the curated feed is
+   * fresh or stale. Tolerant of older databases where `engine_runs` does not yet exist.
+   */
+  getFreshness(): DataFreshness {
+    const total = (
+      this.db.prepare("SELECT COUNT(*) AS c FROM source_items").get() as { c: number }
+    ).c;
+    const newestItemAt = (
+      this.db.prepare("SELECT MAX(created_at) AS m FROM source_items").get() as {
+        m: string | null;
+      }
+    ).m;
+    const lastFetchAt = this.safeMaxLastFetch();
+
+    let lastRunAt: string | null = null;
+    let lastRunTrigger: string | null = null;
+    let lastRunOk: boolean | null = null;
+    try {
+      const row = this.db
+        .prepare("SELECT completed_at, trigger, ok FROM engine_runs ORDER BY id DESC LIMIT 1")
+        .get() as
+        | { completed_at: string | null; trigger: string | null; ok: number | null }
+        | undefined;
+      if (row) {
+        lastRunAt = row.completed_at;
+        lastRunTrigger = row.trigger;
+        lastRunOk = row.ok == null ? null : row.ok !== 0;
+      }
+    } catch {
+      // engine_runs may not exist on an older desktop-app DB — its absence is itself a stale signal.
+    }
+
+    const ageMinutes = minutesSince(lastFetchAt);
+    const isStale = ageMinutes === null || ageMinutes > STALE_AFTER_MINUTES;
+    const note = isStale
+      ? `Feed data ${
+          ageMinutes === null ? "has never been fetched" : `is ~${ageMinutes} min old`
+        } and may be stale: the MCP server reads the database but does not fetch. Run ` +
+        "`fourda-engine --once` (or open the 4DA app) to refresh."
+      : `Feed data is ~${ageMinutes} min old (fresh).`;
+
+    return {
+      source_items_total: total,
+      newest_item_at: newestItemAt,
+      last_fetch_at: lastFetchAt,
+      last_engine_run_at: lastRunAt,
+      last_engine_run_trigger: lastRunTrigger,
+      last_engine_run_ok: lastRunOk,
+      age_minutes: ageMinutes,
+      is_stale: isStale,
+      note,
+    };
+  }
+
+  /** `MAX(sources.last_fetch)`, tolerant of a missing `sources` table (returns null). */
+  private safeMaxLastFetch(): string | null {
+    try {
+      return (
+        this.db.prepare("SELECT MAX(last_fetch) AS m FROM sources").get() as { m: string | null }
+      ).m;
+    } catch {
+      return null;
+    }
   }
 
   private hasColumn(table: string, column: string): boolean {
