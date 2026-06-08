@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { cmd } from '../../lib/commands';
+import { cmd, type SchedulerStatus } from '../../lib/commands';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { MonitoringStatus } from '../../types';
@@ -96,6 +96,83 @@ function LaunchAtStartupToggle() {
         <span
           className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
             enabled ? 'translate-x-5' : 'translate-x-0.5'
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Toggles an OS scheduled task that refreshes the feed while 4DA is closed — the counterpart to the
+ * in-app monitoring above (which only runs while the window/tray is alive). Backed by the
+ * install/uninstall/status background-refresh Tauri commands; the OS task is the source of truth, so
+ * we always render the backend's reported state rather than an optimistic guess.
+ */
+function BackgroundRefreshToggle({ intervalMinutes }: { intervalMinutes: number }) {
+  const { t } = useTranslation();
+  const [status, setStatus] = useState<SchedulerStatus | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    cmd('background_refresh_status')
+      .then((s) => { setStatus(s); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const installed = status?.installed ?? false;
+  const supported = status?.supported ?? true;
+  const activeInterval = status?.interval_minutes ?? intervalMinutes;
+
+  const toggle = async () => {
+    if (busy || !supported) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      const next = installed
+        ? await cmd('uninstall_background_refresh')
+        : await cmd('install_background_refresh', { intervalMinutes });
+      setStatus(next);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
+      <div>
+        <span className="text-sm text-white">{t('settings.monitoring.backgroundRefresh', 'Refresh while 4DA is closed')}</span>
+        <p className="text-xs text-text-muted">
+          {!supported
+            ? t('settings.monitoring.backgroundRefreshUnsupported', 'Not available on this platform yet.')
+            : installed
+              ? t('settings.monitoring.backgroundRefreshActive', { minutes: activeInterval })
+              : t('settings.monitoring.backgroundRefreshDescription', "Run a background system task that keeps your feed fresh on your monitoring interval, even when 4DA isn't open.")}
+        </p>
+        {failed && (
+          <p className="text-xs text-red-400 mt-1">
+            {t('settings.monitoring.backgroundRefreshFailed', 'Could not update the system task. Check your permissions and try again.')}
+          </p>
+        )}
+      </div>
+      <button
+        onClick={() => { void toggle(); }}
+        disabled={busy || !supported}
+        aria-pressed={installed}
+        aria-label={t('settings.monitoring.backgroundRefresh', 'Refresh while 4DA is closed')}
+        className={`relative w-10 h-5 rounded-full transition-colors ${
+          installed ? 'bg-green-500/40' : 'bg-gray-600'
+        } ${busy || !supported ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        <span
+          className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+            installed ? 'translate-x-5' : 'translate-x-0.5'
           }`}
         />
       </button>
@@ -283,6 +360,7 @@ export function MonitoringSection({
 
           <CloseToTrayToggle initialValue={monitoring.close_to_tray} />
           <LaunchAtStartupToggle />
+          <BackgroundRefreshToggle intervalMinutes={monitoringInterval} />
 
         </div>
       ) : (
