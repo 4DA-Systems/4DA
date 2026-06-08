@@ -14,10 +14,12 @@ use ts_rs::TS;
 
 pub(crate) mod compound_score;
 pub(crate) mod scoring_boost;
+pub(crate) mod validation;
 pub(crate) mod windows;
 
 pub(crate) use compound_score::compute_compound_score;
 pub(crate) use scoring_boost::compute_decision_window_boost;
+pub(crate) use validation::validate_open_windows;
 pub(crate) use windows::{detect_decision_windows, expire_stale_windows, get_open_windows};
 
 // ============================================================================
