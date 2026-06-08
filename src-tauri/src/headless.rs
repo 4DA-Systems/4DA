@@ -190,7 +190,16 @@ async fn run_daemon_loop(handle: &AppHandle, force: bool) {
 
 /// The refresh interval from `monitoring.interval_minutes`, clamped to a sane floor so a
 /// misconfigured value can't tighten the loop below [`MIN_DAEMON_INTERVAL_MINUTES`].
+///
+/// `FOURDA_ENGINE_INTERVAL_SECS` overrides this with an explicit seconds cadence (clamped to a 10s
+/// floor) — for tests that need to observe several cycles quickly, and for power users who want a
+/// tighter loop than the settings UI exposes.
 fn daemon_interval() -> Duration {
+    if let Ok(raw) = std::env::var("FOURDA_ENGINE_INTERVAL_SECS") {
+        if let Ok(secs) = raw.trim().parse::<u64>() {
+            return Duration::from_secs(secs.max(10));
+        }
+    }
     let minutes = {
         let settings = crate::get_settings_manager().lock();
         settings.get_monitoring_config().interval_minutes
@@ -209,7 +218,7 @@ fn daemon_interval() -> Duration {
 /// snapshot/timestamp can't be read — failing toward refreshing rather than silently skipping.
 /// `sources.last_fetch` is stamped `datetime('now')` (UTC, `YYYY-MM-DD HH:MM:SS`).
 fn is_data_fresh() -> bool {
-    let interval_minutes = daemon_interval().as_secs() / 60;
+    let interval_minutes = (daemon_interval().as_secs() / 60).max(1);
     let snap = match crate::engine_runs::freshness_snapshot() {
         Ok(s) => s,
         Err(_) => return false,

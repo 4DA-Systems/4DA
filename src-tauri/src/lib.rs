@@ -258,6 +258,7 @@ mod briefing_quality;
 /// `docs/strategy/INTELLIGENCE-RECONCILIATION.md` before touching intelligence.
 mod engagement_telemetry;
 mod engine_runs;
+mod engine_scheduler;
 mod evidence;
 mod external;
 pub mod extractors;
@@ -588,6 +589,77 @@ fn parse_engine_args(args: impl IntoIterator<Item = String>) -> Option<(Headless
     mode.map(|m| (m, force))
 }
 
+/// Handle the scheduler subcommands from the process arguments:
+/// `--install-scheduler [--interval N]` | `--uninstall-scheduler` | `--scheduler-status`.
+/// Returns `Some(exit_code)` when one was handled (the caller should exit the process), else `None`
+/// so a normal launch proceeds. Shells out to the OS scheduler; needs no app initialization.
+///
+/// `headless_arg` is the flag the scheduled task should pass to the current binary — `--engine-once`
+/// for the shipped `fourda` GUI binary, `--once` for the `fourda-engine` console binary — so the task
+/// invokes a headless refresh of whichever executable installed it. Shared by both binaries.
+pub fn handle_scheduler_cli(
+    args: impl IntoIterator<Item = String>,
+    headless_arg: &str,
+) -> Option<i32> {
+    let args: Vec<String> = args.into_iter().collect();
+    let has = |flag: &str| args.iter().any(|a| a == flag);
+    let interval = args
+        .iter()
+        .position(|a| a == "--interval")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|v| v.parse::<u64>().ok());
+
+    if has("--install-scheduler") {
+        let exe = match std::env::current_exe() {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Could not resolve the 4DA executable path: {e}");
+                return Some(1);
+            }
+        };
+        match engine_scheduler::install(
+            interval.unwrap_or(engine_scheduler::DEFAULT_INTERVAL_MINUTES),
+            &exe,
+            headless_arg,
+        ) {
+            Ok(s) => {
+                println!(
+                    "Background refresh installed (every {} min): {}",
+                    s.interval_minutes
+                        .or(interval)
+                        .unwrap_or(engine_scheduler::DEFAULT_INTERVAL_MINUTES),
+                    s.detail
+                );
+                Some(0)
+            }
+            Err(e) => {
+                eprintln!("Failed to install background refresh: {e}");
+                Some(1)
+            }
+        }
+    } else if has("--uninstall-scheduler") {
+        match engine_scheduler::uninstall() {
+            Ok(_) => {
+                println!("Background refresh removed.");
+                Some(0)
+            }
+            Err(e) => {
+                eprintln!("Failed to remove background refresh: {e}");
+                Some(1)
+            }
+        }
+    } else if has("--scheduler-status") {
+        let s = engine_scheduler::status();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&s).unwrap_or_else(|_| format!("{s:?}"))
+        );
+        Some(0)
+    } else {
+        None
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Headless engine mode: `fourda --engine-once|--engine-daemon [--force]` runs the windowless
@@ -595,6 +667,13 @@ pub fn run() {
     // database fresh under a scheduler — no separate bundled executable required. Diverges when matched.
     if let Some((mode, force)) = parse_engine_args(std::env::args().skip(1)) {
         run_headless(mode, force);
+    }
+
+    // Scheduler subcommands: install/remove/inspect the OS background-refresh task, then exit. These
+    // let `fourda --install-scheduler` set up automatic freshness without opening the GUI; the same
+    // engine_scheduler functions back the settings-UI Tauri commands.
+    if let Some(code) = handle_scheduler_cli(std::env::args().skip(1), "--engine-once") {
+        std::process::exit(code);
     }
 
     // Must be set BEFORE any WebKitGTK initialization
