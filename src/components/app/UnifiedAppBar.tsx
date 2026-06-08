@@ -109,22 +109,22 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           {summaryBadges && isComplete && (
             <span
               className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] bg-bg-tertiary/60 text-text-secondary rounded font-mono border border-border"
-              title={t('header.summaryTooltip', '{{rel}} relevant items this session · {{top}} top-scored', {
-                rel: summaryBadges.relevantCount,
+              title={t('header.summaryTooltip', '{{top}} to review · {{rel}} in corpus', {
                 top: summaryBadges.topCount,
+                rel: summaryBadges.relevantCount,
               })}
             >
-              {/* eslint-disable i18next/no-literal-string */}
-              <span className="text-green-400">{summaryBadges.relevantCount}</span>
-              <span className="text-text-muted">relevant</span>
+              {/* Lead with the actionable, prioritized set ("to review"); the larger
+                  relevant set is the searchable corpus, not a backlog the user must clear. */}
               {summaryBadges.topCount > 0 && (
                 <>
-                  <span className="text-text-muted">·</span>
                   <span className="text-orange-400">{summaryBadges.topCount}</span>
-                  <span className="text-text-muted">top</span>
+                  <span className="text-text-muted">{t('header.toReview', 'to review')}</span>
+                  <span className="text-text-muted">·</span>
                 </>
               )}
-              {/* eslint-enable i18next/no-literal-string */}
+              <span className="text-green-400">{summaryBadges.relevantCount}</span>
+              <span className="text-text-muted">{t('header.inCorpus', 'in corpus')}</span>
             </span>
           )}
 
