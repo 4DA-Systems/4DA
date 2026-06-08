@@ -702,10 +702,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 if let Ok(conn) = crate::open_db_connection() {
                     let expired = crate::decision_advantage::expire_stale_windows(&conn);
                     let detected = crate::decision_advantage::detect_decision_windows(&conn);
-                    if expired > 0 || !detected.is_empty() {
+                    let validated = crate::decision_advantage::validate_open_windows(&conn);
+                    if expired > 0 || !detected.is_empty() || validated > 0 {
                         info!(
                             target: "4da::monitor",
-                            expired, detected = detected.len(),
+                            expired, detected = detected.len(), validated,
                             "Decision windows updated"
                         );
                         if let Err(e) = app.emit("decision-windows-updated", &detected) {
