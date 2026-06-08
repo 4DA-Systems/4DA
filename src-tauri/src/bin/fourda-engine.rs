@@ -19,9 +19,16 @@
 //! Exit codes (--once): 0 = success or skipped-fresh, 1 = scoring failed, 2 = app build failed,
 //! 64 = bad usage.
 
-use fourda_lib::{run_headless, HeadlessMode};
+use fourda_lib::{handle_scheduler_cli, run_headless, HeadlessMode};
 
 fn main() {
+    // Scheduler subcommands install/remove/inspect an OS task that runs THIS console binary
+    // (`fourda-engine --once`) on an interval — handy for setting up background refresh on a machine
+    // that runs the engine standalone (e.g. the Verax test host). Exits when handled.
+    if let Some(code) = handle_scheduler_cli(std::env::args().skip(1), "--once") {
+        std::process::exit(code);
+    }
+
     let args: Vec<String> = std::env::args().skip(1).collect();
     let force = args.iter().any(|a| a == "--force" || a == "-f");
     // The mode is the first argument that isn't the force flag.
