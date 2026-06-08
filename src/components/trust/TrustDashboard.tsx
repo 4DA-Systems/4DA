@@ -119,6 +119,11 @@ export const TrustDashboard = memo(function TrustDashboard() {
     : null;
 
   const hasEnoughData = s.total_surfaced >= 10 && s.has_precision_data;
+  // Preemption "wins" ship silent until proven (ADR §3.7, intelligence-doctrine rule 6):
+  // a cold-start user must never see a gold "0 caught early". The validation closer
+  // (I-4) populates these only from real, dependency-grounded preemptions.
+  const MIN_WINS_TO_SURFACE = 3;
+  const hasEnoughWins = s.preemption_wins >= MIN_WINS_TO_SURFACE;
 
   return (
     <div className="p-5 space-y-4">
@@ -151,9 +156,9 @@ export const TrustDashboard = memo(function TrustDashboard() {
         />
         <MetricCard
           label={t('trust.caughtEarly')}
-          value={s.preemption_wins}
-          color="text-accent-gold"
-          subtext={leadTimeDays != null ? t('trust.avgLeadTime', { days: leadTimeDays }) : undefined}
+          value={hasEnoughWins ? s.preemption_wins : '--'}
+          color={hasEnoughWins ? 'text-accent-gold' : 'text-text-muted'}
+          subtext={hasEnoughWins && leadTimeDays != null ? t('trust.avgLeadTime', { days: leadTimeDays }) : undefined}
         />
       </div>
 
