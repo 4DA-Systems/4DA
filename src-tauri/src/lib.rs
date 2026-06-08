@@ -1279,6 +1279,10 @@ pub fn run() {
             preference_commands::forget_preference,
             preference_commands::reset_preference,
             preference_commands::get_preference_evidence,
+            // Background-refresh scheduler (settings-UI toggle → OS task running --engine-once)
+            engine_scheduler::install_background_refresh,
+            engine_scheduler::uninstall_background_refresh,
+            engine_scheduler::background_refresh_status,
         ])
         .setup(app_setup::setup_app)
         .build(app_context())

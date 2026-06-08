@@ -108,11 +108,36 @@ pub fn status() -> SchedulerStatus {
     }
 }
 
-// NOTE: the settings-UI Tauri layer (install/uninstall/status `#[tauri::command]` wrappers + their
-// frontend `invoke()` callers) is intentionally added together in a later change, so a command and
-// its caller land atomically — registering commands the frontend doesn't yet call trips the
-// ghost-command gate. For now the scheduler is driven by the `--install-scheduler` /
-// `--uninstall-scheduler` / `--scheduler-status` CLI on the shipped binary (see lib.rs).
+// ============================================================================
+// Tauri commands — the settings-UI background-refresh toggle (MonitoringSection.tsx)
+// ============================================================================
+
+/// Enable background refresh: install a scheduled task running the shipped binary `--engine-once`
+/// every `interval_minutes` (default 30). Returns the resulting status.
+#[tauri::command]
+pub fn install_background_refresh(
+    interval_minutes: Option<u64>,
+) -> Result<SchedulerStatus, String> {
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("Could not resolve the 4DA executable path: {e}"))?;
+    install(
+        interval_minutes.unwrap_or(DEFAULT_INTERVAL_MINUTES),
+        &exe,
+        "--engine-once",
+    )
+}
+
+/// Disable background refresh: remove the scheduled task.
+#[tauri::command]
+pub fn uninstall_background_refresh() -> Result<SchedulerStatus, String> {
+    uninstall()
+}
+
+/// Current background-refresh status (installed? interval? platform support?).
+#[tauri::command]
+pub fn background_refresh_status() -> SchedulerStatus {
+    status()
+}
 
 // ============================================================================
 // Windows implementation (schtasks)

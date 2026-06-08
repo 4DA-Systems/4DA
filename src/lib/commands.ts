@@ -221,6 +221,22 @@ export interface FeedHealth {
   circuit_open: boolean;
 }
 
+/** Background-refresh OS-task status (mirrors Rust `engine_scheduler::SchedulerStatus`). */
+export interface SchedulerStatus {
+  /** Whether the scheduled task currently exists. */
+  installed: boolean;
+  /** Whether this platform supports background-refresh scheduling at all. */
+  supported: boolean;
+  /** `windows` | `macos` | `linux`. */
+  platform: string;
+  /** The scheduled-task name. */
+  task_name: string;
+  /** Configured interval in minutes, if known. */
+  interval_minutes: number | null;
+  /** Human-readable detail (the task command, or why it's unsupported). */
+  detail: string;
+}
+
 /** Full IPC contract: command name → parameter type & return type. */
 interface CommandMap {
   // -- Analysis & Core --
@@ -276,6 +292,9 @@ interface CommandMap {
   set_close_to_tray: { params: { enabled: boolean }; result: void };
   set_launch_at_startup: { params: { enabled: boolean }; result: { launch_at_startup: boolean; registration_failed?: boolean; message: string } };
   get_launch_at_startup: { params: Record<string, never>; result: boolean };
+  background_refresh_status: { params: Record<string, never>; result: SchedulerStatus };
+  install_background_refresh: { params: { intervalMinutes?: number }; result: SchedulerStatus };
+  uninstall_background_refresh: { params: Record<string, never>; result: SchedulerStatus };
   notification_clicked: { params: { item_id?: number | null }; result: void };
   briefing_item_clicked: { params: { item_id?: number | null }; result: void };
   briefing_open_url: { params: { url: string }; result: void };
