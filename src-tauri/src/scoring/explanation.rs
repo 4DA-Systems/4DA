@@ -1,7 +1,18 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use super::ace_context::ACEContext;
+use super::context::is_low_quality_topic;
 use crate::{context_engine, scoring_config, RelevanceMatch};
 use fourda_macros::score_component;
+
+/// Word-boundary-aware topic match: the item topic equals the active topic, or
+/// contains it as a whole delimited segment. Prevents infix artifacts — e.g. the
+/// active topic "os" must NOT match the item topic "macos" (one segment, not "os").
+fn topic_word_match(item_topic: &str, active_topic: &str) -> bool {
+    item_topic == active_topic
+        || item_topic
+            .split(|c: char| matches!(c, '-' | '.' | '/' | '_' | ' '))
+            .any(|seg| seg == active_topic)
+}
 
 /// Generate a human-readable explanation for why an item was considered relevant.
 /// Produces specific, actionable text naming the exact technologies/topics that matched.
@@ -102,14 +113,18 @@ pub(crate) fn generate_relevance_explanation(
         parts.push(format!("Related to {} ({project_label})", names.join(", ")));
     }
 
-    // 2. Active project topic matches — combine with tier 1 for multi-signal depth
+    // 2. Active project topic matches — combine with tier 1 for multi-signal depth.
+    // Gate by is_low_quality_topic (drops short / code-fragment noise like "os") and
+    // require a word-boundary match (not an arbitrary infix like "macos" -> "os"), so
+    // the reasoning only cites credible active topics — faithful to the same quality bar
+    // synthesize_ace_interests applies before an active topic can influence the score.
     let topic_hits: Vec<&str> = item_topics
         .iter()
         .filter_map(|t| {
             ace_ctx
                 .active_topics
                 .iter()
-                .find(|at| *at == t || t.contains(at.as_str()))
+                .find(|at| !is_low_quality_topic(at) && topic_word_match(t, at))
                 .map(std::string::String::as_str)
         })
         .filter(|t| !used_topics.contains(t))
@@ -719,6 +734,45 @@ mod tests {
             explanation.contains("active project"),
             "Should also have active project match: {}",
             explanation
+        );
+    }
+
+    #[test]
+    fn test_topic_word_match_no_infix() {
+        // Exact and whole-segment matches hold; infix fragments do not.
+        assert!(topic_word_match("tokio", "tokio"));
+        assert!(topic_word_match("react-native", "react"));
+        assert!(topic_word_match("next.js", "next"));
+        assert!(!topic_word_match("macos", "os"));
+        assert!(!topic_word_match("typescript", "types"));
+    }
+
+    #[test]
+    fn test_active_topic_reasoning_filters_noise() {
+        // Noise fragments in active_topics must NOT surface as "active project" reasons:
+        // "os" is low-quality (2 chars) AND only infix-matches "macos"; a credible,
+        // word-matched topic ("tokio") still gets cited.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics = vec!["os".to_string(), "tokio".to_string()];
+        let explanation = generate_relevance_explanation(
+            "Tokio async runtime on macOS",
+            0.5,
+            0.3,
+            &[],
+            &ace_ctx,
+            &["tokio".to_string(), "macos".to_string()],
+            &[],
+            &[],
+            &[],
+            0,
+        );
+        assert!(
+            !explanation.contains("os (active project)") && !explanation.contains(", os "),
+            "noise topic 'os' must not appear as an active-project reason: {explanation}"
+        );
+        assert!(
+            explanation.contains("tokio") && explanation.contains("active project"),
+            "credible topic 'tokio' should be cited as an active-project reason: {explanation}"
         );
     }
 }
