@@ -941,12 +941,21 @@ fn build_gap_explanation(
         format!("{days_since}d since last review")
     };
 
-    // Highlight the most notable missed item
+    // Highlight the most notable missed item — by CONSEQUENCE, not list order.
+    // Security advisories and breaking changes outrank a version update: a CVE must
+    // never be buried under a routine release just because the release appears first
+    // in the list. A version update still outranks a raw first(), so a surfaced gap
+    // never falls back to a noisy alpha-crate item (the af79d241 anti-noise intent).
     let highlight = missed
         .iter()
         .find(|m| {
             let c = classify_missed_item(&m.title);
-            c == "security advisory" || c == "breaking change" || c == "version update"
+            c == "security advisory" || c == "breaking change"
+        })
+        .or_else(|| {
+            missed
+                .iter()
+                .find(|m| classify_missed_item(&m.title) == "version update")
         })
         .or_else(|| missed.first());
 
