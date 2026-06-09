@@ -35,11 +35,8 @@ var synthesisHintText = document.getElementById('synthesis-hint-text');
 var synthesisProvenance = document.getElementById('synthesis-provenance');
 var preemptionSection = document.getElementById('preemption-section');
 var preemptionList = document.getElementById('preemption-list');
-var gapsSection = document.getElementById('gaps-section');
-var gapsList = document.getElementById('gaps-list');
-var blindSpotScore = document.getElementById('blind-spot-score');
-var ongoingSection = document.getElementById('ongoing-section');
-var ongoingLine = document.getElementById('ongoing-line');
+var freshnessSection = document.getElementById('freshness-section');
+var freshnessLine = document.getElementById('freshness-line');
 var stalenessBar = document.getElementById('staleness-bar');
 var stalenessText = document.getElementById('staleness-text');
 var dismissBtn = document.getElementById('dismiss-btn');
@@ -48,10 +45,6 @@ var openAppBtn = document.getElementById('open-app-btn');
 var dismissTimer = null;
 var isHovering = false;
 var corroborationAvailable = false;
-
-// i18n: translatable strings (populated from Rust payload, defaults to English)
-var gapDaysSuffix = 'd since last signal';
-var trackingLabel = 'Still tracking:';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -94,6 +87,13 @@ function isAbstention(text) {
   if (!text) return true;
   var lower = text.toLowerCase();
   return lower.indexOf('low signal') === 0 || lower.indexOf('no noteworthy') !== -1;
+}
+
+/** True if the brief has any signal/alert/chain worth rendering (vs. a pure quiet state). */
+function hasRenderableContent(data) {
+  return !!((data.items && data.items.length > 0)
+    || (data.preemption_alerts && data.preemption_alerts.length > 0)
+    || (data.escalating_chains && data.escalating_chains.length > 0));
 }
 
 /** Extract date string from title like "4DA Intelligence Briefing — 02 Apr 2026" */
@@ -201,18 +201,48 @@ function buildItemHtml(item) {
     + '</div>';
 }
 
-function buildGapsHtml(gaps) {
-  var html = '';
-  for (var i = 0; i < gaps.length; i++) {
-    var gap = gaps[i];
-    var topic = escapeHtml(gap.topic || '');
-    var days = gap.days_since_last != null ? gap.days_since_last : '?';
-    html += '<div class="gap-row">'
-      + '<span class="gap-topic">' + topic + '</span>'
-      + '<span class="gap-days">' + days + gapDaysSuffix + '</span>'
-      + '</div>';
+/** Humanize a minute count into "just now" / "Nm ago" / "Nh ago" / "Nd ago". */
+function formatAgo(minutes) {
+  if (minutes == null) return '';
+  var m = Math.max(0, Math.round(minutes));
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  var h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+/**
+ * Build the Verax freshness line from data_freshness. Prefers the engine-run
+ * receipt ("Scanned 421 · 20/20 sources · 4m ago"); falls back to the raw item
+ * watermark ("Freshest item 4m ago") when no receipt exists — so the line always
+ * shows real freshness even with the headless engine / Verax verifier disabled.
+ */
+function buildFreshnessLine(df) {
+  if (!df) return '';
+  if (df.last_run_items_scored != null && df.last_run_age_minutes != null) {
+    var scanned = df.last_run_items_scored;
+    var ok = df.last_run_sources_succeeded != null ? df.last_run_sources_succeeded : 0;
+    var failed = df.last_run_sources_failed != null ? df.last_run_sources_failed : 0;
+    var total = ok + failed;
+    var srcPart = total > 0 ? (ok + '/' + total + ' sources') : (ok + ' sources');
+    return 'Scanned ' + scanned + ' · ' + srcPart + ' · ' + formatAgo(df.last_run_age_minutes);
   }
-  return html;
+  if (df.newest_item_age_hours != null) {
+    return 'Freshest item ' + formatAgo(df.newest_item_age_hours * 60);
+  }
+  return '';
+}
+
+function renderFreshnessLine(df) {
+  if (!freshnessSection || !freshnessLine) return;
+  var text = buildFreshnessLine(df);
+  if (text) {
+    freshnessLine.textContent = text;
+    freshnessSection.style.display = '';
+  } else {
+    freshnessSection.style.display = 'none';
+  }
 }
 
 function buildChainsHtml(chains) {
@@ -342,15 +372,12 @@ function renderBriefing(data) {
       'label-header': data.labels.header,
       'label-preemption': data.labels.preemption,
       'label-escalating': data.labels.escalating,
-      'label-signals': data.labels.signals,
-      'label-blindspots': data.labels.blind_spots
+      'label-signals': data.labels.signals
     };
     for (var key in labelMap) {
       var el = document.getElementById(key);
       if (el && labelMap[key]) el.textContent = labelMap[key];
     }
-    gapDaysSuffix = data.labels.gap_days_suffix || gapDaysSuffix;
-    trackingLabel = data.labels.tracking || trackingLabel;
   }
 
   // First-briefing personalization context line
@@ -366,13 +393,24 @@ function renderBriefing(data) {
   // as a muted single-line message so the user knows the system ran but had nothing new.
   if (data.synthesis && !isAbstention(data.synthesis)) {
     synthesisSection.style.display = '';
-    synthesisSection.classList.remove('abstention');
+    synthesisSection.classList.remove('abstention', 'synthesizing');
     synthesisText.textContent = cleanSynthesis(data.synthesis);
     if (synthesisHintSection) synthesisHintSection.style.display = 'none';
   } else if (data.synthesis && isAbstention(data.synthesis)) {
-    synthesisSection.style.display = '';
-    synthesisSection.classList.add('abstention');
-    synthesisText.textContent = cleanSynthesis(data.synthesis);
+    // Honest quiet state. When there ARE signals/alerts to show, a "nothing
+    // noteworthy" line would contradict the list directly below it — so suppress
+    // it and let the signals speak, with the freshness line as the proof the
+    // system looked. Only when there is genuinely nothing do we show a warm
+    // collapse line.
+    if (hasRenderableContent(data)) {
+      synthesisSection.style.display = 'none';
+      synthesisSection.classList.remove('abstention', 'synthesizing');
+    } else {
+      synthesisSection.style.display = '';
+      synthesisSection.classList.remove('synthesizing');
+      synthesisSection.classList.add('abstention');
+      synthesisText.textContent = 'All quiet — nothing crosses your bar this morning.';
+    }
     if (synthesisHintSection) synthesisHintSection.style.display = 'none';
   } else if (data.synthesis_hint) {
     // No cloud API configured — show honest empty state
@@ -441,31 +479,9 @@ function renderBriefing(data) {
     itemsList.innerHTML = html;
   }
 
-  // Knowledge gaps — show specific topics, not percentages
-  var hasGaps = data.knowledge_gaps && data.knowledge_gaps.length > 0;
-  if (hasGaps) {
-    gapsSection.style.display = '';
-    gapsList.innerHTML = buildGapsHtml(data.knowledge_gaps);
-  } else if (data.coverage_building) {
-    gapsSection.style.display = '';
-    gapsList.innerHTML = '<div class="gap-row coverage-building">'
-      + '<span class="gap-topic">Building coverage model</span>'
-      + '<span class="gap-days">&lt;7d of data</span>'
-      + '</div>';
-  } else {
-    gapsSection.style.display = 'none';
-  }
-  // Hide blind spot percentage — it's a vanity metric without a denominator
-  blindSpotScore.style.display = 'none';
-
-  // Ongoing topics
-  if (data.ongoing_topics && data.ongoing_topics.length > 0) {
-    ongoingSection.style.display = '';
-    var topics = data.ongoing_topics.map(function (t) { return escapeHtml(t); }).join(', ');
-    ongoingLine.innerHTML = '<span class="ongoing-label">' + trackingLabel + '</span> ' + topics;
-  } else {
-    ongoingSection.style.display = 'none';
-  }
+  // Verax freshness line — always present, on every brief. The visible daily proof
+  // that the data is live, and the trust anchor for a quiet brief.
+  renderFreshnessLine(data.data_freshness);
 }
 
 // ---------------------------------------------------------------------------
@@ -587,14 +603,21 @@ async function init() {
 
     // Async synthesis arrives after initial briefing
     await listen('briefing-synthesis', function (event) {
-      if (event.payload && !isAbstention(event.payload) && synthesisSection && synthesisText) {
-        synthesisSection.classList.remove('synthesizing');
+      if (!event.payload || !synthesisSection || !synthesisText) return;
+      synthesisSection.classList.remove('synthesizing');
+      if (isAbstention(event.payload)) {
+        // Quiet day. The initial briefing-data already rendered any signals; a
+        // late "nothing noteworthy" line would only contradict them — so hide it
+        // and let the signals + freshness line stand as the brief.
+        synthesisSection.classList.remove('abstention');
+        synthesisSection.style.display = 'none';
+      } else {
         synthesisSection.classList.remove('abstention');
         synthesisSection.style.display = '';
         synthesisText.textContent = cleanSynthesis(event.payload);
-        // Hide hint since synthesis arrived
-        if (synthesisHintSection) synthesisHintSection.style.display = 'none';
       }
+      // Hide hint since synthesis arrived
+      if (synthesisHintSection) synthesisHintSection.style.display = 'none';
     });
 
     // Synthesis provenance metadata — consumed for logging only, never shown

@@ -50,4 +50,25 @@ is_stale: boolean,
  * True when no source adapter has succeeded in the last 24 hours,
  * even if the system is not fully stale. Signals degraded freshness.
  */
-no_recent_fetches: boolean, };
+no_recent_fetches: boolean, 
+/**
+ * Items scored in the most recent fetch+score cycle, read from the latest
+ * `engine_runs` receipt (Verax ground truth). Written by BOTH the in-app
+ * background scheduler AND the headless engine — so it is populated even when
+ * the external Verax verifier / headless task is disabled. None only when no
+ * cycle has ever recorded a receipt (brand-new install); the freshness line
+ * then falls back to the `newest_item_age_hours` watermark.
+ */
+last_run_items_scored: number | null, 
+/**
+ * Source adapters that succeeded in the most recent recorded cycle.
+ */
+last_run_sources_succeeded: number | null, 
+/**
+ * Source adapters that failed in the most recent recorded cycle.
+ */
+last_run_sources_failed: number | null, 
+/**
+ * Minutes since the most recent recorded cycle completed. None with no receipt.
+ */
+last_run_age_minutes: number | null, };

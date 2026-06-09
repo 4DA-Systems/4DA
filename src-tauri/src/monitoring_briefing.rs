@@ -53,6 +53,23 @@ pub struct DataFreshness {
     /// True when no source adapter has succeeded in the last 24 hours,
     /// even if the system is not fully stale. Signals degraded freshness.
     pub no_recent_fetches: bool,
+    /// Items scored in the most recent fetch+score cycle, read from the latest
+    /// `engine_runs` receipt (Verax ground truth). Written by BOTH the in-app
+    /// background scheduler AND the headless engine — so it is populated even when
+    /// the external Verax verifier / headless task is disabled. None only when no
+    /// cycle has ever recorded a receipt (brand-new install); the freshness line
+    /// then falls back to the `newest_item_age_hours` watermark.
+    #[serde(default)]
+    pub last_run_items_scored: Option<u32>,
+    /// Source adapters that succeeded in the most recent recorded cycle.
+    #[serde(default)]
+    pub last_run_sources_succeeded: Option<u32>,
+    /// Source adapters that failed in the most recent recorded cycle.
+    #[serde(default)]
+    pub last_run_sources_failed: Option<u32>,
+    /// Minutes since the most recent recorded cycle completed. None with no receipt.
+    #[serde(default)]
+    pub last_run_age_minutes: Option<f64>,
 }
 
 /// Query source_items to compute a DataFreshness snapshot.
@@ -133,6 +150,33 @@ pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> D
         .query_row("SELECT COUNT(*) FROM feed_health", [], |row| row.get(0))
         .unwrap_or(0);
 
+    // Verax freshness receipt — the most recent engine_runs row records what the last
+    // fetch+score cycle actually did (ground truth, written by the GUI scheduler and the
+    // headless engine alike). Powers the brief's "Scanned N · X/Y sources · Zm ago"
+    // provenance line. The table may not exist on a brand-new DB; the query then errors
+    // and we leave the fields None (the line falls back to the item watermark).
+    let (
+        last_run_items_scored,
+        last_run_sources_succeeded,
+        last_run_sources_failed,
+        last_run_age_minutes,
+    ): (Option<u32>, Option<u32>, Option<u32>, Option<f64>) = conn
+        .query_row(
+            "SELECT items_scored, sources_succeeded, sources_failed,
+                    (julianday('now') - julianday(completed_at)) * 24.0 * 60.0
+             FROM engine_runs ORDER BY id DESC LIMIT 1",
+            [],
+            |row| {
+                Ok((
+                    Some(row.get::<_, i64>(0)?.max(0) as u32),
+                    Some(row.get::<_, i64>(1)?.max(0) as u32),
+                    Some(row.get::<_, i64>(2)?.max(0) as u32),
+                    row.get::<_, Option<f64>>(3)?.map(|m| m.max(0.0)),
+                ))
+            },
+        )
+        .unwrap_or((None, None, None, None));
+
     DataFreshness {
         newest_item_age_hours: newest_age,
         items_last_24h: items_24h,
@@ -147,6 +191,10 @@ pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> D
             || (total_sources > 0 && failing_sources * 100 / total_sources >= 50)
             || (total_sources > 0 && source_checks_72h == 0),
         no_recent_fetches: total_sources > 0 && source_checks_24h == 0,
+        last_run_items_scored,
+        last_run_sources_succeeded,
+        last_run_sources_failed,
+        last_run_age_minutes,
     }
 }
 
@@ -718,15 +766,17 @@ pub(crate) fn build_enriched_briefing(
     };
 
     // Abstention: when novelty filtering removed all items AND all preemption
-    // alerts, the briefing has nothing new. Return a "low signal" abstention
-    // with ongoing topics so the user sees the system is alive but quiet.
+    // alerts, the briefing has nothing new. Return a "low signal" abstention; the
+    // frontend pairs it with the Verax freshness line (data_freshness) so silence
+    // reads as proof the system looked, not as a void. Absence lists ("still
+    // tracking" / "quiet sources") are deliberately omitted — see the main return.
     if items.is_empty() && preemption_alerts.is_empty() && !ongoing_topics.is_empty() {
         return BriefingNotification {
             title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
             items: vec![],
             total_relevant: 0,
-            ongoing_topics,
-            knowledge_gaps: detect_knowledge_gaps(),
+            ongoing_topics: vec![],
+            knowledge_gaps: vec![],
             escalating_chains,
             synthesis: Some("Low signal — no new intelligence overnight.".to_string()),
             preemption_alerts: vec![],
@@ -773,9 +823,6 @@ pub(crate) fn build_enriched_briefing(
 
     let total_relevant = items.len();
 
-    // Detect knowledge gaps: declared tech with no recent signals
-    let knowledge_gaps = detect_knowledge_gaps();
-
     // escalating_chains and preemption_alerts already loaded before quality gate
 
     // Collect blind spot score
@@ -799,8 +846,12 @@ pub(crate) fn build_enriched_briefing(
         title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
         items,
         total_relevant,
-        ongoing_topics,
-        knowledge_gaps,
+        // Absence sections ("Still tracking" / "Quiet in your sources") are intentionally
+        // not surfaced in the brief — they report what is NOT happening, inform no action,
+        // and violate Intelligence Doctrine rule #3 (no vanity metrics). `ongoing_topics` is
+        // still computed above for the novelty filter; it just no longer reaches the UI.
+        ongoing_topics: vec![],
+        knowledge_gaps: vec![],
         escalating_chains,
         synthesis: None,
         preemption_alerts,
@@ -1774,76 +1825,6 @@ fn record_preemption_history(
             tracing::warn!(target: "4da::monitor", error = %e, title = %alert.title, "Failed to record preemption history");
         }
     }
-}
-
-// ============================================================================
-// Knowledge Gap Detection
-// ============================================================================
-
-/// Detect knowledge gaps: declared tech topics with no recent source items.
-/// Returns topics the user cares about but hasn't seen intelligence on in 5+ days.
-fn detect_knowledge_gaps() -> Vec<KnowledgeGap> {
-    let declared_tech: Vec<String> = {
-        match crate::get_context_engine() {
-            Ok(engine) => {
-                if let Ok(identity) = engine.get_static_identity() {
-                    identity.tech_stack.clone()
-                } else {
-                    return vec![];
-                }
-            }
-            Err(_) => return vec![],
-        }
-    };
-
-    if declared_tech.is_empty() {
-        return vec![];
-    }
-
-    let conn = match crate::open_db_connection() {
-        Ok(c) => c,
-        Err(_) => return vec![],
-    };
-
-    let mut gaps = Vec::new();
-
-    for tech in &declared_tech {
-        let tech_lower = tech.to_lowercase();
-        // Word-boundary aware: match "react" but not "reactive" or "react-native".
-        // SQLite has no regex, so we check 4 boundary patterns:
-        //   exact title, start-of-title, end-of-title, mid-title with spaces.
-        let last_seen: Option<i64> = conn
-            .query_row(
-                "SELECT CAST(julianday('now') - julianday(MAX(created_at)) AS INTEGER)
-                 FROM source_items
-                 WHERE LOWER(title) = ?1
-                    OR LOWER(title) LIKE ?2
-                    OR LOWER(title) LIKE ?3
-                    OR LOWER(title) LIKE ?4",
-                rusqlite::params![
-                    &tech_lower,
-                    format!("{} %", tech_lower),
-                    format!("% {}", tech_lower),
-                    format!("% {} %", tech_lower),
-                ],
-                |row| row.get(0),
-            )
-            .ok();
-
-        if let Some(days) = last_seen {
-            if days >= 5 {
-                gaps.push(KnowledgeGap {
-                    topic: tech.clone(),
-                    days_since_last: days,
-                });
-            }
-        }
-    }
-
-    // Sort by stalest first
-    gaps.sort_by(|a, b| b.days_since_last.cmp(&a.days_since_last));
-    gaps.truncate(5); // Max 5 gaps in briefing
-    gaps
 }
 
 // ============================================================================
