@@ -18,7 +18,6 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   SourceRelevance,
   ScoreBreakdown,
-  ProValueReport,
 } from '../types/analysis';
 import type { CalibrationResult, CurveFitReport, CurveStatus, TasteTestStepResult, TasteProfileSummary } from '../types/calibration';
 import type {
@@ -434,7 +433,6 @@ interface CommandMap {
   recover_license_by_email: { params: { email: string }; result: { success: boolean; license_key?: string; tier?: string; expires_at?: string; status?: string; reason?: string; detail?: string } };
   get_trial_status: { params: Record<string, never>; result: { active: boolean; days_remaining: number; started_at: string | null } };
   start_trial: { params: Record<string, never>; result: { success: boolean; days_remaining?: number } };
-  get_pro_value_report: { params: Record<string, never>; result: ProValueReport };
 
   // -- Playbook (STREETS) --
   get_playbook_modules: { params: { lang?: string }; result: PlaybookModule[] };
@@ -1990,7 +1988,6 @@ export type {
   AgentSessionBrief,
   DelegationScoreEntry,
   DelegationScoreResult,
-  ProValueReport,
   StreetHealthScore,
   SovereignProfileData,
   SovereignDeveloperProfileData,

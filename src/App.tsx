@@ -83,7 +83,6 @@ function App() {
   const loadSourceHealth = useAppStore(s => s.loadSourceHealth);
   const loadLicense = useAppStore(s => s.loadLicense);
   const loadTrialStatus = useAppStore(s => s.loadTrialStatus);
-  const loadProValueReport = useAppStore(s => s.loadProValueReport);
   const loadChannels = useAppStore(s => s.loadChannels);
   const setEmbeddingStatus = useAppStore(s => s.setEmbeddingStatus);
   const embeddingStatus = useAppStore(s => s.embeddingStatus);
@@ -186,7 +185,7 @@ function App() {
     addToast,
   });
 
-  // Load persisted briefing + source health + license + pro value + game state on mount (instant, from DB)
+  // Load persisted briefing + source health + license + game state on mount (instant, from DB)
   useEffect(() => {
     trackEvent('app_launch');
     // Load source metadata from backend (populates dynamic source registry + resets filters)
@@ -197,9 +196,8 @@ function App() {
     void loadSourceHealth();
     void loadLicense();
     void loadTrialStatus();
-    void loadProValueReport();
     void cmd('prune_personalization_cache').catch(() => {});
-  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport]);
+  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus]);
 
   // Event listeners: deep-link activation, embedding status, framework/comparison triggers, cached result loading
   useAppListeners({

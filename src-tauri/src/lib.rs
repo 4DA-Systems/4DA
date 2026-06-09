@@ -862,7 +862,6 @@ pub fn run() {
             settings_commands::get_locale,
             settings_commands::set_locale,
             settings_commands::set_language,
-            settings_commands::get_pro_value_report,
             settings_commands::get_user_context,
             settings_commands::set_user_role,
             settings_commands::set_experience_level,

@@ -43,7 +43,7 @@ vi.mock('../../store', () => ({
         loadAutophagyStatus: vi.fn(), loadAutophagyHistory: vi.fn(),
         decisionWindows: [], decisionWindowsLoading: false,
         loadDecisionWindows: vi.fn(), actOnWindow: vi.fn(), dismissWindow: vi.fn(),
-        proValueReport: null, agentMemories: [], agentMemoryLoading: false,
+        agentMemories: [], agentMemoryLoading: false,
         loadAgentMemories: vi.fn(),
         tier: 'free', trialStatus: null, expired: false,
         daysRemaining: 0, expiresAt: null, startTrial: vi.fn(),

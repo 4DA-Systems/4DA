@@ -46,10 +46,6 @@ describe('license-slice', () => {
     it('has expired false', () => {
       expect(useAppStore.getState().expired).toBe(false);
     });
-
-    it('has proValueReport null', () => {
-      expect(useAppStore.getState().proValueReport).toBeNull();
-    });
   });
 
   // ---------------------------------------------------------------------------
@@ -248,29 +244,6 @@ describe('license-slice', () => {
       useAppStore.setState({ tier: 'pro', expired: true });
 
       expect(useAppStore.getState().isPro()).toBe(false);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // loadProValueReport
-  // ---------------------------------------------------------------------------
-  describe('loadProValueReport', () => {
-    it('loads the pro value report', async () => {
-      const mockReport = { total_value: 120, features_used: 5, saved_hours: 10 };
-      vi.mocked(invoke).mockResolvedValueOnce(mockReport);
-
-      await useAppStore.getState().loadProValueReport();
-
-      expect(invoke).toHaveBeenCalledWith('get_pro_value_report', {});
-      expect(useAppStore.getState().proValueReport).toEqual(mockReport);
-    });
-
-    it('silently handles errors', async () => {
-      vi.mocked(invoke).mockRejectedValueOnce(new Error('fail'));
-
-      await useAppStore.getState().loadProValueReport();
-
-      expect(useAppStore.getState().proValueReport).toBeNull();
     });
   });
 });

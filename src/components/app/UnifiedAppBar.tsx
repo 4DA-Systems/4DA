@@ -2,7 +2,7 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-import { memo, Suspense, lazy, useCallback } from 'react';
+import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrandMark } from '../void-engine/BrandMark';
 import { useVoidSignals } from '../../hooks/use-void-signals';
@@ -11,7 +11,6 @@ import { SystemHealthDot } from '../SystemHealthDot';
 import { cmd } from '../../lib/commands';
 import { useAppStore } from '../../store';
 import { CommandSearch } from '../search/CommandSearch';
-const ProValueBadge = lazy(() => import('../ProValueBadge').then(m => ({ default: m.ProValueBadge })));
 
 // ============================================================================
 // Types
@@ -191,7 +190,6 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
             </button>
           )}
           <OllamaStatus provider={settingsFormProvider} />
-          <Suspense fallback={null}><ProValueBadge /></Suspense>
 
           {/* Tier badge */}
           <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded ${

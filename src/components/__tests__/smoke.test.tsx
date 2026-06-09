@@ -93,9 +93,6 @@ vi.mock('../../store', () => ({
         actOnWindow: vi.fn(),
         dismissWindow: vi.fn(),
 
-        // pro value
-        proValueReport: null,
-
         // agent memory
         agentMemories: [],
         agentMemoryLoading: false,
@@ -224,7 +221,6 @@ import { BadgeRow } from '../result-item/BadgeRow';
 import { ScoreBreakdownRow } from '../result-item/ScoreBreakdownRow';
 import { AboutPanel } from '../AboutPanel';
 import { ProGate } from '../ProGate';
-import { ProValueBadge } from '../ProValueBadge';
 
 import { ViewTabBar } from '../ViewTabBar';
 import { PlaybookView } from '../PlaybookView';
@@ -310,10 +306,6 @@ const SMOKE_COMPONENTS: Array<{
         <div>Pro content</div>
       </ProGate>
     ),
-  },
-  {
-    name: 'ProValueBadge',
-    render: () => <ProValueBadge />,
   },
   {
     name: 'ViewTabBar',
