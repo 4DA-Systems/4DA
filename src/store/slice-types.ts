@@ -9,7 +9,6 @@ import type {
   FeedbackGiven,
   SuggestedInterest,
   SourceHealthStatus,
-  ProValueReport,
 } from '../types';
 import type { DeveloperDecision } from './decisions-slice';
 import type { AgentMemoryEntry, DelegationScoreEntry } from './agent-slice';
@@ -437,7 +436,6 @@ export interface LicenseSlice {
   expiresAt: string | null;
   daysRemaining: number;
   expired: boolean;
-  proValueReport: ProValueReport | null;
   loadLicense: () => Promise<void>;
   activateLicense: (
     key: string,
@@ -448,5 +446,4 @@ export interface LicenseSlice {
   loadTrialStatus: () => Promise<void>;
   startTrial: () => Promise<boolean>;
   isPro: () => boolean;
-  loadProValueReport: () => Promise<void>;
 }

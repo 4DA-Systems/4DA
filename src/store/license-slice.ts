@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
-import type { ProValueReport } from '../types';
 import type { AppStore, LicenseSlice, TrialStatus } from './types';
 
 export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = (set, get) => ({
@@ -13,7 +12,6 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
   expiresAt: null,
   daysRemaining: 0,
   expired: false,
-  proValueReport: null,
 
   loadLicense: async () => {
     try {
@@ -125,14 +123,5 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
     const { tier, trialStatus, expired } = get();
     if (expired) return false;
     return tier === 'signal' || tier === 'team' || tier === 'enterprise' || tier === 'pro' || (trialStatus?.active === true);
-  },
-
-  loadProValueReport: async () => {
-    try {
-      const report = await cmd('get_pro_value_report') as unknown as ProValueReport;
-      set({ proValueReport: report });
-    } catch {
-      // Silently ignore — badge just won't show
-    }
   },
 });

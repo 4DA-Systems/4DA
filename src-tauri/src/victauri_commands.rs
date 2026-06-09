@@ -45,7 +45,6 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "recover_license_by_email",
     "get_locale",
     "set_locale",
-    "get_pro_value_report",
     "get_user_context",
     "set_user_role",
     "set_experience_level",

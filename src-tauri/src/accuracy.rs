@@ -89,22 +89,6 @@ pub(crate) fn estimate_time_saved(noise_rejected: u32) -> f32 {
     (total_seconds / 3600.0 * 10.0).round() / 10.0 // Round to 1 decimal
 }
 
-/// Honest "hours saved" for the header value badge: derived from items the user
-/// ACTUALLY engaged with (saved/clicked) in the window — content 4DA surfaced that
-/// they'd otherwise have hunted down — NOT from the firehose of rejected noise they
-/// would never have hand-triaged. ~10 min to find one relevant item manually. Floored
-/// at 1.0h: below that the badge ships SILENT (intelligence-doctrine rule 6 / "never
-/// fake intelligence") instead of showing a noisy fraction or an inflated total.
-pub(crate) fn engaged_items_to_hours_saved(engaged_items: i64) -> f32 {
-    let minutes_per_item = 10.0_f32;
-    let raw = (engaged_items.max(0) as f32 * minutes_per_item / 60.0 * 10.0).round() / 10.0;
-    if raw >= 1.0 {
-        raw
-    } else {
-        0.0
-    }
-}
-
 /// Generate a monthly intelligence report from accuracy history.
 pub(crate) fn generate_report(
     period: &str,
@@ -344,15 +328,6 @@ mod tests {
     fn test_time_saved_estimate() {
         let hours = estimate_time_saved(2400);
         assert!((hours - 5.3).abs() < 0.1); // 2400 * 8s = 19200s = 5.3h
-    }
-
-    #[test]
-    fn engaged_hours_floors_to_silent_below_credible() {
-        assert_eq!(engaged_items_to_hours_saved(0), 0.0); // no engagement -> silent
-        assert_eq!(engaged_items_to_hours_saved(3), 0.0); // 0.5h < 1h floor -> silent
-        assert_eq!(engaged_items_to_hours_saved(6), 1.0); // 6 * 10min = 1.0h -> shown
-        assert_eq!(engaged_items_to_hours_saved(60), 10.0); // 10h, credible
-        assert!(engaged_items_to_hours_saved(-5) >= 0.0); // never negative
     }
 
     #[test]
