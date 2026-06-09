@@ -129,6 +129,20 @@ function BackgroundRefreshToggle({ intervalMinutes }: { intervalMinutes: number 
   // default (30) — never blank, so "every {{minutes}} min" always renders a number.
   const activeInterval = status?.interval_minutes ?? (intervalMinutes > 0 ? intervalMinutes : 30);
 
+  // Keep the installed task's cadence in sync with the user's monitoring interval: if enabled and the
+  // active interval no longer matches, re-install (schtasks /F overwrites in place). Debounced so
+  // typing in the interval field doesn't churn the task; ignores values below the field's 5-min min.
+  useEffect(() => {
+    if (!installed || !supported || intervalMinutes < 5) return;
+    if (status?.interval_minutes == null || status.interval_minutes === intervalMinutes) return;
+    const timer = setTimeout(() => {
+      cmd('install_background_refresh', { intervalMinutes })
+        .then((s) => setStatus(s))
+        .catch(() => {});
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [installed, supported, intervalMinutes, status?.interval_minutes]);
+
   const toggle = async () => {
     if (busy || !supported) return;
     setBusy(true);
