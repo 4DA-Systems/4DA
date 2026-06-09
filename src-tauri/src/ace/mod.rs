@@ -333,6 +333,31 @@ impl ACE {
                                     let manifest_type =
                                         format!("{:?}", signal.manifest_type).to_lowercase();
                                     let language = signal.manifest_type.language();
+
+                                    // Record the project itself so the Cross-Project
+                                    // Intelligence views have data (they read detected_projects).
+                                    let project_name =
+                                        signal.project_name.clone().unwrap_or_else(|| {
+                                            signal
+                                                .manifest_path
+                                                .parent()
+                                                .and_then(std::path::Path::file_name)
+                                                .map(|n| n.to_string_lossy().to_string())
+                                                .unwrap_or_else(|| "unknown".to_string())
+                                        });
+                                    if let Err(e) = upsert_detected_project(
+                                        &conn,
+                                        &project_path,
+                                        &project_name,
+                                        &signal.languages,
+                                        &signal.frameworks,
+                                        &signal.dependencies,
+                                        &signal.detected_at,
+                                        relevance,
+                                    ) {
+                                        tracing::warn!(target: "4da::ace", error = %e, path = %project_path, "Failed to upsert detected_project");
+                                    }
+
                                     for dep in &signal.dependencies {
                                         if let Err(e) = crate::temporal::upsert_dependency(
                                             &conn,
@@ -746,6 +771,47 @@ pub fn is_rust_package(name: &str) -> bool {
     ) || name.contains('_') // Rust crates typically use underscores
 }
 
+/// Upsert a scanned project into `detected_projects` — the source the Cross-Project
+/// Intelligence readers (tech convergence / project-health comparison / cross-project
+/// deps) query. `path` is UNIQUE, so a rescan refreshes the row instead of erroring.
+/// Before this writer existed the table was never populated and those views always
+/// read empty no matter how much ACE scanned.
+fn upsert_detected_project(
+    conn: &Connection,
+    path: &str,
+    name: &str,
+    languages: &[String],
+    frameworks: &[String],
+    dependencies: &[String],
+    last_activity: &str,
+    confidence: f32,
+) -> rusqlite::Result<()> {
+    let to_json = |v: &[String]| serde_json::to_string(v).unwrap_or_else(|_| "[]".to_string());
+    conn.execute(
+        "INSERT INTO detected_projects \
+            (path, name, languages, frameworks, dependencies, last_activity, detection_confidence, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now')) \
+         ON CONFLICT(path) DO UPDATE SET \
+            name = excluded.name, \
+            languages = excluded.languages, \
+            frameworks = excluded.frameworks, \
+            dependencies = excluded.dependencies, \
+            last_activity = excluded.last_activity, \
+            detection_confidence = excluded.detection_confidence, \
+            updated_at = datetime('now')",
+        rusqlite::params![
+            path,
+            name,
+            to_json(languages),
+            to_json(frameworks),
+            to_json(dependencies),
+            last_activity,
+            confidence,
+        ],
+    )?;
+    Ok(())
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -777,6 +843,74 @@ pub(crate) fn create_test_ace() -> ACE {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upsert_detected_project_inserts_then_upserts_on_path() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE detected_projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                path TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                languages TEXT, frameworks TEXT, dependencies TEXT,
+                last_activity TEXT, detection_confidence REAL DEFAULT 0.5,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );",
+        )
+        .unwrap();
+        let langs = vec!["rust".to_string()];
+        let fws = vec!["tauri".to_string()];
+        let deps = vec!["tokio".to_string(), "serde".to_string()];
+
+        upsert_detected_project(
+            &conn,
+            "/proj/a",
+            "alpha",
+            &langs,
+            &fws,
+            &deps,
+            "2026-06-09 10:00:00",
+            0.8,
+        )
+        .unwrap();
+
+        let (count, name, langs_json): (i64, String, String) = conn
+            .query_row(
+                "SELECT COUNT(*), name, languages FROM detected_projects WHERE path = '/proj/a'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(name, "alpha");
+        assert_eq!(langs_json, "[\"rust\"]");
+
+        // A rescan of the same path UPDATEs in place — never duplicates (path is UNIQUE).
+        upsert_detected_project(
+            &conn,
+            "/proj/a",
+            "alpha-renamed",
+            &langs,
+            &fws,
+            &deps,
+            "2026-06-10 10:00:00",
+            0.9,
+        )
+        .unwrap();
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM detected_projects", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(total, 1, "upsert must not duplicate on path conflict");
+        let new_name: String = conn
+            .query_row(
+                "SELECT name FROM detected_projects WHERE path = '/proj/a'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(new_name, "alpha-renamed");
+    }
 
     // Temporal decay tests
 
