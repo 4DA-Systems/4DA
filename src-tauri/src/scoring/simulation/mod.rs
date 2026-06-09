@@ -22,6 +22,12 @@ pub(super) mod feedback_sim;
 #[cfg(test)]
 pub(super) mod feedback_sim_tests;
 pub(super) mod first_run;
+// Recall-investigation fixture generator + I/O (test infrastructure, off by
+// default). Only compiled when a simulation-fixture feature is enabled.
+#[cfg(feature = "generate-sim-fixtures")]
+pub(super) mod fixtures_gen;
+#[cfg(any(feature = "calibrated-sim", feature = "generate-sim-fixtures"))]
+pub(super) mod fixtures_io;
 pub(super) mod golden_snapshot;
 pub(super) mod lifecycle;
 pub(super) mod live_reality_check;
@@ -57,8 +63,43 @@ pub(super) fn sim_no_freshness() -> ScoringOptions {
 
 /// Load pre-computed corpus embeddings for simulation.
 /// Bridges reality.rs → mod.rs → domain_embeddings.rs.
+///
+/// DEFAULT (no `calibrated-sim`): SYNTHETIC block-signature embeddings — the
+/// regression baseline golden_snapshot.rs + reality.rs are calibrated against.
+#[cfg(not(feature = "calibrated-sim"))]
 pub(super) fn load_corpus_embeddings() -> Vec<Vec<f32>> {
     domain_embeddings::corpus_embeddings()
+}
+
+/// `calibrated-sim`: REAL fastembed corpus embeddings loaded from the committed
+/// `fixtures/corpus_embeddings.bin`. Indexed by `id - 1` (matching the synthetic
+/// layout the consumers expect); any id gap is left as a zero vector. Fails
+/// loudly if the fixture is missing or malformed — there is no silent fallback,
+/// because a missing fixture would otherwise masquerade as a recall collapse.
+#[cfg(feature = "calibrated-sim")]
+pub(super) fn load_corpus_embeddings() -> Vec<Vec<f32>> {
+    const BYTES: &[u8] = include_bytes!("fixtures/corpus_embeddings.bin");
+    let records = fixtures_io::deserialize_u32_keyed(BYTES)
+        .expect("calibrated-sim: corpus_embeddings.bin is missing or malformed — regenerate via `cargo test --features generate-sim-fixtures ... -- --ignored`");
+    let max_id = records.iter().map(|(id, _)| *id).max().unwrap_or(0) as usize;
+    let mut out = vec![vec![0.0_f32; crate::EMBEDDING_DIMS]; max_id];
+    for (id, v) in records {
+        if id >= 1 {
+            out[(id - 1) as usize] = v;
+        }
+    }
+    out
+}
+
+/// `calibrated-sim`: REAL fastembed topic/interest embeddings keyed by string
+/// (exact + lowercase), loaded from `fixtures/topic_embeddings.bin`. Feeds the
+/// production semantic-ACE-boost path via `ScoringContext.topic_embeddings`.
+#[cfg(feature = "calibrated-sim")]
+pub(super) fn load_topic_embeddings() -> std::collections::HashMap<String, Vec<f32>> {
+    const BYTES: &[u8] = include_bytes!("fixtures/topic_embeddings.bin");
+    let records = fixtures_io::deserialize_str_keyed(BYTES)
+        .expect("calibrated-sim: topic_embeddings.bin is missing or malformed — regenerate via `cargo test --features generate-sim-fixtures ... -- --ignored`");
+    records.into_iter().collect()
 }
 
 pub(super) fn sim_input<'a>(
