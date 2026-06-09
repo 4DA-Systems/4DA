@@ -76,31 +76,48 @@ impl ACE {
                 == Some("security_vulnerability")
         };
 
-        if !is_security_item {
-            self.update_topic_affinities(&signal)?;
+        // Non-learning interactions (item_source prefixed "test_" or "probe_") verify the
+        // recording MECHANICS without shifting the user's profile: the raw interaction row
+        // was already stored above, but none of the learning below runs. This lets the
+        // founder dogfood save/like/dismiss while keeping the instance VANILLA — model
+        // quality is calibrated by the persona simulation (/calibrate), not by founder
+        // engagement, so test clicks must never tailor scoring. Mirrors the probe_ exclusion
+        // in get_pro_value_report.
+        let is_non_learning = item_source.starts_with("test_") || item_source.starts_with("probe_");
 
-            if signal.signal_strength < -0.5 {
-                self.update_anti_topics(&item_topics, signal.signal_strength)?;
-            }
-        } else {
+        if is_non_learning {
             debug!(target: "ace::behavior",
                 item_id = item_id,
-                "Skipping affinity/anti-topic update for security vulnerability item"
+                source = %item_source,
+                "Non-learning interaction: row stored, profile NOT shifted (test/probe source)"
             );
-        }
+        } else {
+            if !is_security_item {
+                self.update_topic_affinities(&signal)?;
 
-        self.update_source_preference(&item_source, signal.signal_strength)?;
-        self.update_activity_patterns(&signal)?;
+                if signal.signal_strength < -0.5 {
+                    self.update_anti_topics(&item_topics, signal.signal_strength)?;
+                }
+            } else {
+                debug!(target: "ace::behavior",
+                    item_id = item_id,
+                    "Skipping affinity/anti-topic update for security vulnerability item"
+                );
+            }
 
-        // Update continuous persona posterior from implicit signals
-        if !item_topics.is_empty() {
-            let conn = self.conn.lock();
-            if let Err(e) = crate::taste_test::continuous::update_posterior(
-                &conn,
-                &item_topics,
-                signal.signal_strength,
-            ) {
-                debug!(target: "ace::behavior", error = %e, "Failed to update continuous posterior");
+            self.update_source_preference(&item_source, signal.signal_strength)?;
+            self.update_activity_patterns(&signal)?;
+
+            // Update continuous persona posterior from implicit signals
+            if !item_topics.is_empty() {
+                let conn = self.conn.lock();
+                if let Err(e) = crate::taste_test::continuous::update_posterior(
+                    &conn,
+                    &item_topics,
+                    signal.signal_strength,
+                ) {
+                    debug!(target: "ace::behavior", error = %e, "Failed to update continuous posterior");
+                }
             }
         }
 
@@ -466,5 +483,51 @@ mod learning_loop_tests {
             after < positive,
             "reversed feedback should lower affinity ({after} should be < {positive})"
         );
+    }
+
+    /// A "test_"/"probe_"-sourced interaction must NOT shift the profile — it keeps the
+    /// founder's instance vanilla (calibration is persona-driven, not founder-driven) —
+    /// yet the raw interaction row is STILL recorded so save/dismiss mechanics stay verifiable.
+    #[test]
+    fn non_learning_interaction_records_row_but_skips_profile() {
+        let ace = create_test_ace();
+
+        // Learning interaction on "rust" shifts affinity; test_ interaction on "java" must not.
+        ace.record_interaction(
+            1,
+            BehaviorAction::Save,
+            vec!["rust".to_string()],
+            "hackernews".to_string(),
+        )
+        .expect("learning save");
+        ace.record_interaction(
+            999_999_999,
+            BehaviorAction::Save,
+            vec!["java".to_string()],
+            "test_dogfood".to_string(),
+        )
+        .expect("non-learning save");
+
+        let affinities = ace.get_topic_affinities_min(1).expect("read affinities");
+        assert!(
+            affinities.iter().any(|a| a.topic == "rust"),
+            "the learning interaction must create a rust affinity"
+        );
+        assert!(
+            !affinities.iter().any(|a| a.topic == "java"),
+            "the test_ interaction must NOT shift the profile (no java affinity)"
+        );
+
+        // The raw interaction row IS still stored — mechanics remain verifiable.
+        let test_rows: i64 = {
+            let conn = ace.get_conn().lock();
+            conn.query_row(
+                "SELECT COUNT(*) FROM interactions WHERE item_source = 'test_dogfood'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("count test rows")
+        };
+        assert_eq!(test_rows, 1, "the test_ interaction must still be recorded");
     }
 }
