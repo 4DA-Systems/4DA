@@ -96,6 +96,13 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
 async fn run_one_cycle(handle: &AppHandle, trigger: &'static str) -> i32 {
     let started = Instant::now();
     let mut receipt = RunReceipt::begin(trigger);
+    // Attribution token: a verifier (e.g. Verax) injects FOURDA_ENGINE_NONCE when it invokes the
+    // engine for a specific task; the engine stamps it into the receipt so an attribution proof can
+    // require the receipt's nonce to match the task's — defeating a free-ride on a concurrent refresh
+    // (whose receipt carries no such nonce). Unset for normal/scheduled/daemon runs.
+    receipt.nonce = std::env::var("FOURDA_ENGINE_NONCE")
+        .ok()
+        .filter(|s| !s.is_empty());
 
     // Step 1 — fetch (fills the cache; writes/touches source_items, stamps sources.last_fetch).
     info!(target: "4da::headless", "Cycle step 1/2: fetching sources...");
