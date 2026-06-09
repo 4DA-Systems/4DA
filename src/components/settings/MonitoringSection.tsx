@@ -115,6 +115,7 @@ function BackgroundRefreshToggle({ intervalMinutes }: { intervalMinutes: number 
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     cmd('background_refresh_status')
@@ -124,7 +125,9 @@ function BackgroundRefreshToggle({ intervalMinutes }: { intervalMinutes: number 
 
   const installed = status?.installed ?? false;
   const supported = status?.supported ?? true;
-  const activeInterval = status?.interval_minutes ?? intervalMinutes;
+  // Prefer the installed task's interval; else the user's monitoring interval; else the scheduler
+  // default (30) — never blank, so "every {{minutes}} min" always renders a number.
+  const activeInterval = status?.interval_minutes ?? (intervalMinutes > 0 ? intervalMinutes : 30);
 
   const toggle = async () => {
     if (busy || !supported) return;
@@ -158,6 +161,31 @@ function BackgroundRefreshToggle({ intervalMinutes }: { intervalMinutes: number 
         {failed && (
           <p className="text-xs text-red-400 mt-1">
             {t('settings.monitoring.backgroundRefreshFailed', 'Could not update the system task. Check your permissions and try again.')}
+          </p>
+        )}
+        {supported && (
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            aria-expanded={expanded}
+            className="mt-1.5 inline-flex items-center gap-1 text-xs text-text-secondary hover:text-white transition-colors"
+          >
+            {t('settings.monitoring.backgroundRefreshWhat', 'What this does')}
+            <svg
+              className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              aria-hidden="true"
+            >
+              <path d="M3 4.5 6 7.5 9 4.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
+        {expanded && supported && (
+          <p className="text-xs text-text-muted mt-1.5 leading-relaxed max-w-md">
+            {t('settings.monitoring.backgroundRefreshWhatDetail', { minutes: activeInterval })}
           </p>
         )}
       </div>
