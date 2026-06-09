@@ -21,6 +21,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { HealthBanner } from './components/HealthBanner';
 import { CriticalAlertBanner } from './components/CriticalAlertBanner';
 import { LicenseRecoveryBanner } from './components/LicenseRecoveryBanner';
+import { BackgroundRefreshBanner } from './components/BackgroundRefreshBanner';
 
 // Lazy-loaded non-critical-path components
 const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
@@ -300,6 +301,8 @@ function App() {
         <CriticalAlertBanner />
         {/* Health warnings — dismissible, only shows if issues found */}
         <HealthBanner />
+        {/* Background-refresh discoverability — one-time, dismissible, only if supported + not enabled */}
+        <BackgroundRefreshBanner />
 
         {/* View Tab Bar */}
         <ViewTabBar />
