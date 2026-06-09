@@ -311,7 +311,7 @@ pub struct ChainSummary {
 /// Carries the rich evidence fields from the backend `PreemptionAlert` so the
 /// frontend can render actionable checklist cards (package, versions, projects,
 /// advisory IDs) instead of opaque title/explanation blobs.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BriefingPreemptionAlert {
     pub title: String,
     pub urgency: String,
@@ -1754,6 +1754,17 @@ fn record_briefing_items(conn: &rusqlite::Connection, items: &[BriefingItem], da
 ///
 /// Returns (novel_alerts, stale_topic_names). Novel alerts are shown in the
 /// PREEMPTION section; stale topics are surfaced in the "Still tracking:" footer.
+/// True for advisories that must re-surface every morning until the user fixes
+/// them, regardless of the 14-day novelty window. The preemption feed is
+/// recomputed from the user's *installed* dependency versions each cycle, so an
+/// alert's presence means the vulnerability is STILL live — an unfixed
+/// Critical/High advisory silenced by novelty is a silent exposure, the exact
+/// opposite of what the brief is for. Lower-severity advisories still obey
+/// novelty so the brief doesn't nag about low-stakes items.
+fn is_persistent_security_alert(alert: &BriefingPreemptionAlert) -> bool {
+    matches!(alert.urgency.as_str(), "critical" | "high")
+}
+
 fn apply_preemption_novelty_filter(
     alerts: Vec<BriefingPreemptionAlert>,
     today: &str,
@@ -1791,7 +1802,11 @@ fn apply_preemption_novelty_filter(
     let mut stale_topics = Vec::new();
 
     for alert in alerts {
-        if recent_titles.contains(&alert.title.to_lowercase()) {
+        // Unfixed Critical/High advisories persist every morning — novelty must
+        // never silence a live high-severity vulnerability on an installed dep.
+        if !is_persistent_security_alert(&alert)
+            && recent_titles.contains(&alert.title.to_lowercase())
+        {
             let topic = alert
                 .package_name
                 .clone()
@@ -3719,6 +3734,24 @@ mod tests {
                 item.content_type
             );
         }
+    }
+
+    #[test]
+    fn test_persistent_security_alert_exempts_critical_and_high() {
+        // Critical/High advisories must bypass the 14-day novelty filter so an
+        // unfixed high-severity vulnerability re-surfaces every morning. Lower
+        // severities still obey novelty.
+        let alert = |urgency: &str| BriefingPreemptionAlert {
+            urgency: urgency.to_string(),
+            title: "axios has known vulnerabilities".to_string(),
+            ..Default::default()
+        };
+        assert!(is_persistent_security_alert(&alert("critical")));
+        assert!(is_persistent_security_alert(&alert("high")));
+        assert!(!is_persistent_security_alert(&alert("medium")));
+        assert!(!is_persistent_security_alert(&alert("watch")));
+        assert!(!is_persistent_security_alert(&alert("low")));
+        assert!(!is_persistent_security_alert(&alert("")));
     }
 
     #[test]
