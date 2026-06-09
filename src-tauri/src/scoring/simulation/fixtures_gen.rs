@@ -9,8 +9,9 @@
 //!     -- --ignored --nocapture
 //! ```
 //!
-//! It embeds every `corpus()` item (`"{title} {content}"`) and every persona
-//! interest / ACE topic / detected-tech string via the SAME fastembed path that
+//! It embeds every `corpus()` item via the production `build_embedding_text`
+//! contract and every persona interest / ACE topic / detected-tech string (as a
+//! short canonical description) via the SAME fastembed path that
 //! `benchmark_calibration::embeddings` uses (`crate::fastembed_sync` +
 //! `pad_and_normalize`), so the artefacts reproduce deterministically.
 //!
@@ -43,91 +44,103 @@ fn pad_and_normalize(mut v: Vec<f32>) -> Vec<f32> {
     v
 }
 
-/// Canonical persona topic / interest / detected-tech strings.
+/// Canonical persona topic / interest / detected-tech strings, each paired with a
+/// short canonical DESCRIPTION that is what actually gets embedded.
 ///
-/// Mirrors EXACTLY the strings used by `personas.rs` (interest topics in their
-/// original case + the lowercase ACE `active_topics` / `detected_tech`). The
-/// loader stores each under both its exact key and its lowercase variant, so the
-/// semantic boost (`compute_semantic_ace_boost`) resolves every lookup.
-const PERSONA_TOPICS: &[&str] = &[
+/// `.0` is the lookup KEY — it mirrors EXACTLY the strings `personas.rs` uses
+/// (interest topics in their original case + the lowercase ACE `active_topics` /
+/// `detected_tech`), so the loader's exact + lowercase keying resolves every lookup
+/// unchanged. `.1` is the embedded TEXT. Bare labels ("Go", "AI", "LLM") are the
+/// noisiest possible embedding regime (1-3 char tokens); embedding a short
+/// description instead moves the user-side vector into the sentence regime where the
+/// model produces stable, separable vectors — without touching what personas.rs
+/// looks up. The loader stores each vector under both the exact key and its
+/// lowercase variant so the semantic boost (`compute_semantic_ace_boost`) resolves.
+const PERSONA_TOPICS: &[(&str, &str)] = &[
     // Interest topics (original case)
-    "Rust",
-    "systems programming",
-    "Tauri",
-    "SQLite",
-    "WebAssembly",
-    "Machine Learning",
-    "Python",
-    "LLM",
-    "PyTorch",
-    "data science",
-    "TypeScript",
-    "React",
-    "Node.js",
-    "Next.js",
-    "GraphQL",
-    "Kubernetes",
-    "kubernetes operator",
-    "Docker",
-    "Terraform",
-    "observability stack",
-    "eBPF tracing",
-    "Prometheus metrics",
-    "SRE",
-    "React Native",
-    "mobile development",
-    "Expo",
-    "iOS",
-    "Android",
-    "distributed systems",
-    "AI",
-    "databases",
-    "Go",
-    "backend",
-    "microservices",
-    "Haskell",
-    "functional programming",
-    "type theory",
-    "category theory",
-    "Nix",
-    "monad",
-    "type system",
-    // ACE active_topics / detected_tech (lowercase)
-    "rust",
-    "tauri",
-    "sqlite",
-    "python",
-    "pytorch",
-    "machine learning",
-    "typescript",
-    "react",
-    "nextjs",
-    "nodejs",
-    "react native",
-    "expo",
-    "mobile",
-    "go",
-    "grpc",
-    "haskell",
-    "nix",
-    "ghc",
-    "cabal",
-    "kubernetes",
-    "docker",
-    "terraform",
-    "prometheus",
-    "ci/cd",
-    "observability",
+    ("Rust", "Rust programming language: memory safety, ownership, borrow checker, systems programming"),
+    ("systems programming", "systems programming: low-level performance, memory management, concurrency, operating systems"),
+    ("Tauri", "Tauri desktop application framework with a Rust backend and a webview frontend"),
+    ("SQLite", "SQLite embedded relational database, SQL, local-first storage"),
+    ("WebAssembly", "WebAssembly (Wasm): portable bytecode runtime with near-native performance in the browser"),
+    ("Machine Learning", "machine learning: neural networks, model training, deep learning, inference"),
+    ("Python", "Python programming language: scripting, data science, machine learning, backends"),
+    ("LLM", "large language models (LLM): transformers, GPT, prompting, fine-tuning, inference"),
+    ("PyTorch", "PyTorch deep learning framework: tensors, autograd, neural network training"),
+    ("data science", "data science: data analysis, pandas, statistics, visualization, notebooks"),
+    ("TypeScript", "TypeScript: statically typed JavaScript for frontend and backend development"),
+    ("React", "React UI library: components, hooks, state management, frontend web development"),
+    ("Node.js", "Node.js JavaScript runtime: server-side, npm, APIs, backend development"),
+    ("Next.js", "Next.js React framework: server-side rendering, routing, full-stack web apps"),
+    ("GraphQL", "GraphQL API query language: schemas, resolvers, typed data fetching"),
+    ("Kubernetes", "Kubernetes container orchestration: pods, clusters, deployments, autoscaling"),
+    ("kubernetes operator", "Kubernetes operator pattern: custom resources, controllers, cluster automation"),
+    ("Docker", "Docker containers: images, containerization, packaging, deployment"),
+    ("Terraform", "Terraform infrastructure as code: declaratively provisioning cloud resources"),
+    ("observability stack", "observability stack: metrics, logging, distributed tracing, monitoring dashboards"),
+    ("eBPF tracing", "eBPF kernel tracing: performance profiling, networking, low-overhead observability"),
+    ("Prometheus metrics", "Prometheus metrics: time-series monitoring, scraping, alerting, dashboards"),
+    ("SRE", "site reliability engineering (SRE): uptime, incident response, automation, on-call"),
+    ("React Native", "React Native: cross-platform iOS and Android mobile app development in JavaScript"),
+    ("mobile development", "mobile application development: iOS, Android, native and cross-platform apps"),
+    ("Expo", "Expo: React Native toolchain for building and deploying mobile apps"),
+    ("iOS", "iOS Apple mobile development: Swift, iPhone and iPad apps, Xcode"),
+    ("Android", "Android mobile development: Kotlin, Jetpack, the Google mobile platform"),
+    ("distributed systems", "distributed systems: consensus, replication, fault tolerance, scalability, consistency"),
+    ("AI", "artificial intelligence (AI): machine learning, neural networks, large language models"),
+    ("databases", "databases: SQL, query optimization, indexing, storage engines, transactions"),
+    ("Go", "Go (golang) programming language: goroutines, concurrency, backend services, networking"),
+    ("backend", "backend development: servers, APIs, databases, scalability, distributed services"),
+    ("microservices", "microservices architecture: independent services, APIs, messaging, scalability"),
+    ("Haskell", "Haskell: pure functional programming, strong static types, laziness, type classes"),
+    ("functional programming", "functional programming: immutability, pure functions, higher-order functions, composition"),
+    ("type theory", "type theory: type systems, formal logic, programming language foundations"),
+    ("category theory", "category theory: functors, monads, natural transformations, mathematical abstraction"),
+    ("Nix", "Nix: reproducible builds, declarative package management and configuration"),
+    ("monad", "monad: a functional programming abstraction for composing effects and sequencing computation"),
+    ("type system", "type system: static typing, type checking, type inference, type safety"),
+    // ACE active_topics / detected_tech (lowercase). Most duplicate a capitalized
+    // interest above and are deduped by the loader; the genuinely-new ones (grpc,
+    // nextjs, nodejs, ghc, cabal, ci/cd, observability, mobile) carry their own text.
+    ("rust", "Rust programming language: memory safety, ownership, systems programming"),
+    ("tauri", "Tauri desktop app framework with a Rust backend and webview frontend"),
+    ("sqlite", "SQLite embedded relational database, local-first SQL storage"),
+    ("python", "Python programming language: scripting, data science, machine learning"),
+    ("pytorch", "PyTorch deep learning framework: tensors, autograd, training"),
+    ("machine learning", "machine learning: neural networks, model training, deep learning"),
+    ("typescript", "TypeScript: statically typed JavaScript for web development"),
+    ("react", "React UI library: components, hooks, frontend web development"),
+    ("nextjs", "Next.js React framework: server-side rendering, full-stack web apps"),
+    ("nodejs", "Node.js JavaScript server runtime: backend, npm, APIs"),
+    ("react native", "React Native: cross-platform mobile app development"),
+    ("expo", "Expo: React Native toolchain for mobile apps"),
+    ("mobile", "mobile application development: iOS, Android, native and cross-platform"),
+    ("go", "Go (golang) programming language: goroutines, concurrency, backend services"),
+    ("grpc", "gRPC: high-performance remote procedure calls over protobuf for microservices"),
+    ("haskell", "Haskell: pure functional programming with strong static types"),
+    ("nix", "Nix: reproducible builds and declarative package management"),
+    ("ghc", "GHC: the Glasgow Haskell Compiler toolchain"),
+    ("cabal", "Cabal: the Haskell build tool and package manager"),
+    ("kubernetes", "Kubernetes container orchestration: pods, clusters, deployments"),
+    ("docker", "Docker containers: images, containerization, deployment"),
+    ("terraform", "Terraform infrastructure as code for cloud provisioning"),
+    ("prometheus", "Prometheus metrics: time-series monitoring and alerting"),
+    ("ci/cd", "CI/CD: continuous integration and deployment pipelines, build automation"),
+    ("observability", "observability: metrics, logs, distributed traces, monitoring"),
 ];
 
 #[test]
 #[ignore = "requires fastembed model; run explicitly to regenerate committed .bin fixtures"]
 fn generate_real_embedding_fixtures() {
     // --- Corpus item embeddings (keyed by id) ---
+    // Use the EXACT production embedding contract (`build_embedding_text`: title
+    // repeated 2x + `\n\n` joins + preprocess_content) so the fixture measures what
+    // production actually embeds — not a bespoke `"{title} {content}"` join that
+    // under-weights the title and diverges from real-user behaviour.
     let items = corpus();
     let texts: Vec<String> = items
         .iter()
-        .map(|it| format!("{} {}", it.title, it.content))
+        .map(|it| crate::build_embedding_text(it.title, it.content))
         .collect();
 
     let raw = crate::fastembed_sync(&texts).expect("fastembed must embed corpus texts");
@@ -144,22 +157,28 @@ fn generate_real_embedding_fixtures() {
     let corpus_path =
         fixtures_io::write_fixture("corpus_embeddings.bin", &corpus_bytes).expect("write corpus");
 
-    // --- Persona topic embeddings (keyed by string, exact + lowercase) ---
-    let topic_texts: Vec<String> = PERSONA_TOPICS.iter().map(|s| (*s).to_string()).collect();
+    // --- Persona topic embeddings (keyed by lookup string, exact + lowercase) ---
+    // Embed the DESCRIPTION (`.1`), key by the LOOKUP string (`.0`) so personas.rs
+    // lookups are byte-for-byte unchanged while the stored vector leaves the noisy
+    // bare-token regime.
+    let topic_texts: Vec<String> = PERSONA_TOPICS
+        .iter()
+        .map(|(_, desc)| (*desc).to_string())
+        .collect();
     let topic_raw =
         crate::fastembed_sync(&topic_texts).expect("fastembed must embed persona topics");
     assert_eq!(topic_raw.len(), PERSONA_TOPICS.len());
 
     let mut topic_records: Vec<(String, Vec<f32>)> = Vec::with_capacity(PERSONA_TOPICS.len() * 2);
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-    for (name, v) in PERSONA_TOPICS.iter().zip(topic_raw.into_iter()) {
+    for ((key, _desc), v) in PERSONA_TOPICS.iter().zip(topic_raw.into_iter()) {
         let vec = pad_and_normalize(v);
-        let exact = (*name).to_string();
+        let exact = (*key).to_string();
         if seen.insert(exact.clone()) {
             topic_records.push((exact.clone(), vec.clone()));
         }
-        let lower = name.to_lowercase();
-        if lower != *name && seen.insert(lower.clone()) {
+        let lower = key.to_lowercase();
+        if lower != *key && seen.insert(lower.clone()) {
             topic_records.push((lower, vec));
         }
     }

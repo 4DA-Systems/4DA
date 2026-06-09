@@ -275,3 +275,137 @@ fn reality_aggregate_summary() {
         aggregate.precision()
     );
 }
+
+/// Diagnostic (run with `--nocapture`): for the personas with the weakest Strong-recall,
+/// dump WHY each StrongRelevant item was missed and tally the failure mode, so a recall
+/// fix targets the actual dropping stage instead of guessing. Classification:
+///   GATE      = fewer than 2 confirmed signal axes (hard-capped below threshold)
+///   DOMAIN    = >=2 signals but domain_relevance <= 0.50 (off-stack crush)
+///   THRESHOLD = >=2 signals, domain OK, but final score still < relevance threshold
+/// Measurement only — never asserts, changes no scoring.
+#[test]
+fn diagnose_strong_misses() {
+    let personas = all_personas();
+    // Weakest Strong-recall personas (generalists + python/niche), by index.
+    let targets = [
+        (1usize, "python_ml"),
+        (6, "power_user"),
+        (7, "context_switcher"),
+    ];
+    let items = corpus();
+    let db = sim_db();
+    let opts = sim_no_freshness();
+    let calibrated = super::load_corpus_embeddings();
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+
+    let mode = if cfg!(feature = "calibrated-sim") {
+        "REAL"
+    } else {
+        "synthetic"
+    };
+    println!("\n=== Strong-miss diagnosis ({mode}) ===");
+    let (mut gate, mut domain, mut threshold) = (0u32, 0u32, 0u32);
+    for (pi, name) in targets {
+        for item in &items {
+            if !matches!(item.expected[pi], ExpectedOutcome::StrongRelevant) {
+                continue;
+            }
+            let emb = calibrated.get((item.id - 1) as usize).unwrap_or(&zero);
+            let input = sim_input(item.id, item.title, item.content, emb);
+            let r = score_item(&input, &personas[pi], &db, &opts, None);
+            if r.relevant && !r.excluded {
+                continue; // caught — not a miss
+            }
+            let bd = r.score_breakdown.as_ref();
+            let sig = bd.map(|b| b.signal_count).unwrap_or(0);
+            let dom = bd.map(|b| b.domain_relevance).unwrap_or(1.0);
+            let cause = if sig < 2 {
+                gate += 1;
+                "GATE"
+            } else if dom <= 0.50 {
+                domain += 1;
+                "DOMAIN"
+            } else {
+                threshold += 1;
+                "THRESHOLD"
+            };
+            let signals = bd
+                .map(|b| b.confirmed_signals.join("+"))
+                .unwrap_or_default();
+            println!(
+                "  [{cause:<9}] {name:<16} score={:.3} sig={sig} dom={dom:.2} int={:.2} dep={:.2} [{signals}] \"{}\"",
+                r.top_score,
+                bd.map(|b| b.interest_score).unwrap_or(0.0),
+                bd.map(|b| b.dep_match_score).unwrap_or(0.0),
+                if item.title.len() > 44 { &item.title[..44] } else { item.title },
+            );
+        }
+    }
+    println!("  ----\n  TALLY: GATE={gate} DOMAIN={domain} THRESHOLD={threshold}");
+    println!("=== end diagnosis ===\n");
+}
+
+/// Measurement harness (run with `--nocapture`): prints the Strong-vs-Weak recall
+/// split per persona and in aggregate. Blended recall is dominated by WeakRelevant
+/// (tangential/adjacency) items a precision-first brief is *meant* to drop, so it
+/// understates quality. Strong-recall is the load-bearing number — a Strong miss
+/// (security advisory, release for a declared dep) is a genuine product failure.
+/// Asserts only the sound invariant that the system catches Strong items at least as
+/// well as Weak ones; the printed numbers drive calibration decisions.
+#[test]
+fn reality_strong_weak_recall_breakdown() {
+    let personas = all_personas();
+    let mut aggregate = SimMetrics::new();
+
+    let mode = if cfg!(feature = "calibrated-sim") {
+        "REAL fastembed fixtures"
+    } else {
+        "synthetic embeddings"
+    };
+    println!("\n=== Strong-vs-Weak recall breakdown ({mode}) ===");
+    println!(
+        "{:<18} {:>6} {:>6} {:>6} | {:>9} {:>10}",
+        "persona", "P", "R", "F1", "R_strong", "R_weak"
+    );
+    for (pi, persona) in personas.iter().enumerate() {
+        let m = run_persona_simulation(pi, persona);
+        println!(
+            "{:<18} {:>6.3} {:>6.3} {:>6.3} | {:>4.3} {:>2}/{:<2} {:>4.3} {:>2}/{:<2}",
+            PERSONA_NAMES[pi],
+            m.precision(),
+            m.recall(),
+            m.f1(),
+            m.recall_strong(),
+            m.tp_strong,
+            m.tp_strong + m.fn_strong,
+            m.recall_weak(),
+            m.tp_weak,
+            m.tp_weak + m.fn_weak,
+        );
+        aggregate.merge(&m);
+    }
+    println!(
+        "{:<18} {:>6.3} {:>6.3} {:>6.3} | {:>4.3} {:>2}/{:<2} {:>4.3} {:>2}/{:<2}",
+        "AGGREGATE",
+        aggregate.precision(),
+        aggregate.recall(),
+        aggregate.f1(),
+        aggregate.recall_strong(),
+        aggregate.tp_strong,
+        aggregate.tp_strong + aggregate.fn_strong,
+        aggregate.recall_weak(),
+        aggregate.tp_weak,
+        aggregate.tp_weak + aggregate.fn_weak,
+    );
+    println!("=== end breakdown ===\n");
+
+    // Sound invariant: Strong (high-signal) items should be caught at least as well as
+    // Weak (tangential) ones. If Strong-recall ever drops below Weak-recall, the pipeline
+    // is inverted — surfacing adjacency over substance — and that is a real regression.
+    assert!(
+        aggregate.recall_strong() + 1e-9 >= aggregate.recall_weak(),
+        "INVERTED: aggregate Strong-recall {:.3} < Weak-recall {:.3} — pipeline favours adjacency over substance",
+        aggregate.recall_strong(),
+        aggregate.recall_weak()
+    );
+}
