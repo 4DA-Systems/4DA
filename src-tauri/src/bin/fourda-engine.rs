@@ -59,6 +59,8 @@ fn print_usage() {
          \x20 --daemon   run continuously on the monitoring interval until Ctrl-C\n\n\
          FLAGS:\n\
          \x20 --force    refresh even if data is already fresh\n\n\
+         ENV:\n\
+         \x20 FOURDA_ENGINE_NONCE  task token stamped into the engine_runs receipt (attribution proofs)\n\n\
          EXIT CODES (--once):\n\
          \x20 0 success/skipped-fresh   1 scoring failed   2 app build failed   64 bad usage"
     );

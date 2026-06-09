@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS engine_runs (
     content_fingerprint TEXT NOT NULL DEFAULT '',
     ok INTEGER NOT NULL DEFAULT 1,
     error TEXT,
+    nonce TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_engine_runs_completed ON engine_runs(completed_at);
@@ -47,7 +48,13 @@ CREATE INDEX IF NOT EXISTS idx_engine_runs_completed ON engine_runs(completed_at
 
 /// Create the `engine_runs` table if it does not exist. Idempotent.
 pub(crate) fn ensure_table(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch(ENGINE_RUNS_SQL)
+    conn.execute_batch(ENGINE_RUNS_SQL)?;
+    // Idempotent add for databases created before the `nonce` column existed. `nonce` binds a
+    // receipt to a specific verifier-assigned task: an attribution proof can require the receipt's
+    // nonce to equal the task's nonce, so a lying agent can't free-ride a concurrent (unrelated)
+    // refresh whose receipt carries no such nonce. Errors (duplicate column) are intentionally ignored.
+    let _ = conn.execute("ALTER TABLE engine_runs ADD COLUMN nonce TEXT", []);
+    Ok(())
 }
 
 // ============================================================================
@@ -73,6 +80,9 @@ pub(crate) struct RunReceipt {
     pub relevant_count: usize,
     pub ok: bool,
     pub error: Option<String>,
+    /// Optional verifier-assigned task token (from `--nonce`), stamped into the receipt so an
+    /// attribution proof can bind this run to a specific task. `None` for unattributed runs.
+    pub nonce: Option<String>,
 }
 
 impl RunReceipt {
@@ -92,6 +102,7 @@ impl RunReceipt {
             relevant_count: 0,
             ok: true,
             error: None,
+            nonce: None,
         }
     }
 }
@@ -124,8 +135,8 @@ pub(crate) fn record(mut receipt: RunReceipt) {
             trigger, started_at, completed_at, duration_ms,
             sources_succeeded, sources_failed, sources_skipped,
             new_items, cached_touches, items_scored, relevant_count,
-            source_items_total, max_item_created_at, content_fingerprint, ok, error
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            source_items_total, max_item_created_at, content_fingerprint, ok, error, nonce
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         rusqlite::params![
             receipt.trigger,
             receipt.started_at,
@@ -143,6 +154,7 @@ pub(crate) fn record(mut receipt: RunReceipt) {
             fingerprint,
             receipt.ok as i64,
             receipt.error,
+            receipt.nonce,
         ],
     );
     match res {
