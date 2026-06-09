@@ -10,6 +10,16 @@ pub(super) struct SimMetrics {
     pub r#fn: u32,
     pub relevant_scores: Vec<f64>,
     pub noise_scores: Vec<f64>,
+    // Strong-vs-Weak split of the relevant denominator. The aggregate recall blends
+    // these, but ~70% of the corpus relevant-denominator is WeakRelevant (tangential /
+    // adjacency content a precision-first brief is *supposed* to drop), so blended recall
+    // understates true quality. Strong-recall = "did we catch the things that truly
+    // matter" (security advisories, releases for declared deps); Weak-recall is a
+    // precision dial, not a target. These are reported, not asserted.
+    pub tp_strong: u32,
+    pub fn_strong: u32,
+    pub tp_weak: u32,
+    pub fn_weak: u32,
 }
 
 impl SimMetrics {
@@ -21,12 +31,24 @@ impl SimMetrics {
         let score = result.top_score as f64;
         let predicted = result.relevant && !result.excluded;
         match expected {
-            ExpectedOutcome::StrongRelevant | ExpectedOutcome::WeakRelevant => {
+            ExpectedOutcome::StrongRelevant => {
                 self.relevant_scores.push(score);
                 if predicted {
                     self.tp += 1;
+                    self.tp_strong += 1;
                 } else {
                     self.r#fn += 1;
+                    self.fn_strong += 1;
+                }
+            }
+            ExpectedOutcome::WeakRelevant => {
+                self.relevant_scores.push(score);
+                if predicted {
+                    self.tp += 1;
+                    self.tp_weak += 1;
+                } else {
+                    self.r#fn += 1;
+                    self.fn_weak += 1;
                 }
             }
             ExpectedOutcome::NotRelevant => {
@@ -62,6 +84,28 @@ impl SimMetrics {
             1.0
         } else {
             self.tp as f64 / d
+        }
+    }
+    /// Recall over StrongRelevant items only — the load-bearing recall metric.
+    /// A miss here (a Strong security advisory or a release for a declared dep) is a
+    /// genuine product failure, unlike a Weak/adjacency miss which is correct curation.
+    pub(super) fn recall_strong(&self) -> f64 {
+        let d = (self.tp_strong + self.fn_strong) as f64;
+        if d == 0.0 {
+            1.0
+        } else {
+            self.tp_strong as f64 / d
+        }
+    }
+    /// Recall over WeakRelevant (tangential/adjacency) items only — a precision dial,
+    /// NOT an optimization target. Low weak-recall is the intended behaviour of the
+    /// 2-signal quality floor for a precision-first brief.
+    pub(super) fn recall_weak(&self) -> f64 {
+        let d = (self.tp_weak + self.fn_weak) as f64;
+        if d == 0.0 {
+            1.0
+        } else {
+            self.tp_weak as f64 / d
         }
     }
     pub(super) fn f1(&self) -> f64 {
@@ -101,9 +145,11 @@ impl SimMetrics {
 
     pub(super) fn format_report(&self, label: &str) -> String {
         format!(
-            "[{label}] TP={} FP={} TN={} FN={} | P={:.3} R={:.3} F1={:.3} | rel={:.3} noise={:.3} gap={:.3}",
+            "[{label}] TP={} FP={} TN={} FN={} | P={:.3} R={:.3} F1={:.3} | R_strong={:.3} ({}/{}) R_weak={:.3} ({}/{}) | rel={:.3} noise={:.3} gap={:.3}",
             self.tp, self.fp, self.tn, self.r#fn,
             self.precision(), self.recall(), self.f1(),
+            self.recall_strong(), self.tp_strong, self.tp_strong + self.fn_strong,
+            self.recall_weak(), self.tp_weak, self.tp_weak + self.fn_weak,
             self.mean_relevant_score(), self.mean_noise_score(), self.separation_gap(),
         )
     }
@@ -113,6 +159,10 @@ impl SimMetrics {
         self.fp += other.fp;
         self.tn += other.tn;
         self.r#fn += other.r#fn;
+        self.tp_strong += other.tp_strong;
+        self.fn_strong += other.fn_strong;
+        self.tp_weak += other.tp_weak;
+        self.fn_weak += other.fn_weak;
         self.relevant_scores
             .extend_from_slice(&other.relevant_scores);
         self.noise_scores.extend_from_slice(&other.noise_scores);
