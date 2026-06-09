@@ -199,6 +199,18 @@ archive = ["dep:tar", "dep:flate2"]
 void-universe = []
 sql-check = []
 experimental = []
+# Recall investigation (test infrastructure only — ships NOTHING to production).
+# calibrated-sim swaps the scoring simulation's SYNTHETIC corpus/interest
+# embeddings for REAL fastembed (snowflake-arctic-embed-m) fixtures committed
+# under src/scoring/simulation/fixtures/*.bin, so reality.rs / quality_dashboard
+# measure TRUE per-persona recall instead of the structurally-inflated synthetic
+# deficit. OFF by default: the default `cargo test` stays on the synthetic
+# baseline (golden_snapshot 50 expectations + reality.rs) byte-for-byte.
+calibrated-sim = []
+# generate-sim-fixtures unlocks the ignored fixture-generator test that embeds
+# the corpus + persona topics via fastembed and writes the *.bin fixtures.
+# Requires the fastembed model; run once to (re)produce the committed fixtures.
+generate-sim-fixtures = ["fastembed-local"]
 # Feature-gated command groups (ghost commands with zero frontend callers)
 team-sync = []       # Team Sync, Intelligence, Monitoring (AD-023) — 17 commands
 enterprise = ["dep:jsonwebtoken", "dep:rsa", "dep:pkcs8", "dep:x509-cert"]      # Audit, Webhooks, Organizations, Analytics, SSO crypto — 15 commands

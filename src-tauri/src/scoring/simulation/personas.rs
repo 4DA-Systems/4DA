@@ -27,9 +27,11 @@ pub(super) fn make_interests(topics: &[(&str, f32)]) -> Vec<crate::context_engin
         .collect()
 }
 
-/// Uses per-persona domain embeddings instead of uniform vectors.
-/// Each interest gets an embedding aligned with the persona's domain block, enabling
-/// cosine-similarity-based interest scoring to discriminate in-domain vs off-domain.
+/// SYNTHETIC (default): per-persona domain embeddings — ALL of a persona's
+/// interests share ONE synthetic block-signature vector. This structurally
+/// under-measures recall (every interest points the same direction), which is
+/// precisely why `calibrated-sim` exists.
+#[cfg(not(feature = "calibrated-sim"))]
 pub(super) fn make_interests_calibrated(
     topics: &[(&str, f32)],
     persona_idx: usize,
@@ -44,6 +46,36 @@ pub(super) fn make_interests_calibrated(
             weight: *w,
             embedding: Some(e.clone()),
             source: crate::context_engine::InterestSource::Explicit,
+        })
+        .collect()
+}
+
+/// `calibrated-sim`: each interest gets its OWN REAL fastembed embedding, looked
+/// up by its topic string (exact then lowercase) from the committed topic
+/// fixture. Falls back to a zero vector only if a string is missing from the
+/// fixture (it should not be — `fixtures_gen` embeds every persona topic).
+#[cfg(feature = "calibrated-sim")]
+pub(super) fn make_interests_calibrated(
+    topics: &[(&str, f32)],
+    _persona_idx: usize,
+) -> Vec<crate::context_engine::Interest> {
+    let map = super::load_topic_embeddings();
+    topics
+        .iter()
+        .enumerate()
+        .map(|(i, (t, w))| {
+            let emb = map
+                .get(*t)
+                .or_else(|| map.get(&t.to_lowercase()))
+                .cloned()
+                .unwrap_or_else(|| vec![0.0_f32; crate::EMBEDDING_DIMS]);
+            crate::context_engine::Interest {
+                id: Some((i + 1) as i64),
+                topic: t.to_string(),
+                weight: *w,
+                embedding: Some(emb),
+                source: crate::context_engine::InterestSource::Explicit,
+            }
         })
         .collect()
 }
@@ -485,7 +517,7 @@ pub(super) fn niche_specialist() -> ScoringContext {
 // ============================================================================
 
 pub(super) fn all_personas() -> Vec<ScoringContext> {
-    vec![
+    let personas = vec![
         rust_systems_dev(),
         python_ml_engineer(),
         fullstack_typescript(),
@@ -495,7 +527,28 @@ pub(super) fn all_personas() -> Vec<ScoringContext> {
         power_user(),
         context_switcher(),
         niche_specialist(),
-    ]
+    ];
+    #[cfg(feature = "calibrated-sim")]
+    let personas = with_calibrated_topic_embeddings(personas);
+    personas
+}
+
+/// `calibrated-sim`: populate every persona's `ScoringContext.topic_embeddings`
+/// with the REAL fastembed topic fixture so the production semantic-ACE-boost
+/// path (`compute_semantic_ace_boost`, keyed by `ace_ctx.active_topics` +
+/// `detected_tech`) is exercised instead of the keyword fallback. The fixture is
+/// a superset of all persona topics; the boost only reads each persona's own
+/// keys, so sharing the full map is behaviorally identical to per-persona maps.
+#[cfg(feature = "calibrated-sim")]
+fn with_calibrated_topic_embeddings(personas: Vec<ScoringContext>) -> Vec<ScoringContext> {
+    let map = super::load_topic_embeddings();
+    personas
+        .into_iter()
+        .map(|mut ctx| {
+            ctx.topic_embeddings = map.clone();
+            ctx
+        })
+        .collect()
 }
 
 /// All 9 personas with full-fidelity enrichment applied.
