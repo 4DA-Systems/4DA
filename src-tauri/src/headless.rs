@@ -38,6 +38,48 @@ pub enum HeadlessMode {
     Daemon,
 }
 
+/// Hide the console window when the OS scheduler (or a double-click) spawned one for this headless
+/// run, so a background refresh never shows an unexplained black window. Windows only.
+///
+/// It distinguishes the two ways a console-subsystem build acquires a console:
+/// - **Scheduler / double-click launch** — a *new* console is created for us and we are its sole
+///   process (`GetConsoleProcessList` returns 1) → hide it.
+/// - **Manual run from a terminal** (`fourda-engine --once`) — we inherit the parent shell's console
+///   (process count > 1) → leave it visible so developers and verifiers keep their logs.
+///
+/// It is a no-op on a windows-subsystem build (release `fourda.exe`): there is no console, so
+/// `GetConsoleWindow` returns null and we return early. Hiding the window does not touch the
+/// stdout/stderr handles, so an external verifier that redirects the engine's output still captures it.
+#[cfg(target_os = "windows")]
+#[allow(unsafe_code)] // Intentional: FFI to Win32 console/window APIs to hide the scheduler's console.
+fn hide_scheduler_spawned_console() {
+    use windows_sys::Win32::System::Console::{GetConsoleProcessList, GetConsoleWindow};
+
+    // `ShowWindow` lives in the `Win32_UI_WindowsAndMessaging` feature, which this crate does not
+    // enable. Declare just this one call rather than widen the shared (peer-contended) Cargo.toml;
+    // `GetConsoleWindow`/`GetConsoleProcessList` are already in the enabled `Win32_System_Console`.
+    #[link(name = "user32")]
+    extern "system" {
+        #[link_name = "ShowWindow"]
+        fn show_window(hwnd: *mut core::ffi::c_void, cmd: i32) -> i32;
+    }
+    const SW_HIDE: i32 = 0;
+
+    // SAFETY: three plain Win32 calls over a fixed-size stack buffer; no pointers outlive the call.
+    unsafe {
+        let hwnd = GetConsoleWindow();
+        if hwnd.is_null() {
+            return; // windows-subsystem build / no attached console — nothing to hide.
+        }
+        // A 2-slot buffer is enough to tell "exactly one owner" from "more than one"; we never read
+        // the pids, only the returned count. A 0 return means the query failed — leave the window.
+        let mut owners = [0u32; 2];
+        if GetConsoleProcessList(owners.as_mut_ptr(), owners.len() as u32) == 1 {
+            show_window(hwnd, SW_HIDE);
+        }
+    }
+}
+
 /// Entry point for the `fourda-engine` binary. Initializes 4DA's global services, builds a
 /// windowless Tauri app for its `AppHandle`, and runs the pipeline in the requested mode.
 /// Never returns — always terminates the process with an explicit exit code.
@@ -46,6 +88,15 @@ pub enum HeadlessMode {
 /// fresh (last fetch within the refresh interval) — so running alongside a GUI that is actively
 /// refreshing does not double-fetch against rate-limited sources.
 pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
+    // A scheduled background refresh must never flash a console window at the user. An unexplained
+    // black window that pops up every 30 minutes reads as malware — the founder's first instinct on
+    // seeing it was to kill it immediately. Release `fourda.exe` is already windowless
+    // (`windows_subsystem = "windows"`); this additionally hides the stray console a *debug* build, or
+    // the console-subsystem `fourda-engine` binary, is handed when the OS scheduler launches it. Done
+    // first so the window is gone before any slower init can let it paint.
+    #[cfg(target_os = "windows")]
+    hide_scheduler_spawned_console();
+
     // Globals: runtime paths, logging, relevance threshold, database, context engine, source
     // registry. Identical to the GUI's pre-Tauri init, but WITHOUT the single-instance lock — the
     // headless engine deliberately coexists with a running GUI over the same WAL database.
