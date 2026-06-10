@@ -6,8 +6,21 @@ use rusqlite::{params, Result as SqliteResult};
 
 use crate::db::Database;
 
+use crate::ace::scanner::DependencyEdge;
+
 use super::mappers::map_dependency_row;
-use super::types::{CrossProjectPackage, StoredDependency};
+use super::types::{CrossProjectPackage, DependencyEdgeRow, StoredDependency};
+
+/// Mirror of the worktree/temp exclusion used by `get_auditable_*` queries.
+/// Edges from ephemeral worktrees and temp clones would duplicate the graph and
+/// inflate reachability, so we skip storing them at write time.
+fn is_excluded_project_path(project_path: &str) -> bool {
+    let p = project_path.replace('\\', "/").to_lowercase();
+    p.contains("/.claude/worktrees/")
+        || p.contains("/.codex/worktrees/")
+        || p.contains("/tmp/")
+        || (p.contains("appdata") && p.contains("local") && p.contains("temp"))
+}
 
 impl Database {
     /// Store (upsert) a dependency discovered by ACE scanner.
@@ -383,6 +396,83 @@ impl Database {
                 Ok(v) => Some(v),
                 Err(e) => {
                     tracing::warn!("Row processing failed in dependencies: {e}");
+                    None
+                }
+            })
+            .collect())
+    }
+
+    /// Bulk-insert parent->child dependency edges for a project (Step 1:
+    /// reachability foundation). Runs in a single transaction. Skips ephemeral
+    /// worktree/temp paths (same exclusion as the auditable-dependency queries).
+    /// Returns the number of edges inserted (0 for excluded/empty input).
+    pub(crate) fn store_dependency_edges(
+        &self,
+        project_path: &str,
+        ecosystem: &str,
+        edges: &[DependencyEdge],
+    ) -> SqliteResult<usize> {
+        if edges.is_empty() || is_excluded_project_path(project_path) {
+            return Ok(0);
+        }
+
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction()?;
+        let mut inserted = 0usize;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO dependency_edges
+                     (project_path, ecosystem, parent_package, parent_version,
+                      child_package, child_version, scope, detected_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
+            )?;
+            for edge in edges {
+                stmt.execute(params![
+                    project_path,
+                    ecosystem,
+                    edge.parent,
+                    edge.parent_version,
+                    edge.child,
+                    edge.child_version,
+                    edge.scope.as_str(),
+                ])?;
+                inserted += 1;
+            }
+        }
+        tx.commit()?;
+        Ok(inserted)
+    }
+
+    /// Get all stored dependency edges for a project.
+    pub fn get_dependency_edges(&self, project_path: &str) -> SqliteResult<Vec<DependencyEdgeRow>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, project_path, ecosystem, parent_package, parent_version,
+                    child_package, child_version, scope, detected_at
+             FROM dependency_edges
+             WHERE project_path = ?1
+             ORDER BY parent_package, child_package",
+        )?;
+
+        let rows = stmt.query_map(params![project_path], |row| {
+            Ok(DependencyEdgeRow {
+                id: row.get(0)?,
+                project_path: row.get(1)?,
+                ecosystem: row.get(2)?,
+                parent_package: row.get(3)?,
+                parent_version: row.get(4)?,
+                child_package: row.get(5)?,
+                child_version: row.get(6)?,
+                scope: row.get(7)?,
+                detected_at: row.get(8)?,
+            })
+        })?;
+
+        Ok(rows
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in dependency edges: {e}");
                     None
                 }
             })

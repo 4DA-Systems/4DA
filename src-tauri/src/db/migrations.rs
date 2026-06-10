@@ -600,7 +600,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 83;
+        const TARGET_VERSION: i64 = 84;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2965,6 +2965,40 @@ impl Database {
                 )?;
             }
 
+            // Phase 84: dependency_edges — capture the parent->child dependency
+            // graph from lockfiles so transitive-vulnerability reachability can be
+            // computed. Today's parsers flatten lockfiles to (name, version) and
+            // discard edges; without edges reachability is unknowable. Ships silent
+            // (internal computation only; no surfaced output yet).
+            if current_version < 84 {
+                Self::run_versioned_migration(
+                    &conn,
+                    83,
+                    84,
+                    "Phase 84: dependency_edges table for reachability",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS dependency_edges (
+                                 id INTEGER PRIMARY KEY,
+                                 project_path TEXT NOT NULL,
+                                 ecosystem TEXT NOT NULL,
+                                 parent_package TEXT NOT NULL,
+                                 parent_version TEXT,
+                                 child_package TEXT NOT NULL,
+                                 child_version TEXT,
+                                 scope TEXT NOT NULL DEFAULT 'unknown',
+                                 detected_at TEXT NOT NULL DEFAULT (datetime('now'))
+                             );
+                             CREATE INDEX IF NOT EXISTS idx_dep_edges_parent
+                                 ON dependency_edges (project_path, parent_package);
+                             CREATE INDEX IF NOT EXISTS idx_dep_edges_child
+                                 ON dependency_edges (project_path, child_package);",
+                        )?;
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -3822,6 +3856,90 @@ mod tests {
                 indexes
             );
         }
+    }
+
+    /// Phase 84: dependency_edges table exists with the expected schema and indexes.
+    #[test]
+    fn test_phase_84_dependency_edges_table_and_indexes() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        // Table exists.
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='dependency_edges'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            table_exists,
+            "dependency_edges table should exist after migration"
+        );
+
+        // Expected columns present.
+        let mut stmt = conn
+            .prepare("SELECT name FROM pragma_table_info('dependency_edges')")
+            .unwrap();
+        let cols: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        let expected_cols = [
+            "id",
+            "project_path",
+            "ecosystem",
+            "parent_package",
+            "parent_version",
+            "child_package",
+            "child_version",
+            "scope",
+            "detected_at",
+        ];
+        for col in expected_cols {
+            assert!(
+                cols.iter().any(|c| c == col),
+                "dependency_edges column '{}' missing; got {:?}",
+                col,
+                cols
+            );
+        }
+
+        // Both indexes created.
+        let mut idx_stmt = conn
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='dependency_edges'",
+            )
+            .unwrap();
+        let indexes: Vec<String> = idx_stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        for idx in ["idx_dep_edges_parent", "idx_dep_edges_child"] {
+            assert!(
+                indexes.iter().any(|i| i == idx),
+                "dependency_edges index '{}' missing; got {:?}",
+                idx,
+                indexes
+            );
+        }
+    }
+
+    /// Phase 84 lifts TARGET_VERSION to 84. Verify the test DB reached it.
+    #[test]
+    fn test_phase_84_schema_version_reached() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 84,
+            "schema_version should be >= 84 after migration; got {}",
+            version
+        );
     }
 
     /// Phase 57 lifts TARGET_VERSION to 57. Verify the test DB reached it.

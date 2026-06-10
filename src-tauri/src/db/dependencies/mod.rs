@@ -10,4 +10,4 @@ mod queries;
 mod tests;
 pub mod types;
 
-pub use types::{CrossProjectPackage, DependencyAlert, StoredDependency};
+pub use types::{CrossProjectPackage, DependencyAlert, DependencyEdgeRow, StoredDependency};

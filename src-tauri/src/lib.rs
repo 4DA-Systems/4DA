@@ -310,6 +310,7 @@ mod project_health_dimensions;
 mod prompt_safety;
 pub mod provenance;
 pub mod query;
+pub(crate) mod reachability;
 mod reconciler;
 pub(crate) mod runtime_paths;
 pub(crate) mod scheduler_gate;

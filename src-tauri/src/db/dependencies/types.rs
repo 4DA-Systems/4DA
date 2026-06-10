@@ -27,6 +27,23 @@ pub struct CrossProjectPackage {
     pub projects: Vec<String>,
 }
 
+/// A stored parent->child dependency edge (Step 1: reachability foundation).
+/// Captures the graph that the flatten parsers discard, so transitive-vuln
+/// reachability can be computed. Internal computation only — never surfaced.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DependencyEdgeRow {
+    pub id: i64,
+    pub project_path: String,
+    pub ecosystem: String,
+    pub parent_package: String,
+    pub parent_version: Option<String>,
+    pub child_package: String,
+    pub child_version: Option<String>,
+    /// One of `runtime` | `dev` | `build` | `unknown`.
+    pub scope: String,
+    pub detected_at: String,
+}
+
 /// An alert associated with a dependency
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DependencyAlert {
