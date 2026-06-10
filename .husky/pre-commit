@@ -62,6 +62,13 @@ node scripts/check-vanity-metrics.cjs || exit 1
 # Ghost command detection — commands in Rust with no frontend caller
 STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.rs$' || true)
 if [ -n "$STAGED_RS" ]; then
+    # --- No-window spawn gate (fast whole-tree scan) ---
+    # Every Windows-reachable Command::new MUST suppress the console window
+    # (CREATE_NO_WINDOW) or a black window flashes on the user's desktop — reads
+    # as malware. See .ai/INVARIANTS.md INV-043.
+    echo "Checking for console-window-flashing spawns..."
+    node scripts/check-no-window-spawns.cjs || exit 1
+
     # --- Dead Code Expiry Check ---
     # Uses a single git diff --cached pass to find files with dead_code annotations,
     # then only inspects those files. Prevents cygheap fork failures on Windows

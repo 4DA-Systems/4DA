@@ -42,6 +42,9 @@ jobs:
       - name: Check file sizes
         run: node scripts/check-file-sizes.cjs --ci
 
+      - name: No console-window-flashing spawns (INV-043)
+        run: node scripts/check-no-window-spawns.cjs
+
       - name: TypeScript type check
         run: pnpm run typecheck
 
