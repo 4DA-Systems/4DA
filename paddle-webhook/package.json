@@ -10,6 +10,11 @@
   "devDependencies": {
     "@types/node": "^25.6.0",
     "typescript": "^5.7.0",
-    "vercel": "^52.0.0"
+    "vercel": "^52.2.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "@tootallnate/once": "2.0.1"
+    }
   }
 }
