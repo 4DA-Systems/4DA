@@ -17,6 +17,7 @@ use super::types::{
 const OSV_BATCH_URL: &str = "https://api.osv.dev/v1/querybatch";
 const USER_AGENT: &str = "4DA/1.0 (local-osv-mirror)";
 const MAX_BATCH_SIZE: usize = 1000;
+pub(crate) const DEFAULT_SYNC_MAX_AGE_HOURS: i64 = 6;
 
 /// Map from ACE/DB ecosystem names to OSV ecosystem identifiers.
 const ECOSYSTEM_NORMALIZE: &[(&str, &str)] = &[
@@ -41,18 +42,89 @@ const ECOSYSTEM_NORMALIZE: &[(&str, &str)] = &[
 ];
 
 fn normalize_to_osv(ecosystem: &str) -> &str {
+    normalize_supported_to_osv(ecosystem).unwrap_or(ecosystem)
+}
+
+fn normalize_supported_to_osv(ecosystem: &str) -> Option<&'static str> {
     let lower = ecosystem.to_lowercase();
     ECOSYSTEM_NORMALIZE
         .iter()
         .find(|(key, _)| *key == lower.as_str())
         .map(|(_, osv)| *osv)
-        .unwrap_or(ecosystem)
 }
 
 /// Public-within-module wrapper for ecosystem normalization.
 /// Used by the cache module to map user dependency ecosystems to OSV names.
 pub(super) fn normalize_to_osv_pub(ecosystem: &str) -> String {
     normalize_to_osv(ecosystem).to_string()
+}
+
+fn auditable_packages_by_ecosystem(db: &Database) -> Result<HashMap<String, Vec<String>>> {
+    let mut deps = db
+        .get_auditable_user_dependencies()
+        .map_err(|e| FourDaError::Internal(format!("Failed to read dependencies: {e}")))?;
+    let scanned = db
+        .get_auditable_scanned_dependencies()
+        .map_err(|e| FourDaError::Internal(format!("Failed to read scanned dependencies: {e}")))?;
+    deps.extend(scanned);
+
+    let mut by_ecosystem: HashMap<String, Vec<String>> = HashMap::new();
+    for dep in deps {
+        let Some(ecosystem) = normalize_supported_to_osv(&dep.ecosystem) else {
+            tracing::debug!(
+                target: "4da::osv",
+                ecosystem = dep.ecosystem,
+                package = dep.package_name,
+                "Skipping dependency from unsupported OSV ecosystem"
+            );
+            continue;
+        };
+        by_ecosystem
+            .entry(ecosystem.to_string())
+            .or_default()
+            .push(dep.package_name);
+    }
+    for packages in by_ecosystem.values_mut() {
+        packages.sort_by_key(|name| name.to_lowercase());
+        packages.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+    }
+    Ok(by_ecosystem)
+}
+
+/// Whether any dependency ecosystem is missing a successful recent sync.
+///
+/// Requiring every active ecosystem avoids the previous false-fresh state where
+/// one recently-synced ecosystem masked a stale or failed sibling ecosystem.
+pub(crate) fn needs_sync(db: &Database, max_age_hours: i64) -> Result<bool> {
+    let required = auditable_packages_by_ecosystem(db)?;
+    if required.is_empty() {
+        return Ok(false);
+    }
+
+    let statuses = db
+        .get_osv_sync_statuses()
+        .map_err(|e| FourDaError::Internal(format!("Failed to read OSV sync status: {e}")))?;
+    let now = chrono::Utc::now().naive_utc();
+    for ecosystem in required.keys() {
+        let Some(status) = statuses
+            .iter()
+            .find(|status| status.ecosystem.eq_ignore_ascii_case(ecosystem))
+        else {
+            return Ok(true);
+        };
+        if status.error.is_some() {
+            return Ok(true);
+        }
+        let Some(last_synced) = status.last_synced_at.as_deref().and_then(|timestamp| {
+            chrono::NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%d %H:%M:%S").ok()
+        }) else {
+            return Ok(true);
+        };
+        if now.signed_duration_since(last_synced).num_hours() >= max_age_hours {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Run a full sync: read deps → query OSV → store advisories → update status.
@@ -66,54 +138,10 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
         errors: Vec::new(),
     };
 
-    let mut deps = db
-        .get_all_user_dependencies()
-        .map_err(|e| FourDaError::Internal(format!("Failed to read dependencies: {e}")))?;
-
-    // Merge scanned deps (lockfile-parsed transitive deps) for full coverage
-    let scanned = db
-        .get_all_scanned_dependencies()
-        .map_err(|e| FourDaError::Internal(format!("Failed to read scanned dependencies: {e}")))?;
-
-    let mut seen_keys: std::collections::HashSet<(String, String)> = deps
-        .iter()
-        .map(|d| {
-            (
-                d.package_name.to_lowercase(),
-                normalize_to_osv(&d.ecosystem).to_string(),
-            )
-        })
-        .collect();
-
-    for dep in scanned {
-        let key = (
-            dep.package_name.to_lowercase(),
-            normalize_to_osv(&dep.ecosystem).to_string(),
-        );
-        if seen_keys.insert(key) {
-            deps.push(dep);
-        }
-    }
-
-    if deps.is_empty() {
+    let by_ecosystem = auditable_packages_by_ecosystem(db)?;
+    if by_ecosystem.is_empty() {
         info!(target: "4da::osv", "No dependencies found — skipping OSV sync");
         return Ok(result);
-    }
-
-    // Group packages by OSV ecosystem
-    let mut by_ecosystem: HashMap<String, Vec<String>> = HashMap::new();
-    for dep in &deps {
-        let osv_eco = normalize_to_osv(&dep.ecosystem).to_string();
-        by_ecosystem
-            .entry(osv_eco)
-            .or_default()
-            .push(dep.package_name.clone());
-    }
-
-    // Deduplicate package names within each ecosystem
-    for packages in by_ecosystem.values_mut() {
-        packages.sort();
-        packages.dedup();
     }
 
     let client = reqwest::Client::builder()
@@ -479,5 +507,63 @@ mod tests {
 
         let stored2 = store_vulnerability(&db, &vuln, &mut seen).unwrap();
         assert_eq!(stored2, 0, "Duplicate should be skipped");
+    }
+
+    #[test]
+    fn test_needs_sync_requires_every_active_ecosystem_to_be_fresh() {
+        use crate::test_utils::test_db;
+
+        let db = test_db();
+        assert!(!needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
+
+        db.store_dependency(
+            "/project",
+            "internal-package",
+            Some("1.0.0"),
+            "custom",
+            false,
+            None,
+        )
+        .unwrap();
+        assert!(
+            !needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap(),
+            "unsupported ecosystems must not keep OSV freshness permanently stale"
+        );
+
+        db.store_dependency("/project", "react", Some("19.0.0"), "npm", false, None)
+            .unwrap();
+        db.store_dependency("/project", "tokio", Some("1.0.0"), "rust", false, None)
+            .unwrap();
+        assert!(needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
+
+        db.update_osv_sync_status("npm", 0, None).unwrap();
+        assert!(
+            needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap(),
+            "fresh npm status must not mask missing crates.io status"
+        );
+
+        db.update_osv_sync_status("crates.io", 0, None).unwrap();
+        assert!(!needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
+
+        db.update_osv_sync_status("npm", 0, Some("network failed"))
+            .unwrap();
+        assert!(
+            needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap(),
+            "a recorded ecosystem failure must remain stale"
+        );
+
+        db.update_osv_sync_status("npm", 0, None).unwrap();
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE osv_sync_status SET last_synced_at = datetime('now', '-7 hours') WHERE ecosystem = 'npm'",
+                [],
+            )
+            .unwrap();
+        }
+        assert!(
+            needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap(),
+            "an old ecosystem status must make the dependency mirror stale"
+        );
     }
 }

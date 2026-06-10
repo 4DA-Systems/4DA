@@ -995,23 +995,18 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             Ok(db) => db,
             Err(_) => return,
         };
-        let deps = db.get_all_user_dependencies().unwrap_or_default();
-        if deps.is_empty() {
+        let dependency_count = db
+            .get_auditable_user_dependencies()
+            .map_or(0, |deps| deps.len())
+            + db.get_auditable_scanned_dependencies()
+                .map_or(0, |deps| deps.len());
+        if dependency_count == 0 {
             return;
         }
-        // Skip if synced recently (within 6 hours)
-        let statuses = db.get_osv_sync_statuses().unwrap_or_default();
-        let recently_synced = statuses.iter().any(|s| {
-            s.last_synced_at
-                .as_deref()
-                .and_then(|ts| chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S").ok())
-                .map(|dt| {
-                    let now = chrono::Utc::now().naive_utc();
-                    now.signed_duration_since(dt).num_hours() < 6
-                })
-                .unwrap_or(false)
-        });
-        if recently_synced {
+        let needs_sync =
+            crate::osv::sync::needs_sync(&db, crate::osv::sync::DEFAULT_SYNC_MAX_AGE_HOURS)
+                .unwrap_or(true);
+        if !needs_sync {
             info!(target: "4da::osv", "OSV mirror synced recently — skipping startup sync");
             // Data is already current — warm the Preemption feed cache now so the
             // tab's first paint is served from cache instead of a 30-40s recompute
@@ -1019,7 +1014,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             crate::preemption::warm_preemption_cache().await;
             return;
         }
-        info!(target: "4da::osv", deps = deps.len(), "Starting background OSV sync");
+        info!(target: "4da::osv", deps = dependency_count, "Starting background OSV sync");
         match crate::osv::sync::sync(&db).await {
             Ok(result) => {
                 info!(

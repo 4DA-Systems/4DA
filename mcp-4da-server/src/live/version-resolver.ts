@@ -34,36 +34,88 @@ export function resolveVersions(
 ): ResolvedDependency[] {
   const ecosystem = mapEcosystem(language);
   const results: ResolvedDependency[] = [];
-
-  const resolvers: Record<string, () => Map<string, string>> = {
-    npm: () => resolveNpm(cwd),
-    "crates.io": () => resolveRust(cwd),
-    PyPI: () => resolvePython(cwd),
-    Go: () => resolveGo(cwd),
-  };
-
-  const resolver = resolvers[ecosystem];
-  const versionMap = resolver ? resolver() : new Map<string, string>();
+  const versionMap = resolveVersionMap(cwd, ecosystem);
 
   for (const name of deps) {
     results.push({
       name,
-      version: versionMap.get(name) || null,
+      version: versionMap.get(normalizePackageName(name, ecosystem)) || null,
       ecosystem,
       isDev: false,
+      isDirect: true,
+      devScopeKnown: true,
     });
   }
 
   for (const name of devDeps) {
     results.push({
       name,
-      version: versionMap.get(name) || null,
+      version: versionMap.get(normalizePackageName(name, ecosystem)) || null,
       ecosystem,
       isDev: true,
+      isDirect: true,
+      devScopeKnown: true,
     });
   }
 
   return results;
+}
+
+/**
+ * Resolve the complete lockfile package set for vulnerability scanning.
+ * Direct dependency health and upgrade planning continue to use resolveVersions.
+ */
+export function resolveAuditVersions(
+  cwd: string,
+  deps: string[],
+  devDeps: string[],
+  language: string,
+): ResolvedDependency[] {
+  const ecosystem = mapEcosystem(language);
+  const direct = resolveVersions(cwd, deps, devDeps, language);
+  const versionMap = resolveVersionMap(cwd, ecosystem);
+  const directNames = new Set(deps.map((name) => normalizePackageName(name, ecosystem)));
+  const devNames = new Set(devDeps.map((name) => normalizePackageName(name, ecosystem)));
+  const seen = new Set(direct.map((dep) => dependencyKey(dep)));
+  const results = [...direct];
+
+  for (const [name, version] of versionMap) {
+    const normalized = normalizePackageName(name, ecosystem);
+    const isDirect = directNames.has(normalized) || devNames.has(normalized);
+    const candidate: ResolvedDependency = {
+      name,
+      version,
+      ecosystem,
+      isDev: devNames.has(normalized),
+      isDirect,
+      devScopeKnown: isDirect,
+    };
+    const key = dependencyKey(candidate);
+    if (!seen.has(key)) {
+      seen.add(key);
+      results.push(candidate);
+    }
+  }
+
+  return results;
+}
+
+function resolveVersionMap(cwd: string, ecosystem: OsvEcosystem): Map<string, string> {
+  const resolvers: Partial<Record<OsvEcosystem, () => Map<string, string>>> = {
+    npm: () => resolveNpm(cwd),
+    "crates.io": () => resolveRust(cwd),
+    PyPI: () => resolvePython(cwd),
+    Go: () => resolveGo(cwd),
+  };
+  return resolvers[ecosystem]?.() || new Map<string, string>();
+}
+
+function normalizePackageName(name: string, ecosystem: OsvEcosystem): string {
+  return ecosystem === "PyPI" ? name.toLowerCase() : name;
+}
+
+function dependencyKey(dep: ResolvedDependency): string {
+  return `${dep.ecosystem}\0${normalizePackageName(dep.name, dep.ecosystem)}\0${dep.version ?? ""}`;
 }
 
 // =============================================================================
@@ -81,7 +133,7 @@ function resolveNpm(cwd: string): Map<string, string> {
       // v2/v3 format: packages["node_modules/name"].version
       if (lock.packages) {
         for (const [key, value] of Object.entries(lock.packages)) {
-          const name = key.replace(/^node_modules\//, "");
+          const name = packageNameFromNodeModulesPath(key);
           if (name && (value as { version?: string }).version) {
             versions.set(name, (value as { version: string }).version);
           }
@@ -135,8 +187,10 @@ function resolveNpm(cwd: string): Map<string, string> {
         }
       }
 
-      // Also try packages section for pnpm v6-v8 format: '/name@version:'
-      const pkgRegex = /^\s*['/]?([^@\s][^@]*)@(\d+[^:('"]*)/gm;
+      // Also parse package/snapshot keys. Requiring a numeric version after
+      // the separator handles scoped packages without splitting at their
+      // leading `@` (for example '@scope/pkg@1.2.3').
+      const pkgRegex = /^\s{2}'?(.+?)@(\d+[^:('"]*)[^:]*'?:\s*$/gm;
       let match;
       while ((match = pkgRegex.exec(content)) !== null) {
         const name = match[1].replace(/^\//, "").trim();
@@ -182,6 +236,12 @@ function resolveNpm(cwd: string): Map<string, string> {
   }
 
   return versions;
+}
+
+function packageNameFromNodeModulesPath(lockPath: string): string {
+  const marker = "node_modules/";
+  const index = lockPath.lastIndexOf(marker);
+  return index === -1 ? "" : lockPath.slice(index + marker.length);
 }
 
 // =============================================================================

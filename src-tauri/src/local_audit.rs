@@ -354,7 +354,7 @@ pub(crate) async fn run_local_audits() -> Vec<LocalAuditFinding> {
         }
     };
 
-    let deps = match db.get_all_user_dependencies() {
+    let deps = match db.get_auditable_user_dependencies() {
         Ok(d) => d,
         Err(e) => {
             debug!(target: "4da::audit", "Cannot load dependencies for local audit: {e}");

@@ -7,6 +7,8 @@ export interface ResolvedDependency {
   version: string | null;
   ecosystem: OsvEcosystem;
   isDev: boolean;
+  isDirect: boolean;
+  devScopeKnown: boolean;
 }
 
 export interface OsvVulnerability {
@@ -32,6 +34,8 @@ export interface VulnerabilityEntry {
   currentVersion: string;
   ecosystem: OsvEcosystem;
   isDev: boolean;
+  isDirect: boolean;
+  devScopeKnown: boolean;
   vulnId: string;
   aliases: string[];
   severity: "critical" | "high" | "medium" | "low" | "unknown";

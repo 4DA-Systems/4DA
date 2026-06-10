@@ -377,11 +377,11 @@ fn collect_ecosystem_packages(
     db: &Database,
 ) -> Result<std::collections::HashMap<String, HashSet<String>>> {
     let mut deps = db
-        .get_all_user_dependencies()
+        .get_auditable_user_dependencies()
         .map_err(|e| FourDaError::Internal(format!("Failed to read dependencies: {e}")))?;
 
-    // Merge lockfile-parsed transitive deps for complete package coverage
-    if let Ok(scanned) = db.get_all_scanned_dependencies() {
+    // Merge scanned deps while preserving project-hygiene filters.
+    if let Ok(scanned) = db.get_auditable_scanned_dependencies() {
         deps.extend(scanned);
     }
 

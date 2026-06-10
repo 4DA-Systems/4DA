@@ -107,6 +107,37 @@ impl Database {
             .collect())
     }
 
+    /// Get dependencies suitable for security auditing.
+    ///
+    /// Includes direct, transitive, runtime, and dev dependencies, while excluding
+    /// ephemeral worktrees and temp clones that would duplicate findings.
+    pub fn get_auditable_user_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at, license
+             FROM user_dependencies
+             WHERE project_path NOT LIKE '%/.claude/worktrees/%'
+               AND project_path NOT LIKE '%\\.claude\\worktrees\\%'
+               AND project_path NOT LIKE '%/.codex/worktrees/%'
+               AND project_path NOT LIKE '%\\.codex\\worktrees\\%'
+               AND project_path NOT LIKE '%/tmp/%'
+               AND project_path NOT LIKE '%\\tmp\\%'
+               AND project_path NOT LIKE '%AppData%Local%Temp%'
+             ORDER BY ecosystem, package_name",
+        )?;
+
+        let rows = stmt.query_map([], map_dependency_row)?;
+        Ok(rows
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in auditable dependencies: {e}");
+                    None
+                }
+            })
+            .collect())
+    }
+
     /// Get user dependencies filtered to relevant runtime deps only.
     ///
     /// Excludes dev deps, transitive deps, and worktree paths to prevent
@@ -165,6 +196,81 @@ impl Database {
                 Ok(v) => Some(v),
                 Err(e) => {
                     tracing::warn!("Row processing failed in scanned dependencies: {e}");
+                    None
+                }
+            })
+            .collect())
+    }
+
+    /// Get ACE-scanned dependencies suitable for security auditing.
+    ///
+    /// Includes all dependency scopes, but keeps the project-hygiene and
+    /// relevance filters used by user-facing intelligence.
+    pub fn get_auditable_scanned_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
+        let conn = self.conn.lock();
+
+        let has_direct = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'is_direct'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+        let has_relevance = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'project_relevance'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+
+        let direct_col = if has_direct {
+            "is_direct"
+        } else {
+            "1 as is_direct"
+        };
+        let relevance_clause = if has_relevance {
+            "AND project_relevance >= 0.15"
+        } else {
+            ""
+        };
+        let sql = format!(
+            "SELECT id, project_path, package_name, version, language, is_dev, {direct_col}, last_scanned
+             FROM project_dependencies
+             WHERE project_path NOT LIKE '%/.claude/worktrees/%'
+               AND project_path NOT LIKE '%\\.claude\\worktrees\\%'
+               AND project_path NOT LIKE '%/.codex/worktrees/%'
+               AND project_path NOT LIKE '%\\.codex\\worktrees\\%'
+               AND project_path NOT LIKE '%/tmp/%'
+               AND project_path NOT LIKE '%\\tmp\\%'
+               AND project_path NOT LIKE '%AppData%Local%Temp%'
+               {relevance_clause}
+             ORDER BY language, package_name"
+        );
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map([], |row| {
+            Ok(StoredDependency {
+                id: row.get(0)?,
+                project_path: row.get(1)?,
+                package_name: row.get(2)?,
+                version: row.get(3)?,
+                ecosystem: row.get::<_, String>(4)?,
+                is_dev: row.get::<_, bool>(5)?,
+                is_direct: row.get::<_, bool>(6)?,
+                detected_at: row.get::<_, String>(7)?,
+                last_seen_at: row.get::<_, String>(7)?,
+                license: None,
+            })
+        })?;
+
+        Ok(rows
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in auditable scanned dependencies: {e}");
                     None
                 }
             })

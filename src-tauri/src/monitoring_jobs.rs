@@ -495,7 +495,10 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
     };
 
     // 1. Load user dependencies
-    let user_deps = match db.get_all_user_dependencies() {
+    // Legacy notification alerts cannot carry direct/dev/transitive scope.
+    // Keep this high-urgency path direct-runtime only; the OSV Preemption path
+    // handles broader auditable coverage with honest scope metadata.
+    let user_deps = match db.get_relevant_user_dependencies() {
         Ok(deps) => deps,
         Err(e) => {
             warn!(target: "4da::jobs", "CVE scan: failed to load dependencies: {e}");
