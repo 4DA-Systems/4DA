@@ -27,7 +27,7 @@ into package.json (validate + test:scripts), .husky/pre-commit (when .rs staged)
 and codified as INVARIANTS.md INV-043. cargo check + clippy --lib clean, fmt clean, gate 41/41 safe, 10/10 tests.
 Pathspec commit (only my 8 files); did NOT touch the 3 pre-existing untracked files (engine_receipt_pubkey.hex
 / fourda-infer-proto/.gitignore / target-verify/) or any peer claim (step1-edges, secaudit Cargo.lock).
-**Commit Lock**: HELD (opus-window-hygiene)
+**Commit Lock**: RELEASED (opus-window-hygiene) — committed @ f3992dd3, pushing to origin/main.
 
 ### Terminal: opus-step1-edges (started 2026-06-11)
 Working on: Step 1 = dependency edges -> reachability ranking (greenlit). Increment 1 (foundation, ships
