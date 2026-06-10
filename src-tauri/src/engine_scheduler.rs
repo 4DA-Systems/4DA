@@ -146,8 +146,14 @@ pub fn background_refresh_status() -> SchedulerStatus {
 #[cfg(target_os = "windows")]
 mod windows {
     use super::{SchedulerStatus, TASK_NAME};
+    use std::os::windows::process::CommandExt;
     use std::path::Path;
     use std::process::Command;
+
+    /// Spawn schtasks with no console window. fourda.exe is a GUI-subsystem binary, so a
+    /// console-subsystem child spawned without this flag makes Windows allocate a fresh console —
+    /// a black window flashes on the user's desktop every time we install/uninstall/query the task.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
     /// `schtasks /Create` — `/TR` carries the quoted exe + headless arg; `/SC MINUTE /MO N` repeats
     /// every N minutes; `/F` overwrites an existing task. Runs in the user context when logged on
@@ -173,6 +179,7 @@ mod windows {
                 "/MO",
                 &interval_minutes.to_string(),
             ])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .map_err(|e| format!("Failed to run schtasks: {e}"))?;
         if output.status.success() {
@@ -191,6 +198,7 @@ mod windows {
     pub(super) fn uninstall() -> Result<(), String> {
         let output = Command::new("schtasks")
             .args(["/Delete", "/F", "/TN", TASK_NAME])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .map_err(|e| format!("Failed to run schtasks: {e}"))?;
         if output.status.success() {
@@ -214,6 +222,7 @@ mod windows {
     pub(super) fn status() -> SchedulerStatus {
         let output = Command::new("schtasks")
             .args(["/Query", "/TN", TASK_NAME, "/V", "/FO", "LIST"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
         match output {
             Ok(out) if out.status.success() => {
