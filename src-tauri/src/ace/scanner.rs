@@ -948,6 +948,314 @@ impl ProjectScanner {
 
         packages
     }
+
+    // ========================================================================
+    // Edge parsers — capture parent->child graph (alongside flatten parsers)
+    // ========================================================================
+
+    /// Parse a Cargo.lock and return parent->child dependency edges.
+    /// Each `[[package]]` block carries `name`, `version`, and an optional
+    /// `dependencies = [ "dep", "dep 1.2.3", ... ]` array. We emit one edge per
+    /// child. Cargo.lock does not separate dev deps in its resolved graph, so all
+    /// edges are `Runtime`. Robust to malformed input — returns what it can.
+    pub(crate) fn parse_cargo_lock_edges(content: &str) -> Vec<DependencyEdge> {
+        let mut edges = Vec::new();
+        let mut name: Option<String> = None;
+        let mut version: Option<String> = None;
+        let mut in_deps = false;
+
+        // Flush the current package's dependency list as edges.
+        fn flush(
+            edges: &mut Vec<DependencyEdge>,
+            name: &Option<String>,
+            version: &Option<String>,
+            children: &[(String, Option<String>)],
+        ) {
+            if let Some(parent) = name {
+                for (child, child_version) in children {
+                    edges.push(DependencyEdge {
+                        parent: parent.clone(),
+                        parent_version: version.clone(),
+                        child: child.clone(),
+                        child_version: child_version.clone(),
+                        scope: EdgeScope::Runtime,
+                    });
+                }
+            }
+        }
+
+        let mut children: Vec<(String, Option<String>)> = Vec::new();
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+
+            if trimmed == "[[package]]" {
+                flush(&mut edges, &name, &version, &children);
+                name = None;
+                version = None;
+                children.clear();
+                in_deps = false;
+                continue;
+            }
+
+            if in_deps {
+                // Inside a `dependencies = [` array until the closing `]`.
+                if trimmed.contains(']') {
+                    in_deps = false;
+                    // A single-line array may close on the same logical line; the
+                    // entries themselves are handled below for the multi-line form.
+                    let inner = trimmed.trim_end_matches(']');
+                    for part in inner.split(',') {
+                        let part = part.trim();
+                        if part.is_empty() || part == "[" {
+                            continue;
+                        }
+                        let (c, v) = split_cargo_dep_spec(part);
+                        if !c.is_empty() {
+                            children.push((c, v));
+                        }
+                    }
+                    continue;
+                }
+                let part = trimmed.trim_end_matches(',');
+                if !part.is_empty() {
+                    let (c, v) = split_cargo_dep_spec(part);
+                    if !c.is_empty() {
+                        children.push((c, v));
+                    }
+                }
+                continue;
+            }
+
+            if let Some(rest) = trimmed.strip_prefix("name = ") {
+                name = Some(rest.trim_matches('"').to_string());
+            } else if let Some(rest) = trimmed.strip_prefix("version = ") {
+                version = Some(rest.trim_matches('"').to_string());
+            } else if let Some(rest) = trimmed.strip_prefix("dependencies = ") {
+                let rest = rest.trim();
+                // Inline single-line array: dependencies = ["a", "b 1.0"]
+                if let Some(inner) = rest.strip_prefix('[') {
+                    if let Some(inner) = inner.strip_suffix(']') {
+                        for part in inner.split(',') {
+                            let part = part.trim();
+                            if part.is_empty() {
+                                continue;
+                            }
+                            let (c, v) = split_cargo_dep_spec(part);
+                            if !c.is_empty() {
+                                children.push((c, v));
+                            }
+                        }
+                    } else {
+                        // Multi-line array begins here.
+                        in_deps = true;
+                    }
+                }
+            }
+        }
+
+        flush(&mut edges, &name, &version, &children);
+        edges
+    }
+
+    /// Parse a package-lock.json (v2/v3 `packages` map, v1 `dependencies` tree)
+    /// and return parent->child edges. Root edges use the [`ROOT_PARENT`] sentinel.
+    /// `dependencies` keys are `Runtime`, `devDependencies` are `Dev`.
+    /// Robust to malformed input — returns an empty Vec on parse failure.
+    pub(crate) fn parse_package_lock_edges(content: &str) -> Vec<DependencyEdge> {
+        let Ok(lock) = serde_json::from_str::<serde_json::Value>(content) else {
+            return Vec::new();
+        };
+
+        let mut edges = Vec::new();
+
+        // v2/v3: a `packages` map keyed by node_modules path. "" is the root.
+        if let Some(pkgs) = lock.get("packages").and_then(|v| v.as_object()) {
+            for (key, value) in pkgs {
+                // Skip deeply nested node_modules — first-level edges only.
+                let name_part = key.strip_prefix("node_modules/").unwrap_or(key);
+                if name_part.contains("node_modules/") {
+                    continue;
+                }
+                let parent = if key.is_empty() {
+                    ROOT_PARENT.to_string()
+                } else {
+                    name_part.to_string()
+                };
+                let parent_version = value
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+
+                for (section, scope) in [
+                    ("dependencies", EdgeScope::Runtime),
+                    ("devDependencies", EdgeScope::Dev),
+                    ("optionalDependencies", EdgeScope::Dev),
+                    ("peerDependencies", EdgeScope::Runtime),
+                ] {
+                    if let Some(deps) = value.get(section).and_then(|v| v.as_object()) {
+                        for (child, spec) in deps {
+                            edges.push(DependencyEdge {
+                                parent: parent.clone(),
+                                parent_version: parent_version.clone(),
+                                child: child.clone(),
+                                child_version: spec.as_str().map(str::to_string),
+                                scope,
+                            });
+                        }
+                    }
+                }
+            }
+            return edges;
+        }
+
+        // v1 fallback: a `dependencies` tree where each node may carry `requires`
+        // (its runtime children) and a `dev` flag. Emit root->dep edges and
+        // dep->requires edges.
+        if let Some(deps) = lock.get("dependencies").and_then(|v| v.as_object()) {
+            for (name, value) in deps {
+                let is_dev = value.get("dev").and_then(|v| v.as_bool()).unwrap_or(false);
+                let version = value
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                edges.push(DependencyEdge {
+                    parent: ROOT_PARENT.to_string(),
+                    parent_version: None,
+                    child: name.clone(),
+                    child_version: version.clone(),
+                    scope: if is_dev {
+                        EdgeScope::Dev
+                    } else {
+                        EdgeScope::Runtime
+                    },
+                });
+                if let Some(requires) = value.get("requires").and_then(|v| v.as_object()) {
+                    for (child, spec) in requires {
+                        edges.push(DependencyEdge {
+                            parent: name.clone(),
+                            parent_version: version.clone(),
+                            child: child.clone(),
+                            child_version: spec.as_str().map(str::to_string),
+                            scope: if is_dev {
+                                EdgeScope::Dev
+                            } else {
+                                EdgeScope::Runtime
+                            },
+                        });
+                    }
+                }
+            }
+        }
+
+        edges
+    }
+
+    /// Parse a pnpm-lock.yaml and return parent->child edges. Each top-level
+    /// package entry's nested `dependencies:` sub-map yields `Runtime` children;
+    /// `devDependencies:`/`optionalDependencies:` yield `Dev` children. Reuses the
+    /// same 2-space top-level indent convention as [`Self::parse_pnpm_lock_yaml`].
+    /// Robust to malformed input.
+    pub(crate) fn parse_pnpm_lock_edges(content: &str) -> Vec<DependencyEdge> {
+        let mut edges = Vec::new();
+        let mut in_packages = false;
+        let mut current_parent: Option<(String, Option<String>)> = None;
+        let mut current_scope: Option<EdgeScope> = None;
+
+        for line in content.lines() {
+            if line.starts_with("packages:") {
+                in_packages = true;
+                continue;
+            }
+            if !in_packages {
+                continue;
+            }
+            // A new top-level (zero-indent) key ends the packages section.
+            if !line.is_empty() && !line.starts_with(' ') && !line.starts_with('\t') {
+                break;
+            }
+
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // Top-level package key: exactly 2 spaces (or 1 tab) + ends with ':'.
+            let is_package_key = (line.starts_with("  ") && !line.starts_with("   "))
+                || (line.starts_with('\t') && !line.starts_with("\t\t"));
+
+            if is_package_key && trimmed.ends_with(':') {
+                let key = trimmed.trim_end_matches(':');
+                let key = key.trim_matches('\'').trim_matches('"');
+                let (name, version) = match parse_pnpm_package_key(key) {
+                    Some((n, v)) => (n, Some(v)),
+                    None => {
+                        // v5/v6 single-segment form like `/express@4.18.2` (no
+                        // nested `/version`) isn't handled by the key parser; split
+                        // on the last `@` after stripping the leading slash.
+                        let bare = key.trim_start_matches('/');
+                        match bare.rfind('@').filter(|&p| p > 0) {
+                            Some(at) => (bare[..at].to_string(), Some(bare[at + 1..].to_string())),
+                            None => (bare.to_string(), None),
+                        }
+                    }
+                };
+                current_parent = if name.is_empty() {
+                    None
+                } else {
+                    Some((name, version))
+                };
+                current_scope = None;
+                continue;
+            }
+
+            // A sub-section header introduces a child map.
+            let scope = match trimmed.trim_end_matches(':') {
+                "dependencies" => Some(EdgeScope::Runtime),
+                "devDependencies" | "optionalDependencies" => Some(EdgeScope::Dev),
+                _ => None,
+            };
+            if trimmed.ends_with(':') && scope.is_some() {
+                current_scope = scope;
+                continue;
+            }
+            // Any other section header (resolution, engines, peerDependencies, ...)
+            // ends the current child map.
+            if trimmed.ends_with(':') && !trimmed.contains(' ') {
+                current_scope = None;
+                continue;
+            }
+
+            // A `child: specifier` line within an active dependency sub-map.
+            if let (Some((parent, parent_version)), Some(scope)) =
+                (current_parent.as_ref(), current_scope)
+            {
+                if let Some((child, spec)) = trimmed.split_once(':') {
+                    let child = child.trim().trim_matches('\'').trim_matches('"');
+                    if child.is_empty() {
+                        continue;
+                    }
+                    let spec = spec.trim();
+                    // pnpm v9 inline form: `specifier: ^1.0.0` then `version: 1.0.0`
+                    // we keep the raw specifier as a best-effort child_version hint.
+                    let child_version = if spec.is_empty() {
+                        None
+                    } else {
+                        Some(spec.trim_matches('\'').trim_matches('"').to_string())
+                    };
+                    edges.push(DependencyEdge {
+                        parent: parent.clone(),
+                        parent_version: parent_version.clone(),
+                        child: child.to_string(),
+                        child_version,
+                        scope,
+                    });
+                }
+            }
+        }
+
+        edges
+    }
 }
 
 /// Parse pnpm package key formats:
@@ -978,6 +1286,71 @@ fn parse_pnpm_package_key(key: &str) -> Option<(String, String)> {
         return None;
     }
     Some((name.to_string(), version.to_string()))
+}
+
+// ============================================================================
+// Dependency Edge Parsers — capture the parent->child graph (Step 1: reachability)
+// ============================================================================
+
+/// The dependency scope of an edge. Cargo.lock does not separate dev in its
+/// resolved graph (everything is `Runtime`); npm/pnpm distinguish dev/runtime,
+/// and build-only scopes map to `Build`. `Unknown` is the safe default when a
+/// lockfile gives us no scope signal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EdgeScope {
+    Runtime,
+    Dev,
+    // `Build` and `Unknown` complete the scope model and back the table's
+    // `scope` DEFAULT 'unknown'; they are not yet produced by the current
+    // parsers (Cargo/npm/pnpm yield Runtime/Dev). Constructed once additional
+    // ecosystems (build-only graphs) are wired in Increment 2.
+    // REMOVE BY 2026-07-31: build-only graph scopes wired in increment 2
+    #[allow(dead_code)]
+    Build,
+    // REMOVE BY 2026-07-31: unknown-scope fallback exercised once more ecosystems land (increment 2)
+    #[allow(dead_code)]
+    Unknown,
+}
+
+impl EdgeScope {
+    /// Canonical lowercase string stored in the `scope` column.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            EdgeScope::Runtime => "runtime",
+            EdgeScope::Dev => "dev",
+            EdgeScope::Build => "build",
+            EdgeScope::Unknown => "unknown",
+        }
+    }
+}
+
+/// A single parent->child dependency edge extracted from a lockfile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DependencyEdge {
+    pub parent: String,
+    pub parent_version: Option<String>,
+    pub child: String,
+    pub child_version: Option<String>,
+    pub scope: EdgeScope,
+}
+
+/// Sentinel parent name for edges that originate from a lockfile's root project
+/// node (e.g. the `""` entry in package-lock v2/v3). Reachability treats this as
+/// a synthetic root so direct deps become BFS entry points.
+pub(crate) const ROOT_PARENT: &str = "__root__";
+
+/// Split a Cargo.lock `dependencies` array entry into (name, optional version).
+/// Entries look like `"serde"` or `"serde 1.0.0"` or `"serde 1.0.0 (registry+...)"`.
+fn split_cargo_dep_spec(spec: &str) -> (String, Option<String>) {
+    let spec = spec.trim().trim_matches('"').trim();
+    match spec.split_once(' ') {
+        Some((name, rest)) => {
+            // Version is the first whitespace-separated token after the name.
+            let version = rest.split_whitespace().next().map(str::to_string);
+            (name.to_string(), version)
+        }
+        None => (spec.to_string(), None),
+    }
 }
 
 impl Default for ProjectScanner {
@@ -1271,6 +1644,170 @@ pub(crate) fn detect_learning_directories(path: &Path) -> Vec<LearningSignal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ------------------------------------------------------------------
+    // Dependency edge parsers (Step 1: reachability foundation)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_cargo_lock_edges() {
+        let content = r#"
+[[package]]
+name = "app"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tokio 1.35.0",
+ "anyhow 1.0.75 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "serde"
+version = "1.0.190"
+dependencies = [
+ "serde_derive 1.0.190",
+]
+"#;
+        let edges = ProjectScanner::parse_cargo_lock_edges(content);
+
+        // app -> serde (no version), app -> tokio 1.35.0, app -> anyhow 1.0.75
+        assert!(edges.iter().any(|e| e.parent == "app"
+            && e.child == "serde"
+            && e.child_version.is_none()
+            && e.scope == EdgeScope::Runtime));
+        assert!(edges.iter().any(|e| e.parent == "app"
+            && e.child == "tokio"
+            && e.child_version.as_deref() == Some("1.35.0")));
+        assert!(edges.iter().any(|e| e.parent == "app"
+            && e.child == "anyhow"
+            && e.child_version.as_deref() == Some("1.0.75")));
+        // serde -> serde_derive 1.0.190
+        assert!(edges.iter().any(|e| e.parent == "serde"
+            && e.child == "serde_derive"
+            && e.child_version.as_deref() == Some("1.0.190")));
+        // Cargo edges are all runtime-scoped.
+        assert!(edges.iter().all(|e| e.scope == EdgeScope::Runtime));
+    }
+
+    #[test]
+    fn test_parse_cargo_lock_edges_inline_array() {
+        let content = r#"
+[[package]]
+name = "app"
+version = "0.1.0"
+dependencies = ["once_cell", "log 0.4.20"]
+"#;
+        let edges = ProjectScanner::parse_cargo_lock_edges(content);
+        assert!(edges
+            .iter()
+            .any(|e| e.parent == "app" && e.child == "once_cell"));
+        assert!(edges.iter().any(|e| e.parent == "app"
+            && e.child == "log"
+            && e.child_version.as_deref() == Some("0.4.20")));
+    }
+
+    #[test]
+    fn test_parse_package_lock_edges_v3_runtime_and_dev() {
+        let content = r#"{
+            "name": "app",
+            "lockfileVersion": 3,
+            "packages": {
+                "": {
+                    "name": "app",
+                    "version": "1.0.0",
+                    "dependencies": { "left-pad": "^1.3.0" },
+                    "devDependencies": { "jest": "^29.0.0" }
+                },
+                "node_modules/left-pad": {
+                    "version": "1.3.0",
+                    "dependencies": { "tiny-dep": "^2.0.0" }
+                },
+                "node_modules/jest": {
+                    "version": "29.7.0"
+                }
+            }
+        }"#;
+        let edges = ProjectScanner::parse_package_lock_edges(content);
+
+        // root -> left-pad is runtime
+        assert!(edges.iter().any(|e| e.parent == ROOT_PARENT
+            && e.child == "left-pad"
+            && e.scope == EdgeScope::Runtime));
+        // root -> jest is dev
+        assert!(edges
+            .iter()
+            .any(|e| e.parent == ROOT_PARENT && e.child == "jest" && e.scope == EdgeScope::Dev));
+        // left-pad -> tiny-dep (transitive runtime)
+        assert!(edges.iter().any(|e| e.parent == "left-pad"
+            && e.child == "tiny-dep"
+            && e.scope == EdgeScope::Runtime));
+    }
+
+    #[test]
+    fn test_parse_package_lock_edges_v1_fallback() {
+        let content = r#"{
+            "name": "app",
+            "lockfileVersion": 1,
+            "dependencies": {
+                "express": {
+                    "version": "4.18.2",
+                    "requires": { "body-parser": "1.20.1" }
+                },
+                "mocha": {
+                    "version": "10.0.0",
+                    "dev": true
+                }
+            }
+        }"#;
+        let edges = ProjectScanner::parse_package_lock_edges(content);
+
+        assert!(edges.iter().any(|e| e.parent == ROOT_PARENT
+            && e.child == "express"
+            && e.scope == EdgeScope::Runtime));
+        assert!(edges.iter().any(|e| e.parent == "express"
+            && e.child == "body-parser"
+            && e.scope == EdgeScope::Runtime));
+        assert!(edges
+            .iter()
+            .any(|e| e.parent == ROOT_PARENT && e.child == "mocha" && e.scope == EdgeScope::Dev));
+    }
+
+    #[test]
+    fn test_parse_pnpm_lock_edges_runtime_and_dev() {
+        let content = r#"lockfileVersion: '6.0'
+
+packages:
+
+  /express@4.18.2:
+    resolution: {integrity: sha512-aaa}
+    dependencies:
+      body-parser: 1.20.1
+      cookie: 0.5.0
+    devDependencies:
+      supertest: 6.3.0
+
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-bbb}
+"#;
+        let edges = ProjectScanner::parse_pnpm_lock_edges(content);
+
+        assert!(edges.iter().any(|e| e.parent == "express"
+            && e.child == "body-parser"
+            && e.scope == EdgeScope::Runtime));
+        assert!(edges.iter().any(|e| e.parent == "express"
+            && e.child == "cookie"
+            && e.scope == EdgeScope::Runtime));
+        assert!(edges
+            .iter()
+            .any(|e| e.parent == "express" && e.child == "supertest" && e.scope == EdgeScope::Dev));
+    }
+
+    #[test]
+    fn test_edge_parsers_are_robust_to_garbage() {
+        assert!(ProjectScanner::parse_cargo_lock_edges("not a lockfile").is_empty());
+        assert!(ProjectScanner::parse_package_lock_edges("{ broken json").is_empty());
+        assert!(ProjectScanner::parse_pnpm_lock_edges("random: text").is_empty());
+    }
 
     #[test]
     fn test_parse_cargo_toml() {

@@ -133,6 +133,10 @@ fn process_cargo_lock(
             Vec::new()
         };
 
+    // Capture the parent->child graph for reachability (Step 1, silent).
+    let edges = crate::ace::scanner::ProjectScanner::parse_cargo_lock_edges(&content);
+    db.store_dependency_edges(project_path, "rust", &edges).ok();
+
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_cargo_lock(&content);
     for (name, version) in &packages {
@@ -179,6 +183,11 @@ fn process_package_lock(
 
     let direct_deps = read_package_json_deps(scanner, dir);
 
+    // Capture the parent->child graph for reachability (Step 1, silent).
+    let edges = crate::ace::scanner::ProjectScanner::parse_package_lock_edges(&content);
+    db.store_dependency_edges(project_path, "javascript", &edges)
+        .ok();
+
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_package_lock_json(&content);
     for (name, version) in &packages {
@@ -223,6 +232,11 @@ fn process_pnpm_lock(
     };
 
     let direct_deps = read_package_json_deps(scanner, dir);
+
+    // Capture the parent->child graph for reachability (Step 1, silent).
+    let edges = crate::ace::scanner::ProjectScanner::parse_pnpm_lock_edges(&content);
+    db.store_dependency_edges(project_path, "javascript", &edges)
+        .ok();
 
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_pnpm_lock_yaml(&content);

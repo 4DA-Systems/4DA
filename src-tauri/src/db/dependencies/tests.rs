@@ -485,3 +485,74 @@ fn test_startup_user_dependency_cleanup() {
     // my_pkg survived (higher rowid than my-pkg), plus tauri and vite
     assert_eq!(names, vec!["my_pkg", "tauri", "vite"]);
 }
+
+// ---------------------------------------------------------------------------
+// Dependency edges (Step 1: reachability foundation)
+// ---------------------------------------------------------------------------
+
+use crate::ace::scanner::{DependencyEdge, EdgeScope};
+
+#[test]
+fn test_store_and_retrieve_dependency_edges() {
+    let db = test_db();
+    let edges = vec![
+        DependencyEdge {
+            parent: "app".to_string(),
+            parent_version: Some("0.1.0".to_string()),
+            child: "serde".to_string(),
+            child_version: Some("1.0.190".to_string()),
+            scope: EdgeScope::Runtime,
+        },
+        DependencyEdge {
+            parent: "app".to_string(),
+            parent_version: Some("0.1.0".to_string()),
+            child: "jest".to_string(),
+            child_version: None,
+            scope: EdgeScope::Dev,
+        },
+    ];
+
+    let n = db
+        .store_dependency_edges("/projects/myapp", "rust", &edges)
+        .expect("store edges");
+    assert_eq!(n, 2);
+
+    let rows = db
+        .get_dependency_edges("/projects/myapp")
+        .expect("get edges");
+    assert_eq!(rows.len(), 2);
+    assert!(rows
+        .iter()
+        .any(|r| r.child_package == "serde" && r.scope == "runtime"));
+    assert!(rows
+        .iter()
+        .any(|r| r.child_package == "jest" && r.scope == "dev"));
+}
+
+#[test]
+fn test_store_dependency_edges_skips_worktree_and_empty() {
+    let db = test_db();
+    let edges = vec![DependencyEdge {
+        parent: "app".to_string(),
+        parent_version: None,
+        child: "x".to_string(),
+        child_version: None,
+        scope: EdgeScope::Runtime,
+    }];
+
+    // Worktree path is excluded.
+    let n = db
+        .store_dependency_edges("/home/u/repo/.claude/worktrees/agent-abc", "rust", &edges)
+        .expect("store excluded");
+    assert_eq!(n, 0);
+
+    // Empty input stores nothing.
+    let n = db
+        .store_dependency_edges("/projects/clean", "rust", &[])
+        .expect("store empty");
+    assert_eq!(n, 0);
+    assert!(db
+        .get_dependency_edges("/projects/clean")
+        .unwrap()
+        .is_empty());
+}
