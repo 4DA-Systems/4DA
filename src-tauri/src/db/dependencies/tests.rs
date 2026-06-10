@@ -275,6 +275,68 @@ fn test_get_relevant_user_dependencies_filters() {
 }
 
 #[test]
+fn test_get_auditable_user_dependencies_keeps_scope_but_filters_ephemeral_paths() {
+    let db = test_db();
+    db.store_dependency(
+        "/projects/myapp",
+        "tokio",
+        Some("1.35.0"),
+        "rust",
+        false,
+        None,
+    )
+    .unwrap();
+    db.store_dependency(
+        "/projects/myapp",
+        "pretty_assertions",
+        Some("1.4.0"),
+        "rust",
+        true,
+        None,
+    )
+    .unwrap();
+    db.store_transitive_dependency(
+        "/projects/myapp",
+        "serde_derive",
+        Some("1.0.204"),
+        "rust",
+        false,
+    )
+    .unwrap();
+    db.store_dependency(
+        "/projects/.claude/worktrees/named-branch/myapp",
+        "react",
+        Some("19.0.0"),
+        "javascript",
+        false,
+        None,
+    )
+    .unwrap();
+    db.store_dependency(
+        r"C:\Users\Admin\AppData\Local\Temp\clone",
+        "axios",
+        Some("1.8.0"),
+        "javascript",
+        false,
+        None,
+    )
+    .unwrap();
+
+    let auditable = db.get_auditable_user_dependencies().unwrap();
+    let names: Vec<&str> = auditable
+        .iter()
+        .map(|dep| dep.package_name.as_str())
+        .collect();
+
+    assert_eq!(auditable.len(), 3);
+    assert!(names.contains(&"tokio"));
+    assert!(names.contains(&"pretty_assertions"));
+    assert!(names.contains(&"serde_derive"));
+    assert!(!names.contains(&"react"));
+    assert!(!names.contains(&"axios"));
+}
+
+#[test]
 fn test_transitive_does_not_downgrade_direct() {
     let db = test_db();
 

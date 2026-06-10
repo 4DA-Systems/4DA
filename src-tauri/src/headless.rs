@@ -119,15 +119,15 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
 
     let code = match mode {
         HeadlessMode::Once => {
-            if !force && is_data_fresh() {
+            if !force && is_cycle_fresh() {
                 info!(
                     target: "4da::headless",
-                    "Data already fresh (last fetch within the refresh interval) — nothing to do. \
+                    "Feed and dependency intelligence already fresh — nothing to do. \
                      Pass --force to refresh anyway."
                 );
                 0
             } else {
-                tauri::async_runtime::block_on(run_one_cycle(&handle, "headless_once"))
+                tauri::async_runtime::block_on(run_one_cycle(&handle, "headless_once", force))
             }
         }
         HeadlessMode::Daemon => {
@@ -141,10 +141,10 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
     std::process::exit(code);
 }
 
-/// Run a single fetch+score cycle and record a freshness receipt. Returns the process exit code:
-/// `0` success, `1` if scoring failed. A fetch failure is non-fatal (we still score the existing
-/// cache) but is reflected in the receipt counts.
-async fn run_one_cycle(handle: &AppHandle, trigger: &'static str) -> i32 {
+/// Run a single fetch+score+dependency-audit cycle and record a freshness receipt. Returns the
+/// process exit code: `0` success, `1` if scoring or dependency refresh failed. A fetch failure is
+/// non-fatal (we still score the existing cache) but is reflected in the receipt counts.
+async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: bool) -> i32 {
     let started = Instant::now();
     let mut receipt = RunReceipt::begin(trigger);
     // Attribution token: a verifier (e.g. Verax) injects FOURDA_ENGINE_NONCE when it invokes the
@@ -156,7 +156,7 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str) -> i32 {
         .filter(|s| !s.is_empty());
 
     // Step 1 — fetch (fills the cache; writes/touches source_items, stamps sources.last_fetch).
-    info!(target: "4da::headless", "Cycle step 1/2: fetching sources...");
+    info!(target: "4da::headless", "Cycle step 1/3: fetching sources...");
     match crate::source_fetching::fill_cache_background(handle).await {
         Ok(summary) => {
             receipt.sources_succeeded = summary.succeeded;
@@ -178,7 +178,7 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str) -> i32 {
     }
 
     // Step 2 — score (embeds + PASIFA; writes relevance_score). Silent variant: no UI progress events.
-    info!(target: "4da::headless", "Cycle step 2/2: scoring cached content...");
+    info!(target: "4da::headless", "Cycle step 2/3: scoring cached content...");
     match crate::analysis::analyze_cached_content_silent(handle).await {
         Ok(results) => {
             receipt.items_scored = results.len();
@@ -193,12 +193,63 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str) -> i32 {
         Err(e) => {
             error!(target: "4da::headless", error = %e, "Scoring failed");
             receipt.ok = false;
-            receipt.error = Some(e.to_string());
+            append_receipt_error(&mut receipt, e.to_string());
+        }
+    }
+
+    // Step 3 — dependency audit. This has its own six-hour freshness gate:
+    // source-feed freshness must never suppress a stale security mirror.
+    info!(target: "4da::headless", "Cycle step 3/3: refreshing dependency intelligence...");
+    match crate::get_database() {
+        Ok(db) => {
+            let needs_sync = force_osv
+                || crate::osv::sync::needs_sync(&db, crate::osv::sync::DEFAULT_SYNC_MAX_AGE_HOURS)
+                    .unwrap_or(true);
+            if needs_sync {
+                match crate::osv::sync::sync(&db).await {
+                    Ok(result) => {
+                        if result.errors.is_empty() {
+                            info!(
+                                target: "4da::headless",
+                                ecosystems = ?result.ecosystems_synced,
+                                stored = result.advisories_stored,
+                                matched = result.advisories_matched,
+                                "Dependency intelligence refresh complete"
+                            );
+                        } else {
+                            warn!(
+                                target: "4da::headless",
+                                errors = ?result.errors,
+                                "Dependency intelligence refresh completed with errors"
+                            );
+                            append_receipt_error(
+                                &mut receipt,
+                                format!("OSV sync partial failure: {}", result.errors.join("; ")),
+                            );
+                            if result.ecosystems_synced.is_empty() {
+                                receipt.ok = false;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!(target: "4da::headless", error = %e, "Dependency intelligence refresh failed");
+                        receipt.ok = false;
+                        append_receipt_error(&mut receipt, format!("OSV sync failed: {e}"));
+                    }
+                }
+            } else {
+                info!(target: "4da::headless", "Dependency intelligence already fresh — skipping OSV sync");
+            }
+        }
+        Err(e) => {
+            error!(target: "4da::headless", error = %e, "Dependency intelligence refresh could not access database");
+            receipt.ok = false;
+            append_receipt_error(&mut receipt, format!("OSV sync database unavailable: {e}"));
         }
     }
 
     receipt.duration_ms = started.elapsed().as_millis() as u64;
-    let exit_code = if receipt.ok { 0 } else { 1 };
+    let exit_code = i32::from(!receipt.ok);
     crate::engine_runs::record(receipt);
 
     // Log the resulting ground-truth freshness so a tail of the run shows the real DB state — this
@@ -216,15 +267,22 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str) -> i32 {
     exit_code
 }
 
+fn append_receipt_error(receipt: &mut RunReceipt, error: String) {
+    receipt.error = Some(match receipt.error.take() {
+        Some(existing) => format!("{existing}; {error}"),
+        None => error,
+    });
+}
+
 /// Self-contained daemon loop: run a cycle, sleep for the monitoring interval, repeat until Ctrl-C.
 /// Cadence is read fresh each iteration so a settings change takes effect on the next sleep.
 async fn run_daemon_loop(handle: &AppHandle, force: bool) {
     info!(target: "4da::headless", "Daemon mode — entering refresh loop (Ctrl-C to stop)");
     loop {
-        if force || !is_data_fresh() {
-            run_one_cycle(handle, "headless_daemon").await;
+        if force || !is_cycle_fresh() {
+            run_one_cycle(handle, "headless_daemon", force).await;
         } else {
-            info!(target: "4da::headless", "Data already fresh — skipping this tick");
+            info!(target: "4da::headless", "Feed and dependency intelligence already fresh — skipping this tick");
         }
 
         let interval = daemon_interval();
@@ -234,7 +292,7 @@ async fn run_daemon_loop(handle: &AppHandle, force: bool) {
             "Cycle done — sleeping until next refresh"
         );
         tokio::select! {
-            _ = tokio::time::sleep(interval) => {}
+            () = tokio::time::sleep(interval) => {}
             r = tokio::signal::ctrl_c() => {
                 match r {
                     Ok(()) => info!(target: "4da::headless", "Ctrl-C received — stopping daemon"),
@@ -291,4 +349,18 @@ fn is_data_fresh() -> bool {
         .signed_duration_since(naive.and_utc())
         .num_minutes();
     age_minutes >= 0 && (age_minutes as u64) < interval_minutes
+}
+
+fn is_osv_fresh() -> bool {
+    let db = match crate::get_database() {
+        Ok(db) => db,
+        Err(_) => return false,
+    };
+    crate::osv::sync::needs_sync(&db, crate::osv::sync::DEFAULT_SYNC_MAX_AGE_HOURS)
+        .map(|needs_sync| !needs_sync)
+        .unwrap_or(false)
+}
+
+fn is_cycle_fresh() -> bool {
+    is_data_fresh() && is_osv_fresh()
 }

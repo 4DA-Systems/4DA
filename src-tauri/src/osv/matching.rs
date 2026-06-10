@@ -10,7 +10,7 @@ use crate::db::Database;
 use crate::error::{FourDaError, Result};
 use semver::Version;
 
-use super::types::{MatchedAdvisory, Range};
+use super::types::{MatchedAdvisory, MatchedDependency, Range};
 
 /// Get all advisories that match the user's installed dependencies.
 /// Merges deps from both `user_dependencies` (user-curated) and
@@ -23,11 +23,11 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
         .map_err(|e| FourDaError::Internal(format!("Failed to read OSV advisories: {e}")))?;
 
     let mut deps = db
-        .get_relevant_user_dependencies()
+        .get_auditable_user_dependencies()
         .map_err(|e| FourDaError::Internal(format!("Failed to read user dependencies: {e}")))?;
 
     let scanned = db
-        .get_relevant_scanned_dependencies()
+        .get_auditable_scanned_dependencies()
         .map_err(|e| FourDaError::Internal(format!("Failed to read scanned dependencies: {e}")))?;
 
     tracing::debug!(
@@ -35,7 +35,7 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
         user_deps = deps.len(),
         scanned_deps = scanned.len(),
         advisories = advisories.len(),
-        "OSV matching: filtered dep counts"
+        "OSV matching: auditable dep counts"
     );
 
     // Merge scanned deps, deduped by (package_name, project_path, ecosystem)
@@ -66,16 +66,14 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
     }
 
     // Index deps by (package_name_lower, ecosystem_normalized) for fast lookup
-    let mut dep_index: HashMap<(String, String), Vec<(Option<String>, String)>> = HashMap::new();
+    let mut dep_index: HashMap<(String, String), Vec<&crate::db::StoredDependency>> =
+        HashMap::new();
     for dep in &deps {
         let key = (
             dep.package_name.to_lowercase(),
             normalize_ecosystem(&dep.ecosystem).to_string(),
         );
-        dep_index
-            .entry(key)
-            .or_default()
-            .push((dep.version.clone(), dep.project_path.clone()));
+        dep_index.entry(key).or_default().push(dep);
     }
 
     let mut matches: Vec<MatchedAdvisory> = Vec::new();
@@ -93,43 +91,66 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
         };
 
         // Check each dependency instance (could be in multiple projects)
-        let mut project_paths = Vec::new();
-        let mut any_version_confirmed = false;
-        let mut representative_version: Option<String> = None;
-
-        for (dep_version, project_path) in dep_entries {
+        let mut dependency_instances = Vec::new();
+        for dep in dep_entries {
             let (is_affected, confirmed) =
-                check_version_affected(dep_version.as_deref(), &advisory.affected_ranges);
+                check_version_affected(dep.version.as_deref(), &advisory.affected_ranges);
 
             if is_affected {
-                project_paths.push(project_path.clone());
-                if confirmed {
-                    any_version_confirmed = true;
-                }
-                if representative_version.is_none() {
-                    representative_version = dep_version.clone();
-                }
+                dependency_instances.push(MatchedDependency {
+                    project_path: normalize_project_path(&dep.project_path),
+                    installed_version: dep.version.clone(),
+                    is_direct: dep.is_direct,
+                    is_dev: dep.is_dev,
+                    is_version_confirmed: confirmed,
+                });
             }
         }
 
-        if project_paths.is_empty() {
+        if dependency_instances.is_empty() {
             continue;
         }
 
-        // Normalize paths: lowercase, forward slashes, dedup
-        project_paths = project_paths
-            .into_iter()
-            .map(|p| {
-                p.replace('\\', "/")
-                    .to_lowercase()
-                    .trim_end_matches('/')
-                    .to_string()
-            })
+        dependency_instances.sort_by(|a, b| {
+            b.is_version_confirmed
+                .cmp(&a.is_version_confirmed)
+                .then_with(|| b.is_direct.cmp(&a.is_direct))
+                .then_with(|| a.is_dev.cmp(&b.is_dev))
+                .then_with(|| a.project_path.cmp(&b.project_path))
+        });
+        dependency_instances.dedup_by(|a, b| {
+            a.project_path == b.project_path
+                && a.installed_version == b.installed_version
+                && a.is_direct == b.is_direct
+                && a.is_dev == b.is_dev
+        });
+
+        let any_version_confirmed = dependency_instances
+            .iter()
+            .any(|instance| instance.is_version_confirmed);
+        let representative_version = dependency_instances
+            .iter()
+            .find(|instance| instance.is_version_confirmed)
+            .or_else(|| dependency_instances.first())
+            .and_then(|instance| instance.installed_version.clone());
+
+        // A confirmed advisory must not claim conservative/unverified projects
+        // as affected. If no instance can be confirmed, retain the conservative
+        // paths for diagnostics but Preemption will not promote the match.
+        let mut project_paths: Vec<String> = dependency_instances
+            .iter()
+            .filter(|instance| !any_version_confirmed || instance.is_version_confirmed)
+            .map(|instance| instance.project_path.clone())
             .collect();
         project_paths.sort();
         project_paths.dedup();
 
-        let dedup_key = format!("{}:{}", advisory.advisory_id, advisory.package_name);
+        let dedup_key = format!(
+            "{}:{}:{}",
+            advisory.advisory_id,
+            advisory.package_name,
+            normalize_ecosystem(&advisory.ecosystem)
+        );
         if !seen.insert(dedup_key) {
             continue;
         }
@@ -154,6 +175,7 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
             is_version_confirmed: any_version_confirmed,
             project_paths,
             published_at: advisory.published_at.clone(),
+            dependency_instances,
         });
     }
 
@@ -179,6 +201,13 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
     );
 
     Ok(matches)
+}
+
+fn normalize_project_path(path: &str) -> String {
+    path.replace('\\', "/")
+        .to_lowercase()
+        .trim_end_matches('/')
+        .to_string()
 }
 
 /// Count matched advisories without building the full result.
@@ -519,6 +548,9 @@ mod tests {
         assert_eq!(matches[0].fixed_version.as_deref(), Some("4.17.21"));
         assert!(matches[0].is_version_confirmed);
         assert_eq!(matches[0].project_paths, vec!["/project/a"]);
+        assert_eq!(matches[0].dependency_instances.len(), 1);
+        assert!(matches[0].dependency_instances[0].is_direct);
+        assert!(!matches[0].dependency_instances[0].is_dev);
     }
 
     #[test]
@@ -584,3 +616,7 @@ mod tests {
         assert_eq!(matches[0].project_paths.len(), 2);
     }
 }
+
+#[cfg(test)]
+#[path = "matching_audit_tests.rs"]
+mod audit_tests;

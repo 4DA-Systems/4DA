@@ -88,7 +88,7 @@ fn test_crud_after_migration() {
     let db = fourda_lib::db::Database::new(&db_path).expect("Failed to create database");
 
     // Insert a source item
-    let embedding = vec![0.0f32; 384];
+    let embedding = vec![0.0f32; fourda_lib::EMBEDDING_DIMS];
     let id = db
         .upsert_source_item(
             "hackernews",

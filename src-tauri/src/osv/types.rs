@@ -124,6 +124,19 @@ pub struct MatchedAdvisory {
     pub is_version_confirmed: bool,
     pub project_paths: Vec<String>,
     pub published_at: Option<String>,
+    /// Exact affected dependency instances. This prevents project/version/scope
+    /// metadata from being reconstructed later from an ambiguous package name.
+    pub dependency_instances: Vec<MatchedDependency>,
+}
+
+/// One installed dependency instance affected by an advisory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchedDependency {
+    pub project_path: String,
+    pub installed_version: Option<String>,
+    pub is_direct: bool,
+    pub is_dev: bool,
+    pub is_version_confirmed: bool,
 }
 
 /// Result of a sync operation.

@@ -369,6 +369,60 @@ fn collapse_direct_dep_targets(matches: &[DirectRuntimeDep]) -> (Vec<String>, Ve
     (projects.into_iter().collect(), deps.into_iter().collect())
 }
 
+fn osv_group_scope(
+    group: &[&crate::osv::types::MatchedAdvisory],
+) -> (Option<bool>, Option<bool>, &'static str) {
+    let instances = group
+        .iter()
+        .flat_map(|matched| matched.dependency_instances.iter())
+        .filter(|instance| instance.is_version_confirmed);
+
+    let mut has_direct_runtime = false;
+    let mut has_transitive = false;
+    let mut has_dev = false;
+    for instance in instances {
+        if instance.is_dev {
+            has_dev = true;
+        } else if instance.is_direct {
+            has_direct_runtime = true;
+        } else {
+            has_transitive = true;
+        }
+    }
+
+    if has_direct_runtime {
+        let label = if has_transitive || has_dev {
+            "direct in at least one project; weaker scope in others"
+        } else {
+            "direct dependency"
+        };
+        (Some(true), Some(false), label)
+    } else if has_transitive {
+        let label = if has_dev {
+            "transitive or dev dependency (runtime reachability unknown)"
+        } else {
+            "transitive dependency (dev/runtime reachability unknown)"
+        };
+        (Some(false), Some(false), label)
+    } else if has_dev {
+        (Some(true), Some(true), "dev dependency")
+    } else {
+        (None, None, "dependency scope unavailable")
+    }
+}
+
+fn rank_osv_urgency(
+    urgency: AlertUrgency,
+    is_direct: Option<bool>,
+    is_dev: Option<bool>,
+) -> AlertUrgency {
+    match (is_direct, is_dev, urgency) {
+        (_, Some(true), AlertUrgency::Critical | AlertUrgency::High) => AlertUrgency::Medium,
+        (Some(false), _, AlertUrgency::Critical) => AlertUrgency::High,
+        (_, _, urgency) => urgency,
+    }
+}
+
 fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
     let db = match crate::get_database() {
         Ok(db) => db,
@@ -403,7 +457,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             let advisory_count = group.len();
 
             // Highest urgency across all advisories for this package
-            let urgency = group
+            let raw_urgency = group
                 .iter()
                 .map(|m| {
                     if let Some(s) = m.cvss_score {
@@ -422,6 +476,8 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 })
                 .min_by_key(|u| urgency_rank(u))
                 .unwrap_or(AlertUrgency::Watch);
+            let (dep_is_direct, dep_is_dev, scope_label) = osv_group_scope(&group);
+            let urgency = rank_osv_urgency(raw_urgency, dep_is_direct, dep_is_dev);
 
             // Highest CVSS across the group
             let max_cvss = group
@@ -430,7 +486,12 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 .fold(None, |acc, s| Some(acc.map_or(s, |a: f64| a.max(s))));
 
             let confidence: f32 = {
-                let base: f32 = 0.92;
+                let base: f32 = match (dep_is_direct, dep_is_dev) {
+                    (Some(true), Some(false)) => 0.92,
+                    (Some(false), Some(false)) => 0.86,
+                    (_, Some(true)) => 0.80,
+                    _ => 0.78,
+                };
                 let cvss_bonus: f32 = if max_cvss.is_some() { 0.03 } else { 0.0 };
                 (base + cvss_bonus).min(0.99)
             };
@@ -468,7 +529,25 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 names.join(", ")
             };
 
-            let version_str = first.installed_version.as_deref().unwrap_or("unknown");
+            let installed_versions: std::collections::BTreeSet<String> = group
+                .iter()
+                .flat_map(|matched| matched.dependency_instances.iter())
+                .filter(|instance| instance.is_version_confirmed)
+                .filter_map(|instance| instance.installed_version.clone())
+                .collect();
+            let alert_installed_version = if installed_versions.len() == 1 {
+                installed_versions.first().cloned()
+            } else {
+                None
+            };
+            let version_str = match installed_versions.len() {
+                0 => "unknown".to_string(),
+                1 => installed_versions
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".to_string()),
+                count => format!("{count} affected installed versions"),
+            };
             let fix_str = best_fix
                 .as_deref()
                 .map(|f| format!(" Update to >= {f}."))
@@ -486,7 +565,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 format!(
                     "{pkg}@{ver}: {count} known {vuln_word}",
                     pkg = first.package_name,
-                    ver = version_str,
+                    ver = &version_str,
                     count = advisory_count,
                     vuln_word = vuln_word,
                 )
@@ -506,20 +585,21 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             };
 
             let explanation = format!(
-                "{ids} ({count} {vuln_word}) affect {pkg}@{ver} in {projects}.{fix}",
+                "{ids} ({count} {vuln_word}) affect {pkg}@{ver} in {projects}. Scope: {scope}.{fix}",
                 ids = ids_display,
                 count = advisory_count,
                 vuln_word = vuln_word,
                 pkg = first.package_name,
-                ver = version_str,
+                ver = &version_str,
                 projects = project_display,
+                scope = scope_label,
                 fix = fix_str,
             );
 
             let action_label = if let Some(ref fix) = best_fix {
                 format!(
                     "Update {} from {} to >= {}",
-                    first.package_name, version_str, fix
+                    first.package_name, &version_str, fix
                 )
             } else {
                 format!(
@@ -550,8 +630,8 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                     action_type: "investigate".to_string(),
                     label: action_label,
                     description: format!(
-                        "Review {} advisories and update {} if affected.",
-                        advisory_count, first.package_name
+                        "Review {} advisories for this {} and update {} if affected.",
+                        advisory_count, scope_label, first.package_name
                     ),
                 },
                 SuggestedAction {
@@ -562,29 +642,6 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                             .to_string(),
                 },
             ];
-
-            let (dep_is_direct, dep_is_dev) = {
-                let conn = db.conn.lock();
-                let scoped_result = all_projects.first().and_then(|project| {
-                    conn.query_row(
-                        "SELECT is_direct, is_dev FROM project_dependencies WHERE package_name = ?1 AND project_path = ?2 LIMIT 1",
-                        rusqlite::params![first.package_name, project],
-                        |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
-                    )
-                    .ok()
-                });
-                scoped_result
-                    .or_else(|| {
-                        conn.query_row(
-                            "SELECT is_direct, is_dev FROM project_dependencies WHERE package_name = ?1 LIMIT 1",
-                            rusqlite::params![first.package_name],
-                            |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
-                        )
-                        .ok()
-                    })
-                    .map(|(d, v)| (Some(d), Some(v)))
-                    .unwrap_or((None, None))
-            };
 
             PreemptionAlert {
                 id: format!("osv-pkg-{}-{}", first.package_name, first.ecosystem),
@@ -601,7 +658,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 created_at: chrono::Utc::now().to_rfc3339(),
                 osv_verified: true,
                 source_classified: false,
-                installed_version: first.installed_version.clone(),
+                installed_version: alert_installed_version,
                 fixed_version: best_fix.clone(),
                 is_direct: dep_is_direct,
                 is_dev: dep_is_dev,
@@ -2003,6 +2060,66 @@ mod tests {
         let unconfirmed: f32 = 0.58;
         assert!(unconfirmed < confirmed);
         assert!(confirmed - unconfirmed > 0.3);
+    }
+
+    #[test]
+    fn osv_scope_ranking_caps_unproven_reachability() {
+        assert!(matches!(
+            rank_osv_urgency(AlertUrgency::Critical, Some(false), Some(false)),
+            AlertUrgency::High
+        ));
+        assert!(matches!(
+            rank_osv_urgency(AlertUrgency::Critical, Some(true), Some(true)),
+            AlertUrgency::Medium
+        ));
+        assert!(matches!(
+            rank_osv_urgency(AlertUrgency::Critical, Some(true), Some(false)),
+            AlertUrgency::Critical
+        ));
+    }
+
+    #[test]
+    fn osv_group_scope_prefers_direct_runtime_over_weaker_scopes() {
+        let matched = crate::osv::types::MatchedAdvisory {
+            advisory_id: "GHSA-test".into(),
+            summary: "test".into(),
+            details: None,
+            package_name: "pkg".into(),
+            ecosystem: "npm".into(),
+            installed_version: Some("1.0.0".into()),
+            fixed_version: Some("2.0.0".into()),
+            severity_type: None,
+            cvss_score: Some(9.8),
+            source_url: None,
+            is_version_confirmed: true,
+            project_paths: vec!["/direct".into(), "/transitive".into()],
+            published_at: None,
+            dependency_instances: vec![
+                crate::osv::types::MatchedDependency {
+                    project_path: "/transitive".into(),
+                    installed_version: Some("1.0.0".into()),
+                    is_direct: false,
+                    is_dev: false,
+                    is_version_confirmed: true,
+                },
+                crate::osv::types::MatchedDependency {
+                    project_path: "/direct".into(),
+                    installed_version: Some("1.0.0".into()),
+                    is_direct: true,
+                    is_dev: false,
+                    is_version_confirmed: true,
+                },
+            ],
+        };
+
+        assert_eq!(
+            osv_group_scope(&[&matched]),
+            (
+                Some(true),
+                Some(false),
+                "direct in at least one project; weaker scope in others"
+            )
+        );
     }
 
     #[test]

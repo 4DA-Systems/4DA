@@ -21,7 +21,7 @@ import type {
 const OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch";
 const OSV_TIMEOUT_MS = 15_000;
 const OSV_CACHE_TTL = 3600; // 1 hour
-const MAX_BATCH_SIZE = 200;
+const MAX_BATCH_SIZE = 1000;
 
 interface OsvBatchQuery {
   package: { name: string; ecosystem: string };
@@ -43,7 +43,7 @@ export class OsvScanner {
 
   async scan(deps: ResolvedDependency[], projectPath: string): Promise<VulnerabilityScanResult> {
     const start = Date.now();
-    const scannable = deps.filter((d) => d.version !== null).slice(0, MAX_BATCH_SIZE);
+    const scannable = deps.filter((d) => d.version !== null);
     const ecosystems = [...new Set(scannable.map((d) => d.ecosystem))];
 
     // Check cache for each dep individually
@@ -70,7 +70,6 @@ export class OsvScanner {
       } else {
         try {
           fetchedVulns = await this.batchQuery(uncached);
-          this.rateLimiter.consume("osv");
         } catch {
           offline = true;
           // Try stale cache for uncached deps
@@ -99,7 +98,7 @@ export class OsvScanner {
       totalVulnerable: vulnerablePackages.size,
       bySeverity,
       vulnerabilities: allVulns,
-      cleanCount: scannable.length - vulnerablePackages.size,
+      cleanCount: offline ? 0 : scannable.length - vulnerablePackages.size,
       scanDurationMs: Date.now() - start,
       cached: uncached.length === 0,
       offline,
@@ -107,40 +106,46 @@ export class OsvScanner {
   }
 
   private async batchQuery(deps: ResolvedDependency[]): Promise<VulnerabilityEntry[]> {
-    const queries: OsvBatchQuery[] = deps.map((d) => ({
-      package: { name: d.name, ecosystem: d.ecosystem },
-      ...(d.version ? { version: d.version } : {}),
-    }));
-
-    const response = await fetchWithTimeout(OSV_BATCH_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ queries }),
-    }, OSV_TIMEOUT_MS);
-
-    if (!response.ok) {
-      throw new Error(`OSV API error: ${response.status}`);
-    }
-
-    const data = (await response.json()) as OsvBatchResponse;
     const results: VulnerabilityEntry[] = [];
 
-    for (let i = 0; i < data.results.length; i++) {
-      const dep = deps[i];
-      const osvResult = data.results[i];
-      const depVulns: VulnerabilityEntry[] = [];
-
-      if (osvResult.vulns && osvResult.vulns.length > 0) {
-        for (const vuln of osvResult.vulns) {
-          depVulns.push(mapVulnerability(vuln, dep));
-        }
+    for (let offset = 0; offset < deps.length; offset += MAX_BATCH_SIZE) {
+      if (!this.rateLimiter.canProceed("osv")) {
+        throw new Error("OSV rate limit reached before all dependency batches completed");
       }
+      const chunk = deps.slice(offset, offset + MAX_BATCH_SIZE);
+      const queries: OsvBatchQuery[] = chunk.map((d) => ({
+        package: { name: d.name, ecosystem: d.ecosystem },
+        ...(d.version ? { version: d.version } : {}),
+      }));
 
-      // Cache per-dep (even empty results to avoid re-fetching clean deps)
-      const cacheKey = `osv:${dep.ecosystem}:${dep.name}:${dep.version}`;
-      this.cache.set(cacheKey, depVulns, "osv", OSV_CACHE_TTL);
+      const response = await fetchWithTimeout(OSV_BATCH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queries }),
+      }, OSV_TIMEOUT_MS);
 
-      results.push(...depVulns);
+      if (!response.ok) {
+        throw new Error(`OSV API error: ${response.status}`);
+      }
+      this.rateLimiter.consume("osv");
+
+      const data = (await response.json()) as OsvBatchResponse;
+      for (let i = 0; i < chunk.length; i++) {
+        const dep = chunk[i];
+        const osvResult = data.results[i];
+        const depVulns: VulnerabilityEntry[] = [];
+
+        if (osvResult?.vulns && osvResult.vulns.length > 0) {
+          for (const vuln of osvResult.vulns) {
+            depVulns.push(mapVulnerability(vuln, dep));
+          }
+        }
+
+        // Cache per-dep (even empty results to avoid re-fetching clean deps)
+        const cacheKey = `osv:${dep.ecosystem}:${dep.name}:${dep.version}`;
+        this.cache.set(cacheKey, depVulns, "osv", OSV_CACHE_TTL);
+        results.push(...depVulns);
+      }
     }
 
     return results;
@@ -157,6 +162,8 @@ function mapVulnerability(vuln: OsvVulnerability, dep: ResolvedDependency): Vuln
     currentVersion: dep.version || "unknown",
     ecosystem: dep.ecosystem,
     isDev: dep.isDev,
+    isDirect: dep.isDirect,
+    devScopeKnown: dep.devScopeKnown,
     vulnId: vuln.id,
     aliases: vuln.aliases || [],
     severity,
@@ -171,18 +178,16 @@ function mapVulnerability(vuln: OsvVulnerability, dep: ResolvedDependency): Vuln
   };
 }
 
-function extractCvssScore(severity: Array<{ type: string; score: string }> | undefined): number | null {
+export function extractCvssScore(severity: Array<{ type: string; score: string }> | undefined): number | null {
   if (!severity || severity.length === 0) return null;
+
+  // OSV commonly returns a CVSS vector rather than a numeric base score.
+  // Without a full CVSS calculator, treating the vector's "3.1" version as
+  // the score is worse than leaving severity unknown.
   for (const s of severity) {
-    if (s.type === "CVSS_V3" || s.type === "CVSS_V4") {
-      // CVSS vector string: "CVSS:3.1/AV:N/AC:L/..." — extract base score
-      const scoreMatch = s.score.match(/(\d+\.?\d*)/);
-      if (scoreMatch) return parseFloat(scoreMatch[1]);
-    }
-  }
-  // Some entries have just a numeric score
-  for (const s of severity) {
-    const num = parseFloat(s.score);
+    const raw = s.score.trim();
+    if (!/^\d+(?:\.\d+)?$/.test(raw)) continue;
+    const num = Number(raw);
     if (!isNaN(num) && num >= 0 && num <= 10) return num;
   }
   return null;
@@ -219,4 +224,3 @@ function extractFixedVersion(
   }
   return null;
 }
-

@@ -34,9 +34,9 @@ fn main() {
     // The mode is the first argument that isn't the force flag.
     let mode_arg = args.iter().find(|a| *a != "--force" && *a != "-f");
     let mode = match mode_arg.map(String::as_str) {
-        None | Some("--once") | Some("once") => HeadlessMode::Once,
-        Some("--daemon") | Some("daemon") => HeadlessMode::Daemon,
-        Some("--help") | Some("-h") => {
+        None | Some("--once" | "once") => HeadlessMode::Once,
+        Some("--daemon" | "daemon") => HeadlessMode::Daemon,
+        Some("--help" | "-h") => {
             print_usage();
             std::process::exit(0);
         }
