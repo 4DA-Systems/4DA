@@ -1,7 +1,7 @@
 # System Invariants
 ## What Must ALWAYS or NEVER Happen in 4DA
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Source:** Extracted from ACE-STONE-TABLET.md and ARCHITECTURE.md
 **Authority:** These are non-negotiable constraints. Violating an invariant is a critical bug.
 
@@ -154,6 +154,27 @@ pub enum MyError {
     },
 }
 ```
+
+### INV-043: No Console Window From Spawned Processes
+- fourda.exe is a GUI-subsystem binary (`windows_subsystem = "windows"`) and owns no console. Every
+  child process it spawns that *can run on Windows* MUST suppress the console window, or Windows
+  allocates a fresh console and a black window flashes on the user's desktop — which reads as malware.
+- Every `std`/`tokio` `Command` reachable on Windows MUST set `CREATE_NO_WINDOW` (`0x0800_0000`),
+  inline or via a helper (e.g. `suppress_console_window`).
+- Background/headless binaries that are themselves console-subsystem (`fourda-engine`) MUST hide their
+  own console at process entry — see `hide_scheduler_spawned_console()` in `headless.rs`.
+- **Code Pattern:**
+```rust
+use std::os::windows::process::CommandExt;
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+cmd.creation_flags(CREATE_NO_WINDOW);
+```
+- **Enforcement:** `scripts/check-no-window-spawns.cjs` (`pnpm run validate:no-window`) — scans every
+  `Command::new` under `src-tauri/src` and fails the build unless the flag is applied, the program is
+  genuinely Unix-only, or an explicit `// no-window-ok: <reason>` marker justifies a visible window.
+- **Origin:** 2026-06-10/11 — a 30-min background refresh, then a self-hosted CI runner, each flashed a
+  console; the founder's first instinct was to kill the process. The gate makes silence by-construction
+  instead of by-discipline.
 
 ---
 
