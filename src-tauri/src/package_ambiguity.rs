@@ -77,11 +77,65 @@ pub(crate) fn is_ambiguous_package_name(name: &str) -> bool {
     )
 }
 
+/// Dep names that are so generic they cause false matches in SQL LIKE queries.
+/// Only truly generic English words that appear in nearly every article title.
+/// Words like "futures", "bytes", "ring", "cookie", "config", "router" are real
+/// crate/package names -- the word boundary matching already prevents false positives.
+pub(crate) fn is_generic_dep_name(name: &str) -> bool {
+    matches!(
+        name.to_lowercase().as_str(),
+        "open"
+            | "test"
+            | "core"
+            | "path"
+            | "sync"
+            | "once"
+            | "glob"
+            | "rand"
+            | "time"
+            | "lock"
+            | "send"
+            | "copy"
+            | "find"
+            | "diff"
+            | "pick"
+            | "wrap"
+            | "trim"
+            | "data"
+            | "form"
+            | "icon"
+            | "link"
+            | "text"
+            | "type"
+            | "util"
+            | "base"
+            | "flat"
+            | "safe"
+            | "fast"
+            | "make"
+            | "pipe"
+            | "pump"
+            | "read"
+            | "call"
+            | "nano"
+            | "pure"
+            | "vary"
+            | "deep"
+            | "try"
+            | "want"
+            | "mime"
+            | "race"
+            | "http"
+            | "https"
+    )
+}
+
 /// True when a package name is too word-like to trust a bare text match:
-/// either it is on the ambiguous list, or it is so short ("os", "fs", "js",
-/// npm shims) that it collides with fragments of ordinary prose.
+/// on the ambiguous list, on the generic-English-word list ("path", "open",
+/// "data" appear in ordinary prose at word boundaries), or so short
+/// ("os", "fs", "js" npm shims) that it collides with prose fragments.
 pub(crate) fn requires_strict_proof(name: &str) -> bool {
-    is_ambiguous_package_name(name) || name.len() < 4
+    is_ambiguous_package_name(name) || is_generic_dep_name(name) || name.len() < 4
 }
 
 /// Ecosystem context words that indicate the text is actually discussing a
@@ -169,9 +223,20 @@ mod tests {
         // Ambiguous-list members of any length.
         assert!(requires_strict_proof("http"));
         assert!(requires_strict_proof("config"));
+        // Generic English words that are also real package names.
+        assert!(requires_strict_proof("path"));
+        assert!(requires_strict_proof("open"));
         // Distinctive names need no extra proof.
         assert!(!requires_strict_proof("axios"));
         assert!(!requires_strict_proof("lodash"));
+    }
+
+    #[test]
+    fn regression_path_does_not_match_singularity_advisory() {
+        // Real false win: dep "path" (npm) bound to a Singularity CVE whose
+        // title uses "path" as an ordinary English word. Must NOT match.
+        let title = "singluarity: incorrect path matching for 'limit container paths'";
+        assert!(!dep_grounded_match(title, "", "path"));
     }
 
     // -- dep_grounded_match: real-world regression cases --

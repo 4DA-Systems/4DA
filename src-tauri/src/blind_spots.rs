@@ -22,7 +22,7 @@ use crate::evidence::{
     EvidenceKind, LensHints, Urgency,
 };
 use crate::monitoring_briefing::DataFreshness;
-use crate::package_ambiguity::has_word_boundary_match;
+use crate::package_ambiguity::{has_word_boundary_match, is_generic_dep_name};
 // Re-exported because peers (dep_linker) import this via blind_spots.
 pub(crate) use crate::package_ambiguity::is_ambiguous_package_name;
 use crate::scoring_config;
@@ -1376,58 +1376,8 @@ fn is_utility_dep(name: &str) -> bool {
     )
 }
 
-/// Dep names that are so generic they cause false matches in SQL LIKE queries.
-/// Only truly generic English words that appear in nearly every article title.
-/// Words like "futures", "bytes", "ring", "cookie", "config", "router" are real
-/// crate/package names — the word boundary matching already prevents false positives.
-fn is_generic_dep_name(name: &str) -> bool {
-    matches!(
-        name.to_lowercase().as_str(),
-        "open"
-            | "test"
-            | "core"
-            | "path"
-            | "sync"
-            | "once"
-            | "glob"
-            | "rand"
-            | "time"
-            | "lock"
-            | "send"
-            | "copy"
-            | "find"
-            | "diff"
-            | "pick"
-            | "wrap"
-            | "trim"
-            | "data"
-            | "form"
-            | "icon"
-            | "link"
-            | "text"
-            | "type"
-            | "util"
-            | "base"
-            | "flat"
-            | "safe"
-            | "fast"
-            | "make"
-            | "pipe"
-            | "pump"
-            | "read"
-            | "call"
-            | "nano"
-            | "pure"
-            | "vary"
-            | "deep"
-            | "try"
-            | "want"
-            | "mime"
-            | "race"
-            | "http"
-            | "https"
-    )
-}
+// is_generic_dep_name moved to crate::package_ambiguity (shared with the
+// decision_advantage win-grounding guards); imported at the top of this file.
 
 fn is_actionable_blind_spot_match(
     dep_lower: &str,
