@@ -183,6 +183,27 @@ impl Database {
         )?;
         Ok(count)
     }
+
+    /// Delete advisories for ecosystems the user has no auditable dependency in.
+    /// Clears orphan rows left by an earlier broad cache ingestion (e.g. NuGet /
+    /// Maven / PyPI advisories that can never match an npm + crates.io dependency
+    /// set) so the mirror only holds advisories that could actually match.
+    ///
+    /// No-op when `keep_ecosystems` is empty — never wipe the whole mirror on a
+    /// transient empty dependency set. Returns the number of rows removed.
+    pub fn prune_advisories_outside_ecosystems(
+        &self,
+        keep_ecosystems: &[String],
+    ) -> SqliteResult<usize> {
+        if keep_ecosystems.is_empty() {
+            return Ok(0);
+        }
+        let conn = self.conn.lock();
+        let placeholders = vec!["?"; keep_ecosystems.len()].join(",");
+        let sql = format!("DELETE FROM osv_advisories WHERE ecosystem NOT IN ({placeholders})");
+        let count = conn.execute(&sql, rusqlite::params_from_iter(keep_ecosystems.iter()))?;
+        Ok(count)
+    }
 }
 
 // ============================================================================
@@ -558,6 +579,77 @@ mod tests {
         assert_eq!(
             crates_count, 1,
             "crates.io should have 1 active advisory (not 2 with withdrawn)"
+        );
+    }
+
+    #[test]
+    fn prune_removes_advisories_outside_kept_ecosystems() {
+        let db = test_db();
+        let ranges = Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"1.0.0"}]}]"#);
+        let mk = |id: &str, pkg: &str, eco: &str| {
+            db.upsert_osv_advisory(
+                id,
+                "summary",
+                None,
+                pkg,
+                eco,
+                ranges,
+                None,
+                Some("CVSS_V3"),
+                Some(5.0),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        };
+        mk("GHSA-npm", "axios", "npm");
+        mk("GHSA-crates", "tokio", "crates.io");
+        mk("GHSA-nuget", "Newtonsoft.Json", "NuGet");
+        mk("GHSA-maven", "log4j", "Maven");
+
+        // Keep only the ecosystems the user actually has deps in.
+        let keep = vec!["npm".to_string(), "crates.io".to_string()];
+        let pruned = db.prune_advisories_outside_ecosystems(&keep).unwrap();
+        assert_eq!(pruned, 2, "NuGet + Maven orphan advisories pruned");
+
+        assert_eq!(
+            db.get_osv_advisories_for_package("axios", "npm")
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            db.get_osv_advisories_for_package("tokio", "crates.io")
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(db
+            .get_osv_advisories_for_package("Newtonsoft.Json", "NuGet")
+            .unwrap()
+            .is_empty());
+        assert!(db
+            .get_osv_advisories_for_package("log4j", "Maven")
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn prune_is_noop_with_empty_keep_list() {
+        let db = test_db();
+        db.upsert_osv_advisory(
+            "GHSA-x", "s", None, "axios", "npm", None, None, None, None, None, None, None, None,
+        )
+        .unwrap();
+        // Empty keep set must never wipe the whole mirror.
+        assert_eq!(db.prune_advisories_outside_ecosystems(&[]).unwrap(), 0);
+        assert_eq!(
+            db.get_osv_advisories_for_package("axios", "npm")
+                .unwrap()
+                .len(),
+            1
         );
     }
 }

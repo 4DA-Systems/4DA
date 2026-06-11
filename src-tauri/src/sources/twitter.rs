@@ -435,11 +435,16 @@ impl Source for TwitterSource {
 
         let mut all_items = Vec::new();
         let mut rate_limited = false;
+        // An invalid/expired bearer token 401s on EVERY handle, so without an
+        // early-stop the source logs one warning per configured handle every
+        // fetch cycle. Bail the whole run on the first auth failure and surface
+        // the real cause once (the per-handle errors still land in feed_errors).
+        let mut auth_failed = false;
 
-        // Fetch tweets for each configured handle (bail early on rate limit)
+        // Fetch tweets for each configured handle (bail early on rate limit / bad key)
         for handle in &self.handles {
-            if rate_limited {
-                debug!(handle = %handle, "Skipping - rate limited");
+            if rate_limited || auth_failed {
+                debug!(handle = %handle, "Skipping - X API unavailable this run");
                 continue;
             }
 
@@ -451,11 +456,18 @@ impl Source for TwitterSource {
                         all_items.extend(items);
                     }
                     Err(e) => {
-                        if e.to_string().contains("Rate limited") {
-                            warn!("X API rate limited - stopping handle fetches");
+                        let es = e.to_string();
+                        if es.contains("Rate limited") {
+                            warn!("X API rate limited - stopping handle fetches for this run");
                             rate_limited = true;
+                        } else if es.contains("401")
+                            || es.contains("Unauthorized")
+                            || es.contains("403")
+                        {
+                            warn!("X API key invalid or expired (HTTP 401/403) - skipping X for this run; update the key in Settings");
+                            auth_failed = true;
                         } else {
-                            warn!(handle = %handle, error = %e, "Failed to fetch tweets");
+                            warn!(handle = %handle, error = %es, "Failed to fetch tweets");
                         }
                         self.feed_errors
                             .lock()
@@ -464,11 +476,18 @@ impl Source for TwitterSource {
                     }
                 },
                 Err(e) => {
-                    if e.to_string().contains("Rate limited") {
-                        warn!("X API rate limited - stopping handle fetches");
+                    let es = e.to_string();
+                    if es.contains("Rate limited") {
+                        warn!("X API rate limited - stopping handle fetches for this run");
                         rate_limited = true;
+                    } else if es.contains("401")
+                        || es.contains("Unauthorized")
+                        || es.contains("403")
+                    {
+                        warn!("X API key invalid or expired (HTTP 401/403) - skipping X for this run; update the key in Settings");
+                        auth_failed = true;
                     } else {
-                        warn!(handle = %handle, error = %e, "Failed to look up user");
+                        warn!(handle = %handle, error = %es, "Failed to look up user");
                     }
                     self.feed_errors
                         .lock()
@@ -515,11 +534,16 @@ impl Source for TwitterSource {
                     all_items.extend(items);
                 }
                 Err(e) => {
-                    if e.to_string().contains("Rate limited") {
+                    let es = e.to_string();
+                    if es.contains("Rate limited") {
                         warn!("X API rate limited - stopping searches");
                         break;
                     }
-                    warn!(query, error = %e, "Search failed");
+                    if es.contains("401") || es.contains("Unauthorized") || es.contains("403") {
+                        warn!("X API key invalid or expired (HTTP 401/403) - stopping searches; update the key in Settings");
+                        break;
+                    }
+                    warn!(query, error = %es, "Search failed");
                 }
             }
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
