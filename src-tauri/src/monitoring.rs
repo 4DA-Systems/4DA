@@ -1042,16 +1042,23 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
 
                         // Relevance-aware forgetting: drop a bounded batch of CONFIRMED
-                        // noise (relevance < 0.05, older than the retention window, never
-                        // high-stakes — security/breaking/CVE are structurally protected)
-                        // so the firehose's low-value items and their 768-dim embeddings
-                        // stop accumulating forever. cleanup_old_items above keys on
-                        // last_seen, which the firehose keeps fresh, so noise never aged
-                        // out that way; this keys on created_at. Items are re-fetchable
-                        // from source; the run_maintenance VACUUM below reclaims the pages.
-                        match db.prune_noise(0.05, max_age_days as i64, 5000) {
+                        // noise (relevance < 0.05, never high-stakes — security/breaking/CVE
+                        // are structurally protected) so the firehose's low-value items and
+                        // their 768-dim embeddings stop accumulating forever. cleanup_old_items
+                        // above keys on last_seen, which the firehose keeps fresh, so noise
+                        // never aged out that way; this keys on created_at. Items are
+                        // re-fetchable; the run_maintenance VACUUM below reclaims the pages.
+                        //
+                        // The noise floor is DECOUPLED from the retention setting: confirmed
+                        // junk is forgotten at 30 days regardless of how long the user keeps
+                        // good content (retention can be up to 365d, which would otherwise
+                        // make this inert — keeping a year of <0.05 noise serves no one). We
+                        // still never forget noise sooner than the user's own retention, so a
+                        // shorter retention wins.
+                        let noise_floor_days = (max_age_days as i64).min(30);
+                        match db.prune_noise(0.05, noise_floor_days, 5000) {
                             Ok(pruned) if pruned > 0 => {
-                                info!(target: "4da::monitor", pruned, max_age_days, "Relevance-aware noise prune (scheduled)");
+                                info!(target: "4da::monitor", pruned, noise_floor_days, "Relevance-aware noise prune (scheduled)");
                             }
                             Ok(_) => {}
                             Err(e) => {
