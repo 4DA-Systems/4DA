@@ -1,6 +1,6 @@
 {
   "name": "get_relevant_content",
-  "description": "Get filtered relevant content from 4DA's personalized feed.\n\nReturns content items that match the user's interests, tech stack, and learned preferences.\nItems are scored based on:\n- Explicit interests declared by the user\n- Tech stack and domains\n- ACE-detected context (recent files, projects, git activity)\n- Learned preferences from past interactions\n\nUse this to find content relevant to the user's current context.",
+  "description": "Get filtered relevant content from 4DA's personalized feed.\n\nReturns content items that match the user's interests, tech stack, and learned preferences.\nItems are scored based on:\n- Explicit interests declared by the user\n- Tech stack and domains\n- ACE-detected context (recent files, projects, git activity)\n- Learned preferences from past interactions\n\nCall when the user asks what to read, what is relevant to them, or for content on a topic.",
   "inputSchema": {
     "type": "object",
     "properties": {
