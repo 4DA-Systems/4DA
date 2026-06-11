@@ -1,6 +1,6 @@
 {
   "name": "developer_dna",
-  "description": "Export your Developer DNA — a comprehensive profile of your tech identity built from project scans, engagement data, and learned preferences. Includes primary stack, adjacent tech, top dependencies, engaged topics, blind spots, source engagement rates, and aggregate stats.",
+  "description": "Export your Developer DNA — a comprehensive profile of your tech identity built from project scans, engagement data, and learned preferences. Includes primary stack, adjacent tech, top dependencies, engaged topics, blind spots, source engagement rates, and aggregate stats. Call when the user asks for a summary of their developer profile, identity, or tech fingerprint.",
   "inputSchema": {
     "type": "object",
     "properties": {

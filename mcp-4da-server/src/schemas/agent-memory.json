@@ -1,6 +1,6 @@
 {
   "name": "agent_memory",
-  "description": "Cross-agent persistent memory — store and recall discoveries, decisions, context, and warnings across sessions and tools.\n\nEnables AI agents to build institutional knowledge that persists beyond individual conversations. Supports storing, recalling by topic, filtering by tags, and retrieving recent entries.",
+  "description": "Cross-agent persistent memory — store and recall discoveries, decisions, context, and warnings across sessions and tools.\n\nEnables AI agents to build institutional knowledge that persists beyond individual conversations. Supports storing, recalling by topic, filtering by tags, and retrieving recent entries. Call to store a discovery, decision, or warning worth keeping, or to recall prior context before starting work.",
   "inputSchema": {
     "type": "object",
     "properties": {
