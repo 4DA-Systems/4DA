@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: FSL-1.1-Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Contract tests for 4DA MCP Server tool handlers.
  *

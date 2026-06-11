@@ -1,7 +1,7 @@
 # @4da/mcp-server
 
 [![npm version](https://img.shields.io/npm/v/@4da/mcp-server?color=gold)](https://www.npmjs.com/package/@4da/mcp-server)
-[![License: FSL-1.1-Apache-2.0](https://img.shields.io/badge/License-FSL--1.1--Apache--2.0-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-%3E%3D18-brightgreen)](https://nodejs.org/)
 [![smithery badge](https://smithery.ai/badge/@4da/mcp-server)](https://smithery.ai/server/@4da/mcp-server)
 
@@ -226,7 +226,7 @@ pnpm test    # 71 contract tests
 
 ## License
 
-Functional Source License, Version 1.1, Apache 2.0 Future License (`FSL-1.1-Apache-2.0`) - converts to Apache 2.0 three years after release. See [LICENSE](LICENSE).
+Apache License 2.0 (`Apache-2.0`). See [LICENSE](LICENSE).
 
 ---
 

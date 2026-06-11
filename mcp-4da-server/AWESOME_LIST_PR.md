@@ -40,7 +40,7 @@ Adds [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) to the Dev
 
 - **npm:** https://www.npmjs.com/package/@4da/mcp-server
 - **GitHub:** https://github.com/runyourempire/4DA/tree/main/mcp-4da-server
-- **License:** FSL-1.1-Apache-2.0
+- **License:** Apache-2.0
 - **Language:** TypeScript
 - **Platforms:** macOS, Windows, Linux (local service)
 ```
