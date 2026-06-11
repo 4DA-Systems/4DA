@@ -155,6 +155,14 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
         .ok()
         .filter(|s| !s.is_empty());
 
+    // Step 0 — ensure context exists. On a fresh data dir (FOURDA_DATA_DIR pointing at a new
+    // location, or a first headless-only install) `context_chunks` is empty because context
+    // indexing normally runs from the GUI's onboarding/auto-discovery flow. Scoring against an
+    // empty context marks every item irrelevant, so a headless-first deployment silently produces
+    // zero intelligence forever. If directories are configured but nothing is indexed, index now.
+    // Never clears or re-indexes existing context — strictly a cold-start self-heal.
+    ensure_context_indexed().await;
+
     // Step 1 — fetch (fills the cache; writes/touches source_items, stamps sources.last_fetch).
     info!(target: "4da::headless", "Cycle step 1/3: fetching sources...");
     match crate::source_fetching::fill_cache_background(handle).await {
@@ -183,6 +191,39 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
         Ok(results) => {
             receipt.items_scored = results.len();
             receipt.relevant_count = results.iter().filter(|r| r.relevant).count();
+
+            // Persist scores. The GUI path persists via the analysis_status completion
+            // handler, and the backfill scheduler stamps the rest — neither runs headless,
+            // so without this block a headless-only deployment computes scores every cycle
+            // and writes none of them (relevance_score stays NULL for every item; verified
+            // live on a fresh FOURDA_DATA_DIR). Mirrors analysis_status.rs exactly:
+            // scores for top_score > 0, a pipeline-version stamp for every scored item.
+            if let Ok(db) = crate::get_database() {
+                let score_data: Vec<(i64, f32, Option<String>, Option<String>)> = results
+                    .iter()
+                    .filter(|r| r.top_score > 0.0)
+                    .map(|r| {
+                        (
+                            r.id as i64,
+                            r.top_score,
+                            r.signal_type.clone(),
+                            r.signal_priority.clone(),
+                        )
+                    })
+                    .collect();
+                if !score_data.is_empty() {
+                    if let Err(e) = db.persist_analysis_scores(&score_data) {
+                        warn!(target: "4da::headless", error = %e, "Failed to persist relevance scores");
+                    }
+                }
+                let scored_ids: Vec<i64> = results.iter().map(|r| r.id as i64).collect();
+                if let Err(e) =
+                    db.mark_items_scored_version(&scored_ids, crate::scoring::PIPELINE_VERSION)
+                {
+                    warn!(target: "4da::headless", error = %e, "Failed to stamp scored pipeline version");
+                }
+            }
+
             info!(
                 target: "4da::headless",
                 scored = receipt.items_scored,
@@ -265,6 +306,61 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
         );
     }
     exit_code
+}
+
+/// Cold-start self-heal: index configured context directories when nothing is indexed yet.
+/// No-op when context already exists (the common case — one cheap COUNT) or when no
+/// `context_dirs` are configured (nothing to index; the GUI onboarding owns that setup).
+/// Failures are logged and non-fatal: a cycle with empty context still fetches and writes
+/// honest receipts — it just scores nothing relevant, which the log now explains.
+async fn ensure_context_indexed() {
+    let chunk_count = match crate::get_database().and_then(|db| {
+        db.context_count()
+            .map_err(|e| format!("context_count failed: {e}").into())
+    }) {
+        Ok(count) => count,
+        Err(e) => {
+            warn!(target: "4da::headless", error = %e, "Context check failed — skipping context indexing");
+            return;
+        }
+    };
+    if chunk_count > 0 {
+        return;
+    }
+    let dirs = crate::get_context_dirs();
+    if dirs.is_empty() {
+        info!(
+            target: "4da::headless",
+            "No context indexed and no context_dirs configured — scoring will have no project context"
+        );
+        return;
+    }
+    info!(
+        target: "4da::headless",
+        dirs = dirs.len(),
+        "Cycle step 0/3: no context indexed yet — indexing configured context directories..."
+    );
+    match crate::context_commands::index_context().await {
+        Ok(summary) => info!(target: "4da::headless", %summary, "Context indexing complete"),
+        Err(e) => {
+            warn!(target: "4da::headless", error = %e, "Context indexing failed — cycle continues without context");
+        }
+    }
+
+    // Same cold-start condition, second profile: the dependency axis (and OSV matching) read the
+    // ACE-detected project/dependency tables, which the GUI's onboarding scan normally populates.
+    // Run the full ACE scan over the same configured directories so a headless-first deployment
+    // gets a real dependency profile too. Non-fatal on failure for the same reason as above.
+    let dir_strings: Vec<String> = dirs
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    match crate::ace_commands::ace_full_scan(dir_strings).await {
+        Ok(_) => info!(target: "4da::headless", "ACE dependency scan complete"),
+        Err(e) => {
+            warn!(target: "4da::headless", error = %e, "ACE dependency scan failed — cycle continues without dependency profile");
+        }
+    }
 }
 
 fn append_receipt_error(receipt: &mut RunReceipt, error: String) {
