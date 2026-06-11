@@ -379,3 +379,10 @@ victauri-gauntlet/
 # git-hygiene hook flagged them on every prompt.
 temp/
 4da-stderr.txt
+
+# Stray cargo target dir from an isolated verify build (sibling of target-test/) — build output.
+target-verify/
+
+# Engine attribution pubkey — per-install RUNTIME artifact: regenerated each run and read by the
+# Verax verifier from the data dir (src/engine_runs.rs). Public key, but not a repo-tracked file.
+data/engine_receipt_pubkey.hex
