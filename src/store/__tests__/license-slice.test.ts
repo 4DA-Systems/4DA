@@ -105,8 +105,7 @@ describe('license-slice', () => {
   describe('activateLicense', () => {
     it('activates license and updates state on success', async () => {
       vi.mocked(invoke)
-        .mockResolvedValueOnce({ success: true, tier: 'pro', expires_at: '2025-06-01' }) // activate_license
-        .mockResolvedValueOnce({ tier: 'playbook', expired: false }); // loadStreetsTier gets called
+        .mockResolvedValueOnce({ success: true, tier: 'pro', expires_at: '2025-06-01' }); // activate_license
 
       const result = await useAppStore.getState().activateLicense('PRO-KEY-123');
 

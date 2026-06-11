@@ -30,7 +30,7 @@ function makeHarness() {
   };
 }
 
-const VALID_VIEWS = ['briefing', 'preemption', 'blindspots', 'results', 'playbook'] as const;
+const VALID_VIEWS = ['briefing', 'preemption', 'blindspots', 'results'] as const;
 
 describe('ui-slice navigation', () => {
   for (const view of VALID_VIEWS) {
@@ -43,7 +43,7 @@ describe('ui-slice navigation', () => {
 
   it('rejects removed views', () => {
     const harness = makeHarness();
-    const removed = ['saved', 'toolkit', 'profile', 'calibrate', 'console', 'evidence'];
+    const removed = ['saved', 'toolkit', 'profile', 'calibrate', 'console', 'evidence', 'playbook'];
     for (const view of removed) {
       harness.setActiveView('briefing');
       // @ts-expect-error — testing runtime rejection of invalid views

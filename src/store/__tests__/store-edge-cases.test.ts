@@ -156,7 +156,6 @@ describe('store edge cases', () => {
       useAppStore.getState().setActiveView('results');
       useAppStore.getState().setActiveView('preemption');
       useAppStore.getState().setActiveView('blindspots');
-      useAppStore.getState().setActiveView('playbook');
       useAppStore.getState().setActiveView('briefing');
 
       expect(useAppStore.getState().activeView).toBe('briefing');

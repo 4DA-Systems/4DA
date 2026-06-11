@@ -21,6 +21,17 @@ static SPAWNED_PIDS: once_cell::sync::Lazy<Mutex<HashSet<u32>>> =
 
 /// Register a PID that the application has spawned.
 /// Other modules should call this when creating child processes.
+///
+/// The kill-guard security model (`toolkit_kill_process` only terminates
+/// registered PIDs) requires this registration entry point. The last in-app
+/// spawner (STREETS command execution) was removed with the playbook UI, so
+/// no production caller remains today; new spawn features must register here
+/// to make their children killable.
+// If no spawn feature registers PIDs by the deadline, delete this entry
+// point AND toolkit_kill_process together (the guard is deny-all without
+// it, so the command is inert).
+// REMOVE BY 2026-09-01
+#[allow(dead_code)]
 pub fn register_spawned_pid(pid: u32) {
     let mut pids = SPAWNED_PIDS.lock();
     pids.insert(pid);

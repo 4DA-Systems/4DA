@@ -20,8 +20,8 @@ interface TranslationStatus {
   percentage: number;
 }
 
-type Namespace = 'all' | 'ui' | 'streets' | 'errors';
-const NAMESPACES: Namespace[] = ['all', 'ui', 'streets', 'errors'];
+type Namespace = 'all' | 'ui' | 'errors';
+const NAMESPACES: Namespace[] = ['all', 'ui', 'errors'];
 
 interface TranslationEditorProps { language: string }
 
@@ -34,7 +34,7 @@ const TEXT = { primary: '#FFFFFF', secondary: '#A0A0A0', muted: '#8A8A8A' };
 const ACCENT = { gold: '#D4AF37', success: '#22C55E', error: '#EF4444' };
 const BORDER = '#2A2A2A';
 const NS_COLORS: Record<string, string> = {
-  ui: '#3B82F6', coach: ACCENT.gold, streets: ACCENT.success, errors: ACCENT.error,
+  ui: '#3B82F6', coach: ACCENT.gold, errors: ACCENT.error,
 };
 const STATUS_COLORS: Record<string, string> = {
   overridden: ACCENT.gold, translated: ACCENT.success, untranslated: TEXT.muted,

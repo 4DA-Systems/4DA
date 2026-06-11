@@ -33,7 +33,6 @@ export function useAppListeners({
   startAnalysis,
 }: AppListenersConfig) {
   const activateLicense = useAppStore(s => s.activateLicense);
-  const activateStreetsLicense = useAppStore(s => s.activateStreetsLicense);
 
   // Deep-link handler: 4da://activate?key=...
   useEffect(() => {
@@ -44,8 +43,7 @@ export function useAppListeners({
           const key = url.searchParams.get('key');
           if (key) {
             const proResult = await activateLicense(key);
-            const streetsOk = await activateStreetsLicense(key);
-            if (proResult.ok || streetsOk) {
+            if (proResult.ok) {
               addToast('success', 'License activated successfully');
             } else {
               addToast('error', 'Invalid license key');
@@ -57,7 +55,7 @@ export function useAppListeners({
       }
     })(); });
     return () => { void unlisten.then(fn => fn()); };
-  }, [activateLicense, activateStreetsLicense, addToast]);
+  }, [activateLicense, addToast]);
 
   // Embedding status listener — surfaces degraded/unavailable state via toast
   useEffect(() => {

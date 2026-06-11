@@ -29,7 +29,7 @@ const https = require('https');
 // ============================================================================
 
 const LOCALES_DIR = path.join(__dirname, '..', 'src', 'locales');
-const NAMESPACES = ['ui', 'errors', 'streets', 'coach', 'signals'];
+const NAMESPACES = ['ui', 'errors', 'coach', 'signals'];
 const LANGUAGES = ['ar', 'de', 'es', 'fr', 'hi', 'it', 'ja', 'ko', 'pt-BR', 'ru', 'tr', 'zh'];
 const BATCH_SIZE = 25; // Strings per API call
 const MODEL = 'claude-haiku-4-5-20251001';

@@ -378,10 +378,8 @@ mod playbook_commands;
 mod sovereign_developer_profile;
 mod sovereign_facts;
 mod sovereign_profile;
-mod streets_commands;
 mod streets_engine;
 mod streets_localization;
-mod streets_suggestion;
 mod toolkit;
 mod toolkit_export;
 #[cfg(feature = "experimental")]
@@ -1054,12 +1052,6 @@ pub fn run() {
             content_personalization::commands::get_personalization_context_summary,
             content_personalization::commands::prune_personalization_cache,
             content_personalization::commands::hydrate_lesson_with_llm,
-            // STREETS Command Execution
-            streets_commands::parse_lesson_commands,
-            streets_commands::execute_streets_command,
-            streets_commands::execute_lesson_commands,
-            // STREETS Contextual Suggestion
-            streets_suggestion::get_streets_suggestion,
             // Sovereign Developer Profile (unified view)
             sovereign_developer_profile::get_sovereign_developer_profile,
             sovereign_developer_profile::export_sovereign_profile_markdown,

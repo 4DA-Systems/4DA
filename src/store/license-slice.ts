@@ -50,7 +50,6 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
             ? Math.max(0, Math.ceil((new Date(result.expires_at).getTime() - Date.now()) / 86400000))
             : 0,
         });
-        void get().loadStreetsTier?.();
         return { ok: true };
       }
       set({ licenseLoading: false });
@@ -78,7 +77,6 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
             ? Math.max(0, Math.ceil((new Date(result.expires_at).getTime() - Date.now()) / 86400000))
             : 0,
         });
-        void get().loadStreetsTier?.();
         return { ok: true, tier: result.tier };
       }
       set({ licenseLoading: false });

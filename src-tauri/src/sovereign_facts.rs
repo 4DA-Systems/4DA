@@ -218,7 +218,7 @@ fn parse_size_to_gb(s: &str) -> Option<f64> {
 }
 
 // ============================================================================
-// Public Helpers — called from streets_commands / suns after execution
+// Public Helpers — called from suns after execution
 // ============================================================================
 
 /// Extract and store facts from a command execution's stdout.
@@ -257,47 +257,6 @@ pub fn store_facts_from_execution(command: &str, stdout: &str, source_lesson: &s
         source = source_lesson,
         "Stored sovereign facts from command execution"
     );
-}
-
-/// Log a command execution to the execution log table.
-#[allow(clippy::too_many_arguments)]
-pub fn log_command_execution(
-    module_id: &str,
-    lesson_idx: usize,
-    command_id: &str,
-    command_text: &str,
-    success: bool,
-    exit_code: i32,
-    stdout: &str,
-    stderr: &str,
-    duration_ms: u64,
-) {
-    let conn = match crate::open_db_connection() {
-        Ok(c) => c,
-        Err(e) => {
-            warn!(target: "4da::sovereign", error = %e, "Cannot log command execution: DB unavailable");
-            return;
-        }
-    };
-
-    if let Err(e) = conn.execute(
-        "INSERT INTO command_execution_log
-            (module_id, lesson_idx, command_id, command_text, success, exit_code, stdout, stderr, duration_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![
-            module_id,
-            lesson_idx as i64,
-            command_id,
-            command_text,
-            success as i32,
-            exit_code,
-            stdout,
-            stderr,
-            duration_ms as i64,
-        ],
-    ) {
-        warn!(target: "4da::sovereign", error = %e, "Failed to log command execution");
-    }
 }
 
 // ============================================================================

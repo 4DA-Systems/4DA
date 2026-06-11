@@ -34,7 +34,7 @@ const { execSync } = require('child_process');
 // ============================================================================
 
 const LOCALES_DIR = path.join(__dirname, '..', 'src', 'locales');
-const NAMESPACES = ['ui', 'errors', 'streets', 'coach', 'signals'];
+const NAMESPACES = ['ui', 'errors', 'coach', 'signals'];
 const SUPPORTED_LANGS = ['ar', 'de', 'es', 'fr', 'hi', 'it', 'ja', 'ko', 'pt-BR', 'ru', 'tr', 'zh'];
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const MODEL = 'claude-haiku-4-5-20251001';

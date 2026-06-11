@@ -60,7 +60,6 @@ import type {
   PlaybookContent,
   PlaybookProgress,
 } from '../types/playbook';
-import type { ParsedCommand, CommandExecutionResult } from '../types/streets';
 import type { ChannelRender, RenderProvenance, ChannelChangelog, ChannelSourceMatch } from '../types/channels';
 import type { StackProfileSummary, StackDetection } from '../types/stacks';
 import type {
@@ -442,9 +441,6 @@ interface CommandMap {
   mark_lesson_complete: { params: { moduleId: string; lessonIdx: number }; result: void };
   translate_playbook_module: { params: { moduleId: string; lang: string }; result: string };
   get_lesson_translation_status: { params: { lang: string }; result: Record<string, boolean> };
-  parse_lesson_commands: { params: { moduleId: string; lessonIdx: number }; result: ParsedCommand[] };
-  execute_streets_command: { params: { commandId: string; command: string; riskLevel: string }; result: CommandExecutionResult };
-  execute_lesson_commands: { params: { moduleId: string; lessonIdx: number; maxRisk: string }; result: CommandExecutionResult[] };
   get_personalized_lesson: { params: { moduleId: string; lessonIdx: number }; result: PersonalizedLesson };
   get_personalized_lessons_batch: { params: { requests: Array<[string, number]> }; result: PersonalizedLesson[] };
   get_personalization_context_summary: { params: Record<string, never>; result: PersonalizationContextSummary };
@@ -453,7 +449,6 @@ interface CommandMap {
 
   // -- STREETS Health --
   get_street_health: { params: Record<string, never>; result: StreetHealthScore };
-  get_streets_suggestion: { params: Record<string, never>; result: { module_id: string; module_title: string; reason: string; match_strength: number } | null };
 
   // -- Sovereign Profile --
   get_sovereign_profile: { params: Record<string, never>; result: SovereignProfileData };

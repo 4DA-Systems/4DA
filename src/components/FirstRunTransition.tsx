@@ -14,7 +14,7 @@ import { buildStackInsights } from './first-run/utils';
 import type { Phase, ScanSummary } from './first-run/utils';
 
 interface FirstRunTransitionProps {
-  onComplete: (view: 'briefing' | 'results' | 'playbook') => void;
+  onComplete: (view: 'briefing' | 'results') => void;
 }
 
 export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
@@ -182,7 +182,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
   }, [appState.loading, appState.progressStage, appState.analysisComplete, phase]);
 
   // Dismiss handler — fade out then call onComplete
-  const handleDismiss = useCallback((view: 'briefing' | 'results' | 'playbook') => {
+  const handleDismiss = useCallback((view: 'briefing' | 'results') => {
     setPhase('fading');
     setTimeout(() => onComplete(view), 300);
   }, [onComplete]);

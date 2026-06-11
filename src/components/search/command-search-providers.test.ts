@@ -74,8 +74,8 @@ describe('navigation provider', () => {
   it('returns every view in launcher mode (empty query)', () => {
     const nav = buildProviders(deps()).find(p => p.id === 'nav')!;
     const out = run(nav, '') as CommandResult[];
-    // 5 views + settings
-    expect(out.length).toBeGreaterThanOrEqual(6);
+    // 4 views + settings
+    expect(out.length).toBeGreaterThanOrEqual(5);
   });
 });
 
