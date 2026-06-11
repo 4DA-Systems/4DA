@@ -2,6 +2,7 @@
 import { memo, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { MonitoringStatus } from '../../types/settings';
+import type { MaintenanceResult } from '../../types/autophagy';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { LocaleSection } from './LocaleSection';
 import { MonitoringSection } from './MonitoringSection';
@@ -15,6 +16,19 @@ interface SettingsGeneralTabProps {
   onUpdateInterval: () => void;
 }
 
+/** Sum every row class run_deep_clean can delete, for the "N records cleaned" summary. */
+function totalCleaned(r: MaintenanceResult): number {
+  return (
+    r.deleted_items +
+    r.deleted_feedback +
+    r.deleted_void +
+    r.deleted_intelligence +
+    r.deleted_windows +
+    r.deleted_cycles +
+    r.deleted_necessity
+  );
+}
+
 export const SettingsGeneralTab = memo(function SettingsGeneralTab({
   monitoring,
   monitoringInterval,
@@ -25,6 +39,8 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
   const { t } = useTranslation();
   const [retentionDays, setRetentionDays] = useState(30);
   const [retentionSaving, setRetentionSaving] = useState(false);
+  const [maintBusy, setMaintBusy] = useState(false);
+  const [maintResult, setMaintResult] = useState<MaintenanceResult | null>(null);
 
   useEffect(() => {
     cmd('get_data_health').then((data) => {
@@ -43,6 +59,20 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
       setRetentionSaving(false);
     }
   }, []);
+
+  const handleRunMaintenance = useCallback(async () => {
+    setMaintBusy(true);
+    setMaintResult(null);
+    try {
+      setMaintResult(await cmd('run_deep_clean'));
+    } catch {
+      // Button re-enables; result stays null so no false "cleaned" claim is shown.
+    } finally {
+      setMaintBusy(false);
+    }
+  }, []);
+
+  const cleaned = maintResult ? totalCleaned(maintResult) : 0;
 
   return (
     <div id="tabpanel-general" role="tabpanel">
@@ -83,6 +113,39 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
           <div className="flex justify-between text-[10px] text-text-muted mt-1">
             {/* eslint-disable-next-line i18next/no-literal-string */}
             <span>7d</span><span>30d</span><span>90d</span><span>180d</span><span>365d</span>
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-border">
+            <button
+              type="button"
+              onClick={() => { void handleRunMaintenance(); }}
+              disabled={maintBusy}
+              className="text-xs px-3 py-1.5 rounded-md bg-bg-secondary border border-border text-text-secondary hover:text-white hover:border-accent-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {maintBusy ? t('settings.dataHealth.cleaning') : t('settings.dataHealth.runMaintenance')}
+            </button>
+            {maintResult ? (
+              <div className="mt-2 flex items-center gap-2 text-xs">
+                <span className="text-text-secondary">
+                  {cleaned > 0
+                    ? t('settings.dataHealth.cleanedRecords', { count: cleaned })
+                    : t('settings.dataHealth.alreadyClean')}
+                  {maintResult.deleted_intelligence > 0
+                    ? ` · ${t('settings.dataHealth.cleanCalibrations', { count: maintResult.deleted_intelligence })}`
+                    : ''}
+                  {maintResult.vacuumed && cleaned > 0
+                    ? ` · ${t('settings.dataHealth.compacted')}`
+                    : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMaintResult(null)}
+                  className="text-text-muted hover:text-white underline"
+                >
+                  {t('settings.dataHealth.dismiss')}
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
