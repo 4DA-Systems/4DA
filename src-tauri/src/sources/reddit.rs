@@ -255,6 +255,12 @@ fn item_score(item: &SourceItem) -> i64 {
 // Access strategies
 // ============================================================================
 
+#[derive(Clone, Copy)]
+enum AccessPath {
+    Json,
+    Rss,
+}
+
 struct RedditJsonStrategy {
     client: reqwest::Client,
     subreddits: Vec<&'static str>,
@@ -267,6 +273,38 @@ struct RedditRssStrategy {
     max_items: usize,
 }
 
+/// Walk a subreddit set via one access path, aggregating into a ranked batch.
+///
+/// Early-bails on the first `Forbidden`/`RateLimited`: a 403/429 from Reddit is a whole-IP/UA block,
+/// not a per-subreddit condition, so hammering the rest only burns Reddit's per-IP budget — which (as
+/// the live test proved) is what pushed the RSS fallback into its OWN 429 when the JSON path had
+/// already fired a request per subreddit. Bailing early keeps the fallback's budget intact.
+async fn fetch_via(
+    client: &reqwest::Client,
+    subreddits: &[&'static str],
+    max_items: usize,
+    path: AccessPath,
+) -> SourceResult<Vec<SourceItem>> {
+    let per_sub = (max_items / subreddits.len().max(1)).max(3);
+    let mut results = Vec::with_capacity(subreddits.len());
+    for sub in subreddits {
+        let result = match path {
+            AccessPath::Json => fetch_subreddit_json(client, sub, per_sub).await,
+            AccessPath::Rss => fetch_subreddit_rss(client, sub, per_sub).await,
+        };
+        let whole_source_block = matches!(
+            result,
+            Err(SourceError::Forbidden(_)) | Err(SourceError::RateLimited(_))
+        );
+        results.push((*sub, result));
+        if whole_source_block {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
+    aggregate(results, max_items)
+}
+
 #[async_trait]
 impl AccessStrategy for RedditJsonStrategy {
     fn label(&self) -> &str {
@@ -274,13 +312,13 @@ impl AccessStrategy for RedditJsonStrategy {
     }
 
     async fn fetch(&self) -> SourceResult<Vec<SourceItem>> {
-        let per_sub = (self.max_items / self.subreddits.len().max(1)).max(3);
-        let mut results = Vec::with_capacity(self.subreddits.len());
-        for sub in &self.subreddits {
-            results.push((*sub, fetch_subreddit_json(&self.client, sub, per_sub).await));
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-        aggregate(results, self.max_items)
+        fetch_via(
+            &self.client,
+            &self.subreddits,
+            self.max_items,
+            AccessPath::Json,
+        )
+        .await
     }
 }
 
@@ -291,13 +329,13 @@ impl AccessStrategy for RedditRssStrategy {
     }
 
     async fn fetch(&self) -> SourceResult<Vec<SourceItem>> {
-        let per_sub = (self.max_items / self.subreddits.len().max(1)).max(3);
-        let mut results = Vec::with_capacity(self.subreddits.len());
-        for sub in &self.subreddits {
-            results.push((*sub, fetch_subreddit_rss(&self.client, sub, per_sub).await));
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-        aggregate(results, self.max_items)
+        fetch_via(
+            &self.client,
+            &self.subreddits,
+            self.max_items,
+            AccessPath::Rss,
+        )
+        .await
     }
 }
 
@@ -588,5 +626,49 @@ mod tests {
             Some("https://example.com/x")
         );
         assert_eq!(extract_link_href("<title>no link</title>"), None);
+    }
+
+    /// LIVE verification of the resilient-fetch CONTRACT for Reddit (hits the network — `#[ignore]`d
+    /// so it never flakes CI). Run manually:
+    /// `cargo test --lib sources::reddit::tests::live -- --ignored --nocapture`.
+    ///
+    /// The guarantee under test is NOT "always returns items" — Reddit blocks automated credential-
+    /// free access aggressively (observed escalating 200 -> 429 -> 403 for a flagged IP within one
+    /// session), so a clean result depends on the IP's reputation, not on 4DA. The guarantee IS:
+    /// fetch_items() either (a) returns items from whichever access path currently works, or (b)
+    /// surfaces an ACTIONABLE error (Forbidden / RateLimited) the UI can turn into "add a Reddit
+    /// credential" — never a silent empty, a confusing Network/Parse leak, or a panic.
+    #[tokio::test]
+    #[ignore = "network: verifies live Reddit failover contract"]
+    async fn live_reddit_failover_honours_contract() {
+        match RedditSource::new().fetch_items().await {
+            Ok(items) => {
+                let via_counts = items.iter().fold(
+                    std::collections::HashMap::<String, usize>::new(),
+                    |mut acc, it| {
+                        let via = it
+                            .metadata
+                            .as_ref()
+                            .and_then(|m| m.get("via"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        *acc.entry(via).or_default() += 1;
+                        acc
+                    },
+                );
+                println!(
+                    "LIVE reddit: {} items, by access path = {via_counts:?}",
+                    items.len()
+                );
+            }
+            Err(e) => {
+                assert!(
+                    matches!(e, SourceError::Forbidden(_) | SourceError::RateLimited(_)),
+                    "credential-free paths must fail with an ACTIONABLE error, got {e:?}"
+                );
+                println!("LIVE reddit: credential-free paths walled -> surfaced {e:?} (needs reddit:oauth)");
+            }
+        }
     }
 }
