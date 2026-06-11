@@ -82,20 +82,28 @@ pub async fn get_dependency_overview() -> Result<serde_json::Value> {
         cb.cmp(&ca)
     });
 
-    // Alert severity summary
+    // Alert severity summary.
+    // Compare case-insensitively: the CVE write-path stores UPPERCASE
+    // ("CRITICAL"/"HIGH"/...) while the legacy local-audit path and pre-5d6fb063
+    // rows stored lowercase. A case-sensitive `== "critical"` silently counted
+    // ZERO criticals/highs while real CRITICAL/HIGH CVEs sat in the table —
+    // the dashboard read "0 critical / 0 high" over genuine RCE-grade vulns.
     let critical = active_alerts
         .iter()
-        .filter(|a| a.severity == "critical")
+        .filter(|a| a.severity.eq_ignore_ascii_case("critical"))
         .count();
     let high = active_alerts
         .iter()
-        .filter(|a| a.severity == "high")
+        .filter(|a| a.severity.eq_ignore_ascii_case("high"))
         .count();
     let medium = active_alerts
         .iter()
-        .filter(|a| a.severity == "medium")
+        .filter(|a| a.severity.eq_ignore_ascii_case("medium"))
         .count();
-    let low = active_alerts.iter().filter(|a| a.severity == "low").count();
+    let low = active_alerts
+        .iter()
+        .filter(|a| a.severity.eq_ignore_ascii_case("low"))
+        .count();
 
     Ok(serde_json::json!({
         "total_dependencies": all_deps.len(),
