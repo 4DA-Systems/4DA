@@ -61,6 +61,7 @@ const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   reddit: { label: 'discussion', color: 'text-orange-400/60' },
   github: { label: 'code', color: 'text-purple-400/60' },
   lobsters: { label: 'discussion', color: 'text-orange-400/60' },
+  lemmy: { label: 'discussion', color: 'text-green-400/60' },
   arxiv: { label: 'paper', color: 'text-cyan-400/60' },
 };
 
