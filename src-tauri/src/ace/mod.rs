@@ -466,6 +466,21 @@ impl ACE {
 
         store_detected_context(&self.conn, &merged_tech, &active_topics)?;
 
+        // Keep the topic_vec KNN index in sync with persisted topic embeddings.
+        // Bounded batch, non-fatal, and a no-op when no embedder is configured
+        // (cold machines pay nothing). Without this the vec0 index only ever
+        // receives newly generated embeddings and semantic topic dedup misses
+        // every topic loaded from the DB cache.
+        match self.populate_topic_vec(512) {
+            Ok(n) if n > 0 => {
+                info!(target: "ace::detect", synced = n, "topic_vec index backfilled from persisted topic embeddings");
+            }
+            Ok(_) => {}
+            Err(e) => {
+                warn!(target: "ace::detect", error = %e, "topic_vec backfill failed (non-fatal)");
+            }
+        }
+
         // Auto-enrich: run stack profile detection after context update
         {
             let ace_ctx = crate::scoring::get_ace_context();

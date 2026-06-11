@@ -53,6 +53,7 @@ pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
     check_disk_write(&data_dir, &mut issues);
     check_disk_space(&data_dir, &mut issues);
     check_database_size(&data_dir, &mut issues);
+    check_embedding_coverage(&mut issues);
 
     #[cfg(target_os = "linux")]
     {
@@ -482,6 +483,65 @@ fn check_database_size(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
         }
     }
 }
+/// Check 8: Zero-embedding coverage - semantic matching silently degrades when
+/// the embedder is unavailable.
+///
+/// When no embedding provider is reachable (no Ollama, fastembed init failed,
+/// no API key), items are stored with zero-vector embeddings and KNN context
+/// scoring collapses - roughly half the scoring signal disappears while the
+/// app looks perfectly healthy. Surface it honestly: if a meaningful share of
+/// RECENTLY embedded items are zero vectors, tell the user and point at the
+/// fix. Mirrors the database-size check's pattern (cheap SQL, warn-only,
+/// never panics).
+fn check_embedding_coverage(issues: &mut Vec<HealthIssue>) {
+    if let Ok(conn) = crate::open_db_connection() {
+        check_embedding_coverage_with_conn(&conn, issues);
+    }
+}
+
+/// Inner implementation taking an explicit connection so tests can run
+/// against an in-memory database.
+///
+/// Sampling: the most recent 300 items (PK-descending - index-backed, no full
+/// table scan) filtered to the last 24 hours. Fires only when the sample is
+/// meaningful (>= 20 items) AND more than half are zero vectors, so first-run
+/// and low-traffic installs never see a false alarm.
+pub(crate) fn check_embedding_coverage_with_conn(
+    conn: &rusqlite::Connection,
+    issues: &mut Vec<HealthIssue>,
+) {
+    const MIN_SAMPLE: i64 = 20;
+    let row = conn.query_row(
+        "SELECT COUNT(*),
+                COALESCE(SUM(CASE WHEN embedding = zeroblob(length(embedding)) THEN 1 ELSE 0 END), 0)
+         FROM (
+             SELECT embedding, created_at FROM source_items
+             WHERE embedding IS NOT NULL AND length(embedding) > 0
+             ORDER BY id DESC LIMIT 300
+         )
+         WHERE created_at > datetime('now', '-24 hours')",
+        [],
+        |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
+    );
+    let (total, zeros) = match row {
+        Ok(v) => v,
+        Err(_) => return, // Table missing or unreadable - other checks report that.
+    };
+    if total >= MIN_SAMPLE && zeros * 2 > total {
+        let pct = zeros.saturating_mul(100) / total.max(1);
+        issues.push(HealthIssue {
+            component: "embedding",
+            severity: HealthSeverity::Warning,
+            message: format!(
+                "Semantic matching is degraded: {pct}% of items fetched in the last 24 hours \
+                 could not be embedded because no local embedding model was available. \
+                 Scoring is falling back to keyword matching. Start Ollama or check the \
+                 AI provider in Settings to restore full semantic scoring."
+            ),
+        });
+    }
+}
+
 // ============================================================================
 // Cross-platform keychain functional probe
 // ============================================================================
