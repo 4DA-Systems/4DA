@@ -300,6 +300,7 @@ mod notification_window;
 mod novelty;
 mod ollama;
 mod osv;
+mod package_ambiguity;
 pub mod plugins;
 mod preemption;
 mod preference_commands;
