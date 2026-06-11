@@ -32,8 +32,8 @@ export function SearchResults({
 
   return (
     <div className="space-y-4">
-      {/* Synthesis panel (Pro only) */}
-      <SynthesisPanel query={query} isPro={isPro} synthesis={synthesis} loading={synthesisLoading} streamingText={streamingText} onRetry={onRetrySynthesis} />
+      {/* Synthesis panel (every tier — BYOK, runs on the user's own key) */}
+      <SynthesisPanel query={query} synthesis={synthesis} loading={synthesisLoading} streamingText={streamingText} onRetry={onRetrySynthesis} />
 
       {/* Query parsing info */}
       <div className="flex items-center gap-2 p-3 bg-bg-secondary rounded-lg border border-border flex-wrap">

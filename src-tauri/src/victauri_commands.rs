@@ -144,6 +144,7 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "get_void_signal",
     "get_attention_report",
     "get_blind_spots",
+    "get_blind_spot_teaser",
     "add_package_watch",
     "dismiss_blind_spot",
     "get_source_health",

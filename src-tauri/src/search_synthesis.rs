@@ -319,13 +319,14 @@ fn count_citations(text: &str, max: usize) -> usize {
 // Tauri Command
 // ============================================================================
 
+// NOT Signal-gated (2026-06-12 tier rebalance): synthesis is BYOK — it runs
+// on the user's own API key at zero cost to us, matching the free
+// `generate_ai_briefing` and `natural_language_query` (AD-025).
 #[tauri::command]
 pub async fn synthesize_search(
     app: tauri::AppHandle,
     query_text: String,
 ) -> Result<SynthesisResponse> {
-    crate::settings::require_signal_feature("synthesize_search")?;
-
     let query_text = query_text.trim().to_string();
     if query_text.is_empty() {
         return Err("Query cannot be empty".into());

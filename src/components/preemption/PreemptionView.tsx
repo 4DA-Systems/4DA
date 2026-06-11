@@ -10,6 +10,7 @@ import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/Evidence
 import { useColdStartGate } from '../../hooks/use-cold-start-gate';
 import { URGENCY_ORDER } from './PreemptionCard';
 import { PreemptionTierSection } from './PreemptionTierSection';
+import { PreemptionFreeFloorNotice } from './PreemptionFreeFloorNotice';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 
 const DISMISS_STORAGE_KEY = 'preemption_dismissed';
@@ -126,6 +127,10 @@ const PreemptionView = memo(function PreemptionView() {
   }, [feed, dismissedIds]);
 
   const totalVisible = verifiedItems.length + assessedItems.length + developingItems.length;
+  // Free security floor: the backend served Tier 1 (OSV-verified) only.
+  // Render the floor normally plus a compact locked-tiers notice — never a
+  // full-page paywall over real security data.
+  const isFreeFloor = feed?.tier_scope === 'free_floor';
 
   return (
     <div className="space-y-5" role="tabpanel" id="view-panel-preemption" aria-labelledby="tab-preemption">
@@ -134,9 +139,11 @@ const PreemptionView = memo(function PreemptionView() {
         <p className="text-sm text-text-muted mt-1">{t('preemption.subtitle')}</p>
       </header>
 
-      {/* Tier gate is a paywall, not a fault — show an upgrade path, never a red
-          error banner. (loading/error/feed are all falsy in this state, so the
-          blocks below naturally yield to it.) */}
+      {/* Stale-backend fallback only: since the 2026-06-12 tier rebalance the
+          backend never gates get_preemption_alerts (free tier gets the OSV
+          floor), so this branch fires only against an older backend binary.
+          A tier gate is a paywall, not a fault — upgrade path, never a red
+          error banner. (loading/error/feed are all falsy in this state.) */}
       {paywalled && (
         <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
           <div className="w-12 h-12 rounded-full bg-accent-gold/10 border border-accent-gold/20 flex items-center justify-center mb-1">
@@ -254,6 +261,8 @@ const PreemptionView = memo(function PreemptionView() {
           )}
         </>
       )}
+
+      {feed && isFreeFloor && !isColdStart && <PreemptionFreeFloorNotice />}
     </div>
   );
 });
