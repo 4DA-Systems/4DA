@@ -339,6 +339,19 @@ impl LensHints {
 // EvidenceFeed — feed-level envelope emitted by lens-backing commands
 // ============================================================================
 
+/// Which entitlement tier a feed was materialized for. Lets the frontend
+/// distinguish the free security floor (deterministic OSV-verified items
+/// only) from the full Signal feed without inferring it from item counts.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "bindings/")]
+pub enum TierScope {
+    /// Free tier: only the deterministic, zero-LLM floor (OSV-verified).
+    FreeFloor,
+    /// Signal/trial: the complete multi-tier feed.
+    Full,
+}
+
 /// Standard envelope every lens-backing command returns. Carries the items
 /// plus precomputed summary counts (so the UI can render a summary bar
 /// without traversing the items list). Emitted by `get_preemption_alerts`,
@@ -373,6 +386,13 @@ pub struct EvidenceFeed {
     /// depends on recent source ingestion/checks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_freshness: Option<crate::monitoring_briefing::DataFreshness>,
+
+    /// Entitlement scope this feed was materialized for. `None` for lenses
+    /// that do not tier-split their output (e.g. Blind Spots, which gates
+    /// at the command boundary instead). Preemption sets this so the UI
+    /// can render the free OSV floor honestly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier_scope: Option<TierScope>,
 }
 
 impl EvidenceFeed {
@@ -393,6 +413,7 @@ impl EvidenceFeed {
             total_tracked: None,
             weak_match_count: None,
             data_freshness: None,
+            tier_scope: None,
         }
     }
 

@@ -30,17 +30,18 @@ function makeSynthesis(text: string, sources: SynthesisResponse['sources'] = [])
 describe('SynthesisPanel', () => {
   const defaultProps = {
     query: 'test query',
-    isPro: true,
     synthesis: null as SynthesisResponse | null,
     loading: false,
     onRetry: vi.fn(),
   };
 
-  it('returns null when isPro is false', () => {
-    const { container } = render(
-      <SynthesisPanel {...defaultProps} isPro={false} />,
+  // Tier rebalance (2026-06-12): synthesis is BYOK and no longer Pro-gated —
+  // the panel renders for every tier whenever there is synthesis content.
+  it('renders synthesis content without any tier gate', () => {
+    render(
+      <SynthesisPanel {...defaultProps} synthesis={makeSynthesis('Free-tier synthesis works.')} />,
     );
-    expect(container.innerHTML).toBe('');
+    expect(screen.getByText('Free-tier synthesis works.')).toBeInTheDocument();
   });
 
   it('returns null when not loading and no synthesis', () => {

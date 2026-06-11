@@ -74,6 +74,7 @@ import type {
 } from '../types';
 import type { PersonalizedLesson as PersonalizedLessonType } from '../types/personalization';
 import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
+import type { BlindSpotTeaser } from '../../src-tauri/bindings/bindings/BlindSpotTeaser';
 
 // ============================================================================
 // Preemption & Intelligence Types — Intelligence Reconciliation Phase 3
@@ -501,8 +502,13 @@ interface CommandMap {
   // Phase 3 & 4 (2026-04-17): both return the canonical EvidenceFeed
   // envelope. Preemption's feed.score is None; Blind Spots' feed.score
   // carries the 0-100 coverage index.
+  // Tier rebalance (2026-06-12): get_preemption_alerts is no longer
+  // Signal-gated — free tier receives the OSV-verified floor with
+  // feed.tier_scope === 'free_floor'; Signal/trial gets 'full'.
+  // get_blind_spot_teaser is free: real counts only, no item detail.
   get_preemption_alerts: { params: Record<string, never>; result: EvidenceFeed };
   get_blind_spots: { params: Record<string, never>; result: EvidenceFeed };
+  get_blind_spot_teaser: { params: Record<string, never>; result: BlindSpotTeaser };
   get_source_health: { params: Record<string, never>; result: { adapters: Array<{ source_type: string; feed_origin: string; status: string; consecutive_failures: number; last_success_at: string | null; last_failure_at: string | null; last_error: string | null }>; total_active: number; total_failing: number; total_disabled: number } };
 
   // -- OSV Local Mirror (Tier 1 verified intelligence) --
@@ -668,7 +674,7 @@ interface CommandMap {
   // -- Splash Probes --
   get_context_stats: { params: Record<string, never>; result: ContextStats };
 
-  // -- Natural Language Search (Pro) --
+  // -- Natural Language Search (free — BYOK, runs on the user's own key) --
   synthesize_search: { params: { queryText: string }; result: SynthesisResponse };
 
   // -- Standing Queries (Pro) --

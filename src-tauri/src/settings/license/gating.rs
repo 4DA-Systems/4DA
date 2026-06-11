@@ -22,6 +22,14 @@ use super::LicenseConfig;
 ///
 /// When adding a gate to a new command, append its name here.
 /// See `docs/strategy/LICENSE-GATING-AUDIT-2026-04-15.md` for the full audit.
+///
+/// Free-floor exceptions (2026-06-12 tier rebalance):
+/// - `get_preemption_alerts` is NOT gated — it tier-splits inside the command:
+///   free receives the deterministic OSV-verified security floor, Signal/trial
+///   the full feed. Security baselines are never paywalled.
+/// - `synthesize_search` is NOT gated — BYOK: it runs on the user's own API
+///   key at zero cost to us, matching `generate_ai_briefing` and
+///   `natural_language_query` (AD-025).
 pub const SIGNAL_FEATURES: &[&str] = &[
     // Intelligence panels (original)
     "get_attention_report",
@@ -29,12 +37,12 @@ pub const SIGNAL_FEATURES: &[&str] = &[
     "get_project_health",
     // Developer DNA un-gated (AD-026): free tier viral sharing of DNA cards
     // natural_language_query removed — BYOK: runs on user's API key at zero cost (AD-025)
+    // synthesize_search removed — BYOK, same reasoning (see free-floor exceptions above)
     "get_semantic_shifts",
-    "synthesize_search",
     "standing_queries",
     // Additional panels added by LICENSE-GATING-AUDIT-2026-04-15
+    // get_preemption_alerts removed — free OSV security floor (see exceptions above)
     "get_blind_spots",
-    "get_preemption_alerts",
     "get_decision_health_report",
     // Cross-project intelligence
     "get_tech_convergence",
@@ -105,14 +113,12 @@ pub fn require_signal_feature(feature: &str) -> Result<()> {
 }
 
 /// Human-readable label for a Signal-gated feature, so error messages never
-/// leak raw backend command names (e.g. "get_preemption_alerts") to the UI.
+/// leak raw backend command names (e.g. "get_blind_spots") to the UI.
 fn signal_feature_label(feature: &str) -> &'static str {
     match feature {
-        "get_preemption_alerts" => "Preemption Radar",
         "get_blind_spots" => "Blind Spots",
         "get_knowledge_gaps" => "Knowledge Gaps",
         "get_attention_report" => "Attention Report",
-        "synthesize_search" => "Search Synthesis",
         "standing_queries" => "Standing Queries",
         "get_semantic_shifts" => "Semantic Shifts",
         "get_project_health" | "get_project_health_comparison" => "Project Health",

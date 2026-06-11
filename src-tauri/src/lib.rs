@@ -978,6 +978,7 @@ pub fn run() {
             // Intelligence panels
             attention::get_attention_report,
             blind_spots::get_blind_spots,
+            blind_spots::get_blind_spot_teaser,
             blind_spots::add_package_watch,
             blind_spots::dismiss_blind_spot,
             source_health_diagnostics::get_source_health,
