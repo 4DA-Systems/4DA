@@ -18,8 +18,8 @@ use ts_rs::TS;
 
 use crate::error::Result;
 use crate::evidence::{
-    Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
-    EvidenceKind, LensHints, Urgency,
+    Action as EvidenceAction, Confidence, ConfidenceProvenance, EvidenceCitation, EvidenceFeed,
+    EvidenceItem, EvidenceKind, LensHints, Urgency,
 };
 use crate::scoring_config;
 use crate::signal_chains::ChainResolution;
@@ -56,7 +56,13 @@ const PREEMPTION_CACHE_TTL: Duration = Duration::from_secs(600);
 fn cached_preemption_feed() -> Option<EvidenceFeed> {
     let guard = PREEMPTION_FEED_CACHE.lock();
     guard.as_ref().and_then(|c| {
-        if c.computed_at.elapsed() < PREEMPTION_CACHE_TTL {
+        let age = c.computed_at.elapsed();
+        if age < PREEMPTION_CACHE_TTL {
+            info!(
+                target: "4da::preemption",
+                age_secs = age.as_secs(),
+                "preemption feed served from cache"
+            );
             Some(c.feed.clone())
         } else {
             None
@@ -1542,11 +1548,43 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
             }
         })
         .collect();
+    // Telemetry: tier composition by confidence provenance (tier1 = OSV-verified,
+    // tier2 = LLM-assessed, tier3 = everything else, i.e. signal chains).
+    let tier1 = items
+        .iter()
+        .filter(|i| i.confidence.provenance == ConfidenceProvenance::OsvVerified)
+        .count();
+    let tier2 = items
+        .iter()
+        .filter(|i| i.confidence.provenance == ConfidenceProvenance::LlmAssessed)
+        .count();
+    let tier3 = items.len() - tier1 - tier2;
+    info!(
+        target: "4da::preemption",
+        tier1, tier2, tier3,
+        "preemption feed recomputed"
+    );
     // TitanCA-inspired adversarial deliberation — two-perspective signal/noise
     // validation. Critical/High items bypass; Medium/Watch get deliberated.
     // Gracefully degrades when LLM is unavailable (items pass through unchanged).
     let user_context = crate::adversarial::build_user_context_summary();
+    let before = items.len();
     let items = crate::adversarial::filter_batch(items, &user_context).await;
+    let dropped = before.saturating_sub(items.len());
+    if dropped > 0 {
+        info!(
+            target: "4da::preemption",
+            dropped, before, after = items.len(),
+            "adversarial filter dropped preemption items"
+        );
+    }
+    if before > 0 && items.is_empty() {
+        warn!(
+            target: "4da::preemption",
+            before,
+            "adversarial filter dropped ALL preemption items - possible LLM failure"
+        );
+    }
 
     Ok(EvidenceFeed::from_items(items))
 }

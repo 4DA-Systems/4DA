@@ -22,6 +22,9 @@ use crate::evidence::{
     EvidenceKind, LensHints, Urgency,
 };
 use crate::monitoring_briefing::DataFreshness;
+use crate::package_ambiguity::has_word_boundary_match;
+// Re-exported because peers (dep_linker) import this via blind_spots.
+pub(crate) use crate::package_ambiguity::is_ambiguous_package_name;
 use crate::scoring_config;
 
 // ============================================================================
@@ -1435,47 +1438,6 @@ fn is_actionable_blind_spot_match(
     has_word_boundary_match(title_lower, dep_lower)
 }
 
-/// Package names that are common English words AND real package names.
-/// Unlike `is_generic_dep_name` (which blocks them from queries entirely),
-/// ambiguous names ARE queried but require ecosystem-qualified proof
-/// (exact_registry or advisory match) to surface.
-pub(crate) fn is_ambiguous_package_name(name: &str) -> bool {
-    matches!(
-        name.to_lowercase().as_str(),
-        "image"
-            | "config"
-            | "log"
-            | "time"
-            | "rand"
-            | "error"
-            | "hash"
-            | "ring"
-            | "url"
-            | "http"
-            | "crypto"
-            | "lazy"
-            | "quote"
-            | "lock"
-            | "once"
-            | "pin"
-            | "signal"
-            | "sync"
-            | "bytes"
-            | "regex"
-            | "either"
-            | "paste"
-            | "clap"
-            | "nom"
-            | "base"
-            | "core"
-            | "test"
-            | "data"
-            | "utils"
-            | "proc_macro2"
-            | "proc-macro2"
-    )
-}
-
 /// Promote best_match_type if the new match is stronger.
 fn upgrade_match_type(current: &mut Option<String>, new_type: &str) {
     fn match_rank(mt: &str) -> u8 {
@@ -2253,31 +2215,6 @@ fn compute_why_relevant(
     // downstream can filter or request LLM-generated reasoning.
     // Never claim relevance we can't substantiate with evidence.
     (String::new(), None)
-}
-
-/// Check whether `text` contains `term` at a word boundary.
-/// Case-sensitive; pass already-lowercased strings for case-insensitive matching.
-fn has_word_boundary_match(text: &str, term: &str) -> bool {
-    if term.is_empty() {
-        return false;
-    }
-    let bytes = text.as_bytes();
-    let mut search_from = 0;
-    while let Some(pos) = text[search_from..].find(term) {
-        let abs = search_from + pos;
-        let before_ok = abs == 0 || !bytes[abs - 1].is_ascii_alphanumeric();
-        let after = abs + term.len();
-        let after_ok = after >= bytes.len()
-            || !bytes[after].is_ascii_alphanumeric()
-            || text[after..].starts_with(".js")
-            || text[after..].starts_with(".ts")
-            || text[after..].starts_with(".rs");
-        if before_ok && after_ok {
-            return true;
-        }
-        search_from = abs + 1;
-    }
-    false
 }
 
 /// Count deps whose package name fuzzy-matches the given topic.

@@ -22,6 +22,9 @@ use crate::error::Result;
 /// AFTER the window opened; if found, close the window as validated with the measured
 /// lead time and record a preemption_wins row. Returns the number of wins recorded.
 pub(crate) fn validate_open_windows(conn: &Connection) -> i64 {
+    // Self-healing first: purge any previously recorded win whose dep-grounding
+    // would no longer pass the ambiguity guard (false wins are the cardinal sin).
+    revalidate_recorded_wins(conn);
     let mut wins = 0i64;
     for w in super::get_open_windows(conn) {
         match validate_single_window(conn, &w) {
@@ -152,22 +155,103 @@ fn find_incident(
         format!("AND id NOT IN ({placeholders})")
     };
 
-    // Dep is parameterized (lowercased); never string-interpolated.
-    let dep_pattern = format!("%{dep}%");
+    // Dep grounding happens in Rust via the shared ambiguity guard - a SQL
+    // LIKE '%dep%' matches raw substrings ("os" inside "close"/"macos") and
+    // minted false wins. Pull candidate events, earliest first, and return
+    // the first that genuinely talks about this dependency.
     let sql = format!(
-        "SELECT created_at FROM source_items \
+        "SELECT title, COALESCE(content, ''), created_at FROM source_items \
          WHERE created_at > ?1 \
-           AND (LOWER(title) LIKE ?2 OR LOWER(COALESCE(content, '')) LIKE ?2) \
            AND {event_clause} \
            {exclude_clause} \
-         ORDER BY created_at ASC LIMIT 1"
+         ORDER BY created_at ASC LIMIT 500"
     );
 
-    let created_at: Option<String> = conn
-        .query_row(&sql, params![w.opened_at, dep_pattern], |r| r.get(0))
-        .ok();
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params![w.opened_at], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+        ))
+    })?;
+    for row in rows {
+        let (title, content, created_at) = row?;
+        if crate::package_ambiguity::dep_grounded_match(
+            &title.to_lowercase(),
+            &content.to_lowercase(),
+            dep,
+        ) {
+            return Ok(Some(Incident { created_at }));
+        }
+    }
+    Ok(None)
+}
 
-    Ok(created_at.map(|created_at| Incident { created_at }))
+/// Self-healing sweep over already-recorded verified wins: delete any row whose
+/// dependency is a strict-proof name (ambiguous or <4 chars) that does NOT
+/// appear at a word boundary in the SOURCE portion of the alert title. Window
+/// titles are formatted "Security: {dep} \u{2014} {source title}" - the prefix
+/// contains the injected dep label and must not count as evidence, so only the
+/// substring after the first em-dash is examined. Returns the deleted count.
+pub(crate) fn revalidate_recorded_wins(conn: &Connection) -> i64 {
+    let rows: Vec<(i64, String, String)> = {
+        let mut stmt = match conn.prepare(
+            "SELECT id, COALESCE(affected_deps, ''), COALESCE(alert_title, '') \
+             FROM preemption_wins WHERE verified = 1",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(target: "4da::decision_advantage", error = %e, "Win revalidation query failed");
+                return 0;
+            }
+        };
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .ok()
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            .unwrap_or_default()
+    };
+
+    let mut deleted = 0i64;
+    for (id, deps, title) in rows {
+        let dep = deps.trim().to_lowercase();
+        if dep.is_empty() || !crate::package_ambiguity::requires_strict_proof(&dep) {
+            continue;
+        }
+        let source_title = match title.split_once('\u{2014}') {
+            Some((_, rest)) => rest,
+            None => title.as_str(),
+        };
+        let source_title_lower = source_title.to_lowercase();
+        if crate::package_ambiguity::has_word_boundary_match(&source_title_lower, &dep) {
+            continue;
+        }
+        match conn.execute("DELETE FROM preemption_wins WHERE id = ?1", params![id]) {
+            Ok(_) => {
+                deleted += 1;
+                warn!(
+                    target: "4da::decision_advantage",
+                    id, dep = %dep, title = %title,
+                    "Deleted false preemption win (dep not grounded in source title)"
+                );
+            }
+            Err(e) => {
+                warn!(
+                    target: "4da::decision_advantage",
+                    id, error = %e,
+                    "Failed to delete false preemption win"
+                );
+            }
+        }
+    }
+    if deleted > 0 {
+        info!(
+            target: "4da::decision_advantage",
+            deleted,
+            "Win revalidation purged false preemption wins"
+        );
+    }
+    deleted
 }
 
 /// Lead time in hours between window open and incident. None if either timestamp
