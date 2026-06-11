@@ -11,6 +11,7 @@ const SOURCE_ICONS: Record<string, string> = {
   arxiv: 'Ax',
   devto: 'D',
   lobsters: 'L',
+  lemmy: 'Le',
 };
 
 export function TeamSharedSources() {

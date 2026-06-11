@@ -25,6 +25,7 @@ const SOURCE_COLORS: Record<string, string> = {
   rss: '#D97706',
   devto: '#22C55E',
   lobsters: '#EF4444',
+  lemmy: '#22C55E',
   bluesky: '#3B82F6',
   producthunt: '#F97316',
   crates_io: '#F97316',
