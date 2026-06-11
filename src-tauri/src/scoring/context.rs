@@ -203,21 +203,11 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     }
 
     // ── Infer role from domain profile when not explicitly set ──
+    // Data-driven persona table (scoring/role_inference.rs) replaces the old
+    // hardcoded cascade; unknown stacks keep the generic "developer" fallback.
     let user_role = user_role.or_else(|| {
-        let stack = &domain_profile.primary_stack;
-        if stack.contains("tauri") || stack.contains("electron") || stack.contains("wails") {
-            Some("desktop_app_developer".to_string())
-        } else if (stack.contains("react") || stack.contains("vue") || stack.contains("svelte"))
-            && (stack.contains("express") || stack.contains("axum") || stack.contains("django"))
-        {
-            Some("fullstack_developer".to_string())
-        } else if stack.contains("react") || stack.contains("vue") || stack.contains("svelte") {
-            Some("frontend_developer".to_string())
-        } else if stack.contains("rust") || stack.contains("go") || stack.contains("python") {
-            Some("backend_developer".to_string())
-        } else {
-            Some("developer".to_string())
-        }
+        let stack: Vec<String> = domain_profile.primary_stack.iter().cloned().collect();
+        Some(super::role_inference::infer_role(&stack).unwrap_or_else(|| "developer".to_string()))
     });
 
     // ── Synthesize implicit interests from ACE-discovered context ──
