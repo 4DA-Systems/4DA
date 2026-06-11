@@ -128,7 +128,9 @@ pub(crate) fn needs_sync(db: &Database, max_age_hours: i64) -> Result<bool> {
 }
 
 /// Populate advisories for one ecosystem from the locally cached OSV ZIP
-/// mirror, downloading the ZIP once if it is not already on disk.
+/// mirror, (re)downloading the ZIP when it is missing or when OSV has published
+/// a newer advisory set (cheap ETag HEAD check) so routine syncs pick up
+/// newly-disclosed CVEs.
 ///
 /// This exists because the OSV `/v1/querybatch` API returns only vulnerability
 /// ID-stubs (`{id, modified}`) — never the `affected` package ranges that
@@ -145,10 +147,34 @@ async fn populate_from_zip_mirror(
     let pkg_set: std::collections::HashSet<String> =
         packages.iter().map(|p| p.to_lowercase()).collect();
 
+    // Refresh the cached ZIP when OSV has published a new advisory set for this
+    // ecosystem (ETag mismatch) or when no ZIP exists yet. The staleness check is
+    // a cheap HTTP HEAD, so the heavy full download (npm's ZIP is ~200MB) only
+    // runs when the advisory data actually changed — that is what lets a routine
+    // sync pick up newly-published CVEs instead of serving a frozen snapshot.
+    // Best effort: a failed check (offline) falls back to the ZIP already on disk
+    // (`is_cache_stale` Err -> treat as fresh); a failed download likewise leaves
+    // the prior ZIP intact (the download writes the destination only on success);
+    // a genuinely missing ZIP is still downloaded by the match arm below.
+    if super::cache::is_cache_stale(ecosystem)
+        .await
+        .unwrap_or(false)
+    {
+        if let Err(e) = super::cache::download_ecosystem_zip(ecosystem).await {
+            warn!(
+                target: "4da::osv",
+                ecosystem = ecosystem,
+                error = %e,
+                "ZIP refresh failed; falling back to the existing cached ZIP if present"
+            );
+        }
+    }
+
     match super::cache::sync_from_zip(db, ecosystem, &pkg_set) {
         Ok(count) => Ok(count),
         Err(_) => {
-            // ZIP absent or unreadable — download once, then match locally.
+            // No usable ZIP on disk (first run offline, or a refresh that never
+            // completed) — make a final attempt to download, then match locally.
             super::cache::download_ecosystem_zip(ecosystem).await?;
             super::cache::sync_from_zip(db, ecosystem, &pkg_set)
         }
