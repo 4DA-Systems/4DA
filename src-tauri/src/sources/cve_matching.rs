@@ -96,7 +96,7 @@ fn parse_user_version(ver: &str) -> Option<Version> {
 ///
 /// Returns `false` only when both version and range parse successfully and
 /// the version is outside the affected range.
-fn version_is_affected(user_version: Option<&str>, affected_range: &str) -> bool {
+pub(crate) fn version_is_affected(user_version: Option<&str>, affected_range: &str) -> bool {
     let user_ver = match user_version {
         Some(v) => v,
         // No version info — conservatively assume affected

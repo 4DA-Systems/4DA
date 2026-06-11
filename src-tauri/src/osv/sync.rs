@@ -277,6 +277,15 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
         }
     }
 
+    // Retire dependency alerts whose package has since been patched out of the
+    // affected range, so the dashboard/Preemption counts reflect only live risks
+    // right after a manual sync rather than waiting for the 6h health job.
+    let resolved_alerts =
+        crate::dependency_health::resolve_patched_dependency_alerts(db).unwrap_or(0);
+    if resolved_alerts > 0 {
+        info!(target: "4da::osv", resolved_alerts, "Retired patched dependency alerts");
+    }
+
     // Count matched advisories
     result.advisories_matched = super::matching::count_matches(db).unwrap_or(0);
     result.duration_ms = start.elapsed().as_millis() as u64;
