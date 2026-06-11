@@ -29,6 +29,7 @@ pub mod hackernews;
 pub mod huggingface;
 pub mod lemmy;
 pub mod lobsters;
+pub mod mastodon;
 pub mod npm_registry;
 pub mod osv;
 mod osv_types;
@@ -653,6 +654,7 @@ pub fn build_all_sources() -> Vec<Box<dyn Source>> {
         // Community
         Box::new(reddit::RedditSource::new()),
         Box::new(lemmy::LemmySource::new()),
+        Box::new(mastodon::MastodonSource::new()),
         Box::new(lobsters::LobstersSource::new()),
         Box::new(devto::DevtoSource::new()),
         Box::new(stackoverflow::StackOverflowSource::new()),
