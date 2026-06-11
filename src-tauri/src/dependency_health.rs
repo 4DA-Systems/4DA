@@ -12,8 +12,9 @@ use std::collections::HashSet;
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, warn};
 
+use crate::db::Database;
 use crate::decision_advantage::get_open_windows;
 use crate::error::Result;
 
@@ -118,10 +119,15 @@ pub fn check_dependency_health(conn: &Connection) -> Result<Vec<DependencyHealth
 
 /// Load package names that have unresolved critical/high alerts.
 fn load_security_alert_packages(conn: &Connection) -> HashSet<(String, String)> {
+    // Compare severity case-insensitively: the CVE write-path stores UPPERCASE
+    // ("CRITICAL"/"HIGH") while older/local-audit rows are lowercase. A bare
+    // `severity IN ('critical','high')` matched ZERO uppercase CVE alerts, so no
+    // SecurityAlert health status (and no security_patch window) ever fired for
+    // real CVEs — the same case bug fixed in get_dependency_overview.
     let mut stmt = match conn.prepare(
         "SELECT DISTINCT LOWER(package_name), LOWER(ecosystem)
          FROM dependency_alerts
-         WHERE resolved_at IS NULL AND severity IN ('critical', 'high')",
+         WHERE resolved_at IS NULL AND LOWER(severity) IN ('critical', 'high')",
     ) {
         Ok(s) => s,
         Err(_) => return HashSet::new(),
@@ -304,9 +310,108 @@ fn insert_window(
 /// (stale, security alert, or major-version-behind).
 ///
 /// Called by the monitoring scheduler on a 6-hour interval.
+/// Re-validate active `dependency_alerts` against the CURRENT installed versions
+/// and auto-resolve any whose install has moved out of the advisory's affected
+/// range — i.e. the package was upgraded to a patched release. Without this, a
+/// fixed vulnerability lingers as an unresolved CRITICAL/HIGH forever and
+/// inflates the dependency-dashboard counts (a stale alert reads as a live risk).
+///
+/// Conservative by construction: an alert is resolved ONLY when the package is
+/// installed AND *every* installed instance is definitively outside the affected
+/// range (`version_is_affected` returns `false`). Any of the following keeps the
+/// alert untouched:
+/// - the affected range is missing/empty or unparseable,
+/// - any installed instance has an unknown or unparseable version,
+/// - any installed instance is still within the affected range,
+/// - the package is no longer present in the auditable dependency set (a scan
+///   gap must never silently clear a real advisory).
+///
+/// Returns the number of alerts auto-resolved.
+pub fn resolve_patched_dependency_alerts(db: &Database) -> Result<usize> {
+    use crate::sources::cve_matching::{normalize_ecosystem, version_is_affected};
+    use std::collections::HashMap;
+
+    let alerts = db.get_active_alerts()?;
+    if alerts.is_empty() {
+        return Ok(0);
+    }
+    let deps = db.get_auditable_user_dependencies()?;
+
+    // (normalized ecosystem, lowercase package) -> all installed versions.
+    let mut installed: HashMap<(String, String), Vec<Option<String>>> = HashMap::new();
+    for dep in &deps {
+        let key = (
+            normalize_ecosystem(&dep.ecosystem).to_string(),
+            dep.package_name.to_lowercase(),
+        );
+        installed.entry(key).or_default().push(dep.version.clone());
+    }
+
+    let mut resolved = 0usize;
+    for alert in &alerts {
+        // Need a concrete affected range to test against; without one we cannot
+        // prove the install is safe, so keep the alert.
+        let range = match alert.affected_versions.as_deref() {
+            Some(r) if !r.trim().is_empty() => r,
+            _ => continue,
+        };
+        let key = (
+            normalize_ecosystem(&alert.ecosystem).to_string(),
+            alert.package_name.to_lowercase(),
+        );
+        let Some(versions) = installed.get(&key) else {
+            // Package not in the current auditable set — leave it (scan-gap safe).
+            continue;
+        };
+
+        // Resolve only when EVERY installed instance is definitively unaffected.
+        // `version_is_affected` is conservative (returns true on unknown/unparseable
+        // version or range), so this never resolves on uncertainty.
+        let all_unaffected = versions
+            .iter()
+            .all(|v| !version_is_affected(v.as_deref(), range));
+        if !all_unaffected {
+            continue;
+        }
+
+        match db.resolve_alert(alert.id) {
+            Ok(()) => {
+                resolved += 1;
+                info!(
+                    target: "4da::health",
+                    package = alert.package_name.as_str(),
+                    ecosystem = alert.ecosystem.as_str(),
+                    alert_id = alert.id,
+                    severity = alert.severity.as_str(),
+                    "Auto-resolved dependency alert — installed version no longer in affected range"
+                );
+            }
+            Err(e) => warn!(
+                target: "4da::health",
+                alert_id = alert.id,
+                error = %e,
+                "Failed to auto-resolve patched dependency alert"
+            ),
+        }
+    }
+
+    if resolved > 0 {
+        info!(target: "4da::health", resolved, "Auto-resolved patched dependency alerts");
+    }
+    Ok(resolved)
+}
+
 pub fn run_dependency_health_check() -> Result<Vec<DependencyHealth>> {
     let conn = crate::open_db_connection()?;
     let health = check_dependency_health(&conn)?;
+
+    // Retire any alerts whose package has since been patched out of range, so the
+    // health classification and dashboard counts reflect only live risks.
+    if let Ok(db) = crate::get_database() {
+        if let Err(e) = resolve_patched_dependency_alerts(&db) {
+            warn!(target: "4da::health", error = %e, "Patched-alert resolution failed");
+        }
+    }
     let actionable: Vec<_> = health
         .iter()
         .filter(|h| {
@@ -690,5 +795,120 @@ mod tests {
             HealthStatus::Healthy,
             "medium severity should not trigger SecurityAlert"
         );
+    }
+
+    // ====================================================================
+    // Patched-alert auto-resolution
+    // ====================================================================
+
+    fn store_active_alert(db: &Database, pkg: &str, eco: &str, sev: &str, affected: &str) {
+        db.store_dependency_alert(&crate::db::DependencyAlert {
+            id: 0,
+            package_name: pkg.to_string(),
+            ecosystem: eco.to_string(),
+            alert_type: "cve".to_string(),
+            severity: sev.to_string(),
+            title: format!("CVE in {pkg} (affected {affected})"),
+            description: None,
+            affected_versions: Some(affected.to_string()),
+            source_url: None,
+            source_item_id: None,
+            detected_at: String::new(),
+            resolved_at: None,
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn resolve_patched_alerts_only_when_install_is_out_of_range() {
+        let db = crate::test_utils::test_db();
+
+        // PATCHED — installed 10.27.0, affected < 10.26.0 => should resolve.
+        store_active_alert(&db, "liquidjs", "npm", "CRITICAL", "< 10.26.0");
+        db.store_dependency(
+            "/p/app",
+            "liquidjs",
+            Some("10.27.0"),
+            "javascript",
+            false,
+            None,
+        )
+        .unwrap();
+
+        // STILL AFFECTED — installed 1.8.3, affected >= 1.1.0, <= 1.8.3 => keep.
+        store_active_alert(&db, "shell-quote", "npm", "CRITICAL", ">= 1.1.0, <= 1.8.3");
+        db.store_dependency(
+            "/p/app",
+            "shell-quote",
+            Some("1.8.3"),
+            "javascript",
+            false,
+            None,
+        )
+        .unwrap();
+
+        // MIXED — 3.2.4 (affected) + 4.1.5 (safe), affected < 4.1.0 => keep,
+        // because not EVERY installed instance is out of range.
+        store_active_alert(&db, "vitest", "npm", "CRITICAL", "< 4.1.0");
+        db.store_dependency("/p/app", "vitest", Some("3.2.4"), "javascript", true, None)
+            .unwrap();
+        db.store_dependency(
+            "/p/other",
+            "vitest",
+            Some("4.1.5"),
+            "javascript",
+            true,
+            None,
+        )
+        .unwrap();
+
+        // NOT INSTALLED — alert exists, package absent from deps => keep (scan-gap safe).
+        store_active_alert(&db, "ghost-pkg", "npm", "HIGH", "< 9.9.9");
+
+        // UNKNOWN VERSION — installed with NULL version => keep (conservative).
+        store_active_alert(&db, "mystery", "npm", "HIGH", "< 2.0.0");
+        db.store_dependency("/p/app", "mystery", None, "javascript", false, None)
+            .unwrap();
+
+        assert_eq!(db.get_active_alerts().unwrap().len(), 5);
+
+        let resolved = resolve_patched_dependency_alerts(&db).unwrap();
+        assert_eq!(resolved, 1, "only the patched liquidjs alert resolves");
+
+        let active = db.get_active_alerts().unwrap();
+        let pkgs: std::collections::HashSet<&str> =
+            active.iter().map(|a| a.package_name.as_str()).collect();
+        assert!(!pkgs.contains("liquidjs"), "patched liquidjs resolved");
+        assert!(pkgs.contains("shell-quote"), "in-range shell-quote kept");
+        assert!(
+            pkgs.contains("vitest"),
+            "mixed-version vitest kept (3.2.4 affected)"
+        );
+        assert!(
+            pkgs.contains("ghost-pkg"),
+            "uninstalled alert kept (scan-gap safe)"
+        );
+        assert!(
+            pkgs.contains("mystery"),
+            "unknown-version alert kept (conservative)"
+        );
+    }
+
+    #[test]
+    fn resolve_patched_alerts_is_noop_without_alerts() {
+        let db = crate::test_utils::test_db();
+        assert_eq!(resolve_patched_dependency_alerts(&db).unwrap(), 0);
+    }
+
+    #[test]
+    fn resolve_keeps_alert_when_affected_range_unparseable() {
+        let db = crate::test_utils::test_db();
+        // Garbage range can't be parsed -> version_is_affected is conservative
+        // (true) -> alert is NOT resolved even though a version is installed.
+        store_active_alert(&db, "weird", "npm", "HIGH", "not-a-range");
+        db.store_dependency("/p/app", "weird", Some("1.0.0"), "javascript", false, None)
+            .unwrap();
+        assert_eq!(resolve_patched_dependency_alerts(&db).unwrap(), 0);
+        assert_eq!(db.get_active_alerts().unwrap().len(), 1);
     }
 }
