@@ -38,21 +38,21 @@ export interface ToolRegistryEntry {
 export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
   // --- Dependency Security (standalone) ---
   vulnerability_scan: {
-    summary: "Scan dependencies for known CVEs via OSV.dev — zero config, multi-ecosystem",
+    summary: "Scan project dependencies for known CVEs via OSV.dev (npm/Rust/Python/Go), zero config. Call when the user asks about security, vulnerabilities, or CVEs, asks whether their dependencies are safe, or before you recommend adding a dependency.",
     schemaFile: "vulnerability-scan.json",
     category: "security",
     tags: ["security", "vulnerabilities", "cve", "dependencies", "osv"],
     standalone: true,
   },
   dependency_health: {
-    summary: "Dependency health — version freshness, deprecation, CVEs across npm/Rust/Python/Go",
+    summary: "Health of project dependencies: version freshness, deprecation status, and CVEs across npm/Rust/Python/Go. Call when the user asks whether their dependencies are outdated, stale, deprecated, or need updating.",
     schemaFile: "dependency-health.json",
     category: "security",
     tags: ["dependencies", "health", "outdated", "deprecated", "versions"],
     standalone: true,
   },
   upgrade_planner: {
-    summary: "Ranked upgrade recommendations — prioritized by CVE severity, deprecation, version distance",
+    summary: "Ranked, prioritized upgrade plan (by CVE severity, deprecation, version distance) separating safe quick wins from breaking changes. Call when the user asks what to upgrade or how to plan upgrades, or after dependency_health surfaces problems.",
     schemaFile: "upgrade-planner.json",
     category: "security",
     tags: ["upgrade", "dependencies", "recommendations", "versions"],
@@ -61,49 +61,49 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
 
   // --- Intelligence (mixed) ---
   what_should_i_know: {
-    summary: "Pre-task intelligence briefing — advisories, decisions, signals, ecosystem updates",
+    summary: "Pre-task intelligence briefing: advisories, active decision windows, signals, and ecosystem updates for a given task. Call BEFORE starting any non-trivial task to get caught up on what matters first.",
     schemaFile: "what-should-i-know.json",
     category: "intelligence",
     tags: ["briefing", "advisories", "pre-task", "signals"],
     standalone: true,
   },
   ecosystem_pulse: {
-    summary: "Live ecosystem news relevant to your tech stack from Hacker News",
+    summary: "Live Hacker News discussions filtered to the user's detected tech stack. Call when the user asks what is new, trending, or happening in their ecosystem or tech community.",
     schemaFile: "ecosystem-pulse.json",
     category: "intelligence",
     tags: ["ecosystem", "news", "hacker-news", "live"],
     standalone: true,
   },
   get_context: {
-    summary: "Get user's interests, tech stack, learned affinities",
+    summary: "What 4DA knows about the user: declared role, tech stack, interests, ACE-detected activity, and learned affinities. Call FIRST when you need to understand what the user works on or cares about before answering or recommending.",
     schemaFile: "get-context.json",
     category: "intelligence",
     tags: ["context", "interests", "tech-stack", "profile"],
     standalone: true,
   },
   get_relevant_content: {
-    summary: "Query scored content feed — articles, advisories, releases ranked by relevance to your stack",
+    summary: "The user's personalized feed: articles, advisories, and releases scored by relevance to their stack and interests. Call when the user asks what they should read, what is relevant to them, or for content on a specific topic.",
     schemaFile: "get-relevant-content.json",
     category: "intelligence",
     tags: ["content", "feed", "relevance", "filter"],
     standalone: false,
   },
   get_actionable_signals: {
-    summary: "Classify content into actionable signals with priority levels",
+    summary: "Classify content into prioritized signal types (security_alert, breaking_change, tool_discovery, tech_trend, learning, competitive_intel). Call when the user wants to know what is actionable or urgent, not just relevant.",
     schemaFile: "get-actionable-signals.json",
     category: "intelligence",
     tags: ["signals", "priority", "actionable", "classification"],
     standalone: false,
   },
   knowledge_gaps: {
-    summary: "Dependencies you use daily but never read about — surfaces missed CVEs and updates",
+    summary: "Blind spots: dependencies the user relies on but never reads about, where a breaking change or CVE could catch them off guard. Call when the user asks what they are missing, what they are not tracking, or where their blind spots are.",
     schemaFile: "knowledge-gaps.json",
     category: "intelligence",
     tags: ["gaps", "dependencies", "knowledge", "blind-spots"],
     standalone: false,
   },
   record_feedback: {
-    summary: "Teach 4DA what matters — save or dismiss items to sharpen future scoring",
+    summary: "Teach 4DA by recording click/save/dismiss/mark_irrelevant on a content item to sharpen future scoring. Call AFTER the user reacts to a surfaced item (opens, saves, or dismisses it).",
     schemaFile: "record-feedback.json",
     category: "intelligence",
     tags: ["feedback", "learning", "save", "dismiss"],
@@ -112,14 +112,14 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
 
   // --- Decisions (standalone) ---
   decision_memory: {
-    summary: "Record, query, and manage architectural decisions across sessions",
+    summary: "Record, list, update, or supersede the developer's architectural and technology decisions across sessions. Call when the user makes, changes, or asks about a settled decision, choice, or convention.",
     schemaFile: "decision-memory.json",
     category: "decisions",
     tags: ["decisions", "memory", "record", "architecture"],
     standalone: true,
   },
   check_decision_alignment: {
-    summary: "Check if a technology change aligns with recorded decisions before proceeding",
+    summary: "Check whether a technology or pattern aligns with the developer's recorded decisions. Call BEFORE suggesting a major tech change, new library, or architecture shift, to avoid contradicting settled decisions.",
     schemaFile: "decision-enforcement.json",
     category: "decisions",
     tags: ["alignment", "decisions", "enforcement", "check"],
@@ -128,7 +128,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
 
   // --- Agent (standalone) ---
   agent_memory: {
-    summary: "Cross-agent persistent memory — store and recall across sessions and tools",
+    summary: "Cross-agent persistent memory: what one AI agent learns, any agent can recall, across sessions and tools. Call to store a discovery, decision, or warning worth keeping, or to recall prior context before starting work.",
     schemaFile: "agent-memory.json",
     category: "agent",
     tags: ["agent", "memory", "persistent", "cross-session"],
@@ -137,7 +137,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
 
   // --- Identity (full-mode) ---
   developer_dna: {
-    summary: "Export your Developer DNA — tech identity, primary stack, engagement patterns",
+    summary: "Export the user's Developer DNA: tech identity, primary and adjacent stack, top dependencies, engaged topics, blind spots, and engagement stats. Call when the user asks for a summary of their developer profile, identity, or tech fingerprint.",
     schemaFile: "developer-dna.json",
     category: "identity",
     tags: ["identity", "dna", "profile", "tech-stack", "export"],

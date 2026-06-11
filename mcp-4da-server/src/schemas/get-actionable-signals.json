@@ -1,6 +1,6 @@
 {
   "name": "get_actionable_signals",
-  "description": "Classify content into actionable signal types (security_alert, breaking_change, tool_discovery, tech_trend, learning, competitive_intel) with priority levels. Cross-references against user's tech stack.",
+  "description": "Classify content into actionable signal types (security_alert, breaking_change, tool_discovery, tech_trend, learning, competitive_intel) with priority levels. Cross-references against user's tech stack. Call when the user wants to know what is actionable or urgent, not just what is relevant.",
   "inputSchema": {
     "type": "object",
     "properties": {

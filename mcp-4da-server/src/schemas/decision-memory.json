@@ -1,6 +1,6 @@
 {
   "name": "decision_memory",
-  "description": "Manage developer decisions — record, list, check alignment, update, or supersede.\n\nPersistent decision memory that tracks technology choices, architecture patterns, and workflow preferences. Prevents re-litigation of settled decisions across sessions.",
+  "description": "Manage developer decisions — record, list, check alignment, update, or supersede.\n\nPersistent decision memory that tracks technology choices, architecture patterns, and workflow preferences. Prevents re-litigation of settled decisions across sessions. Call when the user makes, changes, or asks about a settled decision, choice, or convention.",
   "inputSchema": {
     "type": "object",
     "properties": {

@@ -1,6 +1,6 @@
 {
   "name": "knowledge_gaps",
-  "description": "Detect knowledge gaps in your project dependencies.\n\nIdentifies dependencies you use but haven't been tracking content about — blind spots where a breaking change, security advisory, or major release could catch you off guard.",
+  "description": "Detect knowledge gaps in your project dependencies.\n\nIdentifies dependencies you use but haven't been tracking content about — blind spots where a breaking change, security advisory, or major release could catch you off guard. Call when the user asks what they are missing, what they are not tracking, or where their blind spots are.",
   "inputSchema": {
     "type": "object",
     "properties": {

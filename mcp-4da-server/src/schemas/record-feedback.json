@@ -1,6 +1,6 @@
 {
   "name": "record_feedback",
-  "description": "Record user feedback on a content item.\n\nFeedback actions:\n- \"click\": User clicked/opened the item (moderate positive signal)\n- \"save\": User saved/bookmarked the item (strong positive signal)\n- \"dismiss\": User dismissed the item (weak negative signal)\n- \"mark_irrelevant\": User marked item as not relevant (strong negative signal)\n\nThis feedback helps 4DA learn user preferences over time.",
+  "description": "Record user feedback on a content item.\n\nFeedback actions:\n- \"click\": User clicked/opened the item (moderate positive signal)\n- \"save\": User saved/bookmarked the item (strong positive signal)\n- \"dismiss\": User dismissed the item (weak negative signal)\n- \"mark_irrelevant\": User marked item as not relevant (strong negative signal)\n\nThis feedback helps 4DA learn user preferences over time. Call after the user reacts to a surfaced item (opens, saves, or dismisses it).",
   "inputSchema": {
     "type": "object",
     "properties": {
