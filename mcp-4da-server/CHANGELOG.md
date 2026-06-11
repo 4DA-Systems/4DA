@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.6.1 (2026-06-11)
+
+### Improved: prescriptive tool descriptions
+
+All 14 tool descriptions now state WHEN to call the tool, not just what it does
+(e.g. "Call when the user asks about security, vulnerabilities, or CVEs"). Both the
+slim tool list and the full schemas carry explicit triggers, so calling models select
+the right tool more reliably. A regression test enforces this going forward.
+
+### Changed: license
+
+Relicensed to Apache-2.0 (from MIT). The 4DA desktop app remains under
+FSL-1.1-Apache-2.0; this MCP connector is intentionally permissive to maximize adoption.
+
 ## 4.6.0 (2026-04-24)
 
 ### Breaking: Tool consolidation — 39 → 14 tools

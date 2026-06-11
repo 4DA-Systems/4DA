@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: FSL-1.1-Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 
 export type OsvEcosystem = "npm" | "crates.io" | "PyPI" | "Go" | "Maven" | "NuGet" | "RubyGems" | "Packagist";
 
