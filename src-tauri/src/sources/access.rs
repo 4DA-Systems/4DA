@@ -22,12 +22,17 @@
 //! each user fetches from their own IP at personal volume with their own (free-tier) credential —
 //! distributed and low-volume where a centralized crawler is a single blockable, payable choke point.
 //!
-//! ## Scope (deliberately minimal — not a framework)
-//! v1 is "first strategy that yields any items wins". Merging partial results across strategies, a
-//! cost/budget model, and per-strategy health persistence are future increments, intentionally not
-//! built yet.
+//! ## Scope
+//! Strategies are tried in *health order*: a per-strategy, in-memory consecutive-failure count
+//! promotes working paths and demotes walled ones, so a known-403 endpoint stops eating the first
+//! request (see "Health-driven routing" below). Still future, intentionally not built yet: merging
+//! partial results across strategies, a cost/budget model, and DB-persisted health (survives restart).
+
+use std::collections::HashMap;
 
 use async_trait::async_trait;
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 
 use super::{SourceError, SourceItem, SourceResult};
 
@@ -65,6 +70,52 @@ pub(crate) fn actionability(e: &SourceError) -> u8 {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Health-driven routing
+// ---------------------------------------------------------------------------
+//
+// The `source_health` DB table tracks health per SOURCE (source_type); it cannot tell `reddit:json`
+// (currently walled, 403) apart from `reddit:rss` (working). This in-memory layer fills that
+// per-STRATEGY gap so routing *learns*: a path that keeps failing sinks below a working one and is
+// tried LAST (or not at all, when a healthier path already produced data) — so we stop wasting the
+// first request on a known-walled endpoint. It is intentionally in-memory: it resets on restart
+// (re-learning in the first cycle) and needs no migration. Recovery is automatic — when the preferred
+// path fails, failover retries the deprioritised one, and a success there resets its count.
+
+/// Consecutive-failure count per strategy, keyed by `"{source}/{label}"`.
+static STRATEGY_FAILURES: Lazy<Mutex<HashMap<String, u32>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn health_key(source: &str, label: &str) -> String {
+    format!("{source}/{label}")
+}
+
+/// Record a strategy attempt: reset the failure count on success (the path is reachable), increment
+/// it on failure.
+fn record_outcome(source: &str, label: &str, succeeded: bool) {
+    let mut map = STRATEGY_FAILURES.lock();
+    let entry = map.entry(health_key(source, label)).or_insert(0);
+    *entry = if succeeded {
+        0
+    } else {
+        entry.saturating_add(1)
+    };
+}
+
+/// Order strategy indices by health — fewest consecutive failures first. Stable on ties, so the
+/// adapter's DECLARED preference (e.g. `api` before `rss`) is honoured when health is equal. Pure for
+/// testability.
+fn health_order(failures: &[u32]) -> Vec<usize> {
+    let mut idx: Vec<usize> = (0..failures.len()).collect();
+    idx.sort_by_key(|&i| failures[i]);
+    idx
+}
+
+#[cfg(test)]
+pub(crate) fn reset_strategy_health() {
+    STRATEGY_FAILURES.lock().clear();
+}
+
 /// Try each access strategy in order; return the first that yields a non-empty result. Failover
 /// rules:
 /// - `Ok(items)` with items → return immediately (record the winning strategy).
@@ -78,12 +129,26 @@ pub async fn resilient_fetch(
     source_type: &str,
     strategies: &[Box<dyn AccessStrategy>],
 ) -> SourceResult<Vec<SourceItem>> {
+    // Route by learned per-strategy health: snapshot each strategy's consecutive-failure count and
+    // try the healthiest first. A path that has been failing (e.g. reddit:json 403) sinks below a
+    // working one, so the first request is no longer wasted on a known-walled endpoint.
+    let order = {
+        let map = STRATEGY_FAILURES.lock();
+        let failures: Vec<u32> = strategies
+            .iter()
+            .map(|s| *map.get(&health_key(source_type, s.label())).unwrap_or(&0))
+            .collect();
+        health_order(&failures)
+    };
+
     let mut errors: Vec<SourceError> = Vec::new();
     let mut reached_but_empty = false;
 
-    for strategy in strategies {
+    for &i in &order {
+        let strategy = &strategies[i];
         match strategy.fetch().await {
             Ok(items) if !items.is_empty() => {
+                record_outcome(source_type, strategy.label(), true);
                 tracing::info!(
                     target: "4da::sources::access",
                     source = source_type,
@@ -94,6 +159,7 @@ pub async fn resilient_fetch(
                 return Ok(items);
             }
             Ok(_) => {
+                record_outcome(source_type, strategy.label(), true);
                 reached_but_empty = true;
                 tracing::debug!(
                     target: "4da::sources::access",
@@ -103,6 +169,7 @@ pub async fn resilient_fetch(
                 );
             }
             Err(e) => {
+                record_outcome(source_type, strategy.label(), false);
                 tracing::warn!(
                     target: "4da::sources::access",
                     source = source_type,
@@ -240,5 +307,71 @@ mod tests {
             actionability(&SourceError::Network("".into()))
                 > actionability(&SourceError::Other("".into()))
         );
+    }
+
+    #[test]
+    fn health_order_sorts_by_failures_stable_on_ties() {
+        // Fewest failures first; equal failures keep declared order (stable).
+        assert_eq!(health_order(&[2, 0, 1]), vec![1, 2, 0]);
+        assert_eq!(health_order(&[0, 0, 0]), vec![0, 1, 2]); // ties → declared order
+        assert_eq!(health_order(&[]), Vec::<usize>::new());
+    }
+
+    /// A strategy that keeps a fixed result and counts how many times it was tried. Held behind an
+    /// `Arc` so the box handed to `resilient_fetch` is `'static` while the test still inspects calls.
+    struct Probe {
+        label: &'static str,
+        ok: bool,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+    impl Probe {
+        fn arc(label: &'static str, ok: bool) -> std::sync::Arc<Probe> {
+            std::sync::Arc::new(Probe {
+                label,
+                ok,
+                calls: std::sync::atomic::AtomicUsize::new(0),
+            })
+        }
+        fn calls(&self) -> usize {
+            self.calls.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+    #[async_trait]
+    impl AccessStrategy for std::sync::Arc<Probe> {
+        fn label(&self) -> &str {
+            self.label
+        }
+        async fn fetch(&self) -> SourceResult<Vec<SourceItem>> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if self.ok {
+                Ok(vec![SourceItem::new("t", "1", "x")])
+            } else {
+                Err(SourceError::Forbidden("walled".into()))
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn learns_to_try_the_healthy_path_first() {
+        reset_strategy_health();
+        let bad = Probe::arc("reorder:bad", false); // always walled (403)
+        let good = Probe::arc("reorder:rss", true); // always works
+
+        // Cycle 1: declared order tries `bad` first (1 call, fails), then `good` (1 call, wins).
+        let s1: Vec<Box<dyn AccessStrategy>> = vec![Box::new(bad.clone()), Box::new(good.clone())];
+        assert_eq!(resilient_fetch("t_reorder", &s1).await.unwrap().len(), 1);
+        assert_eq!(bad.calls(), 1);
+        assert_eq!(good.calls(), 1);
+
+        // Cycle 2: `bad` now has a failure on record, so health-routing tries `good` FIRST. `good`
+        // produces data and short-circuits — `bad` is never touched again (no wasted 403 request).
+        let s2: Vec<Box<dyn AccessStrategy>> = vec![Box::new(bad.clone()), Box::new(good.clone())];
+        assert_eq!(resilient_fetch("t_reorder", &s2).await.unwrap().len(), 1);
+        assert_eq!(
+            bad.calls(),
+            1,
+            "the walled path must be skipped once a healthy path is known"
+        );
+        assert_eq!(good.calls(), 2);
     }
 }
