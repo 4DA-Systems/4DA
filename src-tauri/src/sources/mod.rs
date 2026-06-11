@@ -14,6 +14,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+pub mod access;
 pub mod arxiv;
 pub mod bluesky;
 pub mod crates_io;
