@@ -3163,6 +3163,43 @@ pub fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
     Ok(final_feed)
 }
 
+/// Free-tier teaser for the Blind Spots lens: real aggregate counts only,
+/// zero item detail. Computed from the same cached report path Signal pays
+/// for (5-minute TTL), so the numbers can never diverge from what the full
+/// lens would show.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub struct BlindSpotTeaser {
+    pub uncovered_count: usize,
+    pub stale_topic_count: usize,
+    pub missed_signal_count: usize,
+    /// True when the report is cold-start-suppressed (<7 days of engagement
+    /// data). All counts are zero and the frontend renders nothing extra
+    /// (doctrine rule 6: no "no data yet" states).
+    pub cold_start: bool,
+}
+
+fn teaser_from_report(report: &BlindSpotReport) -> BlindSpotTeaser {
+    // The cold-start path returns the -1.0 "not enough data" sentinel score
+    // (with empty item lists); a computed report score is always >= 0.
+    BlindSpotTeaser {
+        uncovered_count: report.uncovered_dependencies.len(),
+        stale_topic_count: report.stale_topics.len(),
+        missed_signal_count: report.missed_signals.len(),
+        cold_start: report.overall_score < 0.0,
+    }
+}
+
+/// Deliberately NOT Signal-gated (2026-06-12 tier rebalance): an honest
+/// teaser — counts a free user can act on only by upgrading, rendered above
+/// the paywall instead of a blind lock screen. The full report (which deps,
+/// which topics, which signals) stays behind `get_blind_spots`' Signal gate.
+#[tauri::command]
+pub fn get_blind_spot_teaser() -> std::result::Result<BlindSpotTeaser, String> {
+    let report = generate_blind_spot_report().map_err(|e| e.to_string())?;
+    Ok(teaser_from_report(&report))
+}
+
 /// Add a watch for a package — the user explicitly wants 4DA to track this dependency.
 /// This ensures the package appears in the user's dependency list and will be
 /// checked by source adapters on the next fetch cycle.
@@ -3271,6 +3308,80 @@ mod tests {
         assert_eq!(Urgency::High.min(Urgency::Critical), Urgency::Critical);
         assert_eq!(Urgency::High.min(Urgency::Medium), Urgency::High);
         assert_eq!(Urgency::High.min(Urgency::Watch), Urgency::High);
+    }
+
+    // ─── Free teaser (tier rebalance) ────────────────────────────────
+
+    fn report_with_counts(
+        score: f32,
+        uncovered: usize,
+        stale: usize,
+        missed: usize,
+    ) -> BlindSpotReport {
+        BlindSpotReport {
+            overall_score: score,
+            uncovered_dependencies: (0..uncovered)
+                .map(|i| UncoveredDep {
+                    name: format!("dep-{i}"),
+                    dep_type: "npm".to_string(),
+                    projects_using: vec![],
+                    days_since_last_signal: 10,
+                    available_signal_count: 1,
+                    risk_level: "medium".to_string(),
+                    match_type: "exact_registry".to_string(),
+                    coverage_reason: None,
+                    adapters_searched: vec![],
+                })
+                .collect(),
+            stale_topics: (0..stale)
+                .map(|i| StaleTopic {
+                    topic: format!("topic-{i}"),
+                    last_engagement_days: 21,
+                    active_deps_in_topic: 2,
+                    missed_signal_count: 3,
+                })
+                .collect(),
+            missed_signals: (0..missed)
+                .map(|i| MissedSignal {
+                    item_id: i as i64,
+                    title: format!("signal-{i}"),
+                    url: None,
+                    source_type: "github".to_string(),
+                    relevance_score: 0.8,
+                    created_at: "2026-06-01 00:00:00".to_string(),
+                    why_relevant: "test".to_string(),
+                    dep_name: None,
+                    was_shown: false,
+                    content_type: None,
+                })
+                .collect(),
+            recommendations: vec![],
+            weak_matches: vec![],
+            generated_at: "2026-06-12T00:00:00Z".to_string(),
+            data_freshness: None,
+        }
+    }
+
+    #[test]
+    fn teaser_carries_real_counts_from_report() {
+        let teaser = teaser_from_report(&report_with_counts(42.0, 7, 2, 5));
+        assert_eq!(teaser.uncovered_count, 7);
+        assert_eq!(teaser.stale_topic_count, 2);
+        assert_eq!(teaser.missed_signal_count, 5);
+        assert!(
+            !teaser.cold_start,
+            "computed report (score >= 0) is not cold-start"
+        );
+    }
+
+    #[test]
+    fn teaser_flags_cold_start_on_sentinel_score() {
+        // The cold-start path returns -1.0 with empty lists (doctrine rule 6).
+        let teaser = teaser_from_report(&report_with_counts(-1.0, 0, 0, 0));
+        assert!(teaser.cold_start);
+        assert_eq!(teaser.uncovered_count, 0);
+        assert_eq!(teaser.stale_topic_count, 0);
+        assert_eq!(teaser.missed_signal_count, 0);
     }
 
     #[test]

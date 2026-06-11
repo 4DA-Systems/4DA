@@ -36,7 +36,7 @@ pub use materializer::{EvidenceMaterializer, MaterializeContext};
 #[allow(unused_imports)]
 pub use types::{
     Action, Confidence, ConfidenceProvenance, EvidenceCitation, EvidenceFeed, EvidenceItem,
-    EvidenceKind, LensHints, PrecedentOutcome, PrecedentRef, Urgency, ACTION_IDS,
+    EvidenceKind, LensHints, PrecedentOutcome, PrecedentRef, TierScope, Urgency, ACTION_IDS,
 };
 #[allow(unused_imports)]
 pub use validate::{validate_item, ValidationError};

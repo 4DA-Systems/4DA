@@ -19,7 +19,7 @@ use ts_rs::TS;
 use crate::error::Result;
 use crate::evidence::{
     Action as EvidenceAction, Confidence, ConfidenceProvenance, EvidenceCitation, EvidenceFeed,
-    EvidenceItem, EvidenceKind, LensHints, Urgency,
+    EvidenceItem, EvidenceKind, LensHints, TierScope, Urgency,
 };
 use crate::scoring_config;
 use crate::signal_chains::ChainResolution;
@@ -80,16 +80,24 @@ fn store_preemption_feed(feed: &EvidenceFeed) {
 
 /// Pre-compute and cache the Preemption feed off the boot path so the first
 /// tab-open is served from cache rather than paying the 30-40s recompute.
-/// Best-effort: gating and compute errors are logged, never propagated.
+/// Best-effort: compute errors are logged, never propagated.
+///
+/// Tier-aware: Signal/trial warms the full deliberated feed; free tier warms
+/// only the deterministic OSV floor — never spend LLM deliberating items a
+/// free user won't be served. (Chosen over warm-full-then-filter precisely
+/// because the full compute is the LLM-dependent, expensive path.)
 pub async fn warm_preemption_cache() {
-    if crate::settings::require_signal_feature("warm_preemption_cache").is_err() {
-        return; // not entitled — don't spend LLM deliberating a feed we won't serve
-    }
-    match compute_preemption_evidence_feed().await {
+    let result = if crate::settings::is_signal() {
+        compute_preemption_evidence_feed().await
+    } else {
+        compute_preemption_free_floor_feed()
+    };
+    match result {
         Ok(feed) => {
             let n = feed.items.len();
+            let scope = feed.tier_scope;
             store_preemption_feed(&feed);
-            info!(target: "4da::preemption", items = n, "Preemption feed cache warmed");
+            info!(target: "4da::preemption", items = n, ?scope, "Preemption feed cache warmed");
         }
         Err(e) => {
             warn!(target: "4da::preemption", error = %e, "Preemption cache warm failed (will compute on demand)");
@@ -1510,44 +1518,65 @@ impl PreemptionAlert {
 /// `monitoring_briefing.rs` continue to use the legacy shape until its own
 /// phase. In dev builds the output is schema-validated; validation failures
 /// drop the offending item with a log rather than breaking the feed.
+///
+/// Tier policy (free security floor): this command is NOT Signal-gated.
+/// Free tier receives the deterministic, zero-LLM floor — Tier 1 items only
+/// (confidence provenance `osv_verified`), with `tier_scope = free_floor` so
+/// the UI can render the locked tiers honestly. Signal/trial receives the
+/// full three-tier feed (`tier_scope = full`). OSV-verified CVEs matched to
+/// installed versions are a security baseline, never a paywall.
 #[tauri::command]
 pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String> {
-    crate::settings::require_signal_feature("get_preemption_alerts").map_err(|e| e.to_string())?;
+    let entitled = crate::settings::is_signal();
     // Serve the cached feed when fresh so the tab paints instantly instead of
     // paying the 30-40s recompute (live OSV matching + adversarial deliberation).
     // The cache is warmed off the boot path; a TTL miss costs one recompute.
     if let Some(feed) = cached_preemption_feed() {
-        return Ok(feed);
+        if !entitled {
+            // A full cached feed narrows losslessly to the floor; a floor
+            // cached feed passes through unchanged.
+            return Ok(free_floor_view(feed));
+        }
+        if feed.tier_scope == Some(TierScope::Full) {
+            return Ok(feed);
+        }
+        // Entitled but the cache only holds the free floor (e.g. trial
+        // started this session) — fall through and compute the full feed.
     }
-    let feed = compute_preemption_evidence_feed().await?;
+    let feed = if entitled {
+        compute_preemption_evidence_feed().await?
+    } else {
+        compute_preemption_free_floor_feed()?
+    };
     store_preemption_feed(&feed);
     Ok(feed)
+}
+
+/// Narrow any Preemption feed to the free security floor: Tier 1
+/// (OSV-verified) items only, summary counts recomputed, scope stamped.
+/// Idempotent — a feed already scoped to the floor passes through.
+fn free_floor_view(feed: EvidenceFeed) -> EvidenceFeed {
+    if feed.tier_scope == Some(TierScope::FreeFloor) {
+        return feed;
+    }
+    let tier1: Vec<EvidenceItem> = feed
+        .items
+        .into_iter()
+        .filter(|i| i.confidence.provenance == ConfidenceProvenance::OsvVerified)
+        .collect();
+    let mut floor = EvidenceFeed::from_items(tier1);
+    floor.tier_scope = Some(TierScope::FreeFloor);
+    floor
 }
 
 /// Compute the fully-deliberated Preemption `EvidenceFeed`: live OSV matching,
 /// schema validation, then adversarial signal/noise filtering. Expensive — the
 /// adversarial pass makes one LLM call per Medium/Watch item — so callers should
-/// prefer the cached path in `get_preemption_alerts`. Not tier-gated: the gate
-/// lives at the serving boundary; this is the shared compute for command + warm.
+/// prefer the cached path in `get_preemption_alerts`. Signal/trial only: the
+/// command and warm path route free users to the deterministic
+/// `compute_preemption_free_floor_feed` instead.
 async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed, String> {
-    let feed = get_preemption_feed().map_err(|e| e.to_string())?;
-    let items: Vec<EvidenceItem> = feed
-        .alerts
-        .iter()
-        .map(|a| a.to_evidence_item())
-        .filter(|item| match crate::evidence::validate_item(item) {
-            Ok(()) => true,
-            Err(e) => {
-                warn!(
-                    target: "4da::evidence::validate",
-                    id = %item.id,
-                    error = %e,
-                    "dropped preemption item failing schema validation"
-                );
-                false
-            }
-        })
-        .collect();
+    let items = validated_preemption_items()?;
     // Telemetry: tier composition by confidence provenance (tier1 = OSV-verified,
     // tier2 = LLM-assessed, tier3 = everything else, i.e. signal chains).
     let tier1 = items
@@ -1586,7 +1615,53 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
         );
     }
 
-    Ok(EvidenceFeed::from_items(items))
+    let mut feed = EvidenceFeed::from_items(items);
+    feed.tier_scope = Some(TierScope::Full);
+    Ok(feed)
+}
+
+/// Compute the free-tier security floor: Tier 1 (OSV-verified) items only.
+/// Fully deterministic — live OSV matching plus schema validation, with NO
+/// adversarial LLM pass (Tier 1 items are version-verified advisory matches;
+/// there is nothing for an LLM to second-guess and free tier must not
+/// depend on an LLM being configured).
+fn compute_preemption_free_floor_feed() -> std::result::Result<EvidenceFeed, String> {
+    let items: Vec<EvidenceItem> = validated_preemption_items()?
+        .into_iter()
+        .filter(|i| i.confidence.provenance == ConfidenceProvenance::OsvVerified)
+        .collect();
+    info!(
+        target: "4da::preemption",
+        tier1 = items.len(),
+        "preemption free-floor feed recomputed"
+    );
+    let mut feed = EvidenceFeed::from_items(items);
+    feed.tier_scope = Some(TierScope::FreeFloor);
+    Ok(feed)
+}
+
+/// Shared materialization step: produce canonical `EvidenceItem`s from the
+/// legacy alert pipeline, dropping (with a log) any item that fails schema
+/// validation. Deterministic — no LLM involvement.
+fn validated_preemption_items() -> std::result::Result<Vec<EvidenceItem>, String> {
+    let feed = get_preemption_feed().map_err(|e| e.to_string())?;
+    Ok(feed
+        .alerts
+        .iter()
+        .map(|a| a.to_evidence_item())
+        .filter(|item| match crate::evidence::validate_item(item) {
+            Ok(()) => true,
+            Err(e) => {
+                warn!(
+                    target: "4da::evidence::validate",
+                    id = %item.id,
+                    error = %e,
+                    "dropped preemption item failing schema validation"
+                );
+                false
+            }
+        })
+        .collect())
 }
 
 // ============================================================================
@@ -1613,6 +1688,7 @@ mod tests {
             total_tracked: None,
             weak_match_count: None,
             data_freshness: None,
+            tier_scope: None,
         };
         store_preemption_feed(&feed);
         let got =
@@ -1625,6 +1701,63 @@ mod tests {
             cached_preemption_feed().is_none(),
             "cleared cache must report a miss"
         );
+    }
+
+    // ─── Free security floor (tier rebalance) ────────────────────────
+    // Free tier gets Tier 1 (OSV-verified) only; the narrow must be lossless
+    // for OSV items, drop everything else, recompute counts, and stamp scope.
+
+    fn floor_test_item(id: &str, confidence: Confidence, urgency: Urgency) -> EvidenceItem {
+        EvidenceItem {
+            id: id.to_string(),
+            kind: EvidenceKind::Alert,
+            title: format!("test alert {id}"),
+            explanation: "test".to_string(),
+            confidence,
+            urgency,
+            reversibility: None,
+            evidence: vec![],
+            affected_projects: vec![],
+            affected_deps: vec![],
+            suggested_actions: vec![],
+            precedents: vec![],
+            refutation_condition: None,
+            lens_hints: LensHints::preemption_only(),
+            created_at: 0,
+            expires_at: None,
+        }
+    }
+
+    #[test]
+    fn free_floor_view_keeps_only_osv_verified_and_recounts() {
+        let full = EvidenceFeed {
+            tier_scope: Some(TierScope::Full),
+            ..EvidenceFeed::from_items(vec![
+                floor_test_item("osv-1", Confidence::osv_verified(0.9), Urgency::Critical),
+                floor_test_item("llm-1", Confidence::llm_assessed(0.7), Urgency::Critical),
+                floor_test_item("osv-2", Confidence::osv_verified(0.8), Urgency::High),
+                floor_test_item("heur-1", Confidence::heuristic(0.5), Urgency::High),
+            ])
+        };
+        let floor = free_floor_view(full);
+        assert_eq!(floor.tier_scope, Some(TierScope::FreeFloor));
+        assert_eq!(floor.total, 2, "only the two OSV-verified items survive");
+        assert!(floor.items.iter().all(|i| i.id.starts_with("osv-")));
+        // Counts must describe the narrowed list, not the original feed.
+        assert_eq!(floor.critical_count, 1);
+        assert_eq!(floor.high_count, 1);
+    }
+
+    #[test]
+    fn free_floor_view_is_idempotent_on_floor_feeds() {
+        let mut floor = EvidenceFeed::from_items(vec![floor_test_item(
+            "osv-1",
+            Confidence::osv_verified(0.9),
+            Urgency::High,
+        )]);
+        floor.tier_scope = Some(TierScope::FreeFloor);
+        let again = free_floor_view(floor.clone());
+        assert_eq!(again, floor, "floor feeds must pass through unchanged");
     }
 
     // ─── Signal-chain urgency grounding ──────────────────────────────

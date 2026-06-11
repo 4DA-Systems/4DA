@@ -20,7 +20,6 @@ export interface SynthesisResponse {
 
 interface SynthesisPanelProps {
   query: string;
-  isPro: boolean;
   synthesis: SynthesisResponse | null;
   loading: boolean;
   streamingText?: string;
@@ -61,7 +60,9 @@ function parseCitations(
   });
 }
 
-export function SynthesisPanel({ isPro, synthesis, loading, streamingText, onRetry }: SynthesisPanelProps) {
+// Available on every tier (2026-06-12 tier rebalance): synthesis is BYOK —
+// it runs on the user's own API key, matching the free AI briefing.
+export function SynthesisPanel({ synthesis, loading, streamingText, onRetry }: SynthesisPanelProps) {
   const { t } = useTranslation();
   const { getTranslated, requestTranslation } = useTranslatedContent();
 
@@ -80,7 +81,6 @@ export function SynthesisPanel({ isPro, synthesis, loading, streamingText, onRet
     }
   }, [synthesis?.sources, requestTranslation]);
 
-  if (!isPro) return null;
   if (!loading && !synthesis) return null;
 
   return (
