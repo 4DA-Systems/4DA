@@ -67,7 +67,7 @@
     "sqlite"
   ],
   "author": "4DA",
-  "license": "MIT",
+  "license": "FSL-1.1-Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/runyourempire/4DA.git",
