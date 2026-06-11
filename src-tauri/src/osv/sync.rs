@@ -277,6 +277,19 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
         }
     }
 
+    // Prune orphan advisories for ecosystems the user no longer depends on
+    // (e.g. NuGet/Maven/PyPI rows left by an earlier unfiltered cache ingestion
+    // that can never match the current npm/crates.io dependency set). Keyed on
+    // the ecosystems we actually audited this run; no-op when that set is empty.
+    let keep: Vec<String> = by_ecosystem.keys().cloned().collect();
+    match db.prune_advisories_outside_ecosystems(&keep) {
+        Ok(pruned) if pruned > 0 => {
+            info!(target: "4da::osv", pruned, "Pruned orphan advisories for unused ecosystems");
+        }
+        Err(e) => warn!(target: "4da::osv", error = %e, "Orphan-advisory prune failed"),
+        _ => {}
+    }
+
     // Retire dependency alerts whose package has since been patched out of the
     // affected range, so the dashboard/Preemption counts reflect only live risks
     // right after a manual sync rather than waiting for the 6h health job.
