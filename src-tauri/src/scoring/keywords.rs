@@ -7,17 +7,27 @@ use crate::context_engine;
 use crate::scoring_config;
 use fourda_macros::score_component;
 
-/// Compute how specific an interest topic is.
-/// Broad terms ("Open Source", "AI") return low weight (0.25),
-/// single-word terms return moderate weight (0.60),
-/// multi-word specific terms get full weight (1.0).
+/// Compute how specific an interest topic is (no profile).
+/// Test-only convenience: production paths use the `_for` variant.
+#[cfg(test)]
 pub(crate) fn interest_specificity_weight(interest_topic: &str) -> f32 {
+    interest_specificity_weight_for(interest_topic, None)
+}
+
+/// Profile-aware variant: a broad term that is the user's own detected
+/// primary domain (e.g. "security" for a security engineer) is NOT treated
+/// as broad - it falls through to the normal word-count weighting.
+pub(crate) fn interest_specificity_weight_for(
+    interest_topic: &str,
+    profile: Option<&super::calibration::SpecificityProfile>,
+) -> f32 {
     let topic_lower = interest_topic.to_lowercase();
     let word_count = topic_lower.split_whitespace().count();
 
     let is_broad = BROAD_INTEREST_TERMS
         .iter()
-        .any(|b| topic_lower == *b || topic_lower.contains(b));
+        .any(|b| topic_lower == *b || topic_lower.contains(b))
+        && !profile.is_some_and(|p| p.exempts_broad(&topic_lower));
 
     if is_broad {
         scoring_config::SPECIFICITY_BROAD // Broad terms contribute 25% of normal weight
@@ -39,6 +49,18 @@ pub(crate) fn best_interest_specificity_weight(
     title: &str,
     content: &str,
     interests: &[context_engine::Interest],
+) -> f32 {
+    best_interest_specificity_weight_for(title, content, interests, None)
+}
+
+/// Profile-aware variant of [`best_interest_specificity_weight`]: broad terms
+/// that are the user's own detected domain keep their normal (non-broad)
+/// specificity weight.
+pub(crate) fn best_interest_specificity_weight_for(
+    title: &str,
+    content: &str,
+    interests: &[context_engine::Interest],
+    profile: Option<&super::calibration::SpecificityProfile>,
 ) -> f32 {
     if interests.is_empty() {
         return 1.0;
@@ -104,11 +126,11 @@ pub(crate) fn best_interest_specificity_weight(
                 1.0 // Full weight for focused users
             } else if interests.len() <= 5 {
                 // 3-5 interests: softer discount (0.60x floor for broad terms)
-                let raw_w = interest_specificity_weight(&interest.topic);
+                let raw_w = interest_specificity_weight_for(&interest.topic, profile);
                 raw_w.max(0.60)
             } else {
                 // 6+ interests: full specificity logic (0.25x for broad)
-                interest_specificity_weight(&interest.topic)
+                interest_specificity_weight_for(&interest.topic, profile)
             };
             if !found_match || w > best_weight {
                 best_weight = w;

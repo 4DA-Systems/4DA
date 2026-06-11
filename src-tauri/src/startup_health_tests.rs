@@ -230,3 +230,112 @@ fn test_health_severity_warning_serialize() {
     assert!(json.contains("\"warning\""));
     assert!(json.contains("\"disk\""));
 }
+
+// ============================================================================
+// Zero-embedding coverage check
+// ============================================================================
+
+/// Minimal in-memory source_items table + N recent rows with the given
+/// embedding blobs.
+fn embedding_test_conn(blobs: &[Vec<u8>]) -> rusqlite::Connection {
+    let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+    conn.execute_batch(
+        "CREATE TABLE source_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            embedding BLOB,
+            created_at TEXT DEFAULT (datetime('now'))
+        );",
+    )
+    .expect("create table");
+    for blob in blobs {
+        conn.execute(
+            "INSERT INTO source_items (embedding) VALUES (?1)",
+            rusqlite::params![blob],
+        )
+        .expect("insert row");
+    }
+    conn
+}
+
+fn zero_blob() -> Vec<u8> {
+    vec![0u8; 32]
+}
+
+fn real_blob() -> Vec<u8> {
+    let mut b = vec![0u8; 32];
+    b[0] = 0x3f; // non-zero byte -> not a zero vector
+    b
+}
+
+#[test]
+fn test_embedding_coverage_warns_on_majority_zero() {
+    // 30 recent items, 24 zero-vector (80%) -> warning fires.
+    let mut blobs = vec![zero_blob(); 24];
+    blobs.extend(vec![real_blob(); 6]);
+    let conn = embedding_test_conn(&blobs);
+
+    let mut issues = Vec::new();
+    check_embedding_coverage_with_conn(&conn, &mut issues);
+    assert_eq!(issues.len(), 1, "majority-zero recent embeddings must warn");
+    assert_eq!(issues[0].component, "embedding");
+    assert_eq!(issues[0].severity, HealthSeverity::Warning);
+    assert!(
+        issues[0].message.contains("Semantic matching is degraded"),
+        "copy must explain the degradation: {}",
+        issues[0].message
+    );
+    assert!(
+        issues[0].message.contains("80%"),
+        "copy must include the measured share: {}",
+        issues[0].message
+    );
+}
+
+#[test]
+fn test_embedding_coverage_silent_when_embeddings_healthy() {
+    // 30 recent items, only 3 zero-vector (10%) -> no warning.
+    let mut blobs = vec![real_blob(); 27];
+    blobs.extend(vec![zero_blob(); 3]);
+    let conn = embedding_test_conn(&blobs);
+
+    let mut issues = Vec::new();
+    check_embedding_coverage_with_conn(&conn, &mut issues);
+    assert!(issues.is_empty(), "healthy embeddings must not warn");
+}
+
+#[test]
+fn test_embedding_coverage_silent_below_min_sample() {
+    // Only 5 recent items, all zero -> too small a sample, stay silent
+    // (first-run / low-traffic installs must not see a false alarm).
+    let conn = embedding_test_conn(&vec![zero_blob(); 5]);
+
+    let mut issues = Vec::new();
+    check_embedding_coverage_with_conn(&conn, &mut issues);
+    assert!(issues.is_empty(), "tiny samples must not warn");
+}
+
+#[test]
+fn test_embedding_coverage_ignores_old_items() {
+    // 30 zero-vector items, but all older than 24h -> silent.
+    let conn = embedding_test_conn(&[]);
+    for _ in 0..30 {
+        conn.execute(
+            "INSERT INTO source_items (embedding, created_at)
+             VALUES (?1, datetime('now', '-3 days'))",
+            rusqlite::params![zero_blob()],
+        )
+        .expect("insert old row");
+    }
+
+    let mut issues = Vec::new();
+    check_embedding_coverage_with_conn(&conn, &mut issues);
+    assert!(issues.is_empty(), "stale zero embeddings must not warn");
+}
+
+#[test]
+fn test_embedding_coverage_missing_table_is_silent() {
+    let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+    let mut issues = Vec::new();
+    check_embedding_coverage_with_conn(&conn, &mut issues);
+    assert!(issues.is_empty(), "missing table must be silent, not panic");
+}

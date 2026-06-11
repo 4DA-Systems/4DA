@@ -390,14 +390,26 @@ fn extract_signals(
     // Raw context: best KNN score from embedding similarity
     let raw_context = matches.first().map_or(0.0, |m| m.similarity);
 
+    // Profile-aware specificity: broad terms that ARE the user's detected
+    // domain (e.g. "ml" for an ML engineer) keep full weight.
+    let spec_profile = super::calibration::SpecificityProfile::from_ctx(ctx);
+
     // Raw interest: embedding similarity against declared interests
-    let raw_interest = compute_interest_score(input.embedding, &ctx.interests);
+    let raw_interest = super::calibration::compute_interest_score_for(
+        input.embedding,
+        &ctx.interests,
+        Some(&spec_profile),
+    );
 
     // Keyword interest matching: boosts items containing declared interest terms
     let raw_keyword_score =
         keywords::compute_keyword_interest_score(input.title, input.content, &ctx.interests);
-    let specificity_weight =
-        keywords::best_interest_specificity_weight(input.title, input.content, &ctx.interests);
+    let specificity_weight = keywords::best_interest_specificity_weight_for(
+        input.title,
+        input.content,
+        &ctx.interests,
+        Some(&spec_profile),
+    );
     let keyword_score = raw_keyword_score * specificity_weight;
 
     // Semantic boost with keyword fallback
@@ -1669,6 +1681,12 @@ pub(crate) fn score_item(
         };
     }
 
+    // -- Language gate (mirrors V1 pipeline.rs) --──
+    // Foreign-language content is capped hard at the end of the pipeline.
+    // Empty detected_lang (unknown) bypasses the gate, exactly like V1.
+    let user_lang = crate::i18n::get_user_language();
+    let lang_mismatch = !input.detected_lang.is_empty() && input.detected_lang != user_lang;
+
     // ── KNN context search (needed for Phase 1 and final output) ──────
     let matches: Vec<RelevanceMatch> =
         if ctx.cached_context_count > 0 && !input.embedding.is_empty() {
@@ -1876,6 +1894,17 @@ pub(crate) fn score_item(
     // just below the absolute ceiling. Only affects scores above the knee.
     let combined_score = apply_final_soft_ceiling(combined_score);
 
+    // -- Language mismatch cap (V1 semantics) --────
+    // Foreign content cannot exceed 0.05 - well below the relevance
+    // threshold, so the score branch below can never mark it relevant.
+    // Applied after every boost/floor (including the critical fast-path
+    // floor) so nothing re-inflates a foreign item.
+    let combined_score = if lang_mismatch {
+        combined_score.min(scoring_config::LANGUAGE_MISMATCH_PENALTY_CAP)
+    } else {
+        combined_score
+    };
+
     // ── Relevance determination ───────────────────────────────────────
     let bootstrap_mode = ctx.feedback_interaction_count < 10;
     let min_signals = if bootstrap_mode {
@@ -1883,7 +1912,10 @@ pub(crate) fn score_item(
     } else {
         scoring_config::QUALITY_FLOOR_MIN_SIGNALS as u8
     };
-    let relevant = critical_fast_path  // Critical items always relevant
+    // The critical fast-path is score-independent, so it must also respect
+    // the language gate: V1 never let a language-mismatched item be relevant,
+    // and a 0.05-capped "relevant" item would be contradictory.
+    let relevant = (critical_fast_path && !lang_mismatch)  // Critical items always relevant
         || (combined_score >= get_relevance_threshold()
             && (signal_count >= min_signals
                 || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE));
@@ -2243,6 +2275,133 @@ fn count_affected_projects(db: &Database, matched_deps: &[String]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ========================================================================
+    // Language gate (ported from V1 - pipeline.rs lang_mismatch cap)
+    // ========================================================================
+
+    /// Build a context + input pair where the item strongly matches the
+    /// user's interests, so any score suppression is attributable to the
+    /// language gate alone.
+    fn lang_gate_fixture(embedding: &[f32]) -> (crate::scoring::ScoringContext, ScoringOptions) {
+        let interests = vec![crate::context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 1.0,
+            embedding: Some(embedding.to_vec()),
+            source: crate::context_engine::InterestSource::Explicit,
+        }];
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        ace_ctx.topic_confidence.insert("rust".to_string(), 0.9);
+
+        let ctx = crate::scoring::ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .ace_ctx(ace_ctx)
+            .build();
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+        (ctx, options)
+    }
+
+    fn lang_gate_input<'a>(embedding: &'a [f32], detected_lang: &'a str) -> ScoringInput<'a> {
+        ScoringInput {
+            id: 1,
+            title: "Rust async runtime performance improvements",
+            url: Some("https://example.com/rust"),
+            content: "rust tokio async await performance benchmarks",
+            source_type: "hackernews",
+            embedding,
+            created_at: None,
+            detected_lang,
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+        }
+    }
+
+    #[test]
+    fn v2_language_mismatch_capped_and_not_relevant() {
+        let db = crate::test_utils::test_db();
+        let embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
+        let (ctx, options) = lang_gate_fixture(&embedding);
+
+        // Detect the user's current language at runtime and pick a
+        // definitively different one (mirrors pipeline_tests.rs:931).
+        let user_lang = crate::i18n::get_user_language();
+        let mismatched_lang = if user_lang == "zz-test" {
+            "en"
+        } else {
+            "zz-test"
+        };
+
+        let input = lang_gate_input(&embedding, mismatched_lang);
+        let result = score_item(&input, &ctx, &db, &options, None);
+
+        assert!(
+            result.top_score <= 0.05,
+            "V2 language mismatch (user={}, content={}) must cap at 0.05, got {}",
+            user_lang,
+            mismatched_lang,
+            result.top_score
+        );
+        assert!(
+            !result.relevant,
+            "V2 language-mismatched content must never be relevant (score={})",
+            result.top_score
+        );
+    }
+
+    #[test]
+    fn v2_same_language_unaffected_by_gate() {
+        let db = crate::test_utils::test_db();
+        let embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
+        let (ctx, options) = lang_gate_fixture(&embedding);
+
+        let user_lang = crate::i18n::get_user_language();
+        let input = lang_gate_input(&embedding, &user_lang);
+        let result = score_item(&input, &ctx, &db, &options, None);
+
+        assert!(
+            result.top_score > 0.05,
+            "Same-language content must not be capped, got {}",
+            result.top_score
+        );
+    }
+
+    #[test]
+    fn v2_empty_detected_lang_bypasses_gate() {
+        let db = crate::test_utils::test_db();
+        let embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
+        let (ctx, options) = lang_gate_fixture(&embedding);
+
+        let user_lang = crate::i18n::get_user_language();
+
+        let same_lang = score_item(
+            &lang_gate_input(&embedding, &user_lang),
+            &ctx,
+            &db,
+            &options,
+            None,
+        );
+        let empty_lang = score_item(&lang_gate_input(&embedding, ""), &ctx, &db, &options, None);
+
+        assert!(
+            (empty_lang.top_score - same_lang.top_score).abs() < f32::EPSILON,
+            "Empty detected_lang must score identically to same-language: empty={}, same={}",
+            empty_lang.top_score,
+            same_lang.top_score
+        );
+        assert!(
+            empty_lang.top_score > 0.05,
+            "Empty detected_lang must not be capped, got {}",
+            empty_lang.top_score
+        );
+    }
 
     #[test]
     fn test_strip_security_metadata_with_severity_block() {
