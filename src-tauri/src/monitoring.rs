@@ -1041,6 +1041,24 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             }
                         }
 
+                        // Relevance-aware forgetting: drop a bounded batch of CONFIRMED
+                        // noise (relevance < 0.05, older than the retention window, never
+                        // high-stakes — security/breaking/CVE are structurally protected)
+                        // so the firehose's low-value items and their 768-dim embeddings
+                        // stop accumulating forever. cleanup_old_items above keys on
+                        // last_seen, which the firehose keeps fresh, so noise never aged
+                        // out that way; this keys on created_at. Items are re-fetchable
+                        // from source; the run_maintenance VACUUM below reclaims the pages.
+                        match db.prune_noise(0.05, max_age_days as i64, 5000) {
+                            Ok(pruned) if pruned > 0 => {
+                                info!(target: "4da::monitor", pruned, max_age_days, "Relevance-aware noise prune (scheduled)");
+                            }
+                            Ok(_) => {}
+                            Err(e) => {
+                                warn!(target: "4da::monitor", error = %e, "Scheduled noise prune failed");
+                            }
+                        }
+
                         // Daily deep maintenance: clean superseded intelligence, temporal data, sun_runs
                         match db.run_maintenance(max_age_days as i64) {
                             Ok(result) => {
@@ -1064,14 +1082,19 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             }
                         }
 
-                        // Emit data health warning if DB is getting large
-                        if let Ok(stats) = db.get_db_stats() {
-                            let size_mb = stats.db_size_bytes as f64 / (1024.0 * 1024.0);
-                            if size_mb > 500.0 || stats.source_items > 100_000 {
+                        // Surface a maintenance nudge ONLY when meaningful RECLAIMABLE
+                        // space remains after the automated prune + VACUUM just ran. Raw
+                        // size is not a problem — a full corpus is the product working,
+                        // and "run a deep clean" is misleading when the freelist is empty.
+                        if let (Ok(stats), Ok(reclaimable)) =
+                            (db.get_db_stats(), db.reclaimable_bytes())
+                        {
+                            let reclaimable_mb = reclaimable as f64 / (1024.0 * 1024.0);
+                            if reclaimable_mb >= 100.0 {
                                 let _ = app.emit("data-health-warning", serde_json::json!({
-                                    "size_mb": (size_mb * 10.0).round() / 10.0,
+                                    "size_mb": (reclaimable_mb * 10.0).round() / 10.0,
                                     "items": stats.source_items,
-                                    "message": format!("Database is {:.0}MB with {} items — consider running a deep clean", size_mb, stats.source_items),
+                                    "message": format!("Database has {:.0}MB of reclaimable free space — run a deep clean in Settings to compact it.", reclaimable_mb),
                                 }));
                             }
                         }

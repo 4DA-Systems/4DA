@@ -437,15 +437,29 @@ extern "system" {
 /// Check 7: Database size — warn if the database is getting large.
 fn check_database_size(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
     let db_path = data_dir.join("4da.db");
-    if let Ok(meta) = std::fs::metadata(&db_path) {
-        let size_mb = meta.len() / (1024 * 1024);
-        if size_mb > 500 {
+    let size_mb = std::fs::metadata(&db_path)
+        .map(|m| m.len() / (1024 * 1024))
+        .unwrap_or(0);
+
+    // Only warn when there is genuinely RECLAIMABLE space: dead pages on the freelist
+    // that VACUUM can return to the OS. A large database that is all live content is
+    // healthy — 4DA's whole job is to read and embed the internet, so the file grows
+    // with the corpus. Nagging about raw size is a false alarm, and telling the user to
+    // "reclaim space" when the freelist is empty is simply wrong (VACUUM frees nothing).
+    if let Ok(conn) = crate::open_db_connection() {
+        let freelist: i64 = conn
+            .query_row("PRAGMA freelist_count", [], |r| r.get(0))
+            .unwrap_or(0);
+        let page_size: i64 = conn
+            .query_row("PRAGMA page_size", [], |r| r.get(0))
+            .unwrap_or(4096);
+        let reclaimable_mb = freelist.saturating_mul(page_size) / (1024 * 1024);
+        if reclaimable_mb >= 100 {
             issues.push(HealthIssue {
                 component: "database",
                 severity: HealthSeverity::Warning,
                 message: format!(
-                    "Database is {}MB. Consider running database optimization in Settings to reclaim space.",
-                    size_mb
+                    "Database has {reclaimable_mb}MB of reclaimable free space ({size_mb}MB total). Run database optimization in Settings to compact it."
                 ),
             });
         }

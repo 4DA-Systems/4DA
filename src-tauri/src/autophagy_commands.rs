@@ -255,10 +255,14 @@ pub async fn set_cleanup_retention(days: u32) -> Result<()> {
 // Relevance-aware forgetting (Phase 4) — measure-first, then bounded prune
 // ============================================================================
 
-/// Conservative defaults: only items scored as near-zero noise, older than a
-/// quarter, and never high-stakes. Tunable per call.
+/// Conservative defaults: only items scored as near-zero noise (relevance < 0.05),
+/// older than a month, and never high-stakes (security/breaking/CVE are structurally
+/// protected by `noise_prune_predicate`). The 90-day floor was effectively inert — the
+/// corpus turns over far faster than that, so confirmed firehose noise never aged out
+/// and the vector table tracked it forever. 30 days lets proven-irrelevant content be
+/// forgotten while staying re-fetchable from its source. Tunable per call.
 const DEFAULT_NOISE_THRESHOLD: f64 = 0.05;
-const DEFAULT_MIN_AGE_DAYS: i64 = 90;
+const DEFAULT_MIN_AGE_DAYS: i64 = 30;
 /// Per-call delete cap — keeps each transaction bounded; call repeatedly to converge.
 const DEFAULT_MAX_DELETE: usize = 2000;
 
