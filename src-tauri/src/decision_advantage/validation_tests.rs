@@ -404,6 +404,182 @@ fn migration_breaking_change_win() {
     assert!((lead.unwrap() - 6.0).abs() < 0.01);
 }
 
+/// Insert a verified preemption_wins row directly (simulates an already-recorded win).
+fn insert_verified_win(conn: &Connection, dep: &str, alert_title: &str) -> i64 {
+    conn.execute(
+        "INSERT INTO preemption_wins \
+         (alert_id, alert_title, alerted_at, incident_at, lead_time_hours, affected_deps, verified) \
+         VALUES ('1', ?1, '2026-06-01 10:00:00', '2026-06-02 04:21:00', 18.35, ?2, 1)",
+        params![alert_title, dep],
+    )
+    .unwrap();
+    conn.last_insert_rowid()
+}
+
+// Self-healing sweep: a recorded false win (ambiguous dep, ungrounded source
+// title) is purged; the real-world "os"/Bugsink regression case.
+#[test]
+fn revalidate_deletes_false_win() {
+    let conn = db();
+    insert_verified_win(
+        &conn,
+        "os",
+        "Security: os \u{2014} Bugsink: Issue event views can show an event from another project",
+    );
+
+    assert_eq!(revalidate_recorded_wins(&conn), 1);
+    assert_eq!(win_count(&conn), 0);
+}
+
+// Self-healing sweep: legitimate wins survive.
+#[test]
+fn revalidate_keeps_legitimate_wins() {
+    let conn = db();
+    // Normal name — no strict proof required.
+    insert_verified_win(
+        &conn,
+        "axios",
+        "Security: axios \u{2014} axios 1.12 CVE advisory",
+    );
+    // Strict-proof name genuinely grounded in the source-title portion.
+    insert_verified_win(
+        &conn,
+        "http",
+        "Security: http \u{2014} npm http package security advisory",
+    );
+
+    assert_eq!(revalidate_recorded_wins(&conn), 0);
+    assert_eq!(win_count(&conn), 2);
+}
+
+// The sweep runs at the start of validate_open_windows (self-healing each cycle).
+#[test]
+fn validate_pass_purges_false_wins() {
+    let conn = db();
+    insert_verified_win(
+        &conn,
+        "http",
+        "Security: http \u{2014} TinyMCE Cross-Site Scripting (XSS) vulnerability",
+    );
+
+    assert_eq!(validate_open_windows(&conn), 0);
+    assert_eq!(win_count(&conn), 0);
+}
+
+// find_incident is ambiguity-guarded: an "os" window must NOT match a
+// Bugsink-titled advisory (the substring false-positive class)...
+#[test]
+fn ambiguous_dep_does_not_match_unrelated_incident() {
+    let conn = db();
+    let wid = insert_window(
+        &conn,
+        "security_patch",
+        Some("os"),
+        "2026-06-01 10:00:00",
+        "[]",
+    );
+    insert_item(
+        &conn,
+        "Bugsink: Issue event views can show an event from another project",
+        "the issue is close to resolution and affects macos users",
+        "2026-06-02 04:21:00",
+        Some("security_advisory"),
+        None,
+        None,
+    );
+
+    assert_eq!(validate_open_windows(&conn), 0);
+    assert_eq!(window_status(&conn, wid).0, "open");
+    assert_eq!(win_count(&conn), 0);
+}
+
+// ...while a distinct dep still matches its own advisory through the new path.
+#[test]
+fn distinct_dep_still_matches_incident() {
+    let conn = db();
+    let wid = insert_window(
+        &conn,
+        "security_patch",
+        Some("axios"),
+        "2026-06-01 10:00:00",
+        "[]",
+    );
+    insert_item(
+        &conn,
+        "CVE-2026-9999: SSRF in axios",
+        "axios versions before 1.13 are affected",
+        "2026-06-01 14:00:00",
+        Some("cve"),
+        None,
+        None,
+    );
+
+    assert_eq!(validate_open_windows(&conn), 1);
+    assert_eq!(window_status(&conn, wid).0, "closed");
+    assert_eq!(win_count(&conn), 1);
+}
+
+// transition_window 'acted' on a dep-bound security window mints an honest
+// user-acted record: user_acted=1, verified=0, NO fabricated incident/lead time.
+#[test]
+fn acted_window_records_unverified_user_acted_win() {
+    let conn = db();
+    let wid = insert_window(
+        &conn,
+        "security_patch",
+        Some("axios"),
+        "2026-06-01 10:00:00",
+        "[]",
+    );
+
+    crate::decision_advantage::windows::transition_window(&conn, wid, "acted", Some("patched"))
+        .unwrap();
+
+    assert_eq!(win_count(&conn), 1);
+    let (user_acted, verified, lead, incident_at, deps, alerted_at): (
+        i64,
+        i64,
+        Option<f32>,
+        Option<String>,
+        String,
+        String,
+    ) = conn
+        .query_row(
+            "SELECT user_acted, verified, lead_time_hours, incident_at, affected_deps, alerted_at \
+             FROM preemption_wins",
+            [],
+            |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                ))
+            },
+        )
+        .unwrap();
+    assert_eq!(user_acted, 1);
+    assert_eq!(verified, 0, "user-acted records are never verified wins");
+    assert!(lead.is_none(), "no incident -> no fabricated lead time");
+    assert!(
+        incident_at.is_none(),
+        "no incident -> incident_at stays NULL"
+    );
+    assert_eq!(deps, "axios");
+    assert_eq!(alerted_at, "2026-06-01 10:00:00");
+}
+
+// Acting on a window WITHOUT a dependency records nothing.
+#[test]
+fn acted_window_without_dep_records_nothing() {
+    let conn = db();
+    let wid = insert_window(&conn, "security_patch", None, "2026-06-01 10:00:00", "[]");
+    crate::decision_advantage::windows::transition_window(&conn, wid, "acted", None).unwrap();
+    assert_eq!(win_count(&conn), 0);
+}
+
 // Extra: window with no dependency is skipped (grounding required).
 #[test]
 fn no_dependency_skipped() {

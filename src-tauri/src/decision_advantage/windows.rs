@@ -102,18 +102,21 @@ pub(crate) fn transition_window(
     if !matches!(status, "acted" | "expired" | "closed") {
         return Err(format!("Invalid window status: {status}").into());
     }
-    let lead_time_hours = conn
+    // One round-trip: opened_at for the lead-time, plus the fields needed to
+    // mint a user-acted preemption record when status == "acted".
+    let row: Option<(String, String, String, Option<String>)> = conn
         .query_row(
-            "SELECT opened_at FROM decision_windows WHERE id = ?1",
+            "SELECT opened_at, window_type, title, dependency \
+             FROM decision_windows WHERE id = ?1",
             params![id],
-            |row| row.get::<_, String>(0),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
-        .ok()
-        .and_then(|opened| {
-            chrono::NaiveDateTime::parse_from_str(&opened, "%Y-%m-%d %H:%M:%S")
-                .ok()
-                .map(|dt| (chrono::Utc::now().naive_utc() - dt).num_minutes() as f32 / 60.0)
-        });
+        .ok();
+    let lead_time_hours = row.as_ref().and_then(|(opened, ..)| {
+        chrono::NaiveDateTime::parse_from_str(opened, "%Y-%m-%d %H:%M:%S")
+            .ok()
+            .map(|dt| (chrono::Utc::now().naive_utc() - dt).num_minutes() as f32 / 60.0)
+    });
     let time_col = if status == "acted" {
         "acted_at"
     } else {
@@ -132,8 +135,46 @@ pub(crate) fn transition_window(
     if affected == 0 {
         return Err(format!("Window {id} not found").into());
     }
+    if status == "acted" {
+        if let Some((opened_at, window_type, title, Some(dep))) = row {
+            if matches!(window_type.as_str(), "security_patch" | "migration")
+                && !dep.trim().is_empty()
+            {
+                record_user_acted_win(conn, id, &title, &opened_at, &dep);
+            }
+        }
+    }
     info!(target: "4da::decision_advantage", id, status, lead_time_hours = ?lead_time_hours, "Window transitioned");
     Ok(())
+}
+
+/// Record an honest "user acted on an early warning" row. This is NOT a
+/// verified win: there is no incident and no measured lead time, and we never
+/// fabricate either (verified = 0, incident_at/lead_time_hours = NULL).
+fn record_user_acted_win(conn: &Connection, id: i64, title: &str, opened_at: &str, dep: &str) {
+    let result = conn.execute(
+        "INSERT INTO preemption_wins \
+         (alert_id, alert_title, alerted_at, incident_at, lead_time_hours, affected_deps, \
+          user_acted, verified) \
+         VALUES (?1, ?2, ?3, NULL, NULL, ?4, 1, 0)",
+        params![id.to_string(), title, opened_at, dep],
+    );
+    match result {
+        Ok(_) => {
+            info!(
+                target: "4da::decision_advantage",
+                id, dep = %dep,
+                "User acted on window - recorded unverified preemption record"
+            );
+        }
+        Err(e) => {
+            warn!(
+                target: "4da::decision_advantage",
+                id, error = %e,
+                "Failed to record user-acted preemption row"
+            );
+        }
+    }
 }
 
 /// Expire windows past their expires_at. Returns count of expired.
@@ -221,7 +262,7 @@ fn query_items_with_keywords(
 fn find_matching_dep(title: &str, content: &str, deps: &[String]) -> Option<String> {
     let (t, c) = (title.to_lowercase(), content.to_lowercase());
     deps.iter()
-        .find(|d| t.contains(d.as_str()) || c.contains(d.as_str()))
+        .find(|d| crate::package_ambiguity::dep_grounded_match(&t, &c, d))
         .cloned()
 }
 
@@ -381,11 +422,13 @@ fn detect_chain_security_windows(conn: &Connection, windows: &mut Vec<DecisionWi
             continue;
         }
 
-        // Check if any chain link title mentions a user dependency
+        // Check if any chain link title mentions a user dependency.
+        // Title-only context: strict-proof names (ambiguous/short) must carry
+        // their ecosystem context in the title itself - correct and conservative.
         let matched_dep = chain.links.iter().find_map(|link| {
             let lower_title = link.title.to_lowercase();
             deps.iter()
-                .find(|d| lower_title.contains(d.as_str()))
+                .find(|d| crate::package_ambiguity::dep_grounded_match(&lower_title, "", d))
                 .cloned()
         });
 
