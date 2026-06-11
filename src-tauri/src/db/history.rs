@@ -539,6 +539,16 @@ impl Database {
         Ok(deleted)
     }
 
+    /// Bytes currently on the freelist — the space a VACUUM could return to the OS.
+    /// A database packed with live content reports ~0 here regardless of total file
+    /// size, so this (not raw size) is the honest signal for "optimization would help".
+    pub fn reclaimable_bytes(&self) -> SqliteResult<i64> {
+        let conn = self.conn.lock();
+        let freelist: i64 = conn.query_row("PRAGMA freelist_count", [], |r| r.get(0))?;
+        let page_size: i64 = conn.query_row("PRAGMA page_size", [], |r| r.get(0))?;
+        Ok(freelist.saturating_mul(page_size))
+    }
+
     /// Run VACUUM if more than threshold rows were deleted.
     pub fn vacuum_if_needed(&self, deleted_count: usize, threshold: usize) -> SqliteResult<()> {
         if deleted_count >= threshold {
@@ -715,5 +725,39 @@ mod tests {
             0,
             "nothing left to prune after the sweep"
         );
+    }
+
+    /// The default noise-prune floor was lowered from 90 to 30 days because the corpus
+    /// turns over far faster than a quarter (the 90-day floor was effectively inert).
+    /// Pin that a 45-day-old confirmed-noise item is forgotten at a 30-day floor yet
+    /// stays protected at the old 90-day floor.
+    #[test]
+    fn test_noise_prune_30day_floor_catches_what_90day_missed() {
+        let db = test_db();
+        let id = insert_test_item(&db, "hackernews", "n45", "45-day-old junk", "x");
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET relevance_score=0.02, scored_pipeline_version=5, created_at=datetime('now','-45 days') WHERE id=?1",
+                rusqlite::params![id],
+            )
+            .unwrap();
+        }
+        // Old 90-day floor: inert (the item is only 45 days old).
+        assert_eq!(db.count_prunable_noise(0.05, 90).unwrap(), 0);
+        // New 30-day floor: the item is now forgettable.
+        assert_eq!(db.count_prunable_noise(0.05, 30).unwrap(), 1);
+        assert_eq!(db.prune_noise(0.05, 30, 100).unwrap(), 1);
+        assert_eq!(db.total_item_count().unwrap(), 0);
+    }
+
+    /// reclaimable_bytes reports ~0 on a freshly-packed DB (no freelist pages), proving
+    /// raw file size is the wrong signal for "optimization would help" — only dead pages
+    /// that VACUUM can return to the OS count as reclaimable.
+    #[test]
+    fn test_reclaimable_bytes_zero_on_packed_db() {
+        let db = test_db();
+        insert_test_item(&db, "hackernews", "a", "a", "x");
+        assert_eq!(db.reclaimable_bytes().unwrap(), 0);
     }
 }
