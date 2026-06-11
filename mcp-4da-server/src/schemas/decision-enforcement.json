@@ -1,6 +1,6 @@
 {
   "name": "check_decision_alignment",
-  "description": "Check if a technology or pattern aligns with active decisions before suggesting changes.\n\nPrevents AI agents from recommending technologies or patterns that contradict settled developer decisions. Returns alignment status and relevant decisions.",
+  "description": "Check if a technology or pattern aligns with active decisions before suggesting changes.\n\nPrevents AI agents from recommending technologies or patterns that contradict settled developer decisions. Returns alignment status and relevant decisions. Call BEFORE suggesting a major tech change, new library, or architecture shift, to avoid contradicting settled decisions.",
   "inputSchema": {
     "type": "object",
     "properties": {
