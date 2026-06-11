@@ -30,11 +30,11 @@ vi.mock('../hooks/use-telemetry', () => ({
 import { ViewTabBar } from './ViewTabBar';
 
 describe('ViewTabBar', () => {
-  it('renders exactly 5 tabs', () => {
+  it('renders exactly 4 tabs', () => {
     setMockState({});
     render(<ViewTabBar />);
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.length).toBe(5);
+    expect(tabs.length).toBe(4);
   });
 
   it('marks the active view tab as selected', () => {
@@ -47,9 +47,9 @@ describe('ViewTabBar', () => {
   it('calls setActiveView when a tab is clicked', () => {
     setMockState({});
     render(<ViewTabBar />);
-    const playbookTab = screen.getByText('nav.playbook');
-    fireEvent.click(playbookTab);
-    expect(setActiveViewMock).toHaveBeenCalledWith('playbook');
+    const preemptionTab = screen.getByText('nav.preemption.label');
+    fireEvent.click(preemptionTab);
+    expect(setActiveViewMock).toHaveBeenCalledWith('preemption');
   });
 
   it('shows badge indicator when results have items', () => {

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { SourceRelevance } from '../../types';
 import { getContentTypeBadge } from '../../config/content-types';
 import { useAppStore } from '../../store';
@@ -13,7 +12,6 @@ interface BadgeRowProps {
 
 export const BadgeRow = memo(function BadgeRow({ item }: BadgeRowProps) {
   const { t } = useTranslation();
-  const { getTranslated } = useTranslatedContent();
   const rawAffinities = useAppStore(s => s.learnedAffinities);
   const learnedAffinities = useMemo(() => rawAffinities ?? [], [rawAffinities]);
 
@@ -107,14 +105,6 @@ export const BadgeRow = memo(function BadgeRow({ item }: BadgeRowProps) {
       {item.score_breakdown?.intent_boost != null && item.score_breakdown.intent_boost > 0 && (
         <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-violet-500/20 text-violet-400">
           {t('results.workingOnBadge')}
-        </span>
-      )}
-      {item.streets_engine && (
-        <span
-          className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-yellow-500/15 text-yellow-400"
-          title={`STREETS ${item.streets_engine}`}
-        >
-          {getTranslated(`streets-${item.id}`, item.streets_engine.replace(/^Engine \d+: /, ''))}
         </span>
       )}
       {item.score_breakdown?.content_quality_mult != null && item.score_breakdown.content_quality_mult >= 1.1 && (

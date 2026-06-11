@@ -11,7 +11,6 @@ const TABS: Array<{ id: ActiveView; labelKey: string; subtitleKey: string; activ
   { id: 'preemption', labelKey: 'nav.preemption.label', subtitleKey: 'nav.preemption.subtitle', activeColor: 'bg-red-500/20 text-red-400' },
   { id: 'blindspots', labelKey: 'nav.blindspots.label', subtitleKey: 'nav.blindspots.subtitle', activeColor: 'bg-amber-500/20 text-amber-400' },
   { id: 'results', labelKey: 'nav.signal.label', subtitleKey: 'nav.signal.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
-  { id: 'playbook', labelKey: 'nav.playbook', subtitleKey: 'nav.playbook.subtitle', activeColor: 'bg-yellow-500/20 text-yellow-400' },
 ];
 
 const BADGE_COLORS: Partial<Record<ActiveView, string>> = {

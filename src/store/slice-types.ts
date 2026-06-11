@@ -42,8 +42,7 @@ export type ActiveView =
   | 'briefing'
   | 'results'
   | 'preemption'
-  | 'blindspots'
-  | 'playbook';
+  | 'blindspots';
 
 export type SignalViewMode = 'list' | 'graph';
 

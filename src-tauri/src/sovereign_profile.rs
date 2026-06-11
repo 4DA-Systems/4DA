@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 // Re-export fact helpers so callers using `crate::sovereign_profile::*` still work.
-pub use crate::sovereign_facts::{log_command_execution, store_facts_from_execution};
+pub use crate::sovereign_facts::store_facts_from_execution;
 
 // ============================================================================
 // Types

@@ -62,7 +62,7 @@ function findDefaultValueUsage(files) {
 // ============================================================================
 
 function findMissingKeys() {
-  const namespaces = ['ui', 'errors', 'streets', 'coach', 'signals'];
+  const namespaces = ['ui', 'errors', 'coach', 'signals'];
   const languages = fs.readdirSync(LOCALES_DIR)
     .filter(d => {
       try { return fs.statSync(path.join(LOCALES_DIR, d)).isDirectory() && d !== 'en'; }

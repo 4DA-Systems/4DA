@@ -25,7 +25,7 @@ const SIGNAL_LABELS: Record<string, string> = {
  *
  * Free users: see signal badges + contextual upgrade path:
  *   - Trial not started → "Start trial to see why"
- *   - Trial expired → "See why" links to 4da.ai/streets
+ *   - Trial expired → "See why" links to 4da.ai/signal
  * Pro users: see relevance breakdown, signal chain context, knowledge gap alerts.
  */
 export function ProInsightRow({ item }: ProInsightRowProps) {

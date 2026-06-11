@@ -33,7 +33,7 @@ interface CelebrationStateProps {
    *  project folder, no ACE context). 0 relevant is then structural, not a
    *  failure — show an honest "add a signal" framing, not a vanity "0". */
   profileEmpty?: boolean;
-  onDismiss: (view: 'briefing' | 'results' | 'playbook') => void;
+  onDismiss: (view: 'briefing' | 'results') => void;
 }
 
 /** Build a human-readable insight explaining why the top signal matched */
@@ -265,18 +265,6 @@ export function CelebrationState({
         )}
       </div>
 
-      {/* STREETS nudge */}
-      <div className="mt-8 pt-4 border-t border-border/50">
-        <p className="text-xs text-text-muted mb-1">{t('firstRun.streetsNudge')}</p>
-        <button
-          onClick={() => onDismiss('playbook')}
-          aria-label={t('firstRun.ariaExploreStreets')}
-          className="text-xs font-medium hover:underline transition-colors"
-          style={{ color: '#D4AF37' }}
-        >
-          {t('firstRun.exploreStreets')}
-        </button>
-      </div>
     </div>
   );
 }

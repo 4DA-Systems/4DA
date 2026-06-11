@@ -59,7 +59,6 @@ const NAV_ENTRIES: readonly NavEntry[] = [
   { view: 'preemption', labelKey: 'nav.preemption.label', keywords: 'alerts preempt risk ahead warning' },
   { view: 'blindspots', labelKey: 'nav.blindspots.label', keywords: 'coverage gaps missing blind spots' },
   { view: 'results', labelKey: 'nav.signal.label', keywords: 'signal feed results items relevant' },
-  { view: 'playbook', labelKey: 'nav.playbook', keywords: 'streets guide lessons playbook learn' },
 ];
 
 function navProvider(deps: ProviderDeps): SearchProvider {

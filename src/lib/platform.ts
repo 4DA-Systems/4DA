@@ -6,7 +6,7 @@
  * Platform detection + keyboard-modifier helpers.
  *
  * Centralizes the OS sniffing that was previously duplicated inline in
- * `StreetsCodeBlock.tsx` and `use-update-check.ts`. The OS cannot change at
+ * `use-update-check.ts` and friends. The OS cannot change at
  * runtime, so detection runs once and is memoized.
  *
  * The modifier helpers exist because a command shortcut must be PLATFORM

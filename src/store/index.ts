@@ -16,12 +16,9 @@ import { createDecisionsSlice } from './decisions-slice';
 import { createAgentSlice } from './agent-slice';
 import { createLicenseSlice } from './license-slice';
 import { createToolkitSlice } from './toolkit-slice';
-import { createPlaybookSlice } from './playbook-slice';
-import { createSovereignProfileSlice } from './sovereign-profile-slice';
 import { createAutophagySlice } from './autophagy-slice';
 import { createDecisionAdvantageSlice } from './decision-advantage-slice';
 import { createChannelsSlice } from './channels-slice';
-import { createUnifiedProfileSlice } from './unified-profile-slice';
 import { createIntelligencePulseSlice } from './intelligence-pulse-slice';
 import { createTeamSlice } from './team-slice';
 import { createEnterpriseSlice } from './enterprise-slice';
@@ -56,12 +53,9 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createAgentSlice(...a),
   ...createLicenseSlice(...a),
   ...createToolkitSlice(...a),
-  ...createPlaybookSlice(...a),
-  ...createSovereignProfileSlice(...a),
   ...createAutophagySlice(...a),
   ...createDecisionAdvantageSlice(...a),
   ...createChannelsSlice(...a),
-  ...createUnifiedProfileSlice(...a),
   ...createIntelligencePulseSlice(...a),
   ...createTeamSlice(...a),
   ...createEnterpriseSlice(...a),

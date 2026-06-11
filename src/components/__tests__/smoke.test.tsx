@@ -53,24 +53,6 @@ vi.mock('../../store', () => ({
           model: null,
         },
 
-        // playbook slice
-        playbookModules: [],
-        playbookContent: null,
-        playbookProgress: null,
-        playbookLoading: false,
-        playbookError: null,
-        activeModuleId: null,
-        streetsTier: 'playbook',
-        loadPlaybookModules: vi.fn(),
-        loadPlaybookContent: vi.fn(),
-        loadPlaybookProgress: vi.fn(),
-        markLessonComplete: vi.fn(),
-        loadStreetsTier: vi.fn(),
-        activateStreetsLicense: vi.fn(),
-        personalizedLessons: {},
-        loadPersonalizedContent: vi.fn(),
-        loadPersonalizedContentBatch: vi.fn(),
-
         // decisions
         decisions: [],
         decisionsLoading: false,
@@ -113,12 +95,9 @@ vi.mock('../../store', () => ({
       return selector(mockState);
     }),
     {
-      // Static getState/setState used by some components (e.g., PlaybookView)
+      // Static getState/setState used by some components
       getState: () => ({
         setShowSettings: vi.fn(),
-        playbookProgress: null,
-        playbookContent: null,
-        personalizedLessons: {},
       }),
       setState: vi.fn(),
     },
@@ -147,36 +126,6 @@ vi.mock('../../assets/sun-logo.webp', () => ({
   default: 'mock-sun-logo.webp',
 }));
 
-// Mock playbook markdown renderer
-vi.mock('../../utils/playbook-markdown', () => ({
-  renderMarkdown: () => 'rendered markdown',
-}));
-
-// Mock playbook sub-components used by PlaybookView
-vi.mock('../playbook/SovereignProfile', () => ({
-  SovereignProfile: () => null,
-}));
-vi.mock('../playbook/StreetHealthBadge', () => ({
-  StreetHealthBadge: () => null,
-}));
-vi.mock('../playbook/SovereignInsightCard', () => ({
-  SovereignInsightCard: () => null,
-}));
-vi.mock('../playbook/SovereignConnectionBlock', () => ({
-  SovereignConnectionBlock: () => null,
-}));
-vi.mock('../playbook/DiffRibbon', () => ({
-  DiffRibbon: () => null,
-}));
-vi.mock('../playbook/FeedEchoBlock', () => ({
-  FeedEchoBlock: () => null,
-}));
-vi.mock('../playbook/ProgressiveRevealBanner', () => ({
-  ProgressiveRevealBanner: () => null,
-}));
-vi.mock('../playbook/PersonalizationDepthIndicator', () => ({
-  PersonalizationDepthIndicator: () => null,
-}));
 // Mock error messages util
 vi.mock('../../utils/error-messages', () => ({
   translateError: (e: unknown) => String(e),
@@ -223,10 +172,8 @@ import { AboutPanel } from '../AboutPanel';
 import { ProGate } from '../ProGate';
 
 import { ViewTabBar } from '../ViewTabBar';
-import { PlaybookView } from '../PlaybookView';
 import { FeedbackButtons } from '../result-item/FeedbackButtons';
 import { ProInsightRow } from '../result-item/ProInsightRow';
-import { StreetsEngineLink } from '../result-item/StreetsEngineLink';
 import { BriefingLoadingState, BriefingReadyState, BriefingNoDataState } from '../BriefingEmptyStates';
 import { SignalsPanel } from '../SignalsPanel';
 import { OllamaStatus } from '../OllamaStatus';
@@ -311,10 +258,6 @@ const SMOKE_COMPONENTS: Array<{
     name: 'ViewTabBar',
     render: () => <ViewTabBar />,
   },
-  {
-    name: 'PlaybookView (no module selected)',
-    render: () => <PlaybookView />,
-  },
   // --- New components (19-38) ---
   {
     name: 'FeedbackButtons (no feedback)',
@@ -358,21 +301,6 @@ const SMOKE_COMPONENTS: Array<{
           top_score: 0.7,
           signal_type: 'security_alert',
           score_breakdown: makeBreakdown({ context_score: 0.5 }),
-        })}
-      />
-    ),
-  },
-  {
-    name: 'StreetsEngineLink (no engine)',
-    render: () => <StreetsEngineLink item={makeItem()} />,
-  },
-  {
-    name: 'StreetsEngineLink (with engine)',
-    render: () => (
-      <StreetsEngineLink
-        item={makeItem({
-          streets_engine: 'Engine 1: Digital Products',
-          title: 'Show HN: Build AI agents with Rust',
         })}
       />
     ),

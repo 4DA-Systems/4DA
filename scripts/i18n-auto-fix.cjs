@@ -133,7 +133,7 @@ async function main() {
     for (const f of items) {
       if (!langFixes[f.key]) continue;
       // Determine namespace by checking which file contains the key
-      for (const ns of ['ui', 'errors', 'streets', 'coach', 'signals']) {
+      for (const ns of ['ui', 'errors', 'coach', 'signals']) {
         const nsPath = path.join(LOCALES_DIR, lang, `${ns}.json`);
         if (!fs.existsSync(nsPath)) continue;
         const nsData = JSON.parse(fs.readFileSync(nsPath, 'utf8'));

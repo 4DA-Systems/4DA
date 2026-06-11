@@ -93,11 +93,6 @@ describe('ui-slice', () => {
       expect(useAppStore.getState().activeView).toBe('blindspots');
     });
 
-    it('changes active view to playbook', () => {
-      useAppStore.getState().setActiveView('playbook');
-      expect(useAppStore.getState().activeView).toBe('playbook');
-    });
-
     it('can switch back to briefing', () => {
       useAppStore.getState().setActiveView('results');
       useAppStore.getState().setActiveView('briefing');

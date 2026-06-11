@@ -125,7 +125,7 @@ async fn main_navigation_tabs_exist() {
 
     let mut client = VictauriClient::discover().await.unwrap();
 
-    let expected_tabs = ["Brief", "Preemption", "Blind Spots", "Signal", "Playbook"];
+    let expected_tabs = ["Brief", "Preemption", "Blind Spots", "Signal"];
     let snapshot = client.dom_snapshot().await.unwrap();
     let snapshot_str = serde_json::to_string(&snapshot).unwrap();
 
@@ -499,7 +499,7 @@ async fn navigate_all_five_views() {
     let mut client = VictauriClient::discover().await.unwrap();
 
     // Skip Brief first (it's already selected), navigate the others, then back to Brief
-    let tabs = ["Preemption", "Blind Spots", "Signal", "Playbook", "Brief"];
+    let tabs = ["Preemption", "Blind Spots", "Signal", "Brief"];
     for tab_name in &tabs {
         let elements = client
             .find_elements(serde_json::json!({"role": "tab"}))
@@ -3153,8 +3153,8 @@ async fn cold_start_no_blank_screens() {
 
     let mut client = VictauriClient::discover().await.unwrap();
 
-    // Visit each of the five tabs — none should render blank
-    let tab_names = ["Brief", "Preemption", "Blind Spots", "Signal", "Playbook"];
+    // Visit each of the four tabs — none should render blank
+    let tab_names = ["Brief", "Preemption", "Blind Spots", "Signal"];
 
     for tab_name in &tab_names {
         let buttons = client
@@ -3185,14 +3185,14 @@ async fn cold_start_no_blank_screens() {
 }
 
 #[tokio::test]
-async fn all_five_tabs_have_no_console_errors() {
+async fn all_tabs_have_no_console_errors() {
     if skip_unless_e2e() {
         return;
     }
 
     let mut client = VictauriClient::discover().await.unwrap();
 
-    let tab_names = ["Brief", "Signal", "Preemption", "Blind Spots", "Playbook"];
+    let tab_names = ["Brief", "Signal", "Preemption", "Blind Spots"];
 
     for tab_name in &tab_names {
         let buttons = client
@@ -3556,7 +3556,8 @@ async fn user_role_set_and_verify() {
     }
 }
 
-// ── Phase 17: Playbook — The Fifth Tab ───────────────────────────────────────
+// ── Phase 17: Playbook content commands (backend-only; UI removed, content
+// serves personalization + the website) ─────────────────────────────────────
 
 #[tokio::test]
 async fn playbook_modules_returns_non_empty_list() {

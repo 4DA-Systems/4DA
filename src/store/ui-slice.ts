@@ -2,7 +2,7 @@
 import type { StateCreator } from 'zustand';
 import type { AppStore, UiSlice, ActiveView } from './types';
 
-const VALID_VIEWS: ActiveView[] = ['briefing', 'results', 'preemption', 'blindspots', 'playbook'];
+const VALID_VIEWS: ActiveView[] = ['briefing', 'results', 'preemption', 'blindspots'];
 
 export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set) => ({
   showSettings: false,

@@ -30,13 +30,6 @@ vi.mock('../../store', () => ({
         appState: { loading: false, analysisComplete: false, status: 'Ready', relevanceResults: [], progress: 0, progressStage: '' },
         userContext: null, startAnalysis: vi.fn(), generateBriefing: vi.fn(),
         aiBriefing: { content: null, loading: false, error: null, model: null },
-        playbookModules: [], playbookContent: null, playbookProgress: null,
-        playbookLoading: false, playbookError: null, activeModuleId: null,
-        streetsTier: 'playbook', loadPlaybookModules: vi.fn(),
-        loadPlaybookContent: vi.fn(), loadPlaybookProgress: vi.fn(),
-        markLessonComplete: vi.fn(), loadStreetsTier: vi.fn(),
-        activateStreetsLicense: vi.fn(), personalizedLessons: {},
-        loadPersonalizedContent: vi.fn(), loadPersonalizedContentBatch: vi.fn(),
         decisions: [], decisionsLoading: false, loadDecisions: vi.fn(),
         recordDecision: vi.fn(), updateDecision: vi.fn(),
         autophagyStatus: null, autophagyHistory: [], autophagyLoading: false,
@@ -56,9 +49,6 @@ vi.mock('../../store', () => ({
     {
       getState: () => ({
         setShowSettings: vi.fn(),
-        playbookProgress: null,
-        playbookContent: null,
-        personalizedLessons: {},
       }),
       setState: vi.fn(),
     },
@@ -72,15 +62,6 @@ vi.mock('../../hooks/use-license', () => ({
   useLicense: () => ({ tier: 'free', isPro: false, trialStatus: null, expired: false, daysRemaining: 0, expiresAt: null }),
 }));
 vi.mock('../../assets/sun-logo.webp', () => ({ default: 'mock-sun-logo.webp' }));
-vi.mock('../../utils/playbook-markdown', () => ({ renderMarkdown: () => 'rendered' }));
-vi.mock('../playbook/SovereignProfile', () => ({ SovereignProfile: () => null }));
-vi.mock('../playbook/StreetHealthBadge', () => ({ StreetHealthBadge: () => null }));
-vi.mock('../playbook/SovereignInsightCard', () => ({ SovereignInsightCard: () => null }));
-vi.mock('../playbook/SovereignConnectionBlock', () => ({ SovereignConnectionBlock: () => null }));
-vi.mock('../playbook/DiffRibbon', () => ({ DiffRibbon: () => null }));
-vi.mock('../playbook/FeedEchoBlock', () => ({ FeedEchoBlock: () => null }));
-vi.mock('../playbook/ProgressiveRevealBanner', () => ({ ProgressiveRevealBanner: () => null }));
-vi.mock('../playbook/PersonalizationDepthIndicator', () => ({ PersonalizationDepthIndicator: () => null }));
 vi.mock('../../utils/error-messages', () => ({ translateError: (e: unknown) => String(e) }));
 vi.mock('../../utils/first-run-messages', () => ({
   getStageNarration: () => 'narration',

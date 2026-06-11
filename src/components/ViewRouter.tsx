@@ -10,7 +10,6 @@ import { ViewErrorBoundary } from './ViewErrorBoundary';
 import { ResultsView } from './ResultsView';
 
 const BriefingView = lazy(() => import('./BriefingView').then(m => ({ default: m.BriefingView })));
-const PlaybookView = lazy(() => import('./PlaybookView').then(m => ({ default: m.PlaybookView })));
 const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m.SignalsPanel })));
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
 const WhatYouWouldHaveMissed = lazy(() => import('./WhatYouWouldHaveMissed').then(m => ({ default: m.WhatYouWouldHaveMissed })));
@@ -23,7 +22,6 @@ const VIEW_LABEL_KEYS: Record<string, string> = {
   preemption: 'nav.preemption.label',
   blindspots: 'nav.blindspots.label',
   results: 'nav.signal.label',
-  playbook: 'nav.playbook',
 };
 
 interface ViewRouterProps {
@@ -70,12 +68,6 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
       ) : activeView === 'blindspots' ? (
         <ViewErrorBoundary viewName="BlindSpots">
           <BlindSpotsView />
-        </ViewErrorBoundary>
-      ) : activeView === 'playbook' ? (
-        <ViewErrorBoundary viewName="Playbook">
-          <div role="tabpanel" id="view-panel-playbook" aria-labelledby="tab-playbook">
-            <PlaybookView />
-          </div>
         </ViewErrorBoundary>
       ) : (
         <ViewErrorBoundary viewName="Signal">

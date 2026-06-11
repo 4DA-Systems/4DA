@@ -3,12 +3,9 @@ import type {
   ContextFile,
   SourceRelevance,
 } from '../types';
-import type { PlaybookSlice } from './playbook-slice';
-import type { SovereignProfileSlice } from './sovereign-profile-slice';
 import type { AutophagySlice } from './autophagy-slice';
 import type { DecisionAdvantageSlice } from './decision-advantage-slice';
 import type { ChannelsSlice } from './channels-slice';
-import type { UnifiedProfileSlice } from './unified-profile-slice';
 import type { IntelligencePulseSlice } from './intelligence-pulse-slice';
 import type { TeamSlice } from './team-slice';
 import type { EnterpriseSlice } from './enterprise-slice';
@@ -170,12 +167,9 @@ export type AppStore =
   & AgentSlice
   & LicenseSlice
   & ToolkitSlice
-  & PlaybookSlice
-  & SovereignProfileSlice
   & AutophagySlice
   & DecisionAdvantageSlice
   & ChannelsSlice
-  & UnifiedProfileSlice
   & IntelligencePulseSlice
   & TeamSlice
   & EnterpriseSlice
