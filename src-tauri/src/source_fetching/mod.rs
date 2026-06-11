@@ -6,10 +6,12 @@
 
 mod fetcher;
 mod processor;
+mod yield_throttle;
 
 // Re-export everything at the module level so `crate::source_fetching::X` paths still work
 pub(crate) use fetcher::fetch_all_sources;
 pub(crate) use processor::fill_cache_background;
+pub(crate) use yield_throttle::{fetch_cap, SourceYield, RELEVANCE_FLOOR_PUB};
 
 #[derive(Debug, Default)]
 pub(crate) struct FetchSummary {

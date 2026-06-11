@@ -102,10 +102,29 @@ pub(crate) async fn fetch_all_sources(
     /// 'pending' and picked up in the next fetch cycle.
     const MAX_EMBED_BATCH: usize = 2000;
 
+    // Adaptive yield throttle: sources that consistently yield little relevance for
+    // THIS user (e.g. ML feeds for a systems dev) get a smaller per-cycle budget, so
+    // we stop embedding+storing a firehose of noise. Computed once per cycle over a
+    // recent window; cold-start + security sources are exempt. See yield_throttle.
+    let source_yields = db
+        .get_source_relevance_yields(30, super::RELEVANCE_FLOOR_PUB)
+        .unwrap_or_default();
+
     for source in &sources {
         let mut new_items_to_embed: Vec<(GenericSourceItem, String)> = Vec::new();
         let source_type = source.source_type();
         let source_name = source.name();
+        let effective_cap = super::fetch_cap(
+            max_items_per_source,
+            source_yields
+                .get(source_type)
+                .map(|&(scored, hit_rate)| super::SourceYield { scored, hit_rate })
+                .as_ref(),
+            source_type,
+        );
+        if effective_cap < max_items_per_source {
+            debug!(target: "4da::sources", source = source_name, cap = effective_cap, base = max_items_per_source, "Yield-throttled fetch budget");
+        }
 
         debug!(target: "4da::sources", source = source_name, "Fetching from source");
 
@@ -255,7 +274,7 @@ pub(crate) async fn fetch_all_sources(
                     }
                 }
 
-                for (idx, item) in items.into_iter().take(max_items_per_source).enumerate() {
+                for (idx, item) in items.into_iter().take(effective_cap).enumerate() {
                     // Generate a numeric ID from source_id hash
                     let id = {
                         use std::collections::hash_map::DefaultHasher;
@@ -298,7 +317,7 @@ pub(crate) async fn fetch_all_sources(
                                     0.3,
                                     &format!("Scraping: {}", &truncate_utf8(&item.title, 30)),
                                     idx,
-                                    max_items_per_source,
+                                    effective_cap,
                                 );
                                 let scraped =
                                     source.scrape_content(&item).await.unwrap_or_default();

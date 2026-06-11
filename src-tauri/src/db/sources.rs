@@ -2,6 +2,7 @@
 //! Source item CRUD, feedback, source registry, and health tracking.
 
 use rusqlite::{params, OptionalExtension, Result as SqliteResult};
+use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 use tracing::info;
 
@@ -75,6 +76,42 @@ pub struct FeedbackTopicSummary {
 // ============================================================================
 
 impl Database {
+    /// Per-source relevance YIELD over a recent window, for adaptive fetch
+    /// throttling. Returns `source_type -> (scored_count, hit_rate)` where
+    /// `hit_rate` is the fraction of recently-scored items from that source that
+    /// scored at or above `floor`. Only scored items (pipeline >= 1) count; the
+    /// window keeps the metric adaptive to interest shifts. See
+    /// `source_fetching::yield_throttle`.
+    pub fn get_source_relevance_yields(
+        &self,
+        window_days: i64,
+        floor: f64,
+    ) -> SqliteResult<HashMap<String, (i64, f64)>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT source_type,
+                    COUNT(*) AS scored,
+                    AVG(CASE WHEN relevance_score >= ?1 THEN 1.0 ELSE 0.0 END) AS hit_rate
+             FROM source_items
+             WHERE relevance_score IS NOT NULL
+               AND scored_pipeline_version >= 1
+               AND created_at > datetime('now', ?2)
+             GROUP BY source_type",
+        )?;
+        let rows = stmt.query_map(params![floor, format!("-{} days", window_days)], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                (row.get::<_, i64>(1)?, row.get::<_, f64>(2)?),
+            ))
+        })?;
+        let mut map = HashMap::new();
+        for row in rows {
+            let (source_type, stats) = row?;
+            map.insert(source_type, stats);
+        }
+        Ok(map)
+    }
+
     /// Store or update a source item (also updates vec0 index).
     /// Language is auto-detected from title text via `whichlang`.
     pub fn upsert_source_item(

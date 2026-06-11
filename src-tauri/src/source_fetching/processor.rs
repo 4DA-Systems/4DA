@@ -63,18 +63,34 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
     let enabled_count = enabled_sources.len();
     let completed = Arc::new(AtomicUsize::new(summary.skipped_disabled));
 
+    // Adaptive yield throttle (see yield_throttle): low-yield sources get a smaller
+    // fetch budget so we stop pulling+embedding a firehose of noise. Capping the
+    // fetch_items_deep count here saves the fetch AND the embed for throttled sources.
+    let source_yields = db
+        .get_source_relevance_yields(30, super::RELEVANCE_FLOOR_PUB)
+        .unwrap_or_default();
+    const CACHE_FILL_BASE: usize = 50;
+
     // Spawn all enabled sources as concurrent tasks
     let mut join_set: JoinSet<FetchResult> = JoinSet::new();
 
     for source in enabled_sources {
         let tracker = cache_tracker.clone();
+        let cap = super::fetch_cap(
+            CACHE_FILL_BASE,
+            source_yields
+                .get(source.source_type())
+                .map(|&(scored, hit_rate)| super::SourceYield { scored, hit_rate })
+                .as_ref(),
+            source.source_type(),
+        );
         join_set.spawn(async move {
             let st = source.source_type().to_string();
             let name = source.name().to_string();
 
             rate_limiter().wait_for_rate_limit(&st).await;
 
-            let result = fetch_with_retry(&name, &tracker, || source.fetch_items_deep(50)).await;
+            let result = fetch_with_retry(&name, &tracker, || source.fetch_items_deep(cap)).await;
 
             match result {
                 Ok(raw_items) => {
