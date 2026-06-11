@@ -127,6 +127,34 @@ pub(crate) fn needs_sync(db: &Database, max_age_hours: i64) -> Result<bool> {
     Ok(false)
 }
 
+/// Populate advisories for one ecosystem from the locally cached OSV ZIP
+/// mirror, downloading the ZIP once if it is not already on disk.
+///
+/// This exists because the OSV `/v1/querybatch` API returns only vulnerability
+/// ID-stubs (`{id, modified}`) — never the `affected` package ranges that
+/// `store_vulnerability` needs — so the batch path cannot fill the mirror on
+/// its own. The per-ecosystem ZIP carries full advisory JSON and is matched
+/// locally, so it is both the path that actually populates `osv_advisories`
+/// and the more privacy-preserving one (nothing about the user's dependency
+/// set leaves the machine).
+async fn populate_from_zip_mirror(
+    db: &Database,
+    ecosystem: &str,
+    packages: &[String],
+) -> Result<usize> {
+    let pkg_set: std::collections::HashSet<String> =
+        packages.iter().map(|p| p.to_lowercase()).collect();
+
+    match super::cache::sync_from_zip(db, ecosystem, &pkg_set) {
+        Ok(count) => Ok(count),
+        Err(_) => {
+            // ZIP absent or unreadable — download once, then match locally.
+            super::cache::download_ecosystem_zip(ecosystem).await?;
+            super::cache::sync_from_zip(db, ecosystem, &pkg_set)
+        }
+    }
+}
+
 /// Run a full sync: read deps → query OSV → store advisories → update status.
 pub async fn sync(db: &Database) -> Result<SyncResult> {
     let start = std::time::Instant::now();
@@ -153,12 +181,44 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
     for (ecosystem, packages) in &by_ecosystem {
         let sync_start = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
         match sync_ecosystem(&client, db, ecosystem, packages, &sync_start).await {
-            Ok(count) => {
+            Ok(count) if count > 0 => {
                 result.ecosystems_synced.push(ecosystem.clone());
                 result.advisories_stored += count;
                 db.update_osv_sync_status(ecosystem, count as i64, None)
                     .ok();
             }
+            // The batch API stored nothing. `/v1/querybatch` returns vulnerability
+            // ID-stubs without the `affected` ranges `store_vulnerability` needs,
+            // so it can never populate the mirror on its own. Fall back to the
+            // cached ZIP mirror (full advisory JSON, matched locally). This — not
+            // the batch query — is what actually fills `osv_advisories` for
+            // npm/crates.io, and it never sends the user's dependency set anywhere.
+            Ok(_) => match populate_from_zip_mirror(db, ecosystem, packages).await {
+                Ok(zip_count) if zip_count > 0 => {
+                    info!(
+                        target: "4da::osv",
+                        ecosystem = ecosystem.as_str(),
+                        cached_advisories = zip_count,
+                        "Batch API returned no storable advisories; populated from ZIP mirror"
+                    );
+                    result.ecosystems_synced.push(ecosystem.clone());
+                    result.advisories_stored += zip_count;
+                    db.update_osv_sync_status(ecosystem, zip_count as i64, None)
+                        .ok();
+                }
+                Ok(_) => {
+                    // Genuinely no advisories for this ecosystem's packages.
+                    result.ecosystems_synced.push(ecosystem.clone());
+                    db.update_osv_sync_status(ecosystem, 0, None).ok();
+                }
+                Err(e) => {
+                    let msg = format!("{ecosystem} (zip): {e}");
+                    warn!(target: "4da::osv", error = %msg, "ZIP mirror population failed");
+                    result.errors.push(msg);
+                    db.update_osv_sync_status(ecosystem, 0, Some(&e.to_string()))
+                        .ok();
+                }
+            },
             Err(e) => {
                 let err_str = e.to_string();
                 // Rate limit errors should not fall back to cache
@@ -166,24 +226,20 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
 
                 if !is_rate_limit {
                     // Attempt cache fallback for network/server errors
-                    let pkg_set: std::collections::HashSet<String> =
-                        packages.iter().map(|p| p.to_lowercase()).collect();
-
-                    match super::cache::sync_from_zip(db, ecosystem, &pkg_set) {
-                        Ok(count) if count > 0 => {
+                    if let Ok(zip_count) = populate_from_zip_mirror(db, ecosystem, packages).await {
+                        if zip_count > 0 {
                             info!(
                                 target: "4da::osv",
                                 ecosystem = ecosystem.as_str(),
-                                cached_advisories = count,
+                                cached_advisories = zip_count,
                                 "API sync failed, fell back to cached ZIP"
                             );
                             result.ecosystems_synced.push(ecosystem.clone());
-                            result.advisories_stored += count;
-                            db.update_osv_sync_status(ecosystem, count as i64, None)
+                            result.advisories_stored += zip_count;
+                            db.update_osv_sync_status(ecosystem, zip_count as i64, None)
                                 .ok();
                             continue;
                         }
-                        _ => {} // No cache available, report original error
                     }
                 }
 
@@ -286,17 +342,27 @@ async fn sync_ecosystem(
         }
     }
 
-    // Clean up advisories that were withdrawn (no longer returned by OSV)
-    let deleted = db
-        .delete_stale_osv_advisories(ecosystem, sync_start)
-        .unwrap_or(0);
-    if deleted > 0 {
-        info!(
-            target: "4da::osv",
-            ecosystem = ecosystem,
-            deleted = deleted,
-            "Removed withdrawn advisories"
-        );
+    // Clean up advisories that were withdrawn (no longer returned by OSV) —
+    // but ONLY when we actually stored fresh advisories this pass. The OSV
+    // `/v1/querybatch` endpoint returns vulnerability *ID stubs* (`{id, modified}`)
+    // with no `affected` package data, so `store_vulnerability` can store nothing
+    // from the batch path (`total_stored == 0`). Pruning on a zero-store would
+    // treat the entire existing mirror as "withdrawn" and WIPE it — exactly the
+    // silent failure that left Preemption empty while real CVEs existed. When the
+    // batch path stores nothing, `sync()` repopulates from the cached ZIP mirror
+    // instead; leave the existing rows intact here.
+    if total_stored > 0 {
+        let deleted = db
+            .delete_stale_osv_advisories(ecosystem, sync_start)
+            .unwrap_or(0);
+        if deleted > 0 {
+            info!(
+                target: "4da::osv",
+                ecosystem = ecosystem,
+                deleted = deleted,
+                "Removed withdrawn advisories"
+            );
+        }
     }
 
     info!(
