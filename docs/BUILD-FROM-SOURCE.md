@@ -29,6 +29,14 @@ If you just want to verify a downloaded binary, see [VERIFY-DOWNLOADS.md](VERIFY
 
 After installing Rust via rustup, the correct toolchain version is selected automatically from `src-tauri/rust-toolchain.toml`.
 
+**OCR models:** the Rust build requires two model files in `src-tauri/models/` (declared as Tauri bundle resources; the directory is gitignored). `pnpm install` fetches them automatically. If you build offline or the fetch fails, download them manually first:
+
+```bash
+mkdir -p src-tauri/models
+curl -sSL -o src-tauri/models/text-detection.rten https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
+curl -sSL -o src-tauri/models/text-recognition.rten https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
+```
+
 Install pnpm after Node.js:
 
 ```bash
@@ -93,6 +101,9 @@ cd 4DA
 git checkout v1.0.0
 
 # 3. Install frontend dependencies
+#    (postinstall also fetches the two OCR models, ~12 MB, into
+#    src-tauri/models/ — the Rust build declares them as bundle
+#    resources and will not compile without them)
 pnpm install
 
 # 4. Build the production application
