@@ -133,25 +133,41 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     if (prev) setStep(prev);
   };
 
-  const handleSetupComplete = async () => {
-    try {
-      await cmd('mark_onboarding_complete');
-    } catch {
-      // Non-critical — continue anyway
+  // Persist the onboarding-complete flag, then enter the app.
+  //
+  // Previously all three completion paths swallowed a failed
+  // mark_onboarding_complete AND cleared the wizard-step key. On a full
+  // disk the flag never persists, so every boot restarted the wizard
+  // from 'welcome' with no error — an invisible loop. Now: retry once
+  // (transient FS hiccup), and on persistent failure KEEP the step key
+  // so the next boot resumes where the user was instead of restarting,
+  // and log loudly. The user still enters the app for this session.
+  const persistCompletionAndEnter = async () => {
+    let persisted = false;
+    for (let attempt = 0; attempt < 2 && !persisted; attempt++) {
+      try {
+        await cmd('mark_onboarding_complete');
+        persisted = true;
+      } catch (e) {
+        if (attempt === 1) {
+          // eslint-disable-next-line no-console
+          console.error(
+            'Could not save onboarding completion (disk full or settings locked?). ' +
+              'The setup wizard will resume on next launch until this succeeds.',
+            e,
+          );
+        }
+      }
     }
-    try { localStorage.removeItem(WIZARD_STEP_KEY); } catch { /* noop */ }
+    if (persisted) {
+      try { localStorage.removeItem(WIZARD_STEP_KEY); } catch { /* noop */ }
+    }
     onComplete();
   };
 
-  const handleSkipToContent = async () => {
-    try {
-      await cmd('mark_onboarding_complete');
-    } catch {
-      // Non-critical — continue anyway
-    }
-    try { localStorage.removeItem(WIZARD_STEP_KEY); } catch { /* noop */ }
-    onComplete();
-  };
+  const handleSetupComplete = persistCompletionAndEnter;
+
+  const handleSkipToContent = persistCompletionAndEnter;
 
   // Consented, recommended local scan: run the same project discovery the
   // setup step awaits, then finish onboarding. Nothing leaves the machine.
@@ -161,13 +177,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     } catch {
       // Non-critical — proceed even if discovery fails
     }
-    try {
-      await cmd('mark_onboarding_complete');
-    } catch {
-      // Non-critical — continue anyway
-    }
-    try { localStorage.removeItem(WIZARD_STEP_KEY); } catch { /* noop */ }
-    onComplete();
+    await persistCompletionAndEnter();
   };
 
   // Hide progress indicator on the choice gate — it's a decision point, not a step

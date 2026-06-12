@@ -143,8 +143,16 @@ pub fn is_trial_active(license: &LicenseConfig) -> bool {
     match &license.trial_started_at {
         Some(started) => {
             if let Ok(start_date) = chrono::DateTime::parse_from_rfc3339(started) {
-                let elapsed = chrono::Utc::now().signed_duration_since(start_date);
-                elapsed.num_days() < TRIAL_DURATION_DAYS
+                // Clamp at 0: a future-dated stamp (clock ran ahead at
+                // first launch, then NTP corrected it) yields negative
+                // elapsed, which would otherwise read as a ~379-day trial
+                // and is a deliberate tamper vector. Treat it as a trial
+                // that just started — fair, and not exploitable.
+                let days = chrono::Utc::now()
+                    .signed_duration_since(start_date)
+                    .num_days()
+                    .max(0);
+                days < TRIAL_DURATION_DAYS
             } else {
                 false
             }
@@ -166,8 +174,13 @@ pub fn get_trial_status(license: &LicenseConfig) -> TrialStatus {
     match &license.trial_started_at {
         Some(started) => {
             if let Ok(start_date) = chrono::DateTime::parse_from_rfc3339(started) {
-                let elapsed = chrono::Utc::now().signed_duration_since(start_date);
-                let remaining = TRIAL_DURATION_DAYS - elapsed.num_days();
+                // Clamp elapsed at 0 (see is_trial_active): a future stamp
+                // must not inflate days_remaining past the trial length.
+                let elapsed_days = chrono::Utc::now()
+                    .signed_duration_since(start_date)
+                    .num_days()
+                    .max(0);
+                let remaining = TRIAL_DURATION_DAYS - elapsed_days;
                 TrialStatus {
                     active: remaining > 0,
                     days_remaining: remaining.max(0) as i32,
@@ -199,4 +212,52 @@ pub struct TrialStatus {
     pub days_remaining: i32,
     pub started_at: Option<String>,
     pub has_license: bool,
+}
+
+#[cfg(test)]
+mod clock_skew_tests {
+    use super::*;
+
+    fn free_with_trial(started: &str) -> LicenseConfig {
+        LicenseConfig {
+            tier: "free".to_string(),
+            license_key: String::new(),
+            activated_at: None,
+            trial_started_at: Some(started.to_string()),
+            dev_unlock_all: false,
+        }
+    }
+
+    #[test]
+    fn future_dated_stamp_does_not_grant_inflated_trial() {
+        // Clock ran a year ahead at first launch, then NTP corrected it:
+        // trial_started_at is in the future. Must NOT read as a ~379-day
+        // trial (the pre-clamp bug) nor exceed the trial length.
+        let future = (chrono::Utc::now() + chrono::Duration::days(365)).to_rfc3339();
+        let lic = free_with_trial(&future);
+        assert!(is_trial_active(&lic), "future stamp clamps to just-started");
+        let status = get_trial_status(&lic);
+        assert!(
+            status.days_remaining <= TRIAL_DURATION_DAYS as i32,
+            "days_remaining never exceeds the trial length (was {})",
+            status.days_remaining
+        );
+        assert!(status.days_remaining >= 0);
+    }
+
+    #[test]
+    fn fresh_stamp_is_active_with_full_window() {
+        let now = chrono::Utc::now().to_rfc3339();
+        let lic = free_with_trial(&now);
+        assert!(is_trial_active(&lic));
+        assert!(get_trial_status(&lic).days_remaining >= TRIAL_DURATION_DAYS as i32 - 1);
+    }
+
+    #[test]
+    fn old_stamp_past_window_is_expired() {
+        let old = (chrono::Utc::now() - chrono::Duration::days(20)).to_rfc3339();
+        let lic = free_with_trial(&old);
+        assert!(!is_trial_active(&lic));
+        assert_eq!(get_trial_status(&lic).days_remaining, 0);
+    }
 }
