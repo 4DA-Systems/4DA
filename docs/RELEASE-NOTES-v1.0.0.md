@@ -8,10 +8,10 @@ Every piece of content is scored against your actual codebase using PASIFA, a 5-
 
 - **5-axis relevance scoring** — PASIFA rates every item against your local projects (context, interest, dependencies, learned patterns, ACE codebase scan)
 - **20+ built-in content sources** — Hacker News, Reddit, GitHub, arXiv, CVE/OSV, Stack Overflow, crates.io, PyPI, npm, Lobsters, Product Hunt, Bluesky, Dev.to, Hugging Face, YouTube, Go Modules, RSS, and more
-- **36 MCP tools** — `npx @4da/mcp-server --setup` installs in one command. Works standalone or with the desktop app. Claude Code, Cursor, Windsurf, GitHub Copilot compatible.
+- **14 MCP tools** — `npx @4da/mcp-server --setup` installs in one command. Works standalone or with the desktop app. Claude Code, Cursor, Windsurf, GitHub Copilot compatible.
 - **AI briefings** — daily and weekly intelligence summaries generated locally via your own API key
-- **STREETS Playbook** — 7 modules for developer growth, included free
-- **14 languages** — Arabic, Chinese, English, French, German, Hindi, Italian, Japanese, Korean, Portuguese (BR), Russian, Spanish, Turkish. Content translation, cross-lingual search, native briefings.
+- **STREETS Playbook** — 7 modules on independent developer income, free on the web at [4da.ai/streets](https://4da.ai/streets)
+- **13 languages** — Arabic, Chinese, English, French, German, Hindi, Italian, Japanese, Korean, Portuguese (BR), Russian, Spanish, Turkish. Content translation, cross-lingual search, native briefings.
 
 ## Download
 
@@ -71,8 +71,7 @@ The MCP server works standalone — no desktop app required. 14 tools for vulner
 | Content sources | All 20+ | All 20+ |
 | PASIFA scoring | Full engine | Full engine |
 | AI briefings | Included | Included |
-| STREETS Playbook | All 7 modules | All 7 modules |
-| MCP tools | All 35 | All 35 |
+| MCP tools | All 14 | All 14 |
 | Developer DNA | — | Included |
 | Signal Chains | — | Included |
 | Knowledge Gaps | — | Included |
