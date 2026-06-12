@@ -44,15 +44,30 @@ pub(crate) async fn fetch_all_sources(
             let client = sources::shared_client();
             let timeout = std::time::Duration::from_secs(8);
 
-            // Check multiple endpoints — succeed if ANY responds
-            // Includes user's API endpoints so corporate networks work
-            let check_result = tokio::select! {
-                r = client.head("https://1.1.1.1/cdn-cgi/trace").timeout(timeout).send() => r.is_ok(),
-                r = client.head("https://dns.google/resolve?name=example.com").timeout(timeout).send() => r.is_ok(),
-                r = client.head("https://httpbin.org/get").timeout(timeout).send() => r.is_ok(),
-                r = client.head("https://hacker-news.firebaseio.com/v0/topstories.json").timeout(timeout).send() => r.is_ok(),
-                r = client.head("https://api.github.com").timeout(timeout).send() => r.is_ok(),
+            // Check multiple endpoints — online if ANY responds.
+            // Must race for the first SUCCESS, not the first to settle: a
+            // `select!` returns whichever future completes first, so a
+            // corporate firewall that INSTANTLY refuses direct-IP HTTPS
+            // (a common rule — hence the IP + DNS + named-host mix) would
+            // win the race with a fast failure and falsely report offline
+            // while api.github.com was about to succeed. `select_ok`
+            // resolves on the first Ok and drops the rest; it errors only
+            // when every probe fails or times out.
+            let probe = |url: &'static str| {
+                let client = client.clone();
+                Box::pin(async move { client.head(url).timeout(timeout).send().await.map(|_| ()) })
+                    as std::pin::Pin<
+                        Box<dyn std::future::Future<Output = reqwest::Result<()>> + Send>,
+                    >
             };
+            let probes = vec![
+                probe("https://api.github.com"),
+                probe("https://dns.google/resolve?name=example.com"),
+                probe("https://hacker-news.firebaseio.com/v0/topstories.json"),
+                probe("https://1.1.1.1/cdn-cgi/trace"),
+                probe("https://httpbin.org/get"),
+            ];
+            let check_result = futures::future::select_ok(probes).await.is_ok();
 
             // Cache the result
             if let Ok(mut guard) = LAST_ONLINE_CHECK.lock() {

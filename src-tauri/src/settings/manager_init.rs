@@ -55,6 +55,14 @@ impl SettingsManager {
             }
         }
 
+        // When a corrupt settings.json is recovered (from backup or
+        // defaults), the recovered value lives only in memory until the
+        // next save. The startup health check re-reads the raw file and
+        // caches its verdict for the process lifetime, so without healing
+        // the disk it reports "settings.json is invalid JSON" forever
+        // while the app runs fine — a pure blame-magnet. Heal the file on
+        // disk immediately so disk matches memory and health reads clean.
+        let mut healed_from_corruption = false;
         let mut settings = if settings_path.exists() {
             let load_result = fs::read_to_string(&settings_path)
                 .ok()
@@ -63,6 +71,7 @@ impl SettingsManager {
             match load_result {
                 Some(s) => s,
                 None => {
+                    healed_from_corruption = true;
                     // Primary settings corrupted or unreadable — try backup
                     let bak_path = settings_path.with_extension("json.bak");
                     let bak_result = if bak_path.exists() {
@@ -89,6 +98,23 @@ impl SettingsManager {
             info!(target: "4da::settings", "No settings file found, using defaults");
             Settings::default()
         };
+
+        // Heal a corrupt-then-recovered settings.json on disk (atomic
+        // write via tmp + rename) so the recovery is durable and the
+        // health check stops reporting already-fixed corruption.
+        if healed_from_corruption {
+            if let Ok(json) = serde_json::to_string_pretty(&settings) {
+                let tmp_path = settings_path.with_extension("json.heal-tmp");
+                if fs::write(&tmp_path, &json).is_ok()
+                    && fs::rename(&tmp_path, &settings_path).is_ok()
+                {
+                    info!(target: "4da::settings", "Healed corrupt settings.json on disk from recovery");
+                } else {
+                    let _ = fs::remove_file(&tmp_path);
+                    warn!(target: "4da::settings", "Could not heal settings.json on disk (will retry on next save)");
+                }
+            }
+        }
 
         // Load usage from separate file, falling back to settings.usage for migration
         let usage = if usage_path.exists() {
