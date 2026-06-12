@@ -3116,5 +3116,6 @@
   "validation.source": "Источник",
   "validation.videos": "видео",
   "calibration.onboarding.gradeStartingPoint": "Это ваш начальный балл — он растёт по мере того, как 4DA узнаёт, что вам важно.",
-  "language.change": "Сменить язык"
+  "language.change": "Сменить язык",
+  "license.trialBadge": "Пробный Signal"
 }

@@ -3100,5 +3100,6 @@
   "weekly.title": "Resumo de inteligência semanal",
   "weekly.topTopics": "Principais tópicos aprendidos",
   "calibration.onboarding.gradeStartingPoint": "Esta é sua pontuação inicial — ela sobe conforme o 4DA aprende o que importa para você.",
-  "language.change": "Alterar idioma"
+  "language.change": "Alterar idioma",
+  "license.trialBadge": "Teste Signal"
 }

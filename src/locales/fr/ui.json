@@ -2819,5 +2819,6 @@
   "results.topMatches": "Meilleures correspondances :",
   "settings.llm.title": "Fournisseur d'IA",
   "calibration.onboarding.gradeStartingPoint": "C’est votre score de départ : il augmente à mesure que 4DA apprend ce qui compte pour vous.",
-  "language.change": "Changer de langue"
+  "language.change": "Changer de langue",
+  "license.trialBadge": "Essai Signal"
 }

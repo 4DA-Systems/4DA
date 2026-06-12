@@ -3031,5 +3031,6 @@
   "validation.source": "소스",
   "validation.videos": "동영상",
   "calibration.onboarding.gradeStartingPoint": "시작 점수입니다 — 4DA가 당신의 관심사를 학습할수록 올라갑니다.",
-  "language.change": "언어 변경"
+  "language.change": "언어 변경",
+  "license.trialBadge": "Signal 체험"
 }

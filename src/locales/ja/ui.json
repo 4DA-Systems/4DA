@@ -3034,5 +3034,6 @@
   "validation.source": "ソース",
   "validation.videos": "動画",
   "calibration.onboarding.gradeStartingPoint": "これは開始スコアです。4DA があなたの関心を学ぶほど上がっていきます。",
-  "language.change": "言語を変更"
+  "language.change": "言語を変更",
+  "license.trialBadge": "Signal 体験版"
 }

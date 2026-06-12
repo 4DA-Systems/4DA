@@ -3135,5 +3135,6 @@
     "loading": "Analysiere deine Abdeckung..."
   },
   "calibration.onboarding.gradeStartingPoint": "Das ist dein Startwert – er steigt, während 4DA lernt, was dir wichtig ist.",
-  "language.change": "Sprache ändern"
+  "language.change": "Sprache ändern",
+  "license.trialBadge": "Signal-Test"
 }

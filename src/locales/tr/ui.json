@@ -3063,5 +3063,6 @@
   "weekly.title": "Haftalık İstihbarat Özeti",
   "weekly.topTopics": "Üst öğrenilen konular",
   "calibration.onboarding.gradeStartingPoint": "Bu başlangıç puanınız — 4DA neyle ilgilendiğinizi öğrendikçe yükselir.",
-  "language.change": "Dili değiştir"
+  "language.change": "Dili değiştir",
+  "license.trialBadge": "Signal deneme"
 }
