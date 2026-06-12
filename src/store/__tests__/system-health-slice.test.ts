@@ -33,6 +33,34 @@ describe('system-health-slice', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // loadCapabilityStates
+  // ---------------------------------------------------------------------------
+  describe('loadCapabilityStates', () => {
+    it('populates capabilityStates from the backend snapshot', async () => {
+      vi.mocked(invoke).mockResolvedValueOnce({
+        briefing_generation: { state: 'unavailable', reason: 'Anthropic rejected the API key (HTTP 401)', remediation: 'Update your API key in Settings' },
+        embedding_search: { state: 'full' },
+      });
+
+      await useAppStore.getState().loadCapabilityStates();
+
+      const caps = useAppStore.getState().capabilityStates;
+      expect(caps).not.toBeNull();
+      expect(caps!.briefing_generation!.state).toBe('unavailable');
+      expect(caps!.embedding_search!.state).toBe('full');
+      expect(invoke).toHaveBeenCalledWith('get_capability_states', {});
+    });
+
+    it('falls back to an empty map on failure (never null after a load)', async () => {
+      vi.mocked(invoke).mockRejectedValueOnce(new Error('cmd fail'));
+
+      await useAppStore.getState().loadCapabilityStates();
+
+      expect(useAppStore.getState().capabilityStates).toEqual({});
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // setSimilarTopicQuery
   // ---------------------------------------------------------------------------
   describe('setSimilarTopicQuery', () => {

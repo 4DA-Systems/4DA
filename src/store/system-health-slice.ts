@@ -8,6 +8,7 @@ export const createSystemHealthSlice: StateCreator<AppStore, [], [], SystemHealt
   similarTopicQuery: '',
   similarTopicResults: [],
   startupHealthIssues: null,
+  capabilityStates: null,
 
   setSimilarTopicQuery: (q) => set({ similarTopicQuery: q }),
 
@@ -17,6 +18,15 @@ export const createSystemHealthSlice: StateCreator<AppStore, [], [], SystemHealt
       set({ startupHealthIssues: issues && issues.length > 0 ? issues : [] });
     } catch {
       set({ startupHealthIssues: [] });
+    }
+  },
+
+  loadCapabilityStates: async () => {
+    try {
+      const s = await cmd('get_capability_states');
+      set({ capabilityStates: s ?? {} });
+    } catch {
+      set({ capabilityStates: {} });
     }
   },
 
