@@ -27,7 +27,7 @@ function LoadingSkeleton() {
 function StatCard({ label, value, suffix, color }: { label: string; value: string | number; suffix?: string; color?: string }) {
   return (
     <div className="bg-bg-tertiary rounded-lg border border-border px-4 py-3">
-      <div className={`text-xl font-semibold ${color ?? 'text-white'}`}>
+      <div className={`text-xl font-semibold ${color ?? 'text-text-primary'}`}>
         {suffix === '$' && <span className="text-sm me-0.5">$</span>}
         {value}
         {suffix && suffix !== '$' && <span className="text-sm ms-0.5">{suffix}</span>}
@@ -111,7 +111,7 @@ export const CostTab = memo(function CostTab() {
           label={t('costs.totalCost')}
           value={usage.total_cost_usd.toFixed(2)}
           suffix="$"
-          color="text-white"
+          color="text-text-primary"
         />
         <StatCard
           label={t('costs.tokensIn')}

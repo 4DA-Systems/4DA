@@ -31,7 +31,7 @@ export function LoadingOrEmptyState({
         <div className="w-16 h-16 mx-auto mb-4 bg-orange-500/20 rounded-full flex items-center justify-center">
           <div className="w-8 h-8 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
         </div>
-        <p className="text-lg text-white mb-2">{t('action.analyzing')}</p>
+        <p className="text-lg text-text-primary mb-2">{t('action.analyzing')}</p>
         <p className="text-sm text-text-muted">{progressMessage}</p>
         {progress > 0 && (
           <div className="mt-4 max-w-xs mx-auto">
@@ -56,7 +56,7 @@ export function LoadingOrEmptyState({
       <div className="w-16 h-16 mx-auto mb-4 rounded-xl border border-border/30 overflow-hidden" role="img" aria-label="4DA">
         <PlatonicSVG {...TETRAHEDRON} size={64} />
       </div>
-      <p className="text-lg text-white mb-2">{t('results.noResults')}</p>
+      <p className="text-lg text-text-primary mb-2">{t('results.noResults')}</p>
       <p className="text-sm text-text-muted mb-3">
         {t('results.startAnalysis')}
       </p>

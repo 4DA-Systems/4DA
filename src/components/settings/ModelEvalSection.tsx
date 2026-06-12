@@ -52,7 +52,7 @@ export function ModelEvalSection() {
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       <div className="flex items-center justify-between mb-2">
         <div>
-          <h4 className="text-xs font-medium text-white">{t('settings.ai.evalTitle', 'Model Quality Check')}</h4>
+          <h4 className="text-xs font-medium text-text-primary">{t('settings.ai.evalTitle', 'Model Quality Check')}</h4>
           <p className="text-[10px] text-text-muted mt-0.5">
             {t('settings.ai.evalDescription', 'Test your configured model against hallucination and accuracy fixtures')}
           </p>
@@ -76,7 +76,7 @@ export function ModelEvalSection() {
 
       {result && (
         <div className="mt-3 space-y-2">
-          <div className={`flex items-center justify-between p-2.5 rounded-lg border ${verdictStyle[result.verdict].bg} border-white/5`}>
+          <div className={`flex items-center justify-between p-2.5 rounded-lg border ${verdictStyle[result.verdict].bg} border-text-primary/5`}>
             <div className="flex items-center gap-2">
               <span className={`text-sm font-semibold ${verdictStyle[result.verdict].text}`}>
                 {verdictStyle[result.verdict].label}

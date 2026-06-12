@@ -96,7 +96,7 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
               </svg>
             </div>
             <div>
-              <h3 className="text-sm font-medium text-white">{t('settings.ai.intelligenceEngine')}</h3>
+              <h3 className="text-sm font-medium text-text-primary">{t('settings.ai.intelligenceEngine')}</h3>
               <p className="text-xs text-text-muted">{t('settings.ai.intelligenceEngineDesc')}</p>
             </div>
           </div>
@@ -135,14 +135,14 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
             aria-label={t('settings.ai.saveConfiguration')}
             className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-all shadow-lg flex items-center justify-center gap-2 ${
               saveState === 'success'
-                ? 'bg-green-600 text-white shadow-green-500/20'
+                ? 'bg-green-600 text-text-primary shadow-green-500/20'
                 : saveState === 'error'
-                  ? 'bg-red-600 text-white shadow-red-500/20'
-                  : 'bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 shadow-orange-500/20'
+                  ? 'bg-red-600 text-text-primary shadow-red-500/20'
+                  : 'bg-gradient-to-r from-orange-500 to-orange-600 text-text-primary hover:from-orange-600 hover:to-orange-700 shadow-orange-500/20'
             } disabled:opacity-60`}
           >
             {saveState === 'loading' && (
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span className="w-4 h-4 border-2 border-text-primary/30 border-t-text-primary rounded-full animate-spin" />
             )}
             {saveState === 'success' ? t('settings.ai.saved') : saveState === 'error' ? t('settings.ai.saveFailed') : t('settings.ai.saveConfiguration')}
           </button>
@@ -155,7 +155,7 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
                 ? 'bg-green-500/10 text-green-400 border-green-500/30'
                 : testState === 'error'
                   ? 'bg-red-500/10 text-red-400 border-red-500/30'
-                  : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-orange-500/30'
+                  : 'bg-bg-tertiary text-text-secondary border-border hover:text-text-primary hover:border-orange-500/30'
             } disabled:opacity-60`}
           >
             {testState === 'loading' && (

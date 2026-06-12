@@ -17,7 +17,7 @@ export function AboutPanel() {
       {/* Logo + Identity */}
       <div className="flex flex-col items-center text-center">
         <LogoMarkSVG size={128} className="mb-3" />
-        <h3 className="text-xl font-semibold text-white">{t('app.title')}</h3>
+        <h3 className="text-xl font-semibold text-text-primary">{t('app.title')}</h3>
         <p className="text-sm text-text-secondary mt-1">{t('about.fullName')}</p>
         <p className="text-xs text-text-muted mt-0.5">{t('app.tagline')}</p>
       </div>

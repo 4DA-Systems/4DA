@@ -141,7 +141,7 @@ export function SprintPhase({ onClose }: SprintPhaseProps) {
   if (state === 'done') {
     return (
       <div className="py-8 text-center space-y-4" data-testid="sprint-done">
-        <h3 className="text-lg font-medium text-white">{t('calibrationView.sprint.doneTitle')}</h3>
+        <h3 className="text-lg font-medium text-text-primary">{t('calibrationView.sprint.doneTitle')}</h3>
         <p className="text-sm text-text-secondary">
           {t('calibrationView.sprint.doneBody', { count: labeledThisSprint })}
         </p>
@@ -158,7 +158,7 @@ export function SprintPhase({ onClose }: SprintPhaseProps) {
         <p className="text-xs text-text-muted max-w-sm mx-auto">{t('calibrationView.sprint.unlocks')}</p>
         <button
           onClick={onClose}
-          className="bg-white text-black font-medium text-sm py-2.5 px-6 rounded-md hover:bg-gray-100 transition-colors"
+          className="bg-accent-primary text-bg-primary font-medium text-sm py-2.5 px-6 rounded-md hover:bg-accent-primary-hover transition-colors"
         >
           {t('calibrationView.sprint.close')}
         </button>
@@ -175,7 +175,7 @@ export function SprintPhase({ onClose }: SprintPhaseProps) {
       <div className="flex items-center gap-3">
         <div className="flex-1 bg-bg-tertiary rounded-full h-1.5 overflow-hidden">
           <div
-            className="bg-white h-full rounded-full transition-all duration-300"
+            className="bg-accent-primary h-full rounded-full transition-all duration-300"
             style={{ width: `${Math.round(((index + 1) / cards.length) * 100)}%` }}
           />
         </div>
@@ -193,7 +193,7 @@ export function SprintPhase({ onClose }: SprintPhaseProps) {
             {card.sourceType}
           </span>
         </div>
-        <h3 className="text-white font-medium text-base mb-3 leading-snug">{card.title}</h3>
+        <h3 className="text-text-primary font-medium text-base mb-3 leading-snug">{card.title}</h3>
         {card.snippet && (
           <p className="text-text-secondary text-sm leading-relaxed mb-6 line-clamp-3">
             {card.snippet}
@@ -206,7 +206,7 @@ export function SprintPhase({ onClose }: SprintPhaseProps) {
               void respond('relevant');
             }}
             disabled={busy}
-            className="flex-1 bg-white text-black font-medium text-sm py-2.5 px-4 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50"
+            className="flex-1 bg-accent-primary text-bg-primary font-medium text-sm py-2.5 px-4 rounded-md hover:bg-accent-primary-hover transition-colors disabled:opacity-50"
           >
             {t('calibrationView.sprint.relevant')}
           </button>

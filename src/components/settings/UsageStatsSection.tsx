@@ -18,13 +18,13 @@ export function UsageStatsSection({ settings, provider }: UsageStatsSectionProps
           <span>&#x1f4c8;</span>
         </div>
         <div>
-          <h3 className="text-sm font-medium text-white">{t('settings.ai.usageTitle')}</h3>
+          <h3 className="text-sm font-medium text-text-primary">{t('settings.ai.usageTitle')}</h3>
           <p className="text-xs text-text-muted">{t('settings.ai.usageDescription')}</p>
         </div>
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-bg-secondary rounded-lg p-3 text-center">
-          <p className="text-xl font-semibold text-white">{settings.usage.tokens_today.toLocaleString()}</p>
+          <p className="text-xl font-semibold text-text-primary">{settings.usage.tokens_today.toLocaleString()}</p>
           <p className="text-xs text-text-muted">{t('settings.ai.tokens')}</p>
         </div>
         <div className="bg-bg-secondary rounded-lg p-3 text-center">

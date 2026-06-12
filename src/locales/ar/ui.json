@@ -1249,6 +1249,8 @@
   "header.toReview": "للمراجعة",
   "header.inCorpus": "في المجموعة",
   "header.summaryTooltip": "{{top}} للمراجعة · {{rel}} في المجموعة",
+  "header.themeToggleToLight": "التبديل إلى المظهر الفاتح",
+  "header.themeToggleToDark": "التبديل إلى المظهر الداكن",
   "cmdk.placeholder": "ابحث في كل ما قرأه 4DA…",
   "cmdk.ariaLabel": "البحث في 4DA",
   "cmdk.groupGoto": "الانتقال إلى",

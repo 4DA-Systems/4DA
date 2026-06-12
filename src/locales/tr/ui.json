@@ -1230,6 +1230,8 @@
   "header.toReview": "incelenecek",
   "header.inCorpus": "derlemede",
   "header.summaryTooltip": "{{top}} incelenecek · {{rel}} derlemede",
+  "header.themeToggleToLight": "Açık temaya geç",
+  "header.themeToggleToDark": "Koyu temaya geç",
   "cmdk.placeholder": "4DA'nın okuduğu her şeyi ara…",
   "cmdk.ariaLabel": "4DA'da ara",
   "cmdk.groupGoto": "Şuraya git",

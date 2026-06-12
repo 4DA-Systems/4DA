@@ -35,11 +35,11 @@ export function DocumentDetail({ document, onBack }: DocumentDetailProps) {
       <div className="flex items-center gap-3 mb-3">
         <button
           onClick={onBack}
-          className="text-sm text-text-secondary hover:text-white transition-colors"
+          className="text-sm text-text-secondary hover:text-text-primary transition-colors"
         >
           {t('documents.back')}
         </button>
-        <h3 className="text-white font-medium truncate flex-1">
+        <h3 className="text-text-primary font-medium truncate flex-1">
           {doc.file_name}
         </h3>
       </div>
@@ -47,19 +47,19 @@ export function DocumentDetail({ document, onBack }: DocumentDetailProps) {
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="p-3 bg-bg-secondary rounded-lg border border-border">
           <div className="text-xs text-text-muted">{t('documents.type')}</div>
-          <div className="text-sm text-white font-medium">{doc.file_type.toUpperCase()}</div>
+          <div className="text-sm text-text-primary font-medium">{doc.file_type.toUpperCase()}</div>
         </div>
         <div className="p-3 bg-bg-secondary rounded-lg border border-border">
           <div className="text-xs text-text-muted">{t('documents.size')}</div>
-          <div className="text-sm text-white font-medium">{formatFileSize(doc.file_size)}</div>
+          <div className="text-sm text-text-primary font-medium">{formatFileSize(doc.file_size)}</div>
         </div>
         <div className="p-3 bg-bg-secondary rounded-lg border border-border">
           <div className="text-xs text-text-muted">{t('documents.words')}</div>
-          <div className="text-sm text-white font-medium">{doc.word_count.toLocaleString()}</div>
+          <div className="text-sm text-text-primary font-medium">{doc.word_count.toLocaleString()}</div>
         </div>
         <div className="p-3 bg-bg-secondary rounded-lg border border-border">
           <div className="text-xs text-text-muted">{t('documents.indexed')}</div>
-          <div className="text-sm text-white font-medium">{formatDate(doc.indexed_at)}</div>
+          <div className="text-sm text-text-primary font-medium">{formatDate(doc.indexed_at)}</div>
         </div>
       </div>
 

@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { reportError } from '../lib/error-reporter';
 import sunLogo from '../assets/sun-logo.webp';
+import sunLogoLight from '../assets/sun-logo-light.webp';
+import { useTheme } from '../lib/theme';
 import { translateError } from '../utils/error-messages';
 import {
   type InitStage,
@@ -32,6 +34,7 @@ interface SplashScreenProps {
 
 export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScreenProps) {
   const { t } = useTranslation();
+  const { isLight } = useTheme();
   const [fadeOut, setFadeOut] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [stage, setStage] = useState<InitStage>('starting');
@@ -126,8 +129,10 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
         <div style={logoRingStyle}>
           {/* eslint-disable i18next/no-literal-string */}
           {!imageError ? (
+            /* The dark asset bakes in a black disc; on paper we use the
+               luminance-keyed cutout (same treatment as the white merch) */
             <img
-              src={sunLogo}
+              src={isLight ? sunLogoLight : sunLogo}
               alt="4DA"
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               onError={() => setImageError(true)}
@@ -197,7 +202,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
         )}
         <span style={{
           fontSize: '0.875rem',
-          color: error ? 'var(--color-error)' : stage === 'ready' ? 'var(--color-success)' : '#9CA3AF',
+          color: error ? 'var(--color-error)' : stage === 'ready' ? 'var(--color-success)' : 'var(--color-text-secondary)',
           transition: 'color 300ms',
         }}>
           {error || t(stageKeys[stage])}
@@ -207,7 +212,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
         {!error && (
           <span style={{
             fontSize: '0.6875rem',
-            color: '#6B7280',
+            color: 'var(--color-text-muted)',
             transition: 'opacity 300ms',
           }}>
             {t(`splash.stageExplanation.${stage}`, stageExplanations[stage])}
@@ -254,8 +259,8 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
         onClick={() => window.location.reload()}
         style={refreshButtonStyle}
         onMouseEnter={(e) => {
-          e.currentTarget.style.color = '#9CA3AF';
-          e.currentTarget.style.borderColor = '#4B5563';
+          e.currentTarget.style.color = 'var(--color-text-secondary)';
+          e.currentTarget.style.borderColor = 'var(--color-text-muted)';
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.color = 'var(--color-text-muted)';

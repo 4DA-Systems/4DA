@@ -172,7 +172,7 @@ export function SourcePreview({ parsed, onConfirm, onCancel }: SourcePreviewProp
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 text-xs rounded border border-border text-text-secondary hover:text-white hover:border-white/20 transition-colors"
+            className="px-3 py-1.5 text-xs rounded border border-border text-text-secondary hover:text-text-primary hover:border-text-primary/20 transition-colors"
           >
             {t('action.cancel', 'Cancel')}
           </button>

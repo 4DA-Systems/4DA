@@ -137,7 +137,7 @@ const FeedItem = memo(function FeedItem({
   const dimmed = feedback === 'dismiss' || feedback === 'mark_irrelevant';
 
   return (
-    <div title={hoverReason} className={`group flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition-colors ${
+    <div title={hoverReason} className={`group flex items-center gap-3 px-4 py-2.5 hover:bg-text-primary/[0.02] transition-colors ${
       dimmed ? 'opacity-40' : ''
     }`}>
       {/* Relevance */}
@@ -154,7 +154,7 @@ const FeedItem = memo(function FeedItem({
               className={`w-1 h-1 rounded-full ${
                 i < (item.score_breakdown?.signal_count ?? 0)
                   ? (item.score_breakdown?.signal_count ?? 0) >= 4 ? 'bg-green-400' : 'bg-text-muted'
-                  : 'bg-white/[0.06]'
+                  : 'bg-text-primary/[0.06]'
               }`}
             />
           ))}

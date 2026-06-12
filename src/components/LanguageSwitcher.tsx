@@ -76,7 +76,7 @@ export const LanguageSwitcher = memo(function LanguageSwitcher({ className = '' 
         aria-label={t('language.change', 'Change language')}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-secondary bg-bg-secondary/80 backdrop-blur border border-border rounded-lg hover:border-orange-500/30 hover:text-white transition-all ${className}`}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-secondary bg-bg-secondary/80 backdrop-blur border border-border rounded-lg hover:border-orange-500/30 hover:text-text-primary transition-all ${className}`}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />

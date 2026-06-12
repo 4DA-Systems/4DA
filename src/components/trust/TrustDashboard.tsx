@@ -54,7 +54,7 @@ function MetricCard({
 }) {
   return (
     <div className="bg-bg-tertiary rounded-lg border border-border px-4 py-3">
-      <div className={`text-xl font-semibold ${color ?? 'text-white'}`}>
+      <div className={`text-xl font-semibold ${color ?? 'text-text-primary'}`}>
         {value}
         {suffix && <span className="text-sm ms-0.5">{suffix}</span>}
       </div>
@@ -129,7 +129,7 @@ export const TrustDashboard = memo(function TrustDashboard() {
     <div className="p-5 space-y-4">
       {/* Title */}
       <div>
-        <h4 className="text-sm font-medium text-white">
+        <h4 className="text-sm font-medium text-text-primary">
           {t('trust.title')}
         </h4>
         <p className="text-[10px] text-text-muted mt-0.5">
@@ -147,7 +147,7 @@ export const TrustDashboard = memo(function TrustDashboard() {
         <MetricCard
           label={t('trust.actionRate')}
           value={`${actionPct}%`}
-          color="text-white"
+          color="text-text-primary"
         />
         <MetricCard
           label={t('trust.fpRate')}

@@ -28,20 +28,20 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
         <BrandMark size={80} />
       </div>
 
-      <h2 className="text-xl font-medium text-white mb-2">
+      <h2 className="text-xl font-medium text-text-primary mb-2">
         {t('firstRun.intelligenceTitle')}
       </h2>
 
       {/* Scan stats */}
       <div className="flex justify-center gap-6 mb-5">
         <div className="text-center">
-          <span className="text-2xl font-bold text-white tabular-nums">{summary.projects_scanned}</span>
+          <span className="text-2xl font-bold text-text-primary tabular-nums">{summary.projects_scanned}</span>
           <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
             {t('firstRun.projects')}
           </p>
         </div>
         <div className="text-center">
-          <span className="text-2xl font-bold text-white tabular-nums">{summary.total_dependencies}</span>
+          <span className="text-2xl font-bold text-text-primary tabular-nums">{summary.total_dependencies}</span>
           <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
             {t('firstRun.dependencies')}
           </p>
@@ -54,7 +54,7 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
           <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">
             {t('firstRun.primaryStack')}
           </p>
-          <p className="text-sm text-white font-medium">{summary.primary_stack}</p>
+          <p className="text-sm text-text-primary font-medium">{summary.primary_stack}</p>
         </div>
       )}
 
@@ -192,7 +192,7 @@ export function LoadingState({
         <div className="mb-6">
           <BrandMark size={80} />
         </div>
-        <h2 className="text-xl font-medium text-white mb-2">
+        <h2 className="text-xl font-medium text-text-primary mb-2">
           {t('firstRun.preparingIntelligence')}
         </h2>
         <div className="mb-5 px-4 py-3 bg-bg-secondary rounded-lg border border-border text-start">
@@ -222,7 +222,7 @@ export function LoadingState({
         </div>
       )}
 
-      <h2 className="text-xl font-medium text-white mb-2">
+      <h2 className="text-xl font-medium text-text-primary mb-2">
         {phase === 'preparing' && t('firstRun.preparing')}
         {phase === 'fetching' && t('firstRun.fetching')}
         {phase === 'analyzing' && t('firstRun.analyzing')}
@@ -265,7 +265,7 @@ export function LoadingState({
           something visibly alive. */}
       {(phase === 'fetching' || phase === 'analyzing') && itemCount > 0 && (
         <div className="mb-5" aria-live="polite">
-          <span className="text-4xl font-bold text-white tabular-nums">{itemCount}</span>
+          <span className="text-4xl font-bold text-text-primary tabular-nums">{itemCount}</span>
           <p className="text-[11px] text-text-muted uppercase tracking-wider mt-0.5">
             {t('firstRun.itemsFlowingIn', 'items flowing in')}
           </p>
@@ -325,7 +325,7 @@ export function LoadingState({
       {showSkip && onSkipAhead && (
         <button
           onClick={onSkipAhead}
-          className="mt-6 text-xs text-text-muted hover:text-white transition-colors"
+          className="mt-6 text-xs text-text-muted hover:text-text-primary transition-colors"
         >
           {t('firstRun.skipToResults')} &rarr;
         </button>

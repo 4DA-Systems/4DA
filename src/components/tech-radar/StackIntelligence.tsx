@@ -15,10 +15,10 @@ export interface StackIntelligenceProps {
 // ---------------------------------------------------------------------------
 
 const RINGS = [
-  { key: 'adopt', labelKey: 'stack.tier.adopt', color: '#22C55E', label: 'Core Stack' },
-  { key: 'trial', labelKey: 'stack.tier.trial', color: '#D4AF37', label: 'Expanding' },
-  { key: 'assess', labelKey: 'stack.tier.assess', color: '#8A8A8A', label: 'Watching' },
-  { key: 'hold', labelKey: 'stack.tier.hold', color: '#EF4444', label: 'On Hold' },
+  { key: 'adopt', labelKey: 'stack.tier.adopt', color: 'var(--color-success)', label: 'Core Stack' },
+  { key: 'trial', labelKey: 'stack.tier.trial', color: 'var(--color-accent-gold)', label: 'Expanding' },
+  { key: 'assess', labelKey: 'stack.tier.assess', color: 'var(--color-text-muted)', label: 'Watching' },
+  { key: 'hold', labelKey: 'stack.tier.hold', color: 'var(--color-error)', label: 'On Hold' },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -27,9 +27,9 @@ const RINGS = [
 
 function movementSymbol(m: RadarEntry['movement']): { icon: string; color: string } {
   switch (m) {
-    case 'up': return { icon: '\u2191', color: '#22C55E' };
-    case 'down': return { icon: '\u2193', color: '#EF4444' };
-    case 'new': return { icon: '\u2726', color: '#D4AF37' };
+    case 'up': return { icon: '\u2191', color: 'var(--color-success)' };
+    case 'down': return { icon: '\u2193', color: 'var(--color-error)' };
+    case 'new': return { icon: '\u2726', color: 'var(--color-accent-gold)' };
     case 'stable': return { icon: '', color: 'transparent' };
   }
 }
@@ -56,7 +56,7 @@ function RingDistribution({ entries }: { entries: RadarEntry[] }) {
             <span className="text-[10px] w-16 flex-shrink-0" style={{ color: ring.color }}>
               {t(ring.labelKey, ring.label)}
             </span>
-            <div className="flex-1 h-1.5 bg-[#1A1A1A] rounded-full overflow-hidden">
+            <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{ width: `${pct}%`, backgroundColor: ring.color, opacity: 0.7 }}
@@ -84,7 +84,7 @@ function EntryRow({ entry, onEntryClick, barColor }: {
       role="button"
       tabIndex={0}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEntryClick(entry); } }}
-      className="flex items-center gap-3 px-3 py-1.5 rounded cursor-pointer hover:bg-[#1F1F1F] transition-colors group"
+      className="flex items-center gap-3 px-3 py-1.5 rounded cursor-pointer hover:bg-bg-tertiary transition-colors group"
     >
       {/* Score bar */}
       <div className="w-20 flex gap-px flex-shrink-0">
@@ -92,12 +92,12 @@ function EntryRow({ entry, onEntryClick, barColor }: {
           <div
             key={i}
             className="h-3 rounded-sm flex-1"
-            style={{ backgroundColor: i < Math.round(entry.score * 10) ? barColor : '#1A1A1A' }}
+            style={{ backgroundColor: i < Math.round(entry.score * 10) ? barColor : 'var(--color-bg-tertiary)' }}
           />
         ))}
       </div>
       {/* Name */}
-      <span className="flex-1 text-[13px] text-white truncate min-w-0 group-hover:text-white">
+      <span className="flex-1 text-[13px] text-text-primary truncate min-w-0 group-hover:text-text-primary">
         {entry.name}
       </span>
       {/* Quadrant */}
@@ -158,13 +158,13 @@ export const StackIntelligence = memo(function StackIntelligence({
       {/* Overview Stats */}
       <div className="grid grid-cols-3 gap-3 px-4 py-4 border-b border-border">
         <div className="text-center">
-          <div className="text-xl font-semibold text-white">{entries.length}</div>
+          <div className="text-xl font-semibold text-text-primary">{entries.length}</div>
           <div className="text-[10px] text-text-muted uppercase tracking-wider">
             {t('stack.totalTracked', 'Technologies')}
           </div>
         </div>
         <div className="text-center">
-          <div className="text-xl font-semibold text-white">
+          <div className="text-xl font-semibold text-text-primary">
             {movingUp > 0 && <span className="text-green-400">{movingUp}</span>}
             {movingUp > 0 && movingDown > 0 && <span className="text-text-muted mx-0.5">/</span>}
             {movingDown > 0 && <span className="text-red-400">{movingDown}</span>}
@@ -200,9 +200,9 @@ export const StackIntelligence = memo(function StackIntelligence({
               role="button"
               tabIndex={0}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEntryClick(entry); } }}
-              className="flex items-center justify-between px-3 py-2 rounded cursor-pointer hover:bg-[#1F1F1F] transition-colors mb-1"
+              className="flex items-center justify-between px-3 py-2 rounded cursor-pointer hover:bg-bg-tertiary transition-colors mb-1"
             >
-              <span className="text-[13px] text-white">{entry.name}</span>
+              <span className="text-[13px] text-text-primary">{entry.name}</span>
               <span className="text-[11px] text-red-400">
                 {entry.movement === 'down' ? `\u2193 ${t('stack.declining')}` : t('stack.hold')}
               </span>
@@ -240,7 +240,7 @@ export const StackIntelligence = memo(function StackIntelligence({
             return (
               <div key={entry.name} className="flex items-center gap-2 px-3 py-1 text-[12px]">
                 <span style={{ color: mv.color }}>{mv.icon}</span>
-                <span className="text-white w-24 flex-shrink-0 truncate">{entry.name}</span>
+                <span className="text-text-primary w-24 flex-shrink-0 truncate">{entry.name}</span>
                 <span className="text-text-muted text-[11px]">
                   {entry.movement === 'up' ? t('stack.accelerating') : entry.movement === 'down' ? t('stack.declining') : t('stack.new')}
                 </span>

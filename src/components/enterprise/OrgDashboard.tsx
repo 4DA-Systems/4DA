@@ -56,7 +56,7 @@ export function OrgDashboard() {
   if (!organization) {
     return (
       <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
-        <h3 className="text-sm font-medium text-white mb-2">
+        <h3 className="text-sm font-medium text-text-primary mb-2">
           {t('enterprise.org.title')}
         </h3>
         <p className="text-xs text-text-muted">
@@ -71,7 +71,7 @@ export function OrgDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-white">
+          <h3 className="text-sm font-medium text-text-primary">
             {organization.name}
           </h3>
           <span className="text-[10px] px-1.5 py-0.5 bg-success/15 text-success rounded font-medium">
@@ -92,7 +92,7 @@ export function OrgDashboard() {
         <div className="grid grid-cols-4 gap-3">
           {[
             { label: t('enterprise.org.teams'), value: orgAnalytics.total_seats, color: 'text-success' },
-            { label: t('enterprise.org.activeSeats'), value: orgAnalytics.active_seats, color: 'text-white' },
+            { label: t('enterprise.org.activeSeats'), value: orgAnalytics.active_seats, color: 'text-text-primary' },
             { label: t('enterprise.org.signalsMonth'), value: orgAnalytics.signals_detected, color: 'text-accent-gold' },
             { label: t('enterprise.org.decisionsMonth'), value: orgAnalytics.decisions_tracked, color: 'text-[#818CF8]' },
           ].map(stat => (
@@ -120,7 +120,7 @@ export function OrgDashboard() {
               >
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-success" />
-                  <span className="text-xs text-white font-mono">
+                  <span className="text-xs text-text-primary font-mono">
                     {team.team_id.slice(0, 8)}...
                   </span>
                 </div>
@@ -153,7 +153,7 @@ export function OrgDashboard() {
                 className="px-3 py-2.5 bg-bg-primary rounded-lg border border-border/50"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-white font-medium">{sig.signal_type}</span>
+                  <span className="text-xs text-text-primary font-medium">{sig.signal_type}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                     sig.org_severity === 'critical' ? 'bg-error/15 text-error' :
                     sig.org_severity === 'high' ? 'bg-[var(--color-accent-action)]/15 text-[var(--color-accent-action)]' :

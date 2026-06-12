@@ -142,7 +142,7 @@ export function ConfigDiagnostics() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-white">
+          <h3 className="text-sm font-medium text-text-primary">
             {t('enterprise.diagnostics.title')}
           </h3>
           <p className="text-[10px] text-text-muted mt-0.5">
@@ -185,7 +185,7 @@ export function ConfigDiagnostics() {
               >
                 <span className={`text-sm ${style.text}`}>{style.icon}</span>
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs text-white font-medium">{check.name}</span>
+                  <span className="text-xs text-text-primary font-medium">{check.name}</span>
                   <p className={`text-[10px] ${style.text}`}>{check.message}</p>
                 </div>
               </div>

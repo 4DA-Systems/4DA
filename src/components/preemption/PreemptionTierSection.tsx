@@ -32,7 +32,7 @@ export const PreemptionTierSection = memo(function PreemptionTierSection({
       <div className="bg-bg-secondary rounded-lg border overflow-hidden" style={{ borderColor }}>
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
-          <h3 className="text-sm font-medium text-white flex-1">{title}</h3>
+          <h3 className="text-sm font-medium text-text-primary flex-1">{title}</h3>
           <span className="text-xs text-[#8A8A8A]">{subtitle}</span>
         </div>
         {items.length > 0 ? (

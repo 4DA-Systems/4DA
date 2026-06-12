@@ -170,7 +170,7 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-6">
             <div>
-              <div className="text-2xl font-bold font-mono text-white">{rejected}</div>
+              <div className="text-2xl font-bold font-mono text-text-primary">{rejected}</div>
               <div className="text-[10px] text-text-muted">
                 {t('missed.noiseRejected')}
               </div>
@@ -228,12 +228,12 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
                         window.open(criticalSave.url!, '_blank', 'noopener,noreferrer');
                       });
                     }}
-                    className="text-sm text-white font-medium truncate hover:text-accent-gold transition-colors text-left cursor-pointer"
+                    className="text-sm text-text-primary font-medium truncate hover:text-accent-gold transition-colors text-left cursor-pointer"
                   >
                     {criticalSave.title}
                   </button>
                 ) : (
-                  <p className="text-sm text-white font-medium truncate">
+                  <p className="text-sm text-text-primary font-medium truncate">
                     {criticalSave.title}
                   </p>
                 )}

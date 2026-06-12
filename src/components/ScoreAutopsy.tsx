@@ -91,7 +91,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
         >
           {loading ? (
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span className="w-3 h-3 border-2 border-text-primary/30 border-t-text-primary rounded-full animate-spin" />
               {t('action.analyzing')}
             </span>
           ) : t('autopsy.title')}

@@ -57,7 +57,7 @@ export function ThirdPartyLicensesModal({ onClose }: Props) {
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
           <h2
             id="third-party-licenses-title"
-            className="text-sm font-semibold text-white"
+            className="text-sm font-semibold text-text-primary"
           >
             {t('about.thirdPartyLicenses', 'Third-Party Licenses')}
           </h2>

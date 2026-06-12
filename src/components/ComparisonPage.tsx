@@ -10,7 +10,7 @@ type Section = 'approach' | 'privacy' | 'scoring' | 'context' | 'compound' | 'tr
 function Principle({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-bg-tertiary/30 border border-border/50 rounded-lg p-4">
-      <p className="text-xs font-medium text-white mb-2">{title}</p>
+      <p className="text-xs font-medium text-text-primary mb-2">{title}</p>
       <div className="text-xs text-text-muted leading-relaxed">{children}</div>
     </div>
   );
@@ -20,7 +20,7 @@ function ArchitectureRow({ label, value, detail }: { label: string; value: strin
   return (
     <tr className="border-b border-border/30">
       <td className="py-2.5 px-4 text-text-secondary font-medium text-xs">{label}</td>
-      <td className="py-2.5 px-4 text-xs text-white">{value}</td>
+      <td className="py-2.5 px-4 text-xs text-text-primary">{value}</td>
       {detail !== undefined && <td className="py-2.5 px-4 text-xs text-text-muted">{detail}</td>}
     </tr>
   );
@@ -30,7 +30,7 @@ function ApproachSection() {
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">{t('comp.approach.title')}</h3>
+      <h3 className="text-lg font-semibold text-text-primary">{t('comp.approach.title')}</h3>
       <p className="text-sm text-text-secondary leading-relaxed">{t('comp.approach.desc')}</p>
 
       <div className="grid grid-cols-1 gap-3">
@@ -46,7 +46,7 @@ function ApproachSection() {
       </div>
 
       <div className="bg-bg-tertiary/50 border border-border rounded-lg p-4">
-        <p className="text-xs font-medium text-white mb-2">{t('comp.approach.categoryTitle')}</p>
+        <p className="text-xs font-medium text-text-primary mb-2">{t('comp.approach.categoryTitle')}</p>
         <p className="text-xs text-text-muted leading-relaxed">{t('comp.approach.categoryBody')}</p>
       </div>
     </div>
@@ -57,7 +57,7 @@ function PrivacySection() {
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">{t('comp.privacy.title')}</h3>
+      <h3 className="text-lg font-semibold text-text-primary">{t('comp.privacy.title')}</h3>
       <p className="text-sm text-text-secondary leading-relaxed">{t('comp.privacy.desc')}</p>
 
       <div className="bg-bg-tertiary/50 border border-border rounded-lg overflow-hidden">
@@ -65,7 +65,7 @@ function PrivacySection() {
           <thead>
             <tr className="border-b border-border">
               <th className="text-start py-2.5 px-4 font-medium text-text-muted">{t('comp.privacy.colLayer')}</th>
-              <th className="text-start py-2.5 px-4 font-medium text-white">{t('comp.privacy.colHow')}</th>
+              <th className="text-start py-2.5 px-4 font-medium text-text-primary">{t('comp.privacy.colHow')}</th>
               <th className="text-start py-2.5 px-4 font-medium text-text-muted">{t('comp.privacy.colVerify')}</th>
             </tr>
           </thead>
@@ -96,7 +96,7 @@ function ScoringSection() {
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">{t('comp.scoring.title')}</h3>
+      <h3 className="text-lg font-semibold text-text-primary">{t('comp.scoring.title')}</h3>
       <p className="text-sm text-text-secondary leading-relaxed">{t('comp.scoring.desc')}</p>
 
       <div className="bg-bg-tertiary/50 border border-border rounded-lg overflow-hidden">
@@ -104,7 +104,7 @@ function ScoringSection() {
           <thead>
             <tr className="border-b border-border">
               <th className="text-start py-2.5 px-4 font-medium text-text-muted">{t('comp.scoring.colPhase')}</th>
-              <th className="text-start py-2.5 px-4 font-medium text-white">{t('comp.scoring.colWhat')}</th>
+              <th className="text-start py-2.5 px-4 font-medium text-text-primary">{t('comp.scoring.colWhat')}</th>
             </tr>
           </thead>
           <tbody>
@@ -136,7 +136,7 @@ function ContextSection() {
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">{t('comp.context.title')}</h3>
+      <h3 className="text-lg font-semibold text-text-primary">{t('comp.context.title')}</h3>
       <p className="text-sm text-text-secondary leading-relaxed">{t('comp.context.desc')}</p>
 
       <div className="bg-bg-tertiary/50 border border-border rounded-lg overflow-hidden">
@@ -144,7 +144,7 @@ function ContextSection() {
           <thead>
             <tr className="border-b border-border">
               <th className="text-start py-2.5 px-4 font-medium text-text-muted">{t('comp.context.colSignal')}</th>
-              <th className="text-start py-2.5 px-4 font-medium text-white">{t('comp.context.colExtract')}</th>
+              <th className="text-start py-2.5 px-4 font-medium text-text-primary">{t('comp.context.colExtract')}</th>
             </tr>
           </thead>
           <tbody>
@@ -173,7 +173,7 @@ function CompoundSection() {
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">{t('comp.compound.title')}</h3>
+      <h3 className="text-lg font-semibold text-text-primary">{t('comp.compound.title')}</h3>
       <p className="text-sm text-text-secondary leading-relaxed">{t('comp.compound.desc')}</p>
 
       <div className="grid grid-cols-1 gap-3">
@@ -195,7 +195,7 @@ function TradeoffsSection() {
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">{t('comp.tradeoffs.title')}</h3>
+      <h3 className="text-lg font-semibold text-text-primary">{t('comp.tradeoffs.title')}</h3>
       <p className="text-sm text-text-secondary leading-relaxed">{t('comp.tradeoffs.desc')}</p>
 
       <div className="bg-bg-tertiary/50 border border-border rounded-lg overflow-hidden">
@@ -203,7 +203,7 @@ function TradeoffsSection() {
           <thead>
             <tr className="border-b border-border">
               <th className="text-start py-2.5 px-4 font-medium text-text-muted">{t('comp.tradeoffs.colChose')}</th>
-              <th className="text-start py-2.5 px-4 font-medium text-white">{t('comp.tradeoffs.colMeans')}</th>
+              <th className="text-start py-2.5 px-4 font-medium text-text-primary">{t('comp.tradeoffs.colMeans')}</th>
               <th className="text-start py-2.5 px-4 font-medium text-text-muted">{t('comp.tradeoffs.colCost')}</th>
             </tr>
           </thead>
@@ -274,12 +274,12 @@ export const ComparisonPage = memo(function ComparisonPage({ onClose }: Comparis
     <div className="fixed inset-0 z-50 bg-bg-primary/95 backdrop-blur-sm flex flex-col">
       <div className="flex items-center justify-between px-6 py-4 border-b border-border">
         <div>
-          <h2 className="text-lg font-semibold text-white">{t('comparison.title')}</h2>
+          <h2 className="text-lg font-semibold text-text-primary">{t('comparison.title')}</h2>
           <p className="text-xs text-text-muted">{t('comparison.subtitle')}</p>
         </div>
         <button
           onClick={onClose}
-          className="px-3 py-1.5 text-xs text-text-secondary hover:text-white border border-border rounded-lg hover:bg-bg-tertiary transition-all"
+          className="px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary border border-border rounded-lg hover:bg-bg-tertiary transition-all"
           aria-label={t('action.close')}
         >
           {t('action.close')}

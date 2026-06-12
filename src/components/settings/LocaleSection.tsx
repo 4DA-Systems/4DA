@@ -103,7 +103,7 @@ export function LocaleSection() {
           <span className="text-blue-400">&#x1f310;</span>
         </div>
         <div>
-          <h3 className="text-white font-medium">{t('settings.locale.title')}</h3>
+          <h3 className="text-text-primary font-medium">{t('settings.locale.title')}</h3>
           <p className="text-text-muted text-sm mt-1">
             {t('settings.locale.description')}
           </p>
@@ -119,7 +119,7 @@ export function LocaleSection() {
             <select
               value={country}
               onChange={(e) => handleCountryChange(e.target.value)}
-              className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
             >
               {COUNTRIES.map((c) => (
                 <option key={c.code} value={c.code}>{c.name}</option>
@@ -135,7 +135,7 @@ export function LocaleSection() {
               <select
                 value={language}
                 onChange={(e) => handleLanguageChange(e.target.value)}
-                className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+                className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
               >
                 {LANGUAGES.map((l) => (
                   <option key={l.code} value={l.code}>{l.name}</option>
@@ -149,7 +149,7 @@ export function LocaleSection() {
               <select
                 value={currency}
                 onChange={(e) => handleCurrencyChange(e.target.value)}
-                className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+                className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
               >
                 {CURRENCIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
@@ -223,7 +223,7 @@ export function LocaleSection() {
           {/* Translation Provider config (only for non-English) */}
           {language !== 'en' && (
             <div className="pt-4 mt-4 border-t border-border space-y-3">
-              <h4 className="text-sm text-white font-medium">{t('settings.translation.title')}</h4>
+              <h4 className="text-sm text-text-primary font-medium">{t('settings.translation.title')}</h4>
 
               <div>
                 <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
@@ -232,7 +232,7 @@ export function LocaleSection() {
                 <select
                   value={txConfig.provider}
                   onChange={(e) => { void saveTxConfig({ ...txConfig, provider: e.target.value }); }}
-                  className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
                 >
                   {TRANSLATION_PROVIDERS.map((p) => (
                     <option key={p.value} value={p.value}>{t(p.labelKey)}</option>
@@ -250,7 +250,7 @@ export function LocaleSection() {
                     value={txConfig.api_key}
                     onChange={(e) => setTxConfig({ ...txConfig, api_key: e.target.value })}
                     onBlur={() => { void saveTxConfig(txConfig); }}
-                    className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+                    className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
                     placeholder="sk-..."
                   />
                   <p className="text-[10px] text-text-muted mt-1">
@@ -263,7 +263,7 @@ export function LocaleSection() {
               {PROVIDERS_REQUIRING_KEY.has(txConfig.provider) && (
                 <div className="flex items-center justify-between">
                   <div className="flex-1 pr-3">
-                    <span className="text-sm text-white">{t('settings.translation.cloudConsent', 'Allow cloud translation')}</span>
+                    <span className="text-sm text-text-primary">{t('settings.translation.cloudConsent', 'Allow cloud translation')}</span>
                     <p className="text-[10px] text-text-muted mt-0.5">
                       {t('settings.translation.cloudConsentHelp', 'Content will be sent to the selected provider for translation. Required for cloud providers.')}
                     </p>
@@ -284,7 +284,7 @@ export function LocaleSection() {
               )}
 
               <div className="flex items-center justify-between">
-                <span className="text-sm text-white">{t('settings.translation.autoTranslate')}</span>
+                <span className="text-sm text-text-primary">{t('settings.translation.autoTranslate')}</span>
                 <button
                   onClick={() => { void saveTxConfig({ ...txConfig, auto_translate: !txConfig.auto_translate }); }}
                   className={`relative w-10 h-5 rounded-full transition-colors ${
@@ -300,7 +300,7 @@ export function LocaleSection() {
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-sm text-white">{t('settings.translation.translateDescriptions')}</span>
+                <span className="text-sm text-text-primary">{t('settings.translation.translateDescriptions')}</span>
                 <button
                   onClick={() => { void saveTxConfig({ ...txConfig, translate_descriptions: !txConfig.translate_descriptions }); }}
                   className={`relative w-10 h-5 rounded-full transition-colors ${
@@ -320,7 +320,7 @@ export function LocaleSection() {
           {/* Embedding Model info (read-only) */}
           {embeddingInfo && (
             <div className="pt-4 mt-4 border-t border-border space-y-2">
-              <h4 className="text-sm text-white font-medium">{t('settings.translation.embedding')}</h4>
+              <h4 className="text-sm text-text-primary font-medium">{t('settings.translation.embedding')}</h4>
               <p className="text-xs text-text-muted">
                 {t('settings.translation.embeddingCurrent', { model: embeddingInfo.model })}
               </p>

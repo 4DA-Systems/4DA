@@ -38,7 +38,7 @@ export function SearchResults({
       {/* Query parsing info */}
       <div className="flex items-center gap-2 p-3 bg-bg-secondary rounded-lg border border-border flex-wrap">
         <span className="text-xs font-medium text-text-muted">{intentLabels[result.intent] || result.intent}</span>
-        <span className="text-sm text-white">{'•'}</span>
+        <span className="text-sm text-text-primary">{'•'}</span>
         <span className="text-sm text-cyan-400">{result.parsed.keywords.join(', ')}</span>
         {result.parsed.time_range && (
           <span className="px-2 py-1 text-xs bg-bg-tertiary rounded-md text-text-secondary border border-border">
@@ -50,7 +50,7 @@ export function SearchResults({
             {result.parsed.file_types.join(', ')}
           </span>
         )}
-        <button onClick={onClear} aria-label="Clear search results" className="ms-auto text-text-muted hover:text-white transition-colors">{'✕'}</button>
+        <button onClick={onClear} aria-label="Clear search results" className="ms-auto text-text-muted hover:text-text-primary transition-colors">{'✕'}</button>
       </div>
 
       {/* Stack context */}
@@ -76,7 +76,7 @@ export function SearchResults({
               <span className="text-[10px] text-text-muted uppercase font-mono bg-bg-tertiary px-1.5 py-0.5 rounded">{sourceLabels[item.source_type] || 'SRC'}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-white font-medium truncate">{item.file_name || t('search.unknownFile')}</span>
+                  <span className="text-sm text-text-primary font-medium truncate">{item.file_name || t('search.unknownFile')}</span>
                   <span
                     className={`text-xs px-2 py-0.5 rounded-md ${item.relevance > 0.7 ? 'bg-green-500/20 text-green-400' : item.relevance > 0.4 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-text-secondary'}`}
                     aria-label={`Relevance: ${(item.relevance * 100).toFixed(0)}%`}

@@ -37,7 +37,7 @@ export function StatusRow({ label, ok, detail }: { label: string; ok: boolean; d
         {ok ? '\u2713' : '\u2717'}
       </span>
       <span className="text-xs text-text-secondary">{label}:</span>
-      <span className="text-xs text-white font-mono">
+      <span className="text-xs text-text-primary font-mono">
         {detail}
       </span>
     </div>
@@ -101,7 +101,7 @@ export function RecommendationItem({ rec, index, actionInProgress, onAction }: R
         >
           {rec.priority}
         </span>
-        <span className="text-[13px] font-medium text-white">
+        <span className="text-[13px] font-medium text-text-primary">
           {getTranslated(`cal-title-${recId}`, rec.title)}
         </span>
       </div>

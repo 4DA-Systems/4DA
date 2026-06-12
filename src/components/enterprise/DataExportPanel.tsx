@@ -98,7 +98,7 @@ export function DataExportPanel() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-white">
+          <h3 className="text-sm font-medium text-text-primary">
             {t('enterprise.export.title')}
           </h3>
           <p className="text-[10px] text-text-muted mt-0.5">
@@ -136,7 +136,7 @@ export function DataExportPanel() {
                     onChange={() => toggleSection(section.key)}
                     className="rounded border-border"
                   />
-                  <span className="text-xs text-white">{label}</span>
+                  <span className="text-xs text-text-primary">{label}</span>
                 </label>
                 <button
                   onClick={() => { void handleExportSection(section.key); }}
@@ -177,7 +177,7 @@ export function DataExportPanel() {
                 className="flex items-center justify-between px-3 py-2 bg-bg-primary rounded-lg border border-border/50"
               >
                 <div>
-                  <span className="text-xs text-white font-mono">{exp.export_id.slice(0, 12)}...</span>
+                  <span className="text-xs text-text-primary font-mono">{exp.export_id.slice(0, 12)}...</span>
                   {/* eslint-disable i18next/no-literal-string */}
                   <span className="text-[10px] text-text-muted ms-2">
                     {exp.format.toUpperCase()} &middot; {exp.total_records} records &middot; {exp.sections.length} sections

@@ -43,7 +43,7 @@ export function ContextPanel({
             <span className="text-text-muted">F</span>
           </div>
           <div>
-            <h2 className="font-medium text-white">{t('context.title')}</h2>
+            <h2 className="font-medium text-text-primary">{t('context.title')}</h2>
             <p className="text-xs text-text-muted">{t('context.filesIndexed', { count: contextFiles.length })}</p>
           </div>
         </div>
@@ -51,7 +51,7 @@ export function ContextPanel({
           <button
             onClick={onReload}
             aria-label="Reload context files"
-            className="w-8 h-8 flex items-center justify-center text-sm bg-bg-tertiary text-text-secondary rounded-lg hover:bg-border hover:text-white transition-all"
+            className="w-8 h-8 flex items-center justify-center text-sm bg-bg-tertiary text-text-secondary rounded-lg hover:bg-border hover:text-text-primary transition-all"
             title={t('context.reloadFiles')}
           >
             R
@@ -101,7 +101,7 @@ export function ContextPanel({
                 key={file.path}
                 className="px-3 py-2 bg-bg-tertiary rounded-lg border border-border hover:border-orange-500/30 transition-all"
               >
-                <div className="font-mono text-white text-sm truncate">
+                <div className="font-mono text-text-primary text-sm truncate">
                   {file.path.split('/').pop()?.split('\\').pop()}
                 </div>
                 {/* eslint-disable-next-line i18next/no-literal-string */}
