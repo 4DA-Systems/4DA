@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
+import { CalibrationSettingsRow } from '../calibration/CalibrationSettingsRow';
 import { APIKeyInput } from './APIKeyInput';
 import { BriefNarrationStatus } from './BriefNarrationStatus';
 import { ModelEvalSection } from './ModelEvalSection';
@@ -312,6 +313,8 @@ export function AIProviderSection({
           )}
 
           <BriefNarrationStatus settings={settings} />
+
+          <CalibrationSettingsRow />
         </div>
       </div>
 

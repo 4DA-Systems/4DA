@@ -10,6 +10,7 @@ pub mod continuous;
 pub mod db;
 pub mod inference;
 pub mod items;
+pub mod sprint;
 
 use serde::{Deserialize, Serialize};
 

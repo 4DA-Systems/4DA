@@ -8,6 +8,7 @@ use tauri::AppHandle;
 use crate::error::{Result, ResultExt};
 use crate::state::open_db_connection;
 use crate::taste_test::inference::InferenceState;
+use crate::taste_test::sprint;
 use crate::taste_test::{TasteProfileSummary, TasteResponse, TasteTestStep};
 
 /// Global inference state (lives for the duration of one taste test session).
@@ -119,4 +120,82 @@ pub async fn taste_test_is_calibrated() -> Result<bool> {
 pub async fn taste_test_get_profile() -> Result<Option<TasteProfileSummary>> {
     let conn = open_db_connection()?;
     Ok(crate::taste_test::db::load_latest_taste_result(&conn))
+}
+
+// ============================================================================
+// Review Sprint — explicit labels on real corpus items (FREE tier;
+// calibration is the product promise, never gated). See taste_test/sprint.rs.
+// ============================================================================
+
+/// Sample up to 24 stratified review-sprint cards from items that have
+/// unprocessed calibration samples. Returns fewer (or none) when the
+/// corpus is thin — the frontend degrades honestly.
+#[tauri::command]
+pub async fn get_calibration_sprint_items() -> Result<Vec<sprint::CalibrationSprintCard>> {
+    let conn = open_db_connection()?;
+    sprint::sprint_items(&conn)
+}
+
+/// Record one sprint judgment.
+///
+/// - `relevant` / `not_relevant` write a `feedback` row through the
+///   SAME path as `record_item_feedback` (`Database::record_feedback`)
+///   — the calibration fitter treats it as unconditional ground truth.
+///   A non-learning ACE interaction row (`probe_` source prefix, see
+///   ace/behavior/tracking.rs) records the mechanics WITHOUT shifting
+///   topic affinities / source prefs / the persona posterior, so sprint
+///   labels feed the FITTER without double-counting into taste learning.
+/// - `skip` writes nothing: an unsure user must not pollute ground truth.
+#[tauri::command]
+pub async fn record_calibration_sprint_response(
+    source_item_id: i64,
+    response: String,
+) -> Result<()> {
+    let parsed = sprint::parse_response(&response)
+        .ok_or_else(|| format!("Invalid sprint response: {response}"))?;
+
+    let relevant = match parsed {
+        sprint::SprintResponse::Relevant => true,
+        sprint::SprintResponse::NotRelevant => false,
+        sprint::SprintResponse::Skip => return Ok(()),
+    };
+
+    let db = crate::get_database()?;
+    db.record_feedback(source_item_id, relevant)
+        .context("Failed to record sprint feedback")?;
+
+    // Best-effort mechanics row; the feedback row above is the label.
+    if let Ok(ace) = crate::state::get_ace_engine() {
+        let action = if relevant {
+            crate::ace::BehaviorAction::Save
+        } else {
+            crate::ace::BehaviorAction::MarkIrrelevant
+        };
+        if let Err(e) = ace.record_interaction(
+            source_item_id,
+            action,
+            Vec::new(),
+            "probe_calibration_sprint".to_string(),
+        ) {
+            tracing::warn!(
+                target: "4da::taste_test::sprint",
+                error = %e,
+                "Sprint interaction row not recorded (feedback label still written)"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Honest progress toward the first calibration fit: distinct labeled
+/// items, the fitter's real MIN_FIT_SAMPLES floor, and whether a curve
+/// already exists on disk.
+#[tauri::command]
+pub async fn get_calibration_sprint_status() -> Result<sprint::CalibrationSprintStatus> {
+    let conn = open_db_connection()?;
+    let calibration_dir = crate::runtime_paths::RuntimePaths::get()
+        .data_dir
+        .join("calibrations");
+    sprint::sprint_status(&conn, &calibration_dir)
 }
