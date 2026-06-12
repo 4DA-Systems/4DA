@@ -25,11 +25,26 @@ fn strip_extended_prefix(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-/// Check if a path is a known system directory that should never be scanned.
+/// Check if a path should never be scanned: system directories, bare drive
+/// roots, and network shares. Named `is_system_directory` for history; it is
+/// the scan-target reject filter.
 fn is_system_directory(path: &Path) -> bool {
     #[cfg(target_os = "windows")]
     {
-        let lower = path.to_string_lossy().to_lowercase();
+        let raw = path.to_string_lossy();
+        // Reject UNC / network shares outright: `exists()` and a recursive
+        // walk on a dead share can block for the full SMB timeout, hanging
+        // the "Scanning your projects" step with no deadline.
+        if raw.starts_with(r"\\") || raw.starts_with("//") {
+            return true;
+        }
+        let lower = raw.to_lowercase();
+        // Block a bare drive root (c:\, d:\) — scanning a whole volume is
+        // never intended and walks Windows / Program Files anyway.
+        let trimmed = lower.trim_end_matches(['\\', '/']);
+        if trimmed.len() == 2 && trimmed.ends_with(':') {
+            return true;
+        }
         return lower.starts_with(r"c:\windows")
             || lower.starts_with(r"c:\program files")
             || lower.starts_with(r"c:\programdata")
@@ -73,7 +88,11 @@ pub(crate) fn get_default_scan_paths() -> Vec<PathBuf> {
         }
     }
 
-    // Also check current working directory parent (for dev scenarios)
+    // Current-working-directory parent is a DEV convenience only. In a
+    // packaged build cwd is the install dir, whose parent is typically
+    // %LOCALAPPDATA%\Programs — auto-discovery would then walk other
+    // installed apps' directories for junk signals. Restrict to debug builds.
+    #[cfg(debug_assertions)]
     if let Ok(cwd) = std::env::current_dir() {
         if let Some(parent) = cwd.parent() {
             if !paths.contains(&parent.to_path_buf()) {
@@ -430,11 +449,33 @@ pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use super::*;
+
     #[test]
     fn test_default_scan_paths_returns_vec() {
         // get_default_scan_paths is pub(crate), test it returns non-empty on any system
         let paths = super::get_default_scan_paths();
         // Should return a Vec (even if empty on CI), no panic
         assert!(paths.len() <= 20, "Should not return excessive paths");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn rejects_unc_shares_and_drive_roots() {
+        use std::path::Path;
+        // UNC / network shares — dead shares hang the scan.
+        assert!(is_system_directory(Path::new(r"\\server\share")));
+        assert!(is_system_directory(Path::new(r"\\192.168.1.10\code")));
+        // Bare drive roots — never a scan target.
+        assert!(is_system_directory(Path::new(r"C:\")));
+        assert!(is_system_directory(Path::new(r"D:\")));
+        assert!(is_system_directory(Path::new("C:")));
+        // System dirs still blocked.
+        assert!(is_system_directory(Path::new(r"C:\Windows\System32")));
+        // A real project dir is allowed.
+        assert!(!is_system_directory(Path::new(
+            r"C:\Users\dev\projects\app"
+        )));
     }
 }

@@ -390,6 +390,11 @@ fn is_sensitive_file(path: &Path) -> bool {
 
 /// Extract topics from a code file's content
 pub fn extract_topics_from_file(path: &Path) -> Result<Vec<String>> {
+    // Skip cloud-only placeholders — reading them forces a OneDrive/Dropbox
+    // download. Shared guard with the project scanner.
+    if crate::ace::scanner::is_cloud_placeholder(path) {
+        return Ok(Vec::new());
+    }
     let metadata =
         std::fs::metadata(path).map_err(|e| format!("Failed to stat {}: {}", path.display(), e))?;
     if metadata.len() > 10_000_000 {
