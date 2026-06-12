@@ -226,6 +226,11 @@ function checkTestCoverage(changedFiles, fileChanges) {
     .map(f => f.file)
     .filter(f => /\.(ts|tsx)$/.test(f) && !f.includes('.test.'));
 
+  const deletedSources = changedFiles
+    .filter(f => f.status === 'D')
+    .map(f => f.file)
+    .filter(f => /\.(ts|tsx)$/.test(f) && !f.includes('.test.'));
+
   // Tests deleted without their source being deleted or modified = regression.
   // A test deleted alongside a major source refactor (M status) is intentional —
   // the feature the test covered was removed from the source.
@@ -243,6 +248,17 @@ function checkTestCoverage(changedFiles, fileChanges) {
       return srcBase === baseName || srcBase === siblingPath;
     });
     if (sourceChanged) return false;
+
+    // Feature-subfolder layout: test lives in a subdir of the source's dir
+    // (e.g. components/playbook/PlaybookView.test.tsx covering
+    // components/PlaybookView.tsx). Conservative: only a DELETED source with
+    // the same basename pairs here — modified files stay strict-path-matched.
+    const testBasename = baseName.split('/').pop();
+    const sourceDeletedByBasename = deletedSources.some(src => {
+      const srcBase = src.replace(/\.(ts|tsx)$/, '');
+      return srcBase.split('/').pop() === testBasename;
+    });
+    if (sourceDeletedByBasename) return false;
 
     // Cross-cutting tests in __tests__/ that don't map to any single source file
     // (e.g. tier-views-consistency.test.ts) are standalone — deleting them is valid.
