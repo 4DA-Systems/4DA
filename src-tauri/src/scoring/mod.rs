@@ -49,7 +49,9 @@ pub(crate) use calibration_monitor::{
     compute_calibration_snapshot, compute_high_stakes_recall, CalibrationSnapshot, HighStakesRecall,
 };
 pub(crate) use composition::{enforce_composition_floors, FloorConfig};
-pub(crate) use context::{build_scoring_context, is_low_quality_topic};
+pub(crate) use context::{
+    build_scoring_context, invalidate_scoring_context_cache, is_low_quality_topic,
+};
 pub(crate) use dedup::{
     apply_domain_diversity, apply_source_topic_diversity, compute_serendipity_candidates,
     dedup_results, fuzzy_dedup_results, sort_results, topic_dedup_results,

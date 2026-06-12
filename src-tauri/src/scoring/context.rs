@@ -408,6 +408,24 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     Ok(context)
 }
 
+/// Clear the cached scoring context so the next `build_scoring_context()` reads
+/// fresh from the DB. Must be called whenever the inputs change — interests,
+/// exclusions, detected tech, role. Without it the 5-minute TTL keeps serving
+/// the context built at app startup, so right after onboarding (taste test +
+/// project scan, which all completes in under a minute) the first analysis
+/// scores against an EMPTY profile and shows a dead feed until the cache ages
+/// out or the app restarts — a catastrophic first impression no user would
+/// know to fix (cold-start integrity run, 2026-06-13).
+pub(crate) fn invalidate_scoring_context_cache() {
+    let mut cache = SCORING_CONTEXT_CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if cache.is_some() {
+        *cache = None;
+        tracing::info!(target: "4da::scoring", "Scoring context cache invalidated");
+    }
+}
+
 /// Reject low-quality ACE-discovered topics before they become synthesized
 /// scoring interests. Such topics pollute the feed (e.g. a commit-type label or
 /// a raw code identifier "matching" unrelated content) and inflate the
