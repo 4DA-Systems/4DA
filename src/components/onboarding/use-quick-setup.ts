@@ -164,12 +164,20 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
         const result = await cmd('ace_get_suggested_interests');
         if (cancelled) return;
         const topics = result.filter(s => !s.already_declared).map(s => s.topic).slice(0, 12);
+        // Only PRE-SELECT interests derived from REAL detection. The generic
+        // fallback list (ML/Rust/TS...) is shown as clickable suggestions but
+        // never auto-committed: silently seeding 3+ phantom interests on an
+        // empty machine defeats the thin-profile scoring floor and hands a
+        // C#/PHP dev a confident Rust feed they never chose (F-6). With no
+        // detection, interests start empty and the conservative floor engages.
         const finalSuggestions = topics.length > 0 ? topics : fallbackSuggestions;
         setSuggestions(finalSuggestions);
-        setInterests(prev => prev.length === 0 ? finalSuggestions.slice(0, 5) : prev);
+        if (topics.length > 0) {
+          setInterests(prev => prev.length === 0 ? topics.slice(0, 5) : prev);
+        }
       } catch {
+        // Detection failed — offer suggestions, but do not auto-commit them.
         setSuggestions(fallbackSuggestions);
-        setInterests(prev => prev.length === 0 ? fallbackSuggestions.slice(0, 5) : prev);
       }
     })();
     return () => { cancelled = true; };
@@ -255,9 +263,12 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       if (role) await cmd('set_user_role', { role });
       if (experienceLevel) await cmd('set_experience_level', { level: experienceLevel });
 
+      // Save the user's chosen interests, or fall back to REAL detected tech.
+      // Never persist the generic fallback list — an empty interest set is the
+      // honest thin-profile state the scoring floor is built for (F-6).
       const interestsToSave = interests.length > 0
         ? interests
-        : detectedTech.length > 0 ? detectedTech.slice(0, 5) : fallbackSuggestions.slice(0, 3);
+        : detectedTech.slice(0, 5);
       await Promise.all([
         ...interestsToSave.map(interest => cmd('add_interest', { topic: interest })),
         ...detectedTech.map(tech => cmd('add_tech_stack', { technology: tech })),
