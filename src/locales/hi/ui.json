@@ -3071,5 +3071,6 @@
   "validation.source": "स्रोत",
   "validation.videos": "वीडियो",
   "calibration.onboarding.gradeStartingPoint": "यह आपका शुरुआती स्कोर है — जैसे-जैसे 4DA आपकी पसंद सीखता है, यह बढ़ता है।",
-  "language.change": "भाषा बदलें"
+  "language.change": "भाषा बदलें",
+  "license.trialBadge": "Signal परीक्षण"
 }

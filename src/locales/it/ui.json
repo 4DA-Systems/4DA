@@ -3150,5 +3150,6 @@
     "loading": "Analisi della tua copertura in corso..."
   },
   "calibration.onboarding.gradeStartingPoint": "Questo è il tuo punteggio iniziale: cresce man mano che 4DA impara ciò che ti interessa.",
-  "language.change": "Cambia lingua"
+  "language.change": "Cambia lingua",
+  "license.trialBadge": "Prova Signal"
 }

@@ -2817,5 +2817,6 @@
   "evidence.learnedEmpty": "Save and dismiss items in the feed to help 4DA learn your preferences. After a few interactions, your topic affinities will appear here.",
   "evidence.learnedPositive": "Topics you engage with",
   "evidence.learnedNegative": "Topics you consistently skip",
-  "calibration.onboarding.gradeStartingPoint": "This is your starting score — it climbs as 4DA learns what you care about."
+  "calibration.onboarding.gradeStartingPoint": "This is your starting score — it climbs as 4DA learns what you care about.",
+  "license.trialBadge": "Signal trial"
 }

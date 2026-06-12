@@ -101,7 +101,11 @@ function App() {
   );
 
   const feedbackCount = useAppStore(s => Object.keys(s.feedbackGiven).length);
-  const { tier, isPro } = useLicense();
+  const { tier, isPro, trialStatus } = useLicense();
+  // Reverse-trial honesty: a trial user HAS Signal features - showing
+  // "FREE" for 14 days hides what expiry takes away (cold-start run,
+  // 2026-06-12). The raw tier stays free; only the badge label changes.
+  const badgeTier = tier === 'free' && trialStatus?.active === true ? t('license.trialBadge') : tier;
 
   // i18n direction (sets dir/lang on <html>)
   useDirection();
@@ -273,7 +277,7 @@ function App() {
           monitoring={monitoring}
           settingsFormProvider={settingsForm.provider}
           isPro={isPro}
-          tier={tier}
+          tier={badgeTier}
           summaryBadges={summaryBadges}
           aiBriefing={aiBriefing}
           onAnalyze={handleAnalyze}

@@ -3177,5 +3177,6 @@
   "validation.source": "المصدر",
   "validation.videos": "مقاطع فيديو",
   "calibration.onboarding.gradeStartingPoint": "هذه نقطة انطلاقك — وترتفع كلما تعلّم 4DA ما يهمّك.",
-  "language.change": "تغيير اللغة"
+  "language.change": "تغيير اللغة",
+  "license.trialBadge": "تجربة Signal"
 }
