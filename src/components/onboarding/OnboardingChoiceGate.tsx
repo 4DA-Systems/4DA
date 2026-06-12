@@ -91,7 +91,7 @@ export function OnboardingChoiceGate({
           <p className="text-xs text-orange-400/80 -mt-2">
             {t(
               'onboarding.choice.scanProjectsDesc',
-              '100% local — nothing ever leaves your machine. Personalizes 4DA to your real stack in about a minute.',
+              '100% local — nothing ever leaves your machine. Personalizes 4DA to your real stack.',
             )}
           </p>
 

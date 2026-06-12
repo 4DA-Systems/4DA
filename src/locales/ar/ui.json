@@ -1481,7 +1481,7 @@
   "onboarding.apiKeys.xApiSkipHint": "تخطَّ هذا إذا لم يكن لديك حساب مطور X. يمكنك إضافته لاحقاً في الإعدادات.",
   "onboarding.choice.continueHint": "إعداد مزوّد الذكاء الاصطناعي، والمكدس، والاهتمامات",
   "onboarding.choice.scanProjects": "فحص مشاريعي",
-  "onboarding.choice.scanProjectsDesc": "محلي 100% — لا شيء يغادر جهازك أبدًا. يخصّص 4DA لمنظومتك الفعلية في حوالي دقيقة.",
+  "onboarding.choice.scanProjectsDesc": "محلي 100% — لا شيء يغادر جهازك أبدًا. يخصّص 4DA لمنظومتك الفعلية.",
   "onboarding.choice.scanRecommended": "موصى به",
   "onboarding.choice.scanning": "جارٍ فحص مشاريعك… يبقى هذا على جهازك",
   "onboarding.choice.keywordOnly": "ليس الآن — استخدام الإعدادات الافتراضية",

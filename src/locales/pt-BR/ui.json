@@ -1488,7 +1488,7 @@
   "onboarding.apiKeys.xApiSkipHint": "Pule isso se não tiver uma conta de X developer. Você pode adicionar depois nas Configurações.",
   "onboarding.choice.continueHint": "Configurar provedor de IA, stack, interesses",
   "onboarding.choice.scanProjects": "Escanear meus projetos",
-  "onboarding.choice.scanProjectsDesc": "100% local — nada nunca sai da sua máquina. Personaliza o 4DA conforme seu stack real em cerca de um minuto.",
+  "onboarding.choice.scanProjectsDesc": "100% local — nada nunca sai da sua máquina. Personaliza o 4DA conforme seu stack real.",
   "onboarding.choice.scanRecommended": "Recomendado",
   "onboarding.choice.scanning": "Escaneando seus projetos… isso permanece no seu dispositivo",
   "onboarding.choice.keywordOnly": "Agora não — usar padrões",

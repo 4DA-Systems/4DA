@@ -673,7 +673,7 @@
   "onboarding.choice.continueSetup": "Продолжить настройку",
   "onboarding.choice.continueHint": "Настроить провайдера ИИ, стек, интересы",
   "onboarding.choice.scanProjects": "Сканировать мои проекты",
-  "onboarding.choice.scanProjectsDesc": "100% локально — ничего никогда не покидает ваш компьютер. Примерно за минуту 4DA подстроится под ваш реальный стек.",
+  "onboarding.choice.scanProjectsDesc": "100% локально — ничего никогда не покидает ваш компьютер. 4DA подстроится под ваш реальный стек.",
   "onboarding.choice.scanRecommended": "Рекомендуется",
   "onboarding.choice.scanning": "Сканирование ваших проектов… это остаётся на вашем устройстве",
   "onboarding.choice.keywordOnly": "Не сейчас — использовать настройки по умолчанию",

@@ -680,7 +680,7 @@
   "onboarding.choice.continueSetup": "Einrichtung fortsetzen",
   "onboarding.choice.continueHint": "KI-Anbieter, Stack, Interessen konfigurieren",
   "onboarding.choice.scanProjects": "Meine Projekte scannen",
-  "onboarding.choice.scanProjectsDesc": "100 % lokal — nichts verlässt jemals deinen Rechner. Passt 4DA in etwa einer Minute an deinen echten Stack an.",
+  "onboarding.choice.scanProjectsDesc": "100 % lokal — nichts verlässt jemals deinen Rechner. Passt 4DA an deinen echten Stack an.",
   "onboarding.choice.scanRecommended": "Empfohlen",
   "onboarding.choice.scanning": "Deine Projekte werden gescannt… das bleibt auf deinem Gerät",
   "onboarding.choice.keywordOnly": "Jetzt nicht — Standardeinstellungen verwenden",

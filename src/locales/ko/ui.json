@@ -1418,7 +1418,7 @@
   "onboarding.apiKeys.xApiSkipHint": "X 개발자 계정이 없다면 건너뛰세요. 나중에 설정에서 추가할 수 있습니다.",
   "onboarding.choice.continueHint": "AI 제공자, 스택, 관심사 설정",
   "onboarding.choice.scanProjects": "내 프로젝트 스캔",
-  "onboarding.choice.scanProjectsDesc": "100% 로컬 — 어떤 것도 기기를 벗어나지 않습니다. 약 1분 만에 실제 스택에 맞게 4DA를 개인화합니다.",
+  "onboarding.choice.scanProjectsDesc": "100% 로컬 — 어떤 것도 기기를 벗어나지 않습니다. 실제 스택에 맞게 4DA를 개인화합니다.",
   "onboarding.choice.scanRecommended": "추천",
   "onboarding.choice.scanning": "프로젝트를 스캔하는 중… 이 작업은 기기 안에서만 이루어집니다",
   "onboarding.choice.keywordOnly": "나중에 — 기본값 사용",
