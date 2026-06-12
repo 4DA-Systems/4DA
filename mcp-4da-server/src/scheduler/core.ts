@@ -30,6 +30,7 @@ export interface Scheduler {
   stop(): void;
   tick(name: string): Promise<void>;
   jobs(): SchedulerJobView[];
+  jobCount(): number;
 }
 
 export function createScheduler(): Scheduler {
@@ -82,6 +83,10 @@ export function createScheduler(): Scheduler {
 
     jobs(): SchedulerJobView[] {
       return [...jobs.values()].map(({ name, intervalMs, lastRun }) => ({ name, intervalMs, lastRun }));
+    },
+
+    jobCount(): number {
+      return jobs.size;
     },
   };
 }
