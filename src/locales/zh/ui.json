@@ -3004,5 +3004,6 @@
   "validation.source": "来源",
   "validation.videos": "视频",
   "calibration.onboarding.gradeStartingPoint": "这是你的初始评分 — 随着 4DA 了解你的关注点，它会不断提升。",
-  "language.change": "切换语言"
+  "language.change": "切换语言",
+  "license.trialBadge": "Signal 试用"
 }

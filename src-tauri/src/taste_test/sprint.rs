@@ -4,8 +4,11 @@
 //! The taste test (15 curated cards) infers a persona but its synthetic
 //! feedback is topic-level with no `source_item_id`, so the calibration
 //! fitter never benefits from it. This module is the second phase: it
-//! samples real `source_items` that already have unprocessed
-//! `calibration_samples` rows and asks the user for an explicit
+//! samples real `source_items` — preferring items that already have
+//! unprocessed `calibration_samples` rows, topping up from scored items
+//! when those run dry (no-LLM installs never stamp samples; their
+//! labels still feed precision tracking and pre-pair future judgments)
+//! — and asks the user for an explicit
 //! relevant / not-relevant judgment. Each judgment becomes a
 //! `feedback(source_item_id, relevant)` row — the strongest possible
 //! label for `calibration_fitter::resolve_outcome` (explicit feedback
@@ -259,9 +262,73 @@ pub fn stratify(
     }
 }
 
+/// Fallback pool: scored corpus items WITHOUT requiring a calibration
+/// sample. Installs with no LLM advisor configured never stamp
+/// `calibration_samples` (the judge path is the only writer), so the
+/// primary pool is empty on a fresh no-key install. Explicit labels are
+/// still durable ground truth there: they feed precision tracking now
+/// and pre-pair with any sample stamped for the item later (feedback
+/// labels never expire). Newest scored items first, same exclusions.
+fn load_fallback_candidates(conn: &Connection, exclude: &[i64]) -> Result<Vec<SprintCandidate>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT si.id, si.title, si.content, si.source_type, si.url,
+                    COALESCE(si.relevance_score, 0.0)
+             FROM source_items si
+             WHERE si.relevance_score IS NOT NULL
+               AND NOT EXISTS (
+                     SELECT 1 FROM feedback f WHERE f.source_item_id = si.id)
+               AND TRIM(si.title) <> ''
+             ORDER BY si.created_at DESC
+             LIMIT ?1",
+        )
+        .context("Failed to prepare sprint fallback query")?;
+
+    let rows = stmt
+        .query_map(params![CANDIDATE_POOL as i64], |row| {
+            let content: String = row.get::<_, Option<String>>(2)?.unwrap_or_default();
+            Ok(SprintCandidate {
+                card: CalibrationSprintCard {
+                    source_item_id: row.get(0)?,
+                    title: row.get(1)?,
+                    snippet: make_snippet(&content),
+                    source_type: row.get(3)?,
+                    url: row.get(4)?,
+                },
+                score: row.get::<_, f64>(5)? as f32,
+            })
+        })
+        .context("Failed to query sprint fallback candidates")?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        match row {
+            Ok(c) => {
+                if !exclude.contains(&c.card.source_item_id) {
+                    out.push(c);
+                }
+            }
+            Err(e) => {
+                tracing::warn!(target: "4da::taste_test::sprint", error = %e, "Skipping malformed fallback candidate row");
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Public entry: sample up to [`SPRINT_TARGET`] stratified sprint cards.
+///
+/// Sample-bearing items lead (their labels pair with the fitter
+/// immediately); when they cannot fill the deck — fresh installs, and
+/// no-LLM installs where the judge never stamps samples — scored corpus
+/// items top it up so the sprint is never artificially empty while
+/// real, labelable content exists.
 pub fn sprint_items(conn: &Connection) -> Result<Vec<CalibrationSprintCard>> {
-    let candidates = load_candidates(conn)?;
+    let mut candidates = load_candidates(conn)?;
+    if candidates.len() < SPRINT_TARGET {
+        let have: Vec<i64> = candidates.iter().map(|c| c.card.source_item_id).collect();
+        candidates.extend(load_fallback_candidates(conn, &have)?);
+    }
     Ok(stratify(candidates, SPRINT_TARGET, PER_SOURCE_CAP))
 }
 
@@ -353,7 +420,8 @@ mod tests {
                 title TEXT NOT NULL,
                 content TEXT NOT NULL DEFAULT '',
                 url TEXT,
-                relevance_score REAL
+                relevance_score REAL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
             CREATE TABLE calibration_samples (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -516,12 +584,12 @@ mod tests {
     // -- sprint_items (SQL eligibility) ---------------------------------------
 
     #[test]
-    fn sprint_items_requires_unprocessed_sample() {
+    fn sprint_items_prefers_sample_bearing_items() {
         let conn = test_conn();
-        // Item with an unprocessed sample: eligible.
+        // Item with an unprocessed sample: primary pool, must lead.
         let a = insert_item(&conn, "Eligible item", "hackernews", 0.5, "body");
         insert_unprocessed_sample(&conn, a);
-        // Item whose only sample is processed: NOT eligible.
+        // Item whose only sample is processed: reachable via fallback.
         let b = insert_item(&conn, "Processed item", "reddit", 0.5, "body");
         conn.execute(
             "INSERT INTO calibration_samples (source_item_id, processed_at)
@@ -529,12 +597,44 @@ mod tests {
             params![b],
         )
         .unwrap();
-        // Item with no samples at all: NOT eligible.
+        // Item with no samples at all: reachable via fallback.
         insert_item(&conn, "Sampleless item", "arxiv", 0.5, "body");
 
         let cards = sprint_items(&conn).unwrap();
-        assert_eq!(cards.len(), 1);
+        // All three are scored + unlabeled, so all three are labelable;
+        // the sample-bearing item leads (its label pairs with the
+        // fitter immediately).
+        assert_eq!(cards.len(), 3);
         assert_eq!(cards[0].source_item_id, a);
+    }
+
+    #[test]
+    fn sprint_items_falls_back_when_no_samples_exist() {
+        // Fresh no-LLM install: the judge never stamps
+        // calibration_samples, but scored items are still labelable
+        // ground truth (cold-start integrity run, 2026-06-12).
+        let conn = test_conn();
+        insert_item(&conn, "Scored item one", "hackernews", 0.8, "body");
+        insert_item(&conn, "Scored item two", "arxiv", 0.1, "body");
+
+        let cards = sprint_items(&conn).unwrap();
+        assert_eq!(cards.len(), 2, "fallback serves scored items");
+    }
+
+    #[test]
+    fn sprint_fallback_still_excludes_labeled_items() {
+        let conn = test_conn();
+        let a = insert_item(&conn, "Already labeled", "hackernews", 0.5, "body");
+        conn.execute(
+            "INSERT INTO feedback (source_item_id, relevant) VALUES (?1, 1)",
+            params![a],
+        )
+        .unwrap();
+        insert_item(&conn, "Unlabeled", "arxiv", 0.5, "body");
+
+        let cards = sprint_items(&conn).unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].title, "Unlabeled");
     }
 
     #[test]

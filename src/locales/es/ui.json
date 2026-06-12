@@ -3096,5 +3096,6 @@
     "loading": "Analizando tu cobertura..."
   },
   "calibration.onboarding.gradeStartingPoint": "Esta es tu puntuación inicial: sube a medida que 4DA aprende lo que te importa.",
-  "language.change": "Cambiar idioma"
+  "language.change": "Cambiar idioma",
+  "license.trialBadge": "Prueba Signal"
 }
