@@ -169,7 +169,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
             <span className="text-emerald-400">📚</span>
           </div>
           <div>
-            <h3 className="text-white font-medium">{t('documents.title')}</h3>
+            <h3 className="text-text-primary font-medium">{t('documents.title')}</h3>
             <p className="text-text-muted text-sm">
               {stats ? t('documents.documentsIndexed', { count: stats.total_documents }) : t('action.loading')}
             </p>
@@ -193,7 +193,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                   className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
                     filterType === t.file_type
                       ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
-                      : 'bg-bg-secondary border-border text-text-secondary hover:text-white hover:border-emerald-500/30'
+                      : 'bg-bg-secondary border-border text-text-secondary hover:text-text-primary hover:border-emerald-500/30'
                   }`}
                 >
                   {fileTypeIcons[t.file_type] || fileTypeIcons.unknown} {t.file_type} ({t.count})
@@ -210,7 +210,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 px-3 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-white placeholder:text-text-muted focus:outline-none focus:border-emerald-500/50 transition-colors"
+              className="flex-1 px-3 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:border-emerald-500/50 transition-colors"
             />
             <button
               onClick={() => void handleSearch()}
@@ -232,7 +232,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                     setSearchQuery('');
                   }}
                   aria-label="Clear search results"
-                  className="text-text-muted hover:text-white transition-colors"
+                  className="text-text-muted hover:text-text-primary transition-colors"
                 >
                   {/* eslint-disable i18next/no-literal-string */}
                   ✕ Clear
@@ -250,7 +250,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                 >
                   <div className="flex items-center gap-2">
                     <span>{fileTypeIcons[result.file_type] || fileTypeIcons.unknown}</span>
-                    <span className="text-sm text-white truncate flex-1">
+                    <span className="text-sm text-text-primary truncate flex-1">
                       {result.file_name}
                     </span>
                   </div>
@@ -285,7 +285,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                         {fileTypeIcons[doc.file_type] || fileTypeIcons.unknown}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm text-white truncate">
+                        <div className="text-sm text-text-primary truncate">
                           {doc.file_name}
                         </div>
                         {/* eslint-disable i18next/no-literal-string */}
@@ -333,7 +333,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
           <button
             onClick={() => void loadDocuments()}
             disabled={loading}
-            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-emerald-500/30 disabled:opacity-50 transition-all"
+            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-text-primary hover:border-emerald-500/30 disabled:opacity-50 transition-all"
           >
             {loading ? t('action.loading') : t('action.refresh')}
           </button>

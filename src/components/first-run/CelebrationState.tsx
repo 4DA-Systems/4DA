@@ -89,14 +89,14 @@ export function CelebrationState({
       </div>
 
       {/* Intelligence Activated header */}
-      <h2 className="text-lg font-medium text-white mb-4">
+      <h2 className="text-lg font-medium text-text-primary mb-4">
         {t('firstRun.intelligenceActivated', 'Intelligence Activated')}
       </h2>
 
       {/* Stats row */}
       <div className="flex justify-center gap-8 mb-6">
         <div className="text-center">
-          <span className="text-3xl font-bold text-white tabular-nums">{totalCount}</span>
+          <span className="text-3xl font-bold text-text-primary tabular-nums">{totalCount}</span>
           <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
             {t('firstRun.itemsAnalyzed', 'analyzed')}
           </p>
@@ -105,7 +105,7 @@ export function CelebrationState({
             "0" is a banned vanity zero (doctrine rule 3) and reads as failure. */}
         {!profileEmpty && (
           <div className="text-center">
-            <span className="text-3xl font-bold text-white tabular-nums">{relevantCount}</span>
+            <span className="text-3xl font-bold text-text-primary tabular-nums">{relevantCount}</span>
             <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
               {t('firstRun.relevantToYou', 'relevant')}
             </p>
@@ -113,7 +113,7 @@ export function CelebrationState({
         )}
         {((profileEmpty && sourceBreakdown.length > 0) || (depMatchCount > 0 && depMatchCount !== totalCount)) && (
           <div className="text-center">
-            <span className="text-3xl font-bold text-white tabular-nums">{sourceBreakdown.length}</span>
+            <span className="text-3xl font-bold text-text-primary tabular-nums">{sourceBreakdown.length}</span>
             <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
               {t('firstRun.sourcesScanned', 'sources')}
             </p>
@@ -171,7 +171,7 @@ export function CelebrationState({
               <span className="ms-2 text-text-muted normal-case">{getSourceFullName(topSignal.source_type)}</span>
             )}
           </p>
-          <p className="text-sm text-white font-medium leading-snug line-clamp-2">{topSignal.title}</p>
+          <p className="text-sm text-text-primary font-medium leading-snug line-clamp-2">{topSignal.title}</p>
           {topSignal.score_breakdown?.matched_deps && topSignal.score_breakdown.matched_deps.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {topSignal.score_breakdown.matched_deps.slice(0, 4).map(dep => (

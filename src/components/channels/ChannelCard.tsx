@@ -47,7 +47,7 @@ export const ChannelCard = memo(function ChannelCard({ channel, active, onClick 
       <div className="flex items-start justify-between gap-2">
         <h3
           className={`text-sm font-medium leading-tight ${
-            active ? 'text-white' : 'text-text-secondary'
+            active ? 'text-text-primary' : 'text-text-secondary'
           }`}
         >
           {getTranslated(`ch-title-${channel.id}`, channel.title)}

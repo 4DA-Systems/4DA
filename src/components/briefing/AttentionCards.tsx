@@ -136,7 +136,7 @@ const AttentionCard = memo(function AttentionCard({
     <div
       className={`flex-shrink-0 w-72 rounded-lg border ${
         hasNecessityHighlight ? style.border : 'border-border'
-      } bg-bg-secondary p-4 flex flex-col gap-3 hover:border-white/20 transition-colors`}
+      } bg-bg-secondary p-4 flex flex-col gap-3 hover:border-text-primary/20 transition-colors`}
     >
       {/* Header: signal badge + source + score */}
       <div className="flex items-center gap-2">
@@ -157,7 +157,7 @@ const AttentionCard = memo(function AttentionCard({
       {/* Title */}
       <button
         onClick={handleOpen}
-        className="text-sm text-white text-start leading-snug line-clamp-2 hover:text-orange-400 transition-colors"
+        className="text-sm text-text-primary text-start leading-snug line-clamp-2 hover:text-orange-400 transition-colors"
       >
         {isSignal && item.signal_action ? item.signal_action : displayTitle}
       </button>

@@ -46,7 +46,7 @@ const SignalRow = memo(function SignalRow({
                 href={cite.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-white hover:text-amber-400 transition-colors leading-snug truncate"
+                className="text-sm text-text-primary hover:text-amber-400 transition-colors leading-snug truncate"
                 onClick={() => recordTrustEvent({
                   eventType: 'acted_on', signalId: item.id,
                   sourceType: 'missed_signal', topic: item.title, notes: 'blind_spot_click',
@@ -55,7 +55,7 @@ const SignalRow = memo(function SignalRow({
                 {displayTitle}
               </a>
             ) : (
-              <span className="text-sm text-white leading-snug truncate">{displayTitle}</span>
+              <span className="text-sm text-text-primary leading-snug truncate">{displayTitle}</span>
             )}
             <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${URGENCY_COLORS[item.urgency]}`}>
               {t(`preemption.urgency.${item.urgency}`)}
@@ -146,7 +146,7 @@ const DepCoverageRow = memo(function DepCoverageRow({
         )}
         {!hasContent && <span className="w-[10px]" />}
         <div className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
-        <span className="text-sm font-medium text-white shrink-0">{dep.name}</span>
+        <span className="text-sm font-medium text-text-primary shrink-0">{dep.name}</span>
         {dep.gap && !expanded && (
           <span className="text-[11px] text-text-muted truncate flex-1">
             — {gapExplanation}
@@ -249,7 +249,7 @@ export const TierSection = memo(function TierSection({
       <div className="bg-bg-secondary rounded-lg border overflow-hidden" style={{ borderColor }}>
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
-          <h3 className="text-sm font-medium text-white flex-1">{title}</h3>
+          <h3 className="text-sm font-medium text-text-primary flex-1">{title}</h3>
           <span className="text-xs text-[#8A8A8A]">{subtitle}</span>
           <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ color: badgeColor }}>
             {badgeText}
@@ -286,7 +286,7 @@ export const EmergingSignals = memo(function EmergingSignals({
       <div className="bg-bg-secondary rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(59, 130, 246, 0.2)' }}>
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <div className="w-2 h-2 rounded-full shrink-0 bg-blue-500" />
-          <h3 className="text-sm font-medium text-white flex-1">{t('blindspots.emerging.title')}</h3>
+          <h3 className="text-sm font-medium text-text-primary flex-1">{t('blindspots.emerging.title')}</h3>
           <span className="text-xs text-[#8A8A8A]">
             {t('blindspots.emerging.subtitle', { count: items.length })}
           </span>
@@ -319,7 +319,7 @@ export const CoveredSection = memo(function CoveredSection({
         className="w-full px-4 py-3 flex items-center gap-2 hover:bg-bg-tertiary/30 transition-colors"
       >
         <div className="w-2 h-2 rounded-full bg-green-400" />
-        <h3 className="text-sm font-medium text-white flex-1 text-left">
+        <h3 className="text-sm font-medium text-text-primary flex-1 text-left">
           {t('blindspots.covered.title')} ({depRows.length})
         </h3>
         <span className="text-[10px] text-green-400">

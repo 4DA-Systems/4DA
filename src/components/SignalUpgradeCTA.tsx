@@ -35,7 +35,7 @@ export function SignalUpgradeCTA({ compact }: SignalUpgradeCTAProps) {
         href="https://4da.ai/signal"
         target="_blank"
         rel="noopener noreferrer"
-        className={`font-medium text-black bg-accent-gold rounded-lg hover:bg-[#C4A030] transition-colors ${
+        className={`font-medium text-bg-primary bg-accent-gold rounded-lg hover:bg-accent-gold-hover transition-colors ${
           compact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm'
         }`}
       >
@@ -45,7 +45,7 @@ export function SignalUpgradeCTA({ compact }: SignalUpgradeCTAProps) {
         <button
           onClick={() => { void handleStartTrial(); }}
           disabled={starting}
-          className={`font-medium text-text-secondary border border-border rounded-lg hover:border-gray-400 hover:text-white transition-colors disabled:opacity-50 ${
+          className={`font-medium text-text-secondary border border-border rounded-lg hover:border-gray-400 hover:text-text-primary transition-colors disabled:opacity-50 ${
             compact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm'
           }`}
         >

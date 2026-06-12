@@ -38,7 +38,7 @@ export function PasifaSection() {
             <div className="flex items-start gap-3">
               <span className="text-xs font-mono text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded flex-shrink-0">{axis}</span>
               <div>
-                <p className="text-sm text-white">{question}</p>
+                <p className="text-sm text-text-primary">{question}</p>
                 <p className="text-xs text-text-muted mt-1">{source}</p>
               </div>
             </div>
@@ -91,7 +91,7 @@ export function PasifaSection() {
           <div key={phase} className="flex items-start gap-3 py-2 border-b border-border/20">
             <span className="text-xs font-mono text-text-muted w-4 flex-shrink-0">{phase}</span>
             <div>
-              <span className="text-sm text-white">{name}</span>
+              <span className="text-sm text-text-primary">{name}</span>
               <span className="text-xs text-text-muted ms-2">{desc}</span>
             </div>
           </div>

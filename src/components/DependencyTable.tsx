@@ -24,7 +24,7 @@ const SEVERITY_COLORS: Record<Severity, string> = {
   critical: 'bg-error/15 text-error border-error/25',
   high: 'bg-[var(--color-accent-action)]/15 text-[var(--color-accent-action)] border-[var(--color-accent-action)]/25',
   medium: 'bg-accent-gold/15 text-accent-gold border-accent-gold/25',
-  low: 'bg-white/5 text-text-muted border-border',
+  low: 'bg-text-primary/5 text-text-muted border-border',
 };
 
 const ECOSYSTEM_COLORS: Record<string, string> = {
@@ -65,7 +65,7 @@ export function EcosystemBadge({ ecosystem }: { ecosystem: string }) {
 export function StatCard({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
     <div className="bg-bg-tertiary rounded-lg border border-border px-4 py-3">
-      <div className={`text-xl font-semibold ${color ?? 'text-white'}`}>
+      <div className={`text-xl font-semibold ${color ?? 'text-text-primary'}`}>
         {value.toLocaleString()}
       </div>
       <div className="text-xs text-text-muted mt-0.5">{label}</div>

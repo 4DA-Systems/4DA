@@ -131,7 +131,7 @@ function GeometryCard({ geo, isExpanded, onToggle }: {
         </div>
       </div>
       <div className="text-center mt-1.5">
-        <span className="text-xs font-medium text-white">{geo.name}</span>
+        <span className="text-xs font-medium text-text-primary">{geo.name}</span>
         <span className="text-[9px] text-accent-gold font-medium ml-1.5">{geo.role}</span>
         <div className="text-[10px] text-text-muted/80 mt-0.5 leading-snug px-1">
           {geo.caption}

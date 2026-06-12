@@ -47,14 +47,14 @@ export const BlindSpotsPaywall = memo(function BlindSpotsPaywall() {
   return (
     <div className="space-y-4" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
       <header className="mb-2">
-        <h1 className="text-xl font-semibold text-white tracking-tight">{t('blindspots.title')}</h1>
+        <h1 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h1>
         <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
       </header>
       <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
         <div className="w-12 h-12 rounded-full bg-accent-gold/10 border border-accent-gold/20 flex items-center justify-center mb-1">
           <span className="text-accent-gold text-lg" aria-hidden="true">&#x1F512;</span>
         </div>
-        <p className="text-sm font-medium text-white">{t('blindspots.locked.title')}</p>
+        <p className="text-sm font-medium text-text-primary">{t('blindspots.locked.title')}</p>
         <p className="text-xs text-text-muted max-w-sm">{t('blindspots.locked.subtitle')}</p>
         {showTeaser && (
           <div className="flex flex-col items-center gap-1.5 mt-2" data-testid="blindspots-teaser">

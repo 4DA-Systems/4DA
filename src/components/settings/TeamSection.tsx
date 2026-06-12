@@ -129,7 +129,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
 
   return (
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
-      <h3 className="text-sm font-medium text-white mb-3">
+      <h3 className="text-sm font-medium text-text-primary mb-3">
         {t('settings.team.title', 'Team Sync')}
       </h3>
 
@@ -176,7 +176,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                 className={`w-2 h-2 rounded-full ${CONNECTION_COLORS[getConnectionState(teamStatus.connected, teamStatus.pending_outbound)]}`}
                 aria-label={t(`settings.team.status.${getConnectionState(teamStatus.connected, teamStatus.pending_outbound)}`, getConnectionState(teamStatus.connected, teamStatus.pending_outbound))}
               />
-              <span className="text-xs text-white font-medium truncate max-w-[120px]" title={teamStatus.team_id ?? undefined}>
+              <span className="text-xs text-text-primary font-medium truncate max-w-[120px]" title={teamStatus.team_id ?? undefined}>
                 {teamStatus.team_id?.slice(0, 8)}...
               </span>
             </div>
@@ -212,7 +212,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                       className="flex items-center gap-2 px-2 py-1.5 rounded bg-bg-primary/50"
                       role="listitem"
                     >
-                      <span className="text-xs text-white flex-1 truncate">{member.display_name}</span>
+                      <span className="text-xs text-text-primary flex-1 truncate">{member.display_name}</span>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded ${badge.bg} ${badge.text}`}>
                         {member.role}
                       </span>
@@ -252,7 +252,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                       className={`absolute top-0.5 start-0.5 w-3 h-3 rounded-full bg-white transition-transform ${sharingPrefs[pref.key] ? 'translate-x-4' : 'translate-x-0'}`}
                     />
                   </button>
-                  <span className="text-xs text-text-secondary group-hover:text-white transition-colors">
+                  <span className="text-xs text-text-secondary group-hover:text-text-primary transition-colors">
                     {pref.label}
                   </span>
                 </label>

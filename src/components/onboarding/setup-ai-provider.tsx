@@ -208,7 +208,7 @@ export function SetupAIProvider({
                       : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
                   }`}
                 >
-                  <div className="text-sm font-medium text-white">
+                  <div className="text-sm font-medium text-text-primary">
                     {p === 'anthropic' ? 'Anthropic' : p === 'openai' ? 'OpenAI' : t('onboarding.setupAi.otherLabel')}
                   </div>
                   <div className="text-[10px] text-text-muted mt-0.5">
@@ -235,7 +235,7 @@ export function SetupAIProvider({
                     : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
                 }`}
               >
-                <div className="text-sm font-medium text-white">Ollama</div>
+                <div className="text-sm font-medium text-text-primary">Ollama</div>
                 <div className="text-[10px] text-text-muted mt-0.5">{t('onboarding.setupAi.ollamaDesc')}</div>
               </button>
               {/* Auto-detected local servers */}
@@ -248,7 +248,7 @@ export function SetupAIProvider({
                   }}
                   className="p-3 rounded-lg text-start bg-bg-tertiary border-2 border-transparent hover:border-border transition-all"
                 >
-                  <div className="text-sm font-medium text-white flex items-center gap-1.5">
+                  <div className="text-sm font-medium text-text-primary flex items-center gap-1.5">
                     {server.name}
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
                   </div>
@@ -283,7 +283,7 @@ export function SetupAIProvider({
                 value={apiKey}
                 onChange={(e) => onApiKeyChange(e.target.value)}
                 placeholder={provider === 'anthropic' ? 'sk-ant-api03-...' : 'sk-proj-...'}
-                className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
+                className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
               />
             </div>
           )}
@@ -297,7 +297,7 @@ export function SetupAIProvider({
                 value={apiKey}
                 onChange={(e) => onApiKeyChange(e.target.value)}
                 placeholder={t('settings.llm.apiKey')}
-                className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
+                className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
               />
               <p className="text-[10px] text-text-muted">{t('onboarding.setupAi.configureInSettings')}</p>
             </div>

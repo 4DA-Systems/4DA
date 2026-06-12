@@ -38,7 +38,7 @@ export function ContextDiscoverySection({
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="text-white font-medium">{t('settings.context.title')}</h3>
+            <h3 className="text-text-primary font-medium">{t('settings.context.title')}</h3>
             <span className="px-2 py-0.5 text-[10px] bg-orange-500/20 text-orange-400 rounded-full font-medium">ACE</span>
           </div>
           <p className="text-text-muted text-sm mt-1">
@@ -65,12 +65,12 @@ export function ContextDiscoverySection({
             onChange={(e) => setNewScanDir(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addScanDirectory()}
             placeholder={t('settings.context.addDirPlaceholder')}
-            className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500/50 focus:outline-none transition-colors"
+            className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-orange-500/50 focus:outline-none transition-colors"
           />
           <button
             onClick={addScanDirectory}
             aria-label={t('settings.context.addDirectory')}
-            className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-orange-500/30 transition-all"
+            className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-text-primary hover:border-orange-500/30 transition-all"
           >
             {t('action.add')}
           </button>
@@ -85,7 +85,7 @@ export function ContextDiscoverySection({
               <div className="space-y-1.5 max-h-32 overflow-y-auto">
                 {scanDirectories.map((dir) => (
                   <div key={dir} className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg border border-border group">
-                    <span className="font-mono text-sm text-white truncate">{dir}</span>
+                    <span className="font-mono text-sm text-text-primary truncate">{dir}</span>
                     <button
                       onClick={() => removeScanDirectory(dir)}
                       aria-label={t('settings.context.removeDir', { dir })}
@@ -104,7 +104,7 @@ export function ContextDiscoverySection({
           <button
             onClick={runFullScan}
             disabled={isScanning}
-            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-text-primary hover:border-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isScanning ? t('settings.context.scanning') : t('settings.context.rescan')}
           </button>

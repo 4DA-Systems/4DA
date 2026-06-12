@@ -133,21 +133,21 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
   const ONBOARDING_ACTIONABLE = ['pull_embedding_model', 'auto_detect_stacks'];
 
   const gradeColor = (grade: string) => {
-    if (grade.startsWith('A')) return '#22C55E';
-    if (grade.startsWith('B')) return '#D4AF37';
-    if (grade.startsWith('C')) return '#F59E0B';
-    return '#EF4444';
+    if (grade.startsWith('A')) return 'var(--color-success)';
+    if (grade.startsWith('B')) return 'var(--color-accent-gold)';
+    if (grade.startsWith('C')) return 'var(--color-amber-500)';
+    return 'var(--color-error)';
   };
 
   return (
     <div className={`transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
-      <h1 className="text-2xl font-semibold text-white mb-2 text-center">{t('calibration.title')}</h1>
+      <h1 className="text-2xl font-semibold text-text-primary mb-2 text-center">{t('calibration.title')}</h1>
       <p className="text-sm text-text-secondary mb-6 text-center">
         {t('calibration.onboarding.subtitle')}
       </p>
 
       {error && (
-        <div style={{ padding: 10, background: '#1a0000', border: '1px solid #EF4444', borderRadius: 6, color: '#EF4444', fontSize: 12, marginBottom: 12 }}>
+        <div style={{ padding: 10, background: 'color-mix(in srgb, var(--color-error) 12%, var(--color-bg-primary))', border: '1px solid var(--color-error)', borderRadius: 6, color: 'var(--color-error)', fontSize: 12, marginBottom: 12 }}>
           {error}
         </div>
       )}
@@ -155,22 +155,22 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
       {pullProgress && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-            <span style={{ fontSize: 11, color: '#A0A0A0' }}>{t('calibration.pulling', { model: pullProgress.model })}</span>
-            <span style={{ fontSize: 11, color: '#D4AF37', fontFamily: 'JetBrains Mono, monospace' }}>
+            <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{t('calibration.pulling', { model: pullProgress.model })}</span>
+            <span style={{ fontSize: 11, color: 'var(--color-accent-gold)', fontFamily: 'JetBrains Mono, monospace' }}>
               {pullProgress.done ? t('calibration.pullDone') : `${pullProgress.percent}%`}
             </span>
           </div>
-          <div style={{ height: 4, background: '#2A2A2A', borderRadius: 2, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${pullProgress.done ? 100 : pullProgress.percent}%`, background: pullProgress.done ? '#22C55E' : '#D4AF37', borderRadius: 2, transition: 'width 0.3s ease' }} />
+          <div style={{ height: 4, background: 'var(--color-border)', borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pullProgress.done ? 100 : pullProgress.percent}%`, background: pullProgress.done ? 'var(--color-success)' : 'var(--color-accent-gold)', borderRadius: 2, transition: 'width 0.3s ease' }} />
           </div>
         </div>
       )}
 
       {loading && !result && (
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
-          <div style={{ width: 24, height: 24, border: '2px solid #2A2A2A', borderTopColor: '#D4AF37', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-          <div style={{ color: '#A0A0A0', fontSize: 13 }}>{t('calibration.onboarding.analyzing')}</div>
-          <div style={{ color: '#8A8A8A', fontSize: 11, marginTop: 4 }}>{t('calibration.onboarding.analyzingDetail')}</div>
+          <div style={{ width: 24, height: 24, border: '2px solid var(--color-border)', borderTopColor: 'var(--color-accent-gold)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+          <div style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>{t('calibration.onboarding.analyzing')}</div>
+          <div style={{ color: 'var(--color-text-muted)', fontSize: 11, marginTop: 4 }}>{t('calibration.onboarding.analyzingDetail')}</div>
         </div>
       )}
 
@@ -178,13 +178,13 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
         <>
           {/* Grade + dimension bars */}
           <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-            <div style={{ flex: '0 0 90px', background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 14, textAlign: 'center' }}>
+            <div style={{ flex: '0 0 90px', background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 14, textAlign: 'center' }}>
               <div style={{ fontSize: 36, fontWeight: 700, color: gradeColor(result.grade), fontFamily: 'JetBrains Mono, monospace' }}>
                 {result.grade}
               </div>
-              <div style={{ fontSize: 11, color: '#8A8A8A' }}>{result.grade_score}/100</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{result.grade_score}/100</div>
             </div>
-            <div style={{ flex: 1, background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 12 }}>
+            <div style={{ flex: 1, background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 12 }}>
               {[
                 { label: t('calibration.dimension.infrastructure'), score: result.infrastructure_score },
                 { label: t('calibration.dimension.context'), score: result.context_richness_score },
@@ -192,14 +192,14 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
                 { label: t('calibration.dimension.discrimination'), score: result.discrimination_score },
               ].map(d => {
                 const pct = Math.round((d.score / 25) * 100);
-                const c = pct >= 80 ? '#22C55E' : pct >= 50 ? '#D4AF37' : pct >= 25 ? '#F59E0B' : '#EF4444';
+                const c = pct >= 80 ? 'var(--color-success)' : pct >= 50 ? 'var(--color-accent-gold)' : pct >= 25 ? 'var(--color-amber-500)' : 'var(--color-error)';
                 return (
                   <div key={d.label} style={{ marginBottom: 6 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 1 }}>
-                      <span style={{ fontSize: 10, color: '#A0A0A0' }}>{d.label}</span>
+                      <span style={{ fontSize: 10, color: 'var(--color-text-secondary)' }}>{d.label}</span>
                       <span style={{ fontSize: 10, color: c, fontFamily: 'JetBrains Mono, monospace' }}>{d.score}/25</span>
                     </div>
-                    <div style={{ height: 3, background: '#2A2A2A', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ height: 3, background: 'var(--color-border)', borderRadius: 2, overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${pct}%`, background: c, borderRadius: 2 }} />
                     </div>
                   </div>
@@ -208,7 +208,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
               {result.active_signal_axes.length > 0 && (
                 <div style={{ display: 'flex', gap: 3, marginTop: 6, flexWrap: 'wrap' }}>
                   {result.active_signal_axes.map(a => (
-                    <span key={a} style={{ padding: '1px 6px', background: '#1F1F1F', borderRadius: 8, fontSize: 9, color: '#22C55E' }}>
+                    <span key={a} style={{ padding: '1px 6px', background: 'var(--color-bg-tertiary)', borderRadius: 8, fontSize: 9, color: 'var(--color-success)' }}>
                       {t(`calibration.axis.${a}`, axisFallback[a] ?? a)}
                     </span>
                   ))}
@@ -220,29 +220,29 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
           {/* Honest day-one framing: some signals (learned/dependency) can't fire until
               you've used 4DA, so a fresh setup grades lower by design. Say so. */}
           {result.grade_score < 70 && (
-            <p style={{ fontSize: 11, color: '#8A8A8A', textAlign: 'center', marginBottom: 16, marginTop: -4 }}>
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', textAlign: 'center', marginBottom: 16, marginTop: -4 }}>
               {t('calibration.onboarding.gradeStartingPoint')}
             </p>
           )}
 
           {/* Actionable recommendations (only P0/P1) */}
           {result.recommendations.filter(r => r.action_type && r.priority !== 'P2').length > 0 && (
-            <div style={{ background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+            <div style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 12, marginBottom: 16 }}>
               {result.recommendations.filter(r => r.action_type && r.priority !== 'P2').map((rec, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: i > 0 ? '1px solid #1F1F1F' : 'none' }}>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: i > 0 ? '1px solid var(--color-bg-tertiary)' : 'none' }}>
                   <div>
                     {/* A colored dot conveys urgency without leaking the internal
                         "P0"/"P1" priority code to the user. */}
-                    <span aria-hidden="true" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: rec.priority === 'P0' ? '#EF4444' : '#F59E0B', marginRight: 6, verticalAlign: 'middle' }} />
-                    <span style={{ fontSize: 12, color: '#FFFFFF', fontWeight: 500 }}>{rec.title}</span>
+                    <span aria-hidden="true" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: rec.priority === 'P0' ? 'var(--color-error)' : 'var(--color-amber-500)', marginRight: 6, verticalAlign: 'middle' }} />
+                    <span style={{ fontSize: 12, color: 'var(--color-text-primary)', fontWeight: 500 }}>{rec.title}</span>
                   </div>
                   {rec.action_type && ONBOARDING_ACTIONABLE.includes(rec.action_type) && (
                     <button
                       onClick={() => { void handleAction(rec); }}
                       disabled={!!actionInProgress}
                       style={{
-                        padding: '3px 10px', background: actionInProgress === rec.action_type ? '#2A2A2A' : '#D4AF37',
-                        color: actionInProgress === rec.action_type ? '#8A8A8A' : '#0A0A0A',
+                        padding: '3px 10px', background: actionInProgress === rec.action_type ? 'var(--color-border)' : 'var(--color-accent-gold)',
+                        color: actionInProgress === rec.action_type ? 'var(--color-text-muted)' : 'var(--color-bg-primary)',
                         border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: actionInProgress ? 'not-allowed' : 'pointer',
                       }}
                     >
@@ -258,23 +258,23 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
 
       {/* No-result explanation */}
       {!loading && !result && !error && (
-        <div style={{ textAlign: 'center', padding: '24px 0', color: '#A0A0A0', fontSize: 13 }}>
+        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
           <p>{t('calibration.onboarding.noContent')}</p>
-          <p style={{ fontSize: 11, color: '#8A8A8A', marginTop: 4 }}>{t('calibration.onboarding.noContentHint')}</p>
+          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>{t('calibration.onboarding.noContentHint')}</p>
         </div>
       )}
 
       {/* Setup summary */}
       {result && (
-        <div style={{ background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 12, marginBottom: 16 }}>
-          <p style={{ fontSize: 11, color: '#A0A0A0', fontWeight: 500, marginBottom: 8 }}>
+        <div style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+          <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', fontWeight: 500, marginBottom: 8 }}>
             {t('calibration.onboarding.setupComplete')}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {/* eslint-disable-next-line i18next/no-literal-string */}
-              <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
-              <span style={{ fontSize: 11, color: '#A0A0A0' }}>
+              <span style={{ color: 'var(--color-success)', fontSize: 12 }}>&#10003;</span>
+              <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
                 {embeddingMode === 'keyword-only'
                   ? t('calibration.onboarding.summaryKeyword')
                   : t('calibration.onboarding.summaryAI')
@@ -283,8 +283,8 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {/* eslint-disable-next-line i18next/no-literal-string */}
-              <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
-              <span style={{ fontSize: 11, color: '#A0A0A0' }}>
+              <span style={{ color: 'var(--color-success)', fontSize: 12 }}>&#10003;</span>
+              <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
                 {(setupCounts?.tech ?? 0) > 0
                   ? t('calibration.onboarding.summaryProjects', {
                       count: setupCounts!.tech,
@@ -295,8 +295,8 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {/* eslint-disable-next-line i18next/no-literal-string */}
-              <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
-              <span style={{ fontSize: 11, color: '#A0A0A0' }}>
+              <span style={{ color: 'var(--color-success)', fontSize: 12 }}>&#10003;</span>
+              <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
                 {(setupCounts?.interests ?? 0) > 0
                   ? t('calibration.onboarding.summaryInterests', {
                       count: setupCounts!.interests,
@@ -316,7 +316,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
 
       {/* Navigation */}
       <div className="flex justify-between mt-4">
-        <button onClick={onBack} className="px-4 py-2 text-sm text-text-secondary hover:text-white transition-colors">
+        <button onClick={onBack} className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors">
           {t('onboarding.nav.back')}
         </button>
         <button

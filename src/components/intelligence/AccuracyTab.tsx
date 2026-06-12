@@ -19,7 +19,7 @@ import type {
 function StatCard({ label, value, suffix, color }: { label: string; value: string | number; suffix?: string; color?: string }) {
   return (
     <div className="bg-bg-tertiary rounded-lg border border-border px-4 py-3">
-      <div className={`text-xl font-semibold ${color ?? 'text-white'}`}>
+      <div className={`text-xl font-semibold ${color ?? 'text-text-primary'}`}>
         {value}{suffix && <span className="text-sm ms-0.5">{suffix}</span>}
       </div>
       <div className="text-xs text-text-muted mt-0.5">{label}</div>

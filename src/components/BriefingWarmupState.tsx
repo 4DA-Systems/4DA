@@ -63,7 +63,7 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
     <div className="relative text-center py-12 px-6">
       <AmbientGlow />
       <div className="relative max-w-md mx-auto">
-        <h2 className="text-xl font-semibold text-white mb-2">
+        <h2 className="text-xl font-semibold text-text-primary mb-2">
           {t('briefing.warmup.title', 'Your Intelligence System')}
         </h2>
 
@@ -74,7 +74,7 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
             </p>
             <div className="flex flex-wrap gap-1.5 justify-center">
               {stack.slice(0, 8).map(tech => (
-                <span key={tech} className="px-2 py-0.5 bg-white/10 text-white text-xs rounded">
+                <span key={tech} className="px-2 py-0.5 bg-text-primary/10 text-text-primary text-xs rounded">
                   {tech}
                 </span>
               ))}
@@ -101,7 +101,7 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
 
         <button
           onClick={onAnalyze}
-          className="px-6 py-2.5 bg-white text-black font-medium rounded-lg hover:bg-gray-200 transition-colors"
+          className="px-6 py-2.5 bg-accent-primary text-bg-primary font-medium rounded-lg hover:bg-accent-primary-hover transition-colors"
         >
           {t('briefing.warmup.activate', 'Start Intelligence')}
         </button>

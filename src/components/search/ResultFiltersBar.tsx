@@ -49,7 +49,7 @@ export function ResultFiltersBar({
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder={t('results.searchPlaceholder')}
           aria-label="Search results by keyword"
-          className="bg-bg-tertiary text-sm text-white placeholder-gray-500 rounded-lg ps-8 pe-3 py-1.5 w-full sm:w-48 border border-transparent focus:border-border focus:outline-none transition-all"
+          className="bg-bg-tertiary text-sm text-text-primary placeholder-gray-500 rounded-lg ps-8 pe-3 py-1.5 w-full sm:w-48 border border-transparent focus:border-border focus:outline-none transition-all"
         />
         <svg className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -92,7 +92,7 @@ export function ResultFiltersBar({
             aria-pressed={sortBy === mode}
             className={`px-2 py-1 text-xs rounded-lg transition-all ${
               sortBy === mode
-                ? 'bg-white/10 text-white'
+                ? 'bg-text-primary/10 text-text-primary'
                 : 'text-text-muted hover:text-text-secondary'
             }`}
           >

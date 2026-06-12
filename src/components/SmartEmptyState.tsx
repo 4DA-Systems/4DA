@@ -81,7 +81,7 @@ export function SmartEmptyState({ detectedStack }: SmartEmptyStateProps) {
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-white font-medium">{signal.title}</p>
+              <p className="text-sm text-text-primary font-medium">{signal.title}</p>
             </div>
             <span
               className="text-[10px] px-2 py-1 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium uppercase tracking-wider flex-shrink-0"

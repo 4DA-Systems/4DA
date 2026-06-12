@@ -1252,6 +1252,8 @@
   "header.toReview": "para revisar",
   "header.inCorpus": "no corpus",
   "header.summaryTooltip": "{{top}} para revisar · {{rel}} no corpus",
+  "header.themeToggleToLight": "Mudar para o tema claro",
+  "header.themeToggleToDark": "Mudar para o tema escuro",
   "cmdk.placeholder": "Pesquise tudo o que o 4DA já leu…",
   "cmdk.ariaLabel": "Pesquisar no 4DA",
   "cmdk.groupGoto": "Ir para",

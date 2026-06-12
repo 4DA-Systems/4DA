@@ -31,7 +31,7 @@ export const PersonalizeNudge = memo(function PersonalizeNudge({
   return (
     <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 flex items-start justify-between gap-3">
       <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-medium text-white mb-1">{t('briefing.personalizeTitle')}</h3>
+        <h3 className="text-sm font-medium text-text-primary mb-1">{t('briefing.personalizeTitle')}</h3>
         <p className="text-xs text-text-secondary mb-3">
           {t(
             'onboarding.choice.scanProjectsDesc',
@@ -71,7 +71,7 @@ export const PersonalizeNudge = memo(function PersonalizeNudge({
       <button
         onClick={onDismiss}
         disabled={isScanning}
-        className="text-text-muted hover:text-white transition-colors flex-shrink-0 p-1 disabled:opacity-30"
+        className="text-text-muted hover:text-text-primary transition-colors flex-shrink-0 p-1 disabled:opacity-30"
         aria-label={t('action.dismiss')}
       >
         &#x2715;

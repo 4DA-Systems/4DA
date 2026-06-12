@@ -20,11 +20,11 @@ const SOVEREIGNTY_COMPONENTS = [
 ];
 
 export function SectionHeading({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-lg font-semibold text-white mb-3">{children}</h3>;
+  return <h3 className="text-lg font-semibold text-text-primary mb-3">{children}</h3>;
 }
 
 export function SubHeading({ children }: { children: React.ReactNode }) {
-  return <h4 className="text-sm font-medium text-white mt-5 mb-2">{children}</h4>;
+  return <h4 className="text-sm font-medium text-text-primary mt-5 mb-2">{children}</h4>;
 }
 
 export function Paragraph({ children }: { children: React.ReactNode }) {
@@ -32,7 +32,7 @@ export function Paragraph({ children }: { children: React.ReactNode }) {
 }
 
 export function Highlight({ children }: { children: React.ReactNode }) {
-  return <span className="text-white font-medium">{children}</span>;
+  return <span className="text-text-primary font-medium">{children}</span>;
 }
 
 export function Card({ children }: { children: React.ReactNode }) {
@@ -133,7 +133,7 @@ export function AuthoritySection() {
           <div key={id} className="flex items-start gap-3 py-2">
             <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded flex-shrink-0">{id}</span>
             <div>
-              <span className="text-sm text-white">{name}</span>
+              <span className="text-sm text-text-primary">{name}</span>
               <span className="text-xs text-text-muted ms-1">— {desc}</span>
             </div>
           </div>
@@ -205,7 +205,7 @@ export function AosSection() {
             <div className="flex items-start gap-3">
               <span className={`text-xs font-mono font-medium ${color} flex-shrink-0`}>{tier}</span>
               <div>
-                <span className="text-sm text-white">{name}</span>
+                <span className="text-sm text-text-primary">{name}</span>
                 <p className="text-xs text-text-muted mt-1">{desc}</p>
               </div>
             </div>

@@ -33,7 +33,7 @@ export function SetupInterests({
         <select
           value={role}
           onChange={(e) => onRoleChange(e.target.value)}
-          className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-white text-sm focus:border-orange-500 focus:outline-none"
+          className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary text-sm focus:border-orange-500 focus:outline-none"
         >
           {roles.map((r) => (
             <option key={r} value={r}>{r}</option>
@@ -53,7 +53,7 @@ export function SetupInterests({
               <button
                 onClick={() => onToggleInterest(interest)}
                 aria-label={t('onboarding.interests.remove', { topic: interest })}
-                className="hover:text-white text-orange-400/70"
+                className="hover:text-text-primary text-orange-400/70"
               >
                 &times;
               </button>
@@ -71,7 +71,7 @@ export function SetupInterests({
           onChange={(e) => onNewInterestChange(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onAddInterest()}
           placeholder={t('onboarding.interests.placeholder')}
-          className="flex-1 px-4 py-2 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none text-sm"
+          className="flex-1 px-4 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder-gray-600 focus:border-orange-500 focus:outline-none text-sm"
         />
         <button
           onClick={onAddInterest}
@@ -94,7 +94,7 @@ export function SetupInterests({
                 key={suggestion}
                 onClick={() => onToggleInterest(suggestion)}
                 aria-label={t('onboarding.interests.addTopic', { topic: suggestion })}
-                className="px-3 py-1.5 bg-bg-tertiary text-text-secondary rounded-full text-sm hover:bg-border hover:text-white transition-all"
+                className="px-3 py-1.5 bg-bg-tertiary text-text-secondary rounded-full text-sm hover:bg-border hover:text-text-primary transition-all"
               >
                 + {suggestion}
               </button>

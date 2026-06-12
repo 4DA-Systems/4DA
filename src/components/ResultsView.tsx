@@ -155,7 +155,7 @@ export function ResultsView({
               }`} />
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="font-medium text-white">{t('results.title')}</h2>
+                  <h2 className="font-medium text-text-primary">{t('results.title')}</h2>
                   {newItemIds.size > 0 && (
                     <span className="px-2 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded-full font-medium animate-pulse">
                       {t('results.new', { count: newItemIds.size })}

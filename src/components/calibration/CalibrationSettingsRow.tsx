@@ -27,7 +27,7 @@ export function CalibrationSettingsRow() {
   return (
     <div className="bg-bg-secondary border border-border rounded-lg p-4 flex items-center justify-between gap-3">
       <div className="min-w-0">
-        <p className="text-sm text-white">{t('calibrationView.settingsRow.title')}</p>
+        <p className="text-sm text-text-primary">{t('calibrationView.settingsRow.title')}</p>
         <p className="text-xs text-text-muted">{t('calibrationView.settingsRow.description')}</p>
         {status &&
           (status.curveFitted ? (
@@ -43,7 +43,7 @@ export function CalibrationSettingsRow() {
       </div>
       <button
         onClick={() => setOpen(true)}
-        className="px-4 py-2 text-sm border border-border rounded-md text-text-secondary hover:text-white hover:bg-bg-tertiary transition-colors whitespace-nowrap shrink-0"
+        className="px-4 py-2 text-sm border border-border rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors whitespace-nowrap shrink-0"
       >
         {t('calibrationView.settingsRow.action')}
       </button>

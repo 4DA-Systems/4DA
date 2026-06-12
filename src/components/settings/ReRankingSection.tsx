@@ -18,7 +18,7 @@ export function ReRankingSection({ settingsForm, setSettingsForm }: ReRankingSec
           <span>&#x26a1;</span>
         </div>
         <div>
-          <h3 className="text-sm font-medium text-white">{t('settings.ai.rerankTitle')}</h3>
+          <h3 className="text-sm font-medium text-text-primary">{t('settings.ai.rerankTitle')}</h3>
           <p className="text-xs text-text-muted">{t('settings.ai.rerankDescription')}</p>
         </div>
       </div>
@@ -33,7 +33,7 @@ export function ReRankingSection({ settingsForm, setSettingsForm }: ReRankingSec
             className="w-5 h-5 accent-orange-500 rounded"
           />
           <div>
-            <span className="text-sm text-white">{t('settings.ai.enableRerank')}</span>
+            <span className="text-sm text-text-primary">{t('settings.ai.enableRerank')}</span>
             <p className="text-xs text-text-muted mt-0.5">{t('settings.ai.rerankNote')}</p>
           </div>
         </label>
@@ -45,7 +45,7 @@ export function ReRankingSection({ settingsForm, setSettingsForm }: ReRankingSec
               type="number"
               value={settingsForm.maxItems}
               onChange={(e) => setSettingsForm((f) => ({ ...f, maxItems: parseInt(e.target.value) || 15 }))}
-              className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+              className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:border-orange-500 focus:outline-none"
             />
           </div>
           <div>
@@ -55,7 +55,7 @@ export function ReRankingSection({ settingsForm, setSettingsForm }: ReRankingSec
               step="0.05"
               value={settingsForm.minScore}
               onChange={(e) => setSettingsForm((f) => ({ ...f, minScore: parseFloat(e.target.value) || 0.25 }))}
-              className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+              className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:border-orange-500 focus:outline-none"
             />
           </div>
         </div>
@@ -67,7 +67,7 @@ export function ReRankingSection({ settingsForm, setSettingsForm }: ReRankingSec
               type="number"
               value={settingsForm.dailyTokenLimit}
               onChange={(e) => setSettingsForm((f) => ({ ...f, dailyTokenLimit: parseInt(e.target.value) || 100000 }))}
-              className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+              className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:border-orange-500 focus:outline-none"
             />
           </div>
           <div>
@@ -76,7 +76,7 @@ export function ReRankingSection({ settingsForm, setSettingsForm }: ReRankingSec
               type="number"
               value={settingsForm.dailyCostLimit}
               onChange={(e) => setSettingsForm((f) => ({ ...f, dailyCostLimit: parseInt(e.target.value) || 50 }))}
-              className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+              className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:border-orange-500 focus:outline-none"
             />
           </div>
         </div>

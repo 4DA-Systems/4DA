@@ -93,7 +93,7 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
 
         <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-white">
+            <span className="text-sm font-medium text-text-primary">
               {t('settings.dataHealth.retention')}
             </span>
             <span className="text-xs text-text-secondary font-mono">
@@ -120,7 +120,7 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
               type="button"
               onClick={() => { void handleRunMaintenance(); }}
               disabled={maintBusy}
-              className="text-xs px-3 py-1.5 rounded-md bg-bg-secondary border border-border text-text-secondary hover:text-white hover:border-accent-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="text-xs px-3 py-1.5 rounded-md bg-bg-secondary border border-border text-text-secondary hover:text-text-primary hover:border-accent-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {maintBusy ? t('settings.dataHealth.cleaning') : t('settings.dataHealth.runMaintenance')}
             </button>
@@ -140,7 +140,7 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
                 <button
                   type="button"
                   onClick={() => setMaintResult(null)}
-                  className="text-text-muted hover:text-white underline"
+                  className="text-text-muted hover:text-text-primary underline"
                 >
                   {t('settings.dataHealth.dismiss')}
                 </button>

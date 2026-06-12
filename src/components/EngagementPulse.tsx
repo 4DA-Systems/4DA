@@ -54,7 +54,7 @@ export const EngagementPulse = memo(function EngagementPulse() {
                 className="w-3 rounded-sm transition-all"
                 style={{
                   height: `${Math.max(4, intensity * 20)}px`,
-                  backgroundColor: day.count === 0 ? '#2A2A2A' : `rgba(34, 197, 94, ${intensity})`,
+                  backgroundColor: day.count === 0 ? 'var(--color-border)' : `rgba(34, 197, 94, ${intensity})`,
                 }}
                 title={`${day.day}: ${day.count} interactions`}
               />

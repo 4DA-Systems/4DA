@@ -188,7 +188,7 @@ export const AdvisorPanel = memo(function AdvisorPanel({
                       calibrationId={sig.calibration_id}
                     />
                   </div>
-                  <span className="text-xs font-mono text-white flex-shrink-0">
+                  <span className="text-xs font-mono text-text-primary flex-shrink-0">
                     {normalizedPct}%
                   </span>
                 </div>

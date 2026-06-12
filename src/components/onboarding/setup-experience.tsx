@@ -41,7 +41,7 @@ export function SetupExperience({ selected, onSelect }: SetupExperienceProps) {
                 {level.icon}
               </span>
               <div>
-                <div className={`text-sm font-medium ${isSelected ? 'text-orange-400' : 'text-white'}`}>
+                <div className={`text-sm font-medium ${isSelected ? 'text-orange-400' : 'text-text-primary'}`}>
                   {t(`onboarding.experience.${level.id}.label`)}
                 </div>
                 <div className="text-xs text-text-muted mt-0.5">

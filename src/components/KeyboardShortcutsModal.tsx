@@ -57,12 +57,12 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
       <button type="button" className="absolute inset-0 w-full h-full cursor-default" onClick={onClose} aria-label={t('shortcuts.close')} tabIndex={-1} />
       <div role="dialog" aria-modal="true" aria-labelledby="keyboard-shortcuts-title" className="relative bg-bg-secondary border border-border rounded-xl w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <h2 id="keyboard-shortcuts-title" className="text-lg font-medium text-white">{t('shortcuts.title')}</h2>
+          <h2 id="keyboard-shortcuts-title" className="text-lg font-medium text-text-primary">{t('shortcuts.title')}</h2>
           <button
             ref={closeButtonRef}
             onClick={onClose}
             aria-label={t('shortcuts.close')}
-            className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-white hover:bg-border flex items-center justify-center transition-all"
+            className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-text-primary hover:bg-border flex items-center justify-center transition-all"
           >
             &times;
           </button>
@@ -77,7 +77,7 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
                 { key: 'k', label: t('shortcuts.previousItem', 'Previous item') },
               ].map(({ key, label }) => (
                 <div key={key} className="flex items-center justify-between">
-                  <kbd className="px-2 py-1 bg-bg-tertiary border border-border rounded text-sm font-mono text-white min-w-[2.5rem] text-center">{key}</kbd>
+                  <kbd className="px-2 py-1 bg-bg-tertiary border border-border rounded text-sm font-mono text-text-primary min-w-[2.5rem] text-center">{key}</kbd>
                   <span className="text-sm text-text-secondary">{label}</span>
                 </div>
               ))}
@@ -94,7 +94,7 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
                 { key: 'R', label: t('shortcuts.runAnalysis') },
               ].map(({ key, label }) => (
                 <div key={key} className="flex items-center justify-between">
-                  <kbd className="px-2 py-1 bg-bg-tertiary border border-border rounded text-sm font-mono text-white min-w-[2.5rem] text-center">{key}</kbd>
+                  <kbd className="px-2 py-1 bg-bg-tertiary border border-border rounded text-sm font-mono text-text-primary min-w-[2.5rem] text-center">{key}</kbd>
                   <span className="text-sm text-text-secondary">{label}</span>
                 </div>
               ))}
@@ -113,7 +113,7 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
                 { key: '?', label: t('shortcuts.showHelp') },
               ].map(({ key, label }) => (
                 <div key={key} className="flex items-center justify-between">
-                  <kbd className="px-2 py-1 bg-bg-tertiary border border-border rounded text-sm font-mono text-white min-w-[2.5rem] text-center">{key}</kbd>
+                  <kbd className="px-2 py-1 bg-bg-tertiary border border-border rounded text-sm font-mono text-text-primary min-w-[2.5rem] text-center">{key}</kbd>
                   <span className="text-sm text-text-secondary">{label}</span>
                 </div>
               ))}

@@ -52,7 +52,7 @@ export const FrameworkPage = memo(function FrameworkPage({ onClose }: FrameworkP
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-border">
         <div>
-          <h2 className="text-lg font-semibold text-white">The 4DA Framework</h2>
+          <h2 className="text-lg font-semibold text-text-primary">The 4DA Framework</h2>
           <p className="text-xs text-text-muted">
             {t('about.frameworkSubtitle')}
           </p>
@@ -60,13 +60,13 @@ export const FrameworkPage = memo(function FrameworkPage({ onClose }: FrameworkP
         <div className="flex items-center gap-3">
           <button
             onClick={() => { void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/framework')); }}
-            className="px-3 py-1.5 text-xs text-text-secondary hover:text-white border border-border rounded-lg hover:border-orange-500/30 transition-all"
+            className="px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary border border-border rounded-lg hover:border-orange-500/30 transition-all"
           >
             Open on 4da.ai
           </button>
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-xs text-text-secondary hover:text-white border border-border rounded-lg hover:bg-bg-tertiary transition-all"
+            className="px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary border border-border rounded-lg hover:bg-bg-tertiary transition-all"
             aria-label={t('action.close')}
           >
             Close

@@ -74,7 +74,7 @@ function ChipActions({
   return (
     <div className="flex items-center gap-4 px-1 py-2 text-xs animate-in fade-in duration-150">
       <div className="flex-1 min-w-0">
-        <span className="text-white font-medium">{facet.value || facet.key}</span>
+        <span className="text-text-primary font-medium">{facet.value || facet.key}</span>
         {/* eslint-disable i18next/no-literal-string */}
         <span className="text-text-muted ml-2">
           {facet.evidence_count} signal{facet.evidence_count !== 1 ? 's' : ''}
@@ -171,12 +171,12 @@ export function LearnedPreferencesSection() {
           <span className="text-indigo-400">&#x1F9E0;</span>
         </div>
         <div className="flex-1">
-          <h3 className="text-white font-medium">{t('learnedPreferences.title')}</h3>
+          <h3 className="text-text-primary font-medium">{t('learnedPreferences.title')}</h3>
           <p className="text-text-muted text-sm mt-1">{t('learnedPreferences.subtitle')}</p>
         </div>
         <button
           onClick={() => { setLoading(true); void loadPreferences(); }}
-          className="text-xs px-2.5 py-1.5 bg-bg-secondary border border-border rounded-lg text-text-muted hover:text-white hover:border-indigo-500/30 transition-all"
+          className="text-xs px-2.5 py-1.5 bg-bg-secondary border border-border rounded-lg text-text-muted hover:text-text-primary hover:border-indigo-500/30 transition-all"
         >
           {t('learnedPreferences.refresh')}
         </button>

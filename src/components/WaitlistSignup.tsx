@@ -120,7 +120,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-xl font-semibold text-white mb-2">
+            <h3 className="text-xl font-semibold text-text-primary mb-2">
               You&apos;re on the list
             </h3>
             <p className="text-sm text-text-secondary leading-relaxed mb-6">
@@ -137,7 +137,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
             {onClose && (
               <button
                 onClick={onClose}
-                className="block mx-auto mt-6 text-sm text-text-muted hover:text-white transition-colors"
+                className="block mx-auto mt-6 text-sm text-text-muted hover:text-text-primary transition-colors"
               >
                 Continue using 4DA
               </button>
@@ -157,7 +157,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
           {onClose && (
             <button
               onClick={onClose}
-              className="absolute top-4 end-4 p-1 text-text-muted hover:text-white transition-colors rounded-lg hover:bg-white/5"
+              className="absolute top-4 end-4 p-1 text-text-muted hover:text-text-primary transition-colors rounded-lg hover:bg-text-primary/5"
               aria-label="Close"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -172,7 +172,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
             </div>
             <div className="pe-6">
               <div className="flex items-center gap-2.5">
-                <h2 className="text-lg font-semibold text-white">4DA {config.name}</h2>
+                <h2 className="text-lg font-semibold text-text-primary">4DA {config.name}</h2>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-gold/10 text-accent-gold font-semibold uppercase tracking-wider">
                   Coming Soon
                 </span>
@@ -205,7 +205,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
                   className="w-full flex items-start gap-2.5 py-1.5 text-start group"
                 >
                   <span className="text-success text-xs mt-0.5 shrink-0 font-mono">+</span>
-                  <span className="text-[13px] text-[#C0C0C0] group-hover:text-white transition-colors">
+                  <span className="text-[13px] text-[#C0C0C0] group-hover:text-text-primary transition-colors">
                     {feature.text}
                   </span>
                 </button>
@@ -233,7 +233,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
               placeholder="Work email *"
               required
               autoComplete="email"
-              className="w-full text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-white placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
+              className="w-full text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
             />
             <div className="flex gap-2.5">
               <input
@@ -242,14 +242,14 @@ const WaitlistSignup = memo(function WaitlistSignup({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your name"
                 autoComplete="name"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-white placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
               />
               <input
                 type="text"
                 value={teamSize}
                 onChange={(e) => setTeamSize(e.target.value)}
                 placeholder="Team size"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-white placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
               />
             </div>
             <div className="flex gap-2.5">
@@ -259,14 +259,14 @@ const WaitlistSignup = memo(function WaitlistSignup({
                 onChange={(e) => setCompany(e.target.value)}
                 placeholder="Company"
                 autoComplete="organization"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-white placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
               />
               <input
                 type="text"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
                 placeholder="Role (e.g. Eng Manager)"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-white placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
               />
             </div>
           </div>
@@ -274,7 +274,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
           <button
             type="submit"
             disabled={submitting || !email.trim()}
-            className="w-full mt-4 text-sm font-semibold px-4 py-3 rounded-lg bg-white text-bg-primary hover:bg-[#F0F0F0] active:bg-[#E0E0E0] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-full mt-4 text-sm font-semibold px-4 py-3 rounded-lg bg-accent-primary text-bg-primary hover:bg-accent-primary-hover active:opacity-80 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {submitting ? 'Joining...' : `Join the ${config.name} Waitlist`}
           </button>

@@ -64,7 +64,7 @@ export function WebhookDocsPanel() {
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border space-y-4">
       {/* Header */}
       <div>
-        <h3 className="text-sm font-medium text-white">
+        <h3 className="text-sm font-medium text-text-primary">
           {t('enterprise.docs.title', 'Webhook & API Reference')}
         </h3>
         <p className="text-[10px] text-text-muted mt-0.5">

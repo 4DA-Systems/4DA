@@ -79,7 +79,7 @@ export function GuidedHighlights() {
         if (!h) return null;
         return (
           <div
-            className="absolute z-50 px-3 py-2 rounded-lg bg-bg-secondary border border-border text-xs text-white shadow-lg max-w-[200px] animate-in fade-in"
+            className="absolute z-50 px-3 py-2 rounded-lg bg-bg-secondary border border-border text-xs text-text-primary shadow-lg max-w-[200px] animate-in fade-in"
             style={{ top: `calc(${h.top} + 20px)`, left: h.left }}
           >
             {t(h.i18nKey)}

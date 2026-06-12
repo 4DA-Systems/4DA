@@ -68,7 +68,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
             <span className="text-text-secondary">✓</span>
           </div>
           <div>
-            <h2 className="font-medium text-white text-sm">{t('knowledgeGaps.title')}</h2>
+            <h2 className="font-medium text-text-primary text-sm">{t('knowledgeGaps.title')}</h2>
             <p className="text-xs text-text-muted">{t('knowledgeGaps.noGaps', 'No gaps detected — your knowledge is current')}</p>
           </div>
         </div>
@@ -83,7 +83,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
             <span className="text-text-secondary">📖</span>
           </div>
           <div className="text-start">
-            <h2 className="font-medium text-white text-sm">{t('knowledgeGaps.title')}</h2>
+            <h2 className="font-medium text-text-primary text-sm">{t('knowledgeGaps.title')}</h2>
             <p className="text-xs text-text-muted">
               {t('knowledgeGaps.count', { count: items.length })}
               {urgentCount > 0 && <span className="text-amber-400 ms-1">{t('knowledgeGaps.needAttention', { count: urgentCount })}</span>}
@@ -122,7 +122,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
                       <span className="text-[9px] text-text-muted uppercase tracking-wide">{t('knowledgeGaps.startHere', 'Start here')}</span>
                       <div className="mt-0.5">
                         {topCite.url ? (
-                          <a href={topCite.url} target="_blank" rel="noopener noreferrer" className={`font-medium ${isSecurityTop ? 'text-red-400 hover:text-red-300' : 'text-text-primary hover:text-white'} transition-colors`}>
+                          <a href={topCite.url} target="_blank" rel="noopener noreferrer" className={`font-medium ${isSecurityTop ? 'text-red-400 hover:text-red-300' : 'text-text-primary hover:text-text-primary'} transition-colors`}>
                             {getTranslated(`${it.id}_cite_0`, topCite.title)}
                           </a>
                         ) : (
@@ -141,7 +141,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
                           {rest.map((cite, i) => (
                             <div key={i + 1} className="text-[11px]">
                               {cite.url ? (
-                                <a href={cite.url} target="_blank" rel="noopener noreferrer" className="text-text-secondary hover:text-white transition-colors">
+                                <a href={cite.url} target="_blank" rel="noopener noreferrer" className="text-text-secondary hover:text-text-primary transition-colors">
                                   {getTranslated(`${it.id}_cite_${i + 1}`, cite.title)}
                                 </a>
                               ) : (

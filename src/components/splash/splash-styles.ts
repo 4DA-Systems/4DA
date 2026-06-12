@@ -92,7 +92,7 @@ export const spinnerRingStyle: CSSProperties = {
 export const brandNameStyle: CSSProperties = {
   fontSize: '2.5rem',
   fontWeight: 600,
-  color: '#FFFFFF',
+  color: 'var(--color-text-primary)',
   letterSpacing: '-0.025em',
   marginBottom: '0.5rem',
 };
@@ -146,7 +146,7 @@ export const versionStyle: CSSProperties = {
   position: 'absolute',
   bottom: '1.5rem',
   fontSize: '0.75rem',
-  color: '#4B5563',
+  color: 'var(--color-text-muted)',
 };
 
 export const refreshButtonStyle: CSSProperties = {

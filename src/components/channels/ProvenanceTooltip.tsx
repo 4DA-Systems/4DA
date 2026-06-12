@@ -56,7 +56,7 @@ export function ProvenanceTooltip({ provenance, children }: Props) {
           </p>
           {provenance.source_titles.map((title, i) => (
             <div key={i} className="mb-2 last:mb-0">
-              <p className="text-white text-sm font-medium leading-tight">
+              <p className="text-text-primary text-sm font-medium leading-tight">
                 {title}
               </p>
               {provenance.source_urls[i] && isSafeUrl(provenance.source_urls[i]) && (

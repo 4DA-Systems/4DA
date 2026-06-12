@@ -170,9 +170,9 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
                 {/* eslint-disable-next-line i18next/no-literal-string */}
                 <span aria-hidden="true">&#x2699;&#xfe0f;</span>
               </div>
-              <h2 id="settings-modal-title" className="text-lg font-medium text-white">{t('settings.title')}</h2>
+              <h2 id="settings-modal-title" className="text-lg font-medium text-text-primary">{t('settings.title')}</h2>
             </div>
-            <button onClick={onClose} aria-label={t('settings.closeSettings')} className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-white hover:bg-border flex items-center justify-center transition-all">
+            <button onClick={onClose} aria-label={t('settings.closeSettings')} className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-text-primary hover:bg-border flex items-center justify-center transition-all">
               &times;
             </button>
           </div>

@@ -133,7 +133,7 @@ export function SsoConfigPanel() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-white">
+          <h3 className="text-sm font-medium text-text-primary">
             {t('enterprise.sso.title', 'Single Sign-On (SSO)')}
           </h3>
           <p className="text-[10px] text-text-muted mt-0.5">
@@ -159,7 +159,7 @@ export function SsoConfigPanel() {
         <div className="bg-bg-primary rounded-lg p-3 border border-success/30">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-white font-medium">{session.display_name}</p>
+              <p className="text-xs text-text-primary font-medium">{session.display_name}</p>
               <p className="text-[10px] text-text-muted">{session.email}</p>
               {session.groups.length > 0 && (
                 <div className="flex items-center gap-1 mt-1">
@@ -191,7 +191,7 @@ export function SsoConfigPanel() {
               id="sso-provider-type"
               value={form.provider_type}
               onChange={e => setForm(f => ({ ...f, provider_type: e.target.value }))}
-              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
+              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-text-primary focus:outline-none focus:border-success/50"
             >
               <option value="saml">SAML 2.0</option>
               <option value="oidc">OpenID Connect</option>
@@ -206,7 +206,7 @@ export function SsoConfigPanel() {
               type="url"
               value={form.idp_url}
               onChange={e => setForm(f => ({ ...f, idp_url: e.target.value }))}
-              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
+              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-text-primary focus:outline-none focus:border-success/50"
               placeholder="https://idp.example.com/saml/sso"
             />
           </div>
@@ -219,7 +219,7 @@ export function SsoConfigPanel() {
               type="text"
               value={form.entity_id}
               onChange={e => setForm(f => ({ ...f, entity_id: e.target.value }))}
-              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
+              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-text-primary focus:outline-none focus:border-success/50"
               placeholder="com.4da.app"
             />
           </div>
@@ -233,7 +233,7 @@ export function SsoConfigPanel() {
                 value={form.certificate}
                 onChange={e => setForm(f => ({ ...f, certificate: e.target.value }))}
                 rows={4}
-                className="w-full px-2 py-1.5 text-[10px] font-mono bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50 resize-none"
+                className="w-full px-2 py-1.5 text-[10px] font-mono bg-bg-primary border border-border rounded text-text-primary focus:outline-none focus:border-success/50 resize-none"
                 placeholder="-----BEGIN CERTIFICATE-----&#10;..."
               />
             </div>
@@ -249,7 +249,7 @@ export function SsoConfigPanel() {
                   type="text"
                   value={form.client_id}
                   onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}
-                  className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
+                  className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-text-primary focus:outline-none focus:border-success/50"
                 />
               </div>
               <div>
@@ -259,7 +259,7 @@ export function SsoConfigPanel() {
                   type="url"
                   value={form.issuer}
                   onChange={e => setForm(f => ({ ...f, issuer: e.target.value }))}
-                  className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
+                  className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-text-primary focus:outline-none focus:border-success/50"
                   placeholder="https://idp.example.com"
                 />
               </div>
@@ -288,7 +288,7 @@ export function SsoConfigPanel() {
             </button>
             <button
               onClick={() => setEditing(false)}
-              className="px-3 py-1.5 text-xs text-text-muted hover:text-white transition-colors"
+              className="px-3 py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
             >
               {t('action.cancel', 'Cancel')}
             </button>
@@ -300,7 +300,7 @@ export function SsoConfigPanel() {
             <div className="space-y-2">
               <div className="flex items-center justify-between px-3 py-2.5 bg-bg-primary rounded-lg border border-border/50">
                 <div>
-                  <span className="text-xs text-white">
+                  <span className="text-xs text-text-primary">
                     {config.provider_type.toUpperCase()} &mdash; {config.idp_url}
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">

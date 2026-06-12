@@ -156,7 +156,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
           value={country}
           onChange={(e) => handleCountryChange(e.target.value)}
           aria-label={t('onboarding.locale.selectCountry')}
-          className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+          className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
         >
           {COUNTRIES.map((c) => (
             <option key={c.code} value={c.code}>{c.name}</option>
@@ -174,7 +174,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
             aria-label={t('onboarding.locale.selectLanguage')}
-            className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+            className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
           >
             {LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>{l.name}</option>
@@ -189,7 +189,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
             value={currency}
             onChange={(e) => handleCurrencyChange(e.target.value)}
             aria-label={t('onboarding.locale.selectCurrency')}
-            className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+            className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
           >
             {CURRENCIES.map((c) => (
               <option key={c} value={c}>{c}</option>

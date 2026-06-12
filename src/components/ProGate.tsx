@@ -88,7 +88,7 @@ export function ProGate({ children, feature }: ProGateProps) {
               href="https://4da.ai/signal"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block px-5 py-2 text-sm font-medium text-black bg-accent-gold rounded-lg hover:bg-[#C4A030] transition-colors"
+              className="inline-block px-5 py-2 text-sm font-medium text-bg-primary bg-accent-gold rounded-lg hover:bg-accent-gold-hover transition-colors"
             >
               {t('pro.upgrade')}
             </a>
@@ -96,7 +96,7 @@ export function ProGate({ children, feature }: ProGateProps) {
               <button
                 onClick={() => { void handleStartTrial(); }}
                 disabled={starting}
-                className="px-5 py-2 text-sm font-medium text-text-secondary border border-gray-600 rounded-lg hover:border-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                className="px-5 py-2 text-sm font-medium text-text-secondary border border-gray-600 rounded-lg hover:border-gray-400 hover:text-text-primary transition-colors disabled:opacity-50"
               >
                 {starting ? t('pro.startingTrial') : t('pro.startTrial')}
               </button>
@@ -119,12 +119,12 @@ export function ProGate({ children, feature }: ProGateProps) {
                     onChange={e => setLicenseKey(e.target.value)}
                     placeholder="4DA-xxxxx.xxxxx"
                     onKeyDown={e => { if (e.key === 'Enter') void handleActivate(); }}
-                    className="flex-1 bg-bg-primary border border-border rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-text-muted focus:border-accent-gold focus:outline-none font-mono"
+                    className="flex-1 bg-bg-primary border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary placeholder-text-muted focus:border-accent-gold focus:outline-none font-mono"
                   />
                   <button
                     onClick={() => { void handleActivate(); }}
                     disabled={activating || !licenseKey.trim()}
-                    className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:bg-border hover:text-white transition-colors disabled:opacity-50"
+                    className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:bg-border hover:text-text-primary transition-colors disabled:opacity-50"
                   >
                     {activating ? '...' : t('action.activate')}
                   </button>

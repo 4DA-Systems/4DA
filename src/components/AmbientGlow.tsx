@@ -18,8 +18,9 @@ export function AmbientGlow({ className = '' }: AmbientGlowProps) {
       className={`absolute inset-0 rounded-lg overflow-hidden pointer-events-none ${className}`}
       aria-hidden="true"
       style={{
-        background:
-          'radial-gradient(130% 90% at 50% 110%, rgba(212,175,55,0.12), rgba(212,175,55,0.04) 45%, transparent 70%)',
+        // Theme-aware: gold ember on the void, faint ink-gold wash on paper
+        // (--ambient-glow defined per theme in App.css)
+        background: 'var(--ambient-glow)',
       }}
     />
   );

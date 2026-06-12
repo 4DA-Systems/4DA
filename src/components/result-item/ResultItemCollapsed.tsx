@@ -80,7 +80,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
         {chipKeys.length > 0 && chipKeys.map(k => (
           <span
             key={k}
-            className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-white/[0.04] text-text-muted border border-border/40"
+            className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-text-primary/[0.04] text-text-muted border border-border/40"
           >
             {t(k)}
           </span>
@@ -99,7 +99,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
                 className={`w-1 h-1 rounded-full ${
                   i < (item.score_breakdown?.signal_count ?? 0)
                     ? (item.score_breakdown?.signal_count ?? 0) >= 4 ? 'bg-green-400' : 'bg-text-muted'
-                    : 'bg-white/[0.06]'
+                    : 'bg-text-primary/[0.06]'
                 }`}
               />
             ))}

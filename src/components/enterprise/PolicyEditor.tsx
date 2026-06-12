@@ -58,7 +58,7 @@ export function PolicyEditor() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-white">
+          <h3 className="text-sm font-medium text-text-primary">
             {t('enterprise.policies.title', 'Data Retention Policies')}
           </h3>
           <p className="text-[10px] text-text-muted mt-0.5">
@@ -83,7 +83,7 @@ export function PolicyEditor() {
               className="flex items-center justify-between px-3 py-2.5 bg-bg-primary rounded-lg border border-border/50"
             >
               <div className="flex-1">
-                <span className="text-xs text-white">{label}</span>
+                <span className="text-xs text-text-primary">{label}</span>
                 <span className="text-[10px] text-text-muted ms-2">
                   ({t('enterprise.policies.default', 'default')}: {defaultDays === 0 ? 'unlimited' : `${defaultDays}d`})
                 </span>
@@ -100,7 +100,7 @@ export function PolicyEditor() {
                   value={currentDays}
                   onChange={e => { void handlePolicyChange(key, parseInt(e.target.value, 10)); }}
                   disabled={isSaving || orgLoading}
-                  className="px-2 py-1 text-xs bg-bg-tertiary border border-border rounded text-white focus:outline-none focus:border-success/50 disabled:opacity-50"
+                  className="px-2 py-1 text-xs bg-bg-tertiary border border-border rounded text-text-primary focus:outline-none focus:border-success/50 disabled:opacity-50"
                   aria-label={`Retention period for ${label}`}
                 >
                   {RETENTION_OPTIONS.map(opt => (

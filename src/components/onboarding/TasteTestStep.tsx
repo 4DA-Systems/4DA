@@ -132,7 +132,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
     return (
       <div className={`text-center space-y-6 transition-opacity duration-300 ${isAnimating ? 'opacity-0' : 'opacity-100'}`}>
         <div className="text-4xl mb-2">&#x1f3af;</div>
-        <h2 className="text-xl font-semibold text-white">
+        <h2 className="text-xl font-semibold text-text-primary">
           Let's calibrate your feed
         </h2>
         <p className="text-text-secondary text-sm max-w-md mx-auto">

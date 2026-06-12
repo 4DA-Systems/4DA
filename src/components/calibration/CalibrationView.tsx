@@ -75,11 +75,11 @@ export function CalibrationView({ open, onClose }: CalibrationViewProps) {
     >
       <div className="bg-bg-primary border border-border rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 relative">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-white">{t('calibrationView.title')}</h2>
+          <h2 className="text-base font-semibold text-text-primary">{t('calibrationView.title')}</h2>
           <button
             onClick={onClose}
             aria-label={t('action.close')}
-            className="text-text-muted hover:text-white transition-colors text-lg leading-none px-2 py-1"
+            className="text-text-muted hover:text-text-primary transition-colors text-lg leading-none px-2 py-1"
           >
             <span aria-hidden="true">{'✕'}</span>
           </button>

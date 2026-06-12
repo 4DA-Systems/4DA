@@ -99,7 +99,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
       {/* Header */}
       <div className="flex items-start justify-between p-4 border-b border-border">
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-semibold text-white truncate">{entry.name}</h2>
+          <h2 className="text-lg font-semibold text-text-primary truncate">{entry.name}</h2>
           <div className="flex items-center gap-2 mt-1.5">
             <span
               className="px-1.5 py-0.5 rounded text-[10px] font-medium"
@@ -114,7 +114,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
         </div>
         <button
           onClick={onClose}
-          className="p-1 text-text-muted hover:text-white transition-colors"
+          className="p-1 text-text-muted hover:text-text-primary transition-colors"
           aria-label={t('techRadar.closePanel')}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">

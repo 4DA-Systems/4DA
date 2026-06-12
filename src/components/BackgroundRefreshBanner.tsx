@@ -68,7 +68,7 @@ export function BackgroundRefreshBanner() {
       <div className="px-3 py-2 flex items-center justify-between gap-3">
         <div className="min-w-0">
           {enabled ? (
-            <span className="text-sm text-white">
+            <span className="text-sm text-text-primary">
               {t(
                 'settings.monitoring.backgroundRefreshNudgeEnabled',
                 'Background refresh is on — your feed stays fresh even when 4DA is closed.',
@@ -76,7 +76,7 @@ export function BackgroundRefreshBanner() {
             </span>
           ) : (
             <>
-              <span className="text-sm text-white">
+              <span className="text-sm text-text-primary">
                 {t('settings.monitoring.backgroundRefreshNudgeTitle', 'Keep your feed fresh when 4DA is closed')}
               </span>
               <p className="text-xs text-text-muted">
@@ -95,7 +95,7 @@ export function BackgroundRefreshBanner() {
                 void enable();
               }}
               disabled={busy}
-              className="px-3 py-1.5 text-xs rounded bg-blue-500/25 text-white hover:bg-blue-500/35 transition-colors disabled:opacity-50 whitespace-nowrap"
+              className="px-3 py-1.5 text-xs rounded bg-blue-500/25 text-text-primary hover:bg-blue-500/35 transition-colors disabled:opacity-50 whitespace-nowrap"
             >
               {busy
                 ? t('settings.monitoring.backgroundRefreshNudgeEnabling', 'Enabling…')
@@ -103,7 +103,7 @@ export function BackgroundRefreshBanner() {
             </button>
             <button
               onClick={dismiss}
-              className="px-3 py-1.5 text-xs rounded bg-white/5 text-text-secondary hover:text-white hover:bg-white/10 transition-colors whitespace-nowrap"
+              className="px-3 py-1.5 text-xs rounded bg-text-primary/5 text-text-secondary hover:text-text-primary hover:bg-text-primary/10 transition-colors whitespace-nowrap"
             >
               {t('settings.monitoring.backgroundRefreshNudgeDismiss', 'Not now')}
             </button>

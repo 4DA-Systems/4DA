@@ -1203,6 +1203,8 @@
   "header.toReview": "검토 필요",
   "header.inCorpus": "코퍼스에",
   "header.summaryTooltip": "{{top}}개 검토 필요 · {{rel}}개 코퍼스에",
+  "header.themeToggleToLight": "라이트 테마로 전환",
+  "header.themeToggleToDark": "다크 테마로 전환",
   "cmdk.placeholder": "4DA가 읽은 모든 것을 검색…",
   "cmdk.ariaLabel": "4DA 검색",
   "cmdk.groupGoto": "이동",

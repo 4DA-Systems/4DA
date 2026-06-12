@@ -41,7 +41,7 @@ export function TeamMemberList() {
               {/* Name + You badge */}
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-white">{member.display_name}</span>
+                  <span className="text-xs text-text-primary">{member.display_name}</span>
                   {isYou && (
                     <span className="text-[9px] px-1 py-0.5 bg-border text-text-muted rounded">
                       {t('team.members.you', 'you')}

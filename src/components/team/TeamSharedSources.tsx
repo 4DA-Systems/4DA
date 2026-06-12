@@ -69,7 +69,7 @@ export function TeamSharedSources() {
           <select
             value={newSourceType}
             onChange={e => setNewSourceType(e.target.value)}
-            className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
+            className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-text-primary focus:outline-none focus:border-success/50"
             aria-label="Source type"
           >
             {Object.keys(SOURCE_ICONS).map(type => (
@@ -81,7 +81,7 @@ export function TeamSharedSources() {
             value={newRecommendation}
             onChange={e => setNewRecommendation(e.target.value)}
             placeholder={t('team.sources.whyRecommend', 'Why is this source valuable?')}
-            className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
+            className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-text-primary focus:outline-none focus:border-success/50"
             onKeyDown={e => { if (e.key === 'Enter') void handleShare(); }}
           />
           <button
@@ -113,7 +113,7 @@ export function TeamSharedSources() {
                 </span>
 
                 <div className="min-w-0">
-                  <span className="text-xs text-white">{source.source_type}</span>
+                  <span className="text-xs text-text-primary">{source.source_type}</span>
                   <p className="text-[10px] text-text-muted truncate">{source.recommendation}</p>
                 </div>
               </div>

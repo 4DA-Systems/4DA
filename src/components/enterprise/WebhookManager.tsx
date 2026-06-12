@@ -58,7 +58,7 @@ export function WebhookManager() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-white">
+          <h2 className="text-lg font-semibold text-text-primary">
             {t('enterprise.webhooks.title', 'Webhooks')}
           </h2>
           <span className="px-2 py-0.5 text-[10px] font-medium bg-green-500/15 text-green-400 border border-green-500/30 rounded">
@@ -67,7 +67,7 @@ export function WebhookManager() {
         </div>
         <button
           onClick={() => setShowForm(prev => !prev)}
-          className="px-3 py-1.5 text-sm font-medium text-black bg-white rounded-lg hover:bg-gray-200 transition-colors"
+          className="px-3 py-1.5 text-sm font-medium text-bg-primary bg-accent-primary rounded-lg hover:bg-accent-primary-hover transition-colors"
         >
           {showForm
             ? t('enterprise.webhooks.cancel', 'Cancel')
@@ -186,7 +186,7 @@ function WebhookForm({ onSubmit, onCancel }: WebhookFormProps) {
 
   return (
     <div className="bg-bg-secondary rounded-lg border border-border p-4 space-y-4">
-      <h3 className="text-sm font-medium text-white">
+      <h3 className="text-sm font-medium text-text-primary">
         {t('enterprise.webhooks.newWebhook', 'New Webhook')}
       </h3>
 
@@ -201,7 +201,7 @@ function WebhookForm({ onSubmit, onCancel }: WebhookFormProps) {
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder={t('enterprise.webhooks.namePlaceholder', 'e.g. Slack Notifications')}
-          className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-white/30 focus:outline-none transition-colors"
+          className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-text-primary/30 focus:outline-none transition-colors"
         />
       </div>
 
@@ -216,8 +216,8 @@ function WebhookForm({ onSubmit, onCancel }: WebhookFormProps) {
           value={url}
           onChange={e => setUrl(e.target.value)}
           placeholder="https://example.com/webhook"
-          className={`w-full px-3 py-2 bg-bg-primary border rounded-lg text-sm text-white placeholder:text-text-muted font-mono focus:outline-none transition-colors ${
-            !isValidUrl ? 'border-red-500/50 focus:border-red-500/80' : 'border-border focus:border-white/30'
+          className={`w-full px-3 py-2 bg-bg-primary border rounded-lg text-sm text-text-primary placeholder:text-text-muted font-mono focus:outline-none transition-colors ${
+            !isValidUrl ? 'border-red-500/50 focus:border-red-500/80' : 'border-border focus:border-text-primary/30'
           }`}
         />
         {!isValidUrl && (
@@ -244,7 +244,7 @@ function WebhookForm({ onSubmit, onCancel }: WebhookFormProps) {
                 <button
                   type="button"
                   onClick={() => toggleCategory(events)}
-                  className="text-text-muted hover:text-white transition-colors underline decoration-dotted"
+                  className="text-text-muted hover:text-text-primary transition-colors underline decoration-dotted"
                   aria-label={t('enterprise.webhooks.toggleCategory', `Toggle all ${category} events`)}
                 >
                   {category}
@@ -258,7 +258,7 @@ function WebhookForm({ onSubmit, onCancel }: WebhookFormProps) {
                       key={event}
                       className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs cursor-pointer transition-all ${
                         checked
-                          ? 'bg-white/10 border-white/20 text-white'
+                          ? 'bg-text-primary/10 border-text-primary/20 text-text-primary'
                           : 'bg-bg-tertiary border-border text-text-muted hover:text-text-secondary hover:border-[#3A3A3A]'
                       }`}
                     >
@@ -270,10 +270,10 @@ function WebhookForm({ onSubmit, onCancel }: WebhookFormProps) {
                         aria-label={event}
                       />
                       <span className={`w-3 h-3 rounded border flex items-center justify-center flex-shrink-0 ${
-                        checked ? 'bg-white border-white' : 'border-[#3A3A3A]'
+                        checked ? 'bg-accent-primary border-accent-primary' : 'border-border'
                       }`}>
                         {checked && (
-                          <svg className="w-2 h-2 text-black" viewBox="0 0 12 12" fill="none">
+                          <svg className="w-2 h-2 text-bg-primary" viewBox="0 0 12 12" fill="none">
                             <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         )}
@@ -305,7 +305,7 @@ function WebhookForm({ onSubmit, onCancel }: WebhookFormProps) {
         <button
           onClick={() => { void handleSubmit(); }}
           disabled={!canSubmit}
-          className="px-4 py-2 text-sm font-medium text-black bg-white rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-4 py-2 text-sm font-medium text-bg-primary bg-accent-primary rounded-lg hover:bg-accent-primary-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {submitting
             ? t('enterprise.webhooks.saving', 'Saving...')
@@ -313,7 +313,7 @@ function WebhookForm({ onSubmit, onCancel }: WebhookFormProps) {
         </button>
         <button
           onClick={onCancel}
-          className="px-4 py-2 text-sm text-text-secondary hover:text-white transition-colors"
+          className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
         >
           {t('enterprise.webhooks.cancel', 'Cancel')}
         </button>

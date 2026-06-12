@@ -11,6 +11,8 @@
   "header.toReview": "zu prüfen",
   "header.inCorpus": "im Korpus",
   "header.summaryTooltip": "{{top}} zu prüfen · {{rel}} im Korpus",
+  "header.themeToggleToLight": "Zum hellen Design wechseln",
+  "header.themeToggleToDark": "Zum dunklen Design wechseln",
   "cmdk.placeholder": "Alles durchsuchen, was 4DA gelesen hat…",
   "cmdk.ariaLabel": "4DA durchsuchen",
   "cmdk.groupGoto": "Gehe zu",

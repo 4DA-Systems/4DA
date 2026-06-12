@@ -114,7 +114,7 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
       >
         <span
           style={{
-            color: '#FFFFFF',
+            color: 'var(--color-text-primary)',
             fontSize: Math.max(8, size * 0.22),
             fontFamily: 'Inter, sans-serif',
             fontWeight: 500,
@@ -138,8 +138,8 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
             top: size + 6,
             left: '50%',
             transform: 'translateX(-50%)',
-            backgroundColor: '#1F1F1F',
-            border: '1px solid #2A2A2A',
+            backgroundColor: 'var(--color-bg-tertiary)',
+            border: '1px solid var(--color-border)',
             borderRadius: 6,
             padding: '8px 10px',
             zIndex: 50,
@@ -148,15 +148,15 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
             pointerEvents: 'none',
           }}
         >
-          <div style={{ color: '#FFFFFF', fontSize: 12, fontWeight: 600, marginBottom: 4, fontFamily: 'Inter, sans-serif' }}>
+          <div style={{ color: 'var(--color-text-primary)', fontSize: 12, fontWeight: 600, marginBottom: 4, fontFamily: 'Inter, sans-serif' }}>
             {data.title}
           </div>
-          <div style={{ color: '#A0A0A0', fontSize: 11, fontFamily: 'Inter, sans-serif' }}>
+          <div style={{ color: 'var(--color-text-secondary)', fontSize: 11, fontFamily: 'Inter, sans-serif' }}>
             {data.source_type}
             {data.signal_type && ` · ${data.signal_type}`}
           </div>
           {data.primary_topic && (
-            <div style={{ color: '#8A8A8A', fontSize: 10, marginTop: 2, fontFamily: 'Inter, sans-serif' }}>
+            <div style={{ color: 'var(--color-text-muted)', fontSize: 10, marginTop: 2, fontFamily: 'Inter, sans-serif' }}>
               {data.primary_topic}
             </div>
           )}

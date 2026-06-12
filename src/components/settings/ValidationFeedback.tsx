@@ -42,7 +42,7 @@ export function ValidationFeedback({ validating, result, onTryFeed }: Validation
             <button
               key={feed}
               onClick={() => onTryFeed(feed)}
-              className="block text-left text-text-secondary hover:text-white underline truncate max-w-full"
+              className="block text-left text-text-secondary hover:text-text-primary underline truncate max-w-full"
             >
               {feed}
             </button>

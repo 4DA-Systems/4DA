@@ -75,6 +75,15 @@ try {
   // case correctly via its existing empty state.
 }
 
+// Sync the native window chrome with the persisted theme (the webview DOM
+// attribute is already applied pre-paint by the inline script in index.html).
+try {
+  const { initTheme } = await import('./lib/theme');
+  initTheme();
+} catch {
+  // Non-Tauri / test environment — webview-only theming.
+}
+
 // Signal Rust that the frontend JS loaded BEFORE React mounts.
 // This fires ~300-500ms earlier than SplashScreen's useEffect,
 // allowing the hidden window to show immediately with the splash

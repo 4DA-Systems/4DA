@@ -49,12 +49,12 @@ export function FirstCveCard({ cveId, packageName, severity, projectCount, minut
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
         {/* eslint-disable-next-line i18next/no-literal-string */}
-        <h3 className="text-sm font-semibold text-white">4DA Protected You</h3>
+        <h3 className="text-sm font-semibold text-text-primary">4DA Protected You</h3>
         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase ${badge}`}>{severity}</span>
       </div>
       {/* eslint-disable i18next/no-literal-string */}
       <p className="text-sm text-text-secondary mb-1">
-        {cveId} affects <span className="text-white font-medium">{packageName}</span> in {projectCount} of your projects
+        {cveId} affects <span className="text-text-primary font-medium">{packageName}</span> in {projectCount} of your projects
       </p>
       <p className="text-xs text-text-muted mb-4">
         Detected {minutesSincePublication} minutes after publication

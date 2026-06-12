@@ -41,7 +41,7 @@ export const FeedbackMilestone = memo(function FeedbackMilestone({ count }: Feed
         </svg>
       </div>
       <div>
-        <p className="text-sm font-medium text-white">{message}</p>
+        <p className="text-sm font-medium text-text-primary">{message}</p>
         <p className="text-[11px] text-text-secondary mt-0.5">{t('feedback.gettingSharper')}</p>
       </div>
     </div>

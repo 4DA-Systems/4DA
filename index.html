@@ -6,8 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="no-referrer" />
     <title>4DA</title>
+    <script>
+      // Apply the persisted theme BEFORE first paint (no flash of wrong theme).
+      // Mirrors src/lib/theme.ts — keep the key in sync.
+      (function () {
+        try {
+          if (localStorage.getItem('4da-theme') === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+          }
+        } catch (_) { /* storage unavailable — default dark */ }
+      })();
+    </script>
     <style>
-      /* Prevent white flash on load */
+      /* Prevent wrong-theme flash on load (theme attr is set above, pre-paint) */
       html, body {
         background-color: #0A0A0A;
         margin: 0;
@@ -16,6 +27,9 @@
       #root {
         background-color: #0A0A0A;
         min-height: 100vh;
+      }
+      html[data-theme='light'], html[data-theme='light'] body, html[data-theme='light'] #root {
+        background-color: #F6F5F2;
       }
     </style>
   </head>

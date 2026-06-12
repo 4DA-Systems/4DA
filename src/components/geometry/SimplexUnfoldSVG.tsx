@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useGeometryPalette } from '../../lib/theme';
 
 type PV = { x: number; y: number; z: number };
 type PE = { x1: number; y1: number; x2: number; y2: number; depth: number };
@@ -54,10 +55,13 @@ interface SimplexUnfoldSVGProps {
  */
 export function SimplexUnfoldSVG({
   size = 180,
-  color = '#C8B560',
-  glowColor = '#D4AF37',
+  color: colorProp,
+  glowColor: glowColorProp,
   className,
 }: SimplexUnfoldSVGProps) {
+  const palette = useGeometryPalette();
+  const color = colorProp ?? palette.stroke;
+  const glowColor = glowColorProp ?? palette.glow;
   const filterId = useId().replace(/:/g, '');
   const frameRef = useRef(0);
   const rafRef = useRef(0);

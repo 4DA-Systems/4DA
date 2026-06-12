@@ -30,7 +30,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
         </div>
         <div className="flex-1 text-start">
           <div className="flex items-center gap-2">
-            <h3 className="text-white font-medium">{t('sources.title')}</h3>
+            <h3 className="text-text-primary font-medium">{t('sources.title')}</h3>
             <span className="px-1.5 py-0.5 text-[10px] bg-cyan-500/20 text-cyan-400 rounded">
               {t('sources.customCount', { count: s.totalSources })}
             </span>
@@ -65,12 +65,12 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                   if (e.key === 'Enter') { e.preventDefault(); s.addRssFeed(); }
                 }}
                 placeholder="blog.deno.com · @Fireship · rust, typescript"
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
+                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
               />
               <button
                 onClick={s.addRssFeed}
                 disabled={s.validating || !s.newRssFeed.trim()}
-                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-text-primary hover:border-cyan-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {t('action.add')}
               </button>
@@ -137,11 +137,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onChange={(e) => s.setNewYoutubeChannel(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') void s.addYoutubeChannel(); }}
                 placeholder="Channel ID e.g. UCsBjURrPoezykLs9EqgamOA"
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
+                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
               />
               <button
                 onClick={() => { void s.addYoutubeChannel(); }}
-                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
+                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-text-primary hover:border-cyan-500/30 transition-all"
               >
                 {t('action.add')}
               </button>
@@ -194,11 +194,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onChange={(e) => s.setNewGithubLanguage(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') void s.addGithubLanguage(); }}
                 placeholder="e.g. go, java, swift"
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none"
+                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none"
               />
               <button
                 onClick={() => { void s.addGithubLanguage(); }}
-                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
+                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-text-primary hover:border-cyan-500/30 transition-all"
               >
                 {t('action.add')}
               </button>
@@ -241,11 +241,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onChange={(e) => s.setNewTwitterHandle(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') void s.addTwitterHandle(); }}
                 placeholder="@handle"
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none"
+                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none"
               />
               <button
                 onClick={() => { void s.addTwitterHandle(); }}
-                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
+                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-text-primary hover:border-cyan-500/30 transition-all"
               >
                 {t('action.add')}
               </button>
@@ -291,11 +291,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 value={s.xApiKey}
                 onChange={(e) => s.setXApiKey(e.target.value)}
                 placeholder={s.hasXApiKey ? '(key saved)' : 'X API Bearer Token'}
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
+                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
               />
               <button
                 onClick={() => { void s.saveXApiKey(); }}
-                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
+                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-text-primary hover:border-cyan-500/30 transition-all"
               >
                 {s.hasXApiKey ? t('sources.twitter.update') : t('action.save')}
               </button>

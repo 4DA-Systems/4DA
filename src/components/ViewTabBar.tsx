@@ -59,7 +59,7 @@ export const ViewTabBar = memo(function ViewTabBar() {
             <span>{t(tab.labelKey)}</span>
             {showBadge && (
               <span
-                className={`absolute top-1 end-1 w-1.5 h-1.5 rounded-full ${BADGE_COLORS[tab.id] || 'bg-white/60'}`}
+                className={`absolute top-1 end-1 w-1.5 h-1.5 rounded-full ${BADGE_COLORS[tab.id] || 'bg-text-primary/60'}`}
                 aria-label="New activity"
               />
             )}

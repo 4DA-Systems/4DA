@@ -28,7 +28,7 @@ export function ErrorState({ status, onRetry, onContinue }: ErrorStateProps) {
           )}
         </svg>
       </div>
-      <h2 className="text-xl font-medium text-white mb-2">{t('firstRun.errorTitle')}</h2>
+      <h2 className="text-xl font-medium text-text-primary mb-2">{t('firstRun.errorTitle')}</h2>
       <p className="text-sm text-text-secondary mb-4">
         {isEmbeddingError
           ? t('firstRun.errorEmbedding')
@@ -54,7 +54,7 @@ export function ErrorState({ status, onRetry, onContinue }: ErrorStateProps) {
           <button
             onClick={onContinue}
             aria-label={t('firstRun.continueAnyway')}
-            className="px-6 py-3 text-text-secondary hover:text-white transition-colors text-sm"
+            className="px-6 py-3 text-text-secondary hover:text-text-primary transition-colors text-sm"
           >
             {t('firstRun.continueAnyway')}
           </button>

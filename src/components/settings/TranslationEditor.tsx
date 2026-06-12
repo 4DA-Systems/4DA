@@ -29,10 +29,10 @@ interface TranslationEditorProps { language: string }
 // Design tokens & computed styles
 // ============================================================================
 
-const BG = { primary: '#0A0A0A', secondary: '#141414', tertiary: '#1F1F1F' };
-const TEXT = { primary: '#FFFFFF', secondary: '#A0A0A0', muted: '#8A8A8A' };
-const ACCENT = { gold: '#D4AF37', success: '#22C55E', error: '#EF4444' };
-const BORDER = '#2A2A2A';
+const BG = { primary: 'var(--color-bg-primary)', secondary: 'var(--color-bg-secondary)', tertiary: 'var(--color-bg-tertiary)' };
+const TEXT = { primary: 'var(--color-text-primary)', secondary: 'var(--color-text-secondary)', muted: 'var(--color-text-muted)' };
+const ACCENT = { gold: 'var(--color-accent-gold)', success: 'var(--color-success)', error: 'var(--color-error)' };
+const BORDER = 'var(--color-border)';
 const NS_COLORS: Record<string, string> = {
   ui: '#3B82F6', coach: ACCENT.gold, errors: ACCENT.error,
 };
@@ -44,7 +44,7 @@ const s = {
   container: { background: BG.tertiary, borderRadius: 8, padding: 20, border: `1px solid ${BORDER}` },
   header: { display: 'flex' as const, alignItems: 'center' as const, gap: 12, marginBottom: 16 },
   icon: {
-    width: 32, height: 32, background: 'rgba(212,175,55,0.2)', borderRadius: 8,
+    width: 32, height: 32, background: 'color-mix(in srgb, var(--color-accent-gold) 20%, transparent)', borderRadius: 8,
     display: 'flex' as const, alignItems: 'center' as const, justifyContent: 'center' as const,
     flexShrink: 0, color: ACCENT.gold, fontSize: 14,
   },
@@ -92,7 +92,7 @@ function nsBtn(active: boolean) {
   return {
     padding: '4px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
     border: `1px solid ${active ? ACCENT.gold : BORDER}`,
-    background: active ? 'rgba(212,175,55,0.15)' : BG.secondary,
+    background: active ? 'color-mix(in srgb, var(--color-accent-gold) 15%, transparent)' : BG.secondary,
     color: active ? ACCENT.gold : TEXT.secondary,
     fontWeight: active ? 600 : 400,
   };

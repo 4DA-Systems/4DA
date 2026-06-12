@@ -111,7 +111,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     return (
       <div className="space-y-4" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
         <header className="mb-2">
-          <h1 className="text-xl font-semibold text-white tracking-tight">{t('blindspots.title')}</h1>
+          <h1 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h1>
           <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
         </header>
         <div className="bg-bg-secondary rounded-lg border border-red-500/20 px-5 py-5">
@@ -121,7 +121,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
             </div>
             <div className="min-w-0 flex-1 space-y-3">
               <div className="space-y-1">
-                <h3 className="text-sm font-medium text-white">{t('blindspots.error.title')}</h3>
+                <h3 className="text-sm font-medium text-text-primary">{t('blindspots.error.title')}</h3>
                 <p className="text-sm text-text-muted">
                   {isTimeoutError ? t('blindspots.error.timeout') : t('blindspots.error.subtitle')}
                 </p>
@@ -129,7 +129,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
               <p className="text-xs text-red-300">{error}</p>
               <button
                 onClick={handleRetry}
-                className="px-3 py-1.5 text-sm text-white bg-bg-tertiary border border-border rounded-lg hover:border-red-500/30 hover:text-red-300 transition-colors"
+                className="px-3 py-1.5 text-sm text-text-primary bg-bg-tertiary border border-border rounded-lg hover:border-red-500/30 hover:text-red-300 transition-colors"
               >
                 {t('action.retry')}
               </button>
@@ -162,7 +162,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   return (
     <div className="space-y-4 pb-8" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
       <header className="mb-2">
-        <h1 className="text-xl font-semibold text-white tracking-tight">{t('blindspots.title')}</h1>
+        <h1 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h1>
         <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
       </header>
       <ScoreBar score={score} />
@@ -221,7 +221,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
           <button
             type="button"
             onClick={handleUndo}
-            className="text-xs font-medium text-amber-400 hover:text-white underline-offset-2 hover:underline transition-colors"
+            className="text-xs font-medium text-amber-400 hover:text-text-primary underline-offset-2 hover:underline transition-colors"
           >
             {t('blindspots.action.undo')}
           </button>
@@ -241,7 +241,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
                 <span className="text-emerald-400 text-sm">&#10003;</span>
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-medium text-white">{t('blindspots.scoreContext.excellent')}</h3>
+                <h3 className="text-sm font-medium text-text-primary">{t('blindspots.scoreContext.excellent')}</h3>
                 {recommendations.length > 0 && (
                   <p className="text-xs text-text-muted mt-1">{recommendations[0]!.explanation}</p>
                 )}

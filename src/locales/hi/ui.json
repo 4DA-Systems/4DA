@@ -1266,6 +1266,8 @@
   "header.toReview": "समीक्षा हेतु",
   "header.inCorpus": "संग्रह में",
   "header.summaryTooltip": "{{top}} समीक्षा हेतु · {{rel}} संग्रह में",
+  "header.themeToggleToLight": "लाइट थीम पर स्विच करें",
+  "header.themeToggleToDark": "डार्क थीम पर स्विच करें",
   "cmdk.placeholder": "4DA ने जो कुछ पढ़ा है, सब खोजें…",
   "cmdk.ariaLabel": "4DA खोजें",
   "cmdk.groupGoto": "जाएँ",

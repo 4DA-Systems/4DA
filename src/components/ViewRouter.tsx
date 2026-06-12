@@ -78,7 +78,7 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
                 onClick={() => setSignalViewMode('list')}
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
                   signalViewMode === 'list'
-                    ? 'bg-bg-tertiary text-white'
+                    ? 'bg-bg-tertiary text-text-primary'
                     : 'text-text-muted hover:text-text-secondary'
                 }`}
                 aria-pressed={signalViewMode === 'list'}
@@ -89,7 +89,7 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
                 onClick={() => setSignalViewMode('graph')}
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
                   signalViewMode === 'graph'
-                    ? 'bg-bg-tertiary text-white'
+                    ? 'bg-bg-tertiary text-text-primary'
                     : 'text-text-muted hover:text-text-secondary'
                 }`}
                 aria-pressed={signalViewMode === 'graph'}

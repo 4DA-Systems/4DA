@@ -36,7 +36,7 @@ export function OnboardingChoiceGate({
       }`}
     >
       <div className="text-4xl mb-4" aria-hidden="true">&#x2728;</div>
-      <h2 className="text-2xl font-semibold text-white mb-2">
+      <h2 className="text-2xl font-semibold text-text-primary mb-2">
         {t('onboarding.choice.title', 'You\'re ready to go')}
       </h2>
       <p className="text-text-secondary text-sm max-w-md mx-auto mb-6">
@@ -83,7 +83,7 @@ export function OnboardingChoiceGate({
           >
             <span className="inline-flex items-center justify-center gap-2">
               {t('onboarding.choice.scanProjects', 'Scan my projects')}
-              <span className="text-[10px] px-1.5 py-0.5 bg-white/20 text-white rounded font-medium uppercase tracking-wide">
+              <span className="text-[10px] px-1.5 py-0.5 bg-text-primary/20 text-text-primary rounded font-medium uppercase tracking-wide">
                 {t('onboarding.choice.scanRecommended', 'Recommended')}
               </span>
             </span>

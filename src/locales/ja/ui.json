@@ -11,6 +11,8 @@
   "header.toReview": "要確認",
   "header.inCorpus": "コーパス内",
   "header.summaryTooltip": "{{top}} 件要確認 · {{rel}} 件コーパス内",
+  "header.themeToggleToLight": "ライトテーマに切り替え",
+  "header.themeToggleToDark": "ダークテーマに切り替え",
   "cmdk.placeholder": "4DA が読み取ったすべてを検索…",
   "cmdk.ariaLabel": "4DA を検索",
   "cmdk.groupGoto": "移動",

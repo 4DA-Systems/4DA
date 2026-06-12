@@ -80,8 +80,8 @@ const ContentGraphEdge = memo(function ContentGraphEdge({
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              backgroundColor: '#1F1F1F',
-              border: '1px solid #2A2A2A',
+              backgroundColor: 'var(--color-bg-tertiary)',
+              border: '1px solid var(--color-border)',
               borderRadius: 6,
               padding: '6px 10px',
               pointerEvents: 'none',
@@ -89,15 +89,15 @@ const ContentGraphEdge = memo(function ContentGraphEdge({
             }}
           >
             {data.label && (
-              <div style={{ color: '#FFFFFF', fontSize: 11, fontWeight: 600, marginBottom: 2, fontFamily: 'Inter, sans-serif' }}>
+              <div style={{ color: 'var(--color-text-primary)', fontSize: 11, fontWeight: 600, marginBottom: 2, fontFamily: 'Inter, sans-serif' }}>
                 {data.label}
               </div>
             )}
-            <div style={{ color: '#A0A0A0', fontSize: 10, fontFamily: 'Inter, sans-serif' }}>
+            <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, fontFamily: 'Inter, sans-serif' }}>
               {edgeType} ({(weight * 100).toFixed(0)}%)
             </div>
             {data.methods.length > 0 && (
-              <div style={{ color: '#8A8A8A', fontSize: 9, marginTop: 2, fontFamily: 'JetBrains Mono, monospace' }}>
+              <div style={{ color: 'var(--color-text-muted)', fontSize: 9, marginTop: 2, fontFamily: 'JetBrains Mono, monospace' }}>
                 {data.methods.join(', ')}
               </div>
             )}

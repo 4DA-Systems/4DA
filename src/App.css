@@ -3,7 +3,7 @@
 /* Limit Tailwind content scanning to src directory only */
 @source "../src/**/*.{js,jsx,ts,tsx}";
 
-/* Design System: Matte Black Minimalism */
+/* Design System: Matte Black Minimalism (dark, default) */
 @theme {
   --color-bg-primary: #0A0A0A;
   --color-bg-secondary: #141414;
@@ -12,12 +12,83 @@
   --color-text-secondary: #A0A0A0;
   --color-text-muted: #8A8A8A;
   --color-accent-primary: #FFFFFF;
+  --color-accent-primary-hover: #E2E2E2;
   --color-accent-gold: #D4AF37;
+  --color-accent-gold-hover: #C4A030;
   --color-border: #2A2A2A;
   --color-success: #22C55E;
   --color-error: #EF4444;
   --color-accent-action: #F97316;
   --color-accent-action-hover: #EA580C;
+}
+
+/* Emissive layer — glow physics differs per theme (additive light needs darkness;
+   on paper it becomes ink weight). Components consume these, never raw gold hexes. */
+:root {
+  color-scheme: dark;
+  --geometry-stroke: #C8B560;
+  --geometry-glow: #D4AF37;
+  --glow-opacity: 0.2;
+  --ambient-glow: radial-gradient(130% 90% at 50% 110%, rgba(212, 175, 55, 0.12), rgba(212, 175, 55, 0.04) 45%, transparent 70%);
+}
+
+/* ============================================================================
+   Light theme — "Paper". Warm paper surfaces, ink text, merch-derived deep
+   gold (#D4AF37 is 1.9:1 on white — it washes out; #8F7118 is the print twin).
+   Status palette: raw Tailwind *-400/-300 classes were tuned as light-on-dark
+   text; remap the shades to their -600/-700 twins so contrast holds on paper.
+   Activated by data-theme="light" on <html> (src/lib/theme.ts).
+   ============================================================================ */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --color-bg-primary: #F6F5F2;
+  --color-bg-secondary: #FFFFFF;
+  --color-bg-tertiary: #EBE9E4;
+  --color-text-primary: #141414;
+  --color-text-secondary: #57544D;
+  --color-text-muted: #7A776F;
+  --color-accent-primary: #141414;
+  --color-accent-primary-hover: #2B2925;
+  --color-accent-gold: #8F7118;
+  --color-accent-gold-hover: #7A5F12;
+  --color-border: #DDDAD2;
+  --color-success: #15803D;
+  --color-error: #B91C1C;
+  --color-accent-action: #EA580C;
+  --color-accent-action-hover: #C2410C;
+
+  /* Status-shade retune (text + dot usages; no solid bg usage of these shades) */
+  --color-red-200: #991B1B;
+  --color-red-300: #B91C1C;
+  --color-red-400: #DC2626;
+  --color-green-300: #15803D;
+  --color-green-400: #16A34A;
+  --color-green-500: #16A34A;
+  --color-orange-300: #C2410C;
+  --color-orange-400: #EA580C;
+  --color-amber-200: #92400E;
+  --color-amber-300: #B45309;
+  --color-amber-400: #B45309;
+  --color-amber-500: #B45309;
+  --color-yellow-400: #A16207;
+  --color-blue-300: #1D4ED8;
+  --color-blue-400: #2563EB;
+  --color-emerald-400: #059669;
+  --color-cyan-300: #0E7490;
+  --color-cyan-400: #0891B2;
+  --color-purple-400: #9333EA;
+  --color-indigo-300: #4338CA;
+  --color-indigo-400: #4F46E5;
+  --color-sky-400: #0284C7;
+  --color-gray-400: #6B7280;
+  --color-gray-500: #57534E;
+  --color-gray-600: #44403C;
+
+  /* Emissive layer: ink weight instead of light */
+  --geometry-stroke: #8F7118;
+  --geometry-glow: #A8861D;
+  --glow-opacity: 0.10;
+  --ambient-glow: radial-gradient(130% 90% at 50% 110%, rgba(143, 113, 24, 0.10), rgba(143, 113, 24, 0.03) 45%, transparent 70%);
 }
 
 /* Base styles */
@@ -160,8 +231,8 @@ body {
 
 /* Tech Radar glow animation for movers (up/new entries) */
 @keyframes radar-glow {
-  0%, 100% { filter: drop-shadow(0 0 2px #22C55E); }
-  50% { filter: drop-shadow(0 0 6px #22C55E); }
+  0%, 100% { filter: drop-shadow(0 0 2px var(--color-success)); }
+  50% { filter: drop-shadow(0 0 6px var(--color-success)); }
 }
 
 .radar-glow {

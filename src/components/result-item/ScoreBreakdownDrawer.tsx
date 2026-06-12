@@ -95,7 +95,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
         </div>
         <button
           onClick={onClose}
-          className="text-text-muted hover:text-white transition-colors text-sm px-2 py-1"
+          className="text-text-muted hover:text-text-primary transition-colors text-sm px-2 py-1"
           aria-label={t('scoreDrawer.close')}
         >
           &times;
@@ -214,7 +214,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
                 </p>
                 <p className="text-xs text-text-secondary truncate">{compareTitle}</p>
                 {/* eslint-disable i18next/no-literal-string */}
-                <p className="text-sm font-mono text-white mt-1">
+                <p className="text-sm font-mono text-text-primary mt-1">
                   {Math.round(compareScore * 100)}% vs {Math.round(finalScore * 100)}%
                   <span className={`ms-2 text-xs ${compareScore > finalScore ? 'text-green-400' : compareScore < finalScore ? 'text-amber-400' : 'text-text-muted'}`}>
                     ({compareScore > finalScore ? '+' : ''}{Math.round((compareScore - finalScore) * 100)})
@@ -225,7 +225,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
               {selectedCompareId != null && (
                 <button
                   onClick={() => setSelectedCompareId(null)}
-                  className="text-[10px] text-text-muted hover:text-white px-2 py-1"
+                  className="text-[10px] text-text-muted hover:text-text-primary px-2 py-1"
                   aria-label={t('scoreDrawer.clearComparison')}
                 >
                   &times;
@@ -240,7 +240,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
               <select
                 value=""
                 onChange={(e) => setSelectedCompareId(Number(e.target.value))}
-                className="w-full bg-bg-tertiary text-xs text-text-secondary rounded border border-border px-2 py-1.5 focus:border-white/30 focus:outline-none"
+                className="w-full bg-bg-tertiary text-xs text-text-secondary rounded border border-border px-2 py-1.5 focus:border-text-primary/30 focus:outline-none"
               >
                 <option value="" disabled>{t('scoreDrawer.selectItem')}</option>
                 {comparePool

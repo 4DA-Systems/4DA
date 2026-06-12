@@ -101,7 +101,7 @@ export function PrivacySection() {
   return (
     <div className="bg-bg-tertiary/30 border border-border/50 rounded-xl p-4 space-y-3">
       <div>
-        <h3 className="text-sm font-medium text-white mb-1">
+        <h3 className="text-sm font-medium text-text-primary mb-1">
           {t('settings.privacy.title', 'Privacy')}
         </h3>
         <p className="text-xs text-text-muted">
@@ -114,7 +114,7 @@ export function PrivacySection() {
 
       {/* Local diagnostics export — replaces third-party crash reporting */}
       <div className="border-t border-border/40 pt-3">
-        <div className="text-sm font-medium text-white">
+        <div className="text-sm font-medium text-text-primary">
           {t('settings.privacy.diagnostics.title', 'Export diagnostics')}
         </div>
         <p className="text-xs text-text-muted mt-0.5">
@@ -129,7 +129,7 @@ export function PrivacySection() {
             type="button"
             onClick={() => void handleExport()}
             disabled={exporting}
-            className="text-xs px-3 py-1.5 rounded-lg bg-bg-secondary border border-border hover:border-accent-gold/50 text-white disabled:opacity-50"
+            className="text-xs px-3 py-1.5 rounded-lg bg-bg-secondary border border-border hover:border-accent-gold/50 text-text-primary disabled:opacity-50"
           >
             {exporting
               ? t('settings.privacy.diagnostics.generating', 'Generating…')
@@ -150,7 +150,7 @@ export function PrivacySection() {
           <div className="mt-3 p-3 bg-bg-secondary/60 rounded-lg border border-border/40">
             <div className="text-[11px] text-text-secondary space-y-2">
               <div>
-                <div className="font-medium text-white mb-0.5">
+                <div className="font-medium text-text-primary mb-0.5">
                   {t('settings.privacy.diagnostics.includedLabel', "What's included")}
                 </div>
                 <ul className="list-disc list-inside space-y-0.5 text-text-muted">
@@ -160,7 +160,7 @@ export function PrivacySection() {
                 </ul>
               </div>
               <div>
-                <div className="font-medium text-white mb-0.5">
+                <div className="font-medium text-text-primary mb-0.5">
                   {t('settings.privacy.diagnostics.scrubbedLabel', "What's scrubbed")}
                 </div>
                 <ul className="list-disc list-inside space-y-0.5 text-text-muted">
@@ -200,7 +200,7 @@ export function PrivacySection() {
             <button
               type="button"
               onClick={() => void handleCopy()}
-              className="text-xs px-3 py-1.5 rounded-lg bg-bg-secondary border border-border hover:border-accent-gold/50 text-white"
+              className="text-xs px-3 py-1.5 rounded-lg bg-bg-secondary border border-border hover:border-accent-gold/50 text-text-primary"
             >
               {copied
                 ? t('settings.privacy.diagnostics.copied', 'Copied')
@@ -223,7 +223,7 @@ export function PrivacySection() {
             className="mt-0.5 w-4 h-4 rounded border-border bg-bg-secondary text-accent-gold focus:ring-accent-gold/50"
           />
           <div className="flex-1">
-            <div className="text-sm font-medium text-white">
+            <div className="text-sm font-medium text-text-primary">
               {t('settings.privacy.activityTracking.title', 'Local activity tracking')}
             </div>
             <p className="text-xs text-text-muted mt-0.5">

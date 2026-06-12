@@ -38,14 +38,14 @@ export function TeamForms({
         <button
           onClick={() => setFormMode('create')}
           aria-label={t('settings.team.createTeam', 'Create Team')}
-          className="flex-1 px-4 py-2 text-xs font-medium text-black bg-success rounded-lg hover:bg-green-600 transition-colors"
+          className="flex-1 px-4 py-2 text-xs font-medium text-bg-primary bg-success rounded-lg hover:opacity-90 transition-colors"
         >
           {t('settings.team.createTeam', 'Create Team')}
         </button>
         <button
           onClick={() => setFormMode('join')}
           aria-label={t('settings.team.joinTeam', 'Join Team')}
-          className="flex-1 px-4 py-2 text-xs font-medium text-text-secondary border border-border rounded-lg hover:border-success/50 hover:text-white transition-colors"
+          className="flex-1 px-4 py-2 text-xs font-medium text-text-secondary border border-border rounded-lg hover:border-success/50 hover:text-text-primary transition-colors"
         >
           {t('settings.team.joinTeam', 'Join Team')}
         </button>
@@ -65,7 +65,7 @@ export function TeamForms({
             value={relayUrl}
             onChange={(e) => setRelayUrl(e.target.value)}
             placeholder="https://relay.4da.ai"
-            className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono"
+            className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-text-primary placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono"
           />
         </label>
         <label className="block">
@@ -77,7 +77,7 @@ export function TeamForms({
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="Your name"
-            className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50"
+            className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-text-primary placeholder-gray-600 focus:outline-none focus:border-success/50"
           />
         </label>
         <div className="flex gap-2">
@@ -86,7 +86,7 @@ export function TeamForms({
             disabled={
               teamLoading || !displayName.trim() || !relayUrl.trim()
             }
-            className="flex-1 px-4 py-2 text-xs font-medium text-black bg-success rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-2 text-xs font-medium text-bg-primary bg-success rounded-lg hover:opacity-90 transition-colors disabled:opacity-50"
           >
             {teamLoading
               ? '...'
@@ -94,7 +94,7 @@ export function TeamForms({
           </button>
           <button
             onClick={() => setFormMode('none')}
-            className="px-4 py-2 text-xs text-text-muted hover:text-white transition-colors"
+            className="px-4 py-2 text-xs text-text-muted hover:text-text-primary transition-colors"
           >
             {t('action.cancel', 'Cancel')}
           </button>
@@ -115,7 +115,7 @@ export function TeamForms({
           value={relayUrl}
           onChange={(e) => setRelayUrl(e.target.value)}
           placeholder="https://relay.4da.ai"
-          className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono"
+          className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-text-primary placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono"
         />
       </label>
       <label className="block">
@@ -128,7 +128,7 @@ export function TeamForms({
           onChange={(e) => setInviteCode(e.target.value.toUpperCase().slice(0, 6))}
           placeholder="ABC123"
           maxLength={6}
-          className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono tracking-widest"
+          className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-text-primary placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono tracking-widest"
         />
       </label>
       <label className="block">
@@ -140,7 +140,7 @@ export function TeamForms({
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="Your name"
-          className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50"
+          className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-text-primary placeholder-gray-600 focus:outline-none focus:border-success/50"
         />
       </label>
       <div className="flex gap-2">
@@ -152,13 +152,13 @@ export function TeamForms({
             !relayUrl.trim() ||
             !inviteCode.trim()
           }
-          className="flex-1 px-4 py-2 text-xs font-medium text-black bg-success rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+          className="flex-1 px-4 py-2 text-xs font-medium text-bg-primary bg-success rounded-lg hover:opacity-90 transition-colors disabled:opacity-50"
         >
           {teamLoading ? '...' : t('settings.team.joinTeam', 'Join Team')}
         </button>
         <button
           onClick={() => setFormMode('none')}
-          className="px-4 py-2 text-xs text-text-muted hover:text-white transition-colors"
+          className="px-4 py-2 text-xs text-text-muted hover:text-text-primary transition-colors"
         >
           {t('action.cancel', 'Cancel')}
         </button>

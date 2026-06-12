@@ -26,7 +26,7 @@ export function BriefingLoadingState() {
         <div className="w-20 h-20 mb-6 bg-orange-500/10 rounded-2xl border border-orange-500/20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
         </div>
-        <h2 className="text-xl font-medium text-white mb-2">{t('briefing.gatheringIntelligence')}</h2>
+        <h2 className="text-xl font-medium text-text-primary mb-2">{t('briefing.gatheringIntelligence')}</h2>
         <p className="text-sm text-text-secondary text-center max-w-md">
           {stageLabel}
         </p>
@@ -86,7 +86,7 @@ export function BriefingReadyState() {
   return (
     <div className="bg-bg-primary rounded-lg">
       <div className="flex flex-col items-center justify-center py-20 px-8">
-        <h2 className="text-xl font-medium text-white mb-2">{t('briefing.readyToGenerate')}</h2>
+        <h2 className="text-xl font-medium text-text-primary mb-2">{t('briefing.readyToGenerate')}</h2>
         <p className="text-sm text-text-muted text-center max-w-md mb-6">
           {t('briefing.resultsAnalyzed', { count: results.length })}
         </p>
@@ -94,7 +94,7 @@ export function BriefingReadyState() {
           <button onClick={handleGenerate} disabled={busy} aria-label="Generate intelligence briefing" className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             {busy ? (
               <span className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span className="w-3.5 h-3.5 border-2 border-text-primary/30 border-t-text-primary rounded-full animate-spin" />
                 {t('briefing.generate')}
               </span>
             ) : t('briefing.generate')}
@@ -105,7 +105,7 @@ export function BriefingReadyState() {
               <button onClick={handleGenerate} disabled={busy} aria-label="Generate intelligence briefing" className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {busy ? (
                   <span className="flex items-center gap-2">
-                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="w-3.5 h-3.5 border-2 border-text-primary/30 border-t-text-primary rounded-full animate-spin" />
                     {t('briefing.generate')}
                   </span>
                 ) : t('briefing.generate')}
@@ -173,7 +173,7 @@ export function BriefingNoDataState() {
         <div className="w-[120px] h-[120px] mb-6 rounded-2xl border border-border/30 overflow-hidden" role="img" aria-label="4DA">
           <SimplexUnfoldSVG size={120} />
         </div>
-        <h2 className="text-xl font-medium text-white mb-2">{t('briefing.noIntelligence')}</h2>
+        <h2 className="text-xl font-medium text-text-primary mb-2">{t('briefing.noIntelligence')}</h2>
         <p className="text-sm text-text-muted text-center max-w-md mb-6">
           {t('briefing.runAnalysis')}
         </p>

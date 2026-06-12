@@ -96,7 +96,7 @@ export function AIProviderSection({
             <span>&#x1f916;</span>
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">{t('settings.ai.title')}</h3>
+            <h3 className="text-sm font-medium text-text-primary">{t('settings.ai.title')}</h3>
             <p className="text-xs text-text-muted">{t('settings.ai.description')}</p>
           </div>
         </div>
@@ -153,7 +153,7 @@ export function AIProviderSection({
                 }));
                 setValidation(IDLE_VALIDATION);
               }}
-              className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+              className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:border-orange-500 focus:outline-none"
             >
               <option value="anthropic">{t('settings.ai.providerAnthropic')} ({t('settings.ai.recommended')})</option>
               <option value="openai">{t('settings.ai.providerOpenAI')}</option>
@@ -214,7 +214,7 @@ export function AIProviderSection({
                 id="ai-model-select"
                 value={settingsForm.model}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
-                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:border-orange-500 focus:outline-none"
               >
                 {settingsForm.provider === 'ollama' && ollamaModels.length === 0 ? (
                   <>
@@ -264,7 +264,7 @@ export function AIProviderSection({
                 value={settingsForm.model}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
                 placeholder={t('settings.ai.modelNamePlaceholder')}
-                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
+                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
               />
             </div>
           )}
@@ -278,7 +278,7 @@ export function AIProviderSection({
                 value={settingsForm.baseUrl}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, baseUrl: e.target.value }))}
                 placeholder="http://localhost:11434"
-                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
+                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
               />
             </div>
           )}
@@ -292,7 +292,7 @@ export function AIProviderSection({
                 value={settingsForm.baseUrl}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, baseUrl: e.target.value }))}
                 placeholder="https://api.groq.com/openai/v1"
-                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
+                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
               />
               <div className="mt-2">
                 <p className="text-[10px] text-text-muted mb-1.5">{t('settings.ai.popularEndpoints')}</p>

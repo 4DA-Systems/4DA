@@ -11,6 +11,8 @@
   "header.toReview": "待查看",
   "header.inCorpus": "在语料库",
   "header.summaryTooltip": "{{top}} 条待查看 · {{rel}} 条在语料库",
+  "header.themeToggleToLight": "切换到浅色主题",
+  "header.themeToggleToDark": "切换到深色主题",
   "cmdk.placeholder": "搜索 4DA 已读取的一切…",
   "cmdk.ariaLabel": "搜索 4DA",
   "cmdk.groupGoto": "前往",

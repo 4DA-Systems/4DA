@@ -102,7 +102,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
             <span className="text-text-secondary">⚡</span>
           </div>
           <div className="text-start">
-            <h2 className="font-medium text-white">{t('signals.title')}</h2>
+            <h2 className="font-medium text-text-primary">{t('signals.title')}</h2>
             <p className="text-xs text-text-muted">
               {t('signals.actionable', { count: signals.length })}
               {criticalCount > 0 && (
@@ -184,7 +184,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
                   aria-pressed={isActive}
                   className={`px-2.5 py-1 text-[11px] rounded-lg border transition-all flex items-center gap-1.5 ${
                     isActive
-                      ? `${config?.bgColor ?? 'bg-white/10'} ${config?.color ?? 'text-white'} ${config?.borderColor ?? 'border-white/20'}`
+                      ? `${config?.bgColor ?? 'bg-text-primary/10'} ${config?.color ?? 'text-text-primary'} ${config?.borderColor ?? 'border-text-primary/20'}`
                       : 'bg-bg-tertiary text-text-secondary border-border hover:border-[#3A3A3A]'
                   }`}
                 >
@@ -230,7 +230,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
               <button
                 onClick={() => { setTypeFilter(null); setPriorityFilter(null); }}
                 aria-label={t('signals.clear')}
-                className="px-2 py-1 text-[10px] text-text-muted hover:text-white transition-colors"
+                className="px-2 py-1 text-[10px] text-text-muted hover:text-text-primary transition-colors"
               >
                 {t('signals.clear')}
               </button>
