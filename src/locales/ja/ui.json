@@ -675,7 +675,7 @@
   "onboarding.choice.continueSetup": "セットアップを続ける",
   "onboarding.choice.continueHint": "AIプロバイダー、スタック、興味を設定",
   "onboarding.choice.scanProjects": "プロジェクトをスキャン",
-  "onboarding.choice.scanProjectsDesc": "100% ローカル — データが端末から出ることは一切ありません。約1分であなたの実際のスタックに合わせて 4DA を最適化します。",
+  "onboarding.choice.scanProjectsDesc": "100% ローカル — データが端末から出ることは一切ありません。あなたの実際のスタックに合わせて 4DA を最適化します。",
   "onboarding.choice.scanRecommended": "おすすめ",
   "onboarding.choice.scanning": "プロジェクトをスキャン中… これはお使いの端末内で行われます",
   "onboarding.choice.keywordOnly": "今はしない — デフォルトを使用",
