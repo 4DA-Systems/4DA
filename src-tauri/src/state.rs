@@ -418,11 +418,18 @@ pub(crate) fn get_context_engine() -> Result<Arc<ContextEngine>> {
 /// Invalidate the context engine so it reinitializes on next access.
 /// Call after settings changes that affect context (interests, exclusions, context dirs).
 pub(crate) fn invalidate_context_engine() {
-    let mut guard = CONTEXT_ENGINE.write();
-    if guard.is_some() {
-        *guard = None;
-        info!(target: "4da::context", "Context engine invalidated, will reinitialize on next access");
+    {
+        let mut guard = CONTEXT_ENGINE.write();
+        if guard.is_some() {
+            *guard = None;
+            info!(target: "4da::context", "Context engine invalidated, will reinitialize on next access");
+        }
     }
+    // The scoring pipeline keeps a SEPARATE 5-minute TTL cache of the assembled
+    // ScoringContext. Clearing only the context engine left that stale, so the
+    // first analysis after onboarding scored against an empty profile. Clear
+    // both so the next build reads the user's fresh interests/tech.
+    crate::scoring::invalidate_scoring_context_cache();
 }
 
 // ============================================================================

@@ -250,6 +250,12 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         "Full scan complete"
     );
 
+    // A scan changes the scoring inputs (detected tech, topics, dependencies),
+    // so drop the cached context engine + scoring context. Without this the
+    // first post-onboarding analysis scores against the empty startup context
+    // and the user sees a dead feed until the cache ages out or the app restarts.
+    crate::invalidate_context_engine();
+
     Ok(serde_json::json!({
         "success": true,
         "manifest_scan": {
