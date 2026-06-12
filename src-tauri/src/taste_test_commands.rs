@@ -77,6 +77,43 @@ pub async fn taste_test_finalize(app: AppHandle) -> Result<TasteProfileSummary> 
     crate::taste_test::db::save_taste_result(&conn, &profile, &responses, &latencies)?;
     crate::taste_test::db::apply_taste_to_context(&conn, &profile)?;
 
+    // Embed the inferred interests so SEMANTIC interest-scoring works from the
+    // first analysis. apply_taste_to_context stores them via raw INSERT with no
+    // embedding column, which left a taste-test-onboarded user with a DEAD feed:
+    // interest_score (the dominant signal when no projects are detected) collapses
+    // to 0, every item tops out at the 1-signal ceiling (~0.23), and nothing clears
+    // the 0.4 relevance gate (cold-start integrity run, 2026-06-13). The context
+    // engine's add_interest upserts the same rows WITH the embedding BLOB, so this
+    // is idempotent and just fills in what the sync path could not.
+    if !profile.inferred_interests.is_empty() {
+        let topics: Vec<String> = profile
+            .inferred_interests
+            .iter()
+            .map(|(t, _)| t.clone())
+            .collect();
+        match crate::embed_texts(&topics).await {
+            Ok(embeddings) => {
+                if let Ok(engine) = crate::get_context_engine() {
+                    for ((topic, weight), emb) in
+                        profile.inferred_interests.iter().zip(embeddings.iter())
+                    {
+                        if let Err(e) = engine.add_interest(
+                            topic,
+                            *weight,
+                            Some(emb.as_slice()),
+                            crate::context_engine::InterestSource::Inferred,
+                        ) {
+                            tracing::warn!(target: "taste_test", topic = %topic, error = %e, "Failed to store inferred-interest embedding");
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!(target: "taste_test", error = %e, "Failed to embed inferred interests — feed will rely on keyword matching until re-added");
+            }
+        }
+    }
+
     // Bridge taste test responses into synthetic interactions so the scoring
     // pipeline's feedback_interaction_count sees real signal from day one.
     // Written to the main DB (same as context engine) because that's where
