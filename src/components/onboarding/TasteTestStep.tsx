@@ -182,7 +182,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
               {Math.round(confidence * 100)}% confident
             </span>
           </div>
-          <p className="text-[10px] text-text-muted mt-1 text-right">
+          <p className="text-[10px] text-text-muted mt-1 text-end">
             {confidence < 0.3
               ? 'Keep going \u2014 more responses improve accuracy'
               : confidence < 0.7
