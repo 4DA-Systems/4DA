@@ -33,7 +33,7 @@ permalink: "/index.html"
     "operatingSystem": "Windows, macOS, Linux",
     "description": "4DA reads the internet for developers -- privately, locally -- and gets sharper every day. It learns from how you engage with what it shows you, so yesterday's noise becomes tomorrow's signal.",
     "offers": [
-      { "@type": "Offer", "price": "0", "priceCurrency": "AUD", "description": "Free -- all 20+ sources, full scoring engine, AI briefings (BYOK), STREETS Playbook (7 modules)" },
+      { "@type": "Offer", "price": "0", "priceCurrency": "AUD", "description": "Free -- all 20+ sources, full scoring engine, AI briefings (BYOK), MCP server (14 tools)" },
       { "@type": "Offer", "price": "12", "priceCurrency": "AUD", "description": "Signal -- compound intelligence: Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Attention Analytics" }
     ]
   }
@@ -1036,7 +1036,7 @@ permalink: "/index.html"
         </div>
         <div class="traction-principle">
           <h4>Multi-Signal Confirmation Gate</h4>
-          <p>Every item is scored across 5 independent axes. An item needs 2+ confirming signals to pass the gate. Typical rejection rate: 95%+ of incoming content.</p>
+          <p>Every item is scored across 5 independent axes. An item needs 2+ confirming signals to pass the gate. Measured across 9 developer personas: 92% of incoming content is filtered as noise.</p>
         </div>
         <div class="traction-principle">
           <h4>Privacy by Architecture</h4>
@@ -1059,7 +1059,6 @@ permalink: "/index.html"
         <button class="gallery-tab" data-filter="preemption">Preemption</button>
         <button class="gallery-tab" data-filter="blind-spots">Blind Spots</button>
         <button class="gallery-tab" data-filter="signal">Signal</button>
-        <button class="gallery-tab" data-filter="playbook">Playbook</button>
       </div>
       <div class="gallery-grid">
         <div class="gallery-item visible" data-category="brief">
@@ -1102,16 +1101,6 @@ permalink: "/index.html"
             </div>
           </button>
         </div>
-        <div class="gallery-item visible" data-category="playbook">
-          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/05-playbook.png" data-lightbox-caption="Playbook — STREETS sovereignty modules built in" aria-label="Expand Playbook screenshot">
-            <img src="screenshots/05-playbook.png" alt="4DA Playbook tab — STREETS sovereignty playbook" loading="lazy" width="1080" height="auto">
-            <span class="zoom-hint">Click to expand</span>
-            <div class="gallery-caption">
-              <span class="caption-tag">Playbook</span>
-              <p>The STREETS playbook built in — seven modules that turn your dev rig into a sovereign business asset. Free, always.</p>
-            </div>
-          </button>
-        </div>
       </div>
 
       <!-- Lightbox modal -->
@@ -1146,7 +1135,6 @@ permalink: "/index.html"
             <li>AI daily briefings + weekly digest</li>
             <li>Multi-signal confirmation gate</li>
             <li>Auto context discovery (ACE)</li>
-            <li>STREETS Playbook (all 7 modules)</li>
             <li>Behavior learning</li>
             <li>MCP server (14 tools)</li>
             <li>CLI binary</li>
@@ -1247,7 +1235,7 @@ permalink: "/index.html"
         <div class="feature-card">
           <div class="feature-tag">scoring</div>
           <h3>5-Axis Scoring</h3>
-          <p>Context, Interest, ACE, Dependency, and Learned axes independently evaluate every item. Multi-signal confirmation gate rejects 95%+ of incoming content.</p>
+          <p>Context, Interest, ACE, Dependency, and Learned axes independently evaluate every item. The multi-signal confirmation gate filters 92% of incoming content as noise, measured across 9 developer personas.</p>
         </div>
         <div class="feature-card">
           <div class="feature-tag">privacy</div>
@@ -1278,7 +1266,7 @@ permalink: "/index.html"
       <div class="mcp-grid">
         <div class="mcp-text">
           <p>4DA ships an MCP server with 14 intelligence tools. Install it with one command and your AI assistant draws from your scored, filtered intelligence feed -- not generic internet search results.</p>
-          <p style="font-size: 14px; color: var(--text-muted);">Works with Claude Code, Cursor, and any MCP-compatible host. MIT licensed. Always free.</p>
+          <p style="font-size: 14px; color: var(--text-muted);">Works with Claude Code, Cursor, and any MCP-compatible host. Apache-2.0 licensed. Always free.</p>
           <ul class="mcp-queries">
             <li>"Scan my dependencies for vulnerabilities"</li>
             <li>"What should I know before I start this task?"</li>
@@ -1310,7 +1298,7 @@ npx <span class="string">@4da/mcp-server</span>
         <div class="trust-grid">
           <div class="trust-card">
             <h3>Free means free</h3>
-            <p>No credit card. No account. No expiration. The full scoring engine with all 20+ sources, AI briefings via your own API key, and the complete STREETS Playbook, forever. Signal features include a 14-day trial.</p>
+            <p>No credit card. No account. No expiration. The full scoring engine with all 20+ sources and AI briefings via your own API key, forever. Signal features include a 14-day trial.</p>
           </div>
           <div class="trust-card">
             <h3>Source available</h3>
@@ -1339,7 +1327,7 @@ npx <span class="string">@4da/mcp-server</span>
       <div class="faq-list">
         <details>
           <summary>What is 4DA in one sentence?</summary>
-          <div class="faq-answer"><strong>4DA reads the internet for developers &mdash; privately, locally &mdash; and gets sharper every day.</strong> It's a Tauri 2.0 desktop app that scans 20+ sources, scores everything against your actual codebase, and rejects the 99% that isn't for you.</div>
+          <div class="faq-answer"><strong>4DA reads the internet for developers &mdash; privately, locally &mdash; and gets sharper every day.</strong> It's a Tauri 2.0 desktop app that scans 20+ sources, scores everything against your actual codebase, and rejects what isn't for you &mdash; 92% of incoming content, measured across 9 developer personas.</div>
         </details>
         <details>
           <summary>How does it get sharper?</summary>
@@ -1359,7 +1347,7 @@ npx <span class="string">@4da/mcp-server</span>
         </details>
         <details>
           <summary>What happens if I never pay?</summary>
-          <div class="faq-answer">Nothing changes. The free tier includes all 20+ sources, the full 5-axis scoring engine, AI daily briefings (BYOK), behavior learning, the MCP server with 14 tools, the complete STREETS Playbook (all 7 modules), and the CLI. The free tier never expires. Signal features include a 14-day trial so you can evaluate before subscribing. Most individual developers will never need Signal.</div>
+          <div class="faq-answer">Nothing changes. The free tier includes all 20+ sources, the full 5-axis scoring engine, AI daily briefings (BYOK), behavior learning, the MCP server with 14 tools, and the CLI. The free tier never expires. Signal features include a 14-day trial so you can evaluate before subscribing. Most individual developers will never need Signal.</div>
         </details>
         <details>
           <summary>What's the confirmation gate?</summary>
@@ -1371,7 +1359,7 @@ npx <span class="string">@4da/mcp-server</span>
         </details>
         <details>
           <summary>Is it open source?</summary>
-          <div class="faq-answer">Source available under FSL-1.1-Apache-2.0. You can read, audit, and self-host. The license converts to Apache 2.0 (full open source) after 3 years. The MCP server is MIT licensed.</div>
+          <div class="faq-answer">Source available under FSL-1.1-Apache-2.0. You can read, audit, and self-host. The license converts to Apache 2.0 (full open source) after 3 years. The MCP server is Apache-2.0 licensed.</div>
         </details>
       </div>
     </div>
@@ -1389,8 +1377,8 @@ npx <span class="string">@4da/mcp-server</span>
 
       <!-- STREETS compact callout -->
       <div style="margin-top: 48px; padding: 24px 28px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); display: inline-block; text-align: center; max-width: 560px;">
-        <p style="font-size: 15px; color: var(--text-secondary); margin: 0 0 4px; line-height: 1.6;">4DA surfaces the signal. <strong style="color: var(--text);">STREETS</strong> teaches you to convert it into revenue. 7 modules, all free inside 4DA.</p>
-        <a href="streets.html" style="font-family: 'JetBrains Mono', monospace; font-size: 13px;">Explore the STREETS Playbook &rarr;</a>
+        <p style="font-size: 15px; color: var(--text-secondary); margin: 0 0 4px; line-height: 1.6;">4DA surfaces the signal. <strong style="color: var(--text);">STREETS</strong> teaches you to convert it into revenue. 7 modules, free on the open web &mdash; no download required.</p>
+        <a href="streets.html" style="font-family: 'JetBrains Mono', monospace; font-size: 13px;">Read the STREETS Playbook &rarr;</a>
       </div>
 
       <div style="margin-top: 32px;">

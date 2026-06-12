@@ -3,7 +3,6 @@
   "outputDirectory": "_site",
   "rewrites": [
     { "source": "/streets", "destination": "/streets.html" },
-    { "source": "/streets/activate", "destination": "/streets/activate.html" },
     { "source": "/merch", "destination": "/merch.html" },
     { "source": "/privacy", "destination": "/privacy.html" },
     { "source": "/terms", "destination": "/terms.html" },

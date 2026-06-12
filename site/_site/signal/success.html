@@ -92,10 +92,10 @@
       autocapture: true
     });
   </script>
-  <!-- Crisp Customer Support -->
+  <!-- Crisp Customer Support — uncomment when CRISP_WEBSITE_ID is configured
   <script type="text/javascript">
     window.$crisp=[];
-    window.CRISP_WEBSITE_ID="PASTE_YOUR_CRISP_WEBSITE_ID_HERE";
+    window.CRISP_WEBSITE_ID="YOUR_CRISP_WEBSITE_ID";
     $crisp.push(["safe", true]);
     (function(){
       var d=document;
@@ -105,6 +105,7 @@
       d.getElementsByTagName("head")[0].appendChild(s);
     })();
   </script>
+  -->
 </head>
 <body>
   
@@ -231,18 +232,17 @@
         return;
       }
 
-      // Webhook may not have fired yet — retry with increasing delays
-      // Total wait: ~24s (3+3+3+3+4+4+4s) which covers most Stripe webhook latencies
-      var delays = [3000, 3000, 3000, 3000, 4000, 4000, 4000];
-      for (var attempt = 0; attempt <= delays.length; attempt++) {
+      // Webhook may not have fired yet — retry a few times
+      for (var attempt = 0; attempt < 4; attempt++) {
         try {
           var ok = await fetchLicense('session_id=' + encodeURIComponent(sessionId));
           if (ok) return;
         } catch {}
-        if (attempt < delays.length) await new Promise(function(r) { setTimeout(r, delays[attempt]); });
+        // Wait before retrying (webhook needs time to process)
+        if (attempt < 3) await new Promise(function(r) { setTimeout(r, 2000); });
       }
 
-      showError('Your license key is being generated. This usually takes 10\u201330 seconds. Enter your purchase email below to retrieve it, or refresh this page.');
+      showError('License generation in progress. Enter your email below or try again in a moment.');
     })();
   </script>
 
