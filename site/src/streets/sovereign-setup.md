@@ -4,8 +4,28 @@ description: "Audit what you already own -- hardware, skills, tools, time -- and
 layout: streets-module.njk
 permalink: "/streets/sovereign-setup/"
 templateEngineOverride: md
+tags: ["streetsModule"]
+locale: "en"
+localeDir: "ltr"
+slug: "sovereign-setup"
+prevLabel: "Previous"
+nextLabel: "Next"
 nextUrl: "/streets/technical-moats/"
 nextTitle: "Module T: Technical Moats"
+alternates:
+  - { code: "en", label: "English", url: "/streets/sovereign-setup/" }
+  - { code: "ar", label: "العربية", url: "/streets/ar/sovereign-setup/" }
+  - { code: "de", label: "Deutsch", url: "/streets/de/sovereign-setup/" }
+  - { code: "es", label: "Español", url: "/streets/es/sovereign-setup/" }
+  - { code: "fr", label: "Français", url: "/streets/fr/sovereign-setup/" }
+  - { code: "hi", label: "हिन्दी", url: "/streets/hi/sovereign-setup/" }
+  - { code: "it", label: "Italiano", url: "/streets/it/sovereign-setup/" }
+  - { code: "ja", label: "日本語", url: "/streets/ja/sovereign-setup/" }
+  - { code: "ko", label: "한국어", url: "/streets/ko/sovereign-setup/" }
+  - { code: "pt-BR", label: "Português (BR)", url: "/streets/pt-BR/sovereign-setup/" }
+  - { code: "ru", label: "Русский", url: "/streets/ru/sovereign-setup/" }
+  - { code: "tr", label: "Türkçe", url: "/streets/tr/sovereign-setup/" }
+  - { code: "zh", label: "中文", url: "/streets/zh/sovereign-setup/" }
 ---
 # Module S: Sovereign Setup
 

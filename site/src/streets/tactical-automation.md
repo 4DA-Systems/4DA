@@ -4,10 +4,30 @@ description: "Delivery pipelines, self-serve onboarding, payment automation, and
 layout: streets-module.njk
 permalink: "/streets/tactical-automation/"
 templateEngineOverride: md
+tags: ["streetsModule"]
+locale: "en"
+localeDir: "ltr"
+slug: "tactical-automation"
+prevLabel: "Previous"
+nextLabel: "Next"
 prevUrl: "/streets/evolving-edge/"
 prevTitle: "Module E: Evolving Edge"
 nextUrl: "/streets/stacking-streams/"
 nextTitle: "Module S: Stacking Streams"
+alternates:
+  - { code: "en", label: "English", url: "/streets/tactical-automation/" }
+  - { code: "ar", label: "العربية", url: "/streets/ar/tactical-automation/" }
+  - { code: "de", label: "Deutsch", url: "/streets/de/tactical-automation/" }
+  - { code: "es", label: "Español", url: "/streets/es/tactical-automation/" }
+  - { code: "fr", label: "Français", url: "/streets/fr/tactical-automation/" }
+  - { code: "hi", label: "हिन्दी", url: "/streets/hi/tactical-automation/" }
+  - { code: "it", label: "Italiano", url: "/streets/it/tactical-automation/" }
+  - { code: "ja", label: "日本語", url: "/streets/ja/tactical-automation/" }
+  - { code: "ko", label: "한국어", url: "/streets/ko/tactical-automation/" }
+  - { code: "pt-BR", label: "Português (BR)", url: "/streets/pt-BR/tactical-automation/" }
+  - { code: "ru", label: "Русский", url: "/streets/ru/tactical-automation/" }
+  - { code: "tr", label: "Türkçe", url: "/streets/tr/tactical-automation/" }
+  - { code: "zh", label: "中文", url: "/streets/zh/tactical-automation/" }
 ---
 # Module T: Tactical Automation
 

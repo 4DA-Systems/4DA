@@ -4,8 +4,16 @@ description: "The companion market map: where developer income is moving in 2026
 layout: streets-module.njk
 permalink: "/streets/income-map/"
 templateEngineOverride: md
+tags: ["streetsModule"]
+locale: "en"
+localeDir: "ltr"
+slug: "income-map"
+prevLabel: "Previous"
+nextLabel: "Next"
 prevUrl: "/streets/stacking-streams/"
 prevTitle: "Module S: Stacking Streams"
+alternates:
+  - { code: "en", label: "English", url: "/streets/income-map/" }
 ---
 # The 2026 Developer Income Opportunity Map
 

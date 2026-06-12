@@ -4,10 +4,30 @@ description: "The operating system for shipping revenue-generating projects alon
 layout: streets-module.njk
 permalink: "/streets/execution-playbook/"
 templateEngineOverride: md
+tags: ["streetsModule"]
+locale: "en"
+localeDir: "ltr"
+slug: "execution-playbook"
+prevLabel: "Previous"
+nextLabel: "Next"
 prevUrl: "/streets/revenue-engines/"
 prevTitle: "Module R: Revenue Engines"
 nextUrl: "/streets/evolving-edge/"
 nextTitle: "Module E: Evolving Edge"
+alternates:
+  - { code: "en", label: "English", url: "/streets/execution-playbook/" }
+  - { code: "ar", label: "العربية", url: "/streets/ar/execution-playbook/" }
+  - { code: "de", label: "Deutsch", url: "/streets/de/execution-playbook/" }
+  - { code: "es", label: "Español", url: "/streets/es/execution-playbook/" }
+  - { code: "fr", label: "Français", url: "/streets/fr/execution-playbook/" }
+  - { code: "hi", label: "हिन्दी", url: "/streets/hi/execution-playbook/" }
+  - { code: "it", label: "Italiano", url: "/streets/it/execution-playbook/" }
+  - { code: "ja", label: "日本語", url: "/streets/ja/execution-playbook/" }
+  - { code: "ko", label: "한국어", url: "/streets/ko/execution-playbook/" }
+  - { code: "pt-BR", label: "Português (BR)", url: "/streets/pt-BR/execution-playbook/" }
+  - { code: "ru", label: "Русский", url: "/streets/ru/execution-playbook/" }
+  - { code: "tr", label: "Türkçe", url: "/streets/tr/execution-playbook/" }
+  - { code: "zh", label: "中文", url: "/streets/zh/execution-playbook/" }
 ---
 # Module E: Execution Playbook
 
