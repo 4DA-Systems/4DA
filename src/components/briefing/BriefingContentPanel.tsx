@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PulseSummary } from './PulseSummary';
 import { AttentionCards } from './AttentionCards';
 import { IntelligenceFeed } from './IntelligenceFeed';
@@ -41,6 +42,7 @@ export const BriefingContentPanel = memo(function BriefingContentPanel({
   onRecordClick,
   setActiveView,
 }: BriefingContentPanelProps) {
+  const { t } = useTranslation();
   const signalIds = useMemo(
     () => new Set(signalItems.map(s => s.id)),
     [signalItems],
@@ -67,6 +69,19 @@ export const BriefingContentPanel = memo(function BriefingContentPanel({
 
   return (
     <>
+      {/* Honest mode badge: when the brief was served by the deterministic
+          floor (no AI provider, or a model too weak), say so at the brief
+          itself — not just buried in Settings — so the user never mistakes
+          the grounded template for AI synthesis (F-27). */}
+      {briefing.model === 'deterministic' && (
+        <p
+          className="text-xs text-text-muted border border-border rounded-md px-2.5 py-1.5"
+          data-testid="brief-deterministic-badge"
+        >
+          {t('settings.ai.briefFloorNoLlm')}
+        </p>
+      )}
+
       {/* Zone 1: The Pulse — one-sentence summary */}
       <PulseSummary
         results={results}
