@@ -256,11 +256,17 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
         phase === 'celebrating' ? (profileEmpty ? `Scan complete: ${totalCount} items analyzed` : `Analysis complete: ${relevantCount} relevant items found`) :
         'Completing'
       }
-      className={`fixed inset-0 z-40 bg-bg-primary flex flex-col items-center justify-center transition-opacity duration-300 ${
+      className={`fixed inset-0 z-40 bg-bg-primary overflow-y-auto transition-opacity duration-300 ${
         phase === 'fading' ? 'opacity-0' : 'opacity-100'
       }`}
     >
-      {renderContent()}
+      {/* min-h-full + the parent's overflow-y-auto: centered when the content
+          fits, scrollable when it doesn't (the celebration step overflows on
+          short windows — same idiom as Onboarding.tsx). Centering on the
+          scroll container itself would clip the top edge unreachably. */}
+      <div className="min-h-full flex flex-col items-center justify-center py-8">
+        {renderContent()}
+      </div>
     </div>
   );
 }
