@@ -7,9 +7,9 @@
  * `scheduler_status` tool) can render: every unit, its cadence, and when it last ran.
  */
 
-import { createScheduler, type SchedulerJobView } from "./core";
-import { createFreshness } from "./freshness";
-import { buildRefreshers } from "./refreshers";
+import { createScheduler, type SchedulerJobView } from "./core.js";
+import { createFreshness } from "./freshness.js";
+import { buildRefreshers } from "./refreshers.js";
 
 export interface InitSchedulerOpts {
   enabled: boolean;
