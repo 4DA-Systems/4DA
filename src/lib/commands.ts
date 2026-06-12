@@ -74,6 +74,8 @@ import type {
 import type { PersonalizedLesson as PersonalizedLessonType } from '../types/personalization';
 import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
 import type { BlindSpotTeaser } from '../../src-tauri/bindings/bindings/BlindSpotTeaser';
+import type { CalibrationSprintCard } from '../../src-tauri/bindings/bindings/CalibrationSprintCard';
+import type { CalibrationSprintStatus } from '../../src-tauri/bindings/bindings/CalibrationSprintStatus';
 
 // ============================================================================
 // Preemption & Intelligence Types — Intelligence Reconciliation Phase 3
@@ -321,6 +323,9 @@ interface CommandMap {
   taste_test_finalize: { params: Record<string, never>; result: TasteProfileSummary };
   taste_test_is_calibrated: { params: Record<string, never>; result: boolean };
   taste_test_get_profile: { params: Record<string, never>; result: TasteProfileSummary | null };
+  get_calibration_sprint_items: { params: Record<string, never>; result: CalibrationSprintCard[] };
+  record_calibration_sprint_response: { params: { sourceItemId: number; response: string }; result: void };
+  get_calibration_sprint_status: { params: Record<string, never>; result: CalibrationSprintStatus };
 
   // -- User Context & Interests --
   get_user_context: { params: Record<string, never>; result: UserContext };

@@ -23,6 +23,7 @@ import { CriticalAlertBanner } from './components/CriticalAlertBanner';
 import { LicenseRecoveryBanner } from './components/LicenseRecoveryBanner';
 import { BackgroundRefreshBanner } from './components/BackgroundRefreshBanner';
 import { TrialExpiryBanner } from './components/TrialExpiryBanner';
+import { CalibrationNudgeBanner } from './components/calibration/CalibrationNudgeBanner';
 
 // Lazy-loaded non-critical-path components
 const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
@@ -306,6 +307,8 @@ function App() {
         <BackgroundRefreshBanner />
         {/* Trial expiry announcement — final 4 days, dismissible per remaining day */}
         <TrialExpiryBanner />
+        {/* Calibration nudge — one-time, dismissible, only for uncalibrated installs */}
+        <CalibrationNudgeBanner />
 
         {/* View Tab Bar */}
         <ViewTabBar />
