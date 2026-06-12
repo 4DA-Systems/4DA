@@ -4,10 +4,30 @@ description: "8 concrete ways developers earn independent income -- validation f
 layout: streets-module.njk
 permalink: "/streets/revenue-engines/"
 templateEngineOverride: md
+tags: ["streetsModule"]
+locale: "en"
+localeDir: "ltr"
+slug: "revenue-engines"
+prevLabel: "Previous"
+nextLabel: "Next"
 prevUrl: "/streets/technical-moats/"
 prevTitle: "Module T: Technical Moats"
 nextUrl: "/streets/execution-playbook/"
 nextTitle: "Module E: Execution Playbook"
+alternates:
+  - { code: "en", label: "English", url: "/streets/revenue-engines/" }
+  - { code: "ar", label: "العربية", url: "/streets/ar/revenue-engines/" }
+  - { code: "de", label: "Deutsch", url: "/streets/de/revenue-engines/" }
+  - { code: "es", label: "Español", url: "/streets/es/revenue-engines/" }
+  - { code: "fr", label: "Français", url: "/streets/fr/revenue-engines/" }
+  - { code: "hi", label: "हिन्दी", url: "/streets/hi/revenue-engines/" }
+  - { code: "it", label: "Italiano", url: "/streets/it/revenue-engines/" }
+  - { code: "ja", label: "日本語", url: "/streets/ja/revenue-engines/" }
+  - { code: "ko", label: "한국어", url: "/streets/ko/revenue-engines/" }
+  - { code: "pt-BR", label: "Português (BR)", url: "/streets/pt-BR/revenue-engines/" }
+  - { code: "ru", label: "Русский", url: "/streets/ru/revenue-engines/" }
+  - { code: "tr", label: "Türkçe", url: "/streets/tr/revenue-engines/" }
+  - { code: "zh", label: "中文", url: "/streets/zh/revenue-engines/" }
 ---
 # Module R: Revenue Engines
 

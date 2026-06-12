@@ -4,10 +4,30 @@ description: "Compound income architecture: how streams interact, when to add vs
 layout: streets-module.njk
 permalink: "/streets/stacking-streams/"
 templateEngineOverride: md
+tags: ["streetsModule"]
+locale: "en"
+localeDir: "ltr"
+slug: "stacking-streams"
+prevLabel: "Previous"
+nextLabel: "Next"
 prevUrl: "/streets/tactical-automation/"
 prevTitle: "Module T: Tactical Automation"
 nextUrl: "/streets/income-map/"
 nextTitle: "The 2026 Developer Income Map"
+alternates:
+  - { code: "en", label: "English", url: "/streets/stacking-streams/" }
+  - { code: "ar", label: "العربية", url: "/streets/ar/stacking-streams/" }
+  - { code: "de", label: "Deutsch", url: "/streets/de/stacking-streams/" }
+  - { code: "es", label: "Español", url: "/streets/es/stacking-streams/" }
+  - { code: "fr", label: "Français", url: "/streets/fr/stacking-streams/" }
+  - { code: "hi", label: "हिन्दी", url: "/streets/hi/stacking-streams/" }
+  - { code: "it", label: "Italiano", url: "/streets/it/stacking-streams/" }
+  - { code: "ja", label: "日本語", url: "/streets/ja/stacking-streams/" }
+  - { code: "ko", label: "한국어", url: "/streets/ko/stacking-streams/" }
+  - { code: "pt-BR", label: "Português (BR)", url: "/streets/pt-BR/stacking-streams/" }
+  - { code: "ru", label: "Русский", url: "/streets/ru/stacking-streams/" }
+  - { code: "tr", label: "Türkçe", url: "/streets/tr/stacking-streams/" }
+  - { code: "zh", label: "中文", url: "/streets/zh/stacking-streams/" }
 ---
 # Module S: Stacking Streams
 

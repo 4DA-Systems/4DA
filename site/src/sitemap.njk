@@ -6,14 +6,9 @@ eleventyExcludeFromCollections: true
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://4da.ai/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
   <url><loc>https://4da.ai/streets</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://4da.ai/streets/sovereign-setup/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://4da.ai/streets/technical-moats/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://4da.ai/streets/revenue-engines/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://4da.ai/streets/execution-playbook/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://4da.ai/streets/evolving-edge/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://4da.ai/streets/tactical-automation/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://4da.ai/streets/stacking-streams/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://4da.ai/streets/income-map/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+{%- for p in collections.streetsModule %}
+  <url><loc>https://4da.ai{{ p.url }}</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+{%- endfor %}
   <url><loc>https://4da.ai/signal</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://4da.ai/framework</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>https://4da.ai/merch</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
