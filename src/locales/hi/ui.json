@@ -1474,7 +1474,7 @@
   "onboarding.apiKeys.xApiSkipHint": "अगर आपके पास X डेवलपर खाता नहीं है तो इसे छोड़ दें। आप बाद में सेटिंग्स में जोड़ सकते हैं।",
   "onboarding.choice.continueHint": "AI प्रदाता, स्टैक, रुचियाँ कॉन्फ़िगर करें",
   "onboarding.choice.scanProjects": "मेरे प्रोजेक्ट स्कैन करें",
-  "onboarding.choice.scanProjectsDesc": "100% लोकल — कुछ भी आपकी मशीन से बाहर नहीं जाता। लगभग एक मिनट में 4DA को आपके असली स्टैक के अनुरूप ढालता है।",
+  "onboarding.choice.scanProjectsDesc": "100% लोकल — कुछ भी आपकी मशीन से बाहर नहीं जाता। 4DA को आपके असली स्टैक के अनुरूप ढालता है।",
   "onboarding.choice.scanRecommended": "अनुशंसित",
   "onboarding.choice.scanning": "आपके प्रोजेक्ट स्कैन हो रहे हैं… यह आपके डिवाइस पर ही रहता है",
   "onboarding.choice.keywordOnly": "अभी नहीं — डिफ़ॉल्ट उपयोग करें",

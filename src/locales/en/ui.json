@@ -681,7 +681,7 @@
   "onboarding.choice.continueSetup": "Continue full setup",
   "onboarding.choice.continueHint": "Configure AI provider, stack, interests",
   "onboarding.choice.scanProjects": "Scan my projects",
-  "onboarding.choice.scanProjectsDesc": "100% local — nothing ever leaves your machine. Personalizes 4DA to your real stack in about a minute.",
+  "onboarding.choice.scanProjectsDesc": "100% local — nothing ever leaves your machine. Personalizes 4DA to your real stack.",
   "onboarding.choice.scanRecommended": "Recommended",
   "onboarding.choice.scanning": "Scanning your projects… this stays on your device",
   "onboarding.choice.keywordOnly": "Not now — use defaults",

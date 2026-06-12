@@ -675,7 +675,7 @@
   "onboarding.choice.continueSetup": "继续设置",
   "onboarding.choice.continueHint": "配置AI提供商、技术栈、兴趣",
   "onboarding.choice.scanProjects": "扫描我的项目",
-  "onboarding.choice.scanProjectsDesc": "100% 本地——任何数据都不会离开你的设备。约一分钟即可让 4DA 适配你真实的技术栈。",
+  "onboarding.choice.scanProjectsDesc": "100% 本地——任何数据都不会离开你的设备。让 4DA 适配你真实的技术栈。",
   "onboarding.choice.scanRecommended": "推荐",
   "onboarding.choice.scanning": "正在扫描你的项目……此过程仅在你的设备上进行",
   "onboarding.choice.keywordOnly": "暂时不用——使用默认设置",

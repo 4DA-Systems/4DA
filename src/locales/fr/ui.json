@@ -680,7 +680,7 @@
   "onboarding.choice.continueSetup": "Continuer la configuration",
   "onboarding.choice.continueHint": "Configurer le fournisseur IA, stack, centres d'intérêt",
   "onboarding.choice.scanProjects": "Analyser mes projets",
-  "onboarding.choice.scanProjectsDesc": "100 % local — rien ne quitte jamais votre machine. Personnalise 4DA selon votre stack réelle en une minute environ.",
+  "onboarding.choice.scanProjectsDesc": "100 % local — rien ne quitte jamais votre machine. Personnalise 4DA selon votre stack réelle.",
   "onboarding.choice.scanRecommended": "Recommandé",
   "onboarding.choice.scanning": "Analyse de vos projets… cela reste sur votre appareil",
   "onboarding.choice.keywordOnly": "Pas maintenant — utiliser les valeurs par défaut",

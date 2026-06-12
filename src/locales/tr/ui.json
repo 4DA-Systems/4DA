@@ -1457,7 +1457,7 @@
   "onboarding.apiKeys.xApiSkipHint": "X geliştirici hesabınız yoksa bunu atlayın. Daha sonra Ayarlar'da ekleyebilirsiniz.",
   "onboarding.choice.continueHint": "AI sağlayıcı, yığın, ilgi alanlarını yapılandır",
   "onboarding.choice.scanProjects": "Projelerimi tara",
-  "onboarding.choice.scanProjectsDesc": "%100 yerel — hiçbir şey cihazınızdan asla ayrılmaz. 4DA’yı yaklaşık bir dakikada gerçek yığınınıza göre kişiselleştirir.",
+  "onboarding.choice.scanProjectsDesc": "%100 yerel — hiçbir şey cihazınızdan asla ayrılmaz. 4DA’yı gerçek yığınınıza göre kişiselleştirir.",
   "onboarding.choice.scanRecommended": "Önerilen",
   "onboarding.choice.scanning": "Projeleriniz taranıyor… bu, cihazınızda kalır",
   "onboarding.choice.keywordOnly": "Şimdi değil — varsayılanları kullan",

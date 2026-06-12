@@ -35,7 +35,7 @@ export const PersonalizeNudge = memo(function PersonalizeNudge({
         <p className="text-xs text-text-secondary mb-3">
           {t(
             'onboarding.choice.scanProjectsDesc',
-            '100% local — nothing ever leaves your machine. Personalizes 4DA to your real stack in about a minute.',
+            '100% local — nothing ever leaves your machine. Personalizes 4DA to your real stack.',
           )}
         </p>
         {isScanning ? (
