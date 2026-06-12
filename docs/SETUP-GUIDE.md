@@ -14,7 +14,7 @@ Everything you need to configure 4DA, fix common issues, and get the most out of
 6. [Context Discovery (ACE)](#context-discovery-ace)
 7. [Intelligence System](#intelligence-system)
 8. [License Activation](#license-activation)
-9. [STREETS Playbook](#streets-playbook)
+9. [STREETS Playbook (on the web)](#streets-playbook-on-the-web)
 10. [Keyboard Shortcuts](#keyboard-shortcuts)
 11. [Troubleshooting](#troubleshooting)
 
@@ -141,7 +141,6 @@ Enter your job title or role (e.g., "Senior Rust Developer", "Full-Stack Enginee
 
 Your tech stack is the most important personalization signal. It affects:
 - Which content scores higher
-- How the STREETS Playbook is personalized
 - What appears in your Developer DNA
 - Decision Windows and tech radar entries
 
@@ -254,11 +253,11 @@ This method also removes the technology from your interests and decision history
 5. Click the red **Remove** button
 
 This cleans the technology from three places:
-- **Tech stack** (primary storage, affects scoring and playbook)
+- **Tech stack** (primary storage, affects scoring)
 - **Interests** (may have been auto-seeded by ACE)
 - **Decisions** (supersedes the tech_choice decision record)
 
-After removal, the STREETS Playbook will regenerate without the incorrect technology on your next visit.
+After removal, scoring and Developer DNA reflect the corrected stack from the next analysis cycle.
 
 > **Tip:** Auto-detected tech decisions show an amber banner: *"Some tech choices were auto-detected from your local projects."* Use the Remove button on any that don't belong.
 
@@ -315,7 +314,7 @@ Go to the **Calibrate** tab to review and tune scoring accuracy. Rate items as r
 
 | Tier | Price | Features |
 |------|-------|----------|
-| **Free** | $0 | All sources, scoring, learning, AI briefings, STREETS Playbook (all 7 modules) |
+| **Free** | $0 | All sources, scoring, learning, AI briefings |
 | **Signal** | Paid | Everything in Free + Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Natural Language Search, Semantic Shifts, Project Health |
 | **Team** | Paid | Everything in Signal + team features |
 
@@ -333,42 +332,24 @@ Your license persists across restarts. You should never need to re-enter it.
 Your current tier is shown:
 - In the header bar (green **PRO** badge)
 - In **Settings > General > License** section
-- In **Settings > General > STREETS Membership**
 
 ---
 
-## STREETS Playbook
+## STREETS Playbook (on the web)
 
-The STREETS Playbook is 4DA's built-in independence curriculum. It's personalized to your actual tech stack, hardware, and profile.
+The STREETS Playbook — 7 modules on turning developer skills into independent income — is published free on the open web. It is not a tab inside the app; 4DA stays focused on intelligence (Brief, Preemption, Blind Spots, Signal).
 
-### Modules
+| Module | Name | Read it |
+|--------|------|---------|
+| **S** | Sovereign Setup | [4da.ai/streets/sovereign-setup](https://4da.ai/streets/sovereign-setup/) |
+| **T** | Technical Moats | [4da.ai/streets/technical-moats](https://4da.ai/streets/technical-moats/) |
+| **R** | Revenue Engines | [4da.ai/streets/revenue-engines](https://4da.ai/streets/revenue-engines/) |
+| **E** | Execution Playbook | [4da.ai/streets/execution-playbook](https://4da.ai/streets/execution-playbook/) |
+| **E** | Evolving Edge | [4da.ai/streets/evolving-edge](https://4da.ai/streets/evolving-edge/) |
+| **T** | Tactical Automation | [4da.ai/streets/tactical-automation](https://4da.ai/streets/tactical-automation/) |
+| **S** | Stacking Streams | [4da.ai/streets/stacking-streams](https://4da.ai/streets/stacking-streams/) |
 
-| Module | Name | Focus |
-|--------|------|-------|
-| **S** | Sovereign Setup | Configure your rig as a business asset (FREE) |
-| **T** | Technical Moats | Build what competitors can't easily copy |
-| **R** | Revenue Engines | Eight ways to turn skills into income |
-| **E1** | Execution Playbook | Ship your first revenue engine |
-| **E2** | Evolving Edge | Stay ahead as markets shift |
-| **T2** | Tactical Automation | Automate your income streams |
-| **S2** | Stacking Streams | Combine engines for resilience |
-
-### Personalization Levels
-
-The Playbook adapts to you through 5 levels of personalization:
-
-1. **L1 — Interpolation**: Your tech stack, hardware specs, and profile data inserted into lessons
-2. **L2 — Conditionals**: Content branches based on your GPU tier, OS, LLM setup
-3. **L3 — Insight Cards**: Computed cards showing hardware benchmarks, stack fit, cost projections
-4. **L4 — Mirror Blocks**: Connections between your profile and lesson concepts
-5. **L5 — Temporal Blocks**: Content that changes based on what's new since your last visit
-
-### If Playbook Shows Incorrect Data
-
-The Playbook pulls your tech stack from the same profile data as everything else. If it references a technology you don't use:
-
-1. **Fix the source**: Remove the incorrect tech from **Settings > Profile > Tech Stack** or via **Insights > Decision Windows > Remove**
-2. **Revisit the lesson**: The Playbook regenerates personalized content on each visit using your current profile
+Bonus: [The 2026 Developer Income Map](https://4da.ai/streets/income-map/).
 
 ---
 
