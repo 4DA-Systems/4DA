@@ -76,7 +76,7 @@ The MCP server works standalone — no desktop app required. 14 tools for vulner
 | Signal Chains | — | Included |
 | Knowledge Gaps | — | Included |
 | Score Autopsy | — | Included |
-| Natural Language Search | — | Included |
+| Natural Language Search | Included (BYOK) | Included |
 
 Free is not a demo. It's the full intelligence engine with 20+ sources, AI briefings, and MCP integration. Signal adds compound intelligence features for developers who want the system to learn faster.
 
