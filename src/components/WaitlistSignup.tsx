@@ -302,8 +302,13 @@ function WaitlistContainer({
     return <div className="flex justify-center">{children}</div>;
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-      {children}
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+      {/* min-h-full wrapper: centered when the panel fits, scrollable when it
+          doesn't — centering on the scroll container would clip the top edge
+          unreachably (same idiom as FirstRunTransition/Onboarding). */}
+      <div className="min-h-full flex items-center justify-center p-4">
+        {children}
+      </div>
     </div>
   );
 }
