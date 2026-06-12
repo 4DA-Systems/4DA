@@ -314,8 +314,8 @@ Go to the **Calibrate** tab to review and tune scoring accuracy. Rate items as r
 
 | Tier | Price | Features |
 |------|-------|----------|
-| **Free** | $0 | All sources, scoring, learning, AI briefings |
-| **Signal** | Paid | Everything in Free + Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Natural Language Search, Semantic Shifts, Project Health |
+| **Free** | $0 | All sources, scoring, learning, AI briefings, natural language search (BYOK) |
+| **Signal** | Paid | Everything in Free + Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Semantic Shifts, Project Health |
 | **Team** | Paid | Everything in Signal + team features |
 
 ### Activating a License Key
