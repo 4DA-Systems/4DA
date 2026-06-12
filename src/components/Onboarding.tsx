@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { ThemeToggle } from './ThemeToggle';
 import type { Step } from './onboarding/types';
 import { WelcomeStep } from './onboarding/WelcomeStep';
 import { TasteTestStep } from './onboarding/TasteTestStep';
@@ -150,7 +151,6 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         persisted = true;
       } catch (e) {
         if (attempt === 1) {
-          // eslint-disable-next-line no-console
           console.error(
             'Could not save onboarding completion (disk full or settings locked?). ' +
               'The setup wizard will resume on next launch until this succeeds.',
@@ -199,6 +199,13 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           either. Uses the shared canonical change+persist path. */}
       <div className="absolute top-4 start-4 z-50">
         <LanguageSwitcher />
+      </div>
+
+      {/* Persistent theme toggle — pinned top-RIGHT, the mirror of the
+          language switcher. The void or paper is offered from the very
+          first screen, before any commitment. */}
+      <div className="absolute top-4 end-4 z-50">
+        <ThemeToggle />
       </div>
 
       {/* Progress indicator — hidden during choice gate */}
