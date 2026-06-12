@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ locale }}" dir="{{ localeDir }}">
 <head>
   {% include "head.njk" %}
   <title>{{ title }}</title>
@@ -7,6 +7,12 @@
   <meta name="description" content="{{ description }}">
   {% endif %}
   <link rel="canonical" href="https://4da.ai{{ page.url }}">
+  {% if alternates and alternates.length > 1 %}
+  {% for alt in alternates %}
+  <link rel="alternate" hreflang="{{ alt.code }}" href="https://4da.ai{{ alt.url }}">
+  {% endfor %}
+  <link rel="alternate" hreflang="x-default" href="https://4da.ai{{ alternates[0].url }}">
+  {% endif %}
   <meta property="og:title" content="{{ title }}">
   <meta property="og:description" content="{{ description }}">
   <meta property="og:type" content="article">
@@ -101,6 +107,19 @@
     footer { border-top: 1px solid var(--border); padding: 28px 24px 40px; text-align: center; font-size: 13px; color: var(--text-muted); }
     footer a { color: var(--text-secondary); text-decoration: none; margin: 0 10px; }
     footer a:hover { color: var(--text); }
+    .lang-switch {
+      max-width: 760px; margin: 0 auto; padding: 18px 24px 0;
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      font-size: 12px; font-family: 'JetBrains Mono', monospace;
+    }
+    .lang-switch a {
+      color: var(--text-muted); text-decoration: none;
+      border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px;
+    }
+    .lang-switch a:hover { color: var(--text); border-color: var(--accent); }
+    .lang-switch a.active { color: var(--accent); border-color: var(--accent); pointer-events: none; }
+    [dir="rtl"] article blockquote { border-left: none; border-right: 3px solid var(--accent); border-radius: 8px 0 0 8px; }
+    [dir="rtl"] article ul, [dir="rtl"] article ol { padding-left: 0; padding-right: 26px; }
     @media (max-width: 640px) {
       article h1 { font-size: 27px; }
       article h2 { font-size: 21px; }
@@ -133,6 +152,14 @@
     </div>
   </nav>
 
+  {% if alternates and alternates.length > 1 %}
+  <div class="lang-switch">
+    {% for alt in alternates %}
+    <a href="{{ alt.url }}"{% if alt.code == locale %} class="active"{% endif %} hreflang="{{ alt.code }}">{{ alt.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <article>
 {{ content | safe }}
   </article>
@@ -140,13 +167,13 @@
   <div class="module-pager">
     {% if prevUrl %}
     <a href="{{ prevUrl }}" class="pager-prev">
-      <span class="pager-label">&larr; Previous</span>
+      <span class="pager-label">&larr; {{ prevLabel }}</span>
       <span class="pager-title">{{ prevTitle }}</span>
     </a>
     {% endif %}
     {% if nextUrl %}
     <a href="{{ nextUrl }}" class="pager-next">
-      <span class="pager-label">Next &rarr;</span>
+      <span class="pager-label">{{ nextLabel }} &rarr;</span>
       <span class="pager-title">{{ nextTitle }}</span>
     </a>
     {% endif %}

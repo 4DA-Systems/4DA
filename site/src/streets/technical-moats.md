@@ -4,10 +4,30 @@ description: "Identify what makes your combination of skills hard to replicate, 
 layout: streets-module.njk
 permalink: "/streets/technical-moats/"
 templateEngineOverride: md
+tags: ["streetsModule"]
+locale: "en"
+localeDir: "ltr"
+slug: "technical-moats"
+prevLabel: "Previous"
+nextLabel: "Next"
 prevUrl: "/streets/sovereign-setup/"
 prevTitle: "Module S: Sovereign Setup"
 nextUrl: "/streets/revenue-engines/"
 nextTitle: "Module R: Revenue Engines"
+alternates:
+  - { code: "en", label: "English", url: "/streets/technical-moats/" }
+  - { code: "ar", label: "العربية", url: "/streets/ar/technical-moats/" }
+  - { code: "de", label: "Deutsch", url: "/streets/de/technical-moats/" }
+  - { code: "es", label: "Español", url: "/streets/es/technical-moats/" }
+  - { code: "fr", label: "Français", url: "/streets/fr/technical-moats/" }
+  - { code: "hi", label: "हिन्दी", url: "/streets/hi/technical-moats/" }
+  - { code: "it", label: "Italiano", url: "/streets/it/technical-moats/" }
+  - { code: "ja", label: "日本語", url: "/streets/ja/technical-moats/" }
+  - { code: "ko", label: "한국어", url: "/streets/ko/technical-moats/" }
+  - { code: "pt-BR", label: "Português (BR)", url: "/streets/pt-BR/technical-moats/" }
+  - { code: "ru", label: "Русский", url: "/streets/ru/technical-moats/" }
+  - { code: "tr", label: "Türkçe", url: "/streets/tr/technical-moats/" }
+  - { code: "zh", label: "中文", url: "/streets/zh/technical-moats/" }
 ---
 # Module T: Technical Moats
 

@@ -4,10 +4,30 @@ description: "Trend detection, pivot frameworks, and how to surface revenue-rele
 layout: streets-module.njk
 permalink: "/streets/evolving-edge/"
 templateEngineOverride: md
+tags: ["streetsModule"]
+locale: "en"
+localeDir: "ltr"
+slug: "evolving-edge"
+prevLabel: "Previous"
+nextLabel: "Next"
 prevUrl: "/streets/execution-playbook/"
 prevTitle: "Module E: Execution Playbook"
 nextUrl: "/streets/tactical-automation/"
 nextTitle: "Module T: Tactical Automation"
+alternates:
+  - { code: "en", label: "English", url: "/streets/evolving-edge/" }
+  - { code: "ar", label: "العربية", url: "/streets/ar/evolving-edge/" }
+  - { code: "de", label: "Deutsch", url: "/streets/de/evolving-edge/" }
+  - { code: "es", label: "Español", url: "/streets/es/evolving-edge/" }
+  - { code: "fr", label: "Français", url: "/streets/fr/evolving-edge/" }
+  - { code: "hi", label: "हिन्दी", url: "/streets/hi/evolving-edge/" }
+  - { code: "it", label: "Italiano", url: "/streets/it/evolving-edge/" }
+  - { code: "ja", label: "日本語", url: "/streets/ja/evolving-edge/" }
+  - { code: "ko", label: "한국어", url: "/streets/ko/evolving-edge/" }
+  - { code: "pt-BR", label: "Português (BR)", url: "/streets/pt-BR/evolving-edge/" }
+  - { code: "ru", label: "Русский", url: "/streets/ru/evolving-edge/" }
+  - { code: "tr", label: "Türkçe", url: "/streets/tr/evolving-edge/" }
+  - { code: "zh", label: "中文", url: "/streets/zh/evolving-edge/" }
 ---
 # Module E: Evolving Edge
 

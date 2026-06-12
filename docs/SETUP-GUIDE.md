@@ -323,14 +323,14 @@ Go to the **Calibrate** tab to review and tune scoring accuracy. Rate items as r
 1. Open **Settings > General** > scroll to **License** section
 2. Paste your license key (format: `XXXXXX-XXXXXX-XXXXXX-XXXXXX-XXXXXX-V3`)
 3. Click **Activate**
-4. You should see a green "Pro" badge appear
+4. You should see a gold **SIGNAL** badge appear in the header bar
 
 Your license persists across restarts. You should never need to re-enter it.
 
 ### Verifying Your Tier
 
 Your current tier is shown:
-- In the header bar (green **PRO** badge)
+- In the header bar (gold tier badge — **SIGNAL** when licensed, **SIGNAL TRIAL** during the 14-day trial, gray **FREE** otherwise)
 - In **Settings > General > License** section
 
 ---
@@ -350,6 +350,8 @@ The STREETS Playbook — 7 modules on turning developer skills into independent 
 | **S** | Stacking Streams | [4da.ai/streets/stacking-streams](https://4da.ai/streets/stacking-streams/) |
 
 Bonus: [The 2026 Developer Income Map](https://4da.ai/streets/income-map/).
+
+Every module is published in 13 languages (English, Arabic, German, Spanish, French, Hindi, Italian, Japanese, Korean, Portuguese (BR), Russian, Turkish, Chinese) — use the language switcher on any module page.
 
 ---
 
