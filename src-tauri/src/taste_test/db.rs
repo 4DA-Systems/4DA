@@ -239,6 +239,17 @@ pub fn generate_synthetic_feedback(
     )
     .context("Failed to ensure interactions table")?;
 
+    // Idempotency: a user who re-onboards (or whose onboarding-complete
+    // write failed and looped) retakes the taste test, and a plain INSERT
+    // would stack duplicate taste_test rows every time — inflating
+    // feedback_interaction_count and skewing bootstrap scoring. Clear the
+    // prior synthetic rows first so the latest test wins cleanly.
+    conn.execute(
+        "DELETE FROM interactions WHERE item_source = 'taste_test'",
+        [],
+    )
+    .context("Failed to clear prior synthetic taste feedback")?;
+
     let items = super::items::calibration_items();
     let mut inserted = 0usize;
 
@@ -439,5 +450,46 @@ mod tests {
             )
             .unwrap();
         assert_eq!(taste_source, 3, "All should have source 'taste_test'");
+    }
+
+    #[test]
+    fn regenerating_feedback_does_not_duplicate_rows() {
+        // Re-onboarding (or an onboarding-complete write loop) retakes the
+        // taste test. Synthetic rows must NOT stack — the latest test wins,
+        // so feedback_interaction_count stays honest. (Adversarial run,
+        // 2026-06-12.)
+        let conn = setup_test_db();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER,
+                action_type TEXT,
+                action_data TEXT,
+                item_topics TEXT,
+                item_source TEXT,
+                signal_strength REAL DEFAULT 0.5,
+                timestamp TEXT DEFAULT (datetime('now'))
+            );",
+        )
+        .unwrap();
+
+        let responses = vec![
+            (0, TasteResponse::Interested),
+            (1, TasteResponse::NotInterested),
+            (6, TasteResponse::StrongInterest),
+        ];
+        generate_synthetic_feedback(&conn, &responses).unwrap();
+        // Take it again — and again.
+        generate_synthetic_feedback(&conn, &responses).unwrap();
+        generate_synthetic_feedback(&conn, &responses).unwrap();
+
+        let taste_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM interactions WHERE item_source = 'taste_test'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(taste_rows, 3, "latest test wins; no duplicate stacking");
     }
 }
