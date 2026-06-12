@@ -2448,9 +2448,48 @@ fn now_millis() -> i64 {
 }
 
 /// Look up the installed version of a package from project_dependencies.
+/// Test-only seam for the consequence lookups below. Unit tests in this module
+/// must be hermetic: they install a thread-local in-memory connection (built
+/// from `setup_test_db()`, which mirrors the migrations schema) and the
+/// `cfg(test)` wrappers read ONLY that — never `crate::get_database()`. Before
+/// this seam existed, three tests passed solely because the operator's live
+/// corpus happened to contain matching security rows, and failed on any fresh
+/// checkout (pre-launch audit 2026-06-13).
+#[cfg(test)]
+pub(crate) mod test_support {
+    use rusqlite::Connection;
+    use std::cell::RefCell;
+
+    thread_local! {
+        static TEST_CONN: RefCell<Option<Connection>> = const { RefCell::new(None) };
+    }
+
+    /// Install the corpus stand-in for the current test thread.
+    pub(crate) fn install_test_conn(conn: Connection) {
+        TEST_CONN.with(|c| *c.borrow_mut() = Some(conn));
+    }
+
+    /// Run `f` against the installed stand-in, or None when a test never
+    /// installed one (lookups then behave as "no data" — deterministically).
+    pub(crate) fn with_test_conn<R>(f: impl FnOnce(&Connection) -> R) -> Option<R> {
+        TEST_CONN.with(|c| c.borrow().as_ref().map(f))
+    }
+}
+
 fn lookup_installed_version(dep_name: &str) -> Option<String> {
-    let db = crate::get_database().ok()?;
-    let conn = db.conn.lock();
+    #[cfg(test)]
+    {
+        test_support::with_test_conn(|conn| lookup_installed_version_conn(conn, dep_name)).flatten()
+    }
+    #[cfg(not(test))]
+    {
+        let db = crate::get_database().ok()?;
+        let conn = db.conn.lock();
+        lookup_installed_version_conn(&conn, dep_name)
+    }
+}
+
+fn lookup_installed_version_conn(conn: &rusqlite::Connection, dep_name: &str) -> Option<String> {
     conn.query_row(
         "SELECT version FROM project_dependencies WHERE package_name = ?1 AND version IS NOT NULL LIMIT 1",
         params![dep_name],
@@ -2479,12 +2518,27 @@ struct DepSignalBreakdown {
 }
 
 fn count_signal_types_for_dep(dep_name: &str) -> DepSignalBreakdown {
+    #[cfg(test)]
+    {
+        test_support::with_test_conn(|conn| count_signal_types_for_dep_conn(conn, dep_name))
+            .unwrap_or_default()
+    }
+    #[cfg(not(test))]
+    {
+        let db = match crate::get_database() {
+            Ok(db) => db,
+            Err(_) => return DepSignalBreakdown::default(),
+        };
+        let conn = db.conn.lock();
+        count_signal_types_for_dep_conn(&conn, dep_name)
+    }
+}
+
+fn count_signal_types_for_dep_conn(
+    conn: &rusqlite::Connection,
+    dep_name: &str,
+) -> DepSignalBreakdown {
     let mut b = DepSignalBreakdown::default();
-    let db = match crate::get_database() {
-        Ok(db) => db,
-        Err(_) => return b,
-    };
-    let conn = db.conn.lock();
     let sql = "SELECT content_type, COUNT(*) FROM source_items
                WHERE title LIKE '%' || ?1 || '%'
                  AND created_at >= datetime('now', '-30 days')
@@ -2977,19 +3031,7 @@ pub(crate) fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFee
     }
 
     // Filter out dismissed items (persisted in blind_spot_dismissals table)
-    let dismissed_ids: std::collections::HashSet<String> =
-        if let Ok(conn) = crate::open_db_connection() {
-            conn.prepare("SELECT item_id FROM blind_spot_dismissals")
-                .ok()
-                .and_then(|mut stmt| {
-                    stmt.query_map([], |row| row.get::<_, String>(0))
-                        .ok()
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
-                .unwrap_or_default()
-        } else {
-            std::collections::HashSet::new()
-        };
+    let dismissed_ids = load_dismissed_ids();
 
     let items: Vec<EvidenceItem> = items
         .into_iter()
@@ -3024,6 +3066,34 @@ fn build_feed_with_existing_score(items: Vec<EvidenceItem>, score: Option<f32>) 
     let mut feed = EvidenceFeed::from_items(items);
     feed.score = score;
     feed
+}
+
+/// Dismissed blind-spot ids. Same hermetic seam as the consequence lookups:
+/// in tests this reads ONLY the thread-local stand-in (empty unless a test
+/// seeds dismissals), never the operator's live database.
+fn load_dismissed_ids() -> std::collections::HashSet<String> {
+    #[cfg(test)]
+    {
+        test_support::with_test_conn(load_dismissed_ids_conn).unwrap_or_default()
+    }
+    #[cfg(not(test))]
+    {
+        match crate::open_db_connection() {
+            Ok(conn) => load_dismissed_ids_conn(&conn),
+            Err(_) => std::collections::HashSet::new(),
+        }
+    }
+}
+
+fn load_dismissed_ids_conn(conn: &rusqlite::Connection) -> std::collections::HashSet<String> {
+    conn.prepare("SELECT item_id FROM blind_spot_dismissals")
+        .ok()
+        .and_then(|mut stmt| {
+            stmt.query_map([], |row| row.get::<_, String>(0))
+                .ok()
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        })
+        .unwrap_or_default()
 }
 
 // ============================================================================
@@ -3517,6 +3587,25 @@ mod tests {
         )
         .expect("schema create");
         conn
+    }
+
+    /// Hermetic stand-in for the live corpus: installs a thread-local DB that
+    /// the consequence lookups (count_signal_types_for_dep /
+    /// lookup_installed_version) read in tests instead of the operator's real
+    /// database. Seeds one fresh tokio security advisory so consequence
+    /// elevation (b.security > 0 -> at-least-High urgency) fires
+    /// deterministically — previously these tests passed only when the live
+    /// corpus happened to contain such rows, and failed on fresh checkouts.
+    fn install_seeded_corpus() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO source_items (title, source_type, content_type, created_at)
+             VALUES ('tokio 1.49.1 fixes RUSTSEC-2026-0042 broadcast UAF', 'cve',
+                     'security_advisory', datetime('now', '-2 days'))",
+            [],
+        )
+        .expect("seed security signal");
+        super::test_support::install_test_conn(conn);
     }
 
     fn insert_project_dep(
@@ -4131,11 +4220,26 @@ mod tests {
 
     #[test]
     fn uncovered_dep_maps_to_gap_kind() {
+        // Critical urgency requires a security signal in the corpus
+        // (b.security > 0 keeps the risk-based Critical; an all-zero
+        // breakdown would cap at Medium) — seed it explicitly.
+        install_seeded_corpus();
         let item = uncovered_dep_to_evidence_item(&uncov_sample());
         assert_eq!(item.kind, crate::evidence::EvidenceKind::Gap);
         assert_eq!(item.urgency, crate::evidence::Urgency::Critical);
         assert!(item.affected_deps.contains(&"tokio".to_string()));
         assert_eq!(item.affected_projects.len(), 2);
+        assert!(crate::evidence::validate_item(&item).is_ok());
+    }
+
+    #[test]
+    fn uncovered_dep_without_consequence_signals_caps_at_medium() {
+        // The other side of consequence elevation: when the corpus holds NO
+        // signals for the dep (no override installed -> deterministic zero
+        // breakdown), pure unread volume must not masquerade as Critical.
+        let item = uncovered_dep_to_evidence_item(&uncov_sample());
+        assert_eq!(item.kind, crate::evidence::EvidenceKind::Gap);
+        assert_eq!(item.urgency, crate::evidence::Urgency::Medium);
         assert!(crate::evidence::validate_item(&item).is_ok());
     }
 
@@ -4168,6 +4272,7 @@ mod tests {
 
     #[test]
     fn report_converts_to_feed_with_score() {
+        install_seeded_corpus(); // uncovered tokio stays Critical via its security signal
         let feed = blind_spot_report_to_feed(&report_sample());
         // 1 uncovered + 1 stale + 1 missed + 1 recommendation
         assert_eq!(feed.total, 4);
@@ -4203,6 +4308,7 @@ mod tests {
 
     #[test]
     fn rebuild_feed_preserves_score_and_recounts_items() {
+        install_seeded_corpus(); // uncovered tokio stays Critical via its security signal
         let items = vec![
             uncovered_dep_to_evidence_item(&uncov_sample()),
             recommendation_to_evidence_item(&rec_sample(), 0),
