@@ -31,7 +31,7 @@ export const DecisionForm = memo(function DecisionForm({
           value={form.decision_type}
           onChange={(e) => onFormChange({ ...form, decision_type: e.target.value })}
           aria-label={t('decisions.typeLabel', 'Decision type')}
-          className="px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg focus:outline-none focus:border-white/30"
+          className="px-3 py-2 text-xs bg-bg-tertiary text-text-primary border border-border rounded-lg focus:outline-none focus:border-text-primary/30"
         >
           {DECISION_TYPES.map((dtype) => (
             <option key={dtype} value={dtype}>
@@ -45,7 +45,7 @@ export const DecisionForm = memo(function DecisionForm({
           aria-label={t('decisions.subject')}
           value={form.subject}
           onChange={(e) => onFormChange({ ...form, subject: e.target.value })}
-          className="flex-1 px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-white/30"
+          className="flex-1 px-3 py-2 text-xs bg-bg-tertiary text-text-primary border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-text-primary/30"
         />
       </div>
       <textarea
@@ -55,7 +55,7 @@ export const DecisionForm = memo(function DecisionForm({
         onChange={(e) => onFormChange({ ...form, decision: e.target.value })}
         rows={2}
         aria-required="true"
-        className="w-full px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-white/30 resize-none"
+        className="w-full px-3 py-2 text-xs bg-bg-tertiary text-text-primary border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-text-primary/30 resize-none"
       />
       <textarea
         placeholder={t('decisions.rationaleOptional')}
@@ -63,7 +63,7 @@ export const DecisionForm = memo(function DecisionForm({
         value={form.rationale}
         onChange={(e) => onFormChange({ ...form, rationale: e.target.value })}
         rows={2}
-        className="w-full px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-white/30 resize-none"
+        className="w-full px-3 py-2 text-xs bg-bg-tertiary text-text-primary border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-text-primary/30 resize-none"
       />
       <div className="flex items-center gap-3">
         <label className="text-xs text-text-muted">
@@ -83,7 +83,7 @@ export const DecisionForm = memo(function DecisionForm({
         <button
           onClick={onSubmit}
           disabled={isSubmitting || !form.subject.trim() || !form.decision.trim()}
-          className="px-4 py-2 text-xs bg-white text-black rounded-lg font-medium hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          className="px-4 py-2 text-xs bg-accent-primary text-bg-primary rounded-lg font-medium hover:bg-accent-primary-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           aria-label={t('decisions.saveDecision', 'Save decision')}
         >
           {t('action.save')}

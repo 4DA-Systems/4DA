@@ -187,7 +187,7 @@ export const BriefingView = memo(function BriefingView() {
             <p className="text-text-secondary text-sm">{t('error.generic')}</p>
             <button
               onClick={() => { void generateBriefing(); }}
-              className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
+              className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-text-primary/10 rounded transition-colors text-text-secondary"
               aria-label="Retry generating briefing"
             >
               {t('action.retry')}

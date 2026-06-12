@@ -39,7 +39,7 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
           role="alert"
           className="bg-bg-secondary border border-red-500/20 rounded-xl p-6"
         >
-          <h2 className="text-lg font-semibold text-white mb-2">
+          <h2 className="text-lg font-semibold text-text-primary mb-2">
             {i18n.t('error.viewFailed', {
               viewName: this.props.viewName,
             })}
@@ -49,7 +49,7 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
           </p>
           <button
             onClick={this.handleRetry}
-            className="px-4 py-2 text-sm font-medium bg-bg-tertiary text-white border border-border rounded-lg hover:bg-bg-secondary transition-colors"
+            className="px-4 py-2 text-sm font-medium bg-bg-tertiary text-text-primary border border-border rounded-lg hover:bg-bg-secondary transition-colors"
           >
             {i18n.t('error.retry')}
           </button>

@@ -85,13 +85,13 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="invite-dialog-title" className="relative bg-bg-secondary border border-border rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <h3 id="invite-dialog-title" className="text-sm font-medium text-white">
+          <h3 id="invite-dialog-title" className="text-sm font-medium text-text-primary">
             {t('settings.team.inviteMember', 'Invite Team Member')}
           </h3>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="w-7 h-7 rounded-lg bg-bg-tertiary text-text-muted hover:text-white hover:bg-border flex items-center justify-center transition-all"
+            className="w-7 h-7 rounded-lg bg-bg-tertiary text-text-muted hover:text-text-primary hover:bg-border flex items-center justify-center transition-all"
           >
             &times;
           </button>
@@ -147,7 +147,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
               <button
                 onClick={() => { void handleCreate(); }}
                 disabled={loading}
-                className="w-full px-4 py-2.5 text-sm font-medium text-white bg-success rounded-lg hover:bg-[#1DA34D] transition-colors disabled:opacity-50"
+                className="w-full px-4 py-2.5 text-sm font-medium text-text-primary bg-success rounded-lg hover:bg-[#1DA34D] transition-colors disabled:opacity-50"
               >
                 {loading
                   ? t('settings.team.generating', 'Generating...')
@@ -175,7 +175,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
                     data-invite-code
                     readOnly
                     value={inviteCode}
-                    className="w-full px-4 py-3 bg-bg-primary border border-success/30 rounded-lg text-center text-lg font-mono text-white tracking-[0.3em] select-all focus:outline-none"
+                    className="w-full px-4 py-3 bg-bg-primary border border-success/30 rounded-lg text-center text-lg font-mono text-text-primary tracking-[0.3em] select-all focus:outline-none"
                     onClick={e => (e.target as HTMLInputElement).select()}
                   />
                 </div>
@@ -203,7 +203,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
               {/* Generate Another */}
               <button
                 onClick={() => { setInviteCode(null); setExpiresAt(null); setError(null); }}
-                className="w-full px-4 py-2 text-xs text-text-secondary hover:text-white transition-colors"
+                className="w-full px-4 py-2 text-xs text-text-secondary hover:text-text-primary transition-colors"
               >
                 {t('settings.team.generateAnother', 'Generate Another Invite')}
               </button>

@@ -60,7 +60,7 @@ export const FactorBar = memo(function FactorBar({
         {/* Compare overlay */}
         {compareValue != null && (
           <div
-            className="absolute top-0 h-full border-e-2 border-white/40"
+            className="absolute top-0 h-full border-e-2 border-text-primary/40"
             style={{ left: `${getBarWidth({ ...factor, value: compareValue })}%` }}
           />
         )}

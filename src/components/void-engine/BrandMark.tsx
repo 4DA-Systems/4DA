@@ -18,6 +18,7 @@ import {
   faceNormalZ,
 } from "./math3d";
 import { deriveSignalVisuals } from "./signal-visuals";
+import { useTheme } from "../../lib/theme";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,8 +52,9 @@ type ProjFace = { points: string; depth: number; facing: number };
  */
 export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
   const filterId = useId().replace(/:/g, "");
+  const { isLight } = useTheme();
 
-  // Derive visual state from signal
+  // Derive visual state from signal (theme-aware: ink gold on paper)
   const {
     glowOpacity,
     edgeColor,
@@ -60,7 +62,7 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
     faceColor,
     stateLabel,
     rotSpeed,
-  } = useMemo(() => deriveSignalVisuals(signal), [signal]);
+  } = useMemo(() => deriveSignalVisuals(signal, isLight), [signal, isLight]);
 
   // ---------------------------------------------------------------------------
   // 3D animation loop
@@ -321,7 +323,7 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
                 : (signal?.signal_color_shift ?? 0) > 0.5
                   ? "var(--color-accent-gold)"
                   : (signal?.signal_color_shift ?? 0) < -0.3
-                    ? "#4A90D9"
+                    ? (isLight ? "#1D4ED8" : "#4A90D9")
                     : "var(--color-text-muted)",
             letterSpacing: "0.1em",
             textTransform: "uppercase",

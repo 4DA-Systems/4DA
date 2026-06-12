@@ -117,19 +117,19 @@ export const FreeBriefingPanel = memo(function FreeBriefingPanel({
               {freeBriefing.top_items?.slice(0, 8).map((item, i) => {
                 const pc = 'bg-text-muted';
                 return (
-                  <div key={`${item.source}:${item.title}`} className="flex items-start gap-2.5 py-1.5 px-2 rounded hover:bg-white/[0.02] transition-colors">
+                  <div key={`${item.source}:${item.title}`} className="flex items-start gap-2.5 py-1.5 px-2 rounded hover:bg-text-primary/[0.02] transition-colors">
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${pc}`} />
                     <div className="min-w-0 flex-1">
                       {item.url && isSafeUrl(item.url) ? (
                         <button
                           onClick={() => { void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(item.url!)).catch(() => window.open(item.url!, '_blank', 'noopener,noreferrer')); }}
                           aria-label={`${t('feedback.openLink')}: ${item.title}`}
-                          className="text-xs text-white hover:text-text-secondary text-start transition-colors leading-snug"
+                          className="text-xs text-text-primary hover:text-text-secondary text-start transition-colors leading-snug"
                         >
                           {getTranslated(`free_${i}`, item.title)}
                         </button>
                       ) : (
-                        <span className="text-xs text-white leading-snug">{getTranslated(`free_${i}`, item.title)}</span>
+                        <span className="text-xs text-text-primary leading-snug">{getTranslated(`free_${i}`, item.title)}</span>
                       )}
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[9px] font-mono text-text-muted">{item.source}</span>

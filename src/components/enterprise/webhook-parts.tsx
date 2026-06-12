@@ -106,7 +106,7 @@ export function WebhookCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1">
               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${status.dot}`} />
-              <h3 className="text-sm font-semibold text-white truncate">{webhook.name}</h3>
+              <h3 className="text-sm font-semibold text-text-primary truncate">{webhook.name}</h3>
               <span className={`text-[10px] ${status.color}`}>{status.label}</span>
             </div>
 
@@ -156,7 +156,7 @@ export function WebhookCard({
                   ? 'bg-green-500/20 border-green-500/30 text-green-400'
                   : testResult === false
                     ? 'bg-red-500/20 border-red-500/30 text-red-400'
-                    : 'bg-bg-tertiary border-border text-text-secondary hover:text-white hover:border-[#3A3A3A]'
+                    : 'bg-bg-tertiary border-border text-text-secondary hover:text-text-primary hover:border-[#3A3A3A]'
               } disabled:opacity-50`}
             >
               {testing
@@ -175,8 +175,8 @@ export function WebhookCard({
               aria-label={t('enterprise.webhooks.deliveries')}
               className={`px-2.5 py-1.5 text-[11px] rounded-lg border transition-all ${
                 expanded
-                  ? 'bg-white/10 border-white/20 text-white'
-                  : 'bg-bg-tertiary border-border text-text-secondary hover:text-white hover:border-[#3A3A3A]'
+                  ? 'bg-text-primary/10 border-text-primary/20 text-text-primary'
+                  : 'bg-bg-tertiary border-border text-text-secondary hover:text-text-primary hover:border-[#3A3A3A]'
               }`}
             >
               {t('enterprise.webhooks.deliveries')}
@@ -193,7 +193,7 @@ export function WebhookCard({
                 </button>
                 <button
                   onClick={onDeleteCancel}
-                  className="px-2.5 py-1.5 text-[11px] bg-bg-tertiary border border-border text-text-muted rounded-lg hover:text-white transition-all"
+                  className="px-2.5 py-1.5 text-[11px] bg-bg-tertiary border border-border text-text-muted rounded-lg hover:text-text-primary transition-all"
                 >
                   {t('enterprise.webhooks.cancelDelete')}
                 </button>

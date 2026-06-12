@@ -75,9 +75,9 @@ const MovementIndicator = memo(function MovementIndicator(
   { x, y, movement }: { x: number; y: number; movement: RadarEntry['movement'] },
 ) {
   const cx = x, cy = y - 9;
-  if (movement === 'up') return <polygon points={`${cx},${cy - 4} ${cx - 3},${cy + 2} ${cx + 3},${cy + 2}`} fill="#22C55E" />;
-  if (movement === 'down') return <polygon points={`${cx},${cy + 4} ${cx - 3},${cy - 2} ${cx + 3},${cy - 2}`} fill="#EF4444" />;
-  if (movement === 'new') return <polygon points={`${cx},${cy - 4} ${cx + 3},${cy} ${cx},${cy + 4} ${cx - 3},${cy}`} fill="#D4AF37" />;
+  if (movement === 'up') return <polygon points={`${cx},${cy - 4} ${cx - 3},${cy + 2} ${cx + 3},${cy + 2}`} className="fill-success" />;
+  if (movement === 'down') return <polygon points={`${cx},${cy + 4} ${cx - 3},${cy - 2} ${cx + 3},${cy - 2}`} className="fill-error" />;
+  if (movement === 'new') return <polygon points={`${cx},${cy - 4} ${cx + 3},${cy} ${cx},${cy + 4} ${cx - 3},${cy}`} className="fill-accent-gold" />;
   return null;
 });
 
@@ -92,16 +92,16 @@ const RadarTooltip = memo(function RadarTooltip({ tooltip }: { tooltip: TooltipS
     <g>
       <rect x={tx} y={ty} width="160"
         height={56 + Math.min(tooltip.entry.signals.length, 3) * 14}
-        rx="6" fill="#1F1F1F" stroke="#2A2A2A" strokeWidth="1" />
-      <text x={tx + 8} y={ty + 16} fill="#FFFFFF" fontSize="11" fontWeight="600">{tooltip.entry.name}</text>
-      <text x={tx + 8} y={ty + 30} fill="#A0A0A0" fontSize="9">{ringLabel} / {quadLabel}</text>
+        rx="6" className="fill-bg-tertiary stroke-border" strokeWidth="1" />
+      <text x={tx + 8} y={ty + 16} className="fill-text-primary" fontSize="11" fontWeight="600">{tooltip.entry.name}</text>
+      <text x={tx + 8} y={ty + 30} className="fill-text-secondary" fontSize="9">{ringLabel} / {quadLabel}</text>
       {/* eslint-disable i18next/no-literal-string */}
-      <text x={tx + 8} y={ty + 44} fill="#8A8A8A" fontSize="9">
+      <text x={tx + 8} y={ty + 44} className="fill-text-muted" fontSize="9">
         Score: {tooltip.entry.score.toFixed(2)} | Movement: {tooltip.entry.movement}
       </text>
       {/* eslint-enable i18next/no-literal-string */}
       {tooltip.entry.signals.slice(0, 3).map((signal, i) => (
-        <text key={i} x={tx + 8} y={ty + 58 + i * 14} fill="#8A8A8A" fontSize="8">
+        <text key={i} x={tx + 8} y={ty + 58 + i * 14} className="fill-text-muted" fontSize="8">
           - {signal.length > 28 ? signal.slice(0, 28) + '...' : signal}
         </text>
       ))}
@@ -152,13 +152,13 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
         )}
 
         {/* Crosshair lines */}
-        <line x1={CX} y1={CX - 290} x2={CX} y2={CY + 290} stroke="#2A2A2A" strokeWidth="1" />
-        <line x1={CX - 290} y1={CY} x2={CX + 290} y2={CY} stroke="#2A2A2A" strokeWidth="1" />
+        <line x1={CX} y1={CX - 290} x2={CX} y2={CY + 290} className="stroke-border" strokeWidth="1" />
+        <line x1={CX - 290} y1={CY} x2={CX + 290} y2={CY} className="stroke-border" strokeWidth="1" />
 
         {/* Concentric rings */}
         {RING_KEYS.map((ring) => (
           <circle key={ring} cx={CX} cy={CY} r={RING_RADII[ring]}
-            fill="none" stroke="#2A2A2A" strokeWidth="1" />
+            fill="none" className="stroke-border" strokeWidth="1" />
         ))}
 
         {/* Ring labels */}
@@ -166,7 +166,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
           const prevR = i === 0 ? 0 : RING_RADII[RING_KEYS[i - 1]!]!;
           return (
             <text key={ring} x={CX + (prevR + RING_RADII[ring]!) / 2} y={CY - 6}
-              textAnchor="middle" fill="#8A8A8A" fontSize="9" fontWeight="500">
+              textAnchor="middle" className="fill-text-muted" fontSize="9" fontWeight="500">
               {t(RING_LABEL_KEYS[i]!)}
             </text>
           );
@@ -175,7 +175,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
         {/* Clickable quadrant labels */}
         {(Object.keys(QUAD_LABEL_POS) as QuadrantKey[]).map((quad) => (
           <text key={quad} x={QUAD_LABEL_POS[quad].x} y={QUAD_LABEL_POS[quad].y}
-            textAnchor="middle" fill={zoomedQuadrant === quad ? '#D4AF37' : '#A0A0A0'}
+            textAnchor="middle" className={zoomedQuadrant === quad ? 'fill-accent-gold' : 'fill-text-secondary'}
             fontSize="11" fontWeight="600"
             onClick={(e) => { e.stopPropagation(); handleQuadrantClick(quad); }}
             style={{ cursor: 'pointer', transition: 'fill 0.2s' }}>
@@ -202,17 +202,17 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
               onClick={(e) => { e.stopPropagation(); handleDotClick(entry); }}
               style={{ cursor: 'pointer' }}
               className={isGlowing ? 'radar-glow' : undefined}>
-              <circle cx={cx} cy={cy} r={r} fill="#FFFFFF" opacity="0.9" style={{ transition }} />
+              <circle cx={cx} cy={cy} r={r} className="fill-text-primary" opacity="0.9" style={{ transition }} />
               {inStack && (
                 <circle cx={cx} cy={cy} r={r + 3} fill="none"
-                  stroke="#D4AF37" strokeWidth="2" opacity="0.8" style={{ transition }} />
+                  className="stroke-accent-gold" strokeWidth="2" opacity="0.8" style={{ transition }} />
               )}
               <circle cx={cx} cy={cy} r={r + 5} fill="transparent" style={{ transition }} />
               {mounted && entry.movement !== 'stable' && (
                 <MovementIndicator x={pos.x} y={pos.y} movement={entry.movement} />
               )}
               {isZoomed && mounted && (
-                <text x={pos.x + r + 4} y={pos.y + 3} fill="#A0A0A0" fontSize="8"
+                <text x={pos.x + r + 4} y={pos.y + 3} className="fill-text-secondary" fontSize="8"
                   fontWeight="500" style={{ pointerEvents: 'none' }}>
                   {entry.name.length > 12 ? entry.name.slice(0, 11) + '\u2026' : entry.name}
                 </text>
@@ -226,7 +226,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
 
       {isZoomed && (
         <button onClick={handleBackClick}
-          className="absolute top-2 start-2 px-2 py-1 text-[10px] rounded bg-bg-tertiary text-text-secondary border border-border hover:text-white hover:border-text-muted transition-colors">
+          className="absolute top-2 start-2 px-2 py-1 text-[10px] rounded bg-bg-tertiary text-text-secondary border border-border hover:text-text-primary hover:border-text-muted transition-colors">
           {t('techRadar.backToFull')}
         </button>
       )}

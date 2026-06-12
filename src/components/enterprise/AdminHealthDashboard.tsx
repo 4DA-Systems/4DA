@@ -97,7 +97,7 @@ export function AdminHealthDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-white">
+          <h3 className="text-sm font-medium text-text-primary">
             {t('enterprise.health.title', 'System Health')}
           </h3>
           <p className="text-[10px] text-text-muted mt-0.5">
@@ -120,7 +120,7 @@ export function AdminHealthDashboard() {
           <p className="text-[10px] text-text-muted">{t('enterprise.health.relay', 'Relay')}</p>
           <div className="flex items-center gap-2 mt-1">
             <div className={`w-2 h-2 rounded-full ${relayHealth.connected ? 'bg-success' : 'bg-error'}`} />
-            <span className="text-xs text-white">
+            <span className="text-xs text-text-primary">
               {relayHealth.connected ? t('enterprise.health.connected', 'Connected') : t('enterprise.health.disconnected', 'Disconnected')}
             </span>
           </div>
@@ -134,7 +134,7 @@ export function AdminHealthDashboard() {
         {/* Database */}
         <div className="bg-bg-primary rounded-lg p-3 border border-border/50">
           <p className="text-[10px] text-text-muted">{t('enterprise.health.database', 'Database')}</p>
-          <p className="text-lg font-semibold text-white mt-1">
+          <p className="text-lg font-semibold text-text-primary mt-1">
             {diagnostics ? `${diagnostics.database_size_mb.toFixed(1)} MB` : '--'}
           </p>
           <p className="text-[10px] text-text-muted">
@@ -147,7 +147,7 @@ export function AdminHealthDashboard() {
           <p className="text-[10px] text-text-muted">{t('enterprise.health.embeddings', 'Embeddings')}</p>
           <div className="flex items-center gap-2 mt-1">
             <div className={`w-2 h-2 rounded-full ${diagnostics?.embedding_operational ? 'bg-success' : 'bg-[var(--color-accent-action)]'}`} />
-            <span className="text-xs text-white">
+            <span className="text-xs text-text-primary">
               {diagnostics?.embedding_model || t('enterprise.health.notConfigured', 'Not configured')}
             </span>
           </div>
@@ -173,7 +173,7 @@ export function AdminHealthDashboard() {
               >
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${statusColor(source.status)}`} />
-                  <span className="text-xs text-white font-mono">{source.source_type}</span>
+                  <span className="text-xs text-text-primary font-mono">{source.source_type}</span>
                 </div>
                 <div className="flex items-center gap-3 text-[10px] text-text-muted">
                   <span>{source.items_fetched} {t('enterprise.health.fetched', 'fetched')}</span>
@@ -198,7 +198,7 @@ export function AdminHealthDashboard() {
           </h4>
           <div className="grid grid-cols-4 gap-2">
             {[
-              { label: t('enterprise.health.activeSeats', 'Active Seats'), value: orgAnalytics.active_seats, color: 'text-white' },
+              { label: t('enterprise.health.activeSeats', 'Active Seats'), value: orgAnalytics.active_seats, color: 'text-text-primary' },
               { label: t('enterprise.health.signalsPeriod', 'Signals/Period'), value: orgAnalytics.signals_detected, color: 'text-accent-gold' },
               { label: t('enterprise.health.resolved', 'Resolved'), value: orgAnalytics.signals_resolved, color: 'text-success' },
               { label: t('enterprise.health.decisions', 'Decisions'), value: orgAnalytics.decisions_tracked, color: 'text-[#818CF8]' },

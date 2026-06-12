@@ -97,9 +97,9 @@ export function SourceBrowser() {
 
   const tierBorderClass = (tier: string) => {
     switch (tier) {
-      case 'core': return 'border-[#D4AF37]/60';
-      case 'ecosystem': return 'border-white/30';
-      default: return 'border-[#2A2A2A]';
+      case 'core': return 'border-accent-gold/60';
+      case 'ecosystem': return 'border-text-primary/30';
+      default: return 'border-border';
     }
   };
 
@@ -113,17 +113,17 @@ export function SourceBrowser() {
 
   if (loading && feeds.length === 0) {
     return (
-      <div className="bg-[#1F1F1F] rounded-lg p-4 border border-[#2A2A2A]">
+      <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#D4AF37]/20 rounded-lg flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 bg-accent-gold/20 rounded-lg flex items-center justify-center flex-shrink-0">
             {/* eslint-disable-next-line i18next/no-literal-string */}
-            <span className="text-[#D4AF37] text-sm">&#x2731;</span>
+            <span className="text-accent-gold text-sm">&#x2731;</span>
           </div>
           <div>
-            <h3 className="text-white font-medium text-sm">
+            <h3 className="text-text-primary font-medium text-sm">
               {t('settings.sourceBrowser.title', 'Curated Sources')}
             </h3>
-            <p className="text-[#8A8A8A] text-xs animate-pulse">
+            <p className="text-text-muted text-xs animate-pulse">
               {t('settings.sourceBrowser.loading', 'Loading catalog...')}
             </p>
           </div>
@@ -133,18 +133,18 @@ export function SourceBrowser() {
   }
 
   return (
-    <div className="bg-[#1F1F1F] rounded-lg p-4 border border-[#2A2A2A]">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       {/* Header */}
       <div className="flex items-start gap-3 mb-3">
-        <div className="w-8 h-8 bg-[#D4AF37]/20 rounded-lg flex items-center justify-center flex-shrink-0">
+        <div className="w-8 h-8 bg-accent-gold/20 rounded-lg flex items-center justify-center flex-shrink-0">
           {/* eslint-disable-next-line i18next/no-literal-string */}
-          <span className="text-[#D4AF37] text-sm">&#x2731;</span>
+          <span className="text-accent-gold text-sm">&#x2731;</span>
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-white font-medium text-sm">
+          <h3 className="text-text-primary font-medium text-sm">
             {t('settings.sourceBrowser.title', 'Curated Sources')}
           </h3>
-          <p className="text-[#8A8A8A] text-xs mt-0.5">
+          <p className="text-text-muted text-xs mt-0.5">
             {t('settings.sourceBrowser.subtitle', '{{enabled}} of {{total}} sources enabled', {
               enabled: enabledCount,
               total: feeds.length,
@@ -160,12 +160,12 @@ export function SourceBrowser() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder={t('settings.sourceBrowser.search', 'Search sources...')}
-          className="w-full px-3 py-1.5 text-xs bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
+          className="w-full px-3 py-1.5 text-xs bg-bg-primary border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-gold/50 transition-colors"
         />
       </div>
 
       {/* Domain filter bar */}
-      <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-[#2A2A2A]">
+      <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-[var(--color-border)]">
         <DomainPill
           label={t('settings.sourceBrowser.all', 'All')}
           active={activeDomain === 'all'}
@@ -189,7 +189,7 @@ export function SourceBrowser() {
 
       {/* Feed grid */}
       {filtered.length === 0 ? (
-        <p className="text-center text-[#8A8A8A] text-xs py-6">
+        <p className="text-center text-text-muted text-xs py-6">
           {t('settings.sourceBrowser.noResults', 'No sources match your search.')}
         </p>
       ) : (
@@ -230,9 +230,9 @@ function DomainPill({
       className={`px-2.5 py-1 text-[11px] rounded-full whitespace-nowrap transition-colors flex-shrink-0 font-medium ${
         active
           ? accent
-            ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/40'
-            : 'bg-white/10 text-white border border-white/20'
-          : 'bg-[#141414] text-[#A0A0A0] border border-[#2A2A2A] hover:text-white hover:border-white/20'
+            ? 'bg-accent-gold/20 text-accent-gold border border-accent-gold/40'
+            : 'bg-text-primary/10 text-text-primary border border-text-primary/20'
+          : 'bg-bg-secondary text-text-secondary border border-border hover:text-text-primary hover:border-text-primary/20'
       }`}
     >
       {label}
@@ -257,34 +257,34 @@ function FeedCard({
 }) {
   return (
     <div
-      className={`relative p-3 rounded-lg border bg-[#141414] transition-colors ${tierBorderClass(feed.tier)} hover:bg-[#1F1F1F]`}
+      className={`relative p-3 rounded-lg border bg-bg-secondary transition-colors ${tierBorderClass(feed.tier)} hover:bg-bg-tertiary`}
       onMouseEnter={() => onHover(feed.id)}
       onMouseLeave={() => onHover(null)}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-white text-xs font-semibold truncate">{feed.name}</span>
+            <span className="text-text-primary text-xs font-semibold truncate">{feed.name}</span>
             <span
               className={`px-1.5 py-0.5 text-[9px] rounded font-medium border ${
                 feed.tier === 'core'
-                  ? 'text-[#D4AF37] border-[#D4AF37]/40 bg-[#D4AF37]/10'
+                  ? 'text-accent-gold border-accent-gold/40 bg-accent-gold/10'
                   : feed.tier === 'ecosystem'
-                    ? 'text-white/80 border-white/20 bg-white/5'
-                    : 'text-[#8A8A8A] border-[#2A2A2A] bg-[#0A0A0A]'
+                    ? 'text-text-primary/80 border-text-primary/20 bg-text-primary/5'
+                    : 'text-text-muted border-border bg-bg-primary'
               }`}
             >
               {tierLabel(feed.tier)}
             </span>
           </div>
-          <p className="text-[#8A8A8A] text-[11px] leading-tight line-clamp-2 mb-1.5">
+          <p className="text-text-muted text-[11px] leading-tight line-clamp-2 mb-1.5">
             {feed.description}
           </p>
           <div className="flex flex-wrap gap-1">
             {feed.domains.map((d) => (
               <span
                 key={d}
-                className="px-1.5 py-0.5 text-[9px] rounded bg-[#0A0A0A] text-[#A0A0A0] border border-[#2A2A2A]"
+                className="px-1.5 py-0.5 text-[9px] rounded bg-bg-primary text-text-secondary border border-border"
               >
                 {d}
               </span>
@@ -295,7 +295,7 @@ function FeedCard({
         <button
           onClick={() => void onToggle(feed.url, feed.enabled)}
           className={`relative w-9 h-[18px] rounded-full transition-colors flex-shrink-0 mt-0.5 ${
-            feed.enabled ? 'bg-[#22C55E]/40' : 'bg-[#2A2A2A]'
+            feed.enabled ? 'bg-success/40' : 'bg-bg-tertiary'
           }`}
           aria-label={feed.enabled ? `Disable ${feed.name}` : `Enable ${feed.name}`}
         >
@@ -308,8 +308,8 @@ function FeedCard({
       </div>
       {/* Hover tooltip with editorial + frequency */}
       {hovered && (
-        <div className="absolute bottom-full left-3 mb-1 px-2 py-1 rounded bg-[#0A0A0A] border border-[#2A2A2A] shadow-lg z-10 whitespace-nowrap">
-          <span className="text-[10px] text-[#A0A0A0]">
+        <div className="absolute bottom-full left-3 mb-1 px-2 py-1 rounded bg-bg-primary border border-border shadow-lg z-10 whitespace-nowrap">
+          <span className="text-[10px] text-text-secondary">
             {editorialLabel(feed.editorial_model)} &middot; {frequencyLabel(feed.expected_frequency_days ?? 7)}
           </span>
         </div>

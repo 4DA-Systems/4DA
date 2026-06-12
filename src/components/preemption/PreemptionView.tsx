@@ -135,7 +135,7 @@ const PreemptionView = memo(function PreemptionView() {
   return (
     <div className="space-y-5" role="tabpanel" id="view-panel-preemption" aria-labelledby="tab-preemption">
       <header>
-        <h1 className="text-xl font-semibold text-white tracking-tight">{t('preemption.title')}</h1>
+        <h1 className="text-xl font-semibold text-text-primary tracking-tight">{t('preemption.title')}</h1>
         <p className="text-sm text-text-muted mt-1">{t('preemption.subtitle')}</p>
       </header>
 
@@ -149,7 +149,7 @@ const PreemptionView = memo(function PreemptionView() {
           <div className="w-12 h-12 rounded-full bg-accent-gold/10 border border-accent-gold/20 flex items-center justify-center mb-1">
             <span className="text-accent-gold text-lg" aria-hidden="true">&#x1F512;</span>
           </div>
-          <p className="text-sm font-medium text-white">{t('preemption.locked.title')}</p>
+          <p className="text-sm font-medium text-text-primary">{t('preemption.locked.title')}</p>
           <p className="text-xs text-text-muted max-w-sm">{t('preemption.locked.subtitle')}</p>
           <div className="mt-1">
             <SignalUpgradeCTA />
@@ -175,7 +175,7 @@ const PreemptionView = memo(function PreemptionView() {
             {/* eslint-disable-next-line i18next/no-literal-string */}
             <span className="text-emerald-400 text-lg">&#x2713;</span>
           </div>
-          <p className="text-sm font-medium text-white mb-1">{t('preemption.empty.title')}</p>
+          <p className="text-sm font-medium text-text-primary mb-1">{t('preemption.empty.title')}</p>
           <p className="text-xs text-text-muted">{t('preemption.empty.subtitle')}</p>
         </div>
       )}
@@ -214,7 +214,7 @@ const PreemptionView = memo(function PreemptionView() {
               <button
                 type="button"
                 onClick={handleUndo}
-                className="text-xs font-medium text-amber-400 hover:text-white underline-offset-2 hover:underline transition-colors"
+                className="text-xs font-medium text-amber-400 hover:text-text-primary underline-offset-2 hover:underline transition-colors"
               >
                 {t('preemption.action.undo')}
               </button>

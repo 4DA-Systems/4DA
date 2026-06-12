@@ -3,6 +3,8 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import sunLogo from '../../assets/sun-logo.webp';
+import sunLogoLight from '../../assets/sun-logo-light.webp';
+import { useTheme } from '../../lib/theme';
 
 interface WelcomeStepProps {
   isAnimating: boolean;
@@ -12,6 +14,7 @@ interface WelcomeStepProps {
 
 export function WelcomeStep({ isAnimating, onNext, onSkip }: WelcomeStepProps) {
   const { t } = useTranslation();
+  const { isLight } = useTheme();
 
   // Enter key advances, Escape skips
   useEffect(() => {
@@ -27,10 +30,10 @@ export function WelcomeStep({ isAnimating, onNext, onSkip }: WelcomeStepProps) {
     <div className={`text-center transition-all duration-500 ${isAnimating ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
       {/* Language selector lives in the persistent top-left switcher rendered by
           Onboarding.tsx — present on every step, so no per-step picker here. */}
-      <div className="w-32 h-32 mx-auto mb-6 rounded-full overflow-hidden shadow-2xl ring-4 ring-orange-500/20">
-        <img src={sunLogo} alt="4DA" className="w-full h-full object-cover" />
+      <div className={`w-32 h-32 mx-auto mb-6 rounded-full overflow-hidden ${isLight ? '' : 'shadow-2xl ring-4 ring-orange-500/20'}`}>
+        <img src={isLight ? sunLogoLight : sunLogo} alt="4DA" className="w-full h-full object-cover" />
       </div>
-      <h1 className="text-4xl font-semibold text-white mb-3">{t('onboarding.welcome.title')}</h1>
+      <h1 className="text-4xl font-semibold text-text-primary mb-3">{t('onboarding.welcome.title')}</h1>
       <p className="text-xl text-orange-400 mb-2 font-medium">{t('onboarding.welcome.tagline')}</p>
       <p className="text-text-muted mb-8 max-w-md mx-auto">
         {t('onboarding.welcome.description')}
@@ -42,7 +45,7 @@ export function WelcomeStep({ isAnimating, onNext, onSkip }: WelcomeStepProps) {
               <span className="text-green-400">&#x1f512;</span>
             </span>
             <div>
-              <strong className="text-white block">{t('onboarding.welcome.privateTitle')}</strong>
+              <strong className="text-text-primary block">{t('onboarding.welcome.privateTitle')}</strong>
               <span className="text-sm">{t('onboarding.welcome.privateDesc')}</span>
             </div>
           </li>
@@ -51,7 +54,7 @@ export function WelcomeStep({ isAnimating, onNext, onSkip }: WelcomeStepProps) {
               <span className="text-orange-400">&#x26a1;</span>
             </span>
             <div>
-              <strong className="text-white block">{t('onboarding.welcome.autonomousTitle')}</strong>
+              <strong className="text-text-primary block">{t('onboarding.welcome.autonomousTitle')}</strong>
               <span className="text-sm">{t('onboarding.welcome.autonomousDesc')}</span>
             </div>
           </li>
@@ -60,7 +63,7 @@ export function WelcomeStep({ isAnimating, onNext, onSkip }: WelcomeStepProps) {
               <span className="text-blue-400">&#x1f511;</span>
             </span>
             <div>
-              <strong className="text-white block">{t('onboarding.welcome.byokTitle')}</strong>
+              <strong className="text-text-primary block">{t('onboarding.welcome.byokTitle')}</strong>
               <span className="text-sm">{t('onboarding.welcome.byokDesc')}</span>
             </div>
           </li>
@@ -77,7 +80,7 @@ export function WelcomeStep({ isAnimating, onNext, onSkip }: WelcomeStepProps) {
         <div className="mt-6">
           <button
             onClick={onSkip}
-            className="text-sm text-text-muted hover:text-white transition-colors"
+            className="text-sm text-text-muted hover:text-text-primary transition-colors"
           >
             {t('onboarding.welcome.skipToContent')}
           </button>

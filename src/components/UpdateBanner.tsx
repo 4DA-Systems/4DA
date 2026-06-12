@@ -24,12 +24,12 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
     <div className="fixed bottom-4 end-4 z-50 bg-bg-secondary border border-accent-gold/40 rounded-xl px-5 py-4 shadow-lg max-w-sm">
       <div className="flex items-start gap-3">
         <div className="flex-1">
-          <p className="text-sm font-medium text-white">{t('update.available', { version: update.version })}</p>
+          <p className="text-sm font-medium text-text-primary">{t('update.available', { version: update.version })}</p>
           <p className="text-xs text-text-secondary mt-1">
             {update.body ? update.body.slice(0, 100) : t('update.defaultBody')}
           </p>
         </div>
-        <button onClick={onDismiss} aria-label="Dismiss update notification" className="text-text-muted hover:text-white text-lg leading-none">&times;</button>
+        <button onClick={onDismiss} aria-label="Dismiss update notification" className="text-text-muted hover:text-text-primary text-lg leading-none">&times;</button>
       </div>
       <div className="flex gap-2 mt-3">
         {update.canAutoUpdate !== false ? (
@@ -37,7 +37,7 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
             onClick={onInstall}
             disabled={installing}
             aria-label={installing ? t('update.installing') : t('update.install')}
-            className="px-4 py-1.5 text-xs font-medium text-black bg-accent-gold rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
+            className="px-4 py-1.5 text-xs font-medium text-bg-primary bg-accent-gold rounded-lg hover:bg-accent-gold-hover transition-colors disabled:opacity-50"
           >
             {installing ? t('update.installing') : t('update.install')}
           </button>
@@ -46,7 +46,7 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
             href={`https://github.com/runyourempire/4DA/releases/latest`}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-1.5 text-xs font-medium text-black bg-accent-gold rounded-lg hover:bg-[#C4A030] transition-colors inline-block"
+            className="px-4 py-1.5 text-xs font-medium text-bg-primary bg-accent-gold rounded-lg hover:bg-accent-gold-hover transition-colors inline-block"
           >
             {t('update.download', 'Download Update')}
           </a>
@@ -54,7 +54,7 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
         <button
           onClick={onDismiss}
           aria-label={t('update.later')}
-          className="px-4 py-1.5 text-xs text-text-secondary hover:text-white transition-colors"
+          className="px-4 py-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors"
         >
           {t('update.later')}
         </button>

@@ -61,19 +61,19 @@ export function CalibrationNudgeBanner() {
       <div className="mx-4 mt-2 mb-1 bg-accent-gold/8 border border-accent-gold/25 rounded-lg overflow-hidden">
         <div className="px-3 py-2 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <span className="text-sm text-white">{t('calibrationView.nudge.title')}</span>
+            <span className="text-sm text-text-primary">{t('calibrationView.nudge.title')}</span>
             <p className="text-xs text-text-muted">{t('calibrationView.nudge.body')}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={openCalibration}
-              className="px-3 py-1.5 text-xs rounded bg-accent-gold/25 text-white hover:bg-accent-gold/35 transition-colors whitespace-nowrap"
+              className="px-3 py-1.5 text-xs rounded bg-accent-gold/25 text-text-primary hover:bg-accent-gold/35 transition-colors whitespace-nowrap"
             >
               {t('calibrationView.nudge.action')}
             </button>
             <button
               onClick={dismiss}
-              className="px-3 py-1.5 text-xs rounded bg-white/5 text-text-secondary hover:text-white hover:bg-white/10 transition-colors whitespace-nowrap"
+              className="px-3 py-1.5 text-xs rounded bg-text-primary/5 text-text-secondary hover:text-text-primary hover:bg-text-primary/10 transition-colors whitespace-nowrap"
             >
               {t('calibrationView.nudge.dismiss')}
             </button>

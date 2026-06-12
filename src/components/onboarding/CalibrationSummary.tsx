@@ -50,7 +50,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header */}
       <div className="text-center">
-        <h2 className="text-xl font-semibold text-white mb-2">{t('onboarding.calib.title')}</h2>
+        <h2 className="text-xl font-semibold text-text-primary mb-2">{t('onboarding.calib.title')}</h2>
         <p className="text-text-secondary text-sm">
           {t('onboarding.calib.basedOn', { count: summary.itemsShown, confidence: confidencePct })}
         </p>
@@ -61,7 +61,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
         <div className="text-xs text-text-muted uppercase tracking-wider mb-2">
           {t('onboarding.calib.developerProfile')}
         </div>
-        <h3 className="text-white font-medium text-lg mb-1">{summary.dominantPersonaName}</h3>
+        <h3 className="text-text-primary font-medium text-lg mb-1">{summary.dominantPersonaName}</h3>
         <p className="text-text-secondary text-sm">{summary.dominantPersonaDescription}</p>
       </div>
 
@@ -77,7 +77,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
                   <span className="text-xs text-text-secondary w-40 truncate">{pw.name}</span>
                   <div className="flex-1 bg-bg-tertiary rounded-full h-2 overflow-hidden">
                     <div
-                      className="bg-white h-full rounded-full transition-all duration-500"
+                      className="bg-accent-primary h-full rounded-full transition-all duration-500"
                       style={{ width: `${Math.round(pw.weight * 100)}%` }}
                     />
                   </div>
@@ -131,12 +131,12 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
               }
             }}
             placeholder={t('onboarding.calib.addPlaceholder')}
-            className="flex-1 bg-bg-primary border border-border rounded-md px-2.5 py-1.5 text-xs text-white placeholder-text-muted focus:border-orange-500 focus:outline-none"
+            className="flex-1 bg-bg-primary border border-border rounded-md px-2.5 py-1.5 text-xs text-text-primary placeholder-text-muted focus:border-orange-500 focus:outline-none"
           />
           <button
             onClick={addInterest}
             disabled={!draft.trim()}
-            className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary border border-border rounded-md hover:text-white hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary border border-border rounded-md hover:text-text-primary hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {t('onboarding.calib.add')}
           </button>

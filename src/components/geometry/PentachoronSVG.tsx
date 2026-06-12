@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { PENTACHORON } from './geometries';
+import { useGeometryPalette } from '../../lib/theme';
 
 type PV = { x: number; y: number; z: number };
 type PE = { x1: number; y1: number; x2: number; y2: number; depth: number };
@@ -59,10 +60,15 @@ interface PentachoronSVGProps {
  */
 export function PentachoronSVG({
   size = 180,
-  color = '#B8A860',
-  glowColor = '#C7B86E',
+  color: colorProp,
+  glowColor: glowColorProp,
   className,
 }: PentachoronSVGProps) {
+  const palette = useGeometryPalette();
+  // Pentachoron runs a softer gold than the other marks — keep that
+  // relationship in both themes.
+  const color = colorProp ?? (palette.isLight ? '#8F7118' : '#B8A860');
+  const glowColor = glowColorProp ?? (palette.isLight ? '#A8861D' : '#C7B86E');
   const filterId = useId().replace(/:/g, '');
   const frameRef = useRef(0);
   const rafRef = useRef(0);

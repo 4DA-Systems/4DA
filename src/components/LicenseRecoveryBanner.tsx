@@ -68,7 +68,7 @@ export function LicenseRecoveryBanner() {
             onClick={() => { setMode('email'); setError(''); }}
             className={`px-2 py-1 text-xs rounded transition-colors ${
               mode === 'email'
-                ? 'bg-white/10 text-text-primary'
+                ? 'bg-text-primary/10 text-text-primary'
                 : 'text-text-muted hover:text-text-secondary'
             }`}
           >
@@ -78,7 +78,7 @@ export function LicenseRecoveryBanner() {
             onClick={() => { setMode('key'); setError(''); }}
             className={`px-2 py-1 text-xs rounded transition-colors ${
               mode === 'key'
-                ? 'bg-white/10 text-text-primary'
+                ? 'bg-text-primary/10 text-text-primary'
                 : 'text-text-muted hover:text-text-secondary'
             }`}
           >
@@ -94,13 +94,13 @@ export function LicenseRecoveryBanner() {
               onChange={e => setEmail(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') void handleEmailRecover(); }}
               placeholder={t('license.recovery.emailPlaceholder', 'Purchase email address')}
-              className="flex-1 px-2 py-1.5 text-xs bg-bg-tertiary border border-border rounded text-text-primary placeholder:text-text-muted focus:outline-none focus:border-white/30"
+              className="flex-1 px-2 py-1.5 text-xs bg-bg-tertiary border border-border rounded text-text-primary placeholder:text-text-muted focus:outline-none focus:border-text-primary/30"
               disabled={licenseLoading}
             />
             <button
               onClick={() => void handleEmailRecover()}
               disabled={licenseLoading}
-              className="px-3 py-1.5 text-xs rounded bg-white/10 text-text-primary hover:bg-white/15 transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 text-xs rounded bg-text-primary/10 text-text-primary hover:bg-text-primary/15 transition-colors disabled:opacity-50"
             >
               {licenseLoading
                 ? t('license.recovery.recovering', 'Recovering...')
@@ -115,13 +115,13 @@ export function LicenseRecoveryBanner() {
               onChange={e => setLicenseKey(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') void handleKeyActivate(); }}
               placeholder={t('license.recovery.keyPlaceholder', 'Paste license key (4DA-... or BE3529-...)')}
-              className="flex-1 px-2 py-1.5 text-xs bg-bg-tertiary border border-border rounded text-text-primary placeholder:text-text-muted focus:outline-none focus:border-white/30 font-mono"
+              className="flex-1 px-2 py-1.5 text-xs bg-bg-tertiary border border-border rounded text-text-primary placeholder:text-text-muted focus:outline-none focus:border-text-primary/30 font-mono"
               disabled={licenseLoading}
             />
             <button
               onClick={() => void handleKeyActivate()}
               disabled={licenseLoading}
-              className="px-3 py-1.5 text-xs rounded bg-white/10 text-text-primary hover:bg-white/15 transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 text-xs rounded bg-text-primary/10 text-text-primary hover:bg-text-primary/15 transition-colors disabled:opacity-50"
             >
               {licenseLoading
                 ? t('license.recovery.activating', 'Activating...')

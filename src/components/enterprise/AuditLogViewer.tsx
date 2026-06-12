@@ -144,7 +144,7 @@ export function AuditLogViewer() {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-white">{t('enterprise.audit.title', 'Audit Log')}</h3>
+          <h3 className="text-sm font-medium text-text-primary">{t('enterprise.audit.title', 'Audit Log')}</h3>
           <span className="text-[10px] px-1.5 py-0.5 bg-success/15 text-success rounded font-medium">
             {t('enterprise.audit.badge', 'Enterprise')}
           </span>
@@ -153,7 +153,7 @@ export function AuditLogViewer() {
           onClick={handleRefresh}
           disabled={auditLoading}
           aria-label={t('enterprise.audit.refresh', 'Refresh audit log')}
-          className="p-1.5 text-text-muted hover:text-white rounded transition-colors disabled:opacity-50"
+          className="p-1.5 text-text-muted hover:text-text-primary rounded transition-colors disabled:opacity-50"
         >
           <svg className={`w-4 h-4 ${auditLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -164,12 +164,12 @@ export function AuditLogViewer() {
       {/* Summary stats */}
       {auditSummary && (
         <div className="flex items-center gap-4 mb-3 text-[11px] text-text-muted">
-          <span>{t('enterprise.audit.totalEvents', 'Total events')}: <span className="text-white font-medium">{auditSummary.total_events}</span></span>
+          <span>{t('enterprise.audit.totalEvents', 'Total events')}: <span className="text-text-primary font-medium">{auditSummary.total_events}</span></span>
           {mostActiveAction && (
-            <span>{t('enterprise.audit.topAction', 'Top action')}: <span className="text-white font-medium">{mostActiveAction[0]}</span></span>
+            <span>{t('enterprise.audit.topAction', 'Top action')}: <span className="text-text-primary font-medium">{mostActiveAction[0]}</span></span>
           )}
           {lastEvent && (
-            <span>{t('enterprise.audit.lastEvent', 'Last event')}: <span className="text-white font-medium">{formatRelativeTime(lastEvent.created_at)}</span></span>
+            <span>{t('enterprise.audit.lastEvent', 'Last event')}: <span className="text-text-primary font-medium">{formatRelativeTime(lastEvent.created_at)}</span></span>
           )}
         </div>
       )}
@@ -246,7 +246,7 @@ export function AuditLogViewer() {
                   </td>
                   <td className="py-2">
                     {hasDetails ? (
-                      <button onClick={() => toggleRow(entry.event_id)} aria-expanded={isExpanded} aria-label={t('enterprise.audit.toggleDetails', 'Toggle details')} className="text-text-muted hover:text-white transition-colors">
+                      <button onClick={() => toggleRow(entry.event_id)} aria-expanded={isExpanded} aria-label={t('enterprise.audit.toggleDetails', 'Toggle details')} className="text-text-muted hover:text-text-primary transition-colors">
                         {isExpanded ? '\u25BE' : '\u25B8'}
                       </button>
                     ) : (
@@ -281,7 +281,7 @@ export function AuditLogViewer() {
       {/* Load more */}
       {!auditLoading && auditEntries.length > 0 && auditEntries.length >= offset + PAGE_SIZE && (
         <div className="flex justify-center mt-3">
-          <button onClick={handleLoadMore} className="px-4 py-1.5 text-xs text-text-secondary border border-border rounded hover:text-white hover:border-success/30 transition-colors">
+          <button onClick={handleLoadMore} className="px-4 py-1.5 text-xs text-text-secondary border border-border rounded hover:text-text-primary hover:border-success/30 transition-colors">
             {t('enterprise.audit.loadMore', 'Load more')}
           </button>
         </div>
@@ -290,7 +290,7 @@ export function AuditLogViewer() {
       {/* Summary panel */}
       {auditSummary && (
         <div className="mt-4 border-t border-border pt-3">
-          <button onClick={() => setShowSummary(!showSummary)} aria-expanded={showSummary} className="flex items-center gap-1 text-xs text-text-muted hover:text-white transition-colors mb-2">
+          <button onClick={() => setShowSummary(!showSummary)} aria-expanded={showSummary} className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors mb-2">
             <span>{showSummary ? '\u25BE' : '\u25B8'}</span>
             <span className="font-medium">{t('enterprise.audit.summary', 'Summary')}</span>
           </button>

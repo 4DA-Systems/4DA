@@ -11,6 +11,8 @@
   "header.toReview": "на проверку",
   "header.inCorpus": "в корпусе",
   "header.summaryTooltip": "{{top}} на проверку · {{rel}} в корпусе",
+  "header.themeToggleToLight": "Переключить на светлую тему",
+  "header.themeToggleToDark": "Переключить на тёмную тему",
   "cmdk.placeholder": "Искать всё, что прочитал 4DA…",
   "cmdk.ariaLabel": "Поиск в 4DA",
   "cmdk.groupGoto": "Перейти к",

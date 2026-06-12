@@ -158,7 +158,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
                 onClick={() => { void handleWatchSuggestion(suggestion); }}
                 disabled={creatingSuggestion === suggestion.topic}
                 aria-label={`${t('search.watch', 'Watch')} ${suggestion.topic}`}
-                className="px-2 py-0.5 text-[10px] rounded bg-white/5 text-text-secondary hover:bg-white/10 hover:text-text-primary transition-all font-medium disabled:opacity-50"
+                className="px-2 py-0.5 text-[10px] rounded bg-text-primary/5 text-text-secondary hover:bg-text-primary/10 hover:text-text-primary transition-all font-medium disabled:opacity-50"
               >
                 {creatingSuggestion === suggestion.topic ? '...' : t('search.watch', 'Watch')}
               </button>
@@ -188,13 +188,13 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
           placeholder={t('search.watchPlaceholder', 'Watch a topic...')}
           aria-label={t('search.watchPlaceholder', 'Watch a topic...')}
           disabled={creatingCustom}
-          className="flex-1 px-3 py-1.5 text-sm bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:border-white/20 disabled:opacity-50"
+          className="flex-1 px-3 py-1.5 text-sm bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:border-text-primary/20 disabled:opacity-50"
         />
         <button
           onClick={() => { void handleCreateCustom(); }}
           disabled={creatingCustom || !customQuery.trim()}
           aria-label={t('search.createWatch', 'Create watch')}
-          className="px-3 py-1.5 text-xs rounded-lg bg-white/5 text-text-secondary hover:bg-white/10 hover:text-text-primary transition-all font-medium disabled:opacity-50"
+          className="px-3 py-1.5 text-xs rounded-lg bg-text-primary/5 text-text-secondary hover:bg-text-primary/10 hover:text-text-primary transition-all font-medium disabled:opacity-50"
         >
           {creatingCustom ? '...' : t('search.watch', 'Watch')}
         </button>

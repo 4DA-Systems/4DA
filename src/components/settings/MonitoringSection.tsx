@@ -29,7 +29,7 @@ function CloseToTrayToggle({ initialValue }: { initialValue: boolean }) {
   return (
     <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
       <div>
-        <span className="text-sm text-white">{t('settings.monitoring.closeToTray')}</span>
+        <span className="text-sm text-text-primary">{t('settings.monitoring.closeToTray')}</span>
         <p className="text-xs text-text-muted">{t('settings.monitoring.closeToTrayDescription')}</p>
       </div>
       <button
@@ -79,7 +79,7 @@ function LaunchAtStartupToggle() {
   return (
     <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
       <div>
-        <span className="text-sm text-white">{t('settings.monitoring.launchAtStartup', 'Launch at startup')}</span>
+        <span className="text-sm text-text-primary">{t('settings.monitoring.launchAtStartup', 'Launch at startup')}</span>
         <p className="text-xs text-text-muted">{t('settings.monitoring.launchAtStartupDescription', 'Start 4DA automatically when you log in')}</p>
         {regFailed && (
           <p className="text-xs text-red-400 mt-1">
@@ -164,7 +164,7 @@ function BackgroundRefreshToggle({ intervalMinutes }: { intervalMinutes: number 
   return (
     <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
       <div>
-        <span className="text-sm text-white">{t('settings.monitoring.backgroundRefresh', 'Refresh while 4DA is closed')}</span>
+        <span className="text-sm text-text-primary">{t('settings.monitoring.backgroundRefresh', 'Refresh while 4DA is closed')}</span>
         <p className="text-xs text-text-muted">
           {!supported
             ? t('settings.monitoring.backgroundRefreshUnsupported', 'Not available on this platform yet.')
@@ -182,7 +182,7 @@ function BackgroundRefreshToggle({ intervalMinutes }: { intervalMinutes: number 
             type="button"
             onClick={() => setExpanded((e) => !e)}
             aria-expanded={expanded}
-            className="mt-1.5 inline-flex items-center gap-1 text-xs text-text-secondary hover:text-white transition-colors"
+            className="mt-1.5 inline-flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary transition-colors"
           >
             {t('settings.monitoring.backgroundRefreshWhat', 'What this does')}
             <svg
@@ -274,7 +274,7 @@ function MorningBriefingSection() {
     <div className="space-y-3 p-3 bg-bg-secondary rounded-lg border border-border">
       <div className="flex items-center justify-between">
         <div>
-          <span className="text-sm text-white font-medium">
+          <span className="text-sm text-text-primary font-medium">
             {t('settings.monitoring.morningBriefing', 'Intelligence Briefing')}
           </span>
           <p className="text-xs text-text-muted">
@@ -304,12 +304,12 @@ function MorningBriefingSection() {
             type="time"
             value={time}
             onChange={(e) => { void updateTime(e.target.value); }}
-            className="px-2 py-1 bg-bg-primary border border-border rounded text-sm text-white focus:border-orange-500 focus:outline-none"
+            className="px-2 py-1 bg-bg-primary border border-border rounded text-sm text-text-primary focus:border-orange-500 focus:outline-none"
           />
           <button
             onClick={() => { void previewBriefing(); }}
             disabled={previewing}
-            className="ms-auto px-3 py-1 text-xs bg-bg-primary border border-border text-text-secondary rounded hover:text-white hover:border-orange-500/30 transition-all disabled:opacity-50"
+            className="ms-auto px-3 py-1 text-xs bg-bg-primary border border-border text-text-secondary rounded hover:text-text-primary hover:border-orange-500/30 transition-all disabled:opacity-50"
           >
             {previewing
               ? t('settings.monitoring.briefingPreviewing', 'Showing...')
@@ -336,7 +336,7 @@ export function MonitoringSection({
           <span>&#x1f504;</span>
         </div>
         <div>
-          <h3 className="text-sm font-medium text-white">{t('settings.monitoring.backgroundTitle')}</h3>
+          <h3 className="text-sm font-medium text-text-primary">{t('settings.monitoring.backgroundTitle')}</h3>
           <p className="text-xs text-text-muted">{t('settings.monitoring.backgroundDescription')}</p>
         </div>
       </div>
@@ -350,7 +350,7 @@ export function MonitoringSection({
               ) : (
                 <div className="w-2 h-2 bg-gray-600 rounded-full" />
               )}
-              <span className="text-sm text-white">
+              <span className="text-sm text-text-primary">
                 {monitoring.enabled ? (
                   <span className="text-green-400">{t('status.active')}</span>
                 ) : (
@@ -383,14 +383,14 @@ export function MonitoringSection({
               max="1440"
               value={monitoringInterval}
               onChange={(e) => setMonitoringInterval(parseInt(e.target.value) || 30)}
-              className="w-20 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white text-center focus:border-orange-500 focus:outline-none"
+              className="w-20 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary text-center focus:border-orange-500 focus:outline-none"
             />
             <span className="text-sm text-text-secondary">{t('settings.monitoring.minutes')}</span>
             {/* eslint-disable-next-line i18next/no-literal-string */}
             <span className="text-xs text-text-muted">5 min – 24 hr</span>
             <button
               onClick={onUpdateInterval}
-              className="px-4 py-2 text-sm bg-bg-secondary border border-border text-text-secondary rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
+              className="px-4 py-2 text-sm bg-bg-secondary border border-border text-text-secondary rounded-lg hover:text-text-primary hover:border-orange-500/30 transition-all"
             >
               {t('settings.monitoring.update')}
             </button>

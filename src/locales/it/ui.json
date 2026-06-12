@@ -11,6 +11,8 @@
   "header.toReview": "da rivedere",
   "header.inCorpus": "nel corpus",
   "header.summaryTooltip": "{{top}} da rivedere · {{rel}} nel corpus",
+  "header.themeToggleToLight": "Passa al tema chiaro",
+  "header.themeToggleToDark": "Passa al tema scuro",
   "cmdk.placeholder": "Cerca tutto ciò che 4DA ha letto…",
   "cmdk.ariaLabel": "Cerca in 4DA",
   "cmdk.groupGoto": "Vai a",

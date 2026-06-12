@@ -8,6 +8,8 @@ import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import './App.css';
 import sunLogo from './assets/sun-logo.webp';
+import sunLogoLight from './assets/sun-logo-light.webp';
+import { useTheme } from './lib/theme';
 import { SplashScreen } from './components/SplashScreen';
 // Onboarding — only shown on first launch, lazy-loaded for returning users
 const Onboarding = lazy(() => import('./components/Onboarding').then(m => ({ default: m.Onboarding })));
@@ -55,6 +57,7 @@ import { loadSourceMeta } from './config/sources';
 
 function App() {
   const { t } = useTranslation();
+  const { isLight } = useTheme();
   const { zoom, showIndicator } = useUiZoom();
   // Local UI state
   const [splashMinElapsed, setSplashMinElapsed] = useState(false);
@@ -264,7 +267,7 @@ function App() {
         )}
       </ViewErrorBoundary>
 
-      <div className={`min-h-screen bg-bg-primary text-white p-3 md:p-6 ${showSplash || showOnboarding ? 'hidden' : 'opacity-100 transition-opacity duration-300'}`}>
+      <div className={`min-h-screen bg-bg-primary text-text-primary p-3 md:p-6 ${showSplash || showOnboarding ? 'hidden' : 'opacity-100 transition-opacity duration-300'}`}>
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-orange-500 focus:text-white focus:rounded-lg focus:text-sm focus:font-medium"
@@ -289,7 +292,7 @@ function App() {
         {/* Browser Mode Notice */}
         {isBrowserMode && (
           <div className="mb-6 px-4 py-4 bg-bg-secondary border border-border rounded-lg">
-            <p className="text-sm font-medium text-white mb-2">{t('browser.title')}</p>
+            <p className="text-sm font-medium text-text-primary mb-2">{t('browser.title')}</p>
             <p className="text-xs text-gray-400">
               {t('browser.description')}
             </p>
@@ -325,7 +328,7 @@ function App() {
         {/* Footer */}
         <footer className="mt-8 text-center">
           <div className="flex items-center justify-center gap-2">
-            <img src={sunLogo} alt="" className="w-4 h-4 rounded-sm object-cover opacity-40" />
+            <img src={isLight ? sunLogoLight : sunLogo} alt="" className="w-4 h-4 rounded-sm object-cover opacity-40" />
             <p className="text-xs text-gray-600">{t('app.tagline')}</p>
           </div>
         </footer>

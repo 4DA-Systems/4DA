@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useGeometryPalette } from '../../lib/theme';
 
 interface PlatonicSVGProps {
   vertices: [number, number, number][];
@@ -55,12 +56,15 @@ export function PlatonicSVG({
   edges,
   faces,
   size = 180,
-  color = '#C8B560',
-  glowColor = '#D4AF37',
+  color: colorProp,
+  glowColor: glowColorProp,
   rotationSpeed = 0.012,
   secondaryTilt = true,
   className,
 }: PlatonicSVGProps) {
+  const palette = useGeometryPalette();
+  const color = colorProp ?? palette.stroke;
+  const glowColor = glowColorProp ?? palette.glow;
   const filterId = useId().replace(/:/g, '');
   const angleRef = useRef(0);
   const frameRef = useRef(0);

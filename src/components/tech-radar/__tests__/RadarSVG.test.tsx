@@ -81,8 +81,8 @@ describe('RadarSVG', () => {
     const { container } = render(
       <RadarSVG entries={mockEntries} userStack={['Rust']} onEntryClick={onEntryClick} />,
     );
-    // Gold ring (stroke="#D4AF37") should be present for Rust
-    const goldCircles = container.querySelectorAll('circle[stroke="#D4AF37"]');
+    // Gold ring (token class — resolves to --color-accent-gold per theme)
+    const goldCircles = container.querySelectorAll('circle.stroke-accent-gold');
     expect(goldCircles.length).toBeGreaterThanOrEqual(1);
   });
 

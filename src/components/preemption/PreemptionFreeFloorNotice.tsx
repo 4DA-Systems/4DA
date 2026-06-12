@@ -18,7 +18,7 @@ export const PreemptionFreeFloorNotice = memo(function PreemptionFreeFloorNotice
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-lg bg-bg-secondary border border-accent-gold/20">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-white">{t('preemption.freeFloor.title')}</p>
+        <p className="text-sm font-medium text-text-primary">{t('preemption.freeFloor.title')}</p>
         <p className="text-xs text-text-muted mt-0.5">{t('preemption.freeFloor.subtitle')}</p>
       </div>
       <div className="shrink-0">

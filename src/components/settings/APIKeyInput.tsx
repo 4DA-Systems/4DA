@@ -39,7 +39,7 @@ export function APIKeyInput({
           );
         }}
         placeholder={settings?.llm.has_api_key ? t('settings.ai.keySaved') : t('settings.ai.enterKey')}
-        className={`w-full px-4 py-2 bg-bg-secondary border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono ${settings?.llm.has_api_key && !settingsForm.apiKey ? 'border-green-500/40' : 'border-border'}`}
+        className={`w-full px-4 py-2 bg-bg-secondary border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono ${settings?.llm.has_api_key && !settingsForm.apiKey ? 'border-green-500/40' : 'border-border'}`}
       />
       {/* Saved key indicator — shown when key exists in secure storage and user hasn't typed a replacement */}
       {/* eslint-disable i18next/no-literal-string */}

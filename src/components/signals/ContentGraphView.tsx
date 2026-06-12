@@ -14,6 +14,7 @@ import '@xyflow/react/dist/style.css';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
+import { useTheme } from '../../lib/theme';
 import type {
   ContentGraph,
   GraphNode as ContentGraphNode,
@@ -78,7 +79,7 @@ function ClusterLabelNode({ data }: { data: { label: string; count: number } }) 
   return (
     <div
       style={{
-        color: '#A0A0A0',
+        color: 'var(--color-text-secondary)',
         fontSize: 11,
         fontWeight: 600,
         fontFamily: 'Inter, sans-serif',
@@ -86,12 +87,13 @@ function ClusterLabelNode({ data }: { data: { label: string; count: number } }) 
         textTransform: 'uppercase',
         pointerEvents: 'none',
         whiteSpace: 'nowrap',
-        textShadow: '0 1px 4px rgba(0,0,0,0.8)',
+        // Halo in the page color lifts the label off edge lines in both themes
+        textShadow: '0 1px 4px var(--color-bg-primary)',
         transform: 'translateX(-50%)',
       }}
     >
       {data.label}
-      <span style={{ color: '#8A8A8A', fontWeight: 400, marginLeft: 4, fontSize: 10 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 400, marginLeft: 4, fontSize: 10 }}>
         ({data.count})
       </span>
     </div>
@@ -101,10 +103,10 @@ function ClusterLabelNode({ data }: { data: { label: string; count: number } }) 
 function LoadingState() {
   const { t } = useTranslation();
   return (
-    <div className="h-full min-h-[500px] flex items-center justify-center" style={{ backgroundColor: '#0A0A0A' }}>
+    <div className="h-full min-h-[500px] flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
       <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-        <span style={{ color: '#A0A0A0', fontSize: 13, fontFamily: 'Inter, sans-serif' }}>
+        <div className="w-8 h-8 border-2 border-text-primary/30 border-t-text-primary rounded-full animate-spin" />
+        <span style={{ color: 'var(--color-text-secondary)', fontSize: 13, fontFamily: 'Inter, sans-serif' }}>
           {t('action.loading')}
         </span>
       </div>
@@ -115,9 +117,9 @@ function LoadingState() {
 function EmptyState() {
   const { t } = useTranslation();
   return (
-    <div className="h-full min-h-[500px] flex items-center justify-center" style={{ backgroundColor: '#0A0A0A' }}>
+    <div className="h-full min-h-[500px] flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
       <div className="flex flex-col items-center gap-2">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#8A8A8A" strokeWidth="1.5">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="stroke-text-muted" strokeWidth="1.5">
           <circle cx="12" cy="12" r="3" />
           <circle cx="4" cy="8" r="2" />
           <circle cx="20" cy="8" r="2" />
@@ -128,10 +130,10 @@ function EmptyState() {
           <line x1="9.5" y1="13.5" x2="5.5" y2="15.5" />
           <line x1="14.5" y1="13.5" x2="18.5" y2="15.5" />
         </svg>
-        <span style={{ color: '#8A8A8A', fontSize: 14, fontFamily: 'Inter, sans-serif' }}>
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 14, fontFamily: 'Inter, sans-serif' }}>
           {t('signals.graphEmpty')}
         </span>
-        <span style={{ color: '#6B7280', fontSize: 12, fontFamily: 'Inter, sans-serif' }}>
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 12, fontFamily: 'Inter, sans-serif' }}>
           {t('signals.graphEmptySub')}
         </span>
       </div>
@@ -158,6 +160,7 @@ const TIME_WINDOWS = [7, 14, 30] as const;
 
 export default function ContentGraphView() {
   const { t } = useTranslation();
+  const { isLight } = useTheme();
   const [days, setDays] = useState(7);
   const [loading, setLoading] = useState(true);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
@@ -248,7 +251,7 @@ export default function ContentGraphView() {
   if (isEmpty) return <EmptyState />;
 
   return (
-    <div className="h-full min-h-[500px]" style={{ backgroundColor: '#0A0A0A' }}>
+    <div className="h-full min-h-[500px]" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -268,29 +271,31 @@ export default function ContentGraphView() {
         nodesConnectable={false}
         elementsSelectable
       >
-        <Background color="#2A2A2A" gap={20} />
+        {/* React Flow paints these via SVG presentation attributes, which
+            cannot resolve var() — resolve concrete values per theme here */}
+        <Background color={isLight ? '#DDDAD2' : '#2A2A2A'} gap={20} />
         <Controls
           showInteractive={false}
           style={{
-            backgroundColor: '#141414',
-            borderColor: '#2A2A2A',
+            backgroundColor: 'var(--color-bg-secondary)',
+            borderColor: 'var(--color-border)',
             borderRadius: 8,
           }}
         />
         <MiniMap
           nodeColor={minimapNodeColor}
-          maskColor="rgba(10, 10, 10, 0.85)"
+          maskColor={isLight ? 'rgba(246, 245, 242, 0.85)' : 'rgba(10, 10, 10, 0.85)'}
           style={{
-            backgroundColor: '#141414',
-            borderColor: '#2A2A2A',
+            backgroundColor: 'var(--color-bg-secondary)',
+            borderColor: 'var(--color-border)',
           }}
         />
       </ReactFlow>
       <div
         className="flex items-center justify-between px-4 py-2 border-t"
-        style={{ backgroundColor: '#141414', borderColor: '#2A2A2A' }}
+        style={{ backgroundColor: 'var(--color-bg-secondary)', borderColor: 'var(--color-border)' }}
       >
-        <div className="flex gap-4 text-[11px]" style={{ color: '#8A8A8A', fontFamily: 'JetBrains Mono, monospace' }}>
+        <div className="flex gap-4 text-[11px]" style={{ color: 'var(--color-text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
           {meta && (
             <>
               <span>{meta.total_items} {t('signals.graphNodes', 'nodes')}</span>
@@ -306,7 +311,7 @@ export default function ContentGraphView() {
               onClick={() => setDays(w)}
               className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
                 days === w
-                  ? 'bg-bg-tertiary text-white'
+                  ? 'bg-bg-tertiary text-text-primary'
                   : 'text-text-muted hover:text-text-secondary'
               }`}
               style={{ fontFamily: 'JetBrains Mono, monospace' }}

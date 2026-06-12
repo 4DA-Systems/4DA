@@ -144,7 +144,7 @@ const EvidenceList = memo(function EvidenceList({
                 href={e.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 min-w-0 text-text-secondary hover:text-white transition-colors truncate"
+                className="flex-1 min-w-0 text-text-secondary hover:text-text-primary transition-colors truncate"
                 title={e.title}
               >
                 {e.title}
@@ -297,7 +297,7 @@ export const ItemCard = memo(function ItemCard({
               {t(tier.badge)}
             </span>
           )}
-          <h3 className="flex-1 min-w-0 text-[13px] font-medium text-white leading-snug">
+          <h3 className="flex-1 min-w-0 text-[13px] font-medium text-text-primary leading-snug">
             {displayTitle}
           </h3>
           <span
@@ -345,7 +345,7 @@ export const ItemCard = memo(function ItemCard({
               <button
                 key={i}
                 type="button"
-                className="px-3 py-1.5 text-[11px] rounded-md border border-border bg-bg-tertiary/60 text-text-secondary hover:text-white hover:bg-bg-tertiary hover:border-white/20 transition-colors"
+                className="px-3 py-1.5 text-[11px] rounded-md border border-border bg-bg-tertiary/60 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary hover:border-text-primary/20 transition-colors"
                 title={action.description}
                 onClick={() => {
                   recordTrustEvent({

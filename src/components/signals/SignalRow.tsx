@@ -51,7 +51,7 @@ export const SignalRow = ({ signal }: { signal: SignalItem }) => {
                 href={signal.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-text-secondary hover:text-white truncate transition-colors"
+                className="text-xs text-text-secondary hover:text-text-primary truncate transition-colors"
                 title={signal.title}
               >
                 {signal.title}

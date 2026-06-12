@@ -33,7 +33,7 @@ export function FeedHealthDot({ health, onReset }: FeedHealthDotProps) {
         {onReset && (
           <button
             onClick={(e) => { e.stopPropagation(); onReset(); }}
-            className="text-[10px] text-text-muted hover:text-white underline"
+            className="text-[10px] text-text-muted hover:text-text-primary underline"
           >
             reset
           </button>

@@ -130,7 +130,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
               </div>
 
               {/* Name */}
-              <div className="text-sm font-medium text-white truncate">
+              <div className="text-sm font-medium text-text-primary truncate">
                 {profile.name}
               </div>
 

@@ -36,7 +36,7 @@ export function TeamOnboardingWizard() {
       <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-success" />
-          <span className="text-xs text-white font-medium">
+          <span className="text-xs text-text-primary font-medium">
             {t('enterprise.wizard.teamActive', 'Team is active')}
           </span>
         </div>
@@ -84,7 +84,7 @@ export function TeamOnboardingWizard() {
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border space-y-4">
       {/* Header */}
       <div>
-        <h3 className="text-sm font-medium text-white">
+        <h3 className="text-sm font-medium text-text-primary">
           {t('enterprise.wizard.title', 'Team Setup Wizard')}
         </h3>
         <p className="text-[10px] text-text-muted mt-0.5">
@@ -128,7 +128,7 @@ export function TeamOnboardingWizard() {
               type="text"
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
+              className="w-full px-3 py-2 text-xs bg-bg-primary border border-border rounded text-text-primary focus:outline-none focus:border-success/50"
               placeholder="https://relay.4da.ai"
             />
             <p className="text-[9px] text-text-muted mt-1">
@@ -156,7 +156,7 @@ export function TeamOnboardingWizard() {
               type="text"
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
+              className="w-full px-3 py-2 text-xs bg-bg-primary border border-border rounded text-text-primary focus:outline-none focus:border-success/50"
               placeholder="e.g. Alice"
               onKeyDown={e => { if (e.key === 'Enter') void handleCreateTeam(); }}
             />
@@ -164,7 +164,7 @@ export function TeamOnboardingWizard() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setStep('relay')}
-              className="px-3 py-2 text-xs text-text-muted hover:text-white transition-colors"
+              className="px-3 py-2 text-xs text-text-muted hover:text-text-primary transition-colors"
             >
               {t('action.back', 'Back')}
             </button>
@@ -192,7 +192,7 @@ export function TeamOnboardingWizard() {
             <select
               value={inviteRole}
               onChange={e => setInviteRole(e.target.value)}
-              className="px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none"
+              className="px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-text-primary focus:outline-none"
               aria-label="Invite role"
             >
               <option value="member">{t('team.roles.member', 'Member')}</option>
@@ -215,7 +215,7 @@ export function TeamOnboardingWizard() {
                 </code>
                 <button
                   onClick={handleCopyInvite}
-                  className="text-[10px] px-2 py-1.5 bg-border text-text-secondary rounded hover:text-white transition-colors"
+                  className="text-[10px] px-2 py-1.5 bg-border text-text-secondary rounded hover:text-text-primary transition-colors"
                 >
                   {copied ? t('action.copied', 'Copied!') : t('action.copy', 'Copy')}
                 </button>
@@ -269,7 +269,7 @@ export function TeamOnboardingWizard() {
       {step === 'done' && (
         <div className="text-center py-4 space-y-2">
           <div className="text-2xl">&#9989;</div>
-          <p className="text-xs text-white font-medium">
+          <p className="text-xs text-text-primary font-medium">
             {t('enterprise.wizard.allDone', 'Team setup complete!')}
           </p>
           <p className="text-[10px] text-text-muted">

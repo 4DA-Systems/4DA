@@ -93,7 +93,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         )}
         {/* eslint-enable i18next/no-literal-string */}
         <div className="text-start">
-          <div className="text-white font-medium text-sm">{title}</div>
+          <div className="text-text-primary font-medium text-sm">{title}</div>
           <div className="text-text-muted text-xs">{subtitle}</div>
         </div>
       </div>
@@ -106,7 +106,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
 
   return (
     <div className={`transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
-      <h2 className="text-3xl font-semibold text-white mb-2 text-center">{t('onboarding.setup.title')}</h2>
+      <h2 className="text-3xl font-semibold text-text-primary mb-2 text-center">{t('onboarding.setup.title')}</h2>
       <p className="text-text-secondary mb-6 text-center">
         {t('onboarding.setup.subtitle')}
       </p>
@@ -258,7 +258,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         <button
           onClick={onBack}
           aria-label={t('onboarding.setup.goBack')}
-          className="px-6 py-2 text-text-secondary hover:text-white transition-colors"
+          className="px-6 py-2 text-text-secondary hover:text-text-primary transition-colors"
         >
           &larr; {t('onboarding.nav.back')}
         </button>

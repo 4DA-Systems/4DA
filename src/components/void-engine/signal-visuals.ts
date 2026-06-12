@@ -10,41 +10,68 @@ export interface SignalVisualState {
   rotSpeed: number;
 }
 
-const IDLE_STATE: SignalVisualState = {
-  glowOpacity: 0.25,
-  edgeColor: "#C8B560",
-  vertexColor: "#D4AF37",
-  faceColor: "#D4AF37",
-  stateLabel: "Idle",
-  rotSpeed: 0.014,
+// Per-theme geometry palettes. SVG presentation attributes can't resolve
+// var(), so the visuals are concrete hexes chosen per theme: additive light
+// gold for the void, merch-derived ink gold for paper (see App.css tokens).
+interface GeomColors { edge: string; vertex: string; face: string }
+interface ThemePalette {
+  gold: GeomColors;
+  error: GeomColors;
+  breaking: GeomColors;
+  learning: GeomColors;
+  idleGlow: number;
+}
+
+const PALETTE: { dark: ThemePalette; light: ThemePalette } = {
+  dark: {
+    gold: { edge: "#C8B560", vertex: "#D4AF37", face: "#D4AF37" },
+    error: { edge: "#EF4444", vertex: "#F87171", face: "#EF4444" },
+    breaking: { edge: "#F59E0B", vertex: "#FBBF24", face: "#F59E0B" },
+    learning: { edge: "#6B93C0", vertex: "#7BA7D4", face: "#6B93C0" },
+    idleGlow: 0.25,
+  },
+  light: {
+    gold: { edge: "#8F7118", vertex: "#A8861D", face: "#A8861D" },
+    error: { edge: "#DC2626", vertex: "#B91C1C", face: "#DC2626" },
+    breaking: { edge: "#B45309", vertex: "#D97706", face: "#B45309" },
+    learning: { edge: "#2563EB", vertex: "#3B82F6", face: "#2563EB" },
+    idleGlow: 0.12,
+  },
 };
 
 /** Derive visual state (colors, glow, label, speed) from the current VoidSignal. */
 export function deriveSignalVisuals(
   signal: VoidSignal | undefined,
+  isLight = false,
 ): SignalVisualState {
-  if (!signal) return IDLE_STATE;
+  const p = isLight ? PALETTE.light : PALETTE.dark;
+  // Glow is additive light: it carries the dark theme; on paper it reads as
+  // smudge, so it runs at roughly half strength.
+  const glowScale = isLight ? 0.5 : 1;
+
+  if (!signal) {
+    return {
+      glowOpacity: p.idleGlow,
+      edgeColor: p.gold.edge,
+      vertexColor: p.gold.vertex,
+      faceColor: p.gold.face,
+      stateLabel: "Idle",
+      rotSpeed: 0.014,
+    };
+  }
 
   const glow =
-    signal.error > 0.5
+    (signal.error > 0.5
       ? 0.15
-      : 0.25 + signal.heat * 0.2 + signal.pulse * 0.15 + signal.burst * 0.25;
+      : 0.25 + signal.heat * 0.2 + signal.pulse * 0.15 + signal.burst * 0.25) * glowScale;
 
-  let edge = "#C8B560";
-  let vertex = "#D4AF37";
-  let face = "#D4AF37";
+  let { edge, vertex, face } = p.gold;
   if (signal.error > 0.5 || signal.critical_count > 0) {
-    edge = "#EF4444";
-    vertex = "#F87171";
-    face = "#EF4444";
+    ({ edge, vertex, face } = p.error);
   } else if (signal.signal_color_shift > 0.5) {
-    edge = "#F59E0B";
-    vertex = "#FBBF24";
-    face = "#F59E0B";
+    ({ edge, vertex, face } = p.breaking);
   } else if (signal.signal_color_shift < -0.3) {
-    edge = "#6B93C0";
-    vertex = "#7BA7D4";
-    face = "#6B93C0";
+    ({ edge, vertex, face } = p.learning);
   }
 
   let label = "Idle";

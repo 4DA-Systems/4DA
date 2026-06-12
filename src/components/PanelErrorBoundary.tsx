@@ -52,7 +52,7 @@ export class PanelErrorBoundary extends Component<PanelErrorBoundaryProps, Panel
           )}
           <button
             onClick={this.handleRetry}
-            className="mt-2 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary border border-border rounded-lg hover:text-white transition-colors"
+            className="mt-2 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary border border-border rounded-lg hover:text-text-primary transition-colors"
           >
             {i18n.t('action.retry')}
           </button>

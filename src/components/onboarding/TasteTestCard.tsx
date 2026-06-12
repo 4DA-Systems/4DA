@@ -43,7 +43,7 @@ export const TasteTestCard = memo(function TasteTestCard({
       </div>
 
       {/* Content */}
-      <h3 className="text-white font-medium text-base mb-3 leading-snug">
+      <h3 className="text-text-primary font-medium text-base mb-3 leading-snug">
         {card.title}
       </h3>
       <p className="text-text-secondary text-sm leading-relaxed mb-6 line-clamp-3">
@@ -55,7 +55,7 @@ export const TasteTestCard = memo(function TasteTestCard({
         <button
           onClick={onInterested}
           aria-label={t('tasteTest.markInteresting', { title: card.title })}
-          className="flex-1 bg-white text-black font-medium text-sm py-2.5 px-4 rounded-md hover:bg-gray-100 transition-colors"
+          className="flex-1 bg-accent-primary text-bg-primary font-medium text-sm py-2.5 px-4 rounded-md hover:bg-accent-primary-hover transition-colors"
         >
           {t('tasteTest.readThis')}
         </button>

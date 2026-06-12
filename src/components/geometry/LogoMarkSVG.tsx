@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useGeometryPalette } from '../../lib/theme';
 
 interface LogoMarkSVGProps {
   size?: number;
@@ -62,8 +63,7 @@ export function LogoMarkSVG({ size = 112, className }: LogoMarkSVGProps) {
   const [pVerts, setPVerts] = useState<PV[]>([]);
   const [pEdges, setPEdges] = useState<PE[]>([]);
 
-  const color = '#C8B560';
-  const glowColor = '#D4AF37';
+  const { stroke: color, glow: glowColor, glowOpacity } = useGeometryPalette();
   const FRICTION = 0.975;
   const SPRING_K = 0.03;
 
@@ -166,7 +166,7 @@ export function LogoMarkSVG({ size = 112, className }: LogoMarkSVGProps) {
         </defs>
 
         {/* Edge glow */}
-        <g opacity={0.2} filter={`url(#lm-${filterId})`}>
+        <g opacity={glowOpacity} filter={`url(#lm-${filterId})`}>
           {pEdges.map((e, i) => (
             <line key={`g${i}`} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
               stroke={glowColor} strokeWidth={edgeStroke(e.depth) + 2}
