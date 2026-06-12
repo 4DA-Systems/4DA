@@ -18,6 +18,7 @@ import {
   saveLlmProvider,
   validateApiKey,
   buildInitialPullProgress,
+  probeKeyBeforeSave,
 } from './quick-setup-utils';
 import type { OllamaStatus } from './types';
 
@@ -143,5 +144,60 @@ describe('buildInitialPullProgress', () => {
   it('queues nothing when both models are present', () => {
     const { models } = buildInitialPullProgress(ollama());
     expect(models).toEqual([]);
+  });
+});
+
+describe('probeKeyBeforeSave', () => {
+  beforeEach(() => cmdMock.mockReset());
+
+  it('skips the probe for ollama (returns ok without calling the backend)', async () => {
+    const r = await probeKeyBeforeSave('ollama', '');
+    expect(r).toEqual({ ok: true });
+    expect(cmdMock).not.toHaveBeenCalled();
+  });
+
+  it('skips the probe for openai-compatible', async () => {
+    const r = await probeKeyBeforeSave('openai-compatible', 'sk-whatever');
+    expect(r).toEqual({ ok: true });
+    expect(cmdMock).not.toHaveBeenCalled();
+  });
+
+  it('skips the probe for an empty key', async () => {
+    const r = await probeKeyBeforeSave('anthropic', '   ');
+    expect(r).toEqual({ ok: true });
+    expect(cmdMock).not.toHaveBeenCalled();
+  });
+
+  it('passes when the key is valid', async () => {
+    cmdMock.mockResolvedValueOnce({ valid: true, format_ok: true, connection_ok: true, error: null, model_access: [] });
+    const r = await probeKeyBeforeSave('anthropic', 'sk-ant-good-key');
+    expect(r.ok).toBe(true);
+    expect(cmdMock).toHaveBeenCalledWith('validate_api_key', { provider: 'anthropic', key: 'sk-ant-good-key', baseUrl: null });
+  });
+
+  it('BLOCKS on a definitive format rejection (format_ok=false)', async () => {
+    cmdMock.mockResolvedValueOnce({ valid: false, format_ok: false, connection_ok: true, error: 'Not an Anthropic key', model_access: [] });
+    const r = await probeKeyBeforeSave('anthropic', 'sk-openai-in-wrong-field');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('Not an Anthropic key');
+  });
+
+  it('BLOCKS on a definitive auth rejection (format_ok=true, connection_ok=false)', async () => {
+    cmdMock.mockResolvedValueOnce({ valid: false, format_ok: true, connection_ok: false, error: 'Provider rejected the key (401)', model_access: [] });
+    const r = await probeKeyBeforeSave('openai', 'sk-revoked-but-well-formed');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('Provider rejected the key (401)');
+  });
+
+  it('PASSES (warn-and-proceed) when the probe throws — never blocks on a crash', async () => {
+    cmdMock.mockRejectedValueOnce(new Error('network down'));
+    const r = await probeKeyBeforeSave('anthropic', 'sk-ant-cannot-reach');
+    expect(r).toEqual({ ok: true });
+  });
+
+  it('PASSES on a lenient/transient result (valid=false but connection_ok=true)', async () => {
+    cmdMock.mockResolvedValueOnce({ valid: false, format_ok: true, connection_ok: true, error: null, model_access: [] });
+    const r = await probeKeyBeforeSave('anthropic', 'sk-ant-rate-limited');
+    expect(r.ok).toBe(true);
   });
 });

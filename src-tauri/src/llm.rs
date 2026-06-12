@@ -47,6 +47,22 @@ pub(crate) fn sanitize_api_error(text: &str) -> String {
     result
 }
 
+/// Surface a definitive auth rejection from a cloud provider as a degraded
+/// capability so the frontend health dot can alert the user.
+///
+/// Only 401/403 are treated as auth failures. Other non-success statuses
+/// (429 rate-limit, 5xx server errors, transient network) are intentionally
+/// left lenient — they are not the user's key being wrong.
+fn note_provider_auth(provider: &str, status: reqwest::StatusCode) {
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        crate::capabilities::report_unavailable(
+            crate::capabilities::Capability::BriefingGeneration,
+            &format!("{provider} rejected the API key (HTTP {})", status.as_u16()),
+            "Update your API key in Settings",
+        );
+    }
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -406,6 +422,7 @@ impl LLMClient {
 
         if !response.status().is_success() {
             let status = response.status();
+            note_provider_auth("Anthropic", status);
             let text = response.text().await.unwrap_or_default();
             return Err(format!(
                 "Anthropic API error {}: {}",
@@ -414,6 +431,9 @@ impl LLMClient {
             )
             .into());
         }
+
+        // Cloud completion succeeded — clear any prior auth alert (no-op if Full).
+        crate::capabilities::report_restored(crate::capabilities::Capability::BriefingGeneration);
 
         let data: serde_json::Value = response
             .json()
@@ -499,11 +519,15 @@ impl LLMClient {
 
         if !response.status().is_success() {
             let status = response.status();
+            note_provider_auth("OpenAI", status);
             let text = response.text().await.unwrap_or_default();
             return Err(
                 format!("OpenAI API error {}: {}", status, sanitize_api_error(&text)).into(),
             );
         }
+
+        // Cloud completion succeeded — clear any prior auth alert (no-op if Full).
+        crate::capabilities::report_restored(crate::capabilities::Capability::BriefingGeneration);
 
         let data: serde_json::Value = response
             .json()
@@ -709,11 +733,15 @@ impl LLMClient {
 
         if !response.status().is_success() {
             let status = response.status();
+            note_provider_auth("OpenAI", status);
             let text = response.text().await.unwrap_or_default();
             return Err(
                 format!("OpenAI API error {}: {}", status, sanitize_api_error(&text)).into(),
             );
         }
+
+        // Cloud completion succeeded — clear any prior auth alert (no-op if Full).
+        crate::capabilities::report_restored(crate::capabilities::Capability::BriefingGeneration);
 
         let data: serde_json::Value = response
             .json()
