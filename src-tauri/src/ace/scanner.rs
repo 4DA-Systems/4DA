@@ -12,6 +12,39 @@ use tracing::warn;
 
 use crate::error::Result;
 
+/// True when `path` is a cloud-only placeholder — a OneDrive / Dropbox
+/// "online-only" file whose CONTENT is not on local disk. Reading such a
+/// file forces a download; during an unattended onboarding scan over a
+/// KFM-redirected Documents folder that can pull gigabytes on a metered
+/// connection without consent — and the app gets blamed for the bill. A
+/// dehydrated file contributes no signal worth a forced download, so we
+/// skip it. Uses `symlink_metadata`, which reads the placeholder's reparse
+/// attributes WITHOUT touching content (no hydration), so the check is free.
+#[cfg(windows)]
+pub(crate) fn is_cloud_placeholder(path: &Path) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    // Win32 file attributes for cloud-on-demand / HSM dehydration.
+    const FILE_ATTRIBUTE_OFFLINE: u32 = 0x0000_1000;
+    const FILE_ATTRIBUTE_RECALL_ON_OPEN: u32 = 0x0004_0000;
+    const FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS: u32 = 0x0040_0000;
+    match fs::symlink_metadata(path) {
+        Ok(m) => {
+            m.file_attributes()
+                & (FILE_ATTRIBUTE_OFFLINE
+                    | FILE_ATTRIBUTE_RECALL_ON_OPEN
+                    | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS)
+                != 0
+        }
+        Err(_) => false,
+    }
+}
+
+/// No cloud-placeholder concept off Windows.
+#[cfg(not(windows))]
+pub(crate) fn is_cloud_placeholder(_path: &Path) -> bool {
+    false
+}
+
 /// Project Scanner - detects projects and their tech stacks
 pub struct ProjectScanner {
     /// Maximum depth to recurse into directories
@@ -299,7 +332,11 @@ impl ProjectScanner {
             let mut files_scanned = 0u32;
             const MAX_SOURCE_FILES: u32 = 50;
 
-            // Scan source files in the manifest directory
+            // Scan source files in the manifest directory.
+            // `files_scanned` must increment on every file we READ, not only
+            // when imports are found — the old "only on hit" counting let a
+            // directory of import-less files blow past the cap and read (and
+            // on OneDrive, hydrate) every one of them.
             if let Ok(entries) = fs::read_dir(dir) {
                 for entry in entries.flatten() {
                     if files_scanned >= MAX_SOURCE_FILES {
@@ -307,10 +344,10 @@ impl ProjectScanner {
                     }
                     let path = entry.path();
                     if path.is_file() {
+                        files_scanned += 1;
                         let extracted = extract_imports_from_source(&path);
                         if !extracted.is_empty() {
                             import_deps.extend(extracted);
-                            files_scanned += 1;
                         }
                     }
                 }
@@ -326,10 +363,10 @@ impl ProjectScanner {
                         }
                         let path = entry.path();
                         if path.is_file() {
+                            files_scanned += 1;
                             let extracted = extract_imports_from_source(&path);
                             if !extracted.is_empty() {
                                 import_deps.extend(extracted);
-                                files_scanned += 1;
                             }
                         }
                     }
@@ -354,6 +391,10 @@ impl ProjectScanner {
     }
 
     fn parse_manifest(&self, path: &Path, manifest_type: ManifestType) -> Option<ProjectSignal> {
+        // A dehydrated manifest (cloud-only) isn't worth forcing a download.
+        if is_cloud_placeholder(path) {
+            return None;
+        }
         let content = fs::read_to_string(path).ok()?;
 
         let mut signal = ProjectSignal {
@@ -1456,6 +1497,11 @@ pub(crate) fn extract_imports_from_source(path: &Path) -> Vec<String> {
 
     // Only process known source files
     if !matches!(ext, "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go") {
+        return Vec::new();
+    }
+
+    // Never force a cloud download to read import lines.
+    if is_cloud_placeholder(path) {
         return Vec::new();
     }
 
