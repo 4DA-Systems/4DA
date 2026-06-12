@@ -47,6 +47,48 @@ export function validateApiKey(provider: ProviderType, key: string): boolean {
   return trimmed.length > 10;
 }
 
+/**
+ * Live pre-flight probe of an API key before saving, run during onboarding.
+ *
+ * Policy: warn-and-proceed. Only block on a DEFINITIVE rejection (a wrong
+ * format, or the provider returning 401/403). Network blips, rate limits
+ * (429), and server errors (5xx) are lenient passes — the backend
+ * `validate_api_key` command already returns connection_ok=true for those.
+ *
+ * Skipped entirely for ollama / openai-compatible / empty keys.
+ */
+export async function probeKeyBeforeSave(
+  provider: ProviderType,
+  apiKey: string,
+): Promise<{ ok: boolean; reason?: string }> {
+  // Only the two BYOK cloud providers with a non-empty key are probed.
+  if (provider !== 'anthropic' && provider !== 'openai') return { ok: true };
+  if (apiKey.trim().length === 0) return { ok: true };
+
+  try {
+    const result = await cmd('validate_api_key', { provider, key: apiKey, baseUrl: null });
+
+    // Key works (or backend was lenient on a transient issue) -> proceed.
+    if (result.valid === true) return { ok: true };
+
+    // Definitive format rejection -> block.
+    if (result.format_ok === false) {
+      return { ok: false, reason: result.error || 'That key format looks wrong for this provider.' };
+    }
+
+    // Format is fine but the provider definitively rejected it (401/403) -> block.
+    if (result.format_ok === true && result.connection_ok === false) {
+      return { ok: false, reason: result.error || 'Your provider rejected this key. Check it and try again.' };
+    }
+
+    // Anything else (lenient pass on a network/transient issue) -> proceed.
+    return { ok: true };
+  } catch {
+    // Never block onboarding on a probe crash.
+    return { ok: true };
+  }
+}
+
 /** Persist the chosen LLM provider + key to the backend. */
 export async function saveLlmProvider(
   provider: ProviderType,

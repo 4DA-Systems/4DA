@@ -12,7 +12,7 @@ import type { ExperienceLevel } from './setup-experience';
 import type { UseQuickSetupProps, ProviderType } from './quick-setup-utils';
 import {
   buildInitialPullProgress, refreshOllamaAfterPull,
-  validateApiKey, saveLlmProvider,
+  validateApiKey, saveLlmProvider, probeKeyBeforeSave,
 } from './quick-setup-utils';
 
 export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
@@ -234,6 +234,16 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     setError(null);
     setIsSaving(true);
     try {
+      // Pre-flight: live-probe a keyed cloud provider and block ONLY on a
+      // definitive rejection (bad format or 401/403). Network blips pass.
+      const probe = await probeKeyBeforeSave(provider, apiKey);
+      if (!probe.ok) {
+        setApiKeyHint(probe.reason ?? null);
+        setAiConfigured(false);
+        setIsSaving(false);
+        return;
+      }
+
       await saveLlmProvider(provider, apiKey, ollamaStatus);
 
       // Auto-trigger embedding engine preparation (fire-and-forget)

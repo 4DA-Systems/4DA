@@ -373,8 +373,10 @@ export interface SystemHealthSlice {
   similarTopicQuery: string;
   similarTopicResults: SimilarTopicResult[];
   startupHealthIssues: Array<{ component: string; severity: 'warning' | 'error'; message: string }> | null;
+  capabilityStates: Record<string, { state: string; reason?: string; since?: string; fallback?: string; remediation?: string }> | null;
   setSimilarTopicQuery: (q: string) => void;
   loadStartupHealth: () => Promise<void>;
+  loadCapabilityStates: () => Promise<void>;
   loadSystemHealth: () => Promise<void>;
   runAnomalyDetection: () => Promise<void>;
   resolveAnomaly: (anomalyId: number) => Promise<void>;
