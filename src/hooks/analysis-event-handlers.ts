@@ -68,7 +68,13 @@ export function handleAnalysisComplete(event: Event<SourceRelevance[]>): void {
     progressStage: 'complete',
     lastAnalyzedAt: new Date(),
   }));
-  useAppStore.getState().addToast('success', i18n.t('analysis.complete', { count: relevantCount }));
+  // Only celebrate when there is something to show. A "complete: 0" success
+  // toast firing seconds after an offline/source warning is a mixed signal
+  // that reads as the product failing silently (F-3); the warnings already
+  // told the real story, and the status line reflects the empty result.
+  if (results.length > 0) {
+    useAppStore.getState().addToast('success', i18n.t('analysis.complete', { count: relevantCount }));
+  }
 
   // Re-sync source health so the cold-start gate reflects the data THIS analysis
   // just fetched. It is loaded once at mount and would otherwise stay stale —
@@ -104,11 +110,30 @@ export function handleAnalysisError(event: Event<string>): void {
   }
 }
 
+// Source-error toast throttle. A captive portal or a blanket firewall makes
+// every one of ~20 sources fail in the same cycle; without a cap that is a
+// rolling wall of warning toasts (F-3). Show the first few, then suppress the
+// rest (still visible in source health + logs).
+const SOURCE_ERROR_TOAST_CAP = 3;
+const SOURCE_ERROR_WINDOW_MS = 10_000;
+let _sourceErrWindowStart = 0;
+let _sourceErrCount = 0;
+
 export function handleSourceError(
   event: Event<{ source: string; error: string; retry_count: number }>,
 ): void {
   const { source, error } = event.payload;
-  useAppStore.getState().addToast('warning', i18n.t('analysis.sourceError', { source: getSourceLabel(source), error }));
+  const now = Date.now();
+  if (now - _sourceErrWindowStart > SOURCE_ERROR_WINDOW_MS) {
+    _sourceErrWindowStart = now;
+    _sourceErrCount = 0;
+  }
+  _sourceErrCount++;
+  if (_sourceErrCount <= SOURCE_ERROR_TOAST_CAP) {
+    useAppStore.getState().addToast('warning', i18n.t('analysis.sourceError', { source: getSourceLabel(source), error }));
+  } else {
+    console.debug('[analysis] source error suppressed (toast cap reached):', source, error);
+  }
 }
 
 export function handleNetworkOffline(): void {
