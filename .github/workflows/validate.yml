@@ -198,78 +198,13 @@ jobs:
           }
           Remove-Item test-output.txt -ErrorAction SilentlyContinue
 
-  # ── Cross-platform validation (GitHub-hosted runners) ──
-  # NOTE: continue-on-error because victauri-plugin is a local path dependency
-  # (../../runyourempire/victauri/) that only exists on the self-hosted runner.
-  # These jobs are informational until victauri-plugin 0.1.1 is published to
-  # crates.io and the dep switches from path to registry.
-  rust-macos:
-    name: Rust (macOS)
-    needs: frontend
-    continue-on-error: true
-    runs-on: macos-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
-        with:
-          toolchain: stable
-
-      - name: Clippy lints
-        run: cd src-tauri && cargo clippy -- -D warnings
-
-      - name: Install cargo-audit and cargo-deny
-        run: |
-          cargo install cargo-audit --locked
-          cargo install cargo-deny --locked
-
-      - name: Security audit (cargo audit)
-        run: cd src-tauri && cargo audit
-
-      - name: Supply chain policy check (cargo deny)
-        run: cd src-tauri && cargo deny check
-
-      - name: Run unit tests
-        run: cd src-tauri && cargo test --lib
-
-  rust-linux:
-    name: Rust (Linux)
-    needs: frontend
-    continue-on-error: true
-    runs-on: ubuntu-22.04
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
-        with:
-          toolchain: stable
-
-      - name: Clippy lints
-        run: cd src-tauri && cargo clippy -- -D warnings
-
-      - name: Install cargo-audit and cargo-deny
-        run: |
-          cargo install cargo-audit --locked
-          cargo install cargo-deny --locked
-
-      - name: Security audit (cargo audit)
-        run: cd src-tauri && cargo audit
-
-      - name: Supply chain policy check (cargo deny)
-        run: cd src-tauri && cargo deny check
-
-      - name: Run unit tests
-        run: cd src-tauri && cargo test --lib
+  # ── Cross-platform validation ──
+  # Moved to .github/workflows/hermetic.yml (the "Hermetic Fresh-Clone" gate).
+  # The old rust-macos / rust-linux jobs here were continue-on-error and rested
+  # on a now-false premise — that victauri-plugin was a local path dependency
+  # (../../runyourempire/victauri/) only present on the self-hosted runner.
+  # victauri-plugin / victauri-test are now registry deps ("0.7", in Cargo.lock),
+  # so a GitHub-hosted runner can do a real, GATING fresh build + test. That
+  # lives in hermetic.yml (ubuntu + windows, no cache, isolated data dir), which
+  # also regression-guards both 2026-06-13 fresh-clone findings. macOS bundles
+  # are built in release.yml.

@@ -1,0 +1,134 @@
+# Hermetic Fresh-Clone
+#
+# Proves that a PRISTINE checkout — with ZERO operator state — compiles and
+# tests green on its own. This is the one thing the main `Validate` workflow
+# CANNOT prove: Validate runs on the self-hosted `[self-hosted, windows, 4da]`
+# runner, which carries the operator's pre-fetched OCR models, a populated
+# `data/4da.db`, and a warm cargo cache. Both 2026-06-13 pre-launch findings
+# were the same failure class — green in the operator's tree, broken on a fresh
+# clone:
+#   Finding 1 (e77e6020): gitignored OCR bundle resource → `cargo` build fails
+#                         with "resource path `models` doesn't exist".
+#   Finding 2 (b047dd36): blind-spots unit tests read the live SQLite corpus.
+# Neither could surface on the self-hosted runner. This job is the canary that
+# makes that whole class impossible to land silently — and the gate that must
+# pass before the repo is flipped public (a contributor's first `git clone`).
+#
+# DESIGN NOTES
+# - Runs on GitHub-HOSTED runners only (ephemeral VMs, no operator filesystem).
+# - NO build/registry cache, BY DESIGN. The value here is proving a cold build;
+#   caching would hide exactly the regressions this job exists to catch.
+# - Replicates the real contributor path verbatim:
+#     git clone → toolchain → system deps → pnpm install (postinstall fetches
+#     the OCR models) → build + test frontend, MCP server, and Rust.
+# - Data-dir isolation is belt-and-suspenders: hosted VMs are already pristine,
+#   but pinning FOURDA_DATA_DIR/FOURDA_DB_PATH to a throwaway temp path means a
+#   regression that reintroduces live-DB coupling fails HERE loudly instead of
+#   passing by luck.
+# - macOS fresh builds are covered by release.yml's bundle jobs; this gate is
+#   ubuntu (the contributor/CI canary that caught Finding 1) + windows (the
+#   operator's own platform).
+
+name: Hermetic Fresh-Clone
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  schedule:
+    # 07:00 UTC daily — after the 06:00 nightly supply-chain audit, so a network
+    # or dependency drift in the fresh-clone path is caught even with no PR open.
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: hermetic-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  NODE_OPTIONS: '--max-old-space-size=8192'
+
+jobs:
+  fresh-clone:
+    name: Fresh clone (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+    defaults:
+      run:
+        # bash is present on GitHub-hosted Windows (Git Bash) and Linux, so the
+        # same fresh-clone commands run identically on both platforms.
+        shell: bash
+    steps:
+      - name: Checkout (pristine — ephemeral runner, no operator state)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+
+      - name: Install Linux system dependencies (tauri / webkit)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: |
+          corepack disable
+          npm install -g --force pnpm@9.15.0
+          pnpm --version
+
+      - name: pnpm install (frozen) — exercises the postinstall OCR-model fetch
+        # This is THE fresh-clone path. The root postinstall hook runs
+        # scripts/fetch-ocr-models.cjs, which downloads the gitignored bundle
+        # resources that Finding 1 proved a clone cannot build without.
+        run: pnpm install --frozen-lockfile
+
+      - name: Assert OCR bundle resources present (regression guard, Finding 1)
+        run: |
+          missing=0
+          for f in text-detection.rten text-recognition.rten; do
+            if [ ! -f "src-tauri/models/$f" ]; then
+              echo "::error::src-tauri/models/$f is missing after install — a fresh clone cannot build src-tauri"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          ls -lh src-tauri/models/
+
+      - name: Frontend — fresh build + tests
+        run: |
+          pnpm run build
+          pnpm run test
+
+      - name: MCP server — fresh install, build, tests
+        run: |
+          pnpm --dir mcp-4da-server install --frozen-lockfile
+          pnpm --dir mcp-4da-server run build
+          pnpm --dir mcp-4da-server run test
+
+      - name: Rust — cold compile gate (no cache, no-run)
+        # Fast-fails the build/resource class before the slow test run.
+        working-directory: src-tauri
+        run: cargo test --lib --no-run
+
+      - name: Rust — hermetic unit tests (isolated, throwaway data dir)
+        working-directory: src-tauri
+        env:
+          # Force any data-dir resolution onto a path that holds no real DB, so
+          # a reintroduced live-corpus dependency (Finding 2) fails here.
+          FOURDA_DATA_DIR: ${{ runner.temp }}/4da-hermetic-data
+          FOURDA_DB_PATH: ${{ runner.temp }}/4da-hermetic-data/4da.db
+        run: cargo test --lib
