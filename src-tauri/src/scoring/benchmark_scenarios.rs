@@ -102,6 +102,33 @@ pub(crate) fn profile_ctx(name: &str) -> ScoringContext {
     }
 }
 
+/// Install realistic ACE dependency intelligence on a benchmark profile.
+///
+/// Production populates `ace_ctx.dependency_info` (and `dependency_names`) from
+/// `load_dependency_intelligence()`. The benchmark profiles set only
+/// `domain_profile.dependency_names`, but `match_dependencies` reads
+/// `ace_ctx.dependency_info` — so without this the dependency signal never fires
+/// and every CVE / registry-update / dependency scenario scores near-zero on weak
+/// signals alone. Mirroring deps into the field the matcher uses makes the
+/// benchmark faithful to production; the scoring algorithm is unchanged.
+fn install_bench_deps(ace: &mut ace_context::ACEContext, deps: &[(&str, &str)]) {
+    for (name, ecosystem) in deps {
+        let info = super::dependencies::DepInfo {
+            package_name: (*name).to_string(),
+            version: None,
+            is_dev: false,
+            is_direct: true,
+            search_terms: super::dependencies::extract_search_terms(name),
+            ecosystem: (*ecosystem).to_string(),
+        };
+        for term in &info.search_terms {
+            ace.dependency_names.insert(term.clone());
+        }
+        ace.dependency_names.insert((*name).to_string());
+        ace.dependency_info.insert((*name).to_string(), info);
+    }
+}
+
 fn rust_developer_ctx() -> ScoringContext {
     let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let interests = vec![
@@ -133,29 +160,47 @@ fn rust_developer_ctx() -> ScoringContext {
         .extend(["rust", "tauri", "sqlite"].iter().map(|s| s.to_string()));
     ace.detected_tech
         .extend(["rust", "tauri", "sqlite"].iter().map(|s| s.to_string()));
+    install_bench_deps(
+        &mut ace,
+        &[
+            ("tokio", "rust"),
+            ("serde", "rust"),
+            ("sqlx", "rust"),
+            ("tauri", "rust"),
+            ("hyper", "rust"),
+            ("reqwest", "rust"),
+        ],
+    );
 
+    let primary_stack = std::collections::HashSet::from_iter(
+        ["rust", "tauri", "sqlite"].iter().map(|s| s.to_string()),
+    );
+    let all_tech = std::collections::HashSet::from_iter(
+        [
+            "rust",
+            "tauri",
+            "sqlite",
+            "tokio",
+            "serde",
+            "wasm",
+            "typescript",
+        ]
+        .iter()
+        .map(|s| s.to_string()),
+    );
+    // Infer domain concerns the way production does — a Tauri desktop developer
+    // cares about packaging / installer / auto-update / code-signing. The
+    // benchmark previously left this empty, so domain-concern items (e.g.
+    // cross-platform packaging) scored near-zero despite being on-domain.
+    let domain_concerns = crate::domain_profile::infer_domain_concerns(&primary_stack, &all_tech);
     let domain = crate::domain_profile::DomainProfile {
-        primary_stack: std::collections::HashSet::from_iter(
-            ["rust", "tauri", "sqlite"].iter().map(|s| s.to_string()),
-        ),
+        primary_stack,
         adjacent_tech: std::collections::HashSet::from_iter(
             ["tokio", "serde", "wasm", "typescript"]
                 .iter()
                 .map(|s| s.to_string()),
         ),
-        all_tech: std::collections::HashSet::from_iter(
-            [
-                "rust",
-                "tauri",
-                "sqlite",
-                "tokio",
-                "serde",
-                "wasm",
-                "typescript",
-            ]
-            .iter()
-            .map(|s| s.to_string()),
-        ),
+        all_tech,
         dependency_names: std::collections::HashSet::from_iter(
             ["tokio", "serde", "sqlx", "tauri", "hyper"]
                 .iter()
@@ -166,7 +211,7 @@ fn rust_developer_ctx() -> ScoringContext {
                 .iter()
                 .map(|s| s.to_string()),
         ),
-        domain_concerns: std::collections::HashSet::new(),
+        domain_concerns,
         ace_promoted_tech: std::collections::HashSet::new(),
     };
 
@@ -221,6 +266,15 @@ fn fullstack_js_ctx() -> ScoringContext {
     );
     ace.detected_tech
         .extend(["typescript", "react"].iter().map(|s| s.to_string()));
+    install_bench_deps(
+        &mut ace,
+        &[
+            ("react", "javascript"),
+            ("next", "javascript"),
+            ("express", "javascript"),
+            ("prisma", "javascript"),
+        ],
+    );
 
     let domain = crate::domain_profile::DomainProfile {
         primary_stack: std::collections::HashSet::from_iter(
@@ -308,6 +362,16 @@ fn python_data_scientist_ctx() -> ScoringContext {
         .extend(["python", "pytorch", "ml"].iter().map(|s| s.to_string()));
     ace.detected_tech
         .extend(["python", "pytorch"].iter().map(|s| s.to_string()));
+    install_bench_deps(
+        &mut ace,
+        &[
+            ("pytorch", "python"),
+            ("torch", "python"),
+            ("transformers", "python"),
+            ("numpy", "python"),
+            ("pandas", "python"),
+        ],
+    );
 
     let domain = crate::domain_profile::DomainProfile {
         primary_stack: std::collections::HashSet::from_iter(

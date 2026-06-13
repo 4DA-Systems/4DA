@@ -59,6 +59,33 @@ pub fn compute_content_quality(title: &str, content: &str, url: Option<&str>) ->
     }
 }
 
+/// Detect egregious clickbait that must be hard-capped regardless of topic or
+/// dependency match — e.g. "This ONE Rust trick ... (Tokio devs HATE it)",
+/// "1000x faster". This is stronger than the soft title-quality clickbait penalty
+/// (which only nudges the [0.5, 1.2] multiplier): a clickbait title that
+/// name-drops a dependency would otherwise ride the dep-match domain promotion
+/// into the brief. The caller pairs this with a hard score ceiling and exempts
+/// genuine security/version content.
+pub fn is_strong_clickbait(title: &str) -> bool {
+    let lower = title.to_lowercase();
+    const MARKERS: &[&str] = &[
+        "devs hate",
+        "hate it",
+        "you won't believe",
+        "will blow your mind",
+        "one weird trick",
+        "what nobody tells you",
+        "the truth about",
+        "stop doing this",
+        "doctors hate",
+    ];
+    // "this one <anything> trick" — catches "this ONE Rust trick"
+    let one_trick = lower.contains("this one") && lower.contains("trick");
+    // Hyperbolic speed claims: "1000x faster", "100x speedup"
+    let hyperbolic_speed = lower.contains("x faster") || lower.contains("x speedup");
+    MARKERS.iter().any(|m| lower.contains(m)) || one_trick || hyperbolic_speed
+}
+
 /// Assess title quality (0.0 = clickbait, 1.0 = high quality)
 fn assess_title_quality(title: &str) -> f32 {
     let mut score: f32 = 1.0;

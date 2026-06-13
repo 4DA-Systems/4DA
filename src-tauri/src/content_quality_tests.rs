@@ -9,6 +9,34 @@ fn test_clickbait_penalty() {
 }
 
 #[test]
+fn test_strong_clickbait_detection() {
+    // Egregious clickbait that name-drops a dependency — must be flagged so the
+    // scoring layer can hard-cap it below the relevance threshold even when the
+    // dep ("Tokio") matches. The soft title-quality penalty alone can't (its
+    // multiplier floors at 0.5).
+    assert!(is_strong_clickbait(
+        "This ONE Rust trick will make your code 1000x faster (Tokio devs HATE it)"
+    ));
+    assert!(is_strong_clickbait(
+        "You won't believe this Rust performance hack"
+    ));
+    assert!(is_strong_clickbait(
+        "100x speedup with this one weird trick"
+    ));
+
+    // Legitimate technical titles must NOT be flagged.
+    assert!(!is_strong_clickbait(
+        "Tokio 1.40: improved task scheduling and memory efficiency"
+    ));
+    assert!(!is_strong_clickbait(
+        "CVE-2026-1234: Tokio runtime denial of service via malformed task wakeup"
+    ));
+    assert!(!is_strong_clickbait(
+        "Building scalable REST APIs with Express and Prisma ORM"
+    ));
+}
+
+#[test]
 fn test_technical_title_quality() {
     let q = assess_title_quality("Tokio 1.34 release: new task scheduling improvements");
     assert!(q > 0.8, "Technical title should score high: {}", q);

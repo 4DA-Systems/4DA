@@ -267,6 +267,10 @@ commodity_ceiling {
     tutorial:     0.28    # [0.15, 0.40]
     help_request: 0.22    # [0.10, 0.30]
     question:     0.30    # [0.20, 0.40]
+    # Egregious clickbait ("This ONE trick…", "1000x faster", "devs HATE it") is
+    # hard-capped regardless of content type or dependency match — a clickbait
+    # title that name-drops a dep must not ride the dep boost into the brief.
+    clickbait:    0.30    # [0.15, 0.40]
 }
 
 # Community quality signal thresholds - extracted from source metadata

@@ -80,8 +80,8 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.03,
-      "score_max": 0.2,
+      "score_min": 0.15,
+      "score_max": 0.45,
       "should_be_relevant": true,
       "required_signals": [
         "interest",
@@ -125,8 +125,8 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.05,
-      "score_max": 0.3,
+      "score_min": 0.2,
+      "score_max": 0.6,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -236,8 +236,8 @@
     },
     "profile": "fullstack_js",
     "expected": {
-      "score_min": 0.06,
-      "score_max": 0.3,
+      "score_min": 0.3,
+      "score_max": 0.8,
       "should_be_relevant": true,
       "required_signals": [
         "interest",
@@ -281,8 +281,8 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.02,
-      "score_max": 0.18,
+      "score_min": 0.15,
+      "score_max": 0.5,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -325,8 +325,8 @@
     },
     "profile": "fullstack_js",
     "expected": {
-      "score_min": 0.1,
-      "score_max": 0.65,
+      "score_min": 0.3,
+      "score_max": 0.9,
       "should_be_relevant": true,
       "required_signals": [
         "interest",
@@ -648,8 +648,8 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.02,
-      "score_max": 0.2,
+      "score_min": 0.5,
+      "score_max": 1.0,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -670,8 +670,8 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.08,
-      "score_max": 0.35,
+      "score_min": 0.5,
+      "score_max": 1.0,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -692,8 +692,8 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.01,
-      "score_max": 0.12,
+      "score_min": 0.5,
+      "score_max": 1.0,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -714,8 +714,8 @@
     },
     "profile": "fullstack_js",
     "expected": {
-      "score_min": 0.02,
-      "score_max": 0.2,
+      "score_min": 0.5,
+      "score_max": 1.0,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -736,8 +736,8 @@
     },
     "profile": "python_data_scientist",
     "expected": {
-      "score_min": 0.02,
-      "score_max": 0.2,
+      "score_min": 0.5,
+      "score_max": 1.0,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -1127,8 +1127,8 @@
     },
     "profile": "fullstack_js",
     "expected": {
-      "score_min": 0,
-      "score_max": 0.6,
+      "score_min": 0.2,
+      "score_max": 0.85,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -1498,7 +1498,7 @@
   },
   {
     "id": "reg_npm_react_update",
-    "category": "true_positive",
+    "category": "true_negative",
     "description": "Regression: npm registry update for React (primary stack)",
     "item": {
       "title": "npm: react v19.3.0 — concurrent rendering improvements",
@@ -1509,14 +1509,14 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.20,
-      "score_max": 0.90,
-      "should_be_relevant": true,
+      "score_min": 0.0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
       "required_signals": [
         "interest",
         "ace"
       ],
-      "notes": "React is primary stack, npm update from registry source"
+      "notes": "React is NOT in a Rust developer stack (no react dep; profile is rust/tauri/sqlite) - off-stack frontend update, correctly low. Precision-first."
     }
   },
   {
