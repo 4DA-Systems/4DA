@@ -75,6 +75,12 @@ struct MastodonTag {
 
 /// Mastodon posts have no title (microblog) — derive a clean, short one from the HTML body: strip
 /// tags, decode the common entities, collapse whitespace, truncate at a word boundary.
+///
+/// When the body mentions a CVE/GHSA id, that id is hoisted to the front so a
+/// rambling toot ("Saturday, but self hosting, so here we go. …CVE-2026-49975…")
+/// leads with the newsworthy token instead of conversational preamble. This also
+/// lets the downstream content classifier see the id and tag the item as a
+/// security advisory (it classifies off the title).
 fn derive_title(html: &str) -> String {
     let mut text = String::with_capacity(html.len());
     let mut in_tag = false;
@@ -95,15 +101,50 @@ fn derive_title(html: &str) -> String {
         .replace("&nbsp;", " ");
     let collapsed = decoded.split_whitespace().collect::<Vec<_>>().join(" ");
 
-    if collapsed.chars().count() > 120 {
-        let truncated: String = collapsed.chars().take(120).collect();
-        match truncated.rfind(' ') {
-            Some(i) => format!("{}…", &truncated[..i]),
-            None => truncated,
+    // Hoist a security id to the front when it isn't already near the start.
+    if let Some(id) = first_security_id(&collapsed) {
+        let head: String = collapsed.chars().take(id.chars().count() + 4).collect();
+        if !head.contains(&id) {
+            return format!("{id} — {}", truncate_at_word(&collapsed, 96));
         }
-    } else {
-        collapsed
     }
+
+    truncate_at_word(&collapsed, 120)
+}
+
+/// Truncate `text` to at most `max` chars at a word boundary, appending an
+/// ellipsis when shortened.
+fn truncate_at_word(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    let truncated: String = text.chars().take(max).collect();
+    match truncated.rfind(' ') {
+        Some(i) => format!("{}…", &truncated[..i]),
+        None => format!("{truncated}…"),
+    }
+}
+
+/// Find the first CVE-YYYY-NNNN(+) or GHSA-xxxx-xxxx-xxxx id in `text`
+/// (uppercase form, the canonical convention). Returns the id verbatim.
+fn first_security_id(text: &str) -> Option<String> {
+    for key in ["CVE-", "GHSA-"] {
+        if let Some(pos) = text.find(key) {
+            // `text.find` returns a byte offset valid in `text`, so this slice is safe.
+            let token: String = text[pos..]
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+                .collect();
+            let token = token.trim_end_matches('-');
+            let has_digit = token.chars().any(|c| c.is_ascii_digit());
+            let hyphens = token.matches('-').count();
+            // CVE-2026-49975 (has digits) or GHSA-xxxx-xxxx-xxxx (3 hyphens).
+            if token.len() >= 8 && (has_digit || hyphens >= 3) {
+                return Some(token.to_string());
+            }
+        }
+    }
+    None
 }
 
 fn status_to_item(status: MastodonStatus) -> Option<SourceItem> {
@@ -468,6 +509,35 @@ mod tests {
             "long titles truncate at a word boundary"
         );
         assert_eq!(derive_title("<p></p>"), "");
+    }
+
+    #[test]
+    fn hoists_security_id_to_title_front() {
+        // A rambling toot that buries the CVE — the id must lead so the headline
+        // is useful and the downstream classifier (which reads the title) can tag
+        // it as a security advisory.
+        let html = "<p>Saturday, but self hosting, so here we go. Earlier this month the HTTP/2 Bomb CVE-2026-49975 dropped, worth a look.</p>";
+        let title = derive_title(html);
+        assert!(
+            title.starts_with("CVE-2026-49975"),
+            "CVE should lead the title, got: {title}"
+        );
+
+        // GHSA ids too.
+        let g = derive_title("<p>heads up, GHSA-w24r-5266-9c3c affects clerk, patch soon</p>");
+        assert!(g.starts_with("GHSA-w24r-5266-9c3c"), "got: {g}");
+
+        // Already at the front — don't double-prefix.
+        assert_eq!(
+            derive_title("<p>CVE-2026-1111 is a nasty one</p>"),
+            "CVE-2026-1111 is a nasty one"
+        );
+
+        // No id — unchanged behavior.
+        assert_eq!(
+            derive_title("<p>just a normal post about rust</p>"),
+            "just a normal post about rust"
+        );
     }
 
     #[test]
