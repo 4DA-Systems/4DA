@@ -370,6 +370,31 @@ fn advisory_affects_dependency(advisory_affected: &[(String, String)], dep: &Dep
     })
 }
 
+/// Dependency-match score for a CVE/OSV advisory after the strict survivor
+/// filter has run.
+///
+/// A security advisory names ONE affected package, so a confirmed match against
+/// a DIRECT dependency is full evidence and must not be halved. The old
+/// `total / 2.0` pinned a single-direct-dep CVE at ~0.375 — just below the 0.40
+/// threshold that unlocks the full SecurityAdvisory content boost (see the
+/// `content_dna_mult` gate in compute_quality_composite) — so the CVE only got
+/// the partial 1.10 boost and floored at the bare 0.50 critical fast-path floor.
+/// A CVE for the user's own direct dependency is the flagship preemption case;
+/// it should score high, not sit at the floor.
+///
+/// Summed confidence still rewards multiple corroborating matches; the strongest
+/// DIRECT-dependency confidence sets the floor. Transitive-only matches keep the
+/// old conservative halved score (a `x509-cert`-via-rustls CVE stays background).
+fn cve_dep_match_score(deps: &[DepMatch]) -> f32 {
+    let summed = (deps.iter().map(|d| d.confidence).sum::<f32>() / 2.0).min(1.0);
+    let direct_max = deps
+        .iter()
+        .filter(|d| d.is_direct)
+        .map(|d| d.confidence)
+        .fold(0.0_f32, f32::max);
+    summed.max(direct_max).min(1.0)
+}
+
 /// Return whichever content should be used for dependency matching. For CVE
 /// and OSV source items the synthetic metadata block is stripped; all other
 /// sources use the content verbatim.
@@ -496,9 +521,10 @@ fn extract_signals(
                 }
                 false
             });
-            // Recompute dep_match_score from the surviving deps.
-            let total: f32 = deps.iter().map(|d| d.confidence).sum();
-            score = (total / 2.0).min(1.0);
+            // Recompute dep_match_score from the surviving deps. A confirmed
+            // direct-dependency match is full evidence for a CVE (see
+            // cve_dep_match_score) — do not halve it.
+            score = cve_dep_match_score(&deps);
         }
 
         // Structured advisory cross-reference: when the source adapter gives
@@ -509,8 +535,7 @@ fn extract_signals(
             let advisory_affected = extract_advisory_ecosystems(input.content);
             if !advisory_affected.is_empty() {
                 deps.retain(|d| advisory_affects_dependency(&advisory_affected, d));
-                let total: f32 = deps.iter().map(|d| d.confidence).sum();
-                score = (total / 2.0).min(1.0);
+                score = cve_dep_match_score(&deps);
             }
         }
 
@@ -2593,6 +2618,43 @@ mod tests {
             version: None,
             ecosystem: ecosystem.to_string(),
         }
+    }
+
+    #[test]
+    fn cve_dep_match_score_does_not_halve_direct_deps() {
+        // A single confirmed DIRECT dependency is full evidence for a CVE. The old
+        // `total / 2.0` halved it to ~0.375 — below the 0.40 SecurityAdvisory
+        // full-boost threshold (see content_dna_mult gate) — so direct-dep CVEs
+        // floored at 0.50. The fix floors the score at the strongest direct-dep
+        // confidence so the flagship preemption case can score high.
+        let direct = vec![test_dep("reqwest", "rust")]; // confidence 0.75, is_direct
+        let s = cve_dep_match_score(&direct);
+        assert!(
+            s >= 0.75,
+            "a single direct-dep (conf 0.75) must not be halved, got {s:.3}"
+        );
+        assert!(
+            s > 0.40,
+            "must clear the 0.40 SecurityAdvisory full-boost threshold, got {s:.3}"
+        );
+
+        // Transitive-only matches stay conservative (half weight, as before) so a
+        // `x509-cert`-via-rustls CVE remains background noise.
+        let mut transitive = test_dep("x509-cert", "rust");
+        transitive.is_direct = false;
+        transitive.confidence = 0.5;
+        let st = cve_dep_match_score(std::slice::from_ref(&transitive));
+        assert!(
+            st <= 0.40,
+            "a transitive-only match must stay conservative (<= 0.40), got {st:.3}"
+        );
+
+        // Multiple confirmed direct deps still accumulate via the summed path.
+        let many = vec![test_dep("tokio", "rust"), test_dep("hyper", "rust")];
+        assert!(
+            cve_dep_match_score(&many) >= 0.75,
+            "multiple confirmed deps remain high-confidence"
+        );
     }
 
     #[test]
