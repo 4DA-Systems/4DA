@@ -59,7 +59,7 @@ scraper = "0.23"
 # Embeddings (local MiniLM model)
 # In-process embedding via ONNX Runtime — zero network, zero config, privacy preserved.
 # ort-load-dynamic: loads onnxruntime shared lib at runtime (avoids MSVC 2022 static link requirement).
-fastembed = { version = "5", optional = true, default-features = false, features = ["ort-load-dynamic", "hf-hub-native-tls"] }
+fastembed = { version = "5", optional = true, default-features = false, features = ["ort-load-dynamic", "hf-hub-rustls-tls"] }
 
 # Thread-safe state
 once_cell = "1"
