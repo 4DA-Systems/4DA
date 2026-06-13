@@ -526,7 +526,10 @@ pub fn is_display_worthy(tech: &str) -> bool {
 /// Domain concerns are non-tech keywords that are contextually relevant based on
 /// what kind of developer the user is. A Tauri dev cares about "packaging" and "installer"
 /// even though those aren't tech names.
-fn infer_domain_concerns(primary: &HashSet<String>, all_tech: &HashSet<String>) -> HashSet<String> {
+pub(crate) fn infer_domain_concerns(
+    primary: &HashSet<String>,
+    all_tech: &HashSet<String>,
+) -> HashSet<String> {
     let mut concerns = HashSet::new();
 
     let combined: HashSet<&str> = primary

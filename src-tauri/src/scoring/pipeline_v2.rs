@@ -1394,6 +1394,19 @@ fn apply_commodity_ceiling(
 ) -> f32 {
     use crate::content_dna::ContentType;
 
+    let title_lower = title.to_lowercase();
+
+    // Egregious clickbait is hard-capped regardless of content type or dep match
+    // — a clickbait title name-dropping a dependency must not ride the dep-match
+    // domain promotion into the brief. Genuine security/version content is exempt
+    // so a (rare) clickbait-styled CVE still surfaces.
+    if crate::content_quality::is_strong_clickbait(title)
+        && !has_security_pattern(&title_lower)
+        && !has_version_conflict(&title_lower)
+    {
+        return score.min(scoring_config::COMMODITY_CEILING_CLICKBAIT);
+    }
+
     // Only applies to commodity types
     let ceiling = match content_type {
         ContentType::Tutorial => scoring_config::COMMODITY_CEILING_TUTORIAL,
@@ -1413,7 +1426,6 @@ fn apply_commodity_ceiling(
     }
 
     // Security/version exemptions
-    let title_lower = title.to_lowercase();
     if has_security_pattern(&title_lower) || has_version_conflict(&title_lower) {
         return score;
     }
