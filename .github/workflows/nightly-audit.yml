@@ -69,10 +69,15 @@ jobs:
           EXIT_CODE=$?
           set -e
           echo "$OUTPUT"
+          # Bound what becomes a step output. The full text is later handed to
+          # the issue-reporter through the process environment, and an unbounded
+          # value (cargo deny dumps the whole dependency tree) overflows it with
+          # "Argument list too long" — which silently broke failure reporting.
+          # Keep the last 6 KB: enough for the error/advisory summary at the end.
           {
             echo "exit_code=$EXIT_CODE"
             echo "output<<CARGO_AUDIT_EOF"
-            echo "$OUTPUT"
+            printf '%s\n' "$OUTPUT" | tail -c 6000
             echo "CARGO_AUDIT_EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -89,7 +94,7 @@ jobs:
           {
             echo "exit_code=$EXIT_CODE"
             echo "output<<CARGO_DENY_EOF"
-            echo "$OUTPUT"
+            printf '%s\n' "$OUTPUT" | tail -c 6000
             echo "CARGO_DENY_EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -108,7 +113,7 @@ jobs:
           {
             echo "exit_code=$EXIT_CODE"
             echo "output<<PNPM_AUDIT_EOF"
-            echo "$OUTPUT"
+            printf '%s\n' "$OUTPUT" | tail -c 6000
             echo "PNPM_AUDIT_EOF"
           } >> "$GITHUB_OUTPUT"
 
