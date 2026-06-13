@@ -1904,13 +1904,24 @@ pub(crate) fn score_item(
         && raw.matched_deps.iter().any(|d| !d.is_dev);
     let critical_fast_path = (is_security || is_breaking) && has_strong_dep_match;
 
+    // A CVE confirmed against the user's DIRECT (non-dev) dependency is the
+    // flagship preemption case and the highest-confidence security signal — it
+    // floors higher than a generic match so a pure-dep-signal advisory (weak
+    // embedding, no topic overlap) still scores clearly relevant instead of
+    // sitting at the bare 0.50 floor.
+    let has_direct_dep = raw.matched_deps.iter().any(|d| d.is_direct && !d.is_dev);
+    let fast_path_floor = if has_direct_dep {
+        scoring_config::CRITICAL_FASTPATH_DIRECT_DEP_FLOOR
+    } else {
+        scoring_config::CRITICAL_FASTPATH_SCORE_FLOOR
+    };
+
     // If critical fast-path, boost score to ensure it passes the gate
-    let combined_score =
-        if critical_fast_path && combined_score < scoring_config::CRITICAL_FASTPATH_SCORE_FLOOR {
-            combined_score.max(scoring_config::CRITICAL_FASTPATH_SCORE_FLOOR) // Floor for security items matching deps
-        } else {
-            combined_score
-        };
+    let combined_score = if critical_fast_path && combined_score < fast_path_floor {
+        combined_score.max(fast_path_floor) // Floor for security items matching deps
+    } else {
+        combined_score
+    };
 
     // ── Final top-end de-saturation ───────────────────────────────────
     // Keep the strongest items rankable (the Brief's top slots) and honor the

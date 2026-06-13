@@ -176,6 +176,10 @@ final_ceiling {
 critical_fastpath {
     score_floor: 0.50           # [0.40, 0.70]
     dep_match_threshold: 0.25   # [0.15, 0.40]
+    # A CVE confirmed against a DIRECT dependency is the flagship preemption case
+    # — higher confidence than a generic match, so it floors higher (and clears
+    # the recalibrated declared-dependency CVE ranges).
+    direct_dep_floor: 0.65      # [0.50, 0.85]
 }
 
 # Foreign language suppression

@@ -688,3 +688,76 @@ fn cold_start_scores_have_spread() {
         scores,
     );
 }
+
+/// L1b regression: a CVE confirmed against the user's DIRECT dependency must
+/// score clearly relevant (>= the direct-dep fast-path floor), NOT sit at the
+/// bare 0.50 generic floor — the flagship preemption case. Hermetic: zero
+/// embedding (the floor is additive, so it fires without embedding signal);
+/// deps injected the way production's ACE records them.
+#[test]
+fn direct_dep_cve_clears_the_direct_dep_floor() {
+    fn mk_dep(name: &str) -> super::dependencies::DepInfo {
+        super::dependencies::DepInfo {
+            package_name: name.to_string(),
+            version: None,
+            is_dev: false,
+            is_direct: true,
+            search_terms: super::dependencies::extract_search_terms(name),
+            ecosystem: "rust".to_string(),
+        }
+    }
+
+    let db = bench_db();
+    let opts = no_freshness();
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
+
+    let mut ctx = rust_developer_ctx();
+    ctx.ace_ctx
+        .dependency_info
+        .insert("hyper".to_string(), mk_dep("hyper"));
+    ctx.ace_ctx.dependency_names.insert("hyper".to_string());
+
+    // A pure-dep-signal CVE (no topic/interest overlap, zero embedding) — exactly
+    // the case that floored at 0.50 before L1b.
+    let tags = vec!["security".to_string(), "cve".to_string()];
+    let input = ScoringInput {
+        id: 1,
+        title: "CVE-2026-5678: hyper HTTP/2 CONTINUATION frame flood",
+        url: Some("https://example.com"),
+        content: "A vulnerability in the hyper crate's HTTP/2 handling allows a CONTINUATION frame flood.",
+        source_type: "cve",
+        embedding: &zero_emb,
+        created_at: None,
+        detected_lang: "en",
+        source_tags: &tags,
+        tags_json: None,
+        feed_origin: None,
+    };
+    let direct = score_item(&input, &ctx, &db, &opts, None).top_score;
+
+    // An unrelated CVE (package NOT a dependency) must still score low — the
+    // floor only lifts CONFIRMED direct-dep matches.
+    let unrelated_input = ScoringInput {
+        id: 2,
+        title: "CVE-2026-88888: php-curl remote code execution in cURL wrapper",
+        url: Some("https://example.com"),
+        content: "A PHP cURL wrapper vulnerability allows remote code execution.",
+        source_type: "cve",
+        embedding: &zero_emb,
+        created_at: None,
+        detected_lang: "en",
+        source_tags: &tags,
+        tags_json: None,
+        feed_origin: None,
+    };
+    let unrelated = score_item(&unrelated_input, &ctx, &db, &opts, None).top_score;
+
+    assert!(
+        direct >= 0.60,
+        "direct-dep CVE must clear the direct-dep floor (~0.65), got {direct:.3}"
+    );
+    assert!(
+        unrelated < 0.30,
+        "unrelated CVE (php-curl, not a dep) must stay low, got {unrelated:.3}"
+    );
+}
