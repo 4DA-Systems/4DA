@@ -635,18 +635,21 @@ pub(crate) fn build_enriched_briefing(
     // Intra-batch fuzzy dedupe — collapses semantic duplicates.
     let deduped = crate::briefing_dedupe::dedupe_briefing_items(quality_filtered);
 
-    // Priority-aware sort: critical/alert first, then by score descending.
-    // The briefing is a curated surface — high-priority items MUST lead.
+    // Priority-aware sort: actionable intel (security/breaking) leads, then
+    // signal priority, score, corroboration, and finally a deterministic id
+    // tiebreak. The briefing is a curated surface — high-priority items MUST
+    // lead, and byte-identical scores (the scoring soft-ceiling can pin distinct
+    // items to the same value) must never order arbitrarily.
     let mut sorted = deduped;
-    sorted.sort_by(|a, b| {
-        let pa = priority_rank(a.signal_priority.as_deref());
-        let pb = priority_rank(b.signal_priority.as_deref());
-        pa.cmp(&pb).then_with(|| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-    });
+    sorted.sort_by(briefing_item_cmp);
+
+    // Corroboration detection on the WIDE pre-diversity pool. Clustering must see
+    // same-topic duplicates BEFORE diversity slotting spreads items across
+    // sources and discards the copies — running it on the final ~8 (as it used
+    // to) structurally found almost nothing, so every corroboration_count was 0.
+    // The corroboration bonus can shift ordering, so re-sort before selecting.
+    let corroboration_available = apply_topic_clustering(&mut sorted);
+    sorted.sort_by(briefing_item_cmp);
 
     // Diversity slots: guarantee at least 1 item per source that produced
     // results, then fill remaining slots from the global ranking. This
@@ -790,12 +793,8 @@ pub(crate) fn build_enriched_briefing(
         };
     }
 
-    // Topic clustering for corroboration detection.
-    // Load embeddings from the DB for the briefing items, then cluster by
-    // cosine similarity. Multi-source clusters get a corroboration bonus
-    // and alt_sources metadata for the UI badge.
-    let mut items = items;
-    let corroboration_available = apply_topic_clustering(&mut items);
+    // Corroboration was already computed on the wide pre-diversity pool above;
+    // the metadata travels with the surviving items here.
 
     // Split items into action-first sections.
     // Actions (security, breaking changes, etc.) lead the briefing.
@@ -811,12 +810,29 @@ pub(crate) fn build_enriched_briefing(
             .iter()
             .map(|a| a.title.to_lowercase())
             .collect();
+        // Also dedup by shared advisory id. A scored news item about CVE-X and a
+        // preemption alert for CVE-X have completely different titles, so the
+        // exact-title match alone never catches them and the same vulnerability
+        // appears twice (once as an "action" item, once as an alert).
+        let alert_ids: std::collections::HashSet<String> = preemption_alerts
+            .iter()
+            .flat_map(|a| a.advisory_ids.iter().map(|id| id.to_uppercase()))
+            .collect();
         items
             .into_iter()
             .filter(|item| {
-                !alert_titles
-                    .iter()
-                    .any(|at| at == &item.title.to_lowercase())
+                let title_l = item.title.to_lowercase();
+                if alert_titles.iter().any(|at| at == &title_l) {
+                    return false;
+                }
+                if !alert_ids.is_empty() {
+                    let mut ids = Vec::new();
+                    extract_ids_from_text(&item.title, &mut ids);
+                    if ids.iter().any(|id| alert_ids.contains(&id.to_uppercase())) {
+                        return false;
+                    }
+                }
+                true
             })
             .collect()
     };
@@ -1140,6 +1156,9 @@ fn apply_section_split(items: Vec<BriefingItem>) -> Vec<BriefingItem> {
             i.section = Some("watch".into());
             i.triage_reason = if i.corroboration_count > 0 {
                 Some(format!("Seen in {} sources", i.corroboration_count))
+            } else if !i.matched_deps.is_empty() {
+                let deps: Vec<&str> = i.matched_deps.iter().take(3).map(|s| s.as_str()).collect();
+                Some(format!("Relevant to {}", deps.join(", ")))
             } else {
                 Some("High relevance match".into())
             };
@@ -1197,6 +1216,55 @@ fn priority_rank(p: Option<&str>) -> u8 {
         Some("alert") => 1,
         Some("advisory") => 2,
         _ => 3, // "watch" or None
+    }
+}
+
+/// Canonical briefing ordering. Actionable intel (security advisories, breaking
+/// changes) leads regardless of relevance score; then signal priority, then
+/// score, then corroboration, then a deterministic `item_id` tiebreak.
+///
+/// The id tiebreak matters: the scoring soft-ceiling can pin two distinct items
+/// to a byte-identical score, and a stable sort would otherwise leave their
+/// order to chance (this is exactly how a homelab listicle ended up adjacent to
+/// an exploitable CVE in a real brief).
+fn briefing_item_cmp(a: &BriefingItem, b: &BriefingItem) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    let a_action = is_actionable_content_type(a.content_type.as_deref());
+    let b_action = is_actionable_content_type(b.content_type.as_deref());
+    b_action
+        .cmp(&a_action) // actionable (true) sorts first
+        .then_with(|| {
+            priority_rank(a.signal_priority.as_deref())
+                .cmp(&priority_rank(b.signal_priority.as_deref()))
+        })
+        .then_with(|| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal))
+        .then_with(|| b.corroboration_count.cmp(&a.corroboration_count))
+        .then_with(|| a.item_id.cmp(&b.item_id))
+}
+
+/// Honest provenance footer appended to the synthesis. Reports item and
+/// distinct-source counts, and ONLY claims corroboration when items were
+/// actually confirmed by more than one source. The previous "(N signals across
+/// <platforms>)" wording conflated total item count with corroboration and
+/// implied cross-source confirmation that the data did not support.
+fn synthesis_provenance(items: &[BriefingItem]) -> String {
+    let item_count = items.len();
+    let source_count = {
+        let mut s: Vec<&str> = items.iter().map(|i| i.source_type.as_str()).collect();
+        s.sort_unstable();
+        s.dedup();
+        s.len()
+    };
+    let corroborated = items.iter().filter(|i| i.corroboration_count > 0).count();
+    let base = format!(
+        "{item_count} item{} from {source_count} source{}",
+        if item_count == 1 { "" } else { "s" },
+        if source_count == 1 { "" } else { "s" },
+    );
+    if corroborated > 0 {
+        format!("{base}; {corroborated} cross-source corroborated")
+    } else {
+        base
     }
 }
 
@@ -2331,18 +2399,8 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                         );
 
                         let mut synthesis = prose;
-                        let mut src_types: Vec<&str> = briefing
-                            .items
-                            .iter()
-                            .map(|i| i.source_type.as_str())
-                            .collect();
-                        src_types.sort_unstable();
-                        src_types.dedup();
-                        synthesis.push_str(&format!(
-                            "\n\n({} signals across {})",
-                            briefing.items.len(),
-                            src_types.join(", ")
-                        ));
+                        synthesis
+                            .push_str(&format!("\n\n({})", synthesis_provenance(&briefing.items)));
                         return Ok(SynthesisResult {
                             prose: synthesis,
                             clusters: Some(output.clusters),
@@ -2629,19 +2687,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         );
 
         let mut synthesis = response.content;
-        let mut source_types: Vec<&str> = briefing
-            .items
-            .iter()
-            .map(|i| i.source_type.as_str())
-            .collect();
-        source_types.sort_unstable();
-        source_types.dedup();
-        let provenance = format!(
-            "\n\n({} signals across {})",
-            briefing.items.len(),
-            source_types.join(", ")
-        );
-        synthesis.push_str(&provenance);
+        synthesis.push_str(&format!("\n\n({})", synthesis_provenance(&briefing.items)));
 
         return Ok(SynthesisResult {
             prose: synthesis,
@@ -2694,6 +2740,67 @@ mod tests {
         )
         .unwrap();
         conn
+    }
+
+    fn mk_item(title: &str, source_type: &str, score: f32) -> BriefingItem {
+        BriefingItem {
+            title: title.into(),
+            source_type: source_type.into(),
+            score,
+            signal_type: None,
+            url: None,
+            item_id: None,
+            signal_priority: None,
+            description: None,
+            matched_deps: vec![],
+            content_type: None,
+            corroboration_count: 0,
+            alt_sources: vec![],
+            section: None,
+            triage_reason: None,
+        }
+    }
+
+    #[test]
+    fn briefing_cmp_puts_actionable_first_then_deterministic() {
+        // A security advisory must lead even with a LOWER score than a listicle —
+        // the exact homelab-listicle-above-CVE failure this fixes.
+        let mut cve = mk_item("HTTP/2 Bomb CVE", "mastodon", 0.80);
+        cve.content_type = Some("security_advisory".into());
+        cve.item_id = Some(10);
+        let mut listicle = mk_item("awesome-homelab", "mastodon", 0.95);
+        listicle.item_id = Some(20);
+        let mut v = vec![listicle, cve];
+        v.sort_by(briefing_item_cmp);
+        assert_eq!(v[0].title, "HTTP/2 Bomb CVE", "actionable content leads");
+
+        // Byte-identical scores order deterministically by item_id, not by chance.
+        let mut a = mk_item("A", "hackernews", 0.9017062);
+        a.item_id = Some(2);
+        let mut b = mk_item("B", "reddit", 0.9017062);
+        b.item_id = Some(1);
+        let mut t = vec![a, b];
+        t.sort_by(briefing_item_cmp);
+        assert_eq!(t[0].title, "B", "lower item_id is the stable tiebreak");
+    }
+
+    #[test]
+    fn synthesis_provenance_is_honest_about_corroboration() {
+        let items = vec![
+            mk_item("a", "hackernews", 0.9),
+            mk_item("b", "reddit", 0.9),
+            mk_item("c", "reddit", 0.9),
+        ];
+        // No corroboration -> must NOT imply cross-source confirmation.
+        let p = synthesis_provenance(&items);
+        assert_eq!(p, "3 items from 2 sources");
+        assert!(!p.contains("signal"), "must not imply corroboration: {p}");
+
+        // With real corroboration, say so explicitly.
+        let mut corro = items.clone();
+        corro[0].corroboration_count = 2;
+        let p2 = synthesis_provenance(&corro);
+        assert!(p2.contains("1 cross-source corroborated"), "got: {p2}");
     }
 
     #[test]
