@@ -55,6 +55,11 @@ impl SourceTier {
             // Social, video, product launches
             "twitter" | "bluesky" | "youtube" | "producthunt" => SourceTier::Peripheral,
 
+            // Federated social (Mastodon/Lemmy) — was silently falling through to
+            // the `_` default; made explicit so the calibration intent is visible
+            // and the authority drift guard covers it.
+            "mastodon" | "lemmy" => SourceTier::Peripheral,
+
             // Custom RSS
             "rss" => SourceTier::Peripheral,
 

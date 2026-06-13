@@ -44,6 +44,12 @@ pub(crate) fn source_authority(source_type: &str) -> f32 {
         "bluesky" => 0.60,
         "youtube" => 0.60, // Quality tech content growing (conferences, deep dives)
 
+        // Federated social — community value but higher automation/bot ratio than
+        // curated aggregators. Were silently uncalibrated (defaulted to 0.50)
+        // until 2026-06-14; now explicit.
+        "mastodon" => 0.55,
+        "lemmy" => 0.55,
+
         // Lower technical depth
         "devto" => 0.50,       // Mixed quality, good for tutorials
         "producthunt" => 0.45, // Product launches, low technical depth
@@ -66,7 +72,9 @@ pub(crate) const KNOWN_SOURCE_TYPES: &[&str] = &[
     "go_modules",
     "hackernews",
     "huggingface",
+    "lemmy",
     "lobsters",
+    "mastodon",
     "npm_registry",
     "osv",
     "papers_with_code",
@@ -147,6 +155,8 @@ mod tests {
             ("twitter", 0.60),
             ("bluesky", 0.60),
             ("youtube", 0.60),
+            ("mastodon", 0.55),
+            ("lemmy", 0.55),
             ("devto", 0.50),
             ("producthunt", 0.45),
         ];
@@ -161,8 +171,29 @@ mod tests {
 
     /// Every adapter's source_type must be explicitly calibrated and in range —
     /// no real source should silently inherit the unknown-source default.
+    ///
+    /// Derived from the LIVE source registry (`build_all_sources`), not a
+    /// hand-maintained list: previously this test iterated `KNOWN_SOURCE_TYPES`,
+    /// which itself omitted `mastodon` and `lemmy`, so the guard passed while two
+    /// registered sources were silently uncalibrated. Cross-checking against the
+    /// registry makes that class of drift impossible — a new adapter that isn't
+    /// added to `KNOWN_SOURCE_TYPES` (and thus to the `source_authority` match)
+    /// fails here.
     #[test]
     fn every_source_type_is_calibrated() {
+        for source in crate::sources::build_all_sources() {
+            let st = source.source_type();
+            assert!(
+                KNOWN_SOURCE_TYPES.contains(&st),
+                "source_type '{st}' is registered in build_all_sources() but missing \
+                 from KNOWN_SOURCE_TYPES — add an explicit `source_authority` arm and \
+                 list entry so it can't fall through to the 0.50 default"
+            );
+            let w = source_authority(st);
+            assert!((0.0..=1.0).contains(&w), "{st} authority {w} out of range");
+        }
+        // Range check over the static list too (covers any entry not currently
+        // emitted by an adapter).
         for source in KNOWN_SOURCE_TYPES {
             let w = source_authority(source);
             assert!(
