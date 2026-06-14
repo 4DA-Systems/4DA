@@ -281,8 +281,16 @@ impl Source for PypiSource {
             "PyPI deep scan: fetching all monitored packages"
         );
 
+        // In strict manifest mode the package list is the full pinned manifest; cap per cycle so a
+        // large stack's deep fetch finishes within the adapter timeout instead of surfacing nothing.
+        // Non-strict deep scan is unchanged (queries every monitored package).
+        let packages: Vec<&String> = if crate::source_fetching::strict_manifest_mode() {
+            self.packages.iter().take(self.config.max_items).collect()
+        } else {
+            self.packages.iter().collect()
+        };
         let mut items = Vec::new();
-        for package in &self.packages {
+        for package in packages {
             match self.fetch_package(package).await {
                 Ok(item) => items.push(item),
                 Err(SourceError::RateLimited(_)) => break,
