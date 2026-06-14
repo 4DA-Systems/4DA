@@ -74,7 +74,16 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 /// decaying to noise), curated>synthesized domain detection, ACE topic-noise gate,
 /// and the dependency generic-subterm filter. Without this bump, every backlog
 /// item stayed stamped v4 = "not stale" and none of the above ever re-applied.
-pub(crate) const PIPELINE_VERSION: i32 = 5;
+///
+/// v6 (2026-06-14): propagate the direct-dep-CVE + clickbait scoring changes
+/// (e49e978c cve_dep_match_score, 749ef4a8 direct_dep_floor 0.65, a595db05
+/// clickbait hard-ceiling + domain_concerns fidelity) to the existing v5 backlog.
+/// These three commits changed scoring LOGIC but shipped without a version bump, so
+/// the 60.8k v5 items — including direct-dependency CVEs structurally pinned at the
+/// old 0.50 floor (e.g. the live axios CVE-2026-44490) — would never re-score and
+/// the fix would stay dark on the real corpus. The stale-drain re-scores the backlog
+/// over subsequent cycles; this is the rule-10 dogfood window made real.
+pub(crate) const PIPELINE_VERSION: i32 = 6;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
