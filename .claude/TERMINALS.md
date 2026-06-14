@@ -22,7 +22,7 @@
      (run-cycle.mjs FOURDA_STRICT_MANIFEST=1) committed in D:\runyourempire\4da-ledger. Files: 8
      src-tauri + TERMINALS.md (pathspec). NOT mine, left untouched: .gitignore/.mcp.json/CLAUDE.md/
      ResultItemExpanded.tsx (peer) + data/4da.db-wal.bak (scoring-recall). Commit Lock RELEASED. -->
-<!-- opus-ledger-engine **Commit Lock**: HELD (committing my pathspec files now) -->
+<!-- opus-ledger-engine **Commit Lock**: RELEASED (committed e0169561; push to origin/main HELD for operator) -->
 
 <!-- opus-scoring-recall (2026-06-14, DOGFOOD START): DONE. Founder-approved rule-10 dogfood for the
      scoring changes is LIVE. Shipped + pushed `bdf9b6b3`: PIPELINE_VERSION 5->6 (the 3 scoring commits
