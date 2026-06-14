@@ -20,6 +20,13 @@ export function useUpdateCheck() {
   const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
+    // The updater plugin is registered only in release builds
+    // (`#[cfg(not(debug_assertions))]` in lib.rs), so calling check() in a dev
+    // build raises "plugin updater not found". Mirror that guard here: skip the
+    // check in dev (DEV aligns with debug_assertions) so we never make an IPC
+    // call we know will fail. There's nothing to update in a dev build anyway.
+    if (import.meta.env.DEV) return;
+
     let cancelled = false;
 
     async function checkForUpdate() {
