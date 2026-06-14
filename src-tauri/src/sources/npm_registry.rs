@@ -87,7 +87,12 @@ impl NpmRegistrySource {
         // Use real user deps from ACE if available, fall back to popular defaults
         let ace_packages = crate::source_fetching::load_ace_packages_for_ecosystem("npm");
         let packages = if ace_packages.is_empty() {
-            DEFAULT_PACKAGES.iter().map(|s| s.to_string()).collect()
+            // Strict manifest mode: fetch NOTHING rather than the global default list.
+            if crate::source_fetching::strict_manifest_mode() {
+                Vec::new()
+            } else {
+                DEFAULT_PACKAGES.iter().map(|s| s.to_string()).collect()
+            }
         } else {
             ace_packages
         };
@@ -249,6 +254,20 @@ impl Source for NpmRegistrySource {
     async fn fetch_items_deep(&self, _items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
+        }
+
+        // Strict manifest mode: never widen to EXTENDED_PACKAGES (global defaults). Fetch only
+        // the manifest-grounded set (self.packages, which is empty when the stack has no npm
+        // deps), exactly like fetch_items.
+        if crate::source_fetching::strict_manifest_mode() {
+            let items = self
+                .fetch_package_list(&self.packages, self.config.max_items)
+                .await?;
+            info!(
+                items = items.len(),
+                "Fetched npm registry items (strict manifest)"
+            );
+            return Ok(items);
         }
 
         info!("Deep fetching npm registry (default + extended packages)");

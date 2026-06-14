@@ -445,6 +445,90 @@ pub(crate) fn load_github_languages_from_settings() -> Vec<String> {
     }
 }
 
+/// Whether the engine runs in strict manifest mode (`FOURDA_STRICT_MANIFEST=1`).
+///
+/// In strict mode the engine surfaces ONLY manifest-grounded release/vulnerability items:
+/// registry fetchers never fall back to global default package lists, crates.io's
+/// recent-updates discovery feed is disabled, the Go fetcher targets the stack's modules
+/// instead of the whole-registry index, and vulnerabilities are routed through
+/// dependency matching (`osv::matching`) rather than the global popular-package flow.
+///
+/// This is the mode the 4DA receipts ledger runs the headless engine in (set alongside
+/// `FOURDA_DATA_DIR` per fixture). Read once at startup; with the flag unset, every gated
+/// path below is skipped and desktop/product behavior is byte-for-byte unchanged.
+pub(crate) fn strict_manifest_mode() -> bool {
+    static STRICT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *STRICT.get_or_init(|| {
+        std::env::var("FOURDA_STRICT_MANIFEST")
+            .ok()
+            .map(|v| {
+                let v = v.trim();
+                v == "1" || v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("yes")
+            })
+            .unwrap_or(false)
+    })
+}
+
+/// Canonical ecosystem token used to compare a dependency's stored ecosystem/language
+/// (e.g. "rust", "javascript", "PyPI", "go") against a registry source's ecosystem key
+/// (e.g. "crates.io", "npm", "pypi", "go"). Returns `None` for unknown ecosystems.
+fn ecosystem_token(eco: &str) -> Option<&'static str> {
+    Some(match eco.trim().to_lowercase().as_str() {
+        "npm" | "javascript" | "typescript" | "node" | "js" | "ts" => "npm",
+        "crates.io" | "rust" | "cargo" | "crates" => "crates",
+        "pypi" | "python" | "pip" | "py" => "pypi",
+        "go" | "golang" => "go",
+        "maven" | "java" | "gradle" => "maven",
+        "nuget" | "csharp" | "c#" | "dotnet" => "nuget",
+        "rubygems" | "ruby" | "gem" => "rubygems",
+        "packagist" | "php" | "composer" => "packagist",
+        _ => return None,
+    })
+}
+
+/// Manifest-grounded package names for `ecosystem`, read directly from the dependency
+/// tables the ACE full-scan populates (`user_dependencies` + `project_dependencies`)
+/// WITHOUT the git-relevance gate. Strict-mode only; non-dev runtime deps.
+///
+/// Uses the caller's RAW connection — deliberately never `get_database()`. This runs inside
+/// `build_all_sources()` (crates/npm/pypi constructors call `load_ace_packages_for_ecosystem`),
+/// which executes within the one-time database + source-registry init (`SOURCES_REGISTERED`
+/// `Once` in state.rs). Re-entering that init via the shared `Database` OnceCell/`Once` would
+/// deadlock — the exact hazard documented at state.rs:371.
+fn strict_manifest_packages_for(conn: &rusqlite::Connection, ecosystem: &str) -> Vec<String> {
+    let Some(want) = ecosystem_token(ecosystem) else {
+        return Vec::new();
+    };
+    let mut out: Vec<String> = Vec::new();
+
+    // Both tables store (package_name, ecosystem-or-language, is_dev). user_dependencies uses
+    // an explicit `ecosystem` column; project_dependencies stores the ecosystem in `language`.
+    for sql in [
+        "SELECT package_name, ecosystem, is_dev FROM user_dependencies",
+        "SELECT package_name, language, is_dev FROM project_dependencies",
+    ] {
+        let Ok(mut stmt) = conn.prepare(sql) else {
+            continue;
+        };
+        let Ok(rows) = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2).unwrap_or(0) != 0,
+            ))
+        }) else {
+            continue;
+        };
+        for (name, eco, is_dev) in rows.flatten() {
+            if !is_dev && ecosystem_token(&eco) == Some(want) {
+                out.push(name);
+            }
+        }
+    }
+
+    out
+}
+
 /// Load user's actual dependency names from ACE for a specific ecosystem.
 /// Returns package names extracted from project manifests (Cargo.toml, package.json, etc.).
 /// Falls back to empty vec if no deps are tracked yet.
@@ -466,22 +550,32 @@ pub(crate) fn load_ace_packages_for_ecosystem(ecosystem: &str) -> Vec<String> {
         _ => return Vec::new(),
     };
 
-    match crate::temporal::get_all_dependencies(&conn) {
-        Ok(deps) => {
-            let mut packages: Vec<String> = deps
-                .into_iter()
-                .filter(|d| manifest_types.contains(&d.manifest_type.as_str()) && !d.is_dev)
-                .map(|d| d.package_name)
-                .collect();
-            packages.sort();
-            packages.dedup();
-            packages
-        }
+    let mut packages: Vec<String> = match crate::temporal::get_all_dependencies(&conn) {
+        Ok(deps) => deps
+            .into_iter()
+            .filter(|d| manifest_types.contains(&d.manifest_type.as_str()) && !d.is_dev)
+            .map(|d| d.package_name)
+            .collect(),
         Err(e) => {
             tracing::debug!(target: "4da::sources", error = %e, ecosystem = ecosystem, "No ACE deps available");
             Vec::new()
         }
+    };
+
+    // Strict manifest mode (ledger/headless): `project_dependencies` is gated by a
+    // git-recency relevance score and is empty for the ledger's fixture stacks (plain
+    // dirs, no git history), so the loop above yields nothing and the registry sources
+    // would fall back to global defaults. Union in the manifest deps the ACE full-scan
+    // persists to `user_dependencies` (+ `project_dependencies`, ungated) so the fetchers
+    // target the stack's REAL pinned packages. Gated: desktop monitoring set is unchanged
+    // when the flag is unset.
+    if strict_manifest_mode() {
+        packages.extend(strict_manifest_packages_for(&conn, ecosystem));
     }
+
+    packages.sort();
+    packages.dedup();
+    packages
 }
 
 /// Load ACE-tracked packages WITH their installed versions for version-aware
@@ -530,6 +624,40 @@ pub(crate) fn load_default_rss_feeds() -> Vec<String> {
         .iter()
         .map(|f| f.url.clone())
         .collect()
+}
+
+// ============================================================================
+// Tests for strict manifest mode helpers
+// ============================================================================
+
+#[cfg(test)]
+mod strict_manifest_tests {
+    use super::*;
+
+    #[test]
+    fn ecosystem_token_canonicalizes_aliases() {
+        // Registry source keys map to the same token as the deps' stored ecosystem/language.
+        assert_eq!(ecosystem_token("crates.io"), ecosystem_token("rust"));
+        assert_eq!(ecosystem_token("crates.io"), Some("crates"));
+        assert_eq!(ecosystem_token("npm"), ecosystem_token("javascript"));
+        assert_eq!(ecosystem_token("npm"), ecosystem_token("typescript"));
+        assert_eq!(ecosystem_token("pypi"), ecosystem_token("python"));
+        assert_eq!(ecosystem_token("pypi"), ecosystem_token("pip"));
+        assert_eq!(ecosystem_token("go"), ecosystem_token("golang"));
+    }
+
+    #[test]
+    fn ecosystem_token_is_case_and_whitespace_insensitive() {
+        assert_eq!(ecosystem_token("  Rust "), Some("crates"));
+        assert_eq!(ecosystem_token("PyPI"), Some("pypi"));
+    }
+
+    #[test]
+    fn ecosystem_token_unknown_is_none_and_never_cross_matches() {
+        assert_eq!(ecosystem_token("brainfuck"), None);
+        // Two distinct unknowns must not be treated as the same ecosystem.
+        assert_ne!(ecosystem_token("rust"), ecosystem_token("unknown-eco"));
+    }
 }
 
 // ============================================================================

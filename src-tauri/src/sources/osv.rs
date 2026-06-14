@@ -232,6 +232,91 @@ fn get_active_osv_ecosystems() -> Vec<String> {
 }
 
 // ============================================================================
+// Strict manifest mode — dependency-matched advisories
+// ============================================================================
+
+/// Strict manifest mode: surface only vulnerabilities that are **version-matched to the
+/// stack's pinned dependencies**, via `osv::matching::get_matched_advisories`, instead of
+/// the global popular-package query flow above. The advisory mirror is synced first when
+/// stale so a single `--once` cycle can surface grounded vulns (the headless step-3 sync's
+/// freshness gate then skips the just-synced mirror — no double download).
+async fn matched_advisories_as_items() -> Vec<SourceItem> {
+    let db = match crate::get_database() {
+        Ok(db) => db,
+        Err(e) => {
+            warn!(target: "4da::sources", error = %e, "OSV strict mode: database unavailable");
+            return Vec::new();
+        }
+    };
+
+    let needs_sync =
+        crate::osv::sync::needs_sync(&db, crate::osv::sync::DEFAULT_SYNC_MAX_AGE_HOURS)
+            .unwrap_or(true);
+    if needs_sync {
+        if let Err(e) = crate::osv::sync::sync(&db).await {
+            warn!(target: "4da::sources", error = %e, "OSV strict mode: advisory sync failed — matching against existing mirror");
+        }
+    }
+
+    let matched = crate::osv::matching::get_matched_advisories(&db).unwrap_or_default();
+    let items: Vec<SourceItem> = matched
+        .iter()
+        .map(matched_advisory_to_source_item)
+        .collect();
+    info!(
+        target: "4da::sources",
+        count = items.len(),
+        "OSV strict mode: surfaced manifest-matched advisories"
+    );
+    items
+}
+
+/// Build a `SourceItem` from a dependency-matched advisory. The title LEADS with the
+/// affected package name (after the `[advisory-id]` prefix) so the ledger's grounding gate
+/// — which grounds a vulnerability on the leading title token — verifies it names a pinned
+/// dependency. e.g. `[GHSA-xxxx-yyyy-zzzz] axios: SSRF via crafted URL`.
+fn matched_advisory_to_source_item(m: &crate::osv::types::MatchedAdvisory) -> SourceItem {
+    let title = format!("[{}] {}: {}", m.advisory_id, m.package_name, m.summary);
+    let url = m
+        .source_url
+        .clone()
+        .or_else(|| Some(format!("https://osv.dev/vulnerability/{}", m.advisory_id)));
+
+    let mut content_parts = vec![
+        format!("{} ({})", m.package_name, m.ecosystem),
+        m.summary.clone(),
+    ];
+    if let Some(details) = &m.details {
+        content_parts.push(details.clone());
+    }
+    if let Some(installed) = &m.installed_version {
+        content_parts.push(format!("Installed: {installed}"));
+    }
+    if let Some(fixed) = &m.fixed_version {
+        content_parts.push(format!("Fixed in: {fixed}"));
+    }
+    let content = content_parts.join("\n");
+
+    let metadata = serde_json::json!({
+        "ecosystem": m.ecosystem,
+        "package": m.package_name,
+        "advisory_id": m.advisory_id,
+        "installed_version": m.installed_version,
+        "fixed_version": m.fixed_version,
+        "cvss_score": m.cvss_score,
+        "severity": m.severity_type,
+        "is_version_confirmed": m.is_version_confirmed,
+        "manifest_grounded": true,
+        "source_name": "osv",
+    });
+
+    SourceItem::new("osv", &m.advisory_id, &title)
+        .with_url(url)
+        .with_content(content)
+        .with_metadata(metadata)
+}
+
+// ============================================================================
 // Source Trait Implementation
 // ============================================================================
 
@@ -269,6 +354,12 @@ impl Source for OsvSource {
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
+        }
+
+        // Strict manifest mode: route through deterministic dependency matching and
+        // suppress the global popular-package query flow entirely.
+        if crate::source_fetching::strict_manifest_mode() {
+            return Ok(matched_advisories_as_items().await);
         }
 
         // Determine which ecosystems the user actually has dependencies in
@@ -311,6 +402,12 @@ impl Source for OsvSource {
     async fn fetch_items_deep(&self, _items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
+        }
+
+        // Strict manifest mode: deterministic dependency matching (same as the shallow
+        // path); the global batch query is suppressed.
+        if crate::source_fetching::strict_manifest_mode() {
+            return Ok(matched_advisories_as_items().await);
         }
 
         // Only query ecosystems the user has dependencies in
@@ -393,6 +490,52 @@ impl Source for OsvSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_matched_advisory_title_is_grounding_compatible() {
+        // The ledger's grounding gate grounds a vulnerability on the LEADING title token
+        // after stripping a `[id]` prefix. This test pins that contract: title must be
+        // `[<advisory_id>] <package_name>: <summary>` and the item must carry source_type
+        // "osv" with source_id = advisory_id.
+        let m = crate::osv::types::MatchedAdvisory {
+            advisory_id: "GHSA-xxxx-yyyy-zzzz".to_string(),
+            summary: "SSRF via crafted URL".to_string(),
+            details: Some("Long details".to_string()),
+            package_name: "axios".to_string(),
+            ecosystem: "npm".to_string(),
+            installed_version: Some("1.6.0".to_string()),
+            fixed_version: Some("1.6.8".to_string()),
+            severity_type: Some("CVSS_V3".to_string()),
+            cvss_score: Some(7.5),
+            source_url: Some("https://github.com/advisories/GHSA-xxxx-yyyy-zzzz".to_string()),
+            is_version_confirmed: true,
+            project_paths: vec!["/stack".to_string()],
+            published_at: Some("2026-01-01T00:00:00Z".to_string()),
+            dependency_instances: vec![],
+        };
+
+        let item = matched_advisory_to_source_item(&m);
+        assert_eq!(item.source_type, "osv");
+        assert_eq!(item.source_id, "GHSA-xxxx-yyyy-zzzz");
+        assert_eq!(
+            item.title,
+            "[GHSA-xxxx-yyyy-zzzz] axios: SSRF via crafted URL"
+        );
+
+        // Replicate the ledger's grounding extraction (grounding.mjs isGrounded, vuln branch):
+        // strip the leading `[...]` id prefix, take the first token before whitespace/colon.
+        let body = item.title.trim_start_matches('[');
+        let after_id = body.splitn(2, ']').nth(1).unwrap().trim();
+        let leading = after_id.split([' ', ':']).next().unwrap();
+        assert_eq!(
+            leading, "axios",
+            "leading title token must be the pinned package"
+        );
+
+        // Content names the package+ecosystem and the fix, so the receipt is self-describing.
+        assert!(item.content.contains("axios (npm)"));
+        assert!(item.content.contains("Fixed in: 1.6.8"));
+    }
 
     #[test]
     fn test_osv_source_creation() {
