@@ -278,6 +278,15 @@ impl Source for CveSource {
             return Err(SourceError::Disabled);
         }
 
+        // Strict manifest mode: the GitHub Advisory feed is a global popular-package flow
+        // (ungrounded — the source of the identical cross-stack `cve:*` items). Grounded,
+        // version-matched vulnerabilities are surfaced via the OSV matching path instead,
+        // so suppress this source entirely.
+        if crate::source_fetching::strict_manifest_mode() {
+            tracing::info!(target: "4da::sources", "Strict manifest mode: CVE global feed suppressed (vulns routed via OSV matching)");
+            return Ok(Vec::new());
+        }
+
         // Filter by user's actual ecosystems when ACE data is available
         let user_ecosystems = get_user_ecosystems();
 
@@ -311,6 +320,11 @@ impl Source for CveSource {
     async fn fetch_items_deep(&self, items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
+        }
+
+        // See fetch_items: suppressed in strict manifest mode.
+        if crate::source_fetching::strict_manifest_mode() {
+            return Ok(Vec::new());
         }
 
         let user_ecosystems = get_user_ecosystems();

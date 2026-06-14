@@ -82,7 +82,13 @@ impl CratesIoSource {
     pub fn new() -> Self {
         let ace_crates = crate::source_fetching::load_ace_packages_for_ecosystem("crates.io");
         let crates = if ace_crates.is_empty() {
-            DEFAULT_CRATES.iter().map(|s| s.to_string()).collect()
+            // Strict manifest mode: no manifest deps means fetch NOTHING, never the global
+            // default crate list (which would publish ungrounded release receipts).
+            if crate::source_fetching::strict_manifest_mode() {
+                Vec::new()
+            } else {
+                DEFAULT_CRATES.iter().map(|s| s.to_string()).collect()
+            }
         } else {
             ace_crates
         };
@@ -363,10 +369,13 @@ impl Source for CratesIoSource {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
 
-        // 2. Fetch recently updated for discovery (cap at 10)
+        // 2. Fetch recently updated for discovery (cap at 10).
+        // Skipped in strict manifest mode: the recent-updates feed is global discovery
+        // (random crates not in the stack's manifest) — exactly the ungrounded noise the
+        // ledger must never publish. Strict mode fetches only the targeted crates above.
         let remaining = self.config.max_items.saturating_sub(items.len());
         let discovery_count = remaining.min(10);
-        if discovery_count > 0 {
+        if discovery_count > 0 && !crate::source_fetching::strict_manifest_mode() {
             match self.fetch_recent(discovery_count).await {
                 Ok(recent) => {
                     info!(count = recent.len(), "Fetched recently updated crates");

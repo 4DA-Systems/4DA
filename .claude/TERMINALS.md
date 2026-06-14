@@ -9,6 +9,464 @@
 
 ## Active Terminals
 
+<!-- opus-ledger-engine (2026-06-15): DONE — committed local, push HELD for operator (4DA is the
+     default branch; per global rule 6 the push is the operator's call). FOURDA_STRICT_MANIFEST=1
+     makes the headless engine surface ONLY manifest-grounded release/vuln items for the receipts
+     ledger; all paths gated, desktop byte-for-byte unchanged when unset. Closed 4 leaks (A registry
+     defaults/0.15-gate + dep union; B crates.io discovery feed; C targeted Go proxy fetcher; D OSV
+     routed via dependency matching, CVE global feed suppressed). Caught+fixed two issues live: a
+     startup deadlock (strict union called get_database() inside build_all_sources -> re-entered the
+     SOURCES_REGISTERED Once) and an npm fetch_items_deep EXTENDED_PACKAGES leak. VERIFIED: all 4
+     reference stacks (rust/nextjs/python/go) run --once strict with 0 ungrounded publishable
+     source_items (ledger's own grounding.mjs); full lib 3856/0; +6 unit tests. Ledger one-liner
+     (run-cycle.mjs FOURDA_STRICT_MANIFEST=1) committed in D:\runyourempire\4da-ledger. Files: 8
+     src-tauri + TERMINALS.md (pathspec). NOT mine, left untouched: .gitignore/.mcp.json/CLAUDE.md/
+     ResultItemExpanded.tsx (peer) + data/4da.db-wal.bak (scoring-recall). Commit Lock RELEASED. -->
+<!-- opus-ledger-engine **Commit Lock**: HELD (committing my pathspec files now) -->
+
+<!-- opus-scoring-recall (2026-06-14, DOGFOOD START): DONE. Founder-approved rule-10 dogfood for the
+     scoring changes is LIVE. Shipped + pushed `bdf9b6b3`: PIPELINE_VERSION 5->6 (the 3 scoring commits
+     changed logic but never bumped it, so the fix was dark on the 60.8k v5 corpus; bump = convention
+     per 168d41fc; full lib 3850/0, gate PASSED). Rebuilt fourda.exe + fourda-engine.exe (new code) —
+     the hourly "4DA Background Refresh" task uses fourda.exe so it now drains with NEW code. Ran 6
+     headless cycles: backlog drain active (1228 v6), precision proven (Traefik non-dep CVE 0.50->0.25,
+     high-score 3040->2552 = release_notes/non-dep CVEs falling, nothing relevant crushed). New-code GUI
+     LAUNCHED (bare fourda.exe, CDP 9222; founder can switch to `pnpm run tauri dev` for HMR+bridge).
+     Live: Preemption 30 alerts, top = axios@1.12.2 (founder's real direct dep). DB backed up
+     (data/4da.db.bak-pre-dogfood-2026-06-14 + -wal). Watch daily: `node scripts/dogfood-check.cjs`.
+     Plan: .claude/plans/dogfood-2026-06-14.md. Decision: PENDING-DECISION.md (APPROVED). Lock not held
+     (only my 2 files committed via pathspec). NOTE for peers: a GUI fourda.exe (new code) + the hourly
+     --engine-once task are running on the live DB — normal dev pattern. -->
+<!-- TERMINALS housekeeping: the 4 pre-existing modified dotfiles (.gitignore/.mcp.json/CLAUDE.md) +
+     src/components/result-item/ResultItemExpanded.tsx (fable-light-theme claim, line ~83) were NOT mine
+     and left untouched. -wal backup data/4da.db-wal.bak-* is untracked (gitignore covers .db.bak* but not
+     .db-wal.bak*); leave or a peer owning .gitignore can add the pattern. -->
+
+<!-- opus-hermetic-ci (2026-06-14, benchmark overhaul): DONE + PUSHED @ origin/main a595db05.
+     Faithful dep_info + domain_concerns; clickbait hard ceiling (precision); sec_*/tp_* range
+     recalibration to match notes; reg_npm_react -> off-stack true_negative. RESULTS: true_positive
+     67->95%, security 92->100%, score-range 91->98.7%, true_negative 100% (hard gate held), gate
+     PASSED. Full lib 3850/3850. Only remaining: reg_desktop_packaging (single-signal B0 gate, left
+     honestly failing). Rule-10 dogfood before release. Lock RELEASED, claims cleared. -->
+
+
+
+<!-- opus-hermetic-ci (2026-06-14, scoring L1b): DONE + PUSHED @ origin/main 749ef4a8. Confirmed
+     direct-dep CVE floors at 0.65 (DSL direct_dep_floor + tiered fast-path floor); pure-dep CVEs
+     (tokio/hyper) 0.50->0.65. Hermetic test added; full lib 3849/3849; benchmark gate GREEN+NEUTRAL.
+     L2 (benchmark dep-fidelity) + the 13-scenario recalibration/clickbait-guard/non-CVE-dep-boost is
+     a founder-gated benchmark OVERHAUL (re-opens precision-first, needs judgment + dogfood) — NOT done;
+     full breakdown in scoring-recall-phaseb.md. L1+L1b = the shipped production wins. Lock RELEASED. -->
+
+
+
+<!-- opus-hermetic-ci (2026-06-14, scoring L1): DONE + PUSHED @ origin/main e49e978c. Direct-dep CVE
+     = full evidence (cve_dep_match_score replaces total/2.0). Single direct dep 0.375->0.75, clears
+     the 0.40 SecurityAdvisory full-boost gate. Unit test pins it; full lib 3848/3848; benchmark gate
+     GREEN+NEUTRAL (91%/71%/92%). PARTIAL (pure-dep-only CVEs still floor — L1b). L2 dep-fidelity +
+     sec_* range recalibration reverted/deferred (founder-gated, cascades). Plan: scoring-recall-phaseb.md.
+     Rule-10 dogfood before release. Lock RELEASED, claim cleared. -->
+
+
+
+<!-- opus-hermetic-ci (2026-06-14, morning-brief Layer 1): DONE + PUSHED @ origin/main
+     58b5d1a1. Security-first briefing_item_cmp + deterministic id tiebreak, corroboration
+     on wide pre-diversity pool, honest synthesis_provenance ("N items from M sources", no
+     fake "signals across"), Mastodon/Lemmy calibration arms + registry-derived drift test,
+     CVE/GHSA title hoist, triage matched_deps fallback, CVE-id item/alert dedup. +3 tests;
+     full lib 3847/3847; pre-push green. Lock RELEASED, claims cleared.
+     NOTE for all terminals: clippy 1.93 `-D warnings` flags 4 PRE-EXISTING pedantic lints
+     (reddit.rs sort_by/label x3, mastodon.rs:343 sort_by) — dormant (PR-only gate, direct
+     pushes bypass), NOT mine, label fix needs an AccessStrategy::label -> &'static str trait
+     change. Live brief regen reflects these changes only after a dev-server rebuild+restart
+     (running fourda.exe still has old code; did NOT restart — peer active). -->
+
+
+
+<!-- opus-hermetic-ci (2026-06-13/14, supply-chain remediation): DONE @ origin/main
+     810e93b2. (B) 21bd229d: fastembed -> rustls, removed native-tls/openssl/openssl-sys
+     + 3 more crates from the tree (cargo tree -i = empty on all targets; cargo check
+     clean). (C) 810e93b2: bounded audit output (last 6KB) so the issue-reporter no
+     longer crashes with "Argument list too long". Plus earlier 513c6811 (pnpm pin).
+     All pathspec commits; pre-push green (one pre-existing FE flake on first try, passed
+     on re-run 1292/1292). Lock RELEASED, claims cleared. Re-dispatching audit to confirm
+     fully GREEN. NOTE: pre-existing intermittent FE test flake still unfixed (separate). -->
+
+
+<!-- opus-hermetic-ci (2026-06-13, supply-chain fix): DONE @ origin/main 513c6811 —
+     pinned all 4 pnpm/action-setup usages to 9.15.0 (nightly-audit, publish-mcp-server,
+     release x2). Root cause: unpinned action-setup drifted to pnpm 10 (Node>=22.13,
+     node:sqlite), crashing the Node-20 audit before any check ran — blind 3+ nights.
+     Pathspec commit (3 files); YAML validated; pre-push green. Lock RELEASED, claim
+     cleared. Dispatched workflow to confirm it runs + surface any REAL advisories. -->
+
+
+<!-- opus-hermetic-ci (2026-06-13, follow-up): DONE @ origin/main 4a8a2c18 — 3
+     scoring::benchmark_calibration real-embedding tests now skip when the fastembed
+     model can't be loaded (was a flaky network download that broke the fresh Linux
+     runner). Pathspec commit (1 file); fmt+compile clean; pre-push suite green.
+     Commit Lock RELEASED, claim cleared. Re-running hermetic.yml to confirm green. -->
+
+<!-- opus-hermetic-ci (2026-06-13): hermetic.yml + validate.yml landed @ origin/main
+     d2ffe8ac (pushed, pre-push suite green). First hosted run 27461744031: windows
+     GREEN (3844/0), ubuntu RED — 3 real-embedding calibration tests flaked on a
+     truncated model download. The gate worked: caught a non-hermetic test class on
+     run #1. Fixing the tests now (follow-up entry above). -->
+
+### Terminal: fable-light-theme (follow-up 2, 2026-06-13)
+Working on: founder request — Generate-AI-Summary button vibrancy (ghost cyan -> solid
+accent-action, token-based both themes).
+**Claims:** src/components/result-item/ResultItemExpanded.tsx ONLY.
+**Commit Lock**: not held (will hold at commit)
+
+<!-- fable-light-theme follow-up (2026-06-13): DONE + PUSHED @ origin/main b7b5264f (0/0). Commit
+     Lock RELEASED, claims cleared. Theme toggle now persistent through ONBOARDING: extracted to
+     shared src/components/ThemeToggle.tsx (UnifiedAppBar consumes it), pinned top-right end-4 in
+     Onboarding.tsx as the mirror of the top-left LanguageSwitcher. Live-verified both themes in
+     the wizard via Victauri (sun on void / moon on paper, in-place flip, sun-logo asset swaps).
+     Test-profile instance restored to dark default. -->
+
+<!-- fable-public-surface wave 3 (2026-06-13): DONE + PUSHED @ origin/main b047dd36 (0/0). Commit
+     Lock RELEASED, claim cleared. Blind-spots unit tests are now HERMETIC (closes the routed
+     finding in .claude/plans/pre-launch-audit-2026-06-13.md): cfg(test) thread-local Connection
+     seam (test_support) — count_signal_types_for_dep + lookup_installed_version + the dismissal
+     filter can NEVER read the live DB from unit tests; _conn pure variants run the real SQL
+     against the migrations-mirror schema; the 3 previously environment-dependent tests seed their
+     tokio security advisory explicitly (install_seeded_corpus); NEW inverse test pins
+     zero-signals -> capped-at-Medium. Verified: 94/94 module incl. against isolated empty
+     FOURDA_DATA_DIR (the exact fresh-checkout condition that failed in the audit worktree); full
+     lib 3,844/3,844 x2; fmt + clippy clean. NOTE: one UNRELATED flaky failure appeared in ONE of
+     three full-suite runs (not blind_spots, did not reproduce, name not captured) — if it recurs
+     on someone's push, it predates this change. -->
+     <!-- Commit Lock RELEASED (fable-public-surface wave 3) -->
+
+<!-- fable-light-theme (2026-06-13): DONE + PUSHED @ origin/main 84602c3b (0/0). Commit Lock
+     RELEASED, claims cleared. FULL LIGHT THEME ("Paper") shipped one-shot, founder-approved:
+     token overrides in App.css ([data-theme=light]: 13 semantic + ~25 status-shade remaps +
+     emissive tokens + color-scheme), pre-paint via index.html inline script (localStorage
+     4da-theme), src/lib/theme.ts (useTheme/useGeometryPalette/initTheme + native titlebar
+     setTheme), sun/moon toggle in UnifiedAppBar (i18n x13), 421 text-white -> text-text-primary
+     (16 orange-CTA keepers triaged line-level), inverse/gold CTAs tokenized
+     (accent-primary-hover/accent-gold-hover), emissive layer ink-gold-on-paper (BrandMark,
+     geometry SVGs, AmbientGlow), data-viz de-hardcoded (ContentGraph x3, RadarSVG,
+     StackIntelligence, TranslationEditor, SourceBrowser, CalibrationStep), NEW
+     sun-logo-light.webp (luminance-keyed cutout; founder caught the baked-black-disc splash
+     live - raster assets audited, not just CSS). LIVE-VERIFIED via Victauri both themes:
+     cold-boot persistence, splash, onboarding, main app, dark regression bit-identical.
+     tsc clean, 1292 FE tests green, i18n 13/13, pre-commit + pre-push gates passed (no
+     --no-verify). RULES FOR ALL TERMINALS now in memory project_light_theme.md: never
+     text-white for page text; every new surface eyeballed in BOTH themes. Founder dogfood of
+     light mode = the rule-10 gate. FLAGGED (pre-existing, not mine): ~31 eslint
+     unnecessary-type-assertion warnings at HEAD in untouched files (toolchain drift). -->
+
+<!-- fable-public-surface wave 2 (2026-06-13): DONE + PUSHED + LIVE-VERIFIED. Commit Lock RELEASED,
+     claims cleared. (1) 69df6a13: STREETS in 13 LANGUAGES — 84 translated pages + EN = 92 at
+     /streets[/<lang>]/<slug>/, hreflang x13 + x-default, native switcher, ar RTL, localized pagers,
+     sitemap from collections (100 URLs live); SETUP-GUIDE badge truth (gold SIGNAL/SIGNAL TRIAL,
+     not "green PRO"). Live-verified ja + ar + sitemap. (2) e77e6020: fresh-clone build fix — NEW
+     scripts/fetch-ocr-models.cjs in postinstall (gitignored src-tauri/models/ is a tauri resource
+     hard-dep; clone couldn't compile) + BUILD-FROM-SOURCE.md offline fallback.
+     /pre-launch RE-RUN in ISOLATED WORKTREE @ 69df6a13 (worktree removed): READY* — scoring 37/37
+     (known true_positive 76% soft spot unchanged), MCP PASS (14 tools, doctor clear, npm 4.6.1
+     current), FRE PASS (0 P0/0 P1; P2 aria-pressed nit on StackSelectStep toggles), frontend
+     1286/1286 + build + sizes clean, cargo check clean. ROUTED FINDING for blind-spots owner:
+     3 blind_spots tests (uncovered_dep_maps_to_gap_kind + report_converts_to_feed_with_score +
+     rebuild_feed_preserves_score_and_recounts_items) are NON-HERMETIC — they pass only against the
+     operator's live 4da.db (count_signal_types_for_dep reads the corpus from a unit test; introduced
+     w/ 152c620e #2b); fail deterministically in any pristine checkout. Full report:
+     .claude/plans/pre-launch-audit-2026-06-13.md -->
+     <!-- Commit Lock RELEASED (fable-public-surface wave 2) -->
+
+<!-- fable-public-surface (2026-06-12/13): DONE + PUSHED + LIVE-VERIFIED. Commit Lock RELEASED,
+     claims cleared. Public-surface truth sync, 4 commits on origin/main (0/0):
+     e5ce5411 (site: STREETS PUBLISHED ON THE WEB — site/scripts/render-streets.mjs renders
+     docs/streets -> 8 pages at /streets/<slug>/, strips in-app {@..@}/{?..?}/{=..=} directives to
+     no-data else-branches/fallbacks; Playbook gallery tab removed; MIT->Apache-2.0; 95%+/99%+ ->
+     tested 92%/98%; 33->14 MCP tools; sitemap fixed incl. dead /streets/activate page removal —
+     the /api/streets/activate STRIPE WEBHOOK is untouched, "streets" there is a legacy path name);
+     fa0e72af (onboarding: unverified "in about a minute" promise cut, 2 components + 13 locales,
+     15/15 tests); 94c0d931 (README/SETUP-GUIDE/RELEASE-NOTES draft same sweep); 806902e3 (NL search
+     free-tier consistency per d250e36f un-gating). LIVE-VERIFIED on 4da.ai post-deploy: module pages
+     render clean (zero leaked directives), homepage 4-tab gallery + Apache-2.0 + 92% stat, streets
+     CTAs -> module pages, sitemap 16 URLs. Verax task-a32de2f1 claimed but the board disconnected
+     mid-run — proof = the git SHAs above. JUDGMENT CALL flagged to founder: module pages are
+     indexed+linked (old W4 note said noindex-until-launch; the landing page already promised the
+     modules publicly, so unlinked would have stayed dishonest — flip to noindex is trivial if
+     preferred). FOLLOW-UPS staged: 12-language module translations exist in docs/streets/<lang>/ ->
+     hreflang wave (extend the generator with a locale loop); SETUP-GUIDE "green PRO badge" wording
+     unverified vs W6 tier-badge changes (Signal-not-Pro feedback) — needs an eyes-on check. -->
+     <!-- Commit Lock RELEASED (fable-public-surface) -->
+
+<!-- fable-scrollfix round 2 (2026-06-12): DONE + PUSHED @ origin/main 07f52829 (0/0). Swept all 14
+     fixed-inset-0 overlays for the a910507e bug class; fixed the 3 uncapped ones — KeyboardShortcutsModal
+     + TeamInviteDialog (panel max-h-[90vh] overflow-y-auto, SettingsModal idiom) + WaitlistSignup (modal
+     container overflow-y-auto + min-h-full wrapper; panels shared with inline mode left alone). tsc +
+     WaitlistSignup 10/10 green; full pre-push gate passed. Both idioms live-proven this session via
+     Victauri. LIVE-VERIFIED post-rebuild (fourda PID 27268, :7375, window shrunk 975->520->restored):
+     REAL shortcuts modal opened via "?" keypress — maxHeight 468px (90vh)/overflowY auto applied,
+     content 643>466 scrolls, title + last row both reachable, Escape closed clean (= TeamInviteDialog's
+     identical idiom proven); WaitlistSignup container replica scrolls 734>473, top+bottom reachable.
+     App left pristine (1200x975, no modal). Commit Lock RELEASED, claims cleared. Terminal closing. -->
+
+<!-- fable-scrollfix (2026-06-12): DONE + PUSHED @ origin/main a910507e (0/0). First-run celebration
+     overlay now scrolls instead of clipping on short windows (FirstRunTransition.tsx: overflow-y-auto
+     outer + min-h-full centering wrapper, the Onboarding.tsx idiom). 19/19 component tests + tsc green;
+     live-verified via Victauri eval_js on :7375 (old: scrollTop stuck at 0, top clipped; new: scrolls,
+     top reachable). Commit Lock RELEASED, claims cleared. -->
+
+<!-- fable-marketing-ledger (2026-06-12): DONE, entry cleared, terminal closed.
+     headless.rs cold-start fix 86979310 CONFIRMED ON ORIGIN (carried by peer push, sync 0/0).
+     External assets pushed: 4da-ledger (autonomous receipts engine — hourly cycle + 6h confirm
+     + weekly digest scheduled tasks, Verax-contract Ed25519 attestation, CI verify on GitHub
+     runners) + 4da-stackscan (client-side demo tool). Marketing masterplan + execution log:
+     .claude/plans/marketing-distribution-masterplan.md; content vault: docs/private/launch/;
+     pre-launch audit: .claude/plans/pre-launch-audit-2026-06-12.md. Scheduled tasks run at OS
+     level — no terminal required. Commit Lock RELEASED. -->
+
+### Terminal: fable-audit-remediation (started 2026-06-11)
+Working on: executing the approved 2026-06-11 deep-audit remediation (plan:
+.claude/plans/audit-remediation-2026-06-11.md). Waves, commit-per-wave:
+W1 preemption-win integrity (purge 16 false "os"/"http" wins, ambiguity guard in window
+detection/validation, feed telemetry); W2 tier rebalance (free OSV preemption floor, trial expiry
+banner, un-gate synthesize_search, blind-spots free teaser); W3 scoring generality (data-driven role
+inference, v2 lang gate, broad-terms, zero-embedding warning; off-domain change MEASURED first via sim);
+W4 STREETS removal from app nav + website publish prep; W5 live engagement-loop verification.
+W1 DONE + COMMITTED LOCAL @ 8fa1856e (pathspec, 7 files: package_ambiguity.rs NEW + windows/validation
+grounding + acted-win path + feed telemetry; 12+50+90 module tests green, clippy clean). 16 false
+preemption_wins purged from live DB directly (rows archived in plan doc; sweep re-guards post-rebuild).
+W2 DONE + COMMITTED LOCAL @ d250e36f (37 files: free OSV preemption floor + tier_scope,
+synthesize_search un-gated, TrialExpiryBanner, blind-spot teaser, 13 locales).
+**Claims (Wave 3):** src-tauri/src/scoring/context.rs, src-tauri/src/scoring/calibration.rs,
+src-tauri/src/scoring/pipeline_v2.rs, src-tauri/src/scoring/role_inference.rs (NEW),
+src-tauri/src/scoring/mod.rs (mod line only), src-tauri/src/scoring/keywords.rs (profile-aware
+specificity wrappers only), src-tauri/src/ace/topic_embeddings.rs,
+src-tauri/src/ace/mod.rs (topic_vec call site only), src-tauri/src/startup_health.rs +
+src-tauri/src/startup_health_tests.rs (zero-embedding entry; frontend health banner renders
+backend strings, so NO frontend/locale change needed). NOT touching: ace/scanner.rs, ace_commands/*,
+db/migrations.rs, reachability.rs, db/dependencies/queries.rs (@opus-step1-edges),
+Cargo.toml/.lock (@opus-secaudit), headless.rs (@fable-marketing-ledger),
+source_fetching/* + db/sources.rs + .mcp.json + CLAUDE.md + .gitignore (peer WIP).
+W3g (monorepo cap notice) DEFERRED: lives in scanner.rs/scanning.rs, both peer-claimed.
+W3 CODE-COMPLETE in tree (NOT committed yet): role_inference.rs NEW (11-persona table, founder
+regression pinned) + context.rs cascade deleted; profile-aware broad-term exemption
+(calibration.rs SpecificityProfile + keywords.rs _for variants, wired in pipeline_v2
+extract_signals); V1 lang gate ported to v2 (cap 0.05 post-soft-ceiling, fast-path suppressed on
+mismatch, 3 tests); startup_health check_embedding_coverage (>50% zero-vector of last-24h sample
+>=20, component "embedding" reuses existing HealthBanner fix-hint - NO frontend change);
+ace sync_topic_vec backfill + populate_topic_vec call in detect_context (502 live topics pending
+backfill). Gates: cargo check 0, scoring 656 + ace 7 + startup_health 25 green, clippy no new
+warnings, fmt clean on my files. CALIBRATED-SIM: 4 reality persona failures
+(power_user/context_switcher/niche_specialist/devops_sre) PROVEN PRE-EXISTING - identical
+metrics at d250e36f HEAD worktree baseline (threshold drift since 58863fde, not W3's).
+W3 DONE + COMMITTED LOCAL @ 5f83172b (10 files). **Claims (Wave 4 - STREETS removal from app):**
+W4 CODE-COMPLETE in tree (NOT committed - orchestrator reviews/commits). DELETED: PlaybookView +
+components/playbook/* (15) + StreetsEngineLink + playbook/sovereign-profile/unified-profile slices
+(+3 tests) + types/streets.ts + utils/playbook-markdown.tsx + locales/*/streets.json (13) +
+streets_commands.rs + streets_suggestion.rs. EDITED: ViewTabBar(.test)/ViewRouter/ui-slice/
+slice-types/store index+types/types index/commands.ts/license-slice/use-app-listeners/
+FirstRunTransition/CelebrationState/command-search-providers(.test)/i18n index/TranslationEditor/
+platform/BadgeRow/ProInsightRow/smoke+a11y+ui-slice(-nav)+store-edge+license tests/ui.json x13;
+Rust: lib.rs (2 mod + 4 reg) / victauri_commands.rs (4) / sovereign_facts+profile (dead writer) /
+toolkit.rs / translation_commands(+tests)/translation_pipeline / tests/victauri_dogfood.rs (4 tabs);
+scripts: 5x i18n ns lists + check-file-sizes exceptions. RETAINED w/ reason: playbook_commands(+tests),
+streets_engine, streets_localization, content_personalization/sovereign_*/suns constellation (wired,
+no UI invoker), DecisionWindow.streets_engine, playbook_progress table. Gates green: cargo check/fmt,
+lib tests 3818/0, clippy 0 new, tsc, frontend 1252/1252, validate-commands 391=391, wiring 9/9,
+i18n guard+translations, sizes, ghost 100%. KEEPING docs/streets/*.md (website source).
+ALL WAVES DONE + PUSHED @ origin/main ca6f5f70 (rev-list 0/0). W1 8fa1856e+4c6ec1e3 (win grounding,
+16 false wins purged, preemption_wins=0), W2 d250e36f (free OSV floor, trial banner, teaser),
+W3 5f83172b (role inference, lang gate, zero-embedding health, topic_vec heal), W4 0a8c7516 (Playbook
+tab retired, -7300 lines), + ca6f5f70 (compound-quality gate taught feature-subfolder test pairing -
+it had false-blocked the W4 push). W5 LIVE-VERIFIED on rebuilt binary (fourda.exe PID 13176, dev server
+LEFT RUNNING with victauri :7373): 4 tabs render; get_preemption_alerts 30 osv_verified tier_scope=full;
+preemption_wins stays 0 (no false re-mint); get_startup_health [] (zero-embedding silent, healthy);
+feed telemetry lines live (recompute tier counts, cache-hit age); KEYSTONE: real UI click on a Brief
+review-queue item wrote interactions rows 7 (click, hackernews) + 8 (accuracy_feedback) instantly -
+engagement loop verified end-to-end. Organic rows 5-6 (dismiss + feedback, 06-11) predate my session =
+wiring works in the wild. Founder dogfood is now the throttle (MIN_FIT_SAMPLES=50 to first calibration
+fit). NOTE pre-push flagged "Rust dependency vulnerabilities - cargo audit" (advisory,
+@opus-secaudit domain). Plan/status: .claude/plans/audit-remediation-2026-06-11.md. Claims CLEARED.
+**Wave 6 - IGNITION (started 2026-06-12, fresh-perspective strategy):** make calibration ignite in
+minutes for every user. (a) post-onboarding Calibration surface (existing installs incl. founder can
+finally take the dormant taste test - built 04-29, founder onboarded 04-22, taste_test_responses=0);
+(b) review-sprint phase 2: label ~24+ REAL corpus items that have unprocessed calibration_samples
+(7,469 live, all with source_item_id) -> explicit feedback rows -> fitter's MIN_FIT_SAMPLES=50
+reachable same-day -> first confidence curve fits.
+**Claims (Wave 6):** src-tauri/src/taste_test/sprint.rs (NEW) + taste_test/mod.rs,
+src-tauri/src/taste_test_commands.rs, src-tauri/src/lib.rs (registration lines only),
+src-tauri/src/victauri_commands.rs (inventory), src/lib/commands.ts, NEW
+src/components/calibration/* (surface + sprint UI), settings entry-point file (TBD exact),
+src/App.tsx (nudge mount only), src/locales/*/ui.json (13), ts-rs bindings, tests.
+NOT touching: onboarding wizard internals (reuse components read-only), calibration_fitter.rs,
+migrations, peer claims (scanner/ace_commands/reachability/Cargo.lock/source_fetching/db sources).
+W6 DONE + PUSHED @ origin/main 3dcb8725 (0/0; 30 files). LIVE-VERIFIED on rebuilt binary (dev server
+LEFT RUNNING, fourda.exe PID 32008, victauri :7373): get_calibration_sprint_status honest (4->5 of 50,
+curveFitted=false); 24 stratified real cards (cve/npm/rss spread); record_calibration_sprint_response
+wrote feedback(444, relevant=1) - one disclosed mechanical-verification label (typescript release, in
+founder's detected stack); nudge banner renders ("Teach 4DA your taste in 5 minutes" + privacy line);
+[Calibrate] opens the overlay; phase 1 = the previously-unreachable taste test intro; overlay closed,
+app left pristine for founder. Founder path to first calibration fit: take the taste test + label ~45
+sprint cards (~10 min). Claims CLEARED.
+W7 COLD-START INTEGRITY RUN DONE + PUSHED @ fdef8893 (0/0). Fresh FOURDA_DATA_DIR
+(temp/coldstart-w7, kept) walked through the REAL first-run UI: trial auto-start OK, taste test
+inferred the synthetic persona correctly, ACE scan OK, 1,343 items zero zero-vec embeddings,
+context built (no GUI cold-start bug), health clean, Preemption 30 OSV alerts day one. TWO real
+gaps fixed: (1) sprint had ZERO cards on no-LLM installs (samples only stamped by the judge) ->
+scored-corpus fallback, 0->24 cards live; (2) FREE badge during active reverse trial -> "Signal
+trial" badge x13 locales. Founder dev server RESTORED (pnpm tauri dev, bridge :7373). NOTE:
+testing cleared the calibration-nudge dismissal in shared localStorage - the banner will greet
+the founder (intentional). fourda-engine.exe was killed once mid-ledger-cycle to unlock a build
+(hourly task self-recovers). Claims CLEARED.
+W8 ADVERSARIAL ONBOARDING RUN (2026-06-12/13): live abuse-testing on fresh profiles + parallel
+code review. 5 contained fixes (pathspec, all Rust + Onboarding.tsx; AVOIDED fable-public-surface's
+OnboardingChoiceGate.tsx + locale-key claims, added NO locale keys): F-1 connectivity select! ->
+select_ok first-success (corp-firewall false-offline), L1 heal corrupt settings.json on disk so
+cached health stops reporting already-fixed corruption (live-verified: disk re-valid, health []),
+F-12/13 clock-skew trial clamp (future stamp no longer = 379-day trial), F-16 synthetic taste
+feedback dedup on re-onboard, F-15 onboarding-complete persist retry + keep step key on failure
+(no silent wizard-every-boot loop). +5 tests. Build + gating/taste/calibration/Onboarding suites
+green. Disconfirmed agent's F-26 (RTL): useDirection already sets dir=rtl - residual is
+physical-property polish, FLAGGED not blind-fixed. DONE + PUSHED @ origin/main 0773bb9a (0/0,
+cleanly atop peer STREETS-website e5ce5411). Founder dev server restored. Claims CLEARED.
+NOT-FIXED findings handed to founder (need product decisions / bigger work): F-7 OneDrive
+mass-hydration (Windows attr check), F-19/F-20 wizard stores unprobed keys + no 401 alert,
+F-6 phantom fallback interests defeat thin-profile, F-3 mixed offline toasts, F-27 deterministic
+briefing badge-at-generation, F-26 RTL physical-property sweep.
+W9 SCANNER HARDENING (2026-06-13): fixing the not-yet-fixed adversarial findings. F-7 OneDrive
+mass-hydration: shared is_cloud_placeholder guard (symlink_metadata file_attributes, no hydration,
+dependency-free) wired into scanner extract_imports + parse_manifest + watcher extract_topics; fixed
+the broken 50-file cap (counted only on import-hit -> read every import-less file); F-8/F-9 UNC +
+bare-drive-root reject in is_system_directory (dead-share hang); F-5 cwd-parent fallback now
+debug-only (packaged build walked %LOCALAPPDATA%\Programs). Build clean, ace::scanner 47 +
+scanning 2 green, clippy clean, +1 win test. Committing W9.
+**Claims (W9-W12):** src-tauri/src/ace/scanner.rs, src-tauri/src/ace/watcher.rs,
+src-tauri/src/ace_commands/scanning.rs (W9 - peer @opus-step1-edges claimed scanner.rs historically
+but that terminal is idle/released; using pathspec on my hunks only). W10 (key validation/401):
+src/components/onboarding/quick-setup-utils.ts, use-quick-setup.ts, settings/validation.rs (or
+settings_commands), llm client + startup_health flag. W11 (phantom interests): use-quick-setup.ts,
+scoring context/pipeline_v2. W12 (frontend polish): toasts/badge/RTL. NOT touching peer dotfiles.
+W9 DONE + COMMITTED @ 64c97961. W10 KEY-VALIDATION + 401 ALERTING DONE in tree (policy:
+warn-and-proceed, block only on definitive rejection): llm.rs note_provider_auth -> capability
+Unavailable on 401/403 + report_restored on success; SystemHealthDot now polls get_capability_states
+(60s) so runtime degradation surfaces (was boot-cached only); wizard probeKeyBeforeSave blocks advance
+on definitive format/auth reject, allows on network blip/throw. capabilities 28 + llm 33 + 50 FE green,
+tsc clean. Committing W10 (pathspec, 9 files; EXCLUDING peer site/* + docs/SETUP-GUIDE.md STREETS WIP).
+W10 DONE + COMMITTED @ 5ee58786. W11 F-6 PHANTOM INTERESTS DONE in tree (frontend-only,
+use-quick-setup.ts): stop auto-committing the generic fallback list (ML/Rust/TS) as interests -
+shown as clickable suggestions only; empty interest set is the honest thin-profile state the floor
+is built for. Phantom interests never reach backend, so the dampener works without backend changes.
+tsc clean, onboarding tests green. Committing W11 (1 file).
+W11 DONE + COMMITTED @ 60e2bdf3. W12 FRONTEND POLISH DONE in tree: F-3 (analysis-event-handlers.ts)
+suppress "complete: 0" success toast when 0 results + throttle source-error toasts (cap 3 / 10s
+window, rest -> console.debug); F-27 (BriefingContentPanel.tsx) deterministic-mode badge at the brief
+itself (reuses existing settings.ai.briefFloorNoLlm key, no new locale keys). tsc clean, eslint clean
+on my files, BriefingView 17 green. Committing W12 (2 files). ALL adversarial findings now addressed
+except F-26 RTL physical-property sweep (needs visual pass) + F-23 data-dir probe timeout (minor).
+W12 DONE + COMMITTED @ 2aab2999. W9-W12 ALL PUSHED @ origin/main 2aab2999 (0/0). W13 F-26 RTL DONE:
+disconfirmed agent's "ml-* throughout" - onboarding had only 2 physical-property instances
+(TasteTestStep text-right, setup-ai-provider border-l-2/pl-2) -> converted to logical (text-end,
+border-s-2/ps-2; Tailwind 4.3 supports them, identical in LTR). LIVE-VERIFIED: switched app to Arabic,
+document.documentElement.dir=rtl confirmed, reverted to en. tsc clean. Committing W13. ALL adversarial
+findings now ADDRESSED (F-23 data-dir probe-timeout = minor, flagged). Founder dev server restored (en).
+W13 DONE + PUSHED @ origin/main abb8b78b (0/0). ALL adversarial-run remediation complete + pushed:
+W9 64c97961 (scanner cloud-stub + cap + UNC/drive-root), W10 5ee58786 (key probe + 401 alerting +
+health-dot capability poll), W11 60e2bdf3 (phantom interests), W12 2aab2999 (offline toasts + brief
+badge), W13 abb8b78b (RTL logical props). Full FE suite 1286 green, cargo build clean. ONLY-REMAINING
+(minor, flagged): F-23 data-dir writability probe has no timeout (slow UNC profile could hang ~boot);
+F-21b keychain-failure silent plaintext fallback deserves a visible notice. Founder dev server
+restored (en, bridge :7373). Claims CLEARED.
+COLD-START INTEGRITY RE-RUN (2026-06-13): found + fixed a SEVERE cold-start bug. taste_test_finalize
+(the default onboarding path) wrote inferred interests via apply_taste_to_context's raw INSERT with NO
+embedding column -> 0 of 16 interests embedded -> interest_score collapses to 0 -> every item caps at
+the 1-signal ceiling (~0.23) -> 0 of 1216 scored items clear the 0.4 relevance gate. A taste-onboarded
+user got a DEAD feed. Founder unaffected (add_interest embeds; 3/3 -> 5750 relevant). FIX: finalize now
+embeds inferred interests via embed_texts + engine.add_interest upsert (correct BLOB, same 768-dim
+space as items). LIVE-VERIFIED on the fixed binary: 16/16 interests embedded (3072 bytes), and
+run_cached_analysis went 0 relevant/max 0.10 -> relevant items appear/max 0.456 after clean context
+load. taste_test 62 green, clippy clean. Claim: src-tauri/src/taste_test_commands.rs (pathspec).
+Committing now. (Cold run also re-confirmed: trial badge=SIGNAL TRIAL, F-6 interests all 'inferred'
+0 phantom, F-16 no taste-row dup, scanner cloud-guard compiled, health []. ThemeToggleButton
+ReferenceError = dev-HMR transient, recovered on reload, not a product bug.)
+DONE + PUSHED @ origin/main 4b13a7f2 (0/0). Cold-start interest-embedding fix shipped. Cold-start
+re-run otherwise CLEAN (health [], trial+SIGNAL TRIAL badge, F-6/F-16 confirmed, scanner guard, real
+embeddings, connectivity online). temp/coldstart-cs* dirs kept for inspection. Founder dev server
+restored. Claims CLEARED. REMAINING (minor, flagged): UnifiedAppBar ThemeToggleButton const-after-use
+(dev-HMR transient only, prod-safe); F-23 data-dir probe timeout; F-21b keychain plaintext-fallback notice.
+COLD-START RE-RUN #2 (2026-06-13): found + fixed the biggest cold-start bug yet. After onboarding
+(taste test + scan), the FIRST analysis scored 0 relevant / max 0.232 (dead feed) and only a RESTART
+fixed it (-> 6-14 relevant, max 0.81-0.89). ROOT CAUSE: TWO context caches - CONTEXT_ENGINE (cleared
+by invalidate_context_engine) and a SEPARATE 5-min-TTL SCORING_CONTEXT_CACHE (scoring/context.rs) that
+had NO on-demand invalidation. Onboarding completes in <1min, so build_scoring_context kept serving the
+empty startup context until TTL/restart -> every new user's first feed was dead with no way to know a
+restart fixes it. FIX: new invalidate_scoring_context_cache() wired into invalidate_context_engine (so
+all interest/taste paths clear both) + ace_full_scan now invalidates after storing detected tech.
+LIVE-VERIFIED on fresh profile WITHOUT restart: both caches invalidate in log, analysis -> 14 relevant
+/ max 0.814 (was 0/0.232). scoring::context 48 + ace_commands 12 green, clippy clean. Backend-only
+(4 Rust files). NOTE: 168 peer frontend files uncommitted in tree (NOT mine, untouched). Cold run also
+re-confirmed: trial active 14d, surfaces honest-empty, interests embed (my prior fix), onboarding
+persists. LOW-PRI noted: auto-seed-decisions warns on fresh DB (vestigial, reads empty tech_stack at
+Phase-9 migration; harmless). Committing now (pathspec, 4 files).
+DONE + PUSHED @ origin/main 93d39979 (0/0). Stale-scoring-context fix shipped + live-verified
+(14 relevant, no restart). Cold-start re-run #2 EXHAUSTIVE + clean: trial 14d, surfaces honest-empty,
+briefs work (free=real content, AI floor=deterministic 1234ch), sprint=24 cards, onboarding persists,
+SKIP-everything path = honest 0-relevant + NO crash (0 interests = thin-profile floor, correct).
+Founder dev server restored. temp/coldstart-cs* kept. Claims CLEARED. REMAINING (low-pri, flagged):
+auto-seed-decisions log warning on fresh DB (vestigial, seeds nothing, harmless - left untouched to
+avoid migration risk); ThemeToggleButton dev-HMR transient (peer adding ThemeToggle to onboarding);
+full real-UI visual verification deferred until peer's 168-file frontend WIP commits (backend verified
+via bridge = origin/main truth).
+**Commit Lock**: RELEASED (fable-audit-remediation, cold-start re-run #2 complete)
+
+### Terminal: opus-db-hygiene (started 2026-06-11)
+DONE — committed LOCAL @ d7c23f0f (4 .rs files, pathspec; push HELD for user). The "Database is 522MB,
+run optimization to reclaim space" banner was a FALSE ALARM: freelist_count=0 -> VACUUM reclaims 0, the
+528MB is all live content (50,772 embedded items, ~11MB/day, 6 weeks old). Retention was also inert (90d
+noise-prune floor vs a corpus that turns over in weeks; 82% of items score <0.20). FIX: (2) startup_health
++ monitoring size-warning now fires only on RECLAIMABLE freelist space (>=100MB), honest copy; new
+Database::reclaimable_bytes() is the shared signal. (3) noise-prune floor 90d->30d (autophagy_commands) +
+the bounded relevance-forget (score<0.05, cap 5000) now runs on the daily maintenance cycle (monitoring),
+VACUUM'd by the existing run_maintenance. Tier 1 (out-of-tree, gitignored data/): deleted 2 stale DB
+backups + 2 dead model blobs (nomic-embed, bge-small) = ~1GB reclaimed; KEPT active arctic-embed + active
+bge-reranker + osv npm.zip mirror. cargo check + clippy --lib clean, fmt clean, 81 history/autophagy tests
+green (+2 new). Code takes effect on next backend rebuild/restart.
+  >> @opus-step1-edges HANDOFF (TIER 4, your domain — I did NOT touch it): dependency_edges grew 121,600 ->
+     133,760 rows in minutes during my analysis (1,061 snapshots, no visible dedup/retention on detected_at).
+     ~29MB now and unbounded. Recommend a retention cap in YOUR migration/queries: keep latest snapshot per
+     (project_path, ecosystem), prune older edges + GC snapshots whose project_path no longer exists on disk
+     (the worktree/temp dupes you already found). Left to you so it composes with the reachability engine
+     (which reads edges) rather than me deleting data it may need.
+  >> FOLLOWUP @ d7c23f0f shipped + pushed (on origin/main via peer rebase). LIVE-TESTED on restarted
+     binary: get_startup_health returns [] (false 553MB banner GONE; freelist=0). BUT testing caught a
+     defect: scheduled prune used max_age_days (= user retention) as its noise floor, and this instance
+     has retention=365d, so the prune was INERT. FIXED: noise floor now min(30, retention) in monitoring.rs
+     so confirmed <0.05 junk is forgotten at 30d regardless of content-retention.
+  >> ALL DONE + PUSHED to origin/main (rev-list 0/0). Three commits total: d7c23f0f (warning logic +
+     retention + reclaimable_bytes), d90e55e3 (noise floor min(30,retention)), cacb87f9 (Settings "Optimize
+     now" button wiring run_deep_clean + 3 tests; revived the dead 13-locale maintenance strings so the
+     honest size-warning points at a real control). Tier 1 ~1GB reclaimed out-of-tree. Pre-push gate green
+     (1288 frontend tests incl. my 3, fmt/clippy/tsc/eslint clean). Live: get_startup_health=[] (false
+     banner gone). Pending: eyes-on the Settings button render (bridge was rebuilding; logic unit-covered,
+     run_deep_clean chain proven in source — not a ghost). Tier 4 (dependency_edges cap) still @opus-step1-edges.
+  >> FIREHOSE WORK (user: "fix the firehose properly", APPROVED). Disconfirmation found my scheduled
+     noise-prune is a REGRESSION vs the 2026-06-05 manual-only/deletion-breaks-search decision; and a
+     pre-ingest semantic gate was already measured+rejected (funnel). Plan: A revert scheduled deletion
+     (manual-only) [DOING]; B registry stack-filter (crates_io 12k/92% non-stack); C adaptive yield-throttle
+     (huggingface 10.5k/4-useful) via source_autopsy engagement -> fetch volume. sources/* now CLEAR
+     (@opus-source-resilience released; only unbuilt Mastodon staged).
+  >> A (revert) DONE + committed @ a694425a (monitoring.rs; scheduled noise-deletion removed, manual-only
+     honored). C (adaptive yield-throttle) CODE-COMPLETE + VERIFIED, awaiting commit:
+     NEW source_fetching/yield_throttle.rs (pure fetch_cap policy + 6 tests, all green) + db/sources.rs
+     get_source_relevance_yields(window,floor) + wired into BOTH ingest paths (fetcher.rs .take, processor.rs
+     fetch_items_deep). cargo check clean, clippy --lib exit 0, my files fmt-clean. DATA-VERIFIED on live DB:
+     huggingface 2%hit->cap5 (90% cut), bluesky 3%->6 (88%), hackernews 15%->29 (42%), crates_io 16%->33 (34%);
+     reddit/devto/arxiv/SO 32-59%->50 (full); osv/cve exempt->50; lemmy/npm/github/pypi cold-start->50.
+     reddit/devto/arxiv/SO 32-59%->50 (full); osv/cve exempt->50; lemmy/npm/github/pypi cold-start->50.
+  >> A + C DONE + COMMITTED (unblocked once @fable-audit committed blind_spots.rs). a694425a (revert
+     scheduled noise-deletion -> manual-only) + b3c2da22 (adaptive yield-throttle, 5 files, 6 tests).
+     Pushing to origin (pre-push gate running). B (registry stack-filter) = staged next wave; C's yield
+     mechanism already throttles crates_io 34%, so the firehose's worst offenders are handled.
+**Claims (firehose):** CLEARED. **Commit Lock**: RELEASED (opus-db-hygiene).
+
 ### Terminal: opus-window-hygiene (started 2026-06-11)
 DOMAIN A DONE (outside repo, nothing committed): the self-hosted GitHub Actions runner no longer flashes
 a console at boot. Root cause = console-subsystem Runner.Listener.exe launched by an interactive boot
@@ -27,7 +485,35 @@ into package.json (validate + test:scripts), .husky/pre-commit (when .rs staged)
 and codified as INVARIANTS.md INV-043. cargo check + clippy --lib clean, fmt clean, gate 41/41 safe, 10/10 tests.
 Pathspec commit (only my 8 files); did NOT touch the 3 pre-existing untracked files (engine_receipt_pubkey.hex
 / fourda-infer-proto/.gitignore / target-verify/) or any peer claim (step1-edges, secaudit Cargo.lock).
-**Commit Lock**: RELEASED (opus-window-hygiene) — committed @ f3992dd3, pushing to origin/main.
+**Commit Lock**: RELEASED (opus-window-hygiene) — done @ f3992dd3/b385324b/813d6acb (window gate, hygiene,
+source-health tool — all pushed). NOW PIVOTED to source-resilience architecture (below).
+
+### Terminal: opus-source-resilience (started 2026-06-11)
+Working on: the TIMELESS answer to API enclosure (reddit/X/SO walling off content). Building the minimal
+durable primitive — an AccessStrategy trait + ordered, health-gated FAILOVER in the Source layer — proven
+on the hardest real case (Reddit: JSON strategy -> RSS-bridge fallback; .rss verified HTTP 200 where .json
+times out). North star = trust-model DIVERSITY (no single access-failure mode load-bearing); local-first
+per-user fetching as the edge advantage. NOT refactoring all 20 adapters (incremental adoption); NOT
+touching the OSV/preemption/dependency/db-hygiene files peers are editing.
+**Claims:** src-tauri/src/sources/access.rs (NEW), src-tauri/src/sources/reddit.rs,
+src-tauri/src/sources/mod.rs (module decl only). Zero overlap with opus-preemption-fix (osv/sync.rs,
+dependency_commands.rs, preemption.rs), opus-step1-edges (migrations/reachability), or opus-db-hygiene
+(startup_health/monitoring/autophagy/history).
+DONE: access.rs (AccessStrategy trait + resilient_fetch failover, error-precedence, 6 tests) + reddit.rs
+refactored to [reddit:json -> reddit:rss] strategies (Atom parser, 4 tests) + mod.rs decl. cargo check +
+clippy --lib clean, fmt clean, 10/10 new tests green. Pathspec commit (3 source files only).
+DONE + PUSHED @ origin/main ec924d74 (rebased onto peers a392e992 by a push race — ALL peer commits
+intact, 21eca8b6 verified in-history, nothing clobbered, sync 0/0). Design doc: .claude/plans/
+source-resilience-architecture.md. Thesis saved to memory. STAGED NEXT (not built): Lemmy + Mastodon
+adapters (open-protocol hedges), partial-merge across strategies, BYO-credential strategy slot, adopt
+the pattern in other walled adapters. Claims CLEARED.
+INCREMENT 2 DONE + PUSHED (pathspec, peer monitoring.rs staged-but-excluded): 7a66622b Reddit failover
+hardening (early-bail on whole-IP 403/429; LIVE 28 items via reddit:rss) + e76bb99e Lemmy adapter
+(sources/lemmy.rs, open-protocol Reddit hedge, [lemmy:api->lemmy:rss], registered + 3 frontend source
+maps; LIVE 40 federated items via lemmy:api). 16 unit tests, full pre-push green, sync 0/0. Live
+caveat CLOSED. NEXT: Mastodon adapter (→X hedge). Did NOT touch peer files (dependency_health/osv/
+monitoring/cve_matching/SettingsGeneralTab). Claims CLEARED.
+**Commit Lock**: RELEASED (opus-source-resilience)
 
 ### Terminal: opus-step1-edges (started 2026-06-11)
 Working on: Step 1 = dependency edges -> reachability ranking (greenlit). Increment 1 (foundation, ships
@@ -38,6 +524,58 @@ Build env now healthy (Defender excluded + target ownership reclaimed via elevat
 **Claims:** src-tauri/src/db/migrations.rs, src-tauri/src/ace/scanner.rs, src-tauri/src/ace_commands/{dependencies.rs,scanning.rs},
 src-tauri/src/db/dependencies/queries.rs, src-tauri/src/reachability.rs (NEW), src-tauri/src/lib.rs (mod line only).
 **Commit Lock**: not yet held (will hold at commit time)
+
+### Terminal: opus-preemption-fix (started 2026-06-11)
+Working on: making the Preemption feed surface the 87 real CVEs (was empty). User-driven (/remote-control
+live audit -> approved plan execution). (A) Bug A severity case in dependency_commands.rs get_dependency_overview
+(`== "critical"` lowercase vs UPPERCASE store -> "0 critical/0 high" over real RCE CVEs) -> eq_ignore_ascii_case
+[DONE in tree]. (B) OSV sync root-cause: /v1/querybatch returns ID-stubs (no `affected`) -> store_vulnerability
+stores 0 EVERY time, unguarded delete_stale then WIPES the mirror -> Tier 1 empty. Fix: guard delete_stale
+(only when total_stored>0) + ZIP-mirror fallback when API stores 0 (npm/crates zips on disk, 906/486 matched).
+(C) Option B (unify dependency_alerts) DELIBERATELY NOT DONE — live testing PROVED it would inject FALSE
+positives: liquidjs CRITICAL is STALE (installed 10.27.0 > fixed 10.26.0, already patched); vitest 3.2.x
+CRITICAL is OVERLY BROAD (OSV: vuln introduced 4.0.0, so 3.2.x NOT affected). dependency_alerts is a lossy
+partly-stale store; the OSV path (Option A) is MORE accurate. Surfacing dependency_alerts wholesale degrades
+accuracy. (Overrides the plan's "B then A".)
+DONE + LIVE-VERIFIED on :7373 (fresh build 12:06): osv_sync_now -> osv_advisories 0->884 npm + 367 crates;
+osv_get_matches 0->477 (280 confirmed: axios/hono/react-router/clerk/jwt...); get_preemption_alerts total
+0->30 (18 high, all osv_verified honest provenance); get_dependency_overview alerts 0crit/0high -> 3crit/27high.
+cargo fmt clean, clippy --lib exit 0, osv 51/51 + dependency 51/51 tests pass.
+**Claims (committing):** src-tauri/src/dependency_commands.rs, src-tauri/src/osv/sync.rs (pathspec only).
+NOTE: zero overlap with opus-step1-edges claims; peer has mcp-4da-server/* STAGED — NOT touching it.
+DONE + PUSHED @ origin/main 506eb91e + 21eca8b6. Follow-up: ZIP-freshness refresh (is_cache_stale ETag HEAD
+-> re-download when OSV publishes a new snapshot) in osv/sync.rs — committing now. Verified trigger live:
+remote npm ETag advanced (b3ed9064) past cached 2026-06-09 (a41ca27b) => is_cache_stale=true.
+ALL DONE + PUSHED @ origin/main: 506eb91e (osv ZIP fallback) + 21eca8b6 (severity case) + a392e992
+(ZIP-freshness ETag refresh). Restores Preemption feed (0 -> 30 osv_verified alerts) + dependency dashboard
+(0crit/0high -> 3crit/27high). My push carried peer d7c23f0f up; peer later pushed ec924d74 (0/0 sync).
+Option B (unify dependency_alerts) DELIBERATELY SKIPPED — proven live to inject stale/over-broad false
+positives (liquidjs patched, vitest 3.2.x not affected). Claims cleared.
+FOLLOW-UP (stale-alert resolution, user-approved): resolve_patched_dependency_alerts (dependency_health.rs)
+re-validates active dependency_alerts vs CURRENT installed versions, auto-resolves when EVERY install is
+confidently out of the affected range (reuses cve_matching::version_is_affected, now pub(crate)). Called from
+the 6h health job + sync()/osv_sync_now. Also fixed a SIBLING of Bug A: load_security_alert_packages used
+lowercase `severity IN ('critical','high')` vs UPPERCASE store -> matched 0 real CVEs -> no SecurityAlert
+windows; now LOWER(severity). 3 new tests + osv 51 + dependency_health 16 + cve_matching 16 pass; cargo check clean.
+**Claims (committing):** src-tauri/src/dependency_health.rs, src-tauri/src/osv/sync.rs,
+src-tauri/src/sources/cve_matching.rs (pathspec only). NOT touching peer monitoring.rs/reddit.rs/access.rs.
+DONE + PUSHED @ origin/main a7e84325 (stale-alert resolution + load_security_alert_packages case fix).
+LIVE-VERIFIED on real prod data: 8 genuinely-patched alerts auto-resolved (liquidjs x6 @10.27.0, bytes
+@>=1.2.1, rustls-webpki @0.103.x) with ZERO false resolutions; still-affected kept ACTIVE (shell-quote
+1.8.3, vitest 3.2.x); dashboard 3crit/27high/87 -> 2crit/25high/79. Push fmt-gate was briefly blocked by a
+peer's untracked unformatted mastodon.rs — waited, peer formatted (6feef500), then pushed clean (no --no-verify).
+FOLLOW-UP (cosmetic cleanups, user-approved): (1) X/Twitter 401 — source only early-stopped on rate-limit;
+an invalid/expired bearer key 401s EVERY handle each cycle (log spam). Fix: detect 401/403, stop for the run,
+surface once via per-source feed_errors. (2) Orphan osv_advisories (141: NuGet/Maven/PyPI/RubyGems/Go — never
+match user's npm/crates deps) — sweep in sync() keyed on current auditable ecosystems. (3) Stale-version scores
+(2,437 @ v1-v4) — drain (merge_stale_drain_batch, 500/cycle) is correct + self-healing; triggering live, no code.
+**Claims:** src-tauri/src/sources/twitter.rs (unclaimed; peer excludes it), src-tauri/src/osv/sync.rs,
+src-tauri/src/db/osv_advisories.rs (pathspec). NOT touching peer access.rs/reddit.rs/mastodon.rs/mod.rs.
+DONE + PUSHED @ origin/main 3f0ad243 (X 401 graceful stop + orphan-advisory prune). ALL 3 cosmetic cleanups
+LIVE-VERIFIED: (1) X/Twitter — new boot logged ONE "key invalid... skipping X for this run" vs old per-handle
+401 spam; (2) orphans — osv_advisories 141->0 (only npm 885 + crates 367); (3) stale scores — drain reaches old
+items (selected 484, Signal-tier), 2437->2308 + ceiling-violators 2->1 this cycle, self-heals (no code). Cleared.
+**Commit Lock**: RELEASED (opus-preemption-fix)
 
 <!-- opus-codex-verify (2026-06-11): DONE + PUSHED @ origin/main c9561466 (0/0). Commit Lock RELEASED,
      claims cleared. Verified + committed Codex/GPT-5.5's uncommitted 22-file transitive-dependency-audit

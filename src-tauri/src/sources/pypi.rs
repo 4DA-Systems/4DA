@@ -70,7 +70,12 @@ impl PypiSource {
     pub fn new() -> Self {
         let ace_packages = crate::source_fetching::load_ace_packages_for_ecosystem("pypi");
         let packages = if ace_packages.is_empty() {
-            DEFAULT_PACKAGES.iter().map(|s| s.to_string()).collect()
+            // Strict manifest mode: fetch NOTHING rather than the global default list.
+            if crate::source_fetching::strict_manifest_mode() {
+                Vec::new()
+            } else {
+                DEFAULT_PACKAGES.iter().map(|s| s.to_string()).collect()
+            }
         } else {
             ace_packages
         };
