@@ -41,22 +41,33 @@ for (const r of vers) console.log(`  v${r.v}: ${r.n}`);
 const drainPct = total ? ((v6 / total) * 100).toFixed(1) : "0.0";
 console.log(`  -> re-scored with NEW code (v6): ${v6} / ${total} (${drainPct}%); remaining v5 backlog: ${v5}`);
 
-// 2. Watched direct-dep CVE items (the items the new floor targets)
+// 2. Watched CVE items. Two expected directions:
+//    - title names a DIRECT non-dev dep  -> the 0.65 floor should LIFT it
+//    - title does NOT name a user dep     -> it loses the old artificial 0.50 floor and should FALL
 line();
-console.log("WATCHED ITEMS (old 0.50-floored direct-dep CVEs) old -> now:");
+const directDeps = new Set(db.prepare("SELECT DISTINCT lower(package_name) p FROM user_dependencies WHERE is_direct=1 AND is_dev=0 AND package_name IS NOT NULL").all().map(r => r.p));
+function namesDirectDep(title) {
+  const t = (title || "").toLowerCase();
+  for (const d of directDeps) { if (d.length >= 4 && new RegExp("(^|[^a-z0-9._-])" + d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^a-z0-9._-]|$)").test(t)) return d; }
+  return null;
+}
+console.log("WATCHED CVE ITEMS  old -> now  (DEP=expect rise to 0.65 | non-dep=expect fall):");
 const getScore = db.prepare("SELECT relevance_score s, scored_pipeline_version v, title t FROM source_items WHERE id=?");
-let lifted = 0, pending = 0;
+let lifted = 0, fell = 0, pending = 0;
 for (const id of Object.keys(base.items || {})) {
   const row = getScore.get(Number(id));
   if (!row) { console.log(`  id=${id} (gone)`); continue; }
   const old = base.items[id].old_score;
-  const arrow = (row.s !== null && old !== null && Math.abs(row.s - old) > 1e-4) ? "  <== CHANGED" : "";
+  const dep = namesDirectDep(row.t);
+  const kind = dep ? `DEP(${dep})` : "non-dep";
+  const changed = (row.s !== null && old !== null && Math.abs(row.s - old) > 1e-4);
+  const arrow = changed ? "  <== CHANGED" : "";
   const rescored = row.v === 6 ? "[v6]" : `[v${row.v}]`;
-  if (row.v === 6) { if (row.s >= 0.65) lifted++; } else { pending++; }
-  const title = (row.t || "").replace(/[^\x20-\x7e]/g, "?").slice(0, 40);
-  console.log(`  id=${id} ${rescored} ${fmt(old)} -> ${fmt(row.s)}${arrow}  | ${title}`);
+  if (row.v === 6) { if (dep && row.s >= 0.65) lifted++; else if (!dep && row.s < old) fell++; } else pending++;
+  const title = (row.t || "").replace(/[^\x20-\x7e]/g, "?").slice(0, 38);
+  console.log(`  id=${id} ${rescored} ${kind.padEnd(14)} ${fmt(old)} -> ${fmt(row.s)}${arrow} | ${title}`);
 }
-console.log(`  -> ${lifted} re-scored & lifted to >=0.65; ${pending} still awaiting drain (v5)`);
+console.log(`  -> direct-dep lifted >=0.65: ${lifted}; non-dep correctly fell: ${fell}; awaiting drain (v5): ${pending}`);
 
 // 3. Direct-dep CVE band (approx: CVE items whose title names a distinctive direct non-dev dep)
 line();
