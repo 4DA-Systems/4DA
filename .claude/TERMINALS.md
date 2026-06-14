@@ -23,6 +23,15 @@
      src-tauri + TERMINALS.md (pathspec). NOT mine, left untouched: .gitignore/.mcp.json/CLAUDE.md/
      ResultItemExpanded.tsx (peer) + data/4da.db-wal.bak (scoring-recall). Commit Lock RELEASED. -->
 <!-- opus-ledger-engine **Commit Lock**: RELEASED (committed e0169561; push to origin/main HELD for operator) -->
+<!-- opus-ledger-engine FOLLOW-UP (2026-06-15): DONE. Re-bootstrap of live ledger dirs surfaced a
+     strict-mode gap — crates.io (and latently pypi) looped the FULL pinned manifest (rust=275 @1/s),
+     overran the 90s adapter timeout -> 0 items. FIX: cap strict-mode crates_io fetch loop + pypi deep
+     loop at max_items (non-strict byte-for-byte unchanged). VERIFIED: rust crates_io 0 -> 30 grounded
+     items in ~57s; rust publishable 18 -> 48, 0 ungrounded; full lib 3856/0. (Crate releases score
+     0.17-0.48, below the 0.6 publish bar — now correctly SOURCED+grounded; publication is the scoring
+     layer's call, out of scope per "gate inputs not score".) Live ledger dirs re-bootstrapped (all 4
+     pristine cold-start strict, +33 receipts, attested, pubkeys pinned). 4DA-Ledger-Cycle re-enabled.
+     Commit Lock: RELEASED. -->
 
 <!-- opus-scoring-recall (2026-06-14, DOGFOOD START): DONE. Founder-approved rule-10 dogfood for the
      scoring changes is LIVE. Shipped + pushed `bdf9b6b3`: PIPELINE_VERSION 5->6 (the 3 scoring commits

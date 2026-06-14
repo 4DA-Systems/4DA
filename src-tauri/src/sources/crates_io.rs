@@ -349,8 +349,16 @@ impl Source for CratesIoSource {
         let mut items = Vec::new();
         let mut seen_ids = std::collections::HashSet::new();
 
-        // 1. Check monitored crates (primary value)
-        for name in &self.crates {
+        // 1. Check monitored crates (primary value). In strict manifest mode the crate list is the
+        // FULL pinned manifest (can be hundreds); at ~1 req/sec that overruns the adapter's fetch
+        // timeout and surfaces NOTHING. Cap per cycle to max_items so the fetch finishes in-budget —
+        // every fetched crate is still manifest-grounded. Non-strict is unchanged (loops the list).
+        let monitored: Vec<&String> = if crate::source_fetching::strict_manifest_mode() {
+            self.crates.iter().take(self.config.max_items).collect()
+        } else {
+            self.crates.iter().collect()
+        };
+        for name in monitored {
             match self.fetch_crate(name).await {
                 Ok(item) => {
                     if seen_ids.insert(item.source_id.clone()) {
