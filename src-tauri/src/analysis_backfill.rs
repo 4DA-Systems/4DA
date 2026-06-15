@@ -142,3 +142,113 @@ pub(crate) async fn backfill_unscored_cycle(chunk_size: usize) -> Result<Backfil
 pub(crate) async fn run_backfill_cycle(chunk_size: Option<usize>) -> Result<BackfillProgress> {
     backfill_unscored_cycle(chunk_size.unwrap_or(500)).await
 }
+
+/// Re-score one chunk of items stamped at an OLDER `PIPELINE_VERSION`, persist the
+/// new scores, and re-stamp at the current version. This is the bulk-drain twin of
+/// [`backfill_unscored_cycle`]: that one drains NEVER-scored items (`version = 0`),
+/// this one drains the stale-VERSION backlog (`0 < version < current`) that a
+/// scoring-logic change creates.
+///
+/// Same cheap, LLM-free PASIFA pipeline as the live `merge_stale_drain_batch` path —
+/// it just isn't throttled to 500/analysis-run, so a `--engine-drain` loop converges
+/// the whole corpus in minutes instead of the ~2.8 days the 500-per-30-min scheduler
+/// trickle takes. Convergent + resumable: progress is the version stamp in the DB.
+pub(crate) async fn drain_stale_version_cycle(chunk_size: usize) -> Result<BackfillProgress> {
+    let db = get_database()?;
+
+    let items = db
+        .get_stale_scored_items(scoring::PIPELINE_VERSION, chunk_size)
+        .map_err(|e| format!("Failed to load stale-version backlog: {e}"))?;
+    if items.is_empty() {
+        return Ok(BackfillProgress {
+            scored_this_cycle: 0,
+            relevant_this_cycle: 0,
+            remaining_unscored: 0,
+            done: true,
+        });
+    }
+
+    let ctx = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        scoring::build_scoring_context(db),
+    )
+    .await
+    .map_err(|_| String::from("Scoring context build timed out after 10s"))?
+    .map_err(|e| format!("Failed to build scoring context: {e}"))?;
+    let trend_topics = crate::detect_trend_topics(
+        items
+            .iter()
+            .map(|item| (item.title.as_str(), item.content.as_str())),
+    );
+    let options = ScoringOptions {
+        apply_freshness: true,
+        apply_signals: true,
+        trend_topics,
+    };
+
+    let mut score_data: Vec<(i64, f32, Option<String>, Option<String>)> = Vec::new();
+    let mut scored_ids: Vec<i64> = Vec::with_capacity(items.len());
+    for item in &items {
+        let r = scoring::score_item(
+            &ScoringInput {
+                id: item.id as u64,
+                title: &item.title,
+                url: item.url.as_deref(),
+                content: &item.content,
+                source_type: &item.source_type,
+                embedding: &item.embedding,
+                created_at: Some(&item.created_at),
+                detected_lang: &item.detected_lang,
+                source_tags: &[],
+                tags_json: item.tags.as_deref(),
+                feed_origin: item.feed_origin.as_deref(),
+            },
+            &ctx,
+            db,
+            &options,
+            Some(signal_classifier()),
+        );
+        if r.top_score > 0.0 {
+            score_data.push((
+                item.id,
+                r.top_score,
+                r.signal_type.clone(),
+                r.signal_priority.clone(),
+            ));
+        }
+        scored_ids.push(item.id);
+    }
+
+    let relevant_this_cycle = score_data.len();
+    if !score_data.is_empty() {
+        if let Err(e) = db.persist_analysis_scores(&score_data) {
+            warn!(target: "4da::backfill", error = %e, "Failed to persist re-scored values");
+        }
+    }
+    // Stamp EVERY re-scored item (including any that fell to noise) so it leaves the
+    // stale pool and the drain converges — same invariant as the analysis path.
+    if let Err(e) = db.mark_items_scored_version(&scored_ids, scoring::PIPELINE_VERSION) {
+        warn!(target: "4da::backfill", error = %e, "Failed to stamp re-scored pipeline version");
+    }
+
+    // Remaining stale items are those still below the current version. Reuse the
+    // same query with a probe-sized window to learn whether more work remains.
+    let remaining = db
+        .get_stale_scored_items(scoring::PIPELINE_VERSION, 1)
+        .map(|v| v.len() as i64)
+        .unwrap_or(0);
+    info!(
+        target: "4da::backfill",
+        rescored = scored_ids.len(),
+        relevant = relevant_this_cycle,
+        more_remaining = remaining > 0,
+        "Stale-version drain cycle complete"
+    );
+
+    Ok(BackfillProgress {
+        scored_this_cycle: scored_ids.len(),
+        relevant_this_cycle,
+        remaining_unscored: remaining,
+        done: remaining == 0,
+    })
+}

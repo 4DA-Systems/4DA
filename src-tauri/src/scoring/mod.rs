@@ -83,7 +83,16 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 /// old 0.50 floor (e.g. the live axios CVE-2026-44490) — would never re-score and
 /// the fix would stay dark on the real corpus. The stale-drain re-scores the backlog
 /// over subsequent cycles; this is the rule-10 dogfood window made real.
-pub(crate) const PIPELINE_VERSION: i32 = 6;
+///
+/// v7 (2026-06-15): semver-compat version awareness in dependency matching
+/// (aa3302ee). The content-relevance path matched deps by NAME with only major-only
+/// version logic — which collapsed the entire pre-1.0 crate ecosystem (gtk-rs 0.18 vs
+/// 0.20 read as "same major" → boosted) and discarded the OlderMajor signal entirely,
+/// so framework content rode the dependency boost regardless of version ("just because
+/// it's Tauri"). Now uses the semver breaking-axis (minor for 0.x, major for >=1.0) and
+/// penalizes content about versions the user has moved past. Drained in one shot via
+/// `fourda.exe --engine-drain` rather than the 500/run scheduler trickle.
+pub(crate) const PIPELINE_VERSION: i32 = 7;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
