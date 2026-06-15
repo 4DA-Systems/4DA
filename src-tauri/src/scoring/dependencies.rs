@@ -451,15 +451,61 @@ fn parse_major_version(version: &str) -> Option<u32> {
         .ok()
 }
 
+/// Parse a version's `(major, minor)` pair for compatibility analysis.
+/// `"1.2.3"` -> `(1, 2)`, `"0.18.4"` -> `(0, 18)`, `"2"` -> `(2, 0)`.
+fn version_pair(version: &str) -> Option<(u32, u32)> {
+    let major = parse_major_version(version)?;
+    let minor = version
+        .trim_start_matches(['v', 'V', '^', '~', '=', '>', '<', ' '])
+        .split('.')
+        .nth(1)
+        .map(|p| {
+            p.chars()
+                .take_while(char::is_ascii_digit)
+                .collect::<String>()
+        })
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+    Some((major, minor))
+}
+
+/// Reduce a `(major, minor)` pair to its semver *breaking axis* — the component
+/// a bump of which signals an incompatible release under Cargo/npm caret rules.
+///
+/// For `>= 1.0` the breaking axis is the major (`1.2` and `1.9` are compatible);
+/// for `0.x` the MINOR is the breaking axis (`0.18` and `0.20` are NOT compatible).
+/// This is the crux of the version-precision fix: naive major-only comparison
+/// collapses the entire pre-1.0 crate ecosystem (gtk-rs 0.18, axum 0.8, every
+/// `0.x` Rust crate) to "major 0" and wrongly reads breaking-apart versions as
+/// "same major", awarding a relevance boost to content about a version the user
+/// has moved past.
+fn breaking_axis(pair: (u32, u32)) -> (u32, u32) {
+    if pair.0 == 0 {
+        (0, pair.1) // 0.x — minor is the breaking line
+    } else {
+        (pair.0, 0) // >=1.0 — major is the breaking line
+    }
+}
+
+/// Compare an installed version against a version mentioned in content,
+/// classifying the relationship from the installed POV.
+fn compare_pairs(installed: (u32, u32), mentioned: (u32, u32)) -> VersionDelta {
+    match breaking_axis(mentioned).cmp(&breaking_axis(installed)) {
+        std::cmp::Ordering::Equal => VersionDelta::SameMajor,
+        std::cmp::Ordering::Greater => VersionDelta::NewerMajor,
+        std::cmp::Ordering::Less => VersionDelta::OlderMajor,
+    }
+}
+
 /// Extract a mentioned version from content near a package name and compare with installed
 fn compare_version_in_content(
     text: &str,
     pkg_name: &str,
     installed_version: &Option<String>,
 ) -> VersionDelta {
-    let installed_major = match installed_version {
-        Some(v) => match parse_major_version(v) {
-            Some(m) => m,
+    let installed_pair = match installed_version {
+        Some(v) => match version_pair(v) {
+            Some(p) => p,
             None => return VersionDelta::Unknown,
         },
         None => return VersionDelta::Unknown,
@@ -474,8 +520,9 @@ fn compare_version_in_content(
         let end = snap_to_char_boundary(&text_lower, end, true);
         let nearby = &text_lower[start..end];
 
-        // Match patterns: "React 19", "tokio 2.0", "v3", "version 5.1"
-        // Simple approach: find first digit sequence after the package name
+        // Match patterns: "React 19", "tokio 2.0", "gtk 0.18", "v3", "version 5.1".
+        // Grab the first version-like token (digits + dots) after the package name
+        // so 0.x lines ("0.18" vs "0.20") are distinguishable, not collapsed to "0".
         let after_name = &nearby[pkg_lower.len()..];
         for (i, ch) in after_name.char_indices() {
             if ch.is_ascii_digit() && i < 20 {
@@ -486,19 +533,14 @@ fn compare_version_in_content(
                         .get(i - 1)
                         .is_none_or(|&b| !b.is_ascii_alphanumeric() || b == b'v' || b == b'V')
                 {
-                    let digit_str: String = after_name[i..]
+                    let token: String = after_name[i..]
                         .chars()
-                        .take_while(char::is_ascii_digit)
+                        .take_while(|c| c.is_ascii_digit() || *c == '.')
                         .collect();
-                    if let Ok(mentioned_major) = digit_str.parse::<u32>() {
-                        if mentioned_major > 0 && mentioned_major < 100 {
-                            return if mentioned_major > installed_major {
-                                VersionDelta::NewerMajor
-                            } else if mentioned_major == installed_major {
-                                VersionDelta::SameMajor
-                            } else {
-                                VersionDelta::OlderMajor
-                            };
+                    if let Some(mentioned_pair) = version_pair(&token) {
+                        // Reject absurd majors (years, IDs) but allow 0.x lines.
+                        if mentioned_pair.0 < 100 && mentioned_pair != (0, 0) {
+                            return compare_pairs(installed_pair, mentioned_pair);
                         }
                     }
                 }
@@ -637,13 +679,23 @@ pub(crate) fn match_dependencies(
             confidence *= 0.3;
         }
 
-        // Version intelligence
+        // Version intelligence. The delta is computed against the user's INSTALLED
+        // compatibility line (semver breaking axis: major for >=1.0, minor for 0.x):
+        //   SameMajor  — content tracks the version you run → most relevant (boost)
+        //   NewerMajor — upgrade / breaking-change ahead of you → forward-looking (boost)
+        //   OlderMajor — content about a version you've moved PAST → usually stale (penalty)
+        //   Unknown    — no version signal in the text → neutral
+        // The OlderMajor penalty is the fix for "just because it's <framework> doesn't
+        // mean it's relevant": a Tauri-v1 / React-16 / gtk-0.18 article no longer rides
+        // the dependency boost when the user is on a newer line. Dampen, don't kill —
+        // migration-away content can still matter, so 0.5 not 0.0.
         let version_delta =
             compare_version_in_content(&text_lower, &info.search_terms[0], &info.version);
         match version_delta {
             VersionDelta::SameMajor => confidence *= 1.2,
             VersionDelta::NewerMajor => confidence *= 1.1,
-            _ => {}
+            VersionDelta::OlderMajor => confidence *= 0.5,
+            VersionDelta::Unknown => {}
         }
 
         matched.push(DepMatch {
@@ -913,6 +965,103 @@ mod tests {
         );
         // First occurrence: "React 17" → 17 < 19 → OlderMajor
         assert_eq!(delta, VersionDelta::OlderMajor);
+    }
+
+    #[test]
+    fn test_version_pair_parsing() {
+        assert_eq!(version_pair("1.2.3"), Some((1, 2)));
+        assert_eq!(version_pair("0.18.4"), Some((0, 18)));
+        assert_eq!(version_pair("0.20"), Some((0, 20)));
+        assert_eq!(version_pair("2"), Some((2, 0)));
+        assert_eq!(version_pair("^0.8.9"), Some((0, 8)));
+        assert_eq!(version_pair("banana"), None);
+    }
+
+    #[test]
+    fn test_breaking_axis_semver_rules() {
+        // >=1.0 — major is the breaking axis; minor is irrelevant to compat
+        assert_eq!(breaking_axis((1, 2)), (1, 0));
+        assert_eq!(breaking_axis((1, 9)), (1, 0));
+        // 0.x — minor is the breaking axis
+        assert_eq!(breaking_axis((0, 18)), (0, 18));
+        assert_eq!(breaking_axis((0, 20)), (0, 20));
+    }
+
+    #[test]
+    fn test_compare_0x_breaking_change_not_same() {
+        // THE FIX: gtk 0.18 (installed) vs gtk 0.20 (content) are a breaking
+        // change apart. Old major-only logic read both as "major 0" → SameMajor
+        // → 1.2x boost on content about a version the user does NOT run.
+        let delta = compare_version_in_content(
+            "gtk 0.20 released with breaking GTK4 migration",
+            "gtk",
+            &Some("0.18.4".to_string()),
+        );
+        assert_eq!(
+            delta,
+            VersionDelta::NewerMajor,
+            "0.18 -> 0.20 is a breaking change, must NOT be SameMajor"
+        );
+    }
+
+    #[test]
+    fn test_compare_0x_same_line() {
+        // Same 0.x breaking line (0.18.4 installed, 0.18.9 mentioned) → compatible
+        let delta = compare_version_in_content(
+            "axum 0.18.9 patch release",
+            "axum",
+            &Some("0.18.4".to_string()),
+        );
+        assert_eq!(delta, VersionDelta::SameMajor);
+    }
+
+    #[test]
+    fn test_compare_0x_older_line() {
+        // Content about an older 0.x line than installed → OlderMajor (penalized)
+        let delta = compare_version_in_content(
+            "tutorial for axum 0.6 routing",
+            "axum",
+            &Some("0.8.0".to_string()),
+        );
+        assert_eq!(delta, VersionDelta::OlderMajor);
+    }
+
+    #[test]
+    fn test_older_major_content_is_penalized() {
+        // A React-16 article should score LOWER for a React-19 user than the same
+        // article pinned to React 19 — the precision the user asked for.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.dependency_info.insert(
+            "react".to_string(),
+            DepInfo {
+                package_name: "react".to_string(),
+                version: Some("19.0.0".to_string()),
+                is_dev: false,
+                is_direct: true,
+                search_terms: vec!["react".to_string()],
+                ecosystem: "javascript".to_string(),
+            },
+        );
+
+        let (older, older_score) = match_dependencies(
+            "Understanding React 16 lifecycle methods",
+            "A deep dive into componentWillMount in the react library.",
+            &[],
+            &ace_ctx,
+        );
+        let (current, current_score) = match_dependencies(
+            "Understanding React 19 features",
+            "A deep dive into the new react library APIs.",
+            &[],
+            &ace_ctx,
+        );
+
+        assert!(!older.is_empty() && !current.is_empty());
+        assert!(
+            older_score < current_score,
+            "older-version content ({older_score}) must score below current-version ({current_score})"
+        );
+        assert_eq!(older[0].version_delta, VersionDelta::OlderMajor);
     }
 
     #[test]
