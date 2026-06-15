@@ -582,6 +582,7 @@ fn parse_engine_args(args: impl IntoIterator<Item = String>) -> Option<(Headless
         match arg.as_str() {
             "--engine-once" => mode = Some(HeadlessMode::Once),
             "--engine-daemon" => mode = Some(HeadlessMode::Daemon),
+            "--engine-drain" => mode = Some(HeadlessMode::Drain),
             "--force" | "-f" => force = true,
             _ => {}
         }

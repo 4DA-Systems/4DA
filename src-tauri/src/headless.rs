@@ -36,6 +36,9 @@ pub enum HeadlessMode {
     Once,
     /// Loop on the monitoring interval until terminated.
     Daemon,
+    /// Re-score the entire stale-version backlog to the current PIPELINE_VERSION,
+    /// then exit. No fetch — a one-shot bulk drain for after a scoring-logic bump.
+    Drain,
 }
 
 /// Hide the console window when the OS scheduler (or a double-click) spawned one for this headless
@@ -134,6 +137,7 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
             tauri::async_runtime::block_on(run_daemon_loop(&handle, force));
             0
         }
+        HeadlessMode::Drain => tauri::async_runtime::block_on(run_drain_to_completion()),
     };
 
     // Hold `app` until all work is done, then exit explicitly — there is no event loop to spin.
@@ -144,6 +148,43 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
 /// Run a single fetch+score+dependency-audit cycle and record a freshness receipt. Returns the
 /// process exit code: `0` success, `1` if scoring or dependency refresh failed. A fetch failure is
 /// non-fatal (we still score the existing cache) but is reflected in the receipt counts.
+/// Drive the stale-version drain to completion: re-score every item stamped below
+/// the current `PIPELINE_VERSION` in bounded chunks until none remain. One-shot
+/// bulk operation for after a scoring-logic bump — converges the whole corpus in
+/// minutes (the scheduled `--engine-once` path only drains 500/run). Exit `0` on a
+/// clean drain, `1` if a cycle errored. Bounded total iterations as a runaway guard.
+async fn run_drain_to_completion() -> i32 {
+    const CHUNK: usize = 2000;
+    const MAX_CYCLES: usize = 500; // 1M items ceiling — far above any real corpus
+    let mut total = 0usize;
+    for cycle in 0..MAX_CYCLES {
+        match crate::analysis_backfill::drain_stale_version_cycle(CHUNK).await {
+            Ok(p) => {
+                total += p.scored_this_cycle;
+                if p.scored_this_cycle > 0 {
+                    info!(
+                        target: "4da::headless",
+                        cycle,
+                        rescored_this_cycle = p.scored_this_cycle,
+                        rescored_total = total,
+                        "Stale-version drain progressing"
+                    );
+                }
+                if p.done {
+                    info!(target: "4da::headless", rescored_total = total, "Stale-version drain complete");
+                    return 0;
+                }
+            }
+            Err(e) => {
+                error!(target: "4da::headless", error = %e, rescored_total = total, "Stale-version drain cycle failed");
+                return 1;
+            }
+        }
+    }
+    warn!(target: "4da::headless", rescored_total = total, "Stale-version drain hit MAX_CYCLES guard before fully draining");
+    0
+}
+
 async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: bool) -> i32 {
     let started = Instant::now();
     let mut receipt = RunReceipt::begin(trigger);
