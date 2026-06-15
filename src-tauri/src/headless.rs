@@ -244,7 +244,7 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     match crate::get_database() {
         Ok(db) => {
             let needs_sync = force_osv
-                || crate::osv::sync::needs_sync(&db, crate::osv::sync::DEFAULT_SYNC_MAX_AGE_HOURS)
+                || crate::osv::sync::needs_sync(&db, crate::osv::sync::osv_sync_max_age_hours())
                     .unwrap_or(true);
             if needs_sync {
                 match crate::osv::sync::sync(&db).await {
@@ -452,7 +452,7 @@ fn is_osv_fresh() -> bool {
         Ok(db) => db,
         Err(_) => return false,
     };
-    crate::osv::sync::needs_sync(&db, crate::osv::sync::DEFAULT_SYNC_MAX_AGE_HOURS)
+    crate::osv::sync::needs_sync(&db, crate::osv::sync::osv_sync_max_age_hours())
         .map(|needs_sync| !needs_sync)
         .unwrap_or(false)
 }
