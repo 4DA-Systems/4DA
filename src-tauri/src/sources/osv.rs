@@ -249,9 +249,8 @@ async fn matched_advisories_as_items() -> Vec<SourceItem> {
         }
     };
 
-    let needs_sync =
-        crate::osv::sync::needs_sync(&db, crate::osv::sync::DEFAULT_SYNC_MAX_AGE_HOURS)
-            .unwrap_or(true);
+    let needs_sync = crate::osv::sync::needs_sync(&db, crate::osv::sync::osv_sync_max_age_hours())
+        .unwrap_or(true);
     if needs_sync {
         if let Err(e) = crate::osv::sync::sync(&db).await {
             warn!(target: "4da::sources", error = %e, "OSV strict mode: advisory sync failed — matching against existing mirror");

@@ -9,6 +9,18 @@
 
 ## Active Terminals
 
+<!-- opus-ledger-engine (OSV freshness, 2026-06-15): DONE. (b) SHIPPED: FOURDA_OSV_MAX_AGE_HOURS
+     (osv/sync.rs osv_sync_max_age_hours() + parse_osv_max_age, pure-tested; wired headless x2 +
+     strict OsvSource path; default 6 = desktop byte-for-byte unchanged; ledger run-cycle.mjs sets 1).
+     ETag HEAD check keeps the tighter cadence cheap. Accuracy gates untouched. Full lib 3857/0.
+     (a) NOT NEEDED — verified the MCP osv-scanner already filters to versioned deps (osv-scanner.ts:46),
+     queries OSV with version (server-side range match), excludes withdrawn, and carries
+     currentVersion+vulnId+fixedVersion+refs (re-derivable proof). The recommendation's premise (agent
+     claim it was version-unaware) was disconfirmed, so changing the published Apache-2.0 package would
+     be churn, not improvement. (c) GHSA/NVD real-time delta = STAGED as a gated plan (.claude/plans/),
+     deferred: (b) already gets the ledger to ~1h, (c) is marginal freshness + false-alarm risk.
+     Commit Lock: RELEASED. -->
+
 <!-- opus-ledger-engine (2026-06-15): DONE — committed local, push HELD for operator (4DA is the
      default branch; per global rule 6 the push is the operator's call). FOURDA_STRICT_MANIFEST=1
      makes the headless engine surface ONLY manifest-grounded release/vuln items for the receipts

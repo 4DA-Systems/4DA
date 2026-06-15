@@ -19,6 +19,28 @@ const USER_AGENT: &str = "4DA/1.0 (local-osv-mirror)";
 const MAX_BATCH_SIZE: usize = 1000;
 pub(crate) const DEFAULT_SYNC_MAX_AGE_HOURS: i64 = 6;
 
+/// Maximum advisory-mirror age (hours) before a sync is due. Read once from
+/// `FOURDA_OSV_MAX_AGE_HOURS`, falling back to [`DEFAULT_SYNC_MAX_AGE_HOURS`].
+///
+/// The 4DA receipts ledger sets this to `1` so new advisories surface within its hourly
+/// cycle instead of waiting up to 6h; the per-ecosystem ETag HEAD check (`is_cache_stale`)
+/// keeps a tighter cadence cheap — a re-download only happens when OSV actually publishes a
+/// new export, so polling more often costs one HEAD request, not a full mirror pull. With the
+/// env var unset, desktop behavior is unchanged (6h). Clamped to a 1h floor so a misconfigured
+/// `0` can't force a sync every cycle against the rate-limited API fallback.
+pub(crate) fn osv_sync_max_age_hours() -> i64 {
+    static MAX_AGE: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
+    *MAX_AGE.get_or_init(|| parse_osv_max_age(std::env::var("FOURDA_OSV_MAX_AGE_HOURS").ok()))
+}
+
+/// Pure parser for [`osv_sync_max_age_hours`]: a positive integer hours value, clamped to a
+/// 1h floor; any missing/blank/non-numeric input falls back to [`DEFAULT_SYNC_MAX_AGE_HOURS`].
+fn parse_osv_max_age(raw: Option<String>) -> i64 {
+    raw.and_then(|v| v.trim().parse::<i64>().ok())
+        .map(|h| h.max(1))
+        .unwrap_or(DEFAULT_SYNC_MAX_AGE_HOURS)
+}
+
 /// Map from ACE/DB ecosystem names to OSV ecosystem identifiers.
 const ECOSYSTEM_NORMALIZE: &[(&str, &str)] = &[
     ("rust", "crates.io"),
@@ -513,6 +535,27 @@ fn extract_fixed_versions(affected: &Affected) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_osv_max_age() {
+        // Unset / blank / non-numeric -> conservative 6h default (desktop unchanged).
+        assert_eq!(parse_osv_max_age(None), DEFAULT_SYNC_MAX_AGE_HOURS);
+        assert_eq!(
+            parse_osv_max_age(Some("".into())),
+            DEFAULT_SYNC_MAX_AGE_HOURS
+        );
+        assert_eq!(
+            parse_osv_max_age(Some("soon".into())),
+            DEFAULT_SYNC_MAX_AGE_HOURS
+        );
+        // Explicit value (the ledger sets "1") is honored.
+        assert_eq!(parse_osv_max_age(Some("1".into())), 1);
+        assert_eq!(parse_osv_max_age(Some(" 2 ".into())), 2);
+        assert_eq!(parse_osv_max_age(Some("24".into())), 24);
+        // A misconfigured 0/negative is clamped to a 1h floor (never sync-every-cycle).
+        assert_eq!(parse_osv_max_age(Some("0".into())), 1);
+        assert_eq!(parse_osv_max_age(Some("-5".into())), 1);
+    }
 
     #[test]
     fn test_normalize_to_osv() {
