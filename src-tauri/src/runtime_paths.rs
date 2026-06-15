@@ -219,6 +219,16 @@ impl RuntimePaths {
         dir
     }
 
+    /// Mini-digest output directory. Lives under the canonical data dir so it
+    /// stays out of the `src-tauri` source tree — writing digests into the
+    /// crate dir made `tauri dev`'s file watcher rebuild the whole app on every
+    /// digest write.
+    pub fn digests_dir(&self) -> PathBuf {
+        let dir = self.data_dir.join("digests");
+        let _ = std::fs::create_dir_all(&dir);
+        dir
+    }
+
     pub fn model_cache_dir(&self) -> PathBuf {
         let dir = self.cache_dir.join("models");
         let _ = std::fs::create_dir_all(&dir);
