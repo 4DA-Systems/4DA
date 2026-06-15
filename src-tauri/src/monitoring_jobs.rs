@@ -377,21 +377,21 @@ pub fn maybe_save_mini_digest(state: &crate::monitoring::MonitoringState) {
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
     let filename = format!("mini_digest_{timestamp}.md");
 
-    if let Ok(data_dir) = std::env::current_dir() {
-        let digest_dir = data_dir.join("data").join("digests");
-        let _ = std::fs::create_dir_all(&digest_dir);
-        let path = digest_dir.join(filename);
-        let content = format!(
-            "# 4DA Mini-Digest\n\nGenerated: {}\nItems: {}\n\n{}\n",
-            chrono::Utc::now().to_rfc3339(),
-            items.len(),
-            digest_content,
-        );
-        if let Err(e) = std::fs::write(&path, content) {
-            warn!(target: "4da::jobs", error = %e, "Failed to save mini-digest");
-        } else {
-            info!(target: "4da::jobs", path = %path.display(), "Mini-digest saved");
-        }
+    // Write to the canonical data dir (RuntimePaths), NOT the cwd. In dev the cwd
+    // is `src-tauri`, so `current_dir()/data/digests` landed inside the watched
+    // crate tree and made `tauri dev` rebuild the whole app on every digest write.
+    let digest_dir = crate::runtime_paths::RuntimePaths::get().digests_dir();
+    let path = digest_dir.join(filename);
+    let content = format!(
+        "# 4DA Mini-Digest\n\nGenerated: {}\nItems: {}\n\n{}\n",
+        chrono::Utc::now().to_rfc3339(),
+        items.len(),
+        digest_content,
+    );
+    if let Err(e) = std::fs::write(&path, content) {
+        warn!(target: "4da::jobs", error = %e, "Failed to save mini-digest");
+    } else {
+        info!(target: "4da::jobs", path = %path.display(), "Mini-digest saved");
     }
 }
 
