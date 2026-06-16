@@ -1,33 +1,46 @@
 {
   "mcpServers": {
-    "memory": {
-      "command": "node",
-      "args": [
-        "./mcp-memory-server/dist/index.js"
-      ],
-      "env": {
-        "MEMORY_DB_PATH": "./.claude/memory.db"
-      }
-    },
     "4da": {
-      "command": "node",
       "args": [
         "./mcp-4da-server/dist/index.js"
       ],
+      "command": "node",
       "env": {
         "FOURDA_DB_PATH": "./data/4da.db"
       }
     },
+    "memory": {
+      "args": [
+        "./mcp-memory-server/dist/index.js"
+      ],
+      "command": "node",
+      "env": {
+        "MEMORY_DB_PATH": "./.claude/memory.db"
+      }
+    },
     "playwright": {
-      "command": "npx",
       "args": [
         "@playwright/mcp@latest"
-      ]
+      ],
+      "command": "npx"
+    },
+    "verax": {
+      "args": [
+        "mcp"
+      ],
+      "command": "D:\\dev-cache\\.cargo\\bin\\verax.exe",
+      "env": {
+        "VERAX_URL": "http://127.0.0.1:7575",
+        "VERAX_TOKEN": "365034629bca4b8ba95e0e72c7ba102c"
+      }
     },
     "victauri": {
-      "command": "victauri",
-      "args": ["bridge", "--wait"],
-      "_comment": "Victauri MCP — stdio bridge to running 4DA dev server"
+      "_comment": "Victauri MCP â€” stdio bridge to running 4DA dev server",
+      "args": [
+        "bridge",
+        "--wait"
+      ],
+      "command": "victauri"
     }
   }
 }
