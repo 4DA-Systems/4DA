@@ -407,6 +407,31 @@ impl ACE {
                                         }
                                     }
 
+                                    // Prune direct deps no longer present in this
+                                    // manifest (dropped deps, or now-skipped local
+                                    // path/git crates) so they stop surfacing as
+                                    // stale "unmonitored" blind spots.
+                                    let current_names: Vec<String> = signal
+                                        .dependencies
+                                        .iter()
+                                        .chain(signal.dev_dependencies.iter())
+                                        .cloned()
+                                        .collect();
+                                    match crate::temporal::prune_removed_dependencies(
+                                        &conn,
+                                        &project_path,
+                                        language,
+                                        &current_names,
+                                    ) {
+                                        Ok(n) if n > 0 => {
+                                            tracing::info!(target: "4da::ace", project = %project_path, removed = n, "Pruned stale direct dependencies");
+                                        }
+                                        Ok(_) => {}
+                                        Err(e) => {
+                                            tracing::warn!(target: "4da::ace", error = %e, project = %project_path, "Failed to prune stale dependencies");
+                                        }
+                                    }
+
                                     // Snapshot deps for the dep_linker's UNION query
                                     if let Ok(db) = crate::get_database() {
                                         let ecosystem = signal.manifest_type.language().to_string();

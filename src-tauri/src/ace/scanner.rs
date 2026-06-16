@@ -456,8 +456,15 @@ impl ProjectScanner {
             }
 
             if (in_deps || in_dev_deps) && !trimmed.is_empty() && !trimmed.starts_with('#') {
-                if let Some(dep_name) = trimmed.split('=').next() {
+                if let Some((dep_name, dep_value)) = trimmed.split_once('=') {
                     let dep = dep_name.trim().to_string();
+                    // Skip local path/git deps (e.g. `foo = { path = "..." }`).
+                    // These are the user's own crates or vendored code with no
+                    // crates.io presence — tracking them as external dependencies
+                    // only produces false-positive "unmonitored" blind spots.
+                    if is_local_cargo_dep(dep_value) {
+                        continue;
+                    }
                     if !dep.is_empty() {
                         if in_dev_deps {
                             signal.dev_dependencies.push(dep);
@@ -507,14 +514,22 @@ impl ProjectScanner {
         }
 
         if let Some(deps) = pkg.get("dependencies").and_then(|v| v.as_object()) {
-            for key in deps.keys() {
+            for (key, val) in deps {
+                // Skip local/non-registry specs (file:/link:/workspace:/git/url)
+                // — sibling or vendored packages produce false-positive blind spots.
+                if is_local_npm_spec(val.as_str().unwrap_or("")) {
+                    continue;
+                }
                 signal.dependencies.push(key.clone());
                 self.detect_js_framework(key, signal);
             }
         }
 
         if let Some(dev_deps) = pkg.get("devDependencies").and_then(|v| v.as_object()) {
-            for key in dev_deps.keys() {
+            for (key, val) in dev_deps {
+                if is_local_npm_spec(val.as_str().unwrap_or("")) {
+                    continue;
+                }
                 signal.dev_dependencies.push(key.clone());
             }
             // Detect TypeScript from devDependencies
@@ -1489,6 +1504,62 @@ fn extract_toml_value(content: &str, key: &str) -> Option<String> {
     None
 }
 
+/// True if a Cargo.toml dependency value declares a LOCAL source — an inline
+/// table containing a `path` or `git` key (e.g. `{ path = "..." }` or
+/// `{ git = "...", branch = "..." }`). Such deps resolve to the user's own
+/// crates or vendored/forked code and have no crates.io registry presence, so
+/// they must not be tracked as external dependencies. Plain version strings
+/// (`"1.0"`) and registry tables (`{ version = "1", features = [...] }`) return
+/// false.
+fn is_local_cargo_dep(value: &str) -> bool {
+    let v = value.trim();
+    if !v.starts_with('{') {
+        return false; // bare version string => registry dependency
+    }
+    toml_inline_has_key(v, "path") || toml_inline_has_key(v, "git")
+}
+
+/// Detect whether `key` appears as a KEY (token followed by `=`) inside an
+/// inline TOML table string. Avoids matching the key inside a value such as a
+/// feature name (`features = ["pathfinder"]`) by requiring a word boundary
+/// before and an `=` immediately after (ignoring whitespace).
+fn toml_inline_has_key(table: &str, key: &str) -> bool {
+    let bytes = table.as_bytes();
+    let mut from = 0usize;
+    while let Some(rel) = table[from..].find(key) {
+        let pos = from + rel;
+        let before_ok = pos == 0 || {
+            let c = bytes[pos - 1] as char;
+            !c.is_alphanumeric() && c != '_' && c != '-'
+        };
+        let after = table[pos + key.len()..].trim_start();
+        if before_ok && after.starts_with('=') {
+            return true;
+        }
+        from = pos + key.len();
+    }
+    false
+}
+
+/// True if an npm/package.json version spec points to a LOCAL or non-registry
+/// source (`file:`, `link:`, `workspace:`, `portal:`, a git/github reference,
+/// or a raw URL). These resolve to sibling/vendored packages with no npm
+/// registry listing, so they must not be tracked as external dependencies.
+/// Normal semver ranges (`^1.0.0`, `~2`, `*`, `latest`) and npm aliases
+/// (`npm:pkg@1`) return false.
+fn is_local_npm_spec(spec: &str) -> bool {
+    let s = spec.trim();
+    s.starts_with("file:")
+        || s.starts_with("link:")
+        || s.starts_with("workspace:")
+        || s.starts_with("portal:")
+        || s.starts_with("git+")
+        || s.starts_with("git:")
+        || s.starts_with("git@")
+        || s.starts_with("github:")
+        || s.contains("://")
+}
+
 /// Extract import/dependency names from source file imports.
 /// Scans first 100 lines for language-specific import patterns.
 /// Returns unique package/crate names found.
@@ -1895,6 +1966,127 @@ pretty_assertions = "1.0"
         assert!(!signal.frameworks.contains(&"tokio".to_string()));
         assert!(signal.frameworks.contains(&"axum".to_string()));
         assert_eq!(signal.project_license, Some("MIT".to_string()));
+    }
+
+    #[test]
+    fn test_is_local_cargo_dep_classification() {
+        // Local path / git deps -> true (skipped).
+        assert!(is_local_cargo_dep(r#" { path = "fourda-macros" }"#));
+        assert!(is_local_cargo_dep(r#"{ path="../shared" }"#));
+        assert!(is_local_cargo_dep(r#" { git = "https://github.com/x/y" }"#));
+        assert!(is_local_cargo_dep(
+            r#" { git = "https://x/y", branch = "main" }"#
+        ));
+        // Registry deps -> false (kept).
+        assert!(!is_local_cargo_dep(r#" "1.0""#));
+        assert!(!is_local_cargo_dep(
+            r#" { version = "1", features = ["full"] }"#
+        ));
+        // A feature literally named with "path" must NOT be misread as a path dep.
+        assert!(!is_local_cargo_dep(
+            r#" { version = "1", features = ["pathfinder"] }"#
+        ));
+    }
+
+    #[test]
+    fn test_parse_cargo_toml_skips_path_and_git_deps() {
+        let content = r#"
+[package]
+name = "my-crate"
+
+[dependencies]
+serde = "1.0"
+fourda-macros = { path = "fourda-macros" }
+forked-lib = { git = "https://github.com/me/forked-lib" }
+tokio = { version = "1", features = ["full"] }
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = ProjectSignal {
+            manifest_type: ManifestType::CargoToml,
+            manifest_path: PathBuf::from("Cargo.toml"),
+            project_name: None,
+            languages: vec!["rust".to_string()],
+            frameworks: Vec::new(),
+            dependencies: Vec::new(),
+            dev_dependencies: Vec::new(),
+            detected_at: String::new(),
+            project_license: None,
+            project_relevance: 1.0,
+        };
+
+        scanner.parse_cargo_toml(content, &mut signal);
+
+        // Registry deps kept.
+        assert!(signal.dependencies.contains(&"serde".to_string()));
+        assert!(signal.dependencies.contains(&"tokio".to_string()));
+        // Local path / git deps dropped — they have no crates.io presence.
+        assert!(
+            !signal.dependencies.contains(&"fourda-macros".to_string()),
+            "path dep must be skipped"
+        );
+        assert!(
+            !signal.dependencies.contains(&"forked-lib".to_string()),
+            "git dep must be skipped"
+        );
+    }
+
+    #[test]
+    fn test_is_local_npm_spec_classification() {
+        for s in [
+            "file:../pkg",
+            "link:../pkg",
+            "workspace:*",
+            "portal:../pkg",
+            "git+https://github.com/x/y.git",
+            "github:x/y",
+            "https://example.com/x.tgz",
+        ] {
+            assert!(is_local_npm_spec(s), "{s} should be local");
+        }
+        for s in ["^1.0.0", "~2.3", "1.x", "*", "latest", "npm:aliased@1.0"] {
+            assert!(!is_local_npm_spec(s), "{s} should be a registry spec");
+        }
+    }
+
+    #[test]
+    fn test_parse_package_json_skips_local_specs() {
+        let content = r#"
+{
+  "name": "monorepo-app",
+  "dependencies": {
+    "react": "^18.0.0",
+    "@scope/internal": "workspace:*",
+    "local-tool": "file:../local-tool"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@scope/devkit": "link:../devkit"
+  }
+}
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = ProjectSignal {
+            manifest_type: ManifestType::PackageJson,
+            manifest_path: PathBuf::from("package.json"),
+            project_name: None,
+            languages: vec!["javascript".to_string()],
+            frameworks: Vec::new(),
+            dependencies: Vec::new(),
+            dev_dependencies: Vec::new(),
+            detected_at: String::new(),
+            project_license: None,
+            project_relevance: 1.0,
+        };
+
+        scanner.parse_package_json(content, &mut signal);
+
+        assert!(signal.dependencies.contains(&"react".to_string()));
+        assert!(signal.dev_dependencies.contains(&"typescript".to_string()));
+        assert!(!signal.dependencies.contains(&"@scope/internal".to_string()));
+        assert!(!signal.dependencies.contains(&"local-tool".to_string()));
+        assert!(!signal
+            .dev_dependencies
+            .contains(&"@scope/devkit".to_string()));
     }
 
     #[test]

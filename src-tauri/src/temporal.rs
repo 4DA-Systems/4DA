@@ -93,6 +93,51 @@ pub fn upsert_dependency(
     Ok(())
 }
 
+/// Remove direct dependencies for a (project, language) that were NOT present in
+/// the latest manifest scan.
+///
+/// Called right after the freshly-parsed manifest deps are upserted, so any dep
+/// dropped from the manifest — or now intentionally skipped (local `path`/`git`
+/// crates, `file:`/`workspace:` npm specs) — stops lingering as a stale row.
+/// Stale rows otherwise surface as bogus "unmonitored" blind spots (e.g. an
+/// internal workspace crate the user removed weeks ago).
+///
+/// Scoped to `is_direct = 1`: direct rows are the only ones written from manifest
+/// scans, so transitive rows from other code paths are never touched here.
+/// No-op when `current_names` is empty, so a parse that yields nothing (parse
+/// failure, or a genuinely dep-less manifest) cannot wipe a project's deps.
+///
+/// Returns the number of stale rows removed.
+pub fn prune_removed_dependencies(
+    conn: &rusqlite::Connection,
+    project_path: &str,
+    language: &str,
+    current_names: &[String],
+) -> Result<usize> {
+    if current_names.is_empty() {
+        return Ok(0);
+    }
+    let canonical_path = canonicalize_project_path(project_path);
+    let placeholders = std::iter::repeat("?")
+        .take(current_names.len())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "DELETE FROM project_dependencies
+         WHERE project_path = ? AND language = ? AND is_direct = 1
+           AND package_name NOT IN ({placeholders})"
+    );
+    // Bind params in positional order: project_path, language, then keep-list.
+    let mut values: Vec<String> = Vec::with_capacity(current_names.len() + 2);
+    values.push(canonical_path);
+    values.push(language.to_string());
+    values.extend(current_names.iter().cloned());
+    let removed = conn
+        .execute(&sql, rusqlite::params_from_iter(values.iter()))
+        .context("Failed to prune removed dependencies")?;
+    Ok(removed)
+}
+
 /// Get all dependencies for a project
 pub fn get_project_dependencies(
     conn: &rusqlite::Connection,
@@ -381,6 +426,135 @@ mod tests {
         assert_eq!(deserialized.data["version"], "19.0.0");
         assert_eq!(deserialized.source_item_id, Some(42));
         assert!(deserialized.expires_at.is_some());
+    }
+
+    fn setup_deps_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE project_dependencies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_path TEXT NOT NULL,
+                manifest_type TEXT NOT NULL DEFAULT 'cargotoml',
+                package_name TEXT NOT NULL,
+                version TEXT,
+                is_dev INTEGER DEFAULT 0,
+                is_direct INTEGER DEFAULT 1,
+                language TEXT NOT NULL DEFAULT 'rust',
+                last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
+                project_relevance REAL DEFAULT 1.0,
+                UNIQUE(project_path, package_name)
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn prune_removes_dropped_direct_deps_only() {
+        let conn = setup_deps_db();
+        let proj = "D:/proj/app";
+        // Two current direct deps + one stale (removed) direct dep.
+        upsert_dependency(
+            &conn,
+            proj,
+            "cargotoml",
+            "serde",
+            None,
+            false,
+            true,
+            "rust",
+            1.0,
+        )
+        .unwrap();
+        upsert_dependency(
+            &conn,
+            proj,
+            "cargotoml",
+            "tokio",
+            None,
+            false,
+            true,
+            "rust",
+            1.0,
+        )
+        .unwrap();
+        upsert_dependency(
+            &conn,
+            proj,
+            "cargotoml",
+            "removed_crate",
+            None,
+            false,
+            true,
+            "rust",
+            1.0,
+        )
+        .unwrap();
+        // A transitive dep (is_direct = 0) must NOT be pruned.
+        conn.execute(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, language, is_direct)
+             VALUES (?1, 'cargotoml', 'transitive_dep', 'rust', 0)",
+            params![canonicalize_project_path(proj)],
+        )
+        .unwrap();
+        // A different-language direct dep must NOT be pruned by a rust scan.
+        conn.execute(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, language, is_direct)
+             VALUES (?1, 'packagejson', 'react', 'javascript', 1)",
+            params![canonicalize_project_path(proj)],
+        )
+        .unwrap();
+
+        let current = vec!["serde".to_string(), "tokio".to_string()];
+        let removed = prune_removed_dependencies(&conn, proj, "rust", &current).unwrap();
+        assert_eq!(removed, 1, "only the dropped direct rust dep is removed");
+
+        let names: Vec<String> = conn
+            .prepare("SELECT package_name FROM project_dependencies ORDER BY package_name")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(names.contains(&"serde".to_string()));
+        assert!(names.contains(&"tokio".to_string()));
+        assert!(!names.contains(&"removed_crate".to_string()));
+        assert!(
+            names.contains(&"transitive_dep".to_string()),
+            "transitive dep must survive"
+        );
+        assert!(
+            names.contains(&"react".to_string()),
+            "other-language dep must survive"
+        );
+    }
+
+    #[test]
+    fn prune_is_noop_on_empty_keep_list() {
+        let conn = setup_deps_db();
+        let proj = "D:/proj/app";
+        upsert_dependency(
+            &conn,
+            proj,
+            "cargotoml",
+            "serde",
+            None,
+            false,
+            true,
+            "rust",
+            1.0,
+        )
+        .unwrap();
+        // An empty keep-list must NOT wipe deps (guards against a parse failure
+        // deleting a whole project's dependency set).
+        let removed = prune_removed_dependencies(&conn, proj, "rust", &[]).unwrap();
+        assert_eq!(removed, 0);
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM project_dependencies", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 1);
     }
 
     #[test]

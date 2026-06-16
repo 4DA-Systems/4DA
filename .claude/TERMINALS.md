@@ -9,6 +9,19 @@
 
 ## Active Terminals
 
+<!-- opus-rc-blindspot (2026-06-16): DONE — blind-spot internal-crate false-positive fix.
+     parse_cargo_toml/parse_package_json now skip local path/git + file:/link:/workspace: deps;
+     prune_removed_dependencies deletes is_direct rows dropped from a manifest (stale-removed deps).
+     +6 unit tests (scanner+temporal), targeted suite 34/0. Built via tauri-dev restart, live-verified
+     through Victauri: internal crates (content_dna_classifiers/content_translation_cache/fourda-macros)
+     gone from project_dependencies AND the Blind Spots UI; real registry deps intact (287->275 rows).
+     Residual flagged for follow-up: extract_imports_from_source still adds internal module names
+     (e.g. `nlp` from `mod nlp;`) as pseudo-deps — different code path, not surfacing as noise.
+     Committed local; push to origin/main HELD for operator (4DA is the default branch, global rule 6).
+     Files: src-tauri/src/{ace/scanner.rs,ace/mod.rs,temporal.rs} + TERMINALS.md (pathspec).
+     NOT mine, untouched: .gitignore/.mcp.json/CLAUDE.md/ResultItemExpanded.tsx/data/*.bak.
+     Commit Lock: RELEASED. -->
+
 <!-- opus-ledger-engine (OSV freshness, 2026-06-15): DONE. (b) SHIPPED: FOURDA_OSV_MAX_AGE_HOURS
      (osv/sync.rs osv_sync_max_age_hours() + parse_osv_max_age, pure-tested; wired headless x2 +
      strict OsvSource path; default 6 = desktop byte-for-byte unchanged; ledger run-cycle.mjs sets 1).
