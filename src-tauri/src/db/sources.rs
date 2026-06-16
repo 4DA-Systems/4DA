@@ -126,7 +126,7 @@ impl Database {
         let conn = self.conn.lock();
         let content_hash = hash_content_parts(&[title, content]);
         let embedding_blob = embedding_to_blob(embedding);
-        let detected_lang = crate::language_detect::detect_language(title);
+        let detected_lang = crate::language_detect::detect_language_with_content(title, content);
 
         let existing_id: Option<i64> = conn
             .query_row(
