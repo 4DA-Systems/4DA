@@ -7,6 +7,12 @@
  */
 
 import type { FourDADatabase } from "../db.js";
+import { rankRowsByRecall, type RecallField } from "./recall.js";
+import {
+  getEmbeddingConfig,
+  semanticScores,
+  type EmbeddingConfig,
+} from "../embeddings.js";
 
 // ============================================================================
 // Types
@@ -127,6 +133,27 @@ const MAX_CONTENT_BYTES = 10 * 1024;
 /** Maximum entries per agent */
 const MAX_ENTRIES_PER_AGENT = 1000;
 
+/** Weighted text fields for lexical recall ranking (shared by lexical + hybrid paths). */
+const MEMORY_RECALL_FIELDS: RecallField<AgentMemoryRow>[] = [
+  { name: "subject", weight: 4, value: (row) => row.subject },
+  { name: "tags", weight: 3, value: (row) => row.context_tags },
+  { name: "content", weight: 2, value: (row) => row.content },
+  { name: "type", weight: 1, value: (row) => row.memory_type },
+];
+
+/** Blend weight for semantic cosine vs normalized lexical score in hybrid recall. */
+const SEMANTIC_BLEND = 0.65;
+
+/**
+ * The text embedded for a memory. Exported so every surface that embeds a memory
+ * row (this tool AND the what_should_i_know briefing) uses IDENTICAL text —
+ * otherwise they would write conflicting vectors into the shared
+ * agent_memory.embedding column.
+ */
+export function memoryEmbedText(row: { subject: string; content: string }): string {
+  return `${row.subject}\n${row.content}`;
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -139,11 +166,20 @@ function parseMemoryRow(row: AgentMemoryRow) {
     memory_type: row.memory_type,
     subject: row.subject,
     content: row.content,
-    context_tags: JSON.parse(row.context_tags || "[]") as string[],
+    context_tags: parseStringList(row.context_tags),
     created_at: row.created_at,
     expires_at: row.expires_at,
     promoted_to_decision_id: row.promoted_to_decision_id,
   };
+}
+
+function parseStringList(json: string | null): string[] {
+  try {
+    const parsed = JSON.parse(json || "[]");
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 // ============================================================================
@@ -153,7 +189,7 @@ function parseMemoryRow(row: AgentMemoryRow) {
 export function executeAgentMemory(
   db: FourDADatabase,
   params: AgentMemoryParams,
-): object {
+): object | Promise<object> {
   const rawDb = db.getRawDb();
 
   switch (params.action) {
@@ -231,13 +267,11 @@ export function executeAgentMemory(
       }
 
       try {
-        const pattern = `%${params.query.toLowerCase()}%`;
         let sql = `SELECT id, session_id, agent_type, memory_type, subject, content,
                           context_tags, created_at, expires_at, promoted_to_decision_id
                    FROM agent_memory
-                   WHERE (LOWER(subject) LIKE ? OR LOWER(context_tags) LIKE ?)
-                   AND (expires_at IS NULL OR expires_at > datetime('now'))`;
-        const sqlParams: (string | number)[] = [pattern, pattern];
+                   WHERE (expires_at IS NULL OR expires_at > datetime('now'))`;
+        const sqlParams: (string | number)[] = [];
 
         if (params.filter_agent) {
           sql += ` AND agent_type = ?`;
@@ -245,14 +279,21 @@ export function executeAgentMemory(
         }
 
         sql += ` ORDER BY created_at DESC LIMIT ?`;
-        sqlParams.push(params.limit || 20);
+        sqlParams.push(MAX_ENTRIES_PER_AGENT);
 
         const rows = rawDb.prepare(sql).all(...sqlParams) as AgentMemoryRow[];
+        const limit = params.limit || 20;
 
-        return {
-          memories: rows.map(parseMemoryRow),
-          count: rows.length,
-        };
+        // Optional semantic recall — only when an embedding provider is configured.
+        // Returns a Promise (dispatch awaits uniformly); every other path stays
+        // synchronous, so callers without a provider behave exactly as before.
+        const embedConfig = getEmbeddingConfig();
+        if (embedConfig) {
+          return enhanceRecallWithSemantics(db, params.query, rows, limit, embedConfig);
+        }
+
+        const ranked = rankRowsByRecall(rows, params.query, MEMORY_RECALL_FIELDS, limit);
+        return lexicalRecallResult(ranked, rows.length);
       } catch (error) {
         return {
           memories: [],
@@ -271,7 +312,7 @@ export function executeAgentMemory(
       }
 
       try {
-        // Build OR conditions for each tag
+        // Prefilter to entries whose tags literally contain ANY requested tag...
         const conditions = params.tags.map(
           () => `LOWER(context_tags) LIKE ?`,
         );
@@ -286,11 +327,30 @@ export function executeAgentMemory(
 
         const rows = rawDb
           .prepare(sql)
-          .all(...tagParams, params.limit || 20) as AgentMemoryRow[];
+          .all(...tagParams, MAX_ENTRIES_PER_AGENT) as AgentMemoryRow[];
+
+        // ...then rank by relevance so the strongest tag/subject/content matches
+        // lead, returning the same shape as `recall` (matched_fields, recall_score).
+        const ranked = rankRowsByRecall(
+          rows,
+          params.tags.join(" "),
+          [
+            { name: "tags", weight: 4, value: (row) => row.context_tags },
+            { name: "subject", weight: 2, value: (row) => row.subject },
+            { name: "content", weight: 1, value: (row) => row.content },
+          ],
+          params.limit || 20,
+        );
 
         return {
-          memories: rows.map(parseMemoryRow),
-          count: rows.length,
+          memories: ranked.map((item) => ({
+            ...parseMemoryRow(item.row),
+            matched_fields: item.matched_fields,
+            recall_score: item.score,
+          })),
+          count: ranked.length,
+          candidate_count: rows.length,
+          recall_mode: "ranked_lexical",
         };
       } catch (error) {
         return {
@@ -344,4 +404,94 @@ export function executeAgentMemory(
     default:
       return { error: `Unknown action: ${params.action}` };
   }
+}
+
+// ============================================================================
+// Recall result shaping + optional semantic enhancement
+// ============================================================================
+
+interface RankedMemory {
+  row: AgentMemoryRow;
+  score: number;
+  matched_fields: string[];
+}
+
+/** Shape a lexical-only recall response (the default, provider-free path). */
+function lexicalRecallResult(
+  ranked: RankedMemory[],
+  candidateCount: number,
+): object {
+  return {
+    memories: ranked.map((item) => ({
+      ...parseMemoryRow(item.row),
+      matched_fields: item.matched_fields,
+      recall_score: item.score,
+    })),
+    count: ranked.length,
+    candidate_count: candidateCount,
+    recall_mode: "ranked_lexical",
+  };
+}
+
+/**
+ * Hybrid recall: blends alias-aware lexical scoring with cosine similarity over
+ * provider-backed embeddings. Embeddings are cached in the agent_memory table and
+ * backfilled lazily (capped per call). ANY failure to embed the query degrades to
+ * pure lexical recall, and recall_mode reports exactly which path produced the result.
+ */
+async function enhanceRecallWithSemantics(
+  db: FourDADatabase,
+  query: string,
+  rows: AgentMemoryRow[],
+  limit: number,
+  config: EmbeddingConfig,
+): Promise<object> {
+  // Lexical baseline over ALL candidates — used for blending and as the fallback.
+  const lexical = rankRowsByRecall(rows, query, MEMORY_RECALL_FIELDS, rows.length);
+  const lexById = new Map<number, RankedMemory>();
+  for (const item of lexical) lexById.set(item.row.id, item);
+  const maxLex = lexical.length ? lexical[0].score : 0;
+
+  const sem = await semanticScores(
+    db,
+    "agent_memory",
+    query,
+    rows.map((row) => ({ id: row.id, text: memoryEmbedText(row) })),
+    config,
+  );
+
+  // Query could not be embedded -> the provider is effectively unavailable.
+  if (!sem.queryEmbedded) {
+    return {
+      ...lexicalRecallResult(lexical.slice(0, limit), rows.length),
+      semantic_note: "embedding provider unreachable — used lexical recall",
+    };
+  }
+
+  const blended = rows
+    .map((row) => {
+      const semantic = Math.max(0, sem.semanticById.get(row.id) ?? 0);
+      const lex = lexById.get(row.id);
+      const lexNorm = maxLex > 0 && lex ? lex.score / maxLex : 0;
+      const score = SEMANTIC_BLEND * semantic + (1 - SEMANTIC_BLEND) * lexNorm;
+      return { row, semantic, matched: lex?.matched_fields ?? [], score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  return {
+    memories: blended.map((x) => ({
+      ...parseMemoryRow(x.row),
+      matched_fields: x.matched,
+      recall_score: Math.round(x.score * 1000) / 1000,
+      semantic_score: Math.round(x.semantic * 1000) / 1000,
+    })),
+    count: blended.length,
+    candidate_count: rows.length,
+    embedded_candidates: sem.embeddedCount,
+    newly_embedded: sem.newlyEmbedded,
+    embedding_model: sem.model,
+    recall_mode: sem.embeddedCount > 0 ? "hybrid" : "ranked_lexical",
+  };
 }
