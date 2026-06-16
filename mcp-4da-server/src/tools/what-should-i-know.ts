@@ -13,6 +13,15 @@
 import type { FourDADatabase } from "../db.js";
 import { executeGetActionableSignals } from "./get-actionable-signals.js";
 import { getLiveIntelligence } from "../live-singleton.js";
+import {
+  rankRowsByRecall,
+  createRelevanceScorer,
+  type RankedRecall,
+  type RecallField,
+} from "./recall.js";
+import { getEmbeddingConfig, semanticScores, type EmbeddingConfig } from "../embeddings.js";
+import { decisionEmbedText } from "./decision-recall.js";
+import { memoryEmbedText } from "./agent-memory.js";
 
 // ============================================================================
 // Types
@@ -44,6 +53,25 @@ interface WisdomEntry {
   detail: string;
 }
 
+interface WisdomDecisionRow {
+  id: number;
+  subject: string;
+  decision: string;
+  rationale: string | null;
+  alternatives_rejected: string;
+  context_tags: string;
+  updated_at: string;
+}
+
+interface WisdomMemoryRow {
+  id: number;
+  memory_type: string;
+  subject: string;
+  content: string;
+  context_tags: string;
+  created_at: string;
+}
+
 interface EcosystemNewsItem {
   title: string;
   url: string | null;
@@ -65,6 +93,8 @@ interface WhatShouldIKnowResult {
     reason: string;
   };
   summary: string;
+  /** How relevant_wisdom was retrieved: "hybrid" when an embedding provider is active. */
+  wisdom_recall_mode: "hybrid" | "ranked_lexical";
 }
 
 // ============================================================================
@@ -95,58 +125,6 @@ export const whatShouldIKnowTool = {
 };
 
 // ============================================================================
-// Relevance Filtering
-// ============================================================================
-
-/**
- * Build a set of lowercase keywords from the task description and file paths.
- * Used for simple keyword-based relevance matching against intelligence results.
- */
-function buildKeywords(task: string, files: string[]): Set<string> {
-  const words = new Set<string>();
-  if (!task) return words;
-
-  // Extract meaningful words from task (3+ chars, lowercased)
-  for (const word of task.toLowerCase().split(/\s+/)) {
-    const cleaned = word.replace(/[^a-z0-9_-]/g, "");
-    if (cleaned.length >= 3) {
-      words.add(cleaned);
-    }
-  }
-
-  // Extract keywords from file paths
-  for (const filePath of files) {
-    // Get filename and directory segments
-    const segments = filePath.replace(/\\/g, "/").split("/");
-    for (const segment of segments) {
-      // Split on dots, dashes, underscores for granular matching
-      for (const part of segment.split(/[.\-_]/)) {
-        const cleaned = part.toLowerCase().replace(/[^a-z0-9]/g, "");
-        if (cleaned.length >= 3) {
-          words.add(cleaned);
-        }
-      }
-    }
-  }
-
-  return words;
-}
-
-/**
- * Check if a text matches any keywords from the task context.
- */
-function matchesKeywords(text: string, keywords: Set<string>): boolean {
-  if (!text) return false;
-  const textLower = text.toLowerCase();
-  for (const keyword of keywords) {
-    if (textLower.includes(keyword)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// ============================================================================
 // Decision Window Retrieval
 // ============================================================================
 
@@ -172,6 +150,187 @@ function getOpenDecisionWindows(db: FourDADatabase): WindowRow[] {
   }
 }
 
+/** Weighted fields for ranking decisions (mirrors the decision tools' weights). */
+const WISDOM_DECISION_FIELDS: RecallField<WisdomDecisionRow>[] = [
+  { name: "alternatives", weight: 5, value: (row) => row.alternatives_rejected },
+  { name: "subject", weight: 4, value: (row) => row.subject },
+  { name: "tags", weight: 3, value: (row) => row.context_tags },
+  { name: "decision", weight: 2, value: (row) => row.decision },
+  { name: "rationale", weight: 1, value: (row) => row.rationale },
+];
+
+/** Weighted fields for ranking memories. */
+const WISDOM_MEMORY_FIELDS: RecallField<WisdomMemoryRow>[] = [
+  { name: "subject", weight: 4, value: (row) => row.subject },
+  { name: "tags", weight: 3, value: (row) => row.context_tags },
+  { name: "content", weight: 2, value: (row) => row.content },
+  { name: "type", weight: 1, value: (row) => row.memory_type },
+];
+
+const WISDOM_LIMIT = 6;
+/** Blend weight for semantic cosine vs normalized lexical score in hybrid wisdom. */
+const WISDOM_BLEND = 0.65;
+
+function loadWisdomDecisions(rawDb: ReturnType<FourDADatabase["getRawDb"]>): WisdomDecisionRow[] {
+  try {
+    return rawDb
+      .prepare(
+        `SELECT id, subject, decision, rationale, alternatives_rejected, context_tags, updated_at
+         FROM developer_decisions
+         WHERE status = 'active'
+         ORDER BY updated_at DESC
+         LIMIT 300`,
+      )
+      .all() as WisdomDecisionRow[];
+  } catch {
+    return []; // Older DBs may not have decision memory yet.
+  }
+}
+
+function loadWisdomMemories(rawDb: ReturnType<FourDADatabase["getRawDb"]>): WisdomMemoryRow[] {
+  try {
+    return rawDb
+      .prepare(
+        `SELECT id, memory_type, subject, content, context_tags, created_at
+         FROM agent_memory
+         WHERE (expires_at IS NULL OR expires_at > datetime('now'))
+         ORDER BY created_at DESC
+         LIMIT 300`,
+      )
+      .all() as WisdomMemoryRow[];
+  } catch {
+    return []; // Older DBs may not have agent memory yet.
+  }
+}
+
+/** Map a ranked decision/memory row to the public WisdomEntry shape. */
+function toWisdomEntry(item: {
+  type: "decision" | "memory";
+  row: WisdomDecisionRow | WisdomMemoryRow;
+}): WisdomEntry {
+  if (item.type === "decision") {
+    const row = item.row as WisdomDecisionRow;
+    return {
+      type: "decision",
+      subject: row.subject,
+      detail: row.rationale ? `${row.decision} Rationale: ${row.rationale}` : row.decision,
+    };
+  }
+  const row = item.row as WisdomMemoryRow;
+  return {
+    type: `memory:${row.memory_type}`,
+    subject: row.subject,
+    detail: row.content,
+  };
+}
+
+/**
+ * Lexical wisdom retrieval (the default, provider-free path): rank decisions and
+ * memories independently, merge by score, take the top entries.
+ */
+function getRelevantWisdom(db: FourDADatabase, task: string, files: string[]): WisdomEntry[] {
+  const rawDb = db.getRawDb();
+  const query = [task, ...files].join(" ");
+
+  const entries: Array<RankedRecall<WisdomDecisionRow | WisdomMemoryRow> & {
+    type: "decision" | "memory";
+  }> = [
+    ...rankRowsByRecall(loadWisdomDecisions(rawDb), query, WISDOM_DECISION_FIELDS, WISDOM_LIMIT).map(
+      (item) => ({ ...item, type: "decision" as const }),
+    ),
+    ...rankRowsByRecall(loadWisdomMemories(rawDb), query, WISDOM_MEMORY_FIELDS, WISDOM_LIMIT).map(
+      (item) => ({ ...item, type: "memory" as const }),
+    ),
+  ];
+
+  return entries
+    .sort((a, b) => b.score - a.score)
+    .slice(0, WISDOM_LIMIT)
+    .map(toWisdomEntry);
+}
+
+/**
+ * Hybrid wisdom retrieval: blends alias-aware lexical scoring with embedding
+ * cosine similarity (per table, since each is normalized independently), so a
+ * paraphrased prior decision or memory surfaces in the briefing even with no
+ * shared words. Falls back to pure lexical (and reports it) when nothing embeds.
+ */
+async function getRelevantWisdomHybrid(
+  db: FourDADatabase,
+  task: string,
+  files: string[],
+  config: EmbeddingConfig,
+): Promise<{ wisdom: WisdomEntry[]; recall_mode: "hybrid" | "ranked_lexical" }> {
+  const rawDb = db.getRawDb();
+  const query = [task, ...files].join(" ");
+  const decisions = loadWisdomDecisions(rawDb);
+  const memories = loadWisdomMemories(rawDb);
+
+  // Lexical baselines over ALL rows, per table, for normalization + fallback.
+  const decLex = rankRowsByRecall(decisions, query, WISDOM_DECISION_FIELDS, decisions.length);
+  const memLex = rankRowsByRecall(memories, query, WISDOM_MEMORY_FIELDS, memories.length);
+  const decLexById = new Map<number, number>(decLex.map((i) => [i.row.id, i.score]));
+  const memLexById = new Map<number, number>(memLex.map((i) => [i.row.id, i.score]));
+  const decMax = decLex.length ? decLex[0].score : 0;
+  const memMax = memLex.length ? memLex[0].score : 0;
+
+  const decSem = decisions.length
+    ? await semanticScores(
+        db,
+        "developer_decisions",
+        query,
+        decisions.map((d) => ({ id: d.id, text: decisionEmbedText(d) })),
+        config,
+      )
+    : null;
+  const memSem = memories.length
+    ? await semanticScores(
+        db,
+        "agent_memory",
+        query,
+        memories.map((m) => ({ id: m.id, text: memoryEmbedText(m) })),
+        config,
+      )
+    : null;
+
+  const anySemantic = (decSem?.embeddedCount ?? 0) > 0 || (memSem?.embeddedCount ?? 0) > 0;
+  if (!anySemantic) {
+    // Provider unreachable / nothing embedded -> behave exactly like lexical.
+    const entries = [
+      ...decLex.slice(0, WISDOM_LIMIT).map((i) => ({ ...i, type: "decision" as const })),
+      ...memLex.slice(0, WISDOM_LIMIT).map((i) => ({ ...i, type: "memory" as const })),
+    ];
+    return {
+      wisdom: entries.sort((a, b) => b.score - a.score).slice(0, WISDOM_LIMIT).map(toWisdomEntry),
+      recall_mode: "ranked_lexical",
+    };
+  }
+
+  const scored: Array<{
+    type: "decision" | "memory";
+    row: WisdomDecisionRow | WisdomMemoryRow;
+    score: number;
+  }> = [];
+
+  for (const d of decisions) {
+    const semantic = Math.max(0, decSem?.semanticById.get(d.id) ?? 0);
+    const lexNorm = decMax > 0 ? (decLexById.get(d.id) ?? 0) / decMax : 0;
+    const score = WISDOM_BLEND * semantic + (1 - WISDOM_BLEND) * lexNorm;
+    if (score > 0) scored.push({ type: "decision", row: d, score });
+  }
+  for (const m of memories) {
+    const semantic = Math.max(0, memSem?.semanticById.get(m.id) ?? 0);
+    const lexNorm = memMax > 0 ? (memLexById.get(m.id) ?? 0) / memMax : 0;
+    const score = WISDOM_BLEND * semantic + (1 - WISDOM_BLEND) * lexNorm;
+    if (score > 0) scored.push({ type: "memory", row: m, score });
+  }
+
+  return {
+    wisdom: scored.sort((a, b) => b.score - a.score).slice(0, WISDOM_LIMIT).map(toWisdomEntry),
+    recall_mode: "hybrid",
+  };
+}
+
 // ============================================================================
 // Execute
 // ============================================================================
@@ -179,10 +338,13 @@ function getOpenDecisionWindows(db: FourDADatabase): WindowRow[] {
 export function executeWhatShouldIKnow(
   db: FourDADatabase,
   params: WhatShouldIKnowParams,
-): WhatShouldIKnowResult {
+): WhatShouldIKnowResult | Promise<WhatShouldIKnowResult> {
   const task = params.task;
   const files = params.files || [];
-  const keywords = buildKeywords(task, files);
+  // One alias-aware scorer for the whole briefing, so advisories, decision
+  // windows and ecosystem news share the SAME relevance model as relevant_wisdom
+  // (an "auth" task now matches a "jwt"/"oauth" advisory; substring matching did not).
+  const relevance = createRelevanceScorer([task, ...files].join(" "));
 
   // ── 1. Actionable Signals (security, breaking changes, etc.) ──────────
   let advisories: Advisory[] = [];
@@ -198,8 +360,8 @@ export function executeWhatShouldIKnow(
         if (s.signal_type === "security_alert" && (s.signal_priority === "critical" || s.signal_priority === "high")) {
           return true;
         }
-        // Otherwise, filter by keyword relevance
-        return matchesKeywords((s.title || "") + " " + (s.action || ""), keywords);
+        // Otherwise, filter by alias-aware relevance to the task
+        return relevance((s.title || "") + " " + (s.action || "")) > 0;
       })
       .slice(0, 10)
       .map((s) => ({
@@ -243,7 +405,7 @@ export function executeWhatShouldIKnow(
   try {
     const windows = getOpenDecisionWindows(db);
     decisionWindows = windows
-      .filter((w) => matchesKeywords((w.title || "") + " " + (w.description || ""), keywords))
+      .filter((w) => relevance((w.title || "") + " " + (w.description || "")) > 0)
       .slice(0, 5)
       .map((w) => ({
         id: w.id,
@@ -255,17 +417,14 @@ export function executeWhatShouldIKnow(
     // Windows unavailable — non-fatal
   }
 
-  // ── 3. Relevant Wisdom (decisions) ─────────────────────────────────────
-  const relevantWisdom: WisdomEntry[] = [];
-
-  // ── 4. Ecosystem News (HN headlines relevant to tech stack) ───────────
+  // ── 3. Ecosystem News (HN headlines relevant to tech stack) ───────────
   let ecosystemNews: EcosystemNewsItem[] = [];
   try {
     const hnIntel = getLiveIntelligence();
     if (hnIntel) {
       const headlines = hnIntel.getHeadlines();
       ecosystemNews = headlines
-        .filter((h) => h.relevanceScore > 0.3 || matchesKeywords(h.title, keywords))
+        .filter((h) => h.relevanceScore > 0.3 || relevance(h.title) > 0)
         .slice(0, 5)
         .map((h) => ({
           title: h.title,
@@ -278,61 +437,80 @@ export function executeWhatShouldIKnow(
     // Headlines unavailable — non-fatal
   }
 
-  // ── 5. Delegation Assessment ──────────────────────────────────────────
-  const signalDensity = advisories.length + decisionWindows.length;
+  // ── 4. Assembly ────────────────────────────────────────────────────────
+  // Wisdom retrieval is lexical by default and hybrid (async) when a provider is
+  // configured, so delegation + summary are deferred into finalize() and the
+  // function returns synchronously OR a Promise accordingly.
+  const finalize = (
+    relevantWisdom: WisdomEntry[],
+    wisdomMode: "hybrid" | "ranked_lexical",
+  ): WhatShouldIKnowResult => {
+    const signalDensity = advisories.length + decisionWindows.length;
 
-  const hasSecuritySignals = advisories.some(
-    (a) => a.signal_type === "security_alert" && (a.priority === "critical" || a.priority === "high"),
-  );
-  const hasHighUrgencyWindows = decisionWindows.some((w) => w.urgency >= 4);
+    const hasSecuritySignals = advisories.some(
+      (a) => a.signal_type === "security_alert" && (a.priority === "critical" || a.priority === "high"),
+    );
+    const hasHighUrgencyWindows = decisionWindows.some((w) => w.urgency >= 4);
 
-  let delegationLevel: DelegationLevel;
-  let delegationReason: string;
+    let delegationLevel: DelegationLevel;
+    let delegationReason: string;
 
-  if (hasSecuritySignals || hasHighUrgencyWindows) {
-    delegationLevel = "human_only";
-    delegationReason = hasSecuritySignals
-      ? "Active security signals require human review before proceeding."
-      : "High-urgency decision windows demand human judgment.";
-  } else if (signalDensity > 3 || relevantWisdom.length > 3) {
-    delegationLevel = "review_needed";
-    delegationReason = `${signalDensity} active signal(s) and ${relevantWisdom.length} relevant decision(s) suggest review after completion.`;
-  } else {
-    delegationLevel = "safe_to_delegate";
-    delegationReason = "No significant advisories or constraints detected for this task.";
-  }
+    if (hasSecuritySignals || hasHighUrgencyWindows) {
+      delegationLevel = "human_only";
+      delegationReason = hasSecuritySignals
+        ? "Active security signals require human review before proceeding."
+        : "High-urgency decision windows demand human judgment.";
+    } else if (signalDensity > 3 || relevantWisdom.length > 3) {
+      delegationLevel = "review_needed";
+      delegationReason = `${signalDensity} active signal(s) and ${relevantWisdom.length} relevant decision(s) suggest review after completion.`;
+    } else {
+      delegationLevel = "safe_to_delegate";
+      delegationReason = "No significant advisories or constraints detected for this task.";
+    }
 
-  // ── 6. Summary ────────────────────────────────────────────────────────
-  const parts: string[] = [];
-  if (advisories.length > 0) {
-    parts.push(`${advisories.length} advisor${advisories.length !== 1 ? "ies" : "y"}`);
-  }
-  if (decisionWindows.length > 0) {
-    parts.push(`${decisionWindows.length} decision window${decisionWindows.length !== 1 ? "s" : ""}`);
-  }
-  if (relevantWisdom.length > 0) {
-    parts.push(`${relevantWisdom.length} relevant decision${relevantWisdom.length !== 1 ? "s" : ""}/memor${relevantWisdom.length !== 1 ? "ies" : "y"}`);
-  }
-  if (ecosystemNews.length > 0) {
-    parts.push(`${ecosystemNews.length} ecosystem update${ecosystemNews.length !== 1 ? "s" : ""}`);
-  }
+    const parts: string[] = [];
+    if (advisories.length > 0) {
+      parts.push(`${advisories.length} advisor${advisories.length !== 1 ? "ies" : "y"}`);
+    }
+    if (decisionWindows.length > 0) {
+      parts.push(`${decisionWindows.length} decision window${decisionWindows.length !== 1 ? "s" : ""}`);
+    }
+    if (relevantWisdom.length > 0) {
+      parts.push(`${relevantWisdom.length} relevant decision${relevantWisdom.length !== 1 ? "s" : ""}/memor${relevantWisdom.length !== 1 ? "ies" : "y"}`);
+    }
+    if (ecosystemNews.length > 0) {
+      parts.push(`${ecosystemNews.length} ecosystem update${ecosystemNews.length !== 1 ? "s" : ""}`);
+    }
 
-  const summary =
-    parts.length > 0
-      ? `Found ${parts.join(", ")} relevant to this task. Delegation: ${delegationLevel}.`
-      : "No active advisories or signals for this task. Proceed normally.";
+    const summary =
+      parts.length > 0
+        ? `Found ${parts.join(", ")} relevant to this task. Delegation: ${delegationLevel}.`
+        : "No active advisories or signals for this task. Proceed normally.";
 
-  return {
-    task,
-    files,
-    advisories,
-    decision_windows: decisionWindows,
-    relevant_wisdom: relevantWisdom,
-    ecosystem_news: ecosystemNews,
-    delegation_assessment: {
-      level: delegationLevel,
-      reason: delegationReason,
-    },
-    summary,
+    return {
+      task,
+      files,
+      advisories,
+      decision_windows: decisionWindows,
+      relevant_wisdom: relevantWisdom,
+      ecosystem_news: ecosystemNews,
+      delegation_assessment: {
+        level: delegationLevel,
+        reason: delegationReason,
+      },
+      summary,
+      wisdom_recall_mode: wisdomMode,
+    };
   };
+
+  // No provider -> synchronous lexical wisdom (classic behaviour preserved).
+  const embedConfig = getEmbeddingConfig();
+  if (!embedConfig) {
+    return finalize(getRelevantWisdom(db, task, files), "ranked_lexical");
+  }
+
+  // Provider configured -> hybrid wisdom (returns a Promise; dispatch awaits).
+  return getRelevantWisdomHybrid(db, task, files, embedConfig).then(
+    ({ wisdom, recall_mode }) => finalize(wisdom, recall_mode),
+  );
 }

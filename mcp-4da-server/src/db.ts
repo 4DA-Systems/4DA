@@ -459,6 +459,8 @@ export class FourDADatabase {
       CREATE INDEX IF NOT EXISTS idx_deps_project ON project_dependencies(project_path);
 
       -- Developer decisions — queried by tech_radar, decision_memory
+      -- embedding/embedding_model are populated lazily ONLY when an embedding
+      -- provider is configured (optional semantic recall); null otherwise.
       CREATE TABLE IF NOT EXISTS developer_decisions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         decision_type TEXT NOT NULL,
@@ -471,7 +473,9 @@ export class FourDADatabase {
         status TEXT NOT NULL DEFAULT 'active',
         superseded_by INTEGER,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        embedding BLOB,
+        embedding_model TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_decisions_type ON developer_decisions(decision_type);
       CREATE INDEX IF NOT EXISTS idx_decisions_subject ON developer_decisions(subject);
@@ -502,6 +506,8 @@ export class FourDADatabase {
       );
 
       -- Agent memory — queried by agent_memory, agent_session_brief
+      -- embedding/embedding_model are populated lazily ONLY when an embedding
+      -- provider is configured (optional semantic recall); null otherwise.
       CREATE TABLE IF NOT EXISTS agent_memory (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_id TEXT NOT NULL,
@@ -512,7 +518,9 @@ export class FourDADatabase {
         context_tags TEXT DEFAULT '[]',
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         expires_at TEXT,
-        promoted_to_decision_id INTEGER
+        promoted_to_decision_id INTEGER,
+        embedding BLOB,
+        embedding_model TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_agent_memory_type ON agent_memory(memory_type);
       CREATE INDEX IF NOT EXISTS idx_agent_memory_session ON agent_memory(session_id);
@@ -829,6 +837,17 @@ export class FourDADatabase {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Idempotently add a column to a table if it does not already exist.
+   * Used to add the optional `embedding` / `embedding_model` columns to
+   * pre-existing databases created before semantic recall shipped. Column/type
+   * are server-controlled constants (never user input), so the inline SQL is safe.
+   */
+  ensureColumn(table: string, column: string, type: string): void {
+    if (this.hasColumn(table, column)) return;
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
   }
 
   /**

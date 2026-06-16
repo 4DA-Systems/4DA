@@ -124,20 +124,23 @@ function checkNewCommands() {
 
     if (!lastMcpCommit) return;
 
-    // Count new tauri::command annotations
+    // Count new tauri::command annotations. Keep this in JS instead of a
+    // grep pipeline so the gate works on Windows too.
     const diff = execSync(
-      `git diff ${lastMcpCommit}..HEAD -- "src-tauri/src/" | grep "^+" | grep "#\\[tauri::command\\]" || true`,
+      `git diff ${lastMcpCommit}..HEAD -- "src-tauri/src/"`,
       { cwd: ROOT, encoding: "utf-8" }
-    ).trim();
+    );
 
-    if (diff) {
-      const count = diff.split("\n").filter(Boolean).length;
-      if (count > 0) {
-        warnings.push(
-          `${count} new #[tauri::command] handler(s) added since last MCP update.\n` +
-          "    Review if any should become MCP tools."
-        );
-      }
+    const count = diff
+      .split("\n")
+      .filter((line) => line.startsWith("+") && line.includes("#[tauri::command]"))
+      .length;
+
+    if (count > 0) {
+      warnings.push(
+        `${count} new #[tauri::command] handler(s) added since last MCP update.\n` +
+        "    Review if any should become MCP tools."
+      );
     }
   } catch {
     // Non-fatal
@@ -195,24 +198,42 @@ function checkBuildStaleness() {
   }
 
   try {
-    // Get newest src file mtime
-    const srcFiles = execSync(
-      `find "${MCP_SRC}" -name "*.ts" -not -name "*.test.ts" -newer "${MCP_DIST}/index.js" 2>/dev/null || true`,
-      { cwd: ROOT, encoding: "utf-8" }
-    ).trim();
+    const distIndex = path.join(MCP_DIST, "index.js");
+    if (!fs.existsSync(distIndex)) {
+      issues.push("MCP server dist/index.js missing — run: cd mcp-4da-server && pnpm run build");
+      return;
+    }
 
-    if (srcFiles) {
-      const staleFiles = srcFiles.split("\n").filter(Boolean);
-      if (staleFiles.length > 0) {
-        issues.push(
-          `MCP server build is stale — ${staleFiles.length} source file(s) newer than dist.\n` +
-          "    Run: cd mcp-4da-server && pnpm run build"
-        );
-      }
+    const distMtime = fs.statSync(distIndex).mtimeMs;
+    const staleFiles = listTsSourceFiles(MCP_SRC)
+      .filter((file) => fs.statSync(file).mtimeMs > distMtime);
+
+    if (staleFiles.length > 0) {
+      issues.push(
+        `MCP server build is stale — ${staleFiles.length} source file(s) newer than dist.\n` +
+        "    Run: cd mcp-4da-server && pnpm run build"
+      );
     }
   } catch {
-    // find may not be available on all platforms
+    // Non-fatal
   }
+}
+
+function listTsSourceFiles(dir) {
+  const files = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listTsSourceFiles(fullPath));
+    } else if (
+      entry.isFile() &&
+      entry.name.endsWith(".ts") &&
+      !entry.name.endsWith(".test.ts")
+    ) {
+      files.push(fullPath);
+    }
+  }
+  return files;
 }
 
 // ─── 6. Tool Count Consistency ──────────────────────────────────────────────

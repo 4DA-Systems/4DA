@@ -15,6 +15,10 @@ import { executeGetContext } from "../tools/get-context.js";
 import { executeRecordFeedback } from "../tools/record-feedback.js";
 import { executeKnowledgeGaps } from "../tools/knowledge-gaps.js";
 import { executeGetActionableSignals } from "../tools/get-actionable-signals.js";
+import { executeAgentMemory } from "../tools/agent-memory.js";
+import { executeDecisionMemory } from "../tools/decision-memory.js";
+import { executeCheckDecisionAlignment } from "../tools/decision-enforcement.js";
+import { executeWhatShouldIKnow } from "../tools/what-should-i-know.js";
 import {
   synthesize,
   synthesizeWithTimeout,
@@ -1072,6 +1076,81 @@ describe("4DA MCP Tool Handlers", () => {
       expect(() => db.close()).not.toThrow();
       // Re-create for afterEach cleanup
       db = createTestDatabase();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Agent and decision recall
+  // ---------------------------------------------------------------------------
+  describe("agent and decision recall", () => {
+    it("recalls agent memories from content, not just subject or tags", () => {
+      executeAgentMemory(db, {
+        action: "store",
+        session_id: "s1",
+        agent_type: "codex",
+        memory_type: "warning",
+        subject: "token storage",
+        content: "Authentication tokens must stay in the OS keychain, never localStorage.",
+        context_tags: ["credentials"],
+      });
+
+      const result = executeAgentMemory(db, {
+        action: "recall",
+        query: "auth",
+      }) as {
+        count: number;
+        memories: Array<{ subject: string; matched_fields: string[] }>;
+      };
+
+      expect(result.count).toBe(1);
+      expect(result.memories[0].subject).toBe("token storage");
+      expect(result.memories[0].matched_fields).toContain("content");
+    });
+
+    it("detects decision conflicts through aliases in rejected alternatives", async () => {
+      executeDecisionMemory(db, {
+        action: "record",
+        subject: "local database",
+        decision: "Use SQLite for local-first storage",
+        rationale: "The app must work offline and keep raw data local.",
+        alternatives_rejected: ["postgres"],
+        context_tags: ["storage"],
+      });
+
+      const result = await executeCheckDecisionAlignment(db, {
+        technology: "postgresql",
+      });
+
+      expect(result.aligned).toBe(false);
+      expect(result.conflicts).toHaveLength(1);
+      expect(result.relevant_decisions[0].relationship).toBe("conflict");
+    });
+
+    it("returns relevant wisdom in pre-task briefings", async () => {
+      executeDecisionMemory(db, {
+        action: "record",
+        subject: "MCP HTTP transport",
+        decision: "Keep HTTP transport localhost-only until signed auth is enforced.",
+        rationale: "Network exposure without signature verification is unsafe.",
+        context_tags: ["mcp", "auth"],
+      });
+      executeAgentMemory(db, {
+        action: "store",
+        session_id: "s2",
+        agent_type: "codex",
+        memory_type: "warning",
+        subject: "HTTP auth gap",
+        content: "The MCP server must not be exposed remotely without signed auth.",
+        context_tags: ["mcp"],
+      });
+
+      const result = await executeWhatShouldIKnow(db, {
+        task: "Expose MCP HTTP transport for another coding agent",
+      });
+
+      expect(result.relevant_wisdom.length).toBeGreaterThanOrEqual(2);
+      expect(result.relevant_wisdom.map((w) => w.subject)).toContain("MCP HTTP transport");
+      expect(result.relevant_wisdom.map((w) => w.subject)).toContain("HTTP auth gap");
     });
   });
 

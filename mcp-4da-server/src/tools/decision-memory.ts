@@ -7,6 +7,13 @@
  */
 
 import type { FourDADatabase } from "../db.js";
+import { matchesRecallQuery } from "./recall.js";
+import { getEmbeddingConfig } from "../embeddings.js";
+import {
+  rankDecisionsLexical,
+  hybridDecisionRecall,
+  POSSIBLE_CONFLICT_THRESHOLD,
+} from "./decision-recall.js";
 
 // ============================================================================
 // Types
@@ -185,6 +192,61 @@ function parseDecisionRow(row: DecisionRow) {
   };
 }
 
+/**
+ * Build the check_alignment response from retrieved decisions. Hard conflicts are
+ * lexical/alias-aware (grounded); semantically-close decisions that rejected
+ * alternatives are surfaced as advisory `possible_conflicts`.
+ */
+function buildAlignmentResponse(
+  rows: DecisionRow[],
+  semanticById: Map<number, number>,
+  recallMode: "hybrid" | "ranked_lexical",
+  technology: string,
+): object {
+  const conflicts: { decision_id: number; subject: string; reason: string }[] = [];
+  const possibleConflicts: {
+    decision_id: number;
+    subject: string;
+    similarity: number;
+    reason: string;
+  }[] = [];
+  const relevant: ReturnType<typeof parseDecisionRow>[] = [];
+
+  for (const row of rows) {
+    const alts: string[] = JSON.parse(row.alternatives_rejected || "[]");
+    const isRejected = alts.some((alt) => matchesRecallQuery(alt, technology));
+
+    if (isRejected) {
+      conflicts.push({
+        decision_id: row.id,
+        subject: row.subject,
+        reason: `'${technology}' was rejected in favor of '${row.decision}' (rationale: ${row.rationale || "none"})`,
+      });
+    } else {
+      const sim = semanticById.get(row.id) ?? 0;
+      if (sim >= POSSIBLE_CONFLICT_THRESHOLD && alts.length > 0) {
+        possibleConflicts.push({
+          decision_id: row.id,
+          subject: row.subject,
+          similarity: Math.round(sim * 1000) / 1000,
+          reason: `'${technology}' is semantically close (${Math.round(sim * 100)}%) to a decision that rejected: ${alts.join(", ")}. Review before proceeding.`,
+        });
+      }
+    }
+
+    relevant.push(parseDecisionRow(row));
+  }
+
+  return {
+    aligned: conflicts.length === 0,
+    relevant_decisions: relevant,
+    conflicts,
+    possible_conflicts: possibleConflicts,
+    confidence: relevant.length > 0 ? Math.max(...relevant.map((r) => r.confidence)) : 0.5,
+    recall_mode: recallMode,
+  };
+}
+
 // ============================================================================
 // Execute
 // ============================================================================
@@ -192,7 +254,7 @@ function parseDecisionRow(row: DecisionRow) {
 export function executeDecisionMemory(
   db: FourDADatabase,
   params: DecisionMemoryParams
-): object {
+): object | Promise<object> {
   const rawDb = db.getRawDb();
 
   switch (params.action) {
@@ -263,55 +325,33 @@ export function executeDecisionMemory(
         };
       }
 
-      const search = `%${params.technology.toLowerCase()}%`;
-      const rows = rawDb
+      const candidateRows = rawDb
         .prepare(
           `SELECT id, decision_type, subject, decision, rationale,
                   alternatives_rejected, context_tags, confidence,
-                  status, created_at
+                  status, superseded_by, created_at, updated_at
            FROM developer_decisions
            WHERE status = 'active'
-             AND (LOWER(subject) LIKE ?
-               OR LOWER(context_tags) LIKE ?
-               OR LOWER(alternatives_rejected) LIKE ?)`
+           ORDER BY updated_at DESC
+           LIMIT 500`
         )
-        .all(search, search, search) as DecisionRow[];
+        .all() as DecisionRow[];
 
-      const conflicts: {
-        decision_id: number;
-        subject: string;
-        reason: string;
-      }[] = [];
-      const relevant: ReturnType<typeof parseDecisionRow>[] = [];
+      const technology = params.technology;
+      const limit = params.limit || 20;
+      const config = getEmbeddingConfig();
 
-      for (const row of rows) {
-        const alts: string[] = JSON.parse(
-          row.alternatives_rejected || "[]"
-        );
-        const isRejected = alts.some((alt) =>
-          alt.toLowerCase().includes(params.technology!.toLowerCase())
-        );
-
-        if (isRejected) {
-          conflicts.push({
-            decision_id: row.id,
-            subject: row.subject,
-            reason: `'${params.technology}' was rejected in favor of '${row.decision}' (rationale: ${row.rationale || "none"})`,
-          });
-        }
-
-        relevant.push(parseDecisionRow(row));
+      // No provider -> synchronous lexical retrieval (classic behaviour).
+      if (!config) {
+        const rows = rankDecisionsLexical(candidateRows, technology, limit);
+        return buildAlignmentResponse(rows, new Map(), "ranked_lexical", technology);
       }
 
-      return {
-        aligned: conflicts.length === 0,
-        relevant_decisions: relevant,
-        conflicts,
-        confidence:
-          relevant.length > 0
-            ? Math.max(...relevant.map((r) => r.confidence))
-            : 0.5,
-      };
+      // Provider configured -> hybrid retrieval (returns a Promise; dispatch awaits).
+      return hybridDecisionRecall(db, technology, candidateRows, limit, config).then(
+        ({ ranked, semanticById, recall_mode }) =>
+          buildAlignmentResponse(ranked, semanticById, recall_mode, technology),
+      );
     }
 
     case "update": {
