@@ -118,10 +118,7 @@ pub fn prune_removed_dependencies(
         return Ok(0);
     }
     let canonical_path = canonicalize_project_path(project_path);
-    let placeholders = std::iter::repeat("?")
-        .take(current_names.len())
-        .collect::<Vec<_>>()
-        .join(", ");
+    let placeholders = vec!["?"; current_names.len()].join(", ");
     let sql = format!(
         "DELETE FROM project_dependencies
          WHERE project_path = ? AND language = ? AND is_direct = 1
