@@ -68,6 +68,16 @@ try {
       wisdomSynthesis: raw.briefing.wisdom_synthesis ?? null,
     };
     (window as Window & { __4DA_INSTANT_SNAPSHOT__?: InstantBriefingSnapshot | null }).__4DA_INSTANT_SNAPSHOT__ = snapshot;
+
+    // Push the snapshot into the store directly — do NOT rely on the window
+    // global alone. The briefing slice's readPreloadedSnapshot() runs at store
+    // MODULE-IMPORT time (eager zustand `create()` fires when `import App` above
+    // executes), which is BEFORE this await resolves. So the slice reads the
+    // global while it is still empty and `instantSnapshot` stays null forever —
+    // the global written here is never read again. Setting it on the live store
+    // guarantees the cold-boot snapshot is actually on screen for first paint.
+    const { useAppStore } = await import('./store');
+    useAppStore.getState().setInstantSnapshot(snapshot);
   }
 } catch {
   // Non-Tauri environment OR snapshot fetch failed — silently fall through

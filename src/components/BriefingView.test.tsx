@@ -26,6 +26,7 @@ function setMockState(overrides: Record<string, unknown>) {
     appState: { relevanceResults: [], loading: false, analysisComplete: false },
     generateBriefing: vi.fn(),
     recordInteraction: vi.fn(),
+    startAnalysis: vi.fn(),
     feedbackGiven: {},
     setActiveView: vi.fn(),
     lastBackgroundResultsAt: null,
@@ -198,6 +199,58 @@ describe('BriefingView', () => {
       render(<BriefingView />);
       // PulseSummary shows RelativeTimestamp when lastGenerated exists
       expect(screen.getByText('Just now')).toBeInTheDocument();
+    });
+  });
+
+  describe('cold boot snapshot precedence', () => {
+    // Regression guard for the 2026-06-16 cold-start bug: loadPersistedBriefing()
+    // sets aiBriefing.content shortly after mount, which used to flip the
+    // `!briefing.content` gate and EVICT the instant snapshot — dropping the user
+    // into the empty "Run an analysis to get started" main view even though fresh
+    // persisted intelligence was already on screen. The snapshot must survive a
+    // persisted-briefing load until LIVE analysis results actually exist.
+    const snapshot = {
+      version: 1,
+      generatedAtUnix: 0,
+      generatedAtDisplay: 'Today 3:39 AM',
+      title: 'Snapshot',
+      items: [{
+        title: 'Snapshot item headline', sourceType: 'hackernews', score: 0.8,
+        signalType: null, url: null, itemId: 1, signalPriority: null,
+        description: null, matchedDeps: [],
+      }],
+      totalRelevant: 1,
+      synthesis: 'Two updates worth a look in your stack today.',
+      wisdomSynthesis: null,
+    };
+
+    it('keeps the snapshot when a persisted briefing loads but no live results exist', () => {
+      setMockState({
+        aiBriefing: { content: '## Persisted narrative', loading: false, error: null, model: 'claude-sonnet-4-6', lastGenerated: new Date() },
+        appState: { relevanceResults: [], loading: false, analysisComplete: false },
+        instantSnapshot: snapshot,
+      });
+      render(<BriefingView />);
+      // Snapshot source item is on screen ...
+      expect(screen.getByText('Snapshot item headline')).toBeInTheDocument();
+      // ... and the empty "Run an analysis" pulse is NOT (the regression).
+      expect(screen.queryByText('pulse.noData')).not.toBeInTheDocument();
+    });
+
+    it('yields to live results once analysis produces them', () => {
+      setMockState({
+        aiBriefing: { content: '## Persisted narrative', loading: false, error: null, model: null, lastGenerated: new Date() },
+        appState: {
+          relevanceResults: [{ id: 1, title: 'Live analysed item', top_score: 0.6, relevant: true, source_type: 'hackernews' }],
+          loading: false, analysisComplete: true,
+        },
+        instantSnapshot: snapshot,
+      });
+      render(<BriefingView />);
+      // Live result wins; the cached snapshot item is gone. (The live item can
+      // appear in more than one zone — attention card + feed — so allow >= 1.)
+      expect(screen.getAllByText('Live analysed item').length).toBeGreaterThan(0);
+      expect(screen.queryByText('Snapshot item headline')).not.toBeInTheDocument();
     });
   });
 
