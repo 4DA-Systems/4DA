@@ -9,6 +9,18 @@
 
 ## Active Terminals
 
+<!-- opus-coldstart-brief FOLLOW-UP (2026-06-16): precision leak from the live analysis. Short ASCII
+     titles were forced to "en" by language_detect's deliberate guard (protects "Homelab Diagram"), so
+     short ASCII Romance-language posts w/o accents (Spanish "Busco un Selector de Colores") slipped the
+     language gate and could surface as stack-relevant. FIX: detect_language_with_content consults the
+     BODY only when the title is in that ambiguous short-ASCII zone — confident non-English body reveals
+     the real lang, English title+body stays "en" (never suppresses English). Wired into the single
+     ingestion chokepoint (db/sources.rs insert_source_item). Scope = NEW items only; no PIPELINE_VERSION
+     (refines a scoring INPUT, not the algorithm; benchmark hardcodes detected_lang, unaffected). Existing
+     72k rows keep stored lang until an OPTIONAL founder-run backfill+re-score (operator chose code-only).
+     language_detect 16/16 (+4 incl. no-English-suppression guard), db::sources 16/0, cargo fmt clean.
+     Files: src-tauri/src/language_detect.rs, src-tauri/src/db/sources.rs. Pushed with the cold-start fix line. -->
+
 <!-- opus-coldstart-brief (2026-06-16): DONE, committed local, PUSH HELD for operator (main = default
      branch; global rule 6). P0 cold-start Brief fix from the live-Victauri analysis. Flagship Brief
      showed "No intelligence gathered yet. Run an analysis to get started." on every cold boot despite
