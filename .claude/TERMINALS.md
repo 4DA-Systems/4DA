@@ -9,6 +9,43 @@
 
 ## Active Terminals
 
+<!-- opus-coldstart-brief (2026-06-16): DONE, committed local, PUSH HELD for operator (main = default
+     branch; global rule 6). P0 cold-start Brief fix from the live-Victauri analysis. Flagship Brief
+     showed "No intelligence gathered yet. Run an analysis to get started." on every cold boot despite
+     a fresh persisted briefing + 3,808 high-rel items. THREE real bugs found + fixed, all LIVE-VERIFIED:
+     (A) instantSnapshot STRUCTURALLY ALWAYS NULL — readPreloadedSnapshot() runs at store MODULE-IMPORT
+         (eager zustand create on `import App`), BEFORE main.tsx writes window.__4DA_INSTANT_SNAPSHOT__;
+         global set but never re-read, setInstantSnapshot had zero callers. FIX: main.tsx pushes the
+         snapshot to the store. "Sovereign Cold Boot" had never actually rendered until now.
+     (B) snapshot EVICTION — BriefingView gate was `!briefing.content`; loadPersistedBriefing() sets
+         aiBriefing.content ~ms after paint, flipping it into the empty results-driven main view. FIX:
+         gate on `results.length===0 && !analysisComplete` so snapshot survives until LIVE results (+2 tests).
+     (C) auto-analysis never fired on cold boot (loadOrAnalyze fires once at T+0 vs cold engine, 15s
+         cooldown blocks the only retry). FIX: idempotent cold-boot freshen effect in BriefingView fires
+         one cache-first analysis when snapshot shows with no results (startAnalysis self-guards on loading).
+         LIVE: auto-fired AT engine-ready time, 97 relevant, zero manual trigger.
+     Plus explanation.rs extract_short_phrase strips leading Markdown markers ("- Built with…" leak in
+     attention-card "Matches your project context"; +1 test, snake_case preserved); en/ui.json pulse copy
+     count-neutral ("N flagged for attention now" fixes "1 need attention").
+     GATES: tsc 0, BriefingView 19/19, scoring::explanation 31/0, i18n 0-err, eslint clean, cargo fmt clean.
+     A mid-verify crash was ENV resource starvation (17 orphaned vite/node, 158s first-light), NOT code —
+     clean restart = 26s first-light, healthy.
+     FLAGGED (not fixed): proper backend home for (C) = auto-retrigger analysis when scoring context ready
+     (freshen is the safe verified stopgap); light-theme orange/white btn contrast 3.56:1 -> fable-light-theme;
+     relevance precision leaks (non-EN single-keyword social, non-stack CVEs in Signal) = PIPELINE_VERSION-gated.
+     Files (pathspec): src/main.tsx, src/components/BriefingView.tsx, src/components/BriefingView.test.tsx,
+     src-tauri/src/scoring/explanation.rs, src/locales/en/ui.json, .claude/TERMINALS.md. NOT mine, untouched:
+     .gitignore/CLAUDE.md/.mcp.json.bak/data/4da.db-wal.bak/ResultItemExpanded.tsx. Commit Lock: RELEASED. -->
+
+<!-- opus-rc-victauri083 (2026-06-16): DONE + PUSHED (commit c33acf12, origin/main 0/0).
+     Adopted Victauri 0.8.3 via cargo update --precise (Cargo.lock only, Cargo.toml stays "0.8").
+     Rebuilt clean; bridge reports 0.8.3; both DX fixes verified live (query_db `sql` alias works;
+     screenshot {"window_label":"briefing"} errors clearly, "main" captures). Pre-push 1292/1292.
+     Full live run done on 0.8.3: preemption 30 osv-verified, blind spots clean (internal_leak=0,
+     dep-hygiene fix held), brief id646 fresh, scoring all v7, engine signed. App running PID 43064.
+     Files: src-tauri/Cargo.lock. NOT mine: peer .gitignore/CLAUDE.md/ResultItemExpanded/.mcp.json.bak.
+     Commit Lock: RELEASED. -->
+
 <!-- opus-rc-blindspot (2026-06-16): DONE — blind-spot internal-crate false-positive fix.
      parse_cargo_toml/parse_package_json now skip local path/git + file:/link:/workspace: deps;
      prune_removed_dependencies deletes is_direct rows dropped from a manifest (stale-removed deps).

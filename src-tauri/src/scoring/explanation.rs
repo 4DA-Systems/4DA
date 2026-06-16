@@ -218,11 +218,62 @@ pub(crate) fn generate_relevance_explanation(
     parts.join(" · ")
 }
 
+/// Strip leading Markdown block markers (list bullets, blockquotes, ATX headings,
+/// ordered-list numerals) and emphasis runs from a snippet so quoted phrases read
+/// as prose rather than raw source. Conservative by design: it only removes block
+/// markers at the start and paired `**`/`` ` `` emphasis, and trims leading `*`/`_`
+/// — it never touches `_` or `*` that sit mid-token, so identifiers like
+/// `anthropic_ai_sdk` survive intact.
+fn strip_markdown_markers(s: &str) -> String {
+    let mut t = s.trim_start();
+    loop {
+        let before = t;
+        if let Some(r) = t.strip_prefix("> ") {
+            t = r.trim_start();
+            continue;
+        }
+        if let Some(r) = t.strip_prefix("- ") {
+            t = r.trim_start();
+            continue;
+        }
+        if let Some(r) = t.strip_prefix("* ") {
+            t = r.trim_start();
+            continue;
+        }
+        if let Some(r) = t.strip_prefix("+ ") {
+            t = r.trim_start();
+            continue;
+        }
+        if t.starts_with('#') {
+            let after = t.trim_start_matches('#');
+            if let Some(r) = after.strip_prefix(' ') {
+                t = r.trim_start();
+                continue;
+            }
+        }
+        let digits = t.chars().take_while(char::is_ascii_digit).count();
+        if digits > 0 && t[digits..].starts_with(". ") {
+            t = t[digits + 2..].trim_start();
+            continue;
+        }
+        if t == before {
+            break;
+        }
+    }
+    // Remove paired bold/code emphasis runs (safe in prose), then trim any leading
+    // inline emphasis left at the very start ("*Why", "_Note").
+    t.replace("**", "")
+        .replace('`', "")
+        .trim_start_matches(['*', '_'])
+        .to_string()
+}
+
 /// Extract a short meaningful phrase from matched context text.
 /// Strips HTML tags first — matched text can contain raw markup from RSS/scraped content.
 pub(crate) fn extract_short_phrase(matched_text: &str) -> String {
     let stripped = crate::utils::strip_html_tags(matched_text);
-    let clean = stripped.trim().trim_end_matches("...");
+    let demarked = strip_markdown_markers(stripped.trim());
+    let clean = demarked.trim().trim_end_matches("...");
     let phrase = clean
         .find(['.', '\n'])
         .filter(|&pos| pos > 10)
@@ -404,6 +455,28 @@ mod tests {
     fn test_extract_short_phrase_with_ellipsis() {
         let phrase = extract_short_phrase("A long context about development practices...");
         assert!(!phrase.ends_with("..."));
+    }
+
+    #[test]
+    fn test_extract_short_phrase_strips_markdown_markers() {
+        // Leading list bullet must not leak into the quoted snippet.
+        assert_eq!(
+            extract_short_phrase("- Built with Claude Code and agents"),
+            "Built with Claude Code and agents"
+        );
+        // Leading bold emphasis ("**Why ...").
+        assert_eq!(
+            extract_short_phrase("**Why this matters for your stack"),
+            "Why this matters for your stack"
+        );
+        // Blockquote + heading markers.
+        assert_eq!(
+            extract_short_phrase("> ## Important architectural note here"),
+            "Important architectural note here"
+        );
+        // snake_case identifiers must survive — no mid-token underscore stripping.
+        let phrase = extract_short_phrase("uses anthropic_ai_sdk for the integration");
+        assert!(phrase.contains("anthropic_ai_sdk"), "got: {phrase}");
     }
 
     #[test]

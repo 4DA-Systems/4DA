@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useCallback, useState, useEffect, memo } from 'react';
+import { useCallback, useState, useEffect, useRef, memo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
@@ -99,6 +99,29 @@ export const BriefingView = memo(function BriefingView() {
     }
   }, [analysisComplete, results.length, freeBriefing, freeBriefingLoading, generateFreeBriefing]);
 
+  // Cold-boot freshen: when we paint the cached snapshot but have no live
+  // results yet, kick off one cache-first analysis so "fresh intelligence
+  // loading…" is actually true. This is the reliable trigger for the case the
+  // mount-only auto-analysis in use-app-listeners misses — it can fire at T+0
+  // against a cold engine, then its 15s cooldown blocks the only retry, leaving
+  // the feed empty. startAnalysis() self-guards on appState.loading, so this
+  // composes safely: whichever path fires first wins, the other no-ops. Runs at
+  // most once per mount; never for first-run users (who haven't been set up yet).
+  const coldBootFreshenedRef = useRef(false);
+  useEffect(() => {
+    if (
+      !coldBootFreshenedRef.current &&
+      instantSnapshot &&
+      results.length === 0 &&
+      !analysisComplete &&
+      !isLoading &&
+      !isFirstRun
+    ) {
+      coldBootFreshenedRef.current = true;
+      void startAnalysis();
+    }
+  }, [instantSnapshot, results.length, analysisComplete, isLoading, isFirstRun, startAnalysis]);
+
   const { signalItems, topItems } =
     useBriefingDerived(results, sourceHealth, briefing, lastBackgroundResultsAt);
 
@@ -107,10 +130,23 @@ export const BriefingView = memo(function BriefingView() {
     return <BriefingSkeleton />;
   }
 
-  // Sovereign Cold Boot — instant first paint of yesterday's briefing.
-  // Naturally superseded by the render waterfall once aiBriefing.content
-  // or analysisComplete populates.
-  if (!briefing.content && !analysisComplete && instantSnapshot) {
+  // Sovereign Cold Boot — instant first paint of yesterday's briefing, held
+  // until LIVE analysis results arrive.
+  //
+  // This was previously gated on `!briefing.content`. But loadPersistedBriefing()
+  // (App.tsx mount) sets aiBriefing.content a few hundred ms after first paint,
+  // which flipped that gate and EVICTED the snapshot — dropping the user into the
+  // empty, results-driven main view ("No intelligence gathered yet. Run an
+  // analysis to get started.") even though fresh persisted intelligence existed
+  // and `get_briefing_snapshot` was already on screen. The narrative in
+  // briefing.content is never rendered by the main view, so letting it win here
+  // showed *less*, not more.
+  //
+  // Gate on the absence of live results instead: the snapshot survives the
+  // briefing-content load and is superseded only when real analysis output
+  // (results) or completion replaces it — which is exactly when the 3-zone
+  // hierarchy has something to render.
+  if (instantSnapshot && results.length === 0 && !analysisComplete) {
     return <InstantSnapshotPanel snapshot={instantSnapshot} />;
   }
 
