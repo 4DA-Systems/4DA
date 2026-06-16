@@ -121,24 +121,38 @@ mod tests {
     }
 }
 
-/// Detect language using title with content fallback.
-/// If title is too short for reliable detection, tries content instead.
+/// Detect language using the title, falling back to the body when the title is
+/// too short or ambiguous to classify on its own.
+///
+/// Closes a precision gap in title-only detection: a short ASCII title can be
+/// Romance-language text WITHOUT accents (e.g. Spanish "Busco un Selector de
+/// Colores"), which `detect_language` deliberately defaults to "en" because the
+/// same short-ASCII heuristic protects short English dev titles ("Homelab
+/// Diagram") from being misread as foreign. When the title lands in that
+/// ambiguous zone, we consult the body: a confidently non-English content sample
+/// reveals the real language, while genuinely English items (English title +
+/// English body) stay "en" — so this never suppresses English content.
 pub fn detect_language_with_content(title: &str, content: &str) -> String {
     let title_trimmed = title.trim();
-    if title_trimmed.len() >= 20 {
-        return detect_language(title_trimmed);
+    let title_lang = detect_language(title_trimmed);
+
+    // If detect_language classified the title CONFIDENTLY — it found a real
+    // language, OR the title was long enough / non-ASCII enough that the
+    // short-ASCII "default to English" guard never fired — trust the title.
+    let title_forced_english =
+        title_lang == "en" && title_trimmed.len() < 40 && title_trimmed.is_ascii();
+    if !title_forced_english {
+        return title_lang;
     }
 
-    // Title too short — try content (take first 200 chars for speed)
+    // Ambiguous short-ASCII title defaulted to English. Consult the body.
     let content_trimmed = content.trim();
-    if content_trimmed.len() >= 20 {
-        let sample: String = content_trimmed.chars().take(200).collect();
-        return detect_language(&sample);
-    }
-
-    // Both too short — try title anyway if it has at least 10 chars
-    if title_trimmed.len() >= 10 {
-        return detect_language(title_trimmed);
+    if content_trimmed.len() >= 40 {
+        let sample: String = content_trimmed.chars().take(400).collect();
+        let content_lang = detect_language(&sample);
+        if content_lang != "en" {
+            return content_lang;
+        }
     }
 
     "en".to_string()
@@ -261,5 +275,41 @@ mod content_fallback_tests {
             ),
             "en"
         );
+    }
+
+    #[test]
+    fn test_short_ascii_foreign_title_resolved_via_content() {
+        // The precision gap: a short ASCII title (no accents) that the title-only
+        // heuristic defaults to "en", but whose body is clearly Spanish. The body
+        // reveals the real language so the language gate can cap it.
+        assert_eq!(
+            detect_language_with_content(
+                "Busco un Selector de Colores",
+                "Estoy desarrollando una aplicaci\u{00f3}n en Kotlin y necesito un selector de \
+                 colores. \u{00bf}Alguien conoce una biblioteca recomendada para esto?"
+            ),
+            "es"
+        );
+    }
+
+    #[test]
+    fn test_short_ascii_english_title_with_english_body_stays_english() {
+        // Regression guard: short ASCII English title + English body must NOT be
+        // reclassified as foreign — that would suppress legitimate English content.
+        assert_eq!(
+            detect_language_with_content(
+                "Quick question about hooks",
+                "I'm using React hooks and wondering about the best pattern for data \
+                 fetching in a dashboard component with Suspense."
+            ),
+            "en"
+        );
+    }
+
+    #[test]
+    fn test_short_ascii_title_with_no_body_keeps_english_default() {
+        // No body to consult — the protective English default for short ASCII
+        // dev titles still holds.
+        assert_eq!(detect_language_with_content("Floci vs Ministack", ""), "en");
     }
 }
