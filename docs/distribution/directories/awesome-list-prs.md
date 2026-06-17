@@ -30,7 +30,7 @@ Adds [4DA](https://4da.ai) to the Applications section.
 - React + TypeScript frontend (880+ tests)
 - SQLite + sqlite-vec for local vector search
 - Local embeddings via Ollama
-- MCP server with 36 tools (MIT, on npm)
+- MCP server with 14 tools (Apache-2.0, on npm)
 
 **Privacy-first:** No 4DA server — indexed data, scores, and learning stay in a local SQLite database. The only outbound call is vulnerability_scan (package names + versions to OSV.dev). No code leaves your machine. No accounts, no telemetry.
 
@@ -47,7 +47,7 @@ Adds [4DA](https://4da.ai) to the Applications section.
 
 **Line to add:**
 ```markdown
-- [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) - 36 MCP tools for codebase-aware developer intelligence. Scores HN, arXiv, Reddit, GitHub content against your tech stack. Local-only, privacy-first. `npx @4da/mcp-server`
+- [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) - 14 MCP tools for codebase-aware developer intelligence. Scores HN, arXiv, Reddit, GitHub content against your tech stack. Local-only, privacy-first. `npx @4da/mcp-server`
 ```
 
 **PR Title:**
