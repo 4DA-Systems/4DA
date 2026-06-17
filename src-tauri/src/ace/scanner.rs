@@ -114,6 +114,10 @@ pub struct ProjectSignal {
     pub frameworks: Vec<String>,
     pub dependencies: Vec<String>,
     pub dev_dependencies: Vec<String>,
+    /// Platform-gated DIRECT deps from `[target.'cfg(...)'.dependencies]`:
+    /// (package name, target spec e.g. "cfg(windows)"). Used to flag advisories
+    /// that aren't relevant on the user's build platform.
+    pub target_dependencies: Vec<(String, String)>,
     pub detected_at: String,
     /// Project-level license extracted from the manifest (e.g., "MIT", "Apache-2.0").
     pub project_license: Option<String>,
@@ -405,6 +409,7 @@ impl ProjectScanner {
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            target_dependencies: Vec::new(),
             detected_at: chrono::Utc::now().to_rfc3339(),
             project_license: None,
             project_relevance: compute_project_relevance(path),
@@ -437,6 +442,8 @@ impl ProjectScanner {
         // Extract dependencies
         let mut in_deps = false;
         let mut in_dev_deps = false;
+        // `Some(spec)` while inside a `[target.<spec>.dependencies]` section.
+        let mut current_target: Option<String> = None;
 
         for line in content.lines() {
             let trimmed = line.trim();
@@ -444,14 +451,24 @@ impl ProjectScanner {
             if trimmed == "[dependencies]" || trimmed == "[workspace.dependencies]" {
                 in_deps = true;
                 in_dev_deps = false;
+                current_target = None;
                 continue;
             } else if trimmed == "[dev-dependencies]" {
                 in_deps = false;
                 in_dev_deps = true;
+                current_target = None;
+                continue;
+            } else if let Some(spec) = parse_target_deps_header(trimmed) {
+                // Platform-gated runtime deps, e.g. [target.'cfg(windows)'.dependencies].
+                // Previously skipped entirely (windows-sys, winreg, libc were invisible).
+                in_deps = true;
+                in_dev_deps = false;
+                current_target = Some(spec);
                 continue;
             } else if trimmed.starts_with('[') {
                 in_deps = false;
                 in_dev_deps = false;
+                current_target = None;
                 continue;
             }
 
@@ -466,7 +483,12 @@ impl ProjectScanner {
                         continue;
                     }
                     if !dep.is_empty() {
-                        if in_dev_deps {
+                        if let Some(ref target) = current_target {
+                            signal
+                                .target_dependencies
+                                .push((dep.clone(), target.clone()));
+                            self.detect_rust_framework(&dep, signal);
+                        } else if in_dev_deps {
                             signal.dev_dependencies.push(dep);
                         } else {
                             signal.dependencies.push(dep.clone());
@@ -1511,6 +1533,23 @@ fn extract_toml_value(content: &str, key: &str) -> Option<String> {
 /// they must not be tracked as external dependencies. Plain version strings
 /// (`"1.0"`) and registry tables (`{ version = "1", features = [...] }`) return
 /// false.
+/// Parse a `[target.<spec>.dependencies]` header, returning the target spec with
+/// surrounding quotes stripped (e.g. `[target.'cfg(windows)'.dependencies]` ->
+/// `cfg(windows)`, `[target.x86_64-pc-windows-msvc.dependencies]` -> the triple).
+/// Returns None for any other header (incl. dev/build target sections, which are
+/// not scanned for runtime advisories).
+fn parse_target_deps_header(line: &str) -> Option<String> {
+    let inner = line
+        .strip_prefix("[target.")?
+        .strip_suffix(".dependencies]")?;
+    let spec = inner.trim().trim_matches(|c| c == '\'' || c == '"');
+    if spec.is_empty() {
+        None
+    } else {
+        Some(spec.to_string())
+    }
+}
+
 fn is_local_cargo_dep(value: &str) -> bool {
     let v = value.trim();
     if !v.starts_with('{') {
@@ -1927,6 +1966,57 @@ packages:
     }
 
     #[test]
+    fn parse_cargo_toml_captures_target_gated_deps() {
+        let content = r#"
+[package]
+name = "demo"
+
+[dependencies]
+serde = "1"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows-sys = { version = "0.59" }
+
+[target.'cfg(not(windows))'.dependencies]
+libc = "0.2"
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = ProjectSignal {
+            manifest_type: ManifestType::CargoToml,
+            manifest_path: PathBuf::from("Cargo.toml"),
+            project_name: None,
+            languages: vec!["rust".to_string()],
+            frameworks: Vec::new(),
+            dependencies: Vec::new(),
+            dev_dependencies: Vec::new(),
+            target_dependencies: Vec::new(),
+            detected_at: String::new(),
+            project_license: None,
+            project_relevance: 1.0,
+        };
+        scanner.parse_cargo_toml(content, &mut signal);
+
+        assert!(signal.dependencies.contains(&"serde".to_string()));
+        // Target-gated deps are captured separately, not as plain dependencies.
+        assert!(!signal.dependencies.contains(&"winreg".to_string()));
+        let targets: std::collections::HashMap<String, String> =
+            signal.target_dependencies.iter().cloned().collect();
+        assert_eq!(
+            targets.get("winreg").map(String::as_str),
+            Some("cfg(windows)")
+        );
+        assert_eq!(
+            targets.get("windows-sys").map(String::as_str),
+            Some("cfg(windows)")
+        );
+        assert_eq!(
+            targets.get("libc").map(String::as_str),
+            Some("cfg(not(windows))")
+        );
+    }
+
+    #[test]
     fn test_parse_cargo_toml() {
         let content = r#"
 [package]
@@ -1952,6 +2042,7 @@ pretty_assertions = "1.0"
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
             project_relevance: 1.0,
@@ -2009,6 +2100,7 @@ tokio = { version = "1", features = ["full"] }
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
             project_relevance: 1.0,
@@ -2073,6 +2165,7 @@ tokio = { version = "1", features = ["full"] }
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
             project_relevance: 1.0,
@@ -2114,6 +2207,7 @@ tokio = { version = "1", features = ["full"] }
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
             project_relevance: 1.0,
@@ -2252,6 +2346,7 @@ axum = "0.7"
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
             project_relevance: 1.0,

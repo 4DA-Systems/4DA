@@ -81,13 +81,47 @@ pub fn upsert_dependency(
     language: &str,
     project_relevance: f32,
 ) -> Result<()> {
+    upsert_dependency_with_platform(
+        conn,
+        project_path,
+        manifest_type,
+        package_name,
+        version,
+        is_dev,
+        is_direct,
+        language,
+        project_relevance,
+        None,
+        true,
+    )
+}
+
+/// Like [`upsert_dependency`], but records platform relevance. `target_cfg` is the
+/// gating spec (e.g. `cfg(windows)`) or `None` for unconditional deps;
+/// `platform_active` is `false` when the dep is not built on the host. These feed
+/// the relevance gate so platform-irrelevant advisories can be de-emphasised. The
+/// columns default to (NULL, 1) so callers that don't care stay unaffected.
+#[allow(clippy::too_many_arguments)]
+pub fn upsert_dependency_with_platform(
+    conn: &rusqlite::Connection,
+    project_path: &str,
+    manifest_type: &str,
+    package_name: &str,
+    version: Option<&str>,
+    is_dev: bool,
+    is_direct: bool,
+    language: &str,
+    project_relevance: f32,
+    target_cfg: Option<&str>,
+    platform_active: bool,
+) -> Result<()> {
     let canonical_path = canonicalize_project_path(project_path);
     conn.execute(
-        "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance, last_scanned)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
+        "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance, target_cfg, platform_active, last_scanned)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'))
          ON CONFLICT(project_path, package_name)
-         DO UPDATE SET version = ?4, is_dev = ?5, is_direct = MAX(project_dependencies.is_direct, ?6), project_relevance = ?8, last_scanned = datetime('now')",
-        params![canonical_path, manifest_type, package_name, version, is_dev as i32, is_direct as i32, language, project_relevance],
+         DO UPDATE SET version = ?4, is_dev = ?5, is_direct = MAX(project_dependencies.is_direct, ?6), project_relevance = ?8, target_cfg = ?9, platform_active = ?10, last_scanned = datetime('now')",
+        params![canonical_path, manifest_type, package_name, version, is_dev as i32, is_direct as i32, language, project_relevance, target_cfg, platform_active as i32],
     )
     .context("Failed to upsert dependency")?;
     Ok(())
