@@ -11,6 +11,45 @@ import {
   sourceTypeLabel,
 } from './types';
 
+// Strip the " (ecosystem)" qualifier from a display name → bare package name.
+export function bareName(displayName: string): string {
+  return displayName.replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+
+// Best-effort ecosystem for a dep row: from the "(eco)" suffix, falling back to
+// the bs_uncov_<eco>_ id prefix.
+export function depEcosystem(dep: DepRow): string {
+  const m = dep.name.match(/\(([^)]+)\)\s*$/);
+  if (m) return m[1]!.trim();
+  if (dep.gap?.id.startsWith('bs_uncov_')) {
+    return dep.gap.id.replace('bs_uncov_', '').split('_')[0] ?? '';
+  }
+  return '';
+}
+
+// Build the canonical registry/search URL for "Investigate" on a dependency.
+export function investigateUrl(name: string, ecosystem: string): string {
+  const eco = ecosystem.toLowerCase();
+  const pkg = encodeURIComponent(name);
+  if (eco === 'crates.io' || eco === 'cargo' || eco === 'rust') return `https://crates.io/crates/${pkg}`;
+  if (eco === 'npm' || eco === 'javascript' || eco === 'typescript') return `https://www.npmjs.com/package/${pkg}`;
+  if (eco === 'pypi' || eco === 'python') return `https://pypi.org/project/${pkg}`;
+  if (eco === 'go' || eco === 'golang') return `https://pkg.go.dev/${pkg}`;
+  return `https://www.google.com/search?q=${encodeURIComponent(`${name} ${ecosystem}`)}`;
+}
+
+const lastInvestigateRef = { current: 0 };
+function openInvestigate(dep: DepRow): void {
+  const now = Date.now();
+  if (now - lastInvestigateRef.current < 500) return; // debounce double-clicks
+  lastInvestigateRef.current = now;
+  const url = investigateUrl(bareName(dep.name), depEcosystem(dep));
+  recordTrustEvent({ eventType: 'acted_on', sourceType: 'gap', topic: dep.name, notes: 'blind_spot_investigate' });
+  import('@tauri-apps/plugin-opener')
+    .then(({ openUrl }) => openUrl(url))
+    .catch(() => window.open(url, '_blank', 'noopener,noreferrer'));
+}
+
 const SignalRow = memo(function SignalRow({
   item, onDismiss,
 }: {
@@ -180,35 +219,38 @@ const DepCoverageRow = memo(function DepCoverageRow({
       {expanded && hasContent && (
         <div className="bg-bg-tertiary/20 border-t border-border/50">
           {dep.gap && (
-            <div className={`px-4 py-2.5 group/gap ${dep.signals.length > 0 ? 'border-b border-border/30' : ''}`}>
-              <div className="flex items-start gap-2">
-                <p className="text-xs text-text-muted flex-1">{gapExplanation}</p>
-                {/* eslint-disable i18next/no-literal-string */}
-                {onAddWatch && dep.gap.id.startsWith('bs_uncov_') && (() => {
-                  const parts = dep.gap.id.replace('bs_uncov_', '').split('_');
-                  const ecosystem = parts[0] ?? '';
-                  return (
-                    <button
-                      onClick={() => onAddWatch(dep.name, ecosystem)}
-                      className="text-xs text-text-muted hover:text-green-400 opacity-0 group-hover/gap:opacity-100 transition-all shrink-0 px-1.5 py-1 rounded hover:bg-green-500/10"
-                      title={t('blindspots.action.watch')}
-                    >
-                      +
-                    </button>
-                  );
-                })()}
-                <button
-                  onClick={() => onDismissSignal(dep.gap!.id)}
-                  className="text-xs text-text-muted hover:text-red-400 opacity-0 group-hover/gap:opacity-100 transition-all shrink-0 px-1.5 py-1 rounded hover:bg-red-500/10"
-                  title={t('blindspots.signal.notRelevant')}
-                >
-                  ✕
-                </button>
-                {/* eslint-enable i18next/no-literal-string */}
-              </div>
+            <div className={`px-4 py-2.5 ${dep.signals.length > 0 ? 'border-b border-border/30' : ''}`}>
+              <p className="text-xs text-text-muted">{gapExplanation}</p>
               {dep.gap.evidence[0]?.relevance_note && (
                 <p className="text-[10px] text-text-muted/70 mt-1">{getTranslated(`${dep.gap.id}:rel`, dep.gap.evidence[0].relevance_note)}</p>
               )}
+              {/* Phase A: actions grouped + always visible, where the eye lands —
+                  no more hover-hidden + buried on the far right. */}
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                {onAddWatch && (
+                  <button
+                    onClick={() => onAddWatch(bareName(dep.name), depEcosystem(dep))}
+                    className="inline-flex items-center text-[11px] px-2 py-1 rounded-md border border-border bg-bg-tertiary/60 text-text-secondary hover:text-green-400 hover:border-green-500/30 hover:bg-green-500/10 transition-colors"
+                    title={t('blindspots.action.watch')}
+                  >
+                    {t('blindspots.action.watchLabel')}
+                  </button>
+                )}
+                <button
+                  onClick={() => openInvestigate(dep)}
+                  className="inline-flex items-center text-[11px] px-2 py-1 rounded-md border border-border bg-bg-tertiary/60 text-text-secondary hover:text-amber-400 hover:border-amber-500/30 hover:bg-amber-500/10 transition-colors"
+                  title={t('blindspots.action.investigate')}
+                >
+                  {t('blindspots.action.investigate')}
+                </button>
+                <button
+                  onClick={() => onDismissSignal(dep.gap!.id)}
+                  className="inline-flex items-center text-[11px] px-2 py-1 rounded-md border border-border bg-bg-tertiary/60 text-text-secondary hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/10 transition-colors"
+                  title={t('blindspots.signal.notRelevant')}
+                >
+                  {t('blindspots.action.dismiss')}
+                </button>
+              </div>
             </div>
           )}
           {dep.signals.length > 0 && (
