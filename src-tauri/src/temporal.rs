@@ -473,6 +473,8 @@ mod tests {
                 language TEXT NOT NULL DEFAULT 'rust',
                 last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
                 project_relevance REAL DEFAULT 1.0,
+                target_cfg TEXT,
+                platform_active INTEGER DEFAULT 1,
                 UNIQUE(project_path, package_name)
             );",
         )
