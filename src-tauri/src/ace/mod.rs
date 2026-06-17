@@ -17,6 +17,7 @@ pub mod context;
 pub mod db;
 pub mod embedding;
 pub mod git;
+pub(crate) mod platform_cfg;
 pub(crate) mod readme_indexing;
 pub mod scanner;
 pub mod topic_embeddings;
@@ -407,6 +408,38 @@ impl ACE {
                                         }
                                     }
 
+                                    // Platform-gated direct deps (e.g.
+                                    // [target.'cfg(windows)'.dependencies]). Record the
+                                    // target spec + whether it's active on the host so
+                                    // platform-irrelevant advisories can be de-emphasised.
+                                    // Ships silent until the relevance gate reads
+                                    // platform_active (no behaviour change yet).
+                                    let host = crate::ace::platform_cfg::host_target();
+                                    for (dep, target_cfg) in &signal.target_dependencies {
+                                        let active =
+                                            crate::ace::platform_cfg::target_active_on_host(
+                                                Some(target_cfg),
+                                                host,
+                                            );
+                                        if let Err(e) =
+                                            crate::temporal::upsert_dependency_with_platform(
+                                                &conn,
+                                                &project_path,
+                                                &manifest_type,
+                                                dep,
+                                                None,
+                                                false,
+                                                true, // direct: from manifest [target.*.dependencies]
+                                                language,
+                                                relevance,
+                                                Some(target_cfg),
+                                                active,
+                                            )
+                                        {
+                                            tracing::warn!(target: "4da::ace", error = %e, dep = %dep, "Failed to upsert target dependency");
+                                        }
+                                    }
+
                                     // Prune direct deps no longer present in this
                                     // manifest (dropped deps, or now-skipped local
                                     // path/git crates) so they stop surfacing as
@@ -415,6 +448,9 @@ impl ACE {
                                         .dependencies
                                         .iter()
                                         .chain(signal.dev_dependencies.iter())
+                                        .chain(
+                                            signal.target_dependencies.iter().map(|(name, _)| name),
+                                        )
                                         .cloned()
                                         .collect();
                                     match crate::temporal::prune_removed_dependencies(
