@@ -29,6 +29,8 @@ export interface ProjectScanResult {
   projectPath: string;
   /** Per-ecosystem deps (correct ecosystem per manifest). Keys: "npm", "rust", "python", "go". */
   depsByEcosystem: Record<string, { deps: string[]; devDeps: string[] }>;
+  /** dependency name -> target spec (e.g. "cfg(windows)") for platform-gated deps. */
+  depTargets: Record<string, string>;
 }
 
 // =============================================================================
@@ -136,6 +138,7 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
     projectName: path.basename(cwd),
     projectPath: cwd,
     depsByEcosystem: {},
+    depTargets: {},
   };
 
   const langSet = new Set<string>();
@@ -223,6 +226,9 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
       parseTOMLDependencies(content, "[dependencies]", rustDeps, fwSet, RUST_FRAMEWORK_MAP);
       parseTOMLDependencies(content, "[dev-dependencies]", rustDevDeps, fwSet, RUST_FRAMEWORK_MAP);
       parseTOMLDependencies(content, "[build-dependencies]", rustDevDeps, fwSet, RUST_FRAMEWORK_MAP);
+      // Platform-gated deps: [target.'cfg(...)'.dependencies] / [target.<triple>.dependencies].
+      // Previously skipped entirely (e.g. windows-sys, winreg, libc were invisible).
+      parseTargetDependencies(content, rustDeps, rustDevDeps, result.depTargets, fwSet, RUST_FRAMEWORK_MAP);
 
       // Add to flat arrays for backward compat
       result.dependencies.push(...rustDeps);
@@ -403,6 +409,42 @@ function parseTOMLDependencies(
       target.push(name);
       if (name in frameworkMap) {
         frameworkSet.add(frameworkMap[name]);
+      }
+    }
+  }
+}
+
+/**
+ * Parse `[target.<spec>.dependencies]` (and dev/build variants) sections, which the
+ * plain section parser skips. Records each dep's target spec so the scanner can flag
+ * platform relevance. `<spec>` is a cfg() predicate or an explicit target triple.
+ */
+function parseTargetDependencies(
+  content: string,
+  deps: string[],
+  devDeps: string[],
+  depTargets: Record<string, string>,
+  frameworkSet: Set<string>,
+  frameworkMap: Record<string, string>,
+): void {
+  const headerRegex = /^\[target\.(.+?)\.(dependencies|dev-dependencies|build-dependencies)\]\s*$/gm;
+  let m: RegExpExecArray | null;
+  while ((m = headerRegex.exec(content)) !== null) {
+    const spec = m[1].trim().replace(/^['"]|['"]$/g, ""); // strip surrounding quotes
+    const isDev = m[2] !== "dependencies";
+    // Body runs from the end of this header line to the next section header.
+    const rest = content.slice(m.index + m[0].length);
+    const nextHeader = rest.search(/^\[/m);
+    const body = nextHeader === -1 ? rest : rest.slice(0, nextHeader);
+    for (const line of body.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const depMatch = trimmed.match(/^([a-zA-Z_][\w-]*)\s*=/);
+      if (depMatch) {
+        const name = depMatch[1];
+        (isDev ? devDeps : deps).push(name);
+        depTargets[name] = spec;
+        if (name in frameworkMap) frameworkSet.add(frameworkMap[name]);
       }
     }
   }

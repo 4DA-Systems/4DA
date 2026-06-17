@@ -161,7 +161,7 @@ export function getLLMConfig(
     const llm = settings.llm || {};
 
     const config: LLMConfig = {
-      provider: llm.provider as LLMConfig["provider"],
+      provider: (llm.provider ?? null) as LLMConfig["provider"],
       anthropic_api_key: llm.api_key || llm.anthropic_api_key,
       openai_api_key: llm.openai_api_key,
       ollama_url: llm.base_url || llm.ollama_url || "http://localhost:11434",

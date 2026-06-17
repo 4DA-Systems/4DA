@@ -84,6 +84,9 @@ export class OsvScanner {
 
     const allVulns = [...cachedVulns, ...fetchedVulns];
     const vulnerablePackages = new Set(allVulns.map((v) => v.package));
+    const platformInactiveVulnerable = new Set(
+      allVulns.filter((v) => !v.platformActive).map((v) => v.package),
+    ).size;
 
     const bySeverity = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 };
     for (const v of allVulns) {
@@ -96,6 +99,7 @@ export class OsvScanner {
       ecosystemsScanned: ecosystems,
       totalScanned: scannable.length,
       totalVulnerable: vulnerablePackages.size,
+      platformInactiveVulnerable,
       bySeverity,
       vulnerabilities: allVulns,
       cleanCount: offline ? 0 : scannable.length - vulnerablePackages.size,
@@ -175,6 +179,8 @@ function mapVulnerability(vuln: OsvVulnerability, dep: ResolvedDependency): Vuln
       .filter((r) => r.type === "ADVISORY" || r.type === "WEB")
       .map((r) => r.url)
       .slice(0, 3),
+    target: dep.target,
+    platformActive: dep.platformActive,
   };
 }
 

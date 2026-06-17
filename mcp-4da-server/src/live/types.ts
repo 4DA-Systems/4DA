@@ -9,6 +9,10 @@ export interface ResolvedDependency {
   isDev: boolean;
   isDirect: boolean;
   devScopeKnown: boolean;
+  /** Target spec gating this dep (e.g. `cfg(windows)`), or null if unconditional. */
+  target: string | null;
+  /** False when `target` is not active on the host platform (advisory is not relevant). */
+  platformActive: boolean;
 }
 
 export interface OsvVulnerability {
@@ -44,6 +48,10 @@ export interface VulnerabilityEntry {
   fixedVersion: string | null;
   published: string;
   references: string[];
+  /** Target spec gating the affected dep, or null if unconditional. */
+  target: string | null;
+  /** False when the affected dep is not active on the host platform. */
+  platformActive: boolean;
 }
 
 export interface VulnerabilityScanResult {
@@ -52,6 +60,8 @@ export interface VulnerabilityScanResult {
   ecosystemsScanned: string[];
   totalScanned: number;
   totalVulnerable: number;
+  /** Vulnerable packages that are NOT active on the host platform (relevance noise). */
+  platformInactiveVulnerable: number;
   bySeverity: { critical: number; high: number; medium: number; low: number; unknown: number };
   vulnerabilities: VulnerabilityEntry[];
   cleanCount: number;
