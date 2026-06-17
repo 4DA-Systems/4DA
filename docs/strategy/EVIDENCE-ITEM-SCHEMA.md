@@ -248,7 +248,8 @@ pub enum PrecedentOutcome {
 
 ### LensHints
 
-Which lenses the item is allowed to surface in. Producers set these; lenses filter.
+Which lenses the item is allowed to surface in (producers set these; lenses
+filter), plus per-item rendering hints the lens groups/badges on.
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize, TS, Default)]
@@ -258,8 +259,28 @@ pub struct LensHints {
     pub preemption: bool,
     pub blind_spots: bool,
     pub evidence: bool,
+    /// Rendering hint (Phase 2c, platform-aware deps): the item is relevant only
+    /// to a build target the user does NOT build on the host (e.g. a
+    /// `cfg(not(windows))` crate's advisory on a Windows machine). The lens
+    /// groups such items into a collapsed "other build targets" section and
+    /// badges them — surfaced, de-prioritised (urgency already capped to Watch
+    /// upstream), never hidden. `false` for all normal items.
+    #[serde(default)]
+    pub other_build_target: bool,
 }
 ```
+
+> **ADR — Phase 2c (2026-06-18): platform-target relevance is a `LensHints`
+> rendering hint, not a new struct.** Per Intelligence Doctrine rule 1 the
+> canonical `EvidenceItem` is extended (not forked) when a new dimension is
+> needed. Platform-target relevance is a *rendering* dimension (group + badge),
+> so it rides on the existing `LensHints` (built entirely via `Default`/helpers,
+> so zero call-site churn and no validator change) rather than a new top-level
+> field or a new alert struct. The preemption and blind-spots materializers set
+> it `true` when the dependency is platform-inactive in every tracked
+> project/target. Specific per-OS labels ("Linux build") are a future additive
+> enrichment; v1 is the boolean group/badge. Full design + rationale:
+> `.claude/plans/platform-aware-dep-intelligence-2026-06-17.md`.
 
 ---
 

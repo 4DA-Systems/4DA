@@ -189,6 +189,13 @@ pub struct PreemptionAlert {
     /// Whether this is a dev-only dependency.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_dev: Option<bool>,
+    /// True when the affected package is inactive on the host platform in every
+    /// tracked project/target (Phase 2b/2c). Such advisories are de-prioritised
+    /// (urgency already capped to Watch) and, in `to_evidence_item`, tagged with
+    /// `LensHints::other_build_target` so the lens groups + badges them as
+    /// "other build targets" — surfaced, never hidden.
+    #[serde(default)]
+    pub platform_inactive: bool,
 }
 
 /// The full preemption feed with summary counts.
@@ -499,8 +506,11 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             let (dep_is_direct, dep_is_dev, scope_label) = osv_group_scope(&group);
             let urgency = rank_osv_urgency(raw_urgency, dep_is_direct, dep_is_dev);
             // De-prioritise advisories for deps not built on the host platform
-            // (e.g. a Linux-only crate on Windows). Never hidden — capped to Watch.
-            let urgency = if platform_inactive_pkgs.contains(&first.package_name.to_lowercase()) {
+            // (e.g. a Linux-only crate on Windows). Never hidden — capped to Watch,
+            // and tagged platform_inactive so the lens groups it under "other build
+            // targets" (Phase 2c).
+            let platform_inactive = platform_inactive_pkgs.contains(&first.package_name.to_lowercase());
+            let urgency = if platform_inactive {
                 AlertUrgency::Watch
             } else {
                 urgency
@@ -689,6 +699,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 fixed_version: best_fix.clone(),
                 is_direct: dep_is_direct,
                 is_dev: dep_is_dev,
+                platform_inactive,
             }
         })
         .collect()
@@ -845,6 +856,7 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
             fixed_version: None,
             is_direct: None,
             is_dev: None,
+            platform_inactive: false,
         });
     }
 
@@ -1148,6 +1160,7 @@ fn chain_to_alert(
         fixed_version: None,
         is_direct: None,
         is_dev: None,
+        platform_inactive: false,
     }
 }
 
@@ -1552,7 +1565,13 @@ impl PreemptionAlert {
             suggested_actions,
             precedents: Vec::new(),
             refutation_condition: None,
-            lens_hints: LensHints::preemption_only(),
+            lens_hints: LensHints {
+                // Phase 2c: tag platform-inactive advisories so the lens groups
+                // them under "other build targets" and badges them. The urgency
+                // was already capped to Watch upstream; this drives the grouping.
+                other_build_target: self.platform_inactive,
+                ..LensHints::preemption_only()
+            },
             created_at,
             expires_at: None,
         }
@@ -2066,6 +2085,7 @@ mod tests {
             fixed_version: None,
             is_direct: None,
             is_dev: None,
+            platform_inactive: false,
         }
     }
 
@@ -2081,6 +2101,26 @@ mod tests {
         let alert = sample_alert();
         let item = alert.to_evidence_item();
         assert_eq!(item.kind, crate::evidence::EvidenceKind::Alert);
+    }
+
+    #[test]
+    fn to_evidence_item_tags_platform_inactive_for_other_build_targets() {
+        // Phase 2c: a platform-inactive alert is tagged so the lens groups it
+        // under "other build targets" — but stays a preemption item (not hidden).
+        let mut alert = sample_alert();
+        // Default: a normal alert is NOT grouped as other-build-target.
+        assert!(!alert.to_evidence_item().lens_hints.other_build_target);
+
+        alert.platform_inactive = true;
+        let item = alert.to_evidence_item();
+        assert!(
+            item.lens_hints.other_build_target,
+            "platform-inactive alert is tagged for the other-build-targets group"
+        );
+        assert!(
+            item.lens_hints.preemption,
+            "platform-inactive alert stays a preemption item (surfaced, not hidden)"
+        );
     }
 
     #[test]

@@ -3678,6 +3678,7 @@ mod tests {
             fixed_version: Some("1.7.4".into()),
             is_direct: Some(true),
             is_dev: Some(false),
+            platform_inactive: false,
         };
 
         let briefing = BriefingPreemptionAlert::from_preemption_alert(&alert);
