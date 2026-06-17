@@ -457,19 +457,44 @@ pub(super) fn store_vulnerability(
     let summary = vuln.summary.as_deref().unwrap_or("Security advisory");
 
     let affected_list = vuln.affected.as_deref().unwrap_or(&[]);
-    let mut stored = 0;
 
+    // Group affected entries by (package, ecosystem) and UNION their ranges. OSV can list the
+    // SAME package in MULTIPLE affected entries (different version branches, e.g. next
+    // [13.4.6,15.5.16) AND [16.0.0,16.2.5)). osv_advisories holds one row per (advisory,
+    // package), so keeping only the first dropped the branch that matched the user's pinned
+    // version — a completeness gap the live cycle exposed (this is the mirror-path twin of the
+    // same fix in sources/osv_live.rs).
+    let mut by_pkg: std::collections::HashMap<(String, String), Affected> =
+        std::collections::HashMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
     for affected in affected_list {
-        let pkg = match &affected.package {
-            Some(p) => p,
-            None => continue,
+        let Some(pkg) = &affected.package else {
+            continue;
         };
+        let key = (pkg.name.clone(), pkg.ecosystem.clone());
+        let merged = by_pkg.entry(key.clone()).or_insert_with(|| {
+            order.push(key.clone());
+            Affected {
+                package: Some(pkg.clone()),
+                ranges: Some(Vec::new()),
+                versions: None,
+            }
+        });
+        if let Some(ranges) = &affected.ranges {
+            merged
+                .ranges
+                .get_or_insert_with(Vec::new)
+                .extend(ranges.iter().cloned());
+        }
+    }
 
-        let dedup_key = format!("{}:{}:{}", vuln.id, pkg.name, pkg.ecosystem);
+    let mut stored = 0;
+    for key in order {
+        let dedup_key = format!("{}:{}:{}", vuln.id, key.0, key.1);
         if !seen.insert(dedup_key) {
             continue;
         }
-
+        let affected = &by_pkg[&key];
         let ranges_json = serialize_ranges(affected);
         let fixed_json = extract_fixed_versions(affected);
 
@@ -477,8 +502,8 @@ pub(super) fn store_vulnerability(
             &vuln.id,
             summary,
             vuln.details.as_deref(),
-            &pkg.name,
-            &pkg.ecosystem,
+            &key.0,
+            &key.1,
             ranges_json.as_deref(),
             fixed_json.as_deref(),
             severity_type.as_deref(),
