@@ -2841,7 +2841,14 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         }],
         precedents: Vec::new(),
         refutation_condition: None,
-        lens_hints: LensHints::blind_spots_only(),
+        lens_hints: LensHints {
+            // Phase 2c: a platform-inactive dep's coverage gap is grouped under
+            // "other build targets" and badged. Urgency was already capped to
+            // Watch above; this drives the grouping. `platform_active` defaults
+            // true, so this is `false` for normal deps.
+            other_build_target: !d.platform_active,
+            ..LensHints::blind_spots_only()
+        },
         created_at: now_millis(),
         expires_at: None,
     }
@@ -4746,15 +4753,19 @@ mod tests {
             platform_active: true,
         };
 
-        // Active dep keeps its risk-based urgency.
+        // Active dep keeps its risk-based urgency and is NOT grouped as other-target.
         let item = uncovered_dep_to_evidence_item(&dep);
         assert_eq!(
             item.urgency,
             Urgency::Critical,
             "platform-active critical dep keeps Critical urgency"
         );
+        assert!(
+            !item.lens_hints.other_build_target,
+            "platform-active dep is not tagged as other-build-target"
+        );
 
-        // Same dep, platform-inactive everywhere -> capped to Watch.
+        // Same dep, platform-inactive everywhere -> capped to Watch + tagged (Phase 2c).
         dep.platform_active = false;
         let item = uncovered_dep_to_evidence_item(&dep);
         assert_eq!(
@@ -4762,8 +4773,17 @@ mod tests {
             Urgency::Watch,
             "platform-inactive dep is de-prioritised to Watch"
         );
-        // De-prioritise, NEVER exclude: the item is still produced and still
-        // names the dep — a cross-platform dev can still reach it.
+        assert!(
+            item.lens_hints.other_build_target,
+            "platform-inactive dep is tagged for the other-build-targets group"
+        );
+        // De-prioritise, NEVER exclude: the item is still produced, still a
+        // blind-spots candidate, and still names the dep — a cross-platform dev
+        // can still reach it.
+        assert!(
+            item.lens_hints.blind_spots,
+            "platform-inactive dep is still a blind-spots item"
+        );
         assert!(
             item.affected_deps.contains(&"libc (cargo)".to_string()),
             "platform-inactive dep is still surfaced, not dropped"
