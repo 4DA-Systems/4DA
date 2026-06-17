@@ -6,19 +6,19 @@ These are replies to existing threads, not standalone posts. Keep them short, he
 
 ## 1. Reply to "What MCP servers do you use?" (r/ClaudeAI)
 
-I've been using @4da/mcp-server — it has 36 tools that give Claude awareness of tech trends, knowledge gaps, and relevant signals from HN/arXiv/Reddit/GitHub scored against your actual codebase. The difference from most MCP servers is that it's not wrapping a single API — it's a full intelligence layer that runs locally. `npx @4da/mcp-server --setup` and it configures itself. Works with Claude Code and Cursor.
+I've been using @4da/mcp-server — it has 14 tools that give Claude awareness of tech trends, knowledge gaps, and relevant signals from HN/arXiv/Reddit/GitHub scored against your actual codebase. The difference from most MCP servers is that it's not wrapping a single API — it's a full intelligence layer that runs locally. `npx @4da/mcp-server --setup` and it configures itself. Works with Claude Code and Cursor.
 
 ---
 
 ## 2. Reply to "Best privacy-first dev tools?" (r/selfhosted, r/LocalLLaMA)
 
-4DA might be worth a look — it's a desktop app that scores developer content (HN, arXiv, Reddit, GitHub, RSS) against your local codebase. Everything runs on your machine — no 4DA server; cloud AI, if you configure it, is contacted directly with your own key. SQLite + sqlite-vec for vector search, optional Ollama for embeddings. The MCP server component (@4da/mcp-server) is MIT licensed and reads from a local SQLite database; its only outbound call is vulnerability_scan (package names + versions to OSV.dev). No accounts, no telemetry.
+4DA might be worth a look — it's a desktop app that scores developer content (HN, arXiv, Reddit, GitHub, RSS) against your local codebase. Everything runs on your machine — no 4DA server; cloud AI, if you configure it, is contacted directly with your own key. SQLite + sqlite-vec for vector search, optional Ollama for embeddings. The MCP server component (@4da/mcp-server) is Apache-2.0 licensed and reads from a local SQLite database; its only outbound call is vulnerability_scan (package names + versions to OSV.dev). No accounts, no telemetry.
 
 ---
 
 ## 3. Reply to "How do I make Cursor/Claude aware of my project?" (r/CursorAI, r/ClaudeCode)
 
-Beyond the built-in context window, check out MCP servers that bridge your project context to the LLM. I use @4da/mcp-server which gives Claude/Cursor 36 tools for things like knowledge gap analysis, tech radar, and codebase-relevant signal detection. It reads from a local database that the 4DA app builds by scanning your projects — so the LLM can ask "what trends matter for THIS codebase" instead of generic questions. Setup is `npx @4da/mcp-server --setup`.
+Beyond the built-in context window, check out MCP servers that bridge your project context to the LLM. I use @4da/mcp-server which gives Claude/Cursor 14 tools for things like knowledge gap analysis, tech radar, and codebase-relevant signal detection. It reads from a local database that the 4DA app builds by scanning your projects — so the LLM can ask "what trends matter for THIS codebase" instead of generic questions. Setup is `npx @4da/mcp-server --setup`.
 
 ---
 
@@ -30,7 +30,7 @@ Beyond the built-in context window, check out MCP servers that bridge your proje
 
 ## 5. Reply to "MCP servers worth trying?" (r/modelcontextprotocol)
 
-@4da/mcp-server is worth trying if you want codebase-aware intelligence rather than just API wrappers. 36 tools covering signal analysis, trend detection, tech radar, knowledge gaps, decision tracking, and source health. The architecture is different from most — it runs entirely locally against a SQLite database, no outbound network calls, no API keys needed at the MCP layer. MIT licensed.
+@4da/mcp-server is worth trying if you want codebase-aware intelligence rather than just API wrappers. 14 tools covering signal analysis, trend detection, tech radar, knowledge gaps, decision tracking, and source health. The architecture is different from most — the DB-backed tools read a local SQLite database, while the live tools query public sources (OSV.dev, package registries) sending only package names and versions. No API keys needed at the MCP layer, and `FOURDA_OFFLINE=true` disables all network access. Apache-2.0 licensed.
 
 ```
 npx @4da/mcp-server --setup

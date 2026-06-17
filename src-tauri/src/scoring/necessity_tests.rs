@@ -417,3 +417,49 @@ fn test_security_takes_priority_over_contradiction() {
     );
     assert!(result.score > 0.90);
 }
+
+#[test]
+fn test_cvss_score_promotes_severity_when_no_priority() {
+    // Bug J regression: a real critical CVE that reaches the security path with NO
+    // signal priority and NO cve_severity (e.g. a dev-only dep that didn't trip the
+    // classifier) must use the CVSS base score, not silently fall back to "medium".
+    let inputs = NecessityInputs {
+        dep_match_score: 0.5,
+        matched_deps: vec!["serde".to_string()],
+        content_type: Some("security_advisory".to_string()),
+        signal_priority: None,
+        cve_severity: None,
+        cvss_score: Some(9.8),
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert_eq!(result.category, NecessityCategory::SecurityVulnerability);
+    assert!(
+        result.score > 0.90,
+        "CVSS 9.8 with dep match must score critical (>0.90), not medium 0.60, got {}",
+        result.score
+    );
+    assert_eq!(result.urgency, Urgency::Immediate);
+}
+
+#[test]
+fn test_signal_priority_still_wins_over_cvss() {
+    // The CVSS fallback must NOT override a present signal priority — the trust gate
+    // deliberately downgrades transitive criticals to a lower priority, and that must
+    // be respected. A "medium" priority with a high CVSS stays medium-scored.
+    let inputs = NecessityInputs {
+        dep_match_score: 0.5,
+        matched_deps: vec!["openssl".to_string()],
+        content_type: Some("security_advisory".to_string()),
+        signal_priority: Some("medium".to_string()),
+        cve_severity: None,
+        cvss_score: Some(9.8),
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert!(
+        result.score >= 0.55 && result.score <= 0.65,
+        "present signal_priority=medium must win over CVSS 9.8, got {}",
+        result.score
+    );
+}

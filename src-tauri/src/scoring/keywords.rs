@@ -227,17 +227,18 @@ fn is_negated_in_context(term: &str, text: &str) -> bool {
 fn count_word_occurrences(term: &str, text: &str) -> usize {
     let mut count = 0;
     for (i, _) in text.match_indices(term) {
-        let before_ok = i == 0
-            || !text
-                .as_bytes()
-                .get(i.wrapping_sub(1))
-                .map_or(false, |b| b.is_ascii_alphanumeric());
+        // CHAR-boundary check, not raw bytes: a UTF-8 continuation byte is not
+        // ASCII-alphanumeric, so byte-based bounds treated a glued non-ASCII letter
+        // ("иgo") as a word boundary and inflated short-term counts (bug E).
+        let before_ok = text[..i]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_alphanumeric());
         let after_pos = i + term.len();
-        let after_ok = after_pos >= text.len()
-            || !text
-                .as_bytes()
-                .get(after_pos)
-                .map_or(false, |b| b.is_ascii_alphanumeric());
+        let after_ok = text[after_pos..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric());
         if before_ok && after_ok {
             count += 1;
         }

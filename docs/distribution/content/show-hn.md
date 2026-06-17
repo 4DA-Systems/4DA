@@ -18,7 +18,7 @@ Ecosystems: npm, crates.io (Rust), PyPI, Go. On first run it auto-detects your s
 
 Beyond vuln scanning, there are 35 more tools: tech stack detection, knowledge gap analysis (deps you use but never read about), persistent decision memory across sessions, developer identity profiling, and agent memory that survives context resets. The companion desktop app adds content intelligence from HN, arXiv, GitHub, etc.
 
-TypeScript, MIT licensed, ~2500 lines, 71 tests.
+TypeScript, Apache-2.0 licensed, ~2500 lines, 71 tests.
 
 GitHub: https://github.com/runyourempire/4DA/tree/main/mcp-4da-server
 npm: https://www.npmjs.com/package/@4da/mcp-server
@@ -62,13 +62,13 @@ The only network call is vulnerability_scan: package names + versions to OSV.dev
 
 On startup it reads manifest files in your working directory: package.json, Cargo.toml, pyproject.toml, go.mod. Then it resolves exact versions from lock files (package-lock.json, pnpm-lock.yaml, yarn.lock, Cargo.lock, poetry.lock, go.sum). No configuration needed — if your project has a manifest, it works.
 
-### Q: "Why 36 tools?"
+### Q: "Why 14 tools?"
 
 The vuln scanner is the instant-value hook. The other tools solve different problems: knowledge gaps (which deps you use daily but never read about), decision memory (enforce architectural choices across sessions), developer DNA (your tech identity for agent handoff), agent memory (persistent across context resets). Your AI picks the relevant tools per question. You don't need to learn them — just ask natural questions.
 
 ### Q: "How is this different from Snyk/Dependabot?"
 
-Snyk requires an account and sends your dependency graph to their servers. Dependabot only works on GitHub. This runs entirely on your machine, works with any MCP-compatible AI tool (Claude, Cursor, Copilot, Windsurf), and the data never leaves your laptop. Also: it's MIT licensed and free. No vendor lock-in.
+Snyk requires an account and sends your dependency graph to their servers. Dependabot only works on GitHub. This runs entirely on your machine, works with any MCP-compatible AI tool (Claude, Cursor, Copilot, Windsurf), and the data never leaves your laptop. Also: it's Apache-2.0 licensed and free. No vendor lock-in.
 
 ### Q: "What's the business model?"
 

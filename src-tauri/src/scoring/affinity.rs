@@ -24,13 +24,32 @@ pub(crate) fn compute_affinity_multiplier(topics: &[String], ace_ctx: &ACEContex
             continue;
         }
 
-        // Check partial matches
+        // Partial matches: collect ALL word-boundary overlaps and pick the
+        // strongest-magnitude one deterministically (ties broken by the
+        // lexicographically smallest key). Using `topic_overlaps` instead of raw
+        // `contains` stops java→javascript / go→google leakage (bug I); the
+        // deterministic pick stops HashMap iteration order from flipping the
+        // multiplier when a topic overlaps >=2 affinity keys (bug H).
+        let mut best: Option<(&str, f32, f32)> = None;
         for (aff_topic, &(affinity, confidence)) in &ace_ctx.topic_affinities {
-            if topic.contains(aff_topic.as_str()) || aff_topic.contains(topic.as_str()) {
-                effect_sum += affinity * confidence * 0.7;
-                match_count += 1;
-                break;
+            if topic_overlaps(topic, aff_topic) {
+                let magnitude = (affinity * confidence).abs();
+                let better = match best {
+                    None => true,
+                    Some((best_key, best_aff, best_conf)) => {
+                        let best_mag = (best_aff * best_conf).abs();
+                        magnitude > best_mag
+                            || (magnitude == best_mag && aff_topic.as_str() < best_key)
+                    }
+                };
+                if better {
+                    best = Some((aff_topic.as_str(), affinity, confidence));
+                }
             }
+        }
+        if let Some((_, affinity, confidence)) = best {
+            effect_sum += affinity * confidence * 0.7;
+            match_count += 1;
         }
     }
 
@@ -73,10 +92,13 @@ pub(crate) fn compute_anti_penalty(topics: &[String], ace_ctx: &ACEContext) -> f
 
     let mut total_penalty: f32 = 0.0;
 
-    // Both topics and anti_topics are already lowercase
+    // Both topics and anti_topics are already lowercase. Use word-boundary overlap
+    // (not raw `contains`) so an anti-topic `go` doesn't penalize `google`/`argo`
+    // and `java` doesn't demote `javascript` (bug I). anti_topics is a Vec, so the
+    // break-on-first-match is already order-stable.
     for topic in topics {
         for anti_topic in &ace_ctx.anti_topics {
-            if topic.contains(anti_topic.as_str()) || anti_topic.contains(topic.as_str()) {
+            if topic_overlaps(topic, anti_topic) {
                 let confidence = ace_ctx
                     .anti_topic_confidence
                     .get(anti_topic)
@@ -299,17 +321,76 @@ mod tests {
         assert!(score_neg >= 0.0, "Score should be clamped to 0.0");
     }
 
-    // Test partial topic matching
+    // Test partial topic matching (word-boundary aware)
     #[test]
     fn test_partial_topic_match() {
         let mut ctx = ACEContext::default();
         ctx.topic_affinities.insert("rust".to_string(), (0.8, 0.9));
 
-        // "rustlang" should partially match "rust"
-        let topics = vec!["rustlang".to_string()];
+        // "rust-async" overlaps "rust" via word boundary → still boosts.
+        let topics = vec!["rust-async".to_string()];
         let mult = compute_affinity_multiplier(&topics, &ctx);
 
-        assert!(mult > 1.0, "Partial match should still produce boost");
+        assert!(mult > 1.0, "Word-boundary partial match should still boost");
+    }
+
+    // Bug I regression: affinity must not leak across tech via unbounded substring.
+    #[test]
+    fn test_affinity_no_substring_leak() {
+        let mut ctx = ACEContext::default();
+        // A dislike of `java` must NOT demote a `javascript` item.
+        ctx.topic_affinities.insert("java".to_string(), (-0.7, 1.0));
+        let mult = compute_affinity_multiplier(&["javascript".to_string()], &ctx);
+        assert_eq!(mult, 1.0, "java affinity must not affect javascript topic");
+    }
+
+    // Bug I regression: anti-topic must not leak across tech via unbounded substring.
+    #[test]
+    fn test_anti_penalty_no_substring_leak() {
+        let mut ctx = ACEContext::default();
+        ctx.anti_topics.push("go".to_string());
+        ctx.anti_topic_confidence.insert("go".to_string(), 1.0);
+        // "go" must not penalize "google" or "argo".
+        assert_eq!(
+            compute_anti_penalty(&["google".to_string()], &ctx),
+            0.0,
+            "anti-topic 'go' must not penalize 'google'"
+        );
+        assert_eq!(
+            compute_anti_penalty(&["argo".to_string()], &ctx),
+            0.0,
+            "anti-topic 'go' must not penalize 'argo'"
+        );
+    }
+
+    // Bug H regression: when a topic overlaps >=2 affinity keys, the strongest
+    // magnitude wins deterministically regardless of HashMap insertion/iteration order.
+    #[test]
+    fn test_affinity_partial_match_deterministic() {
+        // "react-query" overlaps both "react" (+0.9) and "query" (-0.3) via word
+        // boundary. The strongest magnitude (|0.9*1.0|=0.9 > |-0.3*1.0|=0.3) must win
+        // every time, so the result is a boost (>1.0), never a penalty.
+        let build = |insert_react_first: bool| {
+            let mut ctx = ACEContext::default();
+            if insert_react_first {
+                ctx.topic_affinities.insert("react".to_string(), (0.9, 1.0));
+                ctx.topic_affinities
+                    .insert("query".to_string(), (-0.3, 1.0));
+            } else {
+                ctx.topic_affinities
+                    .insert("query".to_string(), (-0.3, 1.0));
+                ctx.topic_affinities.insert("react".to_string(), (0.9, 1.0));
+            }
+            ctx
+        };
+        let topics = vec!["react-query".to_string()];
+        let a = compute_affinity_multiplier(&topics, &build(true));
+        let b = compute_affinity_multiplier(&topics, &build(false));
+        assert_eq!(a, b, "result must be independent of insertion order");
+        assert!(
+            a > 1.0,
+            "strongest match (react +0.9) must win → boost, got {a}"
+        );
     }
 
     #[test]

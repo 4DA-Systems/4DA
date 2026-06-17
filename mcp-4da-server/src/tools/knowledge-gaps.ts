@@ -14,6 +14,12 @@ function hasWordBoundary(text: string, term: string): boolean {
   return regex.test(text);
 }
 
+// Escape SQL LIKE wildcards so a package name containing % or _ (npm names may
+// contain _) is matched literally rather than as a pattern. Paired with ESCAPE '\'.
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => "\\" + c);
+}
+
 export interface KnowledgeGapsParams {
   min_severity?: string;
   limit?: number;
@@ -71,13 +77,20 @@ export function executeKnowledgeGaps(
   const gaps: KnowledgeGap[] = [];
 
   for (const dep of deps) {
-    // Find source items mentioning this dependency
-    const pattern = `%${dep.package_name}%`;
+    // Names shorter than 3 chars (e.g. "c", "go", "ws") match too many unrelated
+    // items via substring LIKE to be a trustworthy "mention" signal — skip them.
+    if (!dep.package_name || dep.package_name.length < 3) continue;
+
+    // Find source items mentioning this dependency. Engagement is recorded by the
+    // app in interactions.item_id / .action_type (the canonical columns; the older
+    // source_item_id / action columns are unused), so the NOT-IN suppression must
+    // read those or it silently never fires.
+    const pattern = `%${escapeLike(dep.package_name)}%`;
     const mentionedItems = rawDb
       .prepare(`SELECT si.id, si.title, si.url, si.source_type, si.created_at
         FROM source_items si
-        WHERE (si.title LIKE ? OR si.content LIKE ?)
-        AND si.id NOT IN (SELECT source_item_id FROM interactions WHERE action IN ('click', 'save'))
+        WHERE (si.title LIKE ? ESCAPE '\\' OR si.content LIKE ? ESCAPE '\\')
+        AND si.id NOT IN (SELECT item_id FROM interactions WHERE action_type IN ('click', 'save'))
         ORDER BY si.created_at DESC LIMIT 5`)
       .all(pattern, pattern) as SourceItemBriefRow[];
 
