@@ -28,4 +28,14 @@ coverage_reason: string | null,
  * Which source adapters were searched for this dependency and their status.
  * Each entry is like "npm_registry: checked 2h ago" or "osv: adapter_failing".
  */
-adapters_searched: Array<AdapterStatus>, };
+adapters_searched: Array<AdapterStatus>, 
+/**
+ * Whether this dependency is built on the host platform. `false` only when
+ * the dep is gated to a target the user does not build (e.g. a
+ * `cfg(not(windows))` crate on Windows) AND inactive in EVERY tracked
+ * project/target. Platform-inactive deps are de-prioritised (urgency capped
+ * to Watch in `uncovered_dep_to_evidence_item`) but never hidden — a
+ * cross-platform dev still reaches them. Defaults to `true` (active/visible)
+ * for back-compat with pre-Phase-2b reports and pre-Phase-85 DBs.
+ */
+platform_active: boolean, };
