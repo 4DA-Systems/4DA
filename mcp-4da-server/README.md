@@ -100,6 +100,8 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 
 **What's sent over the network:** package names + versions, generic tech keywords. The same data visible in your `package.json`. No source code, no file paths, no personal data. Set `FOURDA_OFFLINE=true` to disable all network calls.
 
+> The one exception: if you *explicitly* configure an OpenAI embedding provider (`FOURDA_EMBED_PROVIDER=openai`) for semantic recall, the decision/memory text you store is sent to OpenAI to be embedded. The default — no embedding provider, or a local Ollama one — keeps everything on your machine, and `FOURDA_OFFLINE=true` overrides it regardless.
+
 **Ecosystems supported:** npm, crates.io (Rust), PyPI (Python), Go.
 
 ## What You Can Ask
@@ -206,7 +208,7 @@ npx @4da/mcp-server --version    # Print version
 ## FAQ
 
 **Does this send my code anywhere?**
-No. The server sends package names and versions to public APIs ([OSV.dev](https://osv.dev), npm registry, crates.io, PyPI, Go proxy) and generic tech keywords to [HN Algolia](https://hn.algolia.com/api). The same public data visible in your `package.json`. No source code, no file paths, no personal data. Set `FOURDA_OFFLINE=true` to disable all network calls.
+No. The server sends package names and versions to public APIs ([OSV.dev](https://osv.dev), npm registry, crates.io, PyPI, Go proxy) and generic tech keywords to [HN Algolia](https://hn.algolia.com/api). The same public data visible in your `package.json`. No source code, no file paths, no personal data. Set `FOURDA_OFFLINE=true` to disable all network calls. (The sole exception is opt-in OpenAI embeddings — see the network note above.)
 
 **Do I need the 4DA desktop app?**
 No. 9 tools work standalone: vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, project context, decision memory, alignment checking, and agent memory. The desktop app adds scored content from 20+ sources that compounds over time.

@@ -9,6 +9,142 @@
 
 ## Active Terminals
 
+### Terminal: opus-platform-deps-2 (started 2026-06-18)
+Working on: Phase 2b — platform-aware blind_spots coverage surface, mirroring Phase-2a in
+preemption.rs. De-prioritise (cap urgency to Watch), NEVER exclude. Ships SILENT (no UI; Phase 2c
+is the first visible surface). Plan: .claude/plans/platform-aware-dep-intelligence-2026-06-17.md +
+HANDOFF-platform-deps-2026-06-18.md.
+Approach: add `has_platform_active_column` + `load_platform_inactive_packages`
+(HAVING MAX(platform_active)=0) to blind_spots.rs (faithful mirror of preemption.rs); add
+`platform_active: bool` to UncoveredDep; set it at the 3 constructors in find_uncovered_deps via
+membership check; cap urgency to Watch in uncovered_dep_to_evidence_item when platform-inactive.
+**Claims:** src-tauri/src/blind_spots.rs ONLY (+ regenerated ts-rs binding
+src-tauri/bindings/bindings/UncoveredDep.ts).
+NOT touching: preemption.rs, evidence/types.rs (Phase 2c), peer scoring/* + ace/* + temporal.rs +
+project_health.rs (opus-scoring-verax-fix), MCP osv work, peer dotfiles/.bak/ResultItemExpanded.tsx.
+**DONE + PUSHED @ origin/main 76ed0ae2** (0/0 verified; d6fad184..76ed0ae2 fast-forward, single
+commit, full pre-push gate green — tsc + frontend + clippy --lib + audit). Landed via the §7
+isolated-worktree + node_modules-junction + cherry-pick recipe (worktree removed, branch -D'd, junctions
+unlinked). 2 files: blind_spots.rs (+205/-14) + regenerated UncoveredDep.ts binding. 97/97 blind_spots
+tests (3 new); zero new clippy warnings (the 4 lib warnings are PRE-EXISTING in reddit.rs/mastodon.rs).
+NOTE: my local commit d7fba7f4 lingers on the LOCAL fix/scoring-correctness-verax branch (= 872c41cf +
+my commit, 1 ahead of origin). HARMLESS per HANDOFF §1 precedent — same diff is on main, git dedups when
+PR #119 merges. I did NOT reset/rewrite the shared branch (forbidden destructive op). If a peer pushes
+this branch, my Phase-2b commit rides into PR #119 (acceptable, same as opus-platform-deps's 0fbdd1d7).
+Verax board was 401 (no signing key this session) — coordinated via TERMINALS.md; proof = git SHA 76ed0ae2.
+Ships SILENT (no UI). Next: Phase 2c (first visible surface) — gated behind founder dogfood.
+**Commit Lock**: RELEASED.
+
+### Terminal: opus-scoring-verax-fix (started 2026-06-17)
+Working on: the Verax fix-run handoff (.claude/plans/VERAX-FIX-RUN-RUNBOOK.md). Branch
+`fix/scoring-correctness-verax`. Fixing the 9 confirmed scoring-correctness bugs (F/I/D/E
+mechanical + A/B/G/H/J decision-dependent) found via the Verax method, each with a regression test.
+Resolved the 4 owner-decisions in VERAX-FIX-RUN-DECISIONS.md to the recommended answers (strict-caret,
+last_decay_at, strongest-magnitude tie-break, wire cvss_score) under the operator's Full Execution
+Mandate; rationale in that doc. NOTE for @opus-platform-deps: I found your Phase-85 target_cfg/
+platform_active columns are missing from the TEST-LOCAL project_dependencies CREATE TABLE in
+temporal.rs:465 + project_health.rs:149, so 4 tests (temporal/project_health) failed on HEAD before
+my branch. Fixed in a separate, clearly-labeled commit (mirrors the real migration). Heads-up in case
+you have an in-flight fix.
+**Claims:** src-tauri/src/scoring/{utils,keywords,keywords_tests,affinity,dependencies,necessity,
+necessity_tests,pipeline_v2}.rs, src-tauri/src/ace/{behavior/decay,db,context}.rs, and (separate
+commit) src-tauri/src/{temporal,project_health}.rs (test schema-drift only).
+NOT touching: peer .gitignore/CLAUDE.md/.mcp.json.bak/ResultItemExpanded.tsx/data/*.bak.
+Full lib suite 3894/0 green; clippy clean on my files. Pathspec commits only.
+**DONE + PUSHED** to branch `fix/scoring-correctness-verax` (NOT main; PR #119 open for operator
+review). Two commits: 9e4249e1 (9 scoring fixes + regression tests) + 126b7a4d (test schema-drift
+for @opus-platform-deps's Phase-85 columns). Pre-push full suite passed (no --no-verify). Phase 3
+(Verax-gating) assessed + reported honestly in the PR as a separate cross-repo research follow-up,
+NOT done — fixes are locked by Rust regression tests instead. Peer files (.gitignore/CLAUDE.md/
+ResultItemExpanded.tsx/mcp-4da-server live osv work/.bak) left untouched.
+**Commit Lock**: RELEASED.
+
+### Terminal: opus-platform-deps (started 2026-06-17)
+>> HANDOFF for whoever continues this: .claude/plans/HANDOFF-platform-deps-2026-06-18.md
+   (full state + exact next-step integration points + gotchas + the clean-push worktree recipe).
+   Phases 0-2a SHIPPED @ origin/main d6fad184. Next: Phase 2b blind_spots coverage gate.
+Working on: app-side platform-aware dependency intelligence, Phase 0+1 (Tier A, direct deps),
+shipped SILENT (no UI/relevance change yet). Plan: .claude/plans/platform-aware-dep-intelligence-2026-06-17.md.
+NEW src-tauri/src/ace/platform_cfg.rs (cfg evaluator) + migration phase 85 (project_dependencies
++target_cfg/+platform_active) + parse_cargo_toml target-section parse + thread through upsert.
+**Claims:** src-tauri/src/ace/platform_cfg.rs (NEW), src-tauri/src/ace/scanner.rs,
+src-tauri/src/ace/mod.rs, src-tauri/src/ace_commands/dependencies.rs, src-tauri/src/temporal.rs,
+src-tauri/src/db/migrations.rs.
+NOT touching: keywords.rs/utils.rs/ace/{behavior/decay,context,db}.rs (PEER on fix/scoring-correctness-verax),
+preemption.rs/blind_spots.rs (Phase 2, later).
+Phase 0+1: DONE + PUSHED @ origin/main a43d8500 (clean FF). Migration phase 85.
+Phase 2: DONE — committed @ 0fbdd1d7 on branch fix/scoring-correctness-verax (preemption.rs only,
+pathspec, pre-commit green, 65 preemption tests incl. 2 new). De-prioritises platform-inactive deps'
+advisories to Watch (never hidden; MAX(platform_active)=0 so active-anywhere stays urgent). NOT pushed:
+the branch is @opus-scoring-verax-fix's PR #119 — pushing my commit adds platform-deps into THEIR
+scoring PR. Operator's call: include in PR #119, or cherry-pick 0fbdd1d7 to its own branch/main.
+Claims: + src-tauri/src/preemption.rs.
+FLAG: @opus-scoring-verax-fix fixed my Phase-1 omission of target_cfg/platform_active from TEST-LOCAL
+schemas (temporal.rs:465, project_health.rs:149) in their 126b7a4d — reaches main when PR #119 merges;
+main @ a43d8500 still lacks that test fix.
+**Commit Lock**: RELEASED.
+
+### Terminal: opus-mcp-osv-hydrate (started 2026-06-17)
+Working on: live-testing the "MCP catches a real CVE" demo claim, then fixing the gap it exposed.
+vulnerability_scan WAS catching real advisories (OSV.dev, live) but mapping the `/v1/querybatch`
+index-only object (`{id,modified}`) as the full record — so severity was hardcoded (medium=GHSA,
+unknown=else), fixed_version/references always empty, summary=bare ID, published=modified ts.
+FIX: hydrate matched advisories via `/v1/vulns/{id}` (cache-first 24h, bounded concurrency over the
+vulnerable subset only) + derive severity honestly (CVSS vector->score via NEW cvss.ts, then GHSA
+label, then unknown). Live-verified: js-yaml 5.3/fix 4.2.0, uuid HIGH 7.5/fix 11.1.1 (was mislabeled
+medium), rsa 5.9 Marvin. 113/113 vitest green. Patch-bumped 4.6.1->4.6.2 + CHANGELOG (publish = operator).
+**Claims:** mcp-4da-server/src/live/{osv-scanner,types,cvss}.ts,
+mcp-4da-server/src/__tests__/version-resolution.test.ts, mcp-4da-server/{package.json,CHANGELOG.md}.
+All unclaimed by peers; isolated from the scoring/ace Rust work on this branch. NOT touching peer files.
+**DONE + PUSHED @ origin/fix/scoring-correctness-verax** (sync 0/0). Two commits: cf1375c8 (OSV
+hydration fix, 6 files) + 872c41cf (propagate 4.6.2 to server constructor/--version/server.json after
+check-mcp-server-sync flagged drift; also advanced server.json npm pointer 4.6.0->4.6.2). validate:mcp-sync
+GREEN, 113/113 vitest, npm pack dry-run clean (4da-mcp-server-4.6.2.tgz; cvss.js+osv-scanner.js ship).
+Verified the FIX END-TO-END through the real tool path (executeVulnerabilityScan) on a clean fixture
+(D:\runyourempire\4da-mcp-demo, git repo @ 2fe7d10): 3 critical/17 high, actionable upgrades
+(lodash->4.17.12, minimist->1.2.6, ejs->3.1.7, axios->1.15.2, jsonwebtoken->9.0.0). PUBLISH (npm 4.6.2)
+NOT done — passkey/irreversible, operator's call. Running MCP server still serves OLD code until restart;
+force_refresh:true clears the stale OSV cache (verified, index.ts:140-142). **Commit Lock**: RELEASED.
+ADVERSARIAL AUDIT PASS (2026-06-18, pre-publish): 2 read-only reviewers + own deep-dive. No crashers/injection/
+path-traversal; tarball clean. FIXED 11 issues across 15 files: recommendation now targets MAX fix version +
+honest severity breakdown (was "fixes 10 critical"->4.17.12 under-fix); withdrawn-advisory drop; H1 knowledge_gaps
+reads item_id/action_type (live DB proved action/source_item_id are 0/204 dead cols -> fixed READER not writer, +
+unmasked the test that seeded dead cols); H2 scoped-npm-downloads (bulk endpoint 400s on @scope, now per-pkg);
+M1 LIKE escape+min-len (knowledge_gaps+developer_dna); M2 vulnerableCount=full set; M3 dead code; doctor tech_radar
+string; index.ts "Internal Use Only" header; README opt-in-OpenAI-embeddings privacy caveat; dropped maps+test-setup
+from tarball (221->117 files); L4 stderr log on silent DB-init failure. +7 cvss/semver tests (120/120 green),
+sync GREEN, live-reverified on fixture. PUSHED @ origin c4190bb1 (correctness) + ffe45a39 (publish hygiene),
+sync 0/0. PUBLISHED to npm: @4da/mcp-server@4.6.2 is LIVE (dist-tag latest; fresh `npx @4da/mcp-server@4.6.2
+--version` verified). Operator-provided token used for the publish and flagged to them for revocation; temp
+credential file removed, no .npmrc leaked into the repo. **Commit Lock**: RELEASED.
+
+### Terminal: opus-mcp-recall (started 2026-06-17)
+Working on: building ON the peer's UNCOMMITTED ranked-lexical recall slice (recall.ts +
+agent-memory/decision-*/what-should-i-know wiring — NOT mine, leaving intact). TWO things:
+(1) unify what_should_i_know's advisory/window/news relevance onto the alias-aware scorer +
+per-query precompute in recall.ts (DONE, 83 tests green). (2) OPTIONAL semantic recall for
+agent_memory: provider-backed embeddings (Ollama/OpenAI, opt-in via settings.embedding/env),
+JS cosine, lazy backfill into NEW embedding columns, graceful fallback to ranked_lexical when no
+provider/offline (recall_mode reports semantic|hybrid|ranked_lexical). ZERO new npm deps; query +
+rows embedded by the SAME provider so the vector space is self-consistent. recall_by_tags also
+routed onto the ranked scorer.
+(3) Extended semantic recall to developer_decisions: shared embed/cache core in embeddings.ts
+(semanticScores, generic over table), new tools/decision-recall.ts (lexical + hybrid), wired into
+check_decision_alignment + decision_memory.check_alignment. HARD conflicts stay lexical/alias-grounded;
+semantic only adds advisory possible_conflicts (never flips `aligned`). agent-memory refactored onto
+the shared core.
+(4) Extended hybrid recall to what_should_i_know wisdom (decisions + memories), per-table blend,
+wisdom_recall_mode honesty field. CRITICAL: exported shared decisionEmbedText/memoryEmbedText so the
+briefing and the decision/memory tools write IDENTICAL vectors to the shared embedding columns (no
+cache thrash). 103 tests green (build+sync+sizes+doctor all pass).
+**Claims:** mcp-4da-server/src/tools/{recall,what-should-i-know,agent-memory,decision-enforcement,
+decision-memory,decision-recall}.ts, mcp-4da-server/src/{db,embeddings}.ts, + __tests__/{embeddings,
+agent-memory-semantic,decision-semantic,recall-scorer}.test.ts + tools.test.ts (one await fix).
+**Commit Lock**: RELEASED. DONE + PUSHED @ origin/main 56cbcf35 (0/0 verified). 16-file MCP slice
+(peer lexical bridge + my 4 hybrid increments + embeddings core + 26 tests). Pathspec commit — peers'
+.gitignore/CLAUDE.md/ResultItemExpanded.tsx/.bak files left untouched. TERMINALS.md NOT committed
+(.claude now gitignored via peer's .gitignore WIP; it stays a working-tree coordination artifact).
+
 <!-- opus-coldstart-brief FOLLOW-UP (2026-06-16): precision leak from the live analysis. Short ASCII
      titles were forced to "en" by language_detect's deliberate guard (protects "Homelab Diagram"), so
      short ASCII Romance-language posts w/o accents (Spanish "Busco un Selector de Colores") slipped the

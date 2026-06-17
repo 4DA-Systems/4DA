@@ -446,3 +446,13 @@ fn test_empty_content() {
         title_only
     );
 }
+
+#[test]
+fn test_count_word_occurrences_unicode_boundary() {
+    // Bug E regression: UTF-8 continuation bytes must not count as word boundaries.
+    assert_eq!(count_word_occurrences("go", "иgo"), 0);
+    assert_eq!(count_word_occurrences("go", "goи"), 0);
+    // ASCII word boundaries still count.
+    assert_eq!(count_word_occurrences("go", "go here, let us go"), 2);
+    assert_eq!(count_word_occurrences("go", "argo"), 0);
+}

@@ -293,6 +293,12 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
     conn.execute_batch("ALTER TABLE topic_affinities ADD COLUMN last_decay_at TEXT DEFAULT NULL;")
         .ok(); // ok() because column may already exist on subsequent runs
 
+    // detected_tech needs the same re-baseline column so its half-life decay is
+    // incremental, not compounding (the sibling topic decay already has it). Without
+    // it, apply_detected_tech_decay had no place to record when it last ran.
+    conn.execute_batch("ALTER TABLE detected_tech ADD COLUMN last_decay_at TEXT DEFAULT NULL;")
+        .ok(); // ok() because column may already exist on subsequent runs
+
     // Phase 1D migration: Ensure interactions table has ContextEngine columns
     // If the interactions table was created before the schema unification,
     // it may be missing source_item_id and action columns.

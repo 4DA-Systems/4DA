@@ -39,25 +39,42 @@ pub(crate) fn topic_overlaps(a: &str, b: &str) -> bool {
         return false;
     }
     let split_chars = |c: char| c == '-' || c == '/' || c == '.' || c == '_' || c == ' ';
-    let parts_a: Vec<&str> = a.split(split_chars).filter(|p| p.len() >= 3).collect();
-    let parts_b: Vec<&str> = b.split(split_chars).filter(|p| p.len() >= 3).collect();
+    // Split the LOWERCASED strings — comparing original-case parts made the
+    // part-overlap path case-sensitive, so "rust" vs "Rust-Lang" read as no
+    // overlap and the on-domain item caught the off-domain penalty (bug D).
+    let parts_a: Vec<&str> = a_lower
+        .split(split_chars)
+        .filter(|p| p.len() >= 3)
+        .collect();
+    let parts_b: Vec<&str> = b_lower
+        .split(split_chars)
+        .filter(|p| p.len() >= 3)
+        .collect();
 
     // Check if any part of a matches any part of b exactly
     parts_a
         .iter()
         .any(|pa| parts_b.iter().any(|pb| pa == pb))
-        // Also check whole-string against individual parts
-        || parts_b.contains(&a)
-        || parts_a.contains(&b)
+        // Also check whole-string against individual parts (lowercased)
+        || parts_b.contains(&a_lower.as_str())
+        || parts_a.contains(&b_lower.as_str())
 }
 
 /// Check if a short term appears as a whole word (bounded by non-alphanumeric chars)
 pub(crate) fn has_word_boundary_match(text: &str, term: &str) -> bool {
     for (i, _) in text.match_indices(term) {
-        let before_ok = i == 0 || !text.as_bytes()[i - 1].is_ascii_alphanumeric();
+        // Use CHAR boundaries, not raw bytes. `as_bytes()[i-1].is_ascii_alphanumeric()`
+        // is false for any UTF-8 continuation byte, so a non-ASCII letter glued to the
+        // term (e.g. "иgo") was treated as a word boundary and "go" matched (bug E).
+        let before_ok = text[..i]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_alphanumeric());
         let after_pos = i + term.len();
-        let after_ok =
-            after_pos >= text.len() || !text.as_bytes()[after_pos].is_ascii_alphanumeric();
+        let after_ok = text[after_pos..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric());
         if before_ok && after_ok {
             return true;
         }
@@ -139,5 +156,31 @@ mod tests {
         // Non-aliases should still be rejected
         assert!(!topic_overlaps("rust", "python"));
         assert!(!topic_overlaps("docker", "kubernetes"));
+    }
+
+    #[test]
+    fn test_topic_overlaps_case_insensitive_parts() {
+        // Bug D regression: the part-overlap path must be case-insensitive.
+        // declared_tech/detected_tech are NOT guaranteed lowercase.
+        assert!(topic_overlaps("rust", "Rust-Lang"));
+        assert!(topic_overlaps("react", "React-Native"));
+        assert!(topic_overlaps("next", "Next.js"));
+        assert!(topic_overlaps("RUST", "rust-async"));
+        // Still must reject genuine non-overlaps regardless of case.
+        assert!(!topic_overlaps("frustrating", "Rust"));
+        assert!(!topic_overlaps("Digital", "git"));
+    }
+
+    #[test]
+    fn test_word_boundary_match_unicode() {
+        // Bug E regression: a non-ASCII letter glued to the term is NOT a boundary.
+        assert!(!has_word_boundary_match("иgo", "go"));
+        assert!(!has_word_boundary_match("goи", "go"));
+        assert!(!has_word_boundary_match("café2", "2"));
+        // Existing ASCII behavior preserved.
+        assert!(!has_word_boundary_match("argo", "go"));
+        assert!(has_word_boundary_match("go here", "go"));
+        assert!(has_word_boundary_match("a go b", "go"));
+        assert!(has_word_boundary_match("go", "go"));
     }
 }

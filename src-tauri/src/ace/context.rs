@@ -473,7 +473,10 @@ pub fn store_detected_context(
                 confidence = MAX(excluded.confidence, detected_tech.confidence),
                 evidence = CASE WHEN excluded.confidence > detected_tech.confidence
                     THEN excluded.evidence ELSE detected_tech.evidence END,
-                updated_at = datetime('now')",
+                updated_at = datetime('now'),
+                -- Re-detection re-baselines decay: clear last_decay_at so the next
+                -- decay run measures from the fresh updated_at, not a stale baseline.
+                last_decay_at = NULL",
             rusqlite::params![
                 t.name,
                 category_str,

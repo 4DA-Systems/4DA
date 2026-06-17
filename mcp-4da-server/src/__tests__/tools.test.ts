@@ -1181,10 +1181,13 @@ describe("4DA MCP Tool Handlers", () => {
         (g) => g.dependency === "serde",
       );
 
-      // Click the item (record interaction)
+      // Click the item (record interaction). The app records engagement in the
+      // canonical interactions.item_id / .action_type columns — knowledge_gaps must
+      // read THOSE to suppress engaged items (the older source_item_id/action
+      // columns are unused; seeding them would silently test nothing).
       rawDb
         .prepare(
-          "INSERT INTO interactions (source_item_id, action, item_source, signal_strength) VALUES (?, ?, ?, ?)",
+          "INSERT INTO interactions (item_id, action_type, item_source, signal_strength) VALUES (?, ?, ?, ?)",
         )
         .run(itemId, "click", "hackernews", 0.3);
 
@@ -1194,14 +1197,16 @@ describe("4DA MCP Tool Handlers", () => {
         (g) => g.dependency === "serde",
       );
 
-      // The gap should have fewer missed items or be gone entirely
+      // The clicked item must be suppressed: either the serde gap is gone, or it
+      // no longer lists the clicked item (strictly fewer missed items than before).
       if (serdeGapBefore) {
         if (serdeGapAfter) {
           expect(serdeGapAfter.missed_count).toBeLessThan(
             serdeGapBefore.missed_count,
           );
+          expect(serdeGapAfter.missed_items.some((i) => i.id === itemId)).toBe(false);
         }
-        // Otherwise it was completely resolved -- also a valid outcome
+        // Otherwise it was completely resolved -- also a valid outcome.
       }
     });
   });

@@ -234,6 +234,22 @@ pub(crate) fn compute_necessity(inputs: &NecessityInputs) -> NecessityResult {
 // Path evaluators
 // ============================================================================
 
+/// Map a CVSS base score to a severity bucket. Mirrors the thresholds used by
+/// `extract_cvss_from_content` in the pipeline so the numeric fallback agrees with
+/// the string severity when both are present.
+fn severity_from_cvss(score: f32) -> String {
+    if score >= 9.0 {
+        "critical"
+    } else if score >= 7.0 {
+        "high"
+    } else if score >= 4.0 {
+        "medium"
+    } else {
+        "low"
+    }
+    .to_string()
+}
+
 /// Security CVE path (highest necessity).
 fn try_security_path(
     inputs: &NecessityInputs,
@@ -254,11 +270,18 @@ fn try_security_path(
         return None;
     }
 
-    let severity = inputs
+    // Severity precedence: explicit CVE severity > classifier signal priority >
+    // CVSS base score (numeric fallback) > "medium". The CVSS fallback closes bug J:
+    // a real critical CVE that reaches this path with no priority signal (e.g. a
+    // dev-only dependency that didn't trip the classifier) was scored "medium" 0.60
+    // even when the advisory carried CVSS 9.8.
+    let severity: String = inputs
         .cve_severity
         .as_deref()
         .or(inputs.signal_priority.as_deref())
-        .unwrap_or("medium");
+        .map(str::to_string)
+        .or_else(|| inputs.cvss_score.map(severity_from_cvss))
+        .unwrap_or_else(|| "medium".to_string());
 
     if has_dep_match {
         let (score, urgency) = match severity.to_lowercase().as_str() {

@@ -1,6 +1,6 @@
 {
   "name": "@4da/mcp-server",
-  "version": "4.6.1",
+  "version": "4.6.2",
   "mcpName": "io.github.runyourempire/4da-mcp-server",
   "description": "Dependency intelligence for AI coding agents. Live CVE scanning, dependency health, upgrade planning, ecosystem news, decision memory — zero config, privacy-first. 9 tools standalone, 14 total with desktop app.",
   "type": "module",
@@ -13,6 +13,8 @@
   "files": [
     "dist",
     "!dist/__tests__",
+    "!dist/test-setup.*",
+    "!dist/**/*.map",
     "README.md",
     "LICENSE"
   ],

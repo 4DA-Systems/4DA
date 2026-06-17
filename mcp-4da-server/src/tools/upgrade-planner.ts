@@ -146,9 +146,8 @@ export async function executeUpgradePlanner(
       }
     }
 
-    // Skip if no upgrade needed
+    // Skip if no upgrade needed (no vuln, not deprecated, not behind => no reasons)
     if (reasons.length === 0) continue;
-    if (dep.versionsBehind?.label === "up-to-date" && !dep.deprecated && !vulns) continue;
 
     const label = dep.versionsBehind?.label;
     const upgradeType: UpgradeRecommendation["upgradeType"] =

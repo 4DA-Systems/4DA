@@ -110,30 +110,45 @@ export class NpmRegistry {
     const result = new Map<string, number>();
     if (names.length === 0) return result;
 
-    // Batch into groups of DOWNLOADS_BATCH_SIZE
-    for (let i = 0; i < names.length; i += DOWNLOADS_BATCH_SIZE) {
-      const batch = names.slice(i, i + DOWNLOADS_BATCH_SIZE);
+    // npm's bulk endpoint rejects scoped packages outright — a single "@scope/pkg"
+    // in a comma-joined request fails the WHOLE batch ("scoped packages are not
+    // currently supported in bulk lookups"), which previously zeroed downloads for
+    // every package in the group. Split them: unscoped go through the bulk endpoint,
+    // scoped are fetched individually (the single-package endpoint accepts them).
+    const scoped = names.filter((n) => n.startsWith("@"));
+    const unscoped = names.filter((n) => !n.startsWith("@"));
 
+    for (let i = 0; i < unscoped.length; i += DOWNLOADS_BATCH_SIZE) {
       if (!this.rateLimiter.canProceed("npm")) break;
-
+      const batch = unscoped.slice(i, i + DOWNLOADS_BATCH_SIZE);
       try {
         this.rateLimiter.consume("npm");
-
-        const scopedNames = batch.map((n) => encodeURIComponent(n));
-        const url = `${NPM_DOWNLOADS_URL}/${scopedNames.join(",")}`;
-
+        const url = `${NPM_DOWNLOADS_URL}/${batch.map((n) => encodeURIComponent(n)).join(",")}`;
         const response = await fetchWithTimeout(url, {}, NPM_TIMEOUT_MS);
         if (!response.ok) continue;
-
         const data = (await response.json()) as NpmDownloadsResponse;
-
         for (const [pkg, info] of Object.entries(data)) {
           if (info && typeof info.downloads === "number") {
             result.set(pkg, info.downloads);
           }
         }
       } catch {
-        // Batch failure — continue with remaining batches
+        // Batch failure — continue with remaining batches.
+      }
+    }
+
+    // Scoped packages, one request each. The "@scope/pkg" path is sent literally
+    // (encoding the "/" breaks it); the single endpoint returns { downloads, ... }.
+    for (const name of scoped) {
+      if (!this.rateLimiter.canProceed("npm")) break;
+      try {
+        this.rateLimiter.consume("npm");
+        const response = await fetchWithTimeout(`${NPM_DOWNLOADS_URL}/${name}`, {}, NPM_TIMEOUT_MS);
+        if (!response.ok) continue;
+        const data = (await response.json()) as { downloads?: number };
+        if (typeof data.downloads === "number") result.set(name, data.downloads);
+      } catch {
+        // Skip this package's downloads — best-effort signal.
       }
     }
 

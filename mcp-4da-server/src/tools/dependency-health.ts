@@ -99,13 +99,17 @@ export async function executeDependencyHealth(
   // Compute stats
   let outdated = 0;
   let deprecated = 0;
-  let vulnerable = 0;
 
   for (const dep of registryData) {
     if (dep.versionsBehind && dep.versionsBehind.label !== "up-to-date") outdated++;
     if (dep.deprecated) deprecated++;
-    if (vulnMap.has(dep.name)) vulnerable++;
   }
+
+  // Count vulnerable packages from the full scanned set (the OSV scan covers
+  // transitives), so the "N vulnerable" summary agrees with the severity
+  // breakdown shown beside it. registryData is direct deps only — counting there
+  // undercounts CVEs that live in transitive dependencies.
+  const vulnerable = vulnMap.size;
 
   // Sort
   const sortBy = params.sort_by ?? "risk";

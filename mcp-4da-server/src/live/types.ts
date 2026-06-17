@@ -15,22 +15,32 @@ export interface ResolvedDependency {
   platformActive: boolean;
 }
 
+/**
+ * An OSV record. The `/v1/querybatch` endpoint returns only `{ id, modified }`
+ * per vulnerability (a lightweight index); the rich fields are populated only
+ * after hydrating each advisory via `/v1/vulns/{id}`. Hence every field beyond
+ * `id` is optional — consumers must tolerate the un-hydrated shape.
+ */
 export interface OsvVulnerability {
   id: string;
-  summary: string;
-  details: string;
-  aliases: string[];
-  severity: Array<{ type: string; score: string }>;
-  affected: Array<{
+  summary?: string;
+  details?: string;
+  aliases?: string[];
+  severity?: Array<{ type: string; score: string }>;
+  affected?: Array<{
     package: { name: string; ecosystem: string };
     ranges: Array<{
       type: string;
       events: Array<{ introduced?: string; fixed?: string }>;
     }>;
   }>;
-  references: Array<{ type: string; url: string }>;
-  published: string;
-  modified: string;
+  references?: Array<{ type: string; url: string }>;
+  /** GitHub-advisory severity label: LOW | MODERATE | HIGH | CRITICAL. */
+  database_specific?: { severity?: string };
+  /** Set (to an RFC3339 timestamp) when the advisory has been withdrawn/retracted. */
+  withdrawn?: string;
+  published?: string;
+  modified?: string;
 }
 
 export interface VulnerabilityEntry {
