@@ -600,7 +600,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 84;
+        const TARGET_VERSION: i64 = 85;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2993,6 +2993,27 @@ impl Database {
                                  ON dependency_edges (project_path, parent_package);
                              CREATE INDEX IF NOT EXISTS idx_dep_edges_child
                                  ON dependency_edges (project_path, child_package);",
+                        )?;
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 85 {
+                Self::run_versioned_migration(
+                    &conn,
+                    84,
+                    85,
+                    "Phase 85: platform-aware dependency relevance (target_cfg, platform_active)",
+                    |c| {
+                        // Platform relevance for dependency advisories. `target_cfg`
+                        // is the gating spec (e.g. cfg(windows)) or NULL for
+                        // unconditional deps; `platform_active` is 0 when the dep is
+                        // not built on the host. Default 1 keeps every existing row
+                        // visible until the scanner populates these (ships silent).
+                        c.execute_batch(
+                            "ALTER TABLE project_dependencies ADD COLUMN target_cfg TEXT;
+                             ALTER TABLE project_dependencies ADD COLUMN platform_active INTEGER DEFAULT 1;",
                         )?;
                         Ok(())
                     },
