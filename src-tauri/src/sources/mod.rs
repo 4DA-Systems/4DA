@@ -32,6 +32,7 @@ pub mod lobsters;
 pub mod mastodon;
 pub mod npm_registry;
 pub mod osv;
+mod osv_live;
 mod osv_types;
 pub mod papers_with_code;
 pub mod producthunt;
