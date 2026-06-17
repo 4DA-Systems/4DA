@@ -3074,5 +3074,19 @@
   "validation.videos": "वीडियो",
   "calibration.onboarding.gradeStartingPoint": "यह आपका शुरुआती स्कोर है — जैसे-जैसे 4DA आपकी पसंद सीखता है, यह बढ़ता है।",
   "language.change": "भाषा बदलें",
-  "license.trialBadge": "Signal परीक्षण"
+  "license.trialBadge": "Signal परीक्षण",
+  "preemption.otherTargets.title": "अन्य बिल्ड टारगेट",
+  "preemption.otherTargets.show_one": "{{count}} सलाह केवल अन्य बिल्ड टारगेट पर लागू होती है",
+  "preemption.otherTargets.show_other": "{{count}} सलाहें केवल अन्य बिल्ड टारगेट पर लागू होती हैं",
+  "preemption.otherTargets.expand": "दिखाएँ",
+  "preemption.otherTargets.hide": "छिपाएँ",
+  "preemption.otherTargets.badge": "अन्य टारगेट",
+  "preemption.otherTargets.badgeHint": "ऐसे बिल्ड टारगेट को प्रभावित करता है जिसे आप इस मशीन पर बिल्ड नहीं करते — दिखाया गया, पर कम प्राथमिकता दी गई।",
+  "blindspots.otherTargets.title": "अन्य बिल्ड टारगेट",
+  "blindspots.otherTargets.show_one": "{{count}} निर्भरता केवल अन्य बिल्ड टारगेट पर लागू होती है",
+  "blindspots.otherTargets.show_other": "{{count}} निर्भरताएँ केवल अन्य बिल्ड टारगेट पर लागू होती हैं",
+  "blindspots.otherTargets.expand": "दिखाएँ",
+  "blindspots.otherTargets.hide": "छिपाएँ",
+  "blindspots.otherTargets.badge": "अन्य टारगेट",
+  "blindspots.otherTargets.badgeHint": "केवल ऐसे टारगेट के लिए बिल्ड होती है जिसे आप इस मशीन पर बिल्ड नहीं करते — दिखाया गया, पर कम प्राथमिकता दी गई।"
 }

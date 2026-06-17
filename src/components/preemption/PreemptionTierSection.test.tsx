@@ -35,7 +35,7 @@ const makeItem = (id: string, title: string): EvidenceItem => ({
   suggested_actions: [],
   precedents: [],
   refutation_condition: null,
-  lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false },
+  lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: false },
   created_at: BigInt(Date.now()),
   expires_at: null,
 });

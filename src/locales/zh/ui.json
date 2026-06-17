@@ -3007,5 +3007,19 @@
   "validation.videos": "视频",
   "calibration.onboarding.gradeStartingPoint": "这是你的初始评分 — 随着 4DA 了解你的关注点，它会不断提升。",
   "language.change": "切换语言",
-  "license.trialBadge": "Signal 试用"
+  "license.trialBadge": "Signal 试用",
+  "preemption.otherTargets.title": "其他构建目标",
+  "preemption.otherTargets.show_one": "{{count}} 条公告仅适用于其他构建目标",
+  "preemption.otherTargets.show_other": "{{count}} 条公告仅适用于其他构建目标",
+  "preemption.otherTargets.expand": "显示",
+  "preemption.otherTargets.hide": "隐藏",
+  "preemption.otherTargets.badge": "其他目标",
+  "preemption.otherTargets.badgeHint": "影响你在本机上不构建的目标——会显示，但已降低优先级。",
+  "blindspots.otherTargets.title": "其他构建目标",
+  "blindspots.otherTargets.show_one": "{{count}} 个依赖项仅适用于其他构建目标",
+  "blindspots.otherTargets.show_other": "{{count}} 个依赖项仅适用于其他构建目标",
+  "blindspots.otherTargets.expand": "显示",
+  "blindspots.otherTargets.hide": "隐藏",
+  "blindspots.otherTargets.badge": "其他目标",
+  "blindspots.otherTargets.badgeHint": "仅为你在本机上不构建的目标而构建——会显示，但已降低优先级。"
 }

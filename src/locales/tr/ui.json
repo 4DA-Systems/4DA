@@ -3066,5 +3066,19 @@
   "weekly.topTopics": "Üst öğrenilen konular",
   "calibration.onboarding.gradeStartingPoint": "Bu başlangıç puanınız — 4DA neyle ilgilendiğinizi öğrendikçe yükselir.",
   "language.change": "Dili değiştir",
-  "license.trialBadge": "Signal deneme"
+  "license.trialBadge": "Signal deneme",
+  "preemption.otherTargets.title": "Diğer derleme hedefleri",
+  "preemption.otherTargets.show_one": "{{count}} uyarı yalnızca diğer derleme hedeflerini ilgilendiriyor",
+  "preemption.otherTargets.show_other": "{{count}} uyarı yalnızca diğer derleme hedeflerini ilgilendiriyor",
+  "preemption.otherTargets.expand": "Göster",
+  "preemption.otherTargets.hide": "Gizle",
+  "preemption.otherTargets.badge": "Diğer hedef",
+  "preemption.otherTargets.badgeHint": "Bu makinede derlemediğiniz bir derleme hedefini etkiler — gösterilir, ancak önceliği düşürülür.",
+  "blindspots.otherTargets.title": "Diğer derleme hedefleri",
+  "blindspots.otherTargets.show_one": "{{count}} bağımlılık yalnızca diğer derleme hedeflerini ilgilendiriyor",
+  "blindspots.otherTargets.show_other": "{{count}} bağımlılık yalnızca diğer derleme hedeflerini ilgilendiriyor",
+  "blindspots.otherTargets.expand": "Göster",
+  "blindspots.otherTargets.hide": "Gizle",
+  "blindspots.otherTargets.badge": "Diğer hedef",
+  "blindspots.otherTargets.badgeHint": "Yalnızca bu makinede derlemediğiniz bir hedef için derlenir — gösterilir, ancak önceliği düşürülür."
 }

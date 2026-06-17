@@ -3119,5 +3119,19 @@
   "validation.videos": "видео",
   "calibration.onboarding.gradeStartingPoint": "Это ваш начальный балл — он растёт по мере того, как 4DA узнаёт, что вам важно.",
   "language.change": "Сменить язык",
-  "license.trialBadge": "Пробный Signal"
+  "license.trialBadge": "Пробный Signal",
+  "preemption.otherTargets.title": "Другие цели сборки",
+  "preemption.otherTargets.show_one": "{{count}} рекомендация относится только к другим целям сборки",
+  "preemption.otherTargets.show_other": "{{count}} рекомендаций относятся только к другим целям сборки",
+  "preemption.otherTargets.expand": "Показать",
+  "preemption.otherTargets.hide": "Скрыть",
+  "preemption.otherTargets.badge": "Другая цель",
+  "preemption.otherTargets.badgeHint": "Затрагивает цель сборки, которую вы не собираете на этом устройстве — показано, но с пониженным приоритетом.",
+  "blindspots.otherTargets.title": "Другие цели сборки",
+  "blindspots.otherTargets.show_one": "{{count}} зависимость относится только к другим целям сборки",
+  "blindspots.otherTargets.show_other": "{{count}} зависимостей относятся только к другим целям сборки",
+  "blindspots.otherTargets.expand": "Показать",
+  "blindspots.otherTargets.hide": "Скрыть",
+  "blindspots.otherTargets.badge": "Другая цель",
+  "blindspots.otherTargets.badgeHint": "Собирается только для цели, которую вы не собираете на этом устройстве — показано, но с пониженным приоритетом."
 }

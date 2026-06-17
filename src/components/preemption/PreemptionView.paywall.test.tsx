@@ -85,7 +85,7 @@ function makeFloorItem(id: string, urgency: string) {
     suggested_actions: [],
     precedents: [],
     refutation_condition: null,
-    lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false },
+    lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: false },
     created_at: 0,
     expires_at: null,
   };

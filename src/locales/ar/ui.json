@@ -3180,5 +3180,19 @@
   "validation.videos": "مقاطع فيديو",
   "calibration.onboarding.gradeStartingPoint": "هذه نقطة انطلاقك — وترتفع كلما تعلّم 4DA ما يهمّك.",
   "language.change": "تغيير اللغة",
-  "license.trialBadge": "تجربة Signal"
+  "license.trialBadge": "تجربة Signal",
+  "preemption.otherTargets.title": "أهداف بناء أخرى",
+  "preemption.otherTargets.show_one": "تنبيه واحد ({{count}}) ينطبق على أهداف بناء أخرى فقط",
+  "preemption.otherTargets.show_other": "{{count}} من التنبيهات تنطبق على أهداف بناء أخرى فقط",
+  "preemption.otherTargets.expand": "إظهار",
+  "preemption.otherTargets.hide": "إخفاء",
+  "preemption.otherTargets.badge": "هدف آخر",
+  "preemption.otherTargets.badgeHint": "يؤثّر على هدف بناء لا تبنيه على هذا الجهاز — يُعرَض لكن بأولوية أقل.",
+  "blindspots.otherTargets.title": "أهداف بناء أخرى",
+  "blindspots.otherTargets.show_one": "تبعية واحدة ({{count}}) تنطبق على أهداف بناء أخرى فقط",
+  "blindspots.otherTargets.show_other": "{{count}} من التبعيات تنطبق على أهداف بناء أخرى فقط",
+  "blindspots.otherTargets.expand": "إظهار",
+  "blindspots.otherTargets.hide": "إخفاء",
+  "blindspots.otherTargets.badge": "هدف آخر",
+  "blindspots.otherTargets.badgeHint": "يُبنى فقط لهدف لا تبنيه على هذا الجهاز — يُعرَض لكن بأولوية أقل."
 }

@@ -2822,5 +2822,19 @@
   "settings.llm.title": "Fournisseur d'IA",
   "calibration.onboarding.gradeStartingPoint": "C’est votre score de départ : il augmente à mesure que 4DA apprend ce qui compte pour vous.",
   "language.change": "Changer de langue",
-  "license.trialBadge": "Essai Signal"
+  "license.trialBadge": "Essai Signal",
+  "preemption.otherTargets.title": "Autres cibles de compilation",
+  "preemption.otherTargets.show_one": "{{count}} avis concerne uniquement d’autres cibles de compilation",
+  "preemption.otherTargets.show_other": "{{count}} avis concernent uniquement d’autres cibles de compilation",
+  "preemption.otherTargets.expand": "Afficher",
+  "preemption.otherTargets.hide": "Masquer",
+  "preemption.otherTargets.badge": "Autre cible",
+  "preemption.otherTargets.badgeHint": "Concerne une cible de compilation que vous ne compilez pas sur cette machine — affiché, mais déprioritisé.",
+  "blindspots.otherTargets.title": "Autres cibles de compilation",
+  "blindspots.otherTargets.show_one": "{{count}} dépendance concerne uniquement d’autres cibles de compilation",
+  "blindspots.otherTargets.show_other": "{{count}} dépendances concernent uniquement d’autres cibles de compilation",
+  "blindspots.otherTargets.expand": "Afficher",
+  "blindspots.otherTargets.hide": "Masquer",
+  "blindspots.otherTargets.badge": "Autre cible",
+  "blindspots.otherTargets.badgeHint": "Compilé uniquement pour une cible que vous ne compilez pas sur cette machine — affiché, mais déprioritisé."
 }
