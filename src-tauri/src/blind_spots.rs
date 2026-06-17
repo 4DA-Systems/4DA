@@ -91,6 +91,22 @@ pub struct UncoveredDep {
     /// Each entry is like "npm_registry: checked 2h ago" or "osv: adapter_failing".
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub adapters_searched: Vec<AdapterStatus>,
+    /// Whether this dependency is built on the host platform. `false` only when
+    /// the dep is gated to a target the user does not build (e.g. a
+    /// `cfg(not(windows))` crate on Windows) AND inactive in EVERY tracked
+    /// project/target. Platform-inactive deps are de-prioritised (urgency capped
+    /// to Watch in `uncovered_dep_to_evidence_item`) but never hidden — a
+    /// cross-platform dev still reaches them. Defaults to `true` (active/visible)
+    /// for back-compat with pre-Phase-2b reports and pre-Phase-85 DBs.
+    #[serde(default = "default_platform_active")]
+    pub platform_active: bool,
+}
+
+/// Default for `UncoveredDep::platform_active` — active/visible. Keeps every
+/// existing report and pre-Phase-85 DB at full visibility until a confidently
+/// platform-inactive signal lowers it.
+fn default_platform_active() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -537,6 +553,49 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
     }
 
     Ok(result)
+}
+
+/// Check whether `project_dependencies` has the `platform_active` column.
+///
+/// Added in the Phase 85 migration. When absent (old/test DBs), the platform
+/// relevance gate is a graceful no-op — every dep stays fully visible.
+/// Mirrors `preemption::has_platform_active_column`.
+fn has_platform_active_column(conn: &rusqlite::Connection) -> bool {
+    conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'platform_active'",
+        [],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|count| count > 0)
+    .unwrap_or(false)
+}
+
+/// Lowercased names of packages whose EVERY tracked instance is inactive on the
+/// host platform (e.g. a `cfg(not(windows))` crate on a Windows machine). A
+/// package active in even one project/target is NOT included — relevance is
+/// "active in any target you build", so we never de-prioritise a dep the user
+/// actually ships somewhere. Empty when the column is absent (pre-Phase-85 DBs).
+///
+/// De-prioritise, NEVER exclude: this set only caps urgency to Watch in
+/// `uncovered_dep_to_evidence_item`; the dep is still surfaced. Mirrors
+/// `preemption::load_platform_inactive_packages`.
+fn load_platform_inactive_packages(
+    conn: &rusqlite::Connection,
+) -> std::collections::HashSet<String> {
+    use std::collections::HashSet;
+    if !has_platform_active_column(conn) {
+        return HashSet::new();
+    }
+    let mut stmt = match conn.prepare(
+        "SELECT LOWER(package_name) FROM project_dependencies
+         GROUP BY LOWER(package_name) HAVING MAX(platform_active) = 0",
+    ) {
+        Ok(s) => s,
+        Err(_) => return HashSet::new(),
+    };
+    stmt.query_map([], |row| row.get::<_, String>(0))
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
 }
 
 /// Map ecosystem names to the source adapter types that should cover them.
@@ -1117,6 +1176,13 @@ fn find_uncovered_deps(
         "find_uncovered_deps: coverage after SQL queries"
     );
 
+    // Packages inactive on the host platform — their coverage gaps get
+    // de-prioritised (urgency capped to Watch) in the EvidenceItem conversion:
+    // surfaced, but not urgent for a target the user doesn't build. De-prioritise,
+    // never exclude — a cross-platform dev still reaches them. Empty on pre-Phase-85
+    // DBs (graceful no-op). Loaded once; membership keyed on lowercased bare name.
+    let platform_inactive_pkgs = load_platform_inactive_packages(conn);
+
     let mut uncovered = Vec::new();
     let mut weak_match_deps: Vec<UncoveredDep> = Vec::new();
     for dep in &eligible_deps {
@@ -1152,6 +1218,8 @@ fn find_uncovered_deps(
                 match_type: "title_heuristic".to_string(),
                 coverage_reason: Some("weak_matches_only".to_string()),
                 adapters_searched: adapter_statuses_for_ecosystem(conn, &dep_info.ecosystem),
+                platform_active: !platform_inactive_pkgs
+                    .contains(&dep_info.package_name.to_lowercase()),
             });
             continue;
         }
@@ -1216,6 +1284,8 @@ fn find_uncovered_deps(
                 match_type: "none".to_string(),
                 coverage_reason: Some(reason),
                 adapters_searched: adapter_statuses_for_ecosystem(conn, &dep_info.ecosystem),
+                platform_active: !platform_inactive_pkgs
+                    .contains(&dep_info.package_name.to_lowercase()),
             });
             continue;
         }
@@ -1242,6 +1312,8 @@ fn find_uncovered_deps(
             match_type: best_mt.to_string(),
             coverage_reason: None, // has signals, coverage isn't the issue
             adapters_searched: adapter_statuses_for_ecosystem(conn, &dep_info.ecosystem),
+            platform_active: !platform_inactive_pkgs
+                .contains(&dep_info.package_name.to_lowercase()),
         });
     }
 
@@ -2694,6 +2766,31 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         (title, explanation_parts.join(" "))
     };
 
+    // Consequence-adjusted urgency: security/breaking elevates regardless of
+    // volume; real release/analysis activity keeps the risk-based urgency;
+    // deps whose only unseen signals are general discussion are capped at
+    // Medium. Unmonitored deps (no breakdown) keep their risk-based urgency.
+    let urgency = match breakdown {
+        // Urgency ordinals: Critical < High < Medium < Watch, so the MORE
+        // urgent of two is the smaller one — use min() to mean "at least High"
+        // (keeps Critical if the risk is already critical).
+        Some(b) if b.security > 0 => Urgency::High.min(risk_level_to_urgency(&d.risk_level)),
+        Some(b) if b.releases > 0 || b.analyses > 0 => risk_level_to_urgency(&d.risk_level),
+        Some(_) => cap_urgency_at_medium(risk_level_to_urgency(&d.risk_level)),
+        None => risk_level_to_urgency(&d.risk_level),
+    };
+    // Platform-relevance de-prioritisation (Phase 2b): a dep inactive on every
+    // target the user builds (e.g. a `cfg(not(windows))` crate on Windows) has
+    // its coverage-gap urgency capped to Watch — surfaced, never urgent, and
+    // never hidden (a cross-platform dev still reaches it). Mirrors the preemption
+    // de-prioritisation. `platform_active` defaults true, so this is a no-op until
+    // the scanner + Phase-85 columns confidently mark a dep inactive.
+    let urgency = if d.platform_active {
+        urgency
+    } else {
+        Urgency::Watch
+    };
+
     // Synthesize at least one inferred citation so the schema's
     // "evidence required for user-surfaced kinds" rule holds. Real
     // citations reserved for future enrichment.
@@ -2732,19 +2829,7 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
             };
             (base + project_boost + consequence_boost).min(0.80)
         }),
-        // Consequence-adjusted urgency: security/breaking elevates regardless of
-        // volume; real release/analysis activity keeps the risk-based urgency;
-        // deps whose only unseen signals are general discussion are capped at
-        // Medium. Unmonitored deps (no breakdown) keep their risk-based urgency.
-        urgency: match breakdown {
-            // Urgency ordinals: Critical < High < Medium < Watch, so the MORE
-            // urgent of two is the smaller one — use min() to mean "at least High"
-            // (keeps Critical if the risk is already critical).
-            Some(b) if b.security > 0 => Urgency::High.min(risk_level_to_urgency(&d.risk_level)),
-            Some(b) if b.releases > 0 || b.analyses > 0 => risk_level_to_urgency(&d.risk_level),
-            Some(_) => cap_urgency_at_medium(risk_level_to_urgency(&d.risk_level)),
-            None => risk_level_to_urgency(&d.risk_level),
-        },
+        urgency,
         reversibility: None,
         evidence: vec![citation],
         affected_projects: d.projects_using.clone(),
@@ -3401,6 +3486,7 @@ mod tests {
                     match_type: "exact_registry".to_string(),
                     coverage_reason: None,
                     adapters_searched: vec![],
+                    platform_active: true,
                 })
                 .collect(),
             stale_topics: (0..stale)
@@ -3997,6 +4083,7 @@ mod tests {
                 match_type: "none".to_string(),
                 coverage_reason: None,
                 adapters_searched: Vec::new(),
+                platform_active: true,
             })
             .collect();
         let stale: Vec<StaleTopic> = (0..3)
@@ -4057,6 +4144,7 @@ mod tests {
             match_type: "none".to_string(),
             coverage_reason: None,
             adapters_searched: Vec::new(),
+            platform_active: true,
         }];
         // total_direct_deps = 1 → floor to 5 → 1.0/5 = 0.2 uncovered_pressure
         // Score = 0.2 * 55 = 11.0
@@ -4170,6 +4258,7 @@ mod tests {
             match_type: "exact_registry".into(),
             coverage_reason: None,
             adapters_searched: Vec::new(),
+            platform_active: true,
         }
     }
 
@@ -4582,6 +4671,7 @@ mod tests {
             match_type: "none".into(),
             coverage_reason: Some("not_checked".into()),
             adapters_searched: Vec::new(),
+            platform_active: true,
         };
         let item = uncovered_dep_to_evidence_item(&dep);
         assert!(
@@ -4603,6 +4693,7 @@ mod tests {
             match_type: "none".into(),
             coverage_reason: Some("adapter_failing".into()),
             adapters_searched: Vec::new(),
+            platform_active: true,
         };
         let item = uncovered_dep_to_evidence_item(&dep);
         assert!(
@@ -4624,6 +4715,7 @@ mod tests {
             match_type: "none".into(),
             coverage_reason: None,
             adapters_searched: Vec::new(),
+            platform_active: true,
         };
         let item = uncovered_dep_to_evidence_item(&dep);
         assert!(
@@ -4631,6 +4723,93 @@ mod tests {
             "None coverage_reason should use generic fallback: {}",
             item.explanation
         );
+    }
+
+    // ─── Platform-relevance de-prioritisation (Phase 2b) ──────────────
+    // Mirrors the preemption.rs Phase-2a pattern: a dep inactive on every
+    // target the user builds is surfaced but de-prioritised, never hidden.
+
+    #[test]
+    fn platform_inactive_dep_urgency_capped_to_watch_but_not_hidden() {
+        // Zero-signal path is DB-free (no count_signal_types_for_dep call), so
+        // urgency is driven purely by risk_level — isolating the platform cap.
+        let mut dep = UncoveredDep {
+            name: "libc (cargo)".into(),
+            dep_type: "cargo".into(),
+            projects_using: vec!["/proj".into()],
+            days_since_last_signal: 999,
+            available_signal_count: 0,
+            risk_level: "critical".into(),
+            match_type: "none".into(),
+            coverage_reason: Some("not_checked".into()),
+            adapters_searched: Vec::new(),
+            platform_active: true,
+        };
+
+        // Active dep keeps its risk-based urgency.
+        let item = uncovered_dep_to_evidence_item(&dep);
+        assert_eq!(
+            item.urgency,
+            Urgency::Critical,
+            "platform-active critical dep keeps Critical urgency"
+        );
+
+        // Same dep, platform-inactive everywhere -> capped to Watch.
+        dep.platform_active = false;
+        let item = uncovered_dep_to_evidence_item(&dep);
+        assert_eq!(
+            item.urgency,
+            Urgency::Watch,
+            "platform-inactive dep is de-prioritised to Watch"
+        );
+        // De-prioritise, NEVER exclude: the item is still produced and still
+        // names the dep — a cross-platform dev can still reach it.
+        assert!(
+            item.affected_deps.contains(&"libc (cargo)".to_string()),
+            "platform-inactive dep is still surfaced, not dropped"
+        );
+    }
+
+    #[test]
+    fn platform_inactive_packages_collected_only_when_inactive_everywhere() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE project_dependencies (
+                 project_path TEXT, package_name TEXT, is_dev INTEGER DEFAULT 0,
+                 is_direct INTEGER DEFAULT 1, platform_active INTEGER DEFAULT 1
+             );
+             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/p', 'libc', 0);
+             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/p', 'serde', 1);
+             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/a', 'shared', 0);
+             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/b', 'shared', 1);",
+        )
+        .unwrap();
+
+        let inactive = load_platform_inactive_packages(&conn);
+        assert!(
+            inactive.contains("libc"),
+            "inactive-everywhere dep is collected"
+        );
+        assert!(
+            !inactive.contains("serde"),
+            "active dep is not de-prioritised"
+        );
+        assert!(
+            !inactive.contains("shared"),
+            "a dep active in any project/target stays prioritised"
+        );
+    }
+
+    #[test]
+    fn platform_inactive_empty_on_pre_phase85_db() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE project_dependencies (project_path TEXT, package_name TEXT);
+             INSERT INTO project_dependencies VALUES ('/p', 'libc');",
+        )
+        .unwrap();
+        // No platform_active column -> graceful empty (nothing de-prioritised).
+        assert!(load_platform_inactive_packages(&conn).is_empty());
     }
 
     #[test]
@@ -4650,6 +4829,7 @@ mod tests {
                 match_type: "none".into(),
                 coverage_reason: Some("not_checked".into()),
                 adapters_searched: Vec::new(),
+                platform_active: true,
             }],
             stale_topics: Vec::new(),
             missed_signals: Vec::new(),
@@ -5250,6 +5430,7 @@ mod tests {
             match_type: "title_heuristic".into(),
             coverage_reason: Some("weak_matches_only".into()),
             adapters_searched: Vec::new(),
+            platform_active: true,
         };
 
         let report = BlindSpotReport {
