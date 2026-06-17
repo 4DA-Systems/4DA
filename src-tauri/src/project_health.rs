@@ -157,6 +157,8 @@ mod tests {
                 language TEXT NOT NULL DEFAULT 'unknown',
                 project_relevance REAL DEFAULT 1.0,
                 last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
+                target_cfg TEXT,
+                platform_active INTEGER DEFAULT 1,
                 UNIQUE(project_path, package_name)
             );
             CREATE INDEX IF NOT EXISTS idx_deps_package ON project_dependencies(package_name);
