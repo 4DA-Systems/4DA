@@ -10,6 +10,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { OsvEcosystem, ResolvedDependency } from "./types.js";
+import { targetActiveOnHost } from "./platform.js";
 
 const ECOSYSTEM_MAP: Record<string, OsvEcosystem> = {
   npm: "npm",
@@ -31,32 +32,28 @@ export function resolveVersions(
   deps: string[],
   devDeps: string[],
   language: string,
+  targets: Record<string, string> = {},
 ): ResolvedDependency[] {
   const ecosystem = mapEcosystem(language);
   const results: ResolvedDependency[] = [];
   const versionMap = resolveVersionMap(cwd, ecosystem);
 
-  for (const name of deps) {
-    results.push({
+  const build = (name: string, isDev: boolean): ResolvedDependency => {
+    const target = targets[name] ?? null;
+    return {
       name,
       version: versionMap.get(normalizePackageName(name, ecosystem)) || null,
       ecosystem,
-      isDev: false,
+      isDev,
       isDirect: true,
       devScopeKnown: true,
-    });
-  }
+      target,
+      platformActive: targetActiveOnHost(target),
+    };
+  };
 
-  for (const name of devDeps) {
-    results.push({
-      name,
-      version: versionMap.get(normalizePackageName(name, ecosystem)) || null,
-      ecosystem,
-      isDev: true,
-      isDirect: true,
-      devScopeKnown: true,
-    });
-  }
+  for (const name of deps) results.push(build(name, false));
+  for (const name of devDeps) results.push(build(name, true));
 
   return results;
 }
@@ -70,9 +67,10 @@ export function resolveAuditVersions(
   deps: string[],
   devDeps: string[],
   language: string,
+  targets: Record<string, string> = {},
 ): ResolvedDependency[] {
   const ecosystem = mapEcosystem(language);
-  const direct = resolveVersions(cwd, deps, devDeps, language);
+  const direct = resolveVersions(cwd, deps, devDeps, language, targets);
   const versionMap = resolveVersionMap(cwd, ecosystem);
   const directNames = new Set(deps.map((name) => normalizePackageName(name, ecosystem)));
   const devNames = new Set(devDeps.map((name) => normalizePackageName(name, ecosystem)));
@@ -82,6 +80,9 @@ export function resolveAuditVersions(
   for (const [name, version] of versionMap) {
     const normalized = normalizePackageName(name, ecosystem);
     const isDirect = directNames.has(normalized) || devNames.has(normalized);
+    // Transitive deps from the lockfile carry no per-dep target info (Cargo.lock
+    // doesn't encode it), so they are treated as unconditionally active.
+    const target = targets[name] ?? null;
     const candidate: ResolvedDependency = {
       name,
       version,
@@ -89,6 +90,8 @@ export function resolveAuditVersions(
       isDev: devNames.has(normalized),
       isDirect,
       devScopeKnown: isDirect,
+      target,
+      platformActive: targetActiveOnHost(target),
     };
     const key = dependencyKey(candidate);
     if (!seen.has(key)) {

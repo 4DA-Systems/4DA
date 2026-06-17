@@ -81,12 +81,13 @@ export class LiveIntelligence {
   initFromMultiEcosystem(
     projectPath: string,
     depsByEcosystem: Record<string, { deps: string[]; devDeps: string[] }>,
+    depTargets: Record<string, string> = {},
   ): void {
     const allResolved: ResolvedDependency[] = [];
     const allAudit: ResolvedDependency[] = [];
     for (const [language, { deps, devDeps }] of Object.entries(depsByEcosystem)) {
-      allResolved.push(...resolveVersions(projectPath, deps, devDeps, language));
-      allAudit.push(...resolveAuditVersions(projectPath, deps, devDeps, language));
+      allResolved.push(...resolveVersions(projectPath, deps, devDeps, language, depTargets));
+      allAudit.push(...resolveAuditVersions(projectPath, deps, devDeps, language, depTargets));
     }
     this.resolvedDeps = dedupeDependencies(allResolved);
     this.auditDeps = dedupeDependencies(allAudit);
@@ -282,6 +283,9 @@ function dedupeDependencies(deps: ResolvedDependency[]): ResolvedDependency[] {
       existing.isDirect ||= dep.isDirect;
       existing.devScopeKnown &&= dep.devScopeKnown;
       existing.isDev = existing.devScopeKnown && existing.isDev && dep.isDev;
+      // A crate reachable via ANY active path is active; keep a target label if present.
+      existing.platformActive ||= dep.platformActive;
+      existing.target = existing.target ?? dep.target;
     } else {
       unique.set(key, { ...dep });
     }
@@ -296,6 +300,7 @@ function emptyVulnResult(projectPath: string, offline: boolean): VulnerabilitySc
     ecosystemsScanned: [],
     totalScanned: 0,
     totalVulnerable: 0,
+    platformInactiveVulnerable: 0,
     bySeverity: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
     vulnerabilities: [],
     cleanCount: 0,

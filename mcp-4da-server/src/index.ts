@@ -113,7 +113,9 @@ function getDatabase(): FourDADatabase {
         );
 
         // Initialize live intelligence with per-ecosystem resolved versions
-        liveIntel.initFromMultiEcosystem(cwd, scan.depsByEcosystem);
+        // (depTargets carries platform-gated dep info so advisories can be
+        // flagged platform-relevant for the host).
+        liveIntel.initFromMultiEcosystem(cwd, scan.depsByEcosystem, scan.depTargets);
 
         if (liveIntel.isEnabled()) {
           console.error(`[4DA]   Live intelligence: enabled (OSV.dev + HN)`);

@@ -169,6 +169,8 @@ describe("OsvScanner full-tree batching", () => {
       isDev: false,
       isDirect: false,
       devScopeKnown: false,
+      target: null,
+      platformActive: true,
     }));
     for (const dep of deps) {
       cache.set(`osv:${dep.ecosystem}:${dep.name}:${dep.version}`, [], "osv", 3600);
