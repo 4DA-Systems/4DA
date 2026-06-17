@@ -304,6 +304,17 @@ pub struct LensHints {
     pub preemption: bool,
     pub blind_spots: bool,
     pub evidence: bool,
+    /// Rendering hint (Phase 2c, platform-aware deps): the item is relevant only
+    /// to a build target the user does NOT build on the host (e.g. a
+    /// `cfg(not(windows))` crate's advisory on a Windows machine). The lens
+    /// groups such items into a collapsed "other build targets" section and tags
+    /// them with a badge — surfaced, de-prioritised, never hidden (a
+    /// cross-platform dev still reaches them). `false` for all normal items.
+    /// Set by the preemption + blind-spots materializers when the dep is
+    /// platform-inactive in every tracked project/target. Defaults `false` for
+    /// back-compat with pre-Phase-2c items.
+    #[serde(default)]
+    pub other_build_target: bool,
 }
 
 impl LensHints {

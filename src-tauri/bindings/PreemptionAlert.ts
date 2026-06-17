@@ -33,4 +33,12 @@ is_direct: boolean | null,
 /**
  * Whether this is a dev-only dependency.
  */
-is_dev: boolean | null, };
+is_dev: boolean | null, 
+/**
+ * True when the affected package is inactive on the host platform in every
+ * tracked project/target (Phase 2b/2c). Such advisories are de-prioritised
+ * (urgency already capped to Watch) and, in `to_evidence_item`, tagged with
+ * `LensHints::other_build_target` so the lens groups + badges them as
+ * "other build targets" — surfaced, never hidden.
+ */
+platform_inactive: boolean, };
