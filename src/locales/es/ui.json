@@ -3099,5 +3099,19 @@
   },
   "calibration.onboarding.gradeStartingPoint": "Esta es tu puntuación inicial: sube a medida que 4DA aprende lo que te importa.",
   "language.change": "Cambiar idioma",
-  "license.trialBadge": "Prueba Signal"
+  "license.trialBadge": "Prueba Signal",
+  "preemption.otherTargets.title": "Otros objetivos de compilación",
+  "preemption.otherTargets.show_one": "{{count}} aviso afecta solo a otros objetivos de compilación",
+  "preemption.otherTargets.show_other": "{{count}} avisos afectan solo a otros objetivos de compilación",
+  "preemption.otherTargets.expand": "Mostrar",
+  "preemption.otherTargets.hide": "Ocultar",
+  "preemption.otherTargets.badge": "Otro objetivo",
+  "preemption.otherTargets.badgeHint": "Afecta a un objetivo de compilación que no compilas en este equipo: se muestra, pero con menor prioridad.",
+  "blindspots.otherTargets.title": "Otros objetivos de compilación",
+  "blindspots.otherTargets.show_one": "{{count}} dependencia afecta solo a otros objetivos de compilación",
+  "blindspots.otherTargets.show_other": "{{count}} dependencias afectan solo a otros objetivos de compilación",
+  "blindspots.otherTargets.expand": "Mostrar",
+  "blindspots.otherTargets.hide": "Ocultar",
+  "blindspots.otherTargets.badge": "Otro objetivo",
+  "blindspots.otherTargets.badgeHint": "Solo se compila para un objetivo que no compilas en este equipo: se muestra, pero con menor prioridad."
 }

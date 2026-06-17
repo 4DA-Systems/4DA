@@ -3037,5 +3037,19 @@
   "validation.videos": "動画",
   "calibration.onboarding.gradeStartingPoint": "これは開始スコアです。4DA があなたの関心を学ぶほど上がっていきます。",
   "language.change": "言語を変更",
-  "license.trialBadge": "Signal 体験版"
+  "license.trialBadge": "Signal 体験版",
+  "preemption.otherTargets.title": "他のビルドターゲット",
+  "preemption.otherTargets.show_one": "{{count}} 件の勧告は他のビルドターゲットにのみ該当します",
+  "preemption.otherTargets.show_other": "{{count}} 件の勧告は他のビルドターゲットにのみ該当します",
+  "preemption.otherTargets.expand": "表示",
+  "preemption.otherTargets.hide": "非表示",
+  "preemption.otherTargets.badge": "他のターゲット",
+  "preemption.otherTargets.badgeHint": "このマシンではビルドしないビルドターゲットに影響します。表示はしますが、優先度を下げています。",
+  "blindspots.otherTargets.title": "他のビルドターゲット",
+  "blindspots.otherTargets.show_one": "{{count}} 件の依存関係は他のビルドターゲットにのみ該当します",
+  "blindspots.otherTargets.show_other": "{{count}} 件の依存関係は他のビルドターゲットにのみ該当します",
+  "blindspots.otherTargets.expand": "表示",
+  "blindspots.otherTargets.hide": "非表示",
+  "blindspots.otherTargets.badge": "他のターゲット",
+  "blindspots.otherTargets.badgeHint": "このマシンではビルドしないターゲット向けにのみビルドされます。表示はしますが、優先度を下げています。"
 }

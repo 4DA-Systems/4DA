@@ -165,6 +165,14 @@ const DepCoverageRow = memo(function DepCoverageRow({
             {t('blindspots.signal.count', { count: dep.signals.length })}
           </span>
         )}
+        {dep.gap?.lens_hints.other_build_target && (
+          <span
+            className="text-[9px] px-1.5 py-0.5 rounded shrink-0 text-text-muted bg-bg-tertiary border border-border uppercase tracking-wider"
+            title={t('blindspots.otherTargets.badgeHint')}
+          >
+            {t('blindspots.otherTargets.badge')}
+          </span>
+        )}
         <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${cfg.color}`}>
           {t(cfg.labelKey)}
         </span>
@@ -362,6 +370,50 @@ export const CoveredSection = memo(function CoveredSection({
               ))}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+/**
+ * Phase 2c: a collapsed group for dependencies whose coverage gap applies only
+ * to a build target the user does NOT build on the host (e.g. a `cfg(not(windows))`
+ * crate on Windows). Surfaced, de-prioritised, never hidden — a cross-platform
+ * dev can expand it. Modeled on `CoveredSection`.
+ */
+export const OtherBuildTargetsSection = memo(function OtherBuildTargetsSection({
+  depRows, onDismissSignal, onAddWatch,
+}: {
+  depRows: DepRow[];
+  onDismissSignal: (id: string) => void;
+  onAddWatch?: (packageName: string, ecosystem: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [show, setShow] = useState(false);
+
+  if (depRows.length === 0) return null;
+
+  return (
+    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+      <button
+        onClick={() => setShow(prev => !prev)}
+        aria-expanded={show}
+        className="w-full px-4 py-3 flex items-center gap-2 hover:bg-bg-tertiary/30 transition-colors"
+      >
+        <div className="w-2 h-2 rounded-full bg-[#8A8A8A]" />
+        <h3 className="text-sm font-medium text-text-secondary flex-1 text-left">
+          {t('blindspots.otherTargets.show', { count: depRows.length })}
+        </h3>
+        <span className="text-[10px] text-text-muted">
+          {show ? t('blindspots.otherTargets.hide') : t('blindspots.otherTargets.expand')}
+        </span>
+      </button>
+      {show && (
+        <div className="border-t border-border">
+          {depRows.map(dep => (
+            <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} onAddWatch={onAddWatch} />
+          ))}
         </div>
       )}
     </div>

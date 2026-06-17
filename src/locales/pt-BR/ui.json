@@ -3103,5 +3103,19 @@
   "weekly.topTopics": "Principais tópicos aprendidos",
   "calibration.onboarding.gradeStartingPoint": "Esta é sua pontuação inicial — ela sobe conforme o 4DA aprende o que importa para você.",
   "language.change": "Alterar idioma",
-  "license.trialBadge": "Teste Signal"
+  "license.trialBadge": "Teste Signal",
+  "preemption.otherTargets.title": "Outros alvos de build",
+  "preemption.otherTargets.show_one": "{{count}} aviso se aplica apenas a outros alvos de build",
+  "preemption.otherTargets.show_other": "{{count}} avisos se aplicam apenas a outros alvos de build",
+  "preemption.otherTargets.expand": "Mostrar",
+  "preemption.otherTargets.hide": "Ocultar",
+  "preemption.otherTargets.badge": "Outro alvo",
+  "preemption.otherTargets.badgeHint": "Afeta um alvo de build que você não compila nesta máquina — exibido, mas com prioridade reduzida.",
+  "blindspots.otherTargets.title": "Outros alvos de build",
+  "blindspots.otherTargets.show_one": "{{count}} dependência se aplica apenas a outros alvos de build",
+  "blindspots.otherTargets.show_other": "{{count}} dependências se aplicam apenas a outros alvos de build",
+  "blindspots.otherTargets.expand": "Mostrar",
+  "blindspots.otherTargets.hide": "Ocultar",
+  "blindspots.otherTargets.badge": "Outro alvo",
+  "blindspots.otherTargets.badgeHint": "Compilada apenas para um alvo que você não compila nesta máquina — exibida, mas com prioridade reduzida."
 }

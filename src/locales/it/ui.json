@@ -3153,5 +3153,19 @@
   },
   "calibration.onboarding.gradeStartingPoint": "Questo è il tuo punteggio iniziale: cresce man mano che 4DA impara ciò che ti interessa.",
   "language.change": "Cambia lingua",
-  "license.trialBadge": "Prova Signal"
+  "license.trialBadge": "Prova Signal",
+  "preemption.otherTargets.title": "Altri target di build",
+  "preemption.otherTargets.show_one": "{{count}} avviso riguarda solo altri target di build",
+  "preemption.otherTargets.show_other": "{{count}} avvisi riguardano solo altri target di build",
+  "preemption.otherTargets.expand": "Mostra",
+  "preemption.otherTargets.hide": "Nascondi",
+  "preemption.otherTargets.badge": "Altro target",
+  "preemption.otherTargets.badgeHint": "Riguarda un target di build che non compili su questa macchina — mostrato, ma con priorità ridotta.",
+  "blindspots.otherTargets.title": "Altri target di build",
+  "blindspots.otherTargets.show_one": "{{count}} dipendenza riguarda solo altri target di build",
+  "blindspots.otherTargets.show_other": "{{count}} dipendenze riguardano solo altri target di build",
+  "blindspots.otherTargets.expand": "Mostra",
+  "blindspots.otherTargets.hide": "Nascondi",
+  "blindspots.otherTargets.badge": "Altro target",
+  "blindspots.otherTargets.badgeHint": "Compilata solo per un target che non compili su questa macchina — mostrata, ma con priorità ridotta."
 }

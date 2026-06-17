@@ -15,7 +15,7 @@ import { useBlindSpotsData } from '../../hooks/use-blind-spots-data';
 import { BlindSpotsPaywall } from './BlindSpotsPaywall';
 import { loadPersistedDismissals, persistDismissal, removeDismissal } from './dismissal-utils';
 import ScoreBar from './ScoreBar';
-import { TierSection, EmergingSignals, CoveredSection } from './StackCoverageMap';
+import { TierSection, EmergingSignals, CoveredSection, OtherBuildTargetsSection } from './StackCoverageMap';
 
 // ============================================================================
 // Main View — data shaping + layout
@@ -151,9 +151,16 @@ const BlindSpotsView = memo(function BlindSpotsView() {
 
   const score = report.score ?? 0;
   const totalTracked = report.total_tracked ?? depRows.length;
-  const stackDeps = depRows.filter(d => d.status === 'blind_spot');
-  const ecosystemDeps = depRows.filter(d => d.status === 'falling_behind');
-  const coveredDeps = depRows.filter(d => d.status === 'well_covered');
+  // Phase 2c: deps whose coverage gap applies only to a build target the user
+  // does not build on the host are pulled into a collapsed "other build targets"
+  // group — surfaced, de-prioritised, never hidden — so they don't crowd the
+  // host-relevant stack/ecosystem tiers.
+  const isOtherTarget = (d: typeof depRows[number]) => d.gap?.lens_hints.other_build_target === true;
+  const otherTargetDeps = depRows.filter(isOtherTarget);
+  const normalDeps = depRows.filter(d => !isOtherTarget(d));
+  const stackDeps = normalDeps.filter(d => d.status === 'blind_spot');
+  const ecosystemDeps = normalDeps.filter(d => d.status === 'falling_behind');
+  const coveredDeps = normalDeps.filter(d => d.status === 'well_covered');
 
   const hasProblems = stackDeps.length > 0 || ecosystemDeps.length > 0;
   const hasContent = hasProblems || unmatchedSignals.length > 0;
@@ -323,6 +330,11 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         </>
       )}
       <CoveredSection depRows={coveredDeps} onDismissSignal={handleDismiss} />
+      <OtherBuildTargetsSection
+        depRows={otherTargetDeps}
+        onDismissSignal={handleDismiss}
+        onAddWatch={handleAddWatch}
+      />
     </div>
   );
 });

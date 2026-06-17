@@ -34,7 +34,7 @@ const makeItem = (overrides: Partial<EvidenceItem> = {}): EvidenceItem => ({
   suggested_actions: [],
   precedents: [],
   refutation_condition: null,
-  lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false },
+  lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: false },
   created_at: BigInt(Date.now()),
   expires_at: null,
   ...overrides,
@@ -97,5 +97,18 @@ describe('ItemCard', () => {
     render(<ItemCard item={item} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
     expect(screen.queryByText('preemption.badge.verified')).toBeNull();
     expect(screen.queryByText('preemption.badge.ai')).toBeNull();
+  });
+
+  it('renders the "other build target" badge when lens_hints.other_build_target is set (Phase 2c)', () => {
+    const item = makeItem({
+      lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: true },
+    });
+    render(<ItemCard item={item} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
+    expect(screen.getByText('preemption.otherTargets.badge')).toBeDefined();
+  });
+
+  it('does NOT render the other-build-target badge for a normal item', () => {
+    render(<ItemCard item={makeItem()} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
+    expect(screen.queryByText('preemption.otherTargets.badge')).toBeNull();
   });
 });

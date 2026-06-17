@@ -3138,5 +3138,19 @@
   },
   "calibration.onboarding.gradeStartingPoint": "Das ist dein Startwert – er steigt, während 4DA lernt, was dir wichtig ist.",
   "language.change": "Sprache ändern",
-  "license.trialBadge": "Signal-Test"
+  "license.trialBadge": "Signal-Test",
+  "preemption.otherTargets.title": "Andere Build-Ziele",
+  "preemption.otherTargets.show_one": "{{count}} Hinweis betrifft nur andere Build-Ziele",
+  "preemption.otherTargets.show_other": "{{count}} Hinweise betreffen nur andere Build-Ziele",
+  "preemption.otherTargets.expand": "Anzeigen",
+  "preemption.otherTargets.hide": "Ausblenden",
+  "preemption.otherTargets.badge": "Anderes Ziel",
+  "preemption.otherTargets.badgeHint": "Betrifft ein Build-Ziel, das du auf diesem Gerät nicht baust — wird angezeigt, aber nachrangig behandelt.",
+  "blindspots.otherTargets.title": "Andere Build-Ziele",
+  "blindspots.otherTargets.show_one": "{{count}} Abhängigkeit betrifft nur andere Build-Ziele",
+  "blindspots.otherTargets.show_other": "{{count}} Abhängigkeiten betreffen nur andere Build-Ziele",
+  "blindspots.otherTargets.expand": "Anzeigen",
+  "blindspots.otherTargets.hide": "Ausblenden",
+  "blindspots.otherTargets.badge": "Anderes Ziel",
+  "blindspots.otherTargets.badgeHint": "Wird nur für ein Ziel gebaut, das du auf diesem Gerät nicht baust — wird angezeigt, aber nachrangig behandelt."
 }

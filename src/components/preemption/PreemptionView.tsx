@@ -8,7 +8,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import { useColdStartGate } from '../../hooks/use-cold-start-gate';
-import { URGENCY_ORDER } from './PreemptionCard';
+import { URGENCY_ORDER, ItemCard } from './PreemptionCard';
 import { PreemptionTierSection } from './PreemptionTierSection';
 import { PreemptionFreeFloorNotice } from './PreemptionFreeFloorNotice';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
@@ -54,6 +54,7 @@ const PreemptionView = memo(function PreemptionView() {
   const surfacedRef = useRef(new Set<string>());
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(loadPersistedDismissals);
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
+  const [showOtherTargets, setShowOtherTargets] = useState(false);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { feed, loading, error, paywalled } = useAppStore(
@@ -90,7 +91,7 @@ const PreemptionView = memo(function PreemptionView() {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
   }, [lastDismissed]);
 
-  const { verifiedItems, assessedItems, developingItems, criticalCount, highCount } = useMemo(() => {
+  const { verifiedItems, assessedItems, developingItems, otherTargetItems, criticalCount, highCount } = useMemo(() => {
     const visible = (feed?.items ?? [])
       .filter(item => !dismissedIds.has(item.id))
       .slice()
@@ -101,12 +102,20 @@ const PreemptionView = memo(function PreemptionView() {
     const verified: EvidenceItem[] = [];
     const assessed: EvidenceItem[] = [];
     const developing: EvidenceItem[] = [];
+    // Phase 2c: advisories relevant only to a build target the user does not
+    // build on the host are pulled out of the main tiers into a collapsed
+    // "other build targets" group — surfaced, de-prioritised, never hidden.
+    const otherTarget: EvidenceItem[] = [];
     // Count urgencies from the VISIBLE (post-dismissal) set, not feed.*_count from the
     // backend — otherwise dismissing the only critical leaves the bar reading "1 critical"
     // over an empty list (the count must match the cards beneath it).
     let critical = 0;
     let high = 0;
     for (const item of visible) {
+      if (item.lens_hints.other_build_target) {
+        otherTarget.push(item);
+        continue;
+      }
       if (item.urgency === 'critical') critical += 1;
       else if (item.urgency === 'high') high += 1;
       if (item.confidence.provenance === 'osv_verified') {
@@ -121,12 +130,14 @@ const PreemptionView = memo(function PreemptionView() {
       verifiedItems: verified,
       assessedItems: assessed,
       developingItems: developing,
+      otherTargetItems: otherTarget,
       criticalCount: critical,
       highCount: high,
     };
   }, [feed, dismissedIds]);
 
-  const totalVisible = verifiedItems.length + assessedItems.length + developingItems.length;
+  const totalVisible =
+    verifiedItems.length + assessedItems.length + developingItems.length + otherTargetItems.length;
   // Free security floor: the backend served Tier 1 (OSV-verified) only.
   // Render the floor normally plus a compact locked-tiers notice — never a
   // full-page paywall over real security data.
@@ -258,6 +269,35 @@ const PreemptionView = memo(function PreemptionView() {
               onDismiss={handleDismiss}
               emptyText={t('preemption.tier.developingEmpty')}
             />
+          )}
+
+          {/* Phase 2c: advisories for deps the user does not build on this host.
+              Collapsed by default — surfaced (a cross-platform dev can open it),
+              never urgent, never hidden. */}
+          {otherTargetItems.length > 0 && (
+            <section className="rounded-lg border border-border bg-bg-secondary overflow-hidden" aria-label={t('preemption.otherTargets.title')}>
+              <button
+                type="button"
+                onClick={() => setShowOtherTargets(v => !v)}
+                aria-expanded={showOtherTargets}
+                className="w-full px-4 py-3 flex items-center gap-2 hover:bg-bg-tertiary/30 transition-colors"
+              >
+                <div className="w-2 h-2 rounded-full shrink-0 bg-[#8A8A8A]" />
+                <h3 className="text-sm font-medium text-text-secondary flex-1 text-left">
+                  {t('preemption.otherTargets.show', { count: otherTargetItems.length })}
+                </h3>
+                <span className="text-[10px] text-text-muted">
+                  {showOtherTargets ? t('preemption.otherTargets.hide') : t('preemption.otherTargets.expand')}
+                </span>
+              </button>
+              {showOtherTargets && (
+                <div className="border-t border-border p-4 space-y-4">
+                  {otherTargetItems.map(item => (
+                    <ItemCard key={item.id} item={item} surfacedRef={surfacedRef} onDismiss={handleDismiss} />
+                  ))}
+                </div>
+              )}
+            </section>
           )}
         </>
       )}

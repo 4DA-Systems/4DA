@@ -3034,5 +3034,19 @@
   "validation.videos": "동영상",
   "calibration.onboarding.gradeStartingPoint": "시작 점수입니다 — 4DA가 당신의 관심사를 학습할수록 올라갑니다.",
   "language.change": "언어 변경",
-  "license.trialBadge": "Signal 체험"
+  "license.trialBadge": "Signal 체험",
+  "preemption.otherTargets.title": "다른 빌드 대상",
+  "preemption.otherTargets.show_one": "{{count}}개의 권고가 다른 빌드 대상에만 해당합니다",
+  "preemption.otherTargets.show_other": "{{count}}개의 권고가 다른 빌드 대상에만 해당합니다",
+  "preemption.otherTargets.expand": "표시",
+  "preemption.otherTargets.hide": "숨기기",
+  "preemption.otherTargets.badge": "다른 대상",
+  "preemption.otherTargets.badgeHint": "이 컴퓨터에서 빌드하지 않는 빌드 대상에 영향을 줍니다 — 표시하되 우선순위를 낮춥니다.",
+  "blindspots.otherTargets.title": "다른 빌드 대상",
+  "blindspots.otherTargets.show_one": "{{count}}개의 종속성이 다른 빌드 대상에만 해당합니다",
+  "blindspots.otherTargets.show_other": "{{count}}개의 종속성이 다른 빌드 대상에만 해당합니다",
+  "blindspots.otherTargets.expand": "표시",
+  "blindspots.otherTargets.hide": "숨기기",
+  "blindspots.otherTargets.badge": "다른 대상",
+  "blindspots.otherTargets.badgeHint": "이 컴퓨터에서 빌드하지 않는 대상에서만 빌드됩니다 — 표시하되 우선순위를 낮춥니다."
 }
