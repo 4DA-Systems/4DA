@@ -120,7 +120,7 @@ export function runDoctor(): void {
   const dbCheck = checks.find((c) => c.name === "4DA database");
   if (dbCheck && dbCheck.status === "warn") {
     console.log("  The MCP server can work standalone or with the 4DA desktop app.");
-    console.log("  Standalone: scans your project, provides tech radar and context.");
+    console.log("  Standalone: scans your dependencies for known CVEs and provides project context.");
     console.log("  Full app: adds content scoring, source monitoring, and more.");
     console.log("");
     console.log("  Desktop app: https://github.com/runyourempire/4DA/releases/latest");

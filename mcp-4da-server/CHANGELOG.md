@@ -1,5 +1,24 @@
 # Changelog
 
+## 4.6.2 (2026-06-17)
+
+### Fixed: vulnerability_scan returned empty severity, fix versions, and summaries
+
+The scanner enumerated advisories via OSV's `/v1/querybatch` endpoint, which returns
+only `{ id, modified }` per vulnerability — but it then mapped that index-only object
+as if it were the full record. Every rich field collapsed to a default: `summary`
+became the bare advisory ID, `fixed_version` was always `null` (so every
+recommendation read "no fix version published"), `references` was always empty,
+`published` actually carried the *modified* timestamp, and severity was hardcoded
+(`medium` for any GHSA, `unknown` for anything else) rather than derived.
+
+The scanner now hydrates each matched advisory via `/v1/vulns/{id}` (cache-first,
+24h TTL, bounded concurrency over the vulnerable subset only) and derives severity
+honestly: a CVSS base score — computed from the vector string when OSV provides one
+(new `cvss.ts`, CVSS v3.0/3.1) — wins, then the GitHub-advisory severity label, then
+`unknown`. No more fabricated default buckets. Real fix versions, CVE aliases,
+summaries, and reference links now flow through.
+
 ## 4.6.1 (2026-06-11)
 
 ### Improved: prescriptive tool descriptions

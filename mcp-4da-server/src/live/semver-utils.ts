@@ -28,3 +28,25 @@ export function computeSemverDistance(current: string, latest: string): SemverDi
 export function isPreRelease(version: string): boolean {
   return /[-+]/.test(version.replace(/^v/, "").replace(/^\d+\.\d+\.\d+/, "").slice(0, 1));
 }
+
+/**
+ * Compare two versions by MAJOR.MINOR.PATCH. Returns 1 if a > b, -1 if a < b,
+ * 0 if equal or either is unparseable. Prerelease/build suffixes are ignored
+ * (sufficient for choosing the highest fix version among advisories).
+ */
+export function compareSemver(a: string, b: string): number {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (!pa || !pb) return 0;
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] > pb[i]) return 1;
+    if (pa[i] < pb[i]) return -1;
+  }
+  return 0;
+}
+
+/** Highest version (by MAJOR.MINOR.PATCH) from a list, or null if empty. */
+export function maxSemver(versions: string[]): string | null {
+  if (versions.length === 0) return null;
+  return versions.reduce((max, v) => (compareSemver(v, max) > 0 ? v : max), versions[0]);
+}

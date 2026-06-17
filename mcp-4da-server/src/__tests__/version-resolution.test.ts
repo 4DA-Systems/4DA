@@ -181,9 +181,14 @@ describe("OsvScanner full-tree batching", () => {
     expect(result.cleanCount).toBe(250);
   });
 
-  it("does not mistake the CVSS vector version for the vulnerability score", () => {
+  it("computes the base score from a CVSS vector without mistaking the version for the score", () => {
+    // Canonical worst-case vector → 9.8 (critical). Must NOT return 3.1 (the
+    // CVSS version token) nor null — the vector carries enough to score.
     expect(extractCvssScore([{ type: "CVSS_V3", score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" }]))
-      .toBeNull();
+      .toBe(9.8);
+    // A bare numeric base score is still honored directly.
     expect(extractCvssScore([{ type: "CVSS_V3", score: "9.8" }])).toBe(9.8);
+    // A non-vector, non-numeric value yields null rather than a fabricated score.
+    expect(extractCvssScore([{ type: "CVSS_V3", score: "unknown" }])).toBeNull();
   });
 });

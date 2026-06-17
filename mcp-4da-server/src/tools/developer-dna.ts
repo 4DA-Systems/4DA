@@ -347,17 +347,19 @@ export function executeDeveloperDna(
 
         // Check for any source_items mentioning this dep that have interactions
         try {
+          // Escape LIKE wildcards so a name containing % or _ matches literally.
+          const likeDep = `%${depLower.replace(/[\\%_]/g, (c) => "\\" + c)}%`;
           const mentionedInteraction = rawDb
             .prepare(
               `SELECT i.timestamp
                FROM interactions i
                JOIN source_items si ON i.item_id = si.id AND i.item_source = si.source_type
-               WHERE (LOWER(si.title) LIKE ? OR LOWER(si.content) LIKE ?)
+               WHERE (LOWER(si.title) LIKE ? ESCAPE '\\' OR LOWER(si.content) LIKE ? ESCAPE '\\')
                AND i.action_type IN ('click', 'save')
                ORDER BY i.timestamp DESC
                LIMIT 1`,
             )
-            .get(`%${depLower}%`, `%${depLower}%`) as
+            .get(likeDep, likeDep) as
             | { timestamp: string }
             | undefined;
 

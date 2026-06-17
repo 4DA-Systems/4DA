@@ -2056,13 +2056,24 @@ pub(crate) fn score_item(
         }
     };
 
+    // Security severity evidence feeds the necessity bucket below, so extract it
+    // BEFORE building NecessityInputs. Previously it was computed afterward, so a real
+    // critical CVE on a dev-only dep (which can reach the security path with no signal
+    // priority) fell back to "medium" instead of critical (bug J).
+    let is_security_source = matches!(input.source_type, "cve" | "osv");
+    let (cvss_score, cvss_severity) = if is_security_source {
+        extract_cvss_from_content(input.content)
+    } else {
+        (None, None)
+    };
+
     let necessity_inputs = necessity::NecessityInputs {
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names.clone(),
         signal_type: sig_type.clone(),
         signal_priority: sig_priority.clone(),
-        cve_severity: None, // CVE severity is folded into signal_priority by the classifier
-        cvss_score: None,   // Not directly available at this pipeline stage
+        cve_severity: None, // folded into signal_priority by the classifier
+        cvss_score,         // numeric severity fallback when no priority is present
         affected_project_count: count_affected_projects(db, &matched_dep_names),
         skill_gap_boost,
         matched_skill_gaps: matched_skill_gaps.clone(),
@@ -2084,7 +2095,6 @@ pub(crate) fn score_item(
     }
 
     // ── Security applicability + critical alert gate ────────────────────
-    let is_security_source = matches!(input.source_type, "cve" | "osv");
     let (applicability, is_critical_alert) = if sig_type.as_deref() == Some("security_alert") {
         // Metadata-verified strong dep: confidence >= 0.40, not dev, AND
         // either the advisory has no affected-package metadata or the metadata
@@ -2121,11 +2131,7 @@ pub(crate) fn score_item(
     };
 
     // ── Security evidence extraction ─────────────────────────────────
-    let (cvss_score, cvss_severity) = if is_security_source {
-        extract_cvss_from_content(input.content)
-    } else {
-        (None, None)
-    };
+    // (cvss_score / cvss_severity already extracted above for the necessity bucket)
     let advisory_id = if is_security_source {
         extract_advisory_id(input.title)
     } else {

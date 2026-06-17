@@ -451,45 +451,53 @@ fn parse_major_version(version: &str) -> Option<u32> {
         .ok()
 }
 
-/// Parse a version's `(major, minor)` pair for compatibility analysis.
-/// `"1.2.3"` -> `(1, 2)`, `"0.18.4"` -> `(0, 18)`, `"2"` -> `(2, 0)`.
-fn version_pair(version: &str) -> Option<(u32, u32)> {
+/// Parse a version's `(major, minor, patch)` triplet for compatibility analysis.
+/// `"1.2.3"` -> `(1, 2, 3)`, `"0.18.4"` -> `(0, 18, 4)`, `"2"` -> `(2, 0, 0)`,
+/// `"0.0.5"` -> `(0, 0, 5)`. Keeping the patch distinguishes `0.0.5` from `0.0.99`
+/// so the pre-0.1 caret line (`^0.0.5` matches only `0.0.5`) is not collapsed.
+fn version_triplet(version: &str) -> Option<(u32, u32, u32)> {
+    let trimmed = version.trim_start_matches(['v', 'V', '^', '~', '=', '>', '<', ' ']);
     let major = parse_major_version(version)?;
-    let minor = version
-        .trim_start_matches(['v', 'V', '^', '~', '=', '>', '<', ' '])
-        .split('.')
-        .nth(1)
-        .map(|p| {
-            p.chars()
-                .take_while(char::is_ascii_digit)
-                .collect::<String>()
-        })
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(0);
-    Some((major, minor))
+    let component = |idx: usize| -> u32 {
+        trimmed
+            .split('.')
+            .nth(idx)
+            .map(|p| {
+                p.chars()
+                    .take_while(char::is_ascii_digit)
+                    .collect::<String>()
+            })
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(0)
+    };
+    Some((major, component(1), component(2)))
 }
 
-/// Reduce a `(major, minor)` pair to its semver *breaking axis* — the component
-/// a bump of which signals an incompatible release under Cargo/npm caret rules.
+/// Reduce a `(major, minor, patch)` triplet to its semver *breaking axis* — the
+/// component a bump of which signals an incompatible release under Cargo/npm caret
+/// rules. The breaking line is the LEFTMOST NON-ZERO component:
 ///
 /// For `>= 1.0` the breaking axis is the major (`1.2` and `1.9` are compatible);
-/// for `0.x` the MINOR is the breaking axis (`0.18` and `0.20` are NOT compatible).
-/// This is the crux of the version-precision fix: naive major-only comparison
-/// collapses the entire pre-1.0 crate ecosystem (gtk-rs 0.18, axum 0.8, every
-/// `0.x` Rust crate) to "major 0" and wrongly reads breaking-apart versions as
-/// "same major", awarding a relevance boost to content about a version the user
-/// has moved past.
-fn breaking_axis(pair: (u32, u32)) -> (u32, u32) {
-    if pair.0 == 0 {
-        (0, pair.1) // 0.x — minor is the breaking line
+/// for `0.x` (x>=1) the MINOR is the breaking axis (`0.18` and `0.20` are NOT
+/// compatible); for `0.0.z` the PATCH is the breaking axis (`^0.0.5` matches only
+/// `0.0.5` — every patch is a breaking line). This collapses neither the pre-1.0
+/// crate ecosystem (gtk-rs 0.18, axum 0.8) NOR the pre-0.1 line (`0.0.z`) to
+/// "major 0", so content about a version the user has moved past no longer rides
+/// the same-line relevance boost.
+fn breaking_axis(triplet: (u32, u32, u32)) -> (u32, u32, u32) {
+    let (major, minor, patch) = triplet;
+    if major != 0 {
+        (major, 0, 0) // >=1.0 — major is the breaking line
+    } else if minor != 0 {
+        (0, minor, 0) // 0.x (x>=1) — minor is the breaking line
     } else {
-        (pair.0, 0) // >=1.0 — major is the breaking line
+        (0, 0, patch) // 0.0.z — patch is the breaking line (strict caret)
     }
 }
 
 /// Compare an installed version against a version mentioned in content,
 /// classifying the relationship from the installed POV.
-fn compare_pairs(installed: (u32, u32), mentioned: (u32, u32)) -> VersionDelta {
+fn compare_triplets(installed: (u32, u32, u32), mentioned: (u32, u32, u32)) -> VersionDelta {
     match breaking_axis(mentioned).cmp(&breaking_axis(installed)) {
         std::cmp::Ordering::Equal => VersionDelta::SameMajor,
         std::cmp::Ordering::Greater => VersionDelta::NewerMajor,
@@ -503,8 +511,8 @@ fn compare_version_in_content(
     pkg_name: &str,
     installed_version: &Option<String>,
 ) -> VersionDelta {
-    let installed_pair = match installed_version {
-        Some(v) => match version_pair(v) {
+    let installed_triplet = match installed_version {
+        Some(v) => match version_triplet(v) {
             Some(p) => p,
             None => return VersionDelta::Unknown,
         },
@@ -537,10 +545,12 @@ fn compare_version_in_content(
                         .chars()
                         .take_while(|c| c.is_ascii_digit() || *c == '.')
                         .collect();
-                    if let Some(mentioned_pair) = version_pair(&token) {
-                        // Reject absurd majors (years, IDs) but allow 0.x lines.
-                        if mentioned_pair.0 < 100 && mentioned_pair != (0, 0) {
-                            return compare_pairs(installed_pair, mentioned_pair);
+                    if let Some(mentioned_triplet) = version_triplet(&token) {
+                        // Reject absurd majors (years, IDs) and a bogus bare "0"
+                        // (parses to (0,0,0)), but a real "0.0.5" -> (0,0,5) is kept
+                        // so 0.0.x version intelligence is no longer disabled (bug B).
+                        if mentioned_triplet.0 < 100 && mentioned_triplet != (0, 0, 0) {
+                            return compare_triplets(installed_triplet, mentioned_triplet);
                         }
                     }
                 }
@@ -689,8 +699,13 @@ pub(crate) fn match_dependencies(
         // mean it's relevant": a Tauri-v1 / React-16 / gtk-0.18 article no longer rides
         // the dependency boost when the user is on a newer line. Dampen, don't kill —
         // migration-away content can still matter, so 0.5 not 0.0.
+        // Compare against the ACTUAL package name, not search_terms[0]. After
+        // `terms.sort()` the first search term is the alphabetically-first SUBTERM
+        // (e.g. "tanstack" for @tanstack/react-query), so version intelligence was
+        // reading a sibling product's version near that subterm (bug F).
+        let normalized_name = normalize_package_name(&info.package_name);
         let version_delta =
-            compare_version_in_content(&text_lower, &info.search_terms[0], &info.version);
+            compare_version_in_content(&text_lower, &normalized_name, &info.version);
         match version_delta {
             VersionDelta::SameMajor => confidence *= 1.2,
             VersionDelta::NewerMajor => confidence *= 1.1,
@@ -699,7 +714,7 @@ pub(crate) fn match_dependencies(
         }
 
         matched.push(DepMatch {
-            package_name: normalize_package_name(&info.package_name),
+            package_name: normalized_name,
             confidence: confidence.min(1.0),
             version_delta,
             is_dev: info.is_dev,
@@ -968,23 +983,70 @@ mod tests {
     }
 
     #[test]
-    fn test_version_pair_parsing() {
-        assert_eq!(version_pair("1.2.3"), Some((1, 2)));
-        assert_eq!(version_pair("0.18.4"), Some((0, 18)));
-        assert_eq!(version_pair("0.20"), Some((0, 20)));
-        assert_eq!(version_pair("2"), Some((2, 0)));
-        assert_eq!(version_pair("^0.8.9"), Some((0, 8)));
-        assert_eq!(version_pair("banana"), None);
+    fn test_version_triplet_parsing() {
+        assert_eq!(version_triplet("1.2.3"), Some((1, 2, 3)));
+        assert_eq!(version_triplet("0.18.4"), Some((0, 18, 4)));
+        assert_eq!(version_triplet("0.20"), Some((0, 20, 0)));
+        assert_eq!(version_triplet("2"), Some((2, 0, 0)));
+        assert_eq!(version_triplet("^0.8.9"), Some((0, 8, 9)));
+        // Bug A: patch is retained so 0.0.5 != 0.0.99.
+        assert_eq!(version_triplet("0.0.5"), Some((0, 0, 5)));
+        assert_eq!(version_triplet("0.0.99"), Some((0, 0, 99)));
+        assert_eq!(version_triplet("banana"), None);
     }
 
     #[test]
     fn test_breaking_axis_semver_rules() {
-        // >=1.0 — major is the breaking axis; minor is irrelevant to compat
-        assert_eq!(breaking_axis((1, 2)), (1, 0));
-        assert_eq!(breaking_axis((1, 9)), (1, 0));
-        // 0.x — minor is the breaking axis
-        assert_eq!(breaking_axis((0, 18)), (0, 18));
-        assert_eq!(breaking_axis((0, 20)), (0, 20));
+        // >=1.0 — major is the breaking axis; minor/patch irrelevant to compat
+        assert_eq!(breaking_axis((1, 2, 3)), (1, 0, 0));
+        assert_eq!(breaking_axis((1, 9, 0)), (1, 0, 0));
+        // 0.x (x>=1) — minor is the breaking axis
+        assert_eq!(breaking_axis((0, 18, 4)), (0, 18, 0));
+        assert_eq!(breaking_axis((0, 20, 0)), (0, 20, 0));
+        // 0.0.z — patch is the breaking axis (strict caret, bug A)
+        assert_eq!(breaking_axis((0, 0, 5)), (0, 0, 5));
+        assert_eq!(breaking_axis((0, 0, 99)), (0, 0, 99));
+    }
+
+    #[test]
+    fn test_compare_0_0_z_patch_is_breaking() {
+        // Bug A: 0.0.5 (installed) vs 0.0.6 (content) are a breaking line apart
+        // under strict caret — must NOT read SameMajor.
+        let newer = compare_version_in_content(
+            "mylib 0.0.6 ships a fix",
+            "mylib",
+            &Some("0.0.5".to_string()),
+        );
+        assert_eq!(
+            newer,
+            VersionDelta::NewerMajor,
+            "0.0.5 -> 0.0.6 is breaking"
+        );
+        let older =
+            compare_version_in_content("mylib 0.0.5 notes", "mylib", &Some("0.0.6".to_string()));
+        assert_eq!(older, VersionDelta::OlderMajor, "0.0.6 user, 0.0.5 content");
+        // Same exact 0.0.z line is compatible.
+        let same = compare_version_in_content(
+            "mylib 0.0.5 patch notes",
+            "mylib",
+            &Some("0.0.5".to_string()),
+        );
+        assert_eq!(same, VersionDelta::SameMajor, "0.0.5 == 0.0.5 same line");
+    }
+
+    #[test]
+    fn test_compare_0_0_x_intel_enabled_but_bare_zero_rejected() {
+        // Bug B: a real 0.0.x mention must be classified (not Unknown)...
+        let delta =
+            compare_version_in_content("mylib 0.0.6 released", "mylib", &Some("0.0.5".to_string()));
+        assert_ne!(delta, VersionDelta::Unknown, "0.0.x must get version intel");
+        // ...while a bogus bare "0" near the package stays rejected (Unknown).
+        let bare = compare_version_in_content(
+            "mylib 0 reasons to upgrade",
+            "mylib",
+            &Some("0.0.5".to_string()),
+        );
+        assert_eq!(bare, VersionDelta::Unknown, "bare '0' is bogus -> Unknown");
     }
 
     #[test]
@@ -1145,6 +1207,53 @@ mod tests {
         assert!(
             score > 0.0,
             "dep-match score should be positive, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_match_dependencies_version_uses_package_not_subterm() {
+        // Bug F regression: version intelligence must compare against the package's
+        // OWN name, not the alphabetically-first search subterm. A sibling umbrella
+        // version ("tanstack 1.0") near the "tanstack" subterm must NOT classify the
+        // installed react-query@5 as OlderMajor.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.dependency_info.insert(
+            "@tanstack/react-query".to_string(),
+            DepInfo {
+                package_name: "@tanstack/react-query".to_string(),
+                version: Some("5.0.0".to_string()),
+                is_dev: false,
+                is_direct: true,
+                // sorted order puts the bare "tanstack" subterm first — the bug source
+                search_terms: vec![
+                    "tanstack".to_string(),
+                    "tanstack-react-query".to_string(),
+                    "react-query".to_string(),
+                ],
+                ecosystem: "javascript".to_string(),
+            },
+        );
+
+        let (matches, _score) = match_dependencies(
+            "tanstack-react-query update",
+            "The tanstack 1.0 ecosystem announcement landed today.",
+            &[],
+            &ace_ctx,
+        );
+
+        let dep = matches
+            .iter()
+            .find(|m| m.package_name == "tanstack-react-query")
+            .expect("react-query dep should match");
+        assert_ne!(
+            dep.version_delta,
+            VersionDelta::OlderMajor,
+            "must not read the sibling 'tanstack 1.0' as react-query's version"
+        );
+        assert_eq!(
+            dep.version_delta,
+            VersionDelta::Unknown,
+            "no react-query version is mentioned, so the delta is Unknown"
         );
     }
 
