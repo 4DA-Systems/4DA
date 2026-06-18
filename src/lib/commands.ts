@@ -74,6 +74,7 @@ import type {
 import type { PersonalizedLesson as PersonalizedLessonType } from '../types/personalization';
 import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
 import type { BlindSpotTeaser } from '../../src-tauri/bindings/bindings/BlindSpotTeaser';
+import type { BlindSpotAssessment } from '../../src-tauri/bindings/bindings/BlindSpotAssessment';
 import type { CalibrationSprintCard } from '../../src-tauri/bindings/bindings/CalibrationSprintCard';
 import type { CalibrationSprintStatus } from '../../src-tauri/bindings/bindings/CalibrationSprintStatus';
 
@@ -509,6 +510,7 @@ interface CommandMap {
   get_preemption_alerts: { params: Record<string, never>; result: EvidenceFeed };
   get_blind_spots: { params: Record<string, never>; result: EvidenceFeed };
   get_blind_spot_teaser: { params: Record<string, never>; result: BlindSpotTeaser };
+  assess_blind_spots_with_ai: { params: Record<string, never>; result: BlindSpotAssessment };
   get_source_health: { params: Record<string, never>; result: { adapters: Array<{ source_type: string; feed_origin: string; status: string; consecutive_failures: number; last_success_at: string | null; last_failure_at: string | null; last_error: string | null }>; total_active: number; total_failing: number; total_disabled: number } };
 
   // -- OSV Local Mirror (Tier 1 verified intelligence) --

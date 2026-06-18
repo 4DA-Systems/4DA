@@ -139,11 +139,12 @@ const SignalRow = memo(function SignalRow({
 });
 
 const DepCoverageRow = memo(function DepCoverageRow({
-  dep, onDismissSignal, onAddWatch,
+  dep, onDismissSignal, onAddWatch, aiRecommendation,
 }: {
   dep: DepRow;
   onDismissSignal: (id: string) => void;
   onAddWatch?: (packageName: string, ecosystem: string) => void;
+  aiRecommendation?: string;
 }) {
   const { t } = useTranslation();
   const { getTranslated, requestTranslation } = useTranslatedContent();
@@ -216,6 +217,14 @@ const DepCoverageRow = memo(function DepCoverageRow({
           {t(cfg.labelKey)}
         </span>
       </button>
+      {aiRecommendation && (
+        <div className="px-4 pb-2 -mt-1 ms-[26px] flex items-start gap-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400/80 shrink-0 mt-0.5">
+            {t('blindspots.ai.tag')}
+          </span>
+          <p className="text-[11px] text-text-secondary leading-snug">{aiRecommendation}</p>
+        </div>
+      )}
       {expanded && hasContent && (
         <div className="bg-bg-tertiary/20 border-t border-border/50">
           {dep.gap && (
@@ -287,12 +296,15 @@ interface TierSectionProps {
   onDismissSignal: (id: string) => void;
   onAddWatch?: (packageName: string, ecosystem: string) => void;
   emptyText: string;
+  /** Optional AI one-liner per dep (keyed by display name) — shown when the
+   *  "Assess with AI" triage has run. */
+  aiRecommendations?: Map<string, string>;
 }
 
 export const TierSection = memo(function TierSection({
   dotColor, borderColor, title, subtitle,
   badgeText, badgeColor,
-  depRows, onDismissSignal, onAddWatch, emptyText,
+  depRows, onDismissSignal, onAddWatch, emptyText, aiRecommendations,
 }: TierSectionProps) {
   return (
     <section className="mb-4" aria-label={title}>
@@ -308,7 +320,7 @@ export const TierSection = memo(function TierSection({
         {depRows.length > 0 ? (
           <div>
             {depRows.map(dep => (
-              <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} onAddWatch={onAddWatch} />
+              <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} onAddWatch={onAddWatch} aiRecommendation={aiRecommendations?.get(dep.name)} />
             ))}
           </div>
         ) : (
@@ -456,6 +468,82 @@ export const OtherBuildTargetsSection = memo(function OtherBuildTargetsSection({
           {depRows.map(dep => (
             <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} onAddWatch={onAddWatch} />
           ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
+/**
+ * Phase B: the "probably fine" bucket after an AI triage — dependencies the
+ * model judged not worth the developer's attention right now. Collapsed to a
+ * chip list (these are noise by definition); expandable for the full rows +
+ * their one-line AI reasons. Modeled on `CoveredSection`.
+ */
+export const ProbablyFineSection = memo(function ProbablyFineSection({
+  depRows, onDismissSignal, onAddWatch, aiRecommendations,
+}: {
+  depRows: DepRow[];
+  onDismissSignal: (id: string) => void;
+  onAddWatch?: (packageName: string, ecosystem: string) => void;
+  aiRecommendations?: Map<string, string>;
+}) {
+  const { t } = useTranslation();
+  const [show, setShow] = useState(false);
+  const [detail, setDetail] = useState(false);
+
+  if (depRows.length === 0) return null;
+
+  return (
+    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+      <button
+        onClick={() => setShow(prev => !prev)}
+        aria-expanded={show}
+        className="w-full px-4 py-3 flex items-center gap-2 hover:bg-bg-tertiary/30 transition-colors"
+      >
+        <div className="w-2 h-2 rounded-full bg-emerald-400/70" />
+        <h3 className="text-sm font-medium text-text-secondary flex-1 text-left">
+          {t('blindspots.ai.probablyFine', { count: depRows.length })}
+        </h3>
+        <span className="text-[10px] text-text-muted">
+          {show ? t('blindspots.covered.hide') : t('blindspots.covered.show')}
+        </span>
+      </button>
+      {show && (
+        <div className="border-t border-border">
+          {!detail ? (
+            <div className="px-4 py-3">
+              <div className="flex flex-wrap gap-1.5">
+                {depRows.map(dep => (
+                  <span
+                    key={dep.name}
+                    className="text-[11px] px-2 py-1 rounded bg-bg-tertiary/60 text-text-muted border border-border"
+                    title={aiRecommendations?.get(dep.name) ?? undefined}
+                  >
+                    {dep.name}
+                  </span>
+                ))}
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setDetail(true); }}
+                className="mt-2.5 text-[10px] text-text-muted hover:text-text-secondary transition-colors"
+              >
+                {t('blindspots.covered.details')}
+              </button>
+            </div>
+          ) : (
+            <div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setDetail(false); }}
+                className="w-full px-4 py-1.5 text-[10px] text-text-muted hover:text-text-secondary transition-colors text-right"
+              >
+                {t('blindspots.covered.compact')}
+              </button>
+              {depRows.map(dep => (
+                <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} onAddWatch={onAddWatch} aiRecommendation={aiRecommendations?.get(dep.name)} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
