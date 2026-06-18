@@ -25,12 +25,15 @@ vi.mock('./StackCoverageMap', () => ({
     <div data-testid="tier-section">{depRows.map(d => <span key={d.name} data-testid="tier-dep">{d.name}</span>)}</div>
   ),
   EmergingSignals: () => null,
+}));
+vi.mock('./CollapsedSections', () => ({
   CoveredSection: ({ depRows }: { depRows: DepRow[] }) => (
     <div>{depRows.map(d => <span key={d.name} data-testid="covered-dep">{d.name}</span>)}</div>
   ),
   OtherBuildTargetsSection: ({ depRows }: { depRows: DepRow[] }) => (
     <div data-testid="other-section">{depRows.map(d => <span key={d.name} data-testid="other-dep">{d.name}</span>)}</div>
   ),
+  ProbablyFineSection: () => null,
 }));
 
 let mockDepRows: DepRow[] = [];

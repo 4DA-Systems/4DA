@@ -24,6 +24,8 @@ vi.mock('./StackCoverageMap', () => ({
     <div data-testid="tier" data-title={title}>{depRows.map(d => <span key={d.name} data-testid="worth-dep">{d.name}</span>)}</div>
   ),
   EmergingSignals: () => null,
+}));
+vi.mock('./CollapsedSections', () => ({
   CoveredSection: () => null,
   OtherBuildTargetsSection: () => null,
   ProbablyFineSection: ({ depRows }: { depRows: DepRow[] }) => (
