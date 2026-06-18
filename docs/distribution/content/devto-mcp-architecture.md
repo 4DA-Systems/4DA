@@ -31,7 +31,7 @@ src/
   doctor.ts             # Installation health checker
   types.ts              # Shared type definitions
   schemas/              # 33 JSON Schema files (one per tool)
-  tools/                # 33 tool implementations (one per file)
+  tools/                # 14 tool implementations (one per file)
     index.ts            # Barrel exports
 ```
 

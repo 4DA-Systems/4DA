@@ -114,7 +114,7 @@ Add @4da/mcp-server — 14 tools for codebase-aware developer intelligence
 - **npm:** https://www.npmjs.com/package/@4da/mcp-server
 - **Repository:** https://github.com/runyourempire/4DA/tree/main/mcp-4da-server
 - **Website:** https://4da.ai
-- **License:** MIT
+- **License:** Apache-2.0
 - **Language:** TypeScript
 - **Install:** `npx @4da/mcp-server`
 
@@ -166,7 +166,7 @@ Add @4da/mcp-server — 14 tools for codebase-aware developer intelligence
 | Short Description | 14 MCP tools for codebase-aware developer intelligence. Scores content from HN, arXiv, Reddit, GitHub against your actual tech stack. Local-only, privacy-first. |
 | Category | Developer Tools |
 | Language | TypeScript |
-| License | MIT |
+| License | Apache-2.0 |
 | Install Command | npx @4da/mcp-server --setup |
 | GitHub | https://github.com/runyourempire/4DA/tree/main/mcp-4da-server |
 
@@ -187,7 +187,7 @@ Add @4da/mcp-server — 14 tools for codebase-aware developer intelligence
 | Website | https://4da.ai |
 | Category | Developer Tools |
 | Tags | mcp, developer-tools, content-scoring, privacy-first, local-first, ai-tools, codebase-awareness, decision-memory |
-| License | MIT |
+| License | Apache-2.0 |
 | Language | TypeScript |
 | Platforms | Windows, macOS, Linux |
 
@@ -210,7 +210,7 @@ Add @4da/mcp-server — 14 tools for codebase-aware developer intelligence
 | Install Command | npx @4da/mcp-server --setup |
 | Category | Developer Tools |
 | Tags | developer-intelligence, content-scoring, privacy-first, codebase-awareness, decision-memory, knowledge-gaps |
-| License | MIT |
+| License | Apache-2.0 |
 | Tool Count | 36 |
 
 ---
@@ -266,7 +266,7 @@ npx @4da/mcp-server --setup
 Developer Tools
 
 ### License
-MIT
+Apache-2.0
 
 ### Logo
 [Attach 400x400 PNG logo]
@@ -336,7 +336,7 @@ MIT
 | Install | npx @4da/mcp-server --setup |
 | Category | Developer Tools |
 | Tags | mcp, developer-intelligence, content-scoring, privacy-first, local-first, codebase-awareness |
-| License | MIT |
+| License | Apache-2.0 |
 | Platforms | Windows, macOS, Linux |
 
 ---
@@ -356,7 +356,7 @@ MIT
 | Homepage | https://4da.ai |
 | Install Command | npx @4da/mcp-server --setup |
 | Category | Developer Tools |
-| License | MIT |
+| License | Apache-2.0 |
 | Language | TypeScript |
 | Runtime | Node.js >= 18 |
 
@@ -379,7 +379,7 @@ MIT
 | Install | npx @4da/mcp-server --setup |
 | Category | Developer Tools |
 | Tags | developer-intelligence, content-scoring, privacy-first, local-first, codebase-awareness, decision-memory |
-| License | MIT |
+| License | Apache-2.0 |
 | Tool Count | 36 |
 
 ---
@@ -429,7 +429,7 @@ Adds [4DA](https://4da.ai) to the list.
 
 - **Stack:** Rust backend, React/TypeScript frontend, SQLite + sqlite-vec
 - **MCP Server:** https://www.npmjs.com/package/@4da/mcp-server
-- **License:** App is FSL-1.1-Apache-2.0, MCP server is MIT
+- **License:** App is FSL-1.1-Apache-2.0, MCP server is Apache-2.0
 - **Platforms:** Windows, macOS, Linux
 ```
 
@@ -461,7 +461,7 @@ Adds [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) to the Dev
 
 - **npm:** https://www.npmjs.com/package/@4da/mcp-server
 - **Install:** `npx @4da/mcp-server`
-- **License:** MIT
+- **License:** Apache-2.0
 - **Language:** TypeScript
 - **Privacy-first:** Local SQLite reads; the only outbound call is vulnerability_scan (package names + versions to OSV.dev). No accounts, no telemetry.
 ```
