@@ -51,9 +51,25 @@ pub struct GroundednessReport {
     #[allow(dead_code)] // Serde: populated during grounding analysis
     pub grounded_terms: usize,
     pub ungrounded_terms: Vec<String>,
+    /// Multi-word capitalized proper-noun phrases (e.g. "Stripe Connect",
+    /// "React Server Components") — the interpretive "claim" layer, kept
+    /// separate from factual package/version terms. See `claim_grounded`.
+    pub claim_terms: usize,
+    /// How many of `claim_terms` were grounded in the corpus.
+    pub claim_grounded: usize,
 }
 
 impl GroundednessReport {
+    /// Claim-layer grounding ratio: of the multi-word proper-noun phrases,
+    /// what fraction are grounded? 1.0 when there are none (nothing to doubt).
+    pub fn claim_confidence(&self) -> f32 {
+        if self.claim_terms == 0 {
+            1.0
+        } else {
+            self.claim_grounded as f32 / self.claim_terms as f32
+        }
+    }
+
     /// Is this output safe to show the user at the given threshold?
     pub fn is_acceptable(&self, threshold: f32) -> bool {
         // A good synthesis MUST reference something specific from the
@@ -74,10 +90,26 @@ impl GroundednessReport {
     }
 }
 
+// NOTE on the claim layer (`claim_terms` / `claim_grounded` / `claim_confidence`):
+// these are reported and LOGGED, not gated. A hard "claim phrases must be
+// grounded" gate is unsafe — realistic prose like "Upgrade Tokio today" forms a
+// capitalized run "Upgrade Tokio" whose verb is never in the corpus, so gating
+// on it would false-reject good briefs and re-introduce the abstention bug this
+// change set fixed. The active accuracy guards are: the prompt's project/scope
+// rules (no invented use-cases, no cross-project compounding), the deterministic
+// `check_factual_claims` version verifier, and the overall `confidence` floor.
+// Claim telemetry exists so we can SEE proper-noun drift over time and tighten
+// later from data rather than guesswork.
+
 /// Validate that the synthesized briefing text is grounded in the
 /// provided corpus. The corpus should contain every source item that
 /// was fed to the LLM: concatenate title + description + matched_deps
 /// per item.
+///
+/// 2-arg shim (no package allowlist) used by the grounding test corpus.
+/// Production paths always have the brief's packages and call
+/// [`validate_groundedness_with_packages`], so this is test-only.
+#[cfg(test)]
 pub fn validate_groundedness(output: &str, corpus: &[String]) -> GroundednessReport {
     validate_groundedness_with_packages(output, corpus, &[])
 }
@@ -126,12 +158,24 @@ pub fn validate_groundedness_with_packages(
 
     let mut ungrounded = Vec::new();
     let mut grounded = 0;
+    let mut claim_terms = 0;
+    let mut claim_grounded = 0;
 
     for term in &terms {
-        if is_term_grounded(term, &corpus_lower) {
+        let is_grounded = is_term_grounded(term, &corpus_lower);
+        if is_grounded {
             grounded += 1;
         } else {
             ungrounded.push(term.clone());
+        }
+        // Claim layer = multi-word capitalized proper-noun phrases that are
+        // NOT factual package/version tokens. These are the interpretive names
+        // ("Stripe Connect", "Apache Kafka") most prone to hallucination.
+        if is_claim_term(term, &pkg_set) {
+            claim_terms += 1;
+            if is_grounded {
+                claim_grounded += 1;
+            }
         }
     }
 
@@ -149,7 +193,148 @@ pub fn validate_groundedness_with_packages(
         total_terms: total,
         grounded_terms: grounded,
         ungrounded_terms: ungrounded,
+        claim_terms,
+        claim_grounded,
     }
+}
+
+/// A factual term is one grounded by construction or by shape: a known package
+/// name, a version-like token (digits with a dot), or a scoped npm name. These
+/// are NOT claims — they are the verifiable spine of the synthesis.
+fn is_factual_term(term: &str, pkg_set: &std::collections::HashSet<String>) -> bool {
+    let lower = term.to_lowercase();
+    if pkg_set.contains(&lower) {
+        return true;
+    }
+    if term.starts_with('@') && term.contains('/') {
+        return true;
+    }
+    // Version-like: contains a dot and at least one digit (e.g. "1.16.0").
+    term.contains('.') && term.chars().any(|c| c.is_ascii_digit())
+}
+
+/// A claim term is a multi-word capitalized proper-noun phrase that is not a
+/// factual token. Single-word capitals are excluded on purpose: sentence-initial
+/// words ("Upgrade", "Then", "Audit") are noise, and gating on them would
+/// re-introduce the false-abstention bug.
+fn is_claim_term(term: &str, pkg_set: &std::collections::HashSet<String>) -> bool {
+    term.contains(' ') && !is_factual_term(term, pkg_set)
+}
+
+// ============================================================================
+// Factual claim verification (deterministic — the "accurate first" backstop)
+// ============================================================================
+
+/// A package and the set of versions it is legitimate to cite for it: its
+/// currently-installed version and its advisory's fixed version. Built by the
+/// caller from the brief's security alerts.
+#[derive(Debug, Clone)]
+pub struct PackageFact {
+    pub name: String,
+    pub versions: Vec<String>,
+}
+
+/// Deterministically verify the version numbers a synthesis states for known
+/// packages. The heuristic groundedness check does fuzzy term matching; this is
+/// the exact backstop: if the model says "upgrade axios to 1.99" but the only
+/// versions on record for axios are 1.12.2 (installed) and 1.16.0 (fix), that is
+/// a fabricated version a user could act on — and we must not ship it.
+///
+/// Precision over recall: a violation is reported ONLY when a version token sits
+/// in the span that clearly belongs to a named package (from that package's name
+/// up to the next known package name) and matches none of its allowed versions
+/// (prefix-tolerant, so "1.16" matches "1.16.0"). Versions not associated with
+/// any package are ignored, so legitimate versions from other signals never
+/// trip it.
+pub fn check_factual_claims(prose: &str, facts: &[PackageFact]) -> Vec<String> {
+    if facts.is_empty() {
+        return Vec::new();
+    }
+    let tokens: Vec<&str> = prose.split_whitespace().collect();
+    // Normalize a prose token to a bare identifier for package matching.
+    let norm = |t: &str| -> String {
+        t.trim_matches(|c: char| !c.is_alphanumeric() && !matches!(c, '@' | '/' | '-' | '_' | '.'))
+            .trim_matches(|c: char| matches!(c, '.' | '-' | '_'))
+            .to_lowercase()
+    };
+    // For each package, the bare tokens that should count as "naming" it.
+    let alias = |name: &str| -> Vec<String> {
+        let l = name.to_lowercase();
+        let mut v = vec![l.clone()];
+        // scoped "@scope/pkg" -> also match the bare "pkg"
+        if let Some(idx) = l.rfind('/') {
+            v.push(l[idx + 1..].to_string());
+        }
+        v
+    };
+
+    // Index each token position to a package (if it names one).
+    let pkg_at: Vec<Option<usize>> = tokens
+        .iter()
+        .map(|t| {
+            let n = norm(t);
+            facts.iter().position(|f| alias(&f.name).contains(&n))
+        })
+        .collect();
+
+    let mut violations = Vec::new();
+    for (i, fi) in pkg_at.iter().enumerate() {
+        let Some(fact_idx) = *fi else { continue };
+        let fact = &facts[fact_idx];
+        // Scan forward within the SAME sentence, stopping at the next package
+        // mention, for version tokens to attribute to this package. Bounding to
+        // the sentence prevents a version in a later sentence from being
+        // misattributed (e.g. "Upgrade axios to 1.16.0. React 19.2 is new.").
+        for (offset, raw) in tokens.iter().skip(i + 1).enumerate() {
+            let pos = i + 1 + offset;
+            if pos < pkg_at.len() && pkg_at[pos].is_some() {
+                break; // reached the next package — stop attributing versions here
+            }
+            let v = raw
+                .trim_matches(|c: char| !c.is_ascii_digit() && c != '.')
+                .trim_matches('.');
+            if looks_like_version_token(v)
+                && !fact.versions.iter().any(|allowed| version_matches(v, allowed))
+            {
+                violations.push(format!(
+                    "{} cited version {} (on record: {})",
+                    fact.name,
+                    v,
+                    fact.versions.join(", ")
+                ));
+            }
+            // Stop at a sentence boundary (this token ends with . ! or ?).
+            if raw.ends_with(|c: char| matches!(c, '.' | '!' | '?')) {
+                break;
+            }
+        }
+    }
+    violations
+}
+
+/// A token like "1.16", "10.3.0", "1.12.2" — at least one dot between digits.
+fn looks_like_version_token(t: &str) -> bool {
+    let bytes: Vec<char> = t.chars().collect();
+    if !t.contains('.') {
+        return false;
+    }
+    if !t.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        return false;
+    }
+    bytes.first().is_some_and(|c| c.is_ascii_digit())
+        && bytes.last().is_some_and(|c| c.is_ascii_digit())
+}
+
+/// Prefix-tolerant version equality at dot boundaries: "1.16" matches "1.16.0"
+/// and "1.16.2", but "1.16" does not match "1.1" or "1.160".
+fn version_matches(stated: &str, allowed: &str) -> bool {
+    if stated == allowed {
+        return true;
+    }
+    let s: Vec<&str> = stated.split('.').collect();
+    let a: Vec<&str> = allowed.split('.').collect();
+    let n = s.len().min(a.len());
+    n >= 1 && s[..n] == a[..n]
 }
 
 // ============================================================================
@@ -392,5 +577,105 @@ mod tests {
         assert_eq!(r.total_terms, 0);
         assert_eq!(r.confidence, 0.0);
         assert!(!r.is_acceptable(0.65));
+    }
+
+    #[test]
+    fn realistic_imperative_prose_is_not_falsely_rejected() {
+        // Regression guard for the #3 design decision: imperative prose like
+        // "Upgrade Tokio" forms a capitalized run whose verb the extractor sees
+        // as a term. With a realistic corpus (as production builds from item
+        // text + advisory explanations) the content is grounded and passes.
+        // The claim layer is telemetry-only — it must never gate this away.
+        let output = "Tokio has a confirmed advisory. Upgrade Tokio to 1.38.6 today.";
+        let c = corpus(&[
+            "tokio security advisory: upgrade tokio to 1.38.6 to patch the runtime",
+        ]);
+        let r = validate_groundedness(output, &c);
+        assert!(
+            r.is_acceptable(0.65),
+            "grounded imperative prose must not be force-abstained: {r:?}"
+        );
+    }
+
+    // ---- #2: deterministic factual version verification -------------------
+
+    fn facts(pairs: &[(&str, &[&str])]) -> Vec<PackageFact> {
+        pairs
+            .iter()
+            .map(|(n, vs)| PackageFact {
+                name: (*n).to_string(),
+                versions: vs.iter().map(|v| (*v).to_string()).collect(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn factual_check_passes_correct_versions() {
+        let prose = "Upgrade jsonwebtoken to 10.3.0 and axios to 1.16.0 today.";
+        let f = facts(&[
+            ("jsonwebtoken", &["9.3.1", "10.3.0"]),
+            ("axios", &["1.12.2", "1.16.0"]),
+        ]);
+        assert!(check_factual_claims(prose, &f).is_empty());
+    }
+
+    #[test]
+    fn factual_check_flags_fabricated_version() {
+        let prose = "Upgrade axios to 1.99.0 immediately.";
+        let f = facts(&[("axios", &["1.12.2", "1.16.0"])]);
+        let v = check_factual_claims(prose, &f);
+        assert!(!v.is_empty(), "fabricated version should be flagged");
+        assert!(v[0].contains("axios"), "got {v:?}");
+    }
+
+    #[test]
+    fn factual_check_attributes_versions_to_right_package() {
+        // 1.16.0 belongs to axios; jsonwebtoken's window must end at "axios".
+        let prose = "Upgrade jsonwebtoken to 10.3.0 and axios to 1.16.0.";
+        let f = facts(&[("jsonwebtoken", &["10.3.0"]), ("axios", &["1.16.0"])]);
+        assert!(check_factual_claims(prose, &f).is_empty());
+    }
+
+    #[test]
+    fn factual_check_ignores_version_in_a_later_sentence() {
+        // The "19.2" belongs to a different sentence/topic, not axios.
+        let prose = "Upgrade axios to 1.16.0 now. React 19.2 just shipped.";
+        let f = facts(&[("axios", &["1.16.0"])]);
+        assert!(
+            check_factual_claims(prose, &f).is_empty(),
+            "a later-sentence version must not be attributed to axios"
+        );
+    }
+
+    #[test]
+    fn factual_check_prefix_tolerant() {
+        let prose = "Bump axios to 1.16.";
+        let f = facts(&[("axios", &["1.16.0"])]);
+        assert!(
+            check_factual_claims(prose, &f).is_empty(),
+            "1.16 should match 1.16.0"
+        );
+    }
+
+    #[test]
+    fn factual_check_scoped_name_alias() {
+        let prose = "Update provider-utils to 2.1.0.";
+        let f = facts(&[("@ai-sdk/provider-utils", &["2.1.0"])]);
+        assert!(
+            check_factual_claims(prose, &f).is_empty(),
+            "bare 'provider-utils' should map to the scoped name"
+        );
+    }
+
+    #[test]
+    fn claim_telemetry_separates_factual_from_claims() {
+        // "Apache Kafka" is an invented multi-word proper noun (claim layer);
+        // axios + version are factual. Telemetry tracks it; it is NOT gated.
+        let output = "Apache Kafka is unrelated. Upgrade axios to 1.16.0.";
+        let c = corpus(&["axios advisory affecting your stack"]);
+        let packages = vec!["axios".to_string()];
+        let r = validate_groundedness_with_packages(output, &c, &packages);
+        assert!(r.claim_terms >= 1, "Apache Kafka should count as a claim term");
+        assert!(r.claim_confidence() < 1.0, "ungrounded claim lowers claim_confidence");
     }
 }

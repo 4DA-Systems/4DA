@@ -2058,6 +2058,23 @@ pub(crate) struct SynthesisResult {
     pub synthesis_tier: String,
 }
 
+/// Short, human-readable label for a project path: the last one or two path
+/// components (e.g. "c:/users/.../kairos-mvp/backend" -> "kairos-mvp/backend").
+/// Gives the synthesizer a concrete project to name instead of inventing one.
+fn project_label(path: &str) -> String {
+    let norm = path.replace('\\', "/");
+    let parts: Vec<&str> = norm
+        .trim_end_matches('/')
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
+    match parts.len() {
+        0 => path.to_string(),
+        1 => parts[0].to_string(),
+        n => format!("{}/{}", parts[n - 2], parts[n - 1]),
+    }
+}
+
 /// Synthesize a narrative morning intelligence briefing using LLM.
 pub(crate) async fn synthesize_morning_briefing(
     briefing: &BriefingNotification,
@@ -2210,8 +2227,16 @@ pub(crate) async fn synthesize_morning_briefing(
     let preemption_text = if briefing.preemption_alerts.is_empty() {
         String::new()
     } else {
-        let p = briefing
-            .preemption_alerts
+        // Order so primary-app issues lead, then side projects, then dev-only:
+        // "what's important right now" weights the app you ship above side work.
+        let mut ordered: Vec<&BriefingPreemptionAlert> =
+            briefing.preemption_alerts.iter().collect();
+        ordered.sort_by_key(|a| match a.scope.as_deref() {
+            Some("primary") => 0u8,
+            Some("dev") => 2,
+            _ => 1, // external / unknown
+        });
+        let p = ordered
             .iter()
             .map(|a| {
                 let pkg = a
@@ -2224,6 +2249,21 @@ pub(crate) async fn synthesize_morning_briefing(
                     Some(false) => "transitive dep",
                     None => "dependency",
                 };
+                // Scope + concrete project so the model anchors to real paths
+                // instead of inventing a use-case ("webhook flows").
+                let scope_label = match a.scope.as_deref() {
+                    Some("primary") => "in your PRIMARY app",
+                    Some("dev") => "dev-only dependency",
+                    Some("external") => "in a SIDE project (not the app you ship)",
+                    _ => "scope unknown",
+                };
+                let projects = if a.affected_projects.is_empty() {
+                    String::new()
+                } else {
+                    let names: Vec<String> =
+                        a.affected_projects.iter().map(|p| project_label(p)).collect();
+                    format!(", project: {}", names.join(", "))
+                };
                 let fix = match (a.installed_version.as_deref(), a.fixed_version.as_deref()) {
                     (Some(cur), Some(fixed)) => format!("; installed {cur}, fix in {fixed}"),
                     (None, Some(fixed)) => format!("; fix in {fixed}"),
@@ -2231,11 +2271,13 @@ pub(crate) async fn synthesize_morning_briefing(
                     (None, None) => String::new(),
                 };
                 format!(
-                    "- [{}] {}{} ({}{})",
+                    "- [{}] {}{} ({}, {}{}{})",
                     a.urgency.to_uppercase(),
                     a.title,
                     pkg,
                     dep_kind,
+                    scope_label,
+                    projects,
                     fix
                 )
             })
@@ -2286,8 +2328,14 @@ QUALITY RULES:
 8. If only 1 cluster is strong, write 1 cluster. Don't force a second cluster from weak signals.
 9. NEVER invent numbers, percentages, or statistics not explicitly stated in the signals. "2-3x", "35%", "second this quarter" are claims -- they must come from the input, not your imagination.
 10. ONLY mention technologies that appear in the developer's installed dependencies list or tech stack. If a signal mentions a package NOT in the developer's dependency list, do not claim it "impacts your stack" or "affects your applications". You may still mention it as industry news, but frame it accordingly: "X released Y" not "X affects your stack".
+11. PROJECTS ARE GROUND TRUTH. Each security alert states its project and scope. Reference the actual project by name (e.g. "in kairos-mvp/backend"). NEVER invent a use-case, feature, or flow the input does not state -- do not say "auth flows", "webhook flows", "payment path" etc. unless those exact words appear in the input. The path is data; the use-case is your imagination.
+12. NO CROSS-PROJECT COMPOUNDING. Two issues only "compound", "combine", or form a "combined exposure" when they are in the SAME project/path. If alert A is in project X and alert B is in project Y, they are SEPARATE issues -- say so, or cover only the strongest. Never manufacture a combined-attack-surface narrative across different projects.
+13. RESPECT SCOPE. An alert marked "in a SIDE project" or "dev-only" is NOT in the app the developer ships. Do not imply it is active core work or that "the attack surface is live" in their main product. State the scope honestly: "in your side project navcal" not "in flows you're actively working on". Lead with PRIMARY-app issues; for side projects, name the project and label it as such.
 
 BANNED:
+- Inventing a use-case/feature/flow not stated in the input ("auth flows", "webhook flows", "billing path") -- name the project, not an imagined purpose
+- Claiming two issues "compound" / "combine" / are a "combined exposure" when they are in different projects -- that is a fabricated narrative
+- Implying a side-project or dev-only dependency is active core work or a live threat to the shipped app
 - Restating signal titles without adding context or connecting dots
 - Speculative implications: "could impact", "might affect", "may influence" without evidence in the signals
 - Transition padding: "meanwhile", "in another domain", "in a related vein", "additionally", "furthermore"
@@ -2400,6 +2448,32 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         s.into_iter().collect()
     };
 
+    // Factual ground truth for the deterministic version check: each alert's
+    // package and the versions it is legitimate to cite (installed + fix).
+    // Packages with no known version are omitted — we can't fault a claim we
+    // have no data to contradict.
+    let package_facts: Vec<crate::briefing_groundedness::PackageFact> = briefing
+        .preemption_alerts
+        .iter()
+        .filter_map(|a| {
+            let name = a.package_name.as_deref().filter(|p| !p.is_empty())?;
+            let mut versions = Vec::new();
+            if let Some(v) = a.installed_version.as_deref().filter(|v| !v.is_empty()) {
+                versions.push(v.to_string());
+            }
+            if let Some(v) = a.fixed_version.as_deref().filter(|v| !v.is_empty()) {
+                versions.push(v.to_string());
+            }
+            if versions.is_empty() {
+                return None;
+            }
+            Some(crate::briefing_groundedness::PackageFact {
+                name: name.to_string(),
+                versions,
+            })
+        })
+        .collect();
+
     const GROUNDEDNESS_THRESHOLD: f32 = 0.65;
 
     let mut last_error: Option<String> = None;
@@ -2473,10 +2547,31 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                             });
                         }
 
+                        // Deterministic factual backstop: reject fabricated
+                        // version numbers the fuzzy grounding check can't catch.
+                        let fact_violations =
+                            crate::briefing_groundedness::check_factual_claims(&prose, &package_facts);
+                        if !fact_violations.is_empty() {
+                            tracing::warn!(
+                                target: "4da::briefing",
+                                violations = ?fact_violations,
+                                "Structured synthesis stated wrong package versions — abstaining"
+                            );
+                            return Ok(SynthesisResult {
+                                prose: "Low signal -- no noteworthy intelligence overnight."
+                                    .to_string(),
+                                clusters: None,
+                                provider_used: provider_label.clone(),
+                                synthesis_tier: tier.as_str().to_string(),
+                            });
+                        }
+
                         tracing::info!(
                             target: "4da::briefing",
                             confidence = report.confidence,
-                            "Structured synthesis passed groundedness"
+                            claim_confidence = report.claim_confidence(),
+                            claim_terms = report.claim_terms,
+                            "Structured synthesis passed groundedness + factual checks"
                         );
 
                         let mut synthesis = prose;
@@ -2763,11 +2858,28 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
             });
         }
 
+        let fact_violations =
+            crate::briefing_groundedness::check_factual_claims(&response.content, &package_facts);
+        if !fact_violations.is_empty() {
+            tracing::warn!(
+                target: "4da::briefing",
+                violations = ?fact_violations,
+                "Morning brief synthesis stated wrong package versions — falling back to abstention"
+            );
+            return Ok(SynthesisResult {
+                prose: "Low signal -- no noteworthy intelligence overnight.".to_string(),
+                clusters: None,
+                provider_used: provider_label.clone(),
+                synthesis_tier: tier.as_str().to_string(),
+            });
+        }
+
         tracing::info!(
             target: "4da::briefing",
             confidence = report.confidence,
             total_terms = report.total_terms,
-            "Groundedness check passed"
+            claim_confidence = report.claim_confidence(),
+            "Groundedness + factual checks passed"
         );
 
         let mut synthesis = response.content;
