@@ -2258,6 +2258,8 @@
   "settings.ai.recommended": "Recomendado",
   "settings.ai.intelligenceEngine": "Motor de inteligência",
   "settings.ai.intelligenceEngineDesc": "Modelos integrados que alimentam pontuação e relevância — roda localmente, sem necessidade de chave API.",
+  "settings.ai.autoAssessTitle": "Avaliar pontos cegos com IA automaticamente",
+  "settings.ai.autoAssessDesc": "Quando uma dependência surge como novo ponto cego, a IA faz a triagem automaticamente para manter atualizada a lista de itens que valem revisão. Fica em cache conforme o seu conjunto de dependências — só usa o seu modelo quando algo realmente muda.",
   "settings.ai.engineEmbedding": "Incorporação",
   "settings.ai.engineReranker": "Reranker",
   "settings.ai.engineTopics": "Enriquecimento de tópicos",

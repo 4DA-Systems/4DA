@@ -349,6 +349,8 @@
   "settings.ai.embeddingSetup.prepare": "Préparer le moteur d'intégration",
   "settings.ai.intelligenceEngine": "Moteur d'intelligence",
   "settings.ai.intelligenceEngineDesc": "Modèles intégrés qui alimentent le scoring et la pertinence — fonctionne localement, aucune clé API requise.",
+  "settings.ai.autoAssessTitle": "Évaluer les angles morts avec l'IA automatiquement",
+  "settings.ai.autoAssessDesc": "Lorsqu'une dépendance apparaît comme nouvel angle mort, le tri par l'IA se lance automatiquement pour garder à jour la liste des éléments à examiner. Mis en cache selon votre ensemble de dépendances — votre modèle n'est sollicité que lorsque quelque chose change vraiment.",
   "settings.ai.engineEmbedding": "Intégration",
   "settings.ai.engineReranker": "Reranker",
   "settings.ai.engineTopics": "Enrichissement thématique",

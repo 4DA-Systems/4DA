@@ -34,6 +34,9 @@ export interface Settings {
     items_reranked: number;
   };
   embedding_threshold: number;
+  /** When true, the Blind Spots lens auto-runs the AI triage when the surfaced
+   *  dep-set changes (cached, so it only spends an LLM call on a real change). */
+  auto_assess_blind_spots?: boolean;
   license: LicenseConfig;
 }
 

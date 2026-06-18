@@ -830,6 +830,7 @@ pub fn run() {
             settings_commands::mark_onboarding_complete,
             settings_commands::set_rerank_config,
             settings_commands::set_llm_limits,
+            settings_commands::set_auto_assess_blind_spots,
             settings_commands::test_llm_connection,
             settings_commands::check_ollama_status,
             settings_commands::pull_ollama_model,

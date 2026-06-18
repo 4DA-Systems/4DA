@@ -9,7 +9,7 @@
 
 use tracing::{info, warn};
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::settings::{LLMProvider, LlmLimitsConfig, RerankConfig};
 
 use crate::get_settings_manager;
@@ -67,6 +67,7 @@ pub async fn get_settings() -> Result<serde_json::Value> {
         "embedding_threshold": settings.embedding_threshold,
         "onboarding_complete": settings.onboarding_complete,
         "auto_discovery_completed": settings.auto_discovery_completed,
+        "auto_assess_blind_spots": settings.auto_assess_blind_spots,
         "license": {
             "tier": settings.license.tier,
             "has_key": !settings.license.license_key.is_empty(),
@@ -328,6 +329,21 @@ pub async fn set_rerank_config(
 
     guard.set_rerank_config(config)?;
     info!(target: "4da::settings", enabled = enabled, "Re-rank config updated");
+    Ok(())
+}
+
+/// Toggle automatic AI triage of Blind Spots. When enabled, the Blind Spots
+/// lens runs the assessment whenever the surfaced dep-set changes (cached, so
+/// it only spends an LLM call on an actual change). Persisted top-level.
+#[tauri::command]
+pub async fn set_auto_assess_blind_spots(enabled: bool) -> Result<()> {
+    let manager = get_settings_manager();
+    let mut guard = manager.lock();
+    guard.get_mut().auto_assess_blind_spots = enabled;
+    guard
+        .save()
+        .context("Failed to persist auto-assess-blind-spots setting")?;
+    tracing::info!(target: "4da::settings", auto_assess_blind_spots = enabled, "Auto-assess Blind Spots updated");
     Ok(())
 }
 

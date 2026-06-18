@@ -349,6 +349,8 @@
   "settings.ai.embeddingSetup.prepare": "Einbettungs-Engine vorbereiten",
   "settings.ai.intelligenceEngine": "Intelligenz-Engine",
   "settings.ai.intelligenceEngineDesc": "Integrierte Modelle für Bewertung und Relevanz — läuft lokal, kein API-Schlüssel erforderlich.",
+  "settings.ai.autoAssessTitle": "Blinde Flecken automatisch mit KI bewerten",
+  "settings.ai.autoAssessDesc": "Sobald eine Abhängigkeit neu als blinder Fleck auftaucht, läuft die KI-Triage automatisch, damit die Liste der prüfenswerten Punkte aktuell bleibt. Zwischengespeichert nach deinem Abhängigkeitssatz — dein Modell wird nur genutzt, wenn sich tatsächlich etwas ändert.",
   "settings.ai.engineEmbedding": "Einbettung",
   "settings.ai.engineReranker": "Reranker",
   "settings.ai.engineTopics": "Themenanreicherung",

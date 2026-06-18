@@ -349,6 +349,8 @@
   "settings.ai.embeddingSetup.prepare": "准备嵌入引擎",
   "settings.ai.intelligenceEngine": "智能引擎",
   "settings.ai.intelligenceEngineDesc": "驱动评分和相关性的内置模型 — 本地运行，无需 API 密钥。",
+  "settings.ai.autoAssessTitle": "用 AI 自动评估盲区",
+  "settings.ai.autoAssessDesc": "当某个依赖项新出现为盲区时，自动运行 AI 评估，让值得审阅的清单保持最新。结果按你的依赖项集合缓存 — 只有在确实发生变化时才会调用你的模型。",
   "settings.ai.engineEmbedding": "嵌入",
   "settings.ai.engineReranker": "重排序器",
   "settings.ai.engineTopics": "主题丰富化",

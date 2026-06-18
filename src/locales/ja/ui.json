@@ -349,6 +349,8 @@
   "settings.ai.embeddingSetup.prepare": "エンベディングエンジンを準備",
   "settings.ai.intelligenceEngine": "インテリジェンスエンジン",
   "settings.ai.intelligenceEngineDesc": "スコアリングと関連性を支える組み込みモデル — ローカルで動作、APIキー不要。",
+  "settings.ai.autoAssessTitle": "ブラインドスポットをAIで自動評価",
+  "settings.ai.autoAssessDesc": "依存関係が新たにブラインドスポットとして現れると、AIトリアージを自動実行し、レビュー候補リストを常に最新に保ちます。依存関係のセットごとにキャッシュされるため、実際に変化があったときだけモデルを使用します。",
   "settings.ai.engineEmbedding": "エンベディング",
   "settings.ai.engineReranker": "リランカー",
   "settings.ai.engineTopics": "トピック補強",
