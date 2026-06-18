@@ -15,7 +15,9 @@
   },
   "pnpm": {
     "overrides": {
-      "liquidjs": ">=10.26.0"
+      "liquidjs": ">=10.26.0",
+      "markdown-it": ">=14.2.0 <15",
+      "js-yaml": ">=4.2.0 <5"
     }
   }
 }
