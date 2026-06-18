@@ -983,6 +983,7 @@ pub fn run() {
             blind_spots::get_blind_spot_teaser,
             blind_spots::add_package_watch,
             blind_spots::assess_blind_spots_with_ai,
+            blind_spots::get_cached_blind_spot_assessment,
             blind_spots::dismiss_blind_spot,
             source_health_diagnostics::get_source_health,
             knowledge_decay::get_knowledge_gaps,

@@ -511,6 +511,7 @@ interface CommandMap {
   get_blind_spots: { params: Record<string, never>; result: EvidenceFeed };
   get_blind_spot_teaser: { params: Record<string, never>; result: BlindSpotTeaser };
   assess_blind_spots_with_ai: { params: Record<string, never>; result: BlindSpotAssessment };
+  get_cached_blind_spot_assessment: { params: Record<string, never>; result: BlindSpotAssessment | null };
   get_source_health: { params: Record<string, never>; result: { adapters: Array<{ source_type: string; feed_origin: string; status: string; consecutive_failures: number; last_success_at: string | null; last_failure_at: string | null; last_error: string | null }>; total_active: number; total_failing: number; total_disabled: number } };
 
   // -- OSV Local Mirror (Tier 1 verified intelligence) --
