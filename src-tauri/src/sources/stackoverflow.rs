@@ -79,6 +79,16 @@ impl StackOverflowSource {
         }
     }
 
+    /// Create a Stack Overflow source whose tags are shaped by the user's detected stack.
+    /// Falls back to `DEFAULT_TAGS` when `tags` is empty (no stack signals / fresh install).
+    pub fn with_tags(tags: Vec<String>) -> Self {
+        let mut source = Self::new();
+        if !tags.is_empty() {
+            source.tags = tags;
+        }
+        source
+    }
+
     /// Fetch questions for a single tag
     async fn fetch_tag(&self, tag: &str) -> SourceResult<(Vec<SourceItem>, Option<u32>)> {
         let url = format!(
