@@ -56,7 +56,7 @@ Those give you a list in your terminal. This gives your AI the data in context. 
 
 ### Q: "Does it phone home?"
 
-The only network call is vulnerability_scan: package names + versions to OSV.dev. Same data that's public in your manifest files. Everything else is local SQLite reads. No accounts, no telemetry, no analytics. Set FOURDA_OFFLINE=true to go fully offline. The code is MIT — read it yourself.
+The only network call is vulnerability_scan: package names + versions to OSV.dev. Same data that's public in your manifest files. Everything else is local SQLite reads. No accounts, no telemetry, no analytics. Set FOURDA_OFFLINE=true to go fully offline. The MCP server is Apache-2.0 — read it yourself.
 
 ### Q: "How does it know my stack?"
 
@@ -72,11 +72,11 @@ Snyk requires an account and sends your dependency graph to their servers. Depen
 
 ### Q: "What's the business model?"
 
-The MCP server is MIT and stays free. The companion desktop app (4DA) has paid tiers for advanced content intelligence that compounds over time. Not venture-funded, not optimizing for growth metrics.
+The MCP server is Apache-2.0 and stays free. The companion desktop app (4DA) has paid tiers for advanced content intelligence that compounds over time. Not venture-funded, not optimizing for growth metrics.
 
 ### Q: "Why not open source the desktop app?"
 
-It's source-available under FSL-1.1-Apache-2.0. You can read, modify, and run it. The only restriction is you can't build a competing product. Converts to full Apache 2.0 after three years. The MCP server has no such restriction — plain MIT.
+It's source-available under FSL-1.1-Apache-2.0. You can read, modify, and run it. The only restriction is you can't build a competing product. Converts to full Apache 2.0 after three years. The MCP server has no such restriction — plain Apache-2.0.
 
 ### Q: "Isn't MCP a fad?"
 
