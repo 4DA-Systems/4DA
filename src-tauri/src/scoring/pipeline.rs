@@ -253,7 +253,15 @@ pub(crate) fn score_item(
     // Replaces binary off_domain_penalty with tiered relevance (1.0 primary → 0.15 off-domain)
     let mut domain_relevance =
         crate::domain_profile::compute_domain_relevance(&topics, &ctx.domain_profile);
-    if dep_match_score >= 0.50 && !ctx.domain_profile.is_empty() {
+    // Override only when a SPECIFIC (non-ubiquitous) dep matches — a ubiquitous
+    // framework alone (react, vue, node, ...) is weak evidence and must not force
+    // an off-domain item to full domain relevance. Mirrors pipeline_v2.
+    if dep_match_score >= 0.50
+        && !ctx.domain_profile.is_empty()
+        && matched_deps
+            .iter()
+            .any(|d| !crate::domain_profile::is_ubiquitous_framework(&d.package_name))
+    {
         domain_relevance = domain_relevance.max(1.0);
     }
     let off_domain_penalty = if domain_relevance >= 0.85 {
