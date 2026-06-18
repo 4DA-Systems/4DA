@@ -36,6 +36,12 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     })),
   );
   const loadBlindSpots = useAppStore((s) => s.loadBlindSpots);
+  // Auto-assess: the user's toggle + whether a cloud LLM key is present. Auto
+  // runs are gated to cloud-key users so we never auto-spend (or surface a
+  // "no model" hint) unprompted; local-only (Ollama) and key-less users keep
+  // the manual button.
+  const autoAssess = useAppStore((s) => s.settings?.auto_assess_blind_spots);
+  const hasLlmKey = useAppStore((s) => s.settings?.llm?.has_api_key);
   const [dismissed, setDismissed] = useState<Set<string>>(loadPersistedDismissals);
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -94,19 +100,28 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     setAi({ map, model: a.model });
   }, []);
 
-  const handleAssess = useCallback(() => {
+  // `manual` distinguishes a user click (records an "acted-on" trust event)
+  // from an automatic run on a dep-set change (no trust event — the user did
+  // not act). Both hit the same backend command, which is cached by the
+  // surfaced dep-set: an auto-run on an unchanged set returns instantly with
+  // no model call.
+  const runAssess = useCallback((manual: boolean) => {
     setAiLoading(true);
     setAiError(null);
     cmd('assess_blind_spots_with_ai')
       .then((res) => {
         applyAssessment(res as BlindSpotAssessment);
-        recordTrustEvent({ eventType: 'acted_on', sourceType: 'gap', notes: 'blind_spot_ai_assess' });
+        if (manual) {
+          recordTrustEvent({ eventType: 'acted_on', sourceType: 'gap', notes: 'blind_spot_ai_assess' });
+        }
       })
       .catch((e: unknown) => {
         setAiError(String(e).includes('no_llm_configured') ? 'no_llm' : String(e));
       })
       .finally(() => setAiLoading(false));
   }, [applyAssessment]);
+
+  const handleAssess = useCallback(() => runAssess(true), [runAssess]);
 
   // Persist the triage across view re-mounts / webview reloads: the backend
   // caches the last assessment in-process, so on mount we re-hydrate it. This
@@ -133,6 +148,27 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       }
     }
   }, [depRows]);
+
+  // Auto-assess on dep-set change: when the toggle is on and a cloud LLM key is
+  // present, run the triage once per distinct surfaced dep-set. The backend
+  // caches by that exact set, so an unchanged set is a free instant cache read;
+  // a model call happens only when a dependency newly surfaces or drops off.
+  // We track the last auto-assessed signature in a ref so re-renders and the
+  // hourly background scan (which doesn't change the set) don't re-fire it.
+  const autoAssessedSigRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (autoAssess === false || !hasLlmKey || paywalled) return;
+    const gapNames = depRows
+      .filter((d) => d.gap?.lens_hints.other_build_target !== true)
+      .filter((d) => d.status === 'blind_spot' || d.status === 'falling_behind')
+      .map((d) => d.name)
+      .sort();
+    if (gapNames.length === 0) return;
+    const sig = gapNames.join('|');
+    if (autoAssessedSigRef.current === sig) return;
+    autoAssessedSigRef.current = sig;
+    runAssess(false);
+  }, [autoAssess, hasLlmKey, paywalled, depRows, runAssess]);
 
   if (loading) {
     return (

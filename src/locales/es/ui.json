@@ -349,6 +349,8 @@
   "settings.ai.embeddingSetup.prepare": "Preparar motor de incrustaciones",
   "settings.ai.intelligenceEngine": "Motor de inteligencia",
   "settings.ai.intelligenceEngineDesc": "Modelos integrados que impulsan la puntuación y la relevancia — se ejecuta localmente, no requiere clave API.",
+  "settings.ai.autoAssessTitle": "Evaluar puntos ciegos con IA automáticamente",
+  "settings.ai.autoAssessDesc": "Cuando una dependencia aparece como nuevo punto ciego, la IA hace la evaluación automáticamente para mantener al día la lista de elementos por revisar. Se guarda en caché según tu conjunto de dependencias — solo usa tu modelo cuando algo cambia de verdad.",
   "settings.ai.engineEmbedding": "Incrustación",
   "settings.ai.engineReranker": "Reranker",
   "settings.ai.engineTopics": "Enriquecimiento de temas",

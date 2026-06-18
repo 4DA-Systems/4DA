@@ -349,6 +349,8 @@
   "settings.ai.embeddingSetup.prepare": "Prepare embedding engine",
   "settings.ai.intelligenceEngine": "Intelligence Engine",
   "settings.ai.intelligenceEngineDesc": "Built-in models that power scoring and relevance — runs locally, no API key required.",
+  "settings.ai.autoAssessTitle": "Auto-assess Blind Spots with AI",
+  "settings.ai.autoAssessDesc": "When a dependency newly surfaces as a blind spot, run the AI triage automatically so the worth-reviewing list stays current. Cached by your dependency set — it only uses your model when something actually changes.",
   "settings.ai.engineEmbedding": "Embedding",
   "settings.ai.engineReranker": "Reranker",
   "settings.ai.engineTopics": "Topic Enrichment",

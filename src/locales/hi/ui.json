@@ -2229,6 +2229,8 @@
   "settings.ai.recommended": "अनुशंसित",
   "settings.ai.intelligenceEngine": "इंटेलिजेंस इंजन",
   "settings.ai.intelligenceEngineDesc": "स्कोरिंग और प्रासंगिकता को संचालित करने वाले अंतर्निहित मॉडल — स्थानीय रूप से चलता है, API कुंजी की आवश्यकता नहीं।",
+  "settings.ai.autoAssessTitle": "ब्लाइंड स्पॉट का AI से स्वतः आकलन करें",
+  "settings.ai.autoAssessDesc": "जब कोई डिपेंडेंसी नए ब्लाइंड स्पॉट के रूप में सामने आती है, तो AI ट्रायाज स्वतः चल जाता है ताकि समीक्षा योग्य सूची अद्यतन बनी रहे। यह आपके डिपेंडेंसी सेट के अनुसार कैश होता है — यह आपके मॉडल का उपयोग केवल तभी करता है जब वास्तव में कुछ बदलता है।",
   "settings.ai.engineEmbedding": "एम्बेडिंग",
   "settings.ai.engineReranker": "रीरैंकर",
   "settings.ai.engineTopics": "विषय संवर्धन",

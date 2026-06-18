@@ -2287,6 +2287,8 @@
   "settings.ai.recommended": "موصى به",
   "settings.ai.intelligenceEngine": "محرك الذكاء",
   "settings.ai.intelligenceEngineDesc": "نماذج مدمجة تدعم التقييم والصلة — تعمل محلياً، لا تحتاج مفتاح API.",
+  "settings.ai.autoAssessTitle": "تقييم النقاط العمياء تلقائياً بالذكاء الاصطناعي",
+  "settings.ai.autoAssessDesc": "عند ظهور تبعية جديدة كنقطة عمياء، يُجرى تقييم الذكاء الاصطناعي تلقائياً لإبقاء قائمة العناصر الجديرة بالمراجعة محدّثة. يُخزَّن التقييم مؤقتاً حسب مجموعة تبعياتك، فلا يستخدم نموذجك إلا عند حدوث تغيير فعلي.",
   "settings.ai.engineEmbedding": "التضمين",
   "settings.ai.engineReranker": "إعادة الترتيب",
   "settings.ai.engineTopics": "إثراء المواضيع",

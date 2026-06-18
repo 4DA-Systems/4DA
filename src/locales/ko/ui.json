@@ -2176,6 +2176,8 @@
   "settings.ai.recommended": "추천",
   "settings.ai.intelligenceEngine": "인텔리전스 엔진",
   "settings.ai.intelligenceEngineDesc": "점수 산정과 관련성을 구동하는 내장 모델 — 로컬에서 실행되며 API 키가 필요하지 않습니다.",
+  "settings.ai.autoAssessTitle": "사각지대를 AI로 자동 평가",
+  "settings.ai.autoAssessDesc": "의존성이 새로운 사각지대로 나타나면 AI 분류가 자동으로 실행되어 검토할 만한 항목 목록을 최신 상태로 유지합니다. 의존성 집합별로 캐시되므로 실제로 변화가 있을 때만 모델을 사용합니다.",
   "settings.ai.engineEmbedding": "임베딩",
   "settings.ai.engineReranker": "리랭커",
   "settings.ai.engineTopics": "토픽 보강",

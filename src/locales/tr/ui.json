@@ -2230,6 +2230,8 @@
   "settings.ai.recommended": "Önerilen",
   "settings.ai.intelligenceEngine": "Zeka Motoru",
   "settings.ai.intelligenceEngineDesc": "Puanlama ve ilgililik sağlayan yerleşik modeller — yerel olarak çalışır, API anahtarı gerekmez.",
+  "settings.ai.autoAssessTitle": "Kör noktaları yapay zekayla otomatik değerlendir",
+  "settings.ai.autoAssessDesc": "Bir bağımlılık yeni bir kör nokta olarak ortaya çıktığında, gözden geçirilmeye değer listesi güncel kalsın diye yapay zeka önceliklendirmesi otomatik olarak çalışır. Bağımlılık kümenize göre önbelleğe alınır — modelinizi yalnızca gerçekten bir şey değiştiğinde kullanır.",
   "settings.ai.engineEmbedding": "Gömme",
   "settings.ai.engineReranker": "Reranker",
   "settings.ai.engineTopics": "Konu Zenginleştirme",

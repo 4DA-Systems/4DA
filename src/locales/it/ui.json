@@ -349,6 +349,8 @@
   "settings.ai.embeddingSetup.prepare": "Prepara motore di incorporamento",
   "settings.ai.intelligenceEngine": "Motore di intelligenza",
   "settings.ai.intelligenceEngineDesc": "Modelli integrati che alimentano punteggio e rilevanza — funziona localmente, nessuna chiave API richiesta.",
+  "settings.ai.autoAssessTitle": "Valuta i punti ciechi con l'IA automaticamente",
+  "settings.ai.autoAssessDesc": "Quando una dipendenza emerge come nuovo punto cieco, l'IA esegue la valutazione automaticamente per mantenere aggiornato l'elenco degli elementi da rivedere. Memorizzata in cache in base al tuo set di dipendenze — usa il tuo modello solo quando qualcosa cambia davvero.",
   "settings.ai.engineEmbedding": "Incorporamento",
   "settings.ai.engineReranker": "Reranker",
   "settings.ai.engineTopics": "Arricchimento tematico",
