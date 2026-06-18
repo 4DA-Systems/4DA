@@ -27,8 +27,13 @@ pub(super) async fn live_matched_advisories_as_items(client: &reqwest::Client) -
     };
     let deps = gather_versioned_auditable_deps(&db);
     if deps.is_empty() {
-        info!(target: "4da::sources", "OSV live strict: no versioned dependencies to query");
-        return Vec::new();
+        // No dependency carries a concrete version in the DB (e.g. a requirements.txt stack whose
+        // scan didn't capture pins). The version-exact live query can't run, but the mirror path
+        // matches conservatively against osv_advisories and still surfaces the advisories (the
+        // ledger then version-grounds them from the manifest) — so fall back rather than surface
+        // NOTHING, which would silently blind an entire stack.
+        info!(target: "4da::sources", "OSV live strict: no versioned dependencies — falling back to mirror-matched advisories");
+        return super::osv::matched_advisories_as_items().await;
     }
     match query_live_version_matched(client, &db, &deps).await {
         Ok(items) => {
