@@ -15,7 +15,9 @@ import { useBlindSpotsData } from '../../hooks/use-blind-spots-data';
 import { BlindSpotsPaywall } from './BlindSpotsPaywall';
 import { loadPersistedDismissals, persistDismissal, removeDismissal } from './dismissal-utils';
 import ScoreBar from './ScoreBar';
-import { TierSection, EmergingSignals, CoveredSection, OtherBuildTargetsSection } from './StackCoverageMap';
+import { TierSection, EmergingSignals, CoveredSection, OtherBuildTargetsSection, ProbablyFineSection } from './StackCoverageMap';
+import type { DepAssessment } from '../../../src-tauri/bindings/bindings/DepAssessment';
+import type { BlindSpotAssessment } from '../../../src-tauri/bindings/bindings/BlindSpotAssessment';
 
 // ============================================================================
 // Main View — data shaping + layout
@@ -76,6 +78,30 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     void cmd('add_package_watch', { packageName, ecosystem }).catch(() => {});
     void loadBlindSpots();
   }, [loadBlindSpots]);
+
+  // Phase B: on-demand AI triage of the surfaced blind spots. One batched,
+  // cached call; verdicts keyed by dep display name. `no_llm_configured` →
+  // a graceful "add a key" hint rather than an error.
+  const [ai, setAi] = useState<{ map: Map<string, DepAssessment>; model: string } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleAssess = useCallback(() => {
+    setAiLoading(true);
+    setAiError(null);
+    cmd('assess_blind_spots_with_ai')
+      .then((res) => {
+        const a = res as BlindSpotAssessment;
+        const map = new Map<string, DepAssessment>();
+        for (const item of a.assessments) map.set(item.dep_name, item);
+        setAi({ map, model: a.model });
+        recordTrustEvent({ eventType: 'acted_on', sourceType: 'gap', notes: 'blind_spot_ai_assess' });
+      })
+      .catch((e: unknown) => {
+        setAiError(String(e).includes('no_llm_configured') ? 'no_llm' : String(e));
+      })
+      .finally(() => setAiLoading(false));
+  }, []);
 
   const { depRows, unmatchedSignals, recommendations } = useBlindSpotsData(report, dismissed);
 
@@ -166,6 +192,19 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const hasContent = hasProblems || unmatchedSignals.length > 0;
   const dataFreshness = report.data_freshness;
 
+  // Phase B: when the AI triage has run, split the host-relevant gap deps into
+  // "worth reviewing" vs "probably fine" by the model's verdict. A dep that
+  // wasn't assessed defaults to worth-reviewing — we never hide what wasn't
+  // judged. Recommendations are keyed by display name for the rows to show.
+  const aiMap = ai?.map ?? null;
+  const aiActive = aiMap !== null;
+  const gapDeps = [...stackDeps, ...ecosystemDeps];
+  const worthReviewing = aiActive ? gapDeps.filter(d => aiMap.get(d.name)?.worth_reviewing !== false) : [];
+  const probablyFine = aiActive ? gapDeps.filter(d => aiMap.get(d.name)?.worth_reviewing === false) : [];
+  const aiRecs = aiActive
+    ? new Map(Array.from(aiMap.entries()).map(([k, v]) => [k, v.recommendation] as const))
+    : undefined;
+
   return (
     <div className="space-y-4 pb-8" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
       <header className="mb-2">
@@ -205,6 +244,26 @@ const BlindSpotsView = memo(function BlindSpotsView() {
               </span>
             )}
           </span>
+        </div>
+      )}
+      {hasProblems && (
+        <div className="flex items-center gap-2 flex-wrap -mt-1">
+          <button
+            onClick={handleAssess}
+            disabled={aiLoading}
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 disabled:opacity-60 transition-colors"
+          >
+            {aiLoading ? t('blindspots.ai.assessing') : t('blindspots.ai.assess')}
+          </button>
+          {ai && !aiLoading && (
+            <span className="text-[10px] text-text-muted">{t('blindspots.ai.assessedWith', { model: ai.model })}</span>
+          )}
+          {aiError === 'no_llm' && (
+            <span className="text-[10px] text-text-muted">{t('blindspots.ai.noModel')}</span>
+          )}
+          {aiError && aiError !== 'no_llm' && (
+            <span className="text-[10px] text-red-400">{t('blindspots.ai.failed')}</span>
+          )}
         </div>
       )}
       {sourceHealth && sourceHealth.total_failing > 0 && (
@@ -275,33 +334,64 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         )
       ) : (
         <>
-          {stackDeps.length > 0 && (
-            <TierSection
-              dotColor="#EF4444"
-              borderColor="rgba(239, 68, 68, 0.2)"
-              title={t('blindspots.tier.stack')}
-              subtitle={t('blindspots.tier.stackSubtitle', { count: stackDeps.length })}
-              badgeText={t('blindspots.tier.needsAttention')}
-              badgeColor="#EF4444"
-              depRows={stackDeps}
-              onDismissSignal={handleDismiss}
-              onAddWatch={handleAddWatch}
-              emptyText={t('blindspots.tier.stackEmpty')}
-            />
-          )}
-          {ecosystemDeps.length > 0 && (
-            <TierSection
-              dotColor="#F59E0B"
-              borderColor="rgba(245, 158, 11, 0.15)"
-              title={t('blindspots.tier.ecosystem')}
-              subtitle={t('blindspots.tier.ecosystemSubtitle', { count: ecosystemDeps.length })}
-              badgeText={t('blindspots.tier.drifting')}
-              badgeColor="#F59E0B"
-              depRows={ecosystemDeps}
-              onDismissSignal={handleDismiss}
-              onAddWatch={handleAddWatch}
-              emptyText={t('blindspots.tier.ecosystemEmpty')}
-            />
+          {aiActive ? (
+            /* Phase B: AI triage active — one "worth reviewing" group + a
+               collapsed "probably fine" bucket, replacing the stack/ecosystem
+               split. Each row carries its one-line AI recommendation. */
+            <>
+              {worthReviewing.length > 0 && (
+                <TierSection
+                  dotColor="#EF4444"
+                  borderColor="rgba(239, 68, 68, 0.2)"
+                  title={t('blindspots.ai.worthReviewing')}
+                  subtitle={t('blindspots.ai.worthReviewingSubtitle', { count: worthReviewing.length })}
+                  badgeText={t('blindspots.tier.needsAttention')}
+                  badgeColor="#EF4444"
+                  depRows={worthReviewing}
+                  onDismissSignal={handleDismiss}
+                  onAddWatch={handleAddWatch}
+                  emptyText={t('blindspots.tier.stackEmpty')}
+                  aiRecommendations={aiRecs}
+                />
+              )}
+              <ProbablyFineSection
+                depRows={probablyFine}
+                onDismissSignal={handleDismiss}
+                onAddWatch={handleAddWatch}
+                aiRecommendations={aiRecs}
+              />
+            </>
+          ) : (
+            <>
+              {stackDeps.length > 0 && (
+                <TierSection
+                  dotColor="#EF4444"
+                  borderColor="rgba(239, 68, 68, 0.2)"
+                  title={t('blindspots.tier.stack')}
+                  subtitle={t('blindspots.tier.stackSubtitle', { count: stackDeps.length })}
+                  badgeText={t('blindspots.tier.needsAttention')}
+                  badgeColor="#EF4444"
+                  depRows={stackDeps}
+                  onDismissSignal={handleDismiss}
+                  onAddWatch={handleAddWatch}
+                  emptyText={t('blindspots.tier.stackEmpty')}
+                />
+              )}
+              {ecosystemDeps.length > 0 && (
+                <TierSection
+                  dotColor="#F59E0B"
+                  borderColor="rgba(245, 158, 11, 0.15)"
+                  title={t('blindspots.tier.ecosystem')}
+                  subtitle={t('blindspots.tier.ecosystemSubtitle', { count: ecosystemDeps.length })}
+                  badgeText={t('blindspots.tier.drifting')}
+                  badgeColor="#F59E0B"
+                  depRows={ecosystemDeps}
+                  onDismissSignal={handleDismiss}
+                  onAddWatch={handleAddWatch}
+                  emptyText={t('blindspots.tier.ecosystemEmpty')}
+                />
+              )}
+            </>
           )}
           <EmergingSignals items={unmatchedSignals} onDismiss={handleDismiss} />
           {recommendations.length > 0 && (
