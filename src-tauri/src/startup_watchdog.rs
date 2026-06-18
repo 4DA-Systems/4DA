@@ -43,11 +43,14 @@ use crate::state::get_db_path;
 /// becomes visible.
 ///
 /// Release builds get a tight 5-second budget because the bundled frontend
-/// loads instantly and there's no dev-server poll. Debug builds get 10
+/// loads instantly and there's no dev-server poll. Debug builds get 45
 /// seconds because:
 ///   - Vite dev server bootstrap can take 1-3s
-///   - The dev-mode webview poll watchdog adds up to 2s wait-for-frontend
+///   - On a COLD dev start Vite transforms the entire module graph on the
+///     first request (~15-20s) before `main.tsx` executes and emits
+///     `frontend-ready`; the poll loop in app_setup waits up to 40s for it
 ///   - Larger development databases (200MB+) take longer to migrate
+/// A debug start exceeding 45s is a real stall (not just a cold transform).
 ///
 /// A release build hitting 5s OR a debug build hitting 10s is a real
 /// incident and warrants the `.stalled` marker for the next launch to
@@ -55,7 +58,7 @@ use crate::state::get_db_path;
 #[cfg(not(debug_assertions))]
 const PHASE0_BUDGET_SECS: u64 = 5;
 #[cfg(debug_assertions)]
-const PHASE0_BUDGET_SECS: u64 = 10;
+const PHASE0_BUDGET_SECS: u64 = 45;
 
 /// Time budget for Phase 1 (essential services ready).
 // REMOVE BY 2026-08-01

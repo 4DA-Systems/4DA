@@ -59,10 +59,34 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
 
     const checkBackend = async () => {
       try {
-        // Stage 1: Database — must succeed before proceeding
+        // Stage 1: Database — must succeed before proceeding.
+        // The backend can take far longer than a single command timeout to
+        // become IPC-responsive on a cold or loaded start (dev: Vite transform
+        // + heavy startup ingestion; prod: a busy machine) — a one-shot
+        // get_settings then hard-fails and blocks the app on the splash. Retry
+        // with backoff for up to ~90s so the splash rides out a slow backend
+        // instead of giving up; a normal start still succeeds on the first try.
         setStage('database');
-        await cmd('get_settings');
-        if (cancelled) return;
+        {
+          // VITEST: single attempt (fail fast) so the error-path test doesn't
+          // wait out the retry window. Runtime: retry for up to ~90s.
+          const readyDeadline = Date.now() + (import.meta.env.VITEST ? 0 : 90_000);
+          let lastErr: unknown;
+          let settingsOk = false;
+          do {
+            try {
+              await cmd('get_settings');
+              settingsOk = true;
+              break;
+            } catch (e) {
+              lastErr = e;
+              if (Date.now() >= readyDeadline) break;
+              await new Promise((r) => setTimeout(r, 2000));
+            }
+          } while (!cancelled);
+          if (cancelled) return;
+          if (!settingsOk) throw lastErr ?? new Error('backend not ready');
+        }
 
         // Stages 2-4: Parallel non-critical probes with animated stage advancement
         setStage('embeddings');
