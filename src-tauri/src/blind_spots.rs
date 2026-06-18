@@ -3370,7 +3370,11 @@ pub async fn assess_blind_spots_with_ai() -> std::result::Result<BlindSpotAssess
     // 1. Gather the surfaced coverage-gap deps (display name + why-surfaced).
     //    Synchronous — the owned report drops before the LLM await below.
     let report = generate_blind_spot_report().map_err(|e| e.to_string())?;
-    let deps: Vec<(String, String)> = report
+    // (display_name, why_surfaced, force_worth). `force_worth` is the accuracy
+    // safety net: a critical/high-risk dep (it has real security/breaking
+    // signals) is NEVER collapsed to "probably fine" no matter what the model
+    // says — the AI can only ADD attention, never remove it from a risky dep.
+    let deps: Vec<(String, String, bool)> = report
         .uncovered_dependencies
         .iter()
         .map(|d| {
@@ -3384,7 +3388,13 @@ pub async fn assess_blind_spots_with_ai() -> std::result::Result<BlindSpotAssess
                     .clone()
                     .unwrap_or_else(|| "no confirmed source coverage".to_string())
             };
-            (d.name.clone(), why)
+            // Force-keep ONLY deps that have REAL unreviewed signals at high risk
+            // — not a quiet dep that scores "high" merely for being in many
+            // projects. Otherwise a zero-signal "stable, no action" dep would be
+            // wrongly pinned into "worth reviewing".
+            let force_worth =
+                d.available_signal_count > 0 && matches!(d.risk_level.as_str(), "critical" | "high");
+            (d.name.clone(), why, force_worth)
         })
         .collect();
 
@@ -3398,7 +3408,7 @@ pub async fn assess_blind_spots_with_ai() -> std::result::Result<BlindSpotAssess
     }
 
     // 2. Cache check (keyed by the surfaced dep-set).
-    let names: Vec<String> = deps.iter().map(|(n, _)| n.clone()).collect();
+    let names: Vec<String> = deps.iter().map(|(n, _, _)| n.clone()).collect();
     let key = assessment_cache_key(&names);
     if let Ok(guard) = BS_ASSESSMENT_CACHE.lock() {
         if let Some((cached_key, cached)) = guard.as_ref() {
@@ -3423,7 +3433,7 @@ pub async fn assess_blind_spots_with_ai() -> std::result::Result<BlindSpotAssess
     let items_text = deps
         .iter()
         .enumerate()
-        .map(|(i, (name, why))| format!("{}. {} — {}", i + 1, name, why))
+        .map(|(i, (name, why, _))| format!("{}. {} — {}", i + 1, name, why))
         .collect::<Vec<_>>()
         .join("\n");
     let user_message = format!(
@@ -3460,7 +3470,9 @@ pub async fn assess_blind_spots_with_ai() -> std::result::Result<BlindSpotAssess
 /// Parse the model's `[{id, worth_reviewing, recommendation}]` array, joining
 /// each entry back to its dep by 1-based index. Tolerant: a parse failure
 /// yields an empty Vec (the UI then shows "couldn't assess"), never a panic.
-fn parse_dep_assessments(response: &str, deps: &[(String, String)]) -> Vec<DepAssessment> {
+/// The dep tuple's third field (`force_worth`) is the safety guard — a
+/// high-risk dep is kept worth-reviewing regardless of the model's verdict.
+fn parse_dep_assessments(response: &str, deps: &[(String, String, bool)]) -> Vec<DepAssessment> {
     let json_str = match (response.find('['), response.rfind(']')) {
         (Some(s), Some(e)) if e >= s => &response[s..=e],
         _ => response,
@@ -3475,14 +3487,35 @@ fn parse_dep_assessments(response: &str, deps: &[(String, String)]) -> Vec<DepAs
         if id == 0 || (id as usize) > deps.len() {
             continue;
         }
-        let (name, _) = &deps[id as usize - 1];
+        let (name, _, force_worth) = &deps[id as usize - 1];
         out.push(DepAssessment {
             dep_name: name.clone(),
-            worth_reviewing: v["worth_reviewing"].as_bool().unwrap_or(false),
+            // Safety guard: a high-risk dep can never be collapsed to "fine".
+            worth_reviewing: v["worth_reviewing"].as_bool().unwrap_or(false) || *force_worth,
             recommendation: truncate_note(v["recommendation"].as_str().unwrap_or("")),
         });
     }
     out
+}
+
+/// Return the in-process AI assessment cache WITHOUT calling the LLM. The
+/// frontend calls this on mount so a previously-run triage persists across
+/// view re-mounts and webview reloads (in dev, the HMR reload loop otherwise
+/// drops the in-flight `assess_blind_spots_with_ai` callback and the result
+/// would vanish). `None` when nothing has been assessed this process.
+#[tauri::command]
+pub fn get_cached_blind_spot_assessment() -> std::result::Result<Option<BlindSpotAssessment>, String>
+{
+    crate::settings::require_signal_feature("get_cached_blind_spot_assessment")
+        .map_err(|e| e.to_string())?;
+    let cached = BS_ASSESSMENT_CACHE.lock().ok().and_then(|g| {
+        g.as_ref().map(|(_, a)| {
+            let mut hit = a.clone();
+            hit.from_cache = true;
+            hit
+        })
+    });
+    Ok(cached)
 }
 
 // ============================================================================
@@ -5030,9 +5063,10 @@ mod tests {
 
     #[test]
     fn parse_dep_assessments_joins_by_index_and_tolerates_garbage() {
+        // tuple = (display_name, why, force_worth)
         let deps = vec![
-            ("libc (crates.io)".to_string(), "no coverage".to_string()),
-            ("react (npm)".to_string(), "3 signals".to_string()),
+            ("libc (crates.io)".to_string(), "no coverage".to_string(), false),
+            ("react (npm)".to_string(), "3 signals".to_string(), false),
         ];
         let resp = r#"Sure: [{"id":1,"worth_reviewing":false,"recommendation":"Stable libc, no action."},{"id":2,"worth_reviewing":true,"recommendation":"Review the v19 breaking changes."}]"#;
         let out = parse_dep_assessments(resp, &deps);
@@ -5049,6 +5083,20 @@ mod tests {
         assert!(
             parse_dep_assessments(r#"[{"id":99,"worth_reviewing":true,"recommendation":"x"}]"#, &deps)
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn parse_dep_assessments_force_worth_overrides_model_for_high_risk() {
+        // A high-risk dep (force_worth=true) stays worth-reviewing even when the
+        // model says "fine" — the AI can add attention, never remove it.
+        let deps = vec![("openssl (crates.io)".to_string(), "4 signals, risk=high".to_string(), true)];
+        let resp = r#"[{"id":1,"worth_reviewing":false,"recommendation":"Looks fine."}]"#;
+        let out = parse_dep_assessments(resp, &deps);
+        assert_eq!(out.len(), 1);
+        assert!(
+            out[0].worth_reviewing,
+            "high-risk dep must never be collapsed to 'probably fine' by the model"
         );
     }
 

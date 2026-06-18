@@ -15,7 +15,8 @@ import { useBlindSpotsData } from '../../hooks/use-blind-spots-data';
 import { BlindSpotsPaywall } from './BlindSpotsPaywall';
 import { loadPersistedDismissals, persistDismissal, removeDismissal } from './dismissal-utils';
 import ScoreBar from './ScoreBar';
-import { TierSection, EmergingSignals, CoveredSection, OtherBuildTargetsSection, ProbablyFineSection } from './StackCoverageMap';
+import { TierSection, EmergingSignals } from './StackCoverageMap';
+import { CoveredSection, OtherBuildTargetsSection, ProbablyFineSection } from './CollapsedSections';
 import type { DepAssessment } from '../../../src-tauri/bindings/bindings/DepAssessment';
 import type { BlindSpotAssessment } from '../../../src-tauri/bindings/bindings/BlindSpotAssessment';
 
@@ -86,22 +87,37 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  const applyAssessment = useCallback((a: BlindSpotAssessment | null) => {
+    if (!a || a.assessments.length === 0) return;
+    const map = new Map<string, DepAssessment>();
+    for (const item of a.assessments) map.set(item.dep_name, item);
+    setAi({ map, model: a.model });
+  }, []);
+
   const handleAssess = useCallback(() => {
     setAiLoading(true);
     setAiError(null);
     cmd('assess_blind_spots_with_ai')
       .then((res) => {
-        const a = res as BlindSpotAssessment;
-        const map = new Map<string, DepAssessment>();
-        for (const item of a.assessments) map.set(item.dep_name, item);
-        setAi({ map, model: a.model });
+        applyAssessment(res as BlindSpotAssessment);
         recordTrustEvent({ eventType: 'acted_on', sourceType: 'gap', notes: 'blind_spot_ai_assess' });
       })
       .catch((e: unknown) => {
         setAiError(String(e).includes('no_llm_configured') ? 'no_llm' : String(e));
       })
       .finally(() => setAiLoading(false));
-  }, []);
+  }, [applyAssessment]);
+
+  // Persist the triage across view re-mounts / webview reloads: the backend
+  // caches the last assessment in-process, so on mount we re-hydrate it. This
+  // is what makes the result survive the dev-mode HMR reload loop (which drops
+  // the in-flight assess callback) — and keeps it shown when navigating away
+  // and back in production. Cheap: no LLM call, just a cache read.
+  useEffect(() => {
+    void cmd('get_cached_blind_spot_assessment')
+      .then((res) => applyAssessment(res as BlindSpotAssessment | null))
+      .catch(() => {});
+  }, [applyAssessment]);
 
   const { depRows, unmatchedSignals, recommendations } = useBlindSpotsData(report, dismissed);
 
