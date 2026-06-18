@@ -487,11 +487,22 @@ mod tests {
     fn phase0_budget_is_reasonable() {
         // Phase 0 budget has to be larger than a typical cold-start window
         // paint (<500ms on release builds) but tight enough that a real
-        // regression gets caught. 5s in release / 10s in debug is the
-        // current compromise — debug needs more headroom for the Vite
-        // dev-server bootstrap and the webview poll watchdog.
+        // regression gets caught. The budget is profile-split (see the const
+        // above): 5s in release stays tight; debug gets 45s of headroom for the
+        // Vite dev-server bootstrap and the webview poll watchdog on a slow
+        // cold boot. The assertion must mirror that split, or `cargo test`
+        // (a debug build, where the const is 45) fails its own ceiling.
         assert!(PHASE0_BUDGET_SECS >= 2);
-        assert!(PHASE0_BUDGET_SECS <= 15);
+        #[cfg(not(debug_assertions))]
+        assert!(
+            PHASE0_BUDGET_SECS <= 15,
+            "release Phase-0 budget must stay tight"
+        );
+        #[cfg(debug_assertions)]
+        assert!(
+            PHASE0_BUDGET_SECS <= 60,
+            "debug Phase-0 budget allows a slow dev-server cold boot"
+        );
     }
 
     #[test]
