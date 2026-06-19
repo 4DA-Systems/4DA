@@ -57,6 +57,7 @@ pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf])
             lockfile_count += process_pnpm_lock(db, &scanner, &dir, &project_path);
             lockfile_count += process_yarn_lock(db, &scanner, &dir, &project_path);
             lockfile_count += process_poetry_lock(db, &scanner, &dir, &project_path);
+            lockfile_count += process_requirements_txt(db, &dir, &project_path);
             lockfile_count += process_go_sum(db, &scanner, &dir, &project_path);
             lockfile_count += process_gemfile_lock(db, &scanner, &dir, &project_path);
             lockfile_count += process_composer_lock(db, &dir, &project_path);
@@ -353,6 +354,31 @@ fn process_poetry_lock(
             )
             .ok();
         }
+    }
+    count
+}
+
+/// Process a requirements.txt: its `==` pins are exact installed versions (a pinned
+/// requirements.txt is the lock for the stack), so record them as the direct deps' versions —
+/// the same role poetry.lock plays for Poetry projects. Without this, version-exact OSV matching
+/// can't run for requirements.txt stacks: the deps surface version-less and fall back to
+/// conservative matching, silently missing version-specific advisories.
+fn process_requirements_txt(db: &Database, dir: &PathBuf, project_path: &str) -> u32 {
+    let requirements = dir.join("requirements.txt");
+    if !requirements.exists() {
+        return 0;
+    }
+    let Ok(content) = std::fs::read_to_string(&requirements) else {
+        return 0;
+    };
+    let pins = crate::ace::scanner::ProjectScanner::parse_requirements_txt_pins(&content);
+    let mut count = 0u32;
+    for (name, version) in &pins {
+        // requirements.txt entries are direct deps; store_dependency upserts the version onto the
+        // existing direct row (COALESCE keeps it if a later manifest pass re-stores version-less).
+        db.store_dependency(project_path, name, Some(version.as_str()), "python", false, None)
+            .ok();
+        count += 1;
     }
     count
 }
