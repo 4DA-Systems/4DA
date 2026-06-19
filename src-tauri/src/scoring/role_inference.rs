@@ -168,7 +168,7 @@ const PROFILES: &[RoleProfile] = &[
         role: "backend_developer",
         signals: &[
             "rust", "go", "python", "java", "ruby", "php", "elixir", "axum", "django", "rails",
-            "spring",
+            "spring", "csharp", "c#", "dotnet", ".net", "asp.net", "laravel", "symfony",
         ],
         min_hits: 1,
         priority: 30,
