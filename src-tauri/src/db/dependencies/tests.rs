@@ -53,6 +53,29 @@ fn test_store_and_retrieve_dependency() {
 }
 
 #[test]
+fn store_dependency_dedups_raw_and_canonical_paths() {
+    // A lockfile processor passes the RAW scan path (OS backslashes); the manifest
+    // scan stores the CANONICAL path. Before canonicalization these produced TWO rows
+    // (a null-version + a versioned dup) for one dependency. They must now collapse to
+    // ONE row, findable via either path form.
+    let db = test_db();
+    db.store_dependency("proj\\app", "serde", None, "rust", false, None)
+        .unwrap();
+    db.store_dependency("proj/app", "serde", Some("1.2.3"), "rust", false, None)
+        .unwrap();
+
+    let via_raw = db.get_project_dependencies("proj\\app").unwrap();
+    let via_canon = db.get_project_dependencies("proj/app").unwrap();
+    assert_eq!(via_raw.len(), 1, "raw + canonical writes must collapse to one row");
+    assert_eq!(via_canon.len(), 1, "found via the canonical path too");
+    assert_eq!(
+        via_raw[0].version.as_deref(),
+        Some("1.2.3"),
+        "version from the lockfile write is preserved on the single row"
+    );
+}
+
+#[test]
 fn test_upsert_updates_last_seen() {
     let db = test_db();
     db.store_dependency(
