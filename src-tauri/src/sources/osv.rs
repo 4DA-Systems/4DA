@@ -65,6 +65,18 @@ impl OsvSource {
                     "org.apache.logging.log4j:log4j-core",
                     "com.google.guava:guava",
                 ],
+                "NuGet" => vec![
+                    "Newtonsoft.Json",
+                    "System.Text.Json",
+                    "Microsoft.Data.SqlClient",
+                ],
+                "RubyGems" => vec!["rails", "nokogiri", "rack"],
+                "Packagist" => vec![
+                    "laravel/framework",
+                    "symfony/http-kernel",
+                    "guzzlehttp/guzzle",
+                ],
+                "Pub" => vec!["http", "dio", "shared_preferences"],
                 _ => vec![],
             };
             default_packages
@@ -220,6 +232,7 @@ fn get_active_osv_ecosystems() -> Vec<String> {
         ("nuget", "NuGet"),
         ("rubygems", "RubyGems"),
         ("packagist", "Packagist"),
+        ("pub", "Pub"),
     ];
 
     ecosystem_map
