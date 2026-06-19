@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn test_all_profiles_exist() {
         let profiles = list_profiles();
-        assert_eq!(profiles.len(), 11);
+        assert_eq!(profiles.len(), 16);
         for profile in profiles {
             assert!(!profile.id.is_empty());
             assert!(!profile.name.is_empty());
