@@ -552,6 +552,7 @@ pub(crate) fn load_ace_packages_for_ecosystem(ecosystem: &str) -> Vec<String> {
         "nuget" | "csharp" => vec!["Csproj"],
         "rubygems" | "ruby" => vec!["Gemfile"],
         "packagist" | "php" => vec!["ComposerJson"],
+        "pub" | "dart" => vec!["PubspecYaml"],
         _ => return Vec::new(),
     };
 
@@ -600,6 +601,7 @@ pub(crate) fn load_ace_packages_with_versions(ecosystem: &str) -> Vec<(String, O
         "nuget" | "csharp" => vec!["Csproj"],
         "rubygems" | "ruby" => vec!["Gemfile"],
         "packagist" | "php" => vec!["ComposerJson"],
+        "pub" | "dart" => vec!["PubspecYaml"],
         _ => return Vec::new(),
     };
 
