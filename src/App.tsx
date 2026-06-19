@@ -54,6 +54,7 @@ import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
 import { useAppListeners } from './hooks/use-app-listeners';
 import { loadSourceMeta } from './config/sources';
+import { runWhenIdle } from './lib/defer';
 
 function App() {
   const { t } = useTranslation();
@@ -195,18 +196,32 @@ function App() {
     addToast,
   });
 
-  // Load persisted briefing + source health + license + game state on mount (instant, from DB)
+  // Mount loads, split by paint-criticality. Measured 2026-06-20 (live, warm):
+  // firing every load at once made unrelated commands queue behind each other at
+  // ~230ms over the IPC bridge while the webview parsed the bundle — real compute
+  // was only ~30-70ms. So the paint-critical loads (Brief default-view content +
+  // license tier badge / recovery banner) fire immediately; everything that only
+  // feeds secondary banners/filters — and the 576-902ms prune maintenance command
+  // — defers to idle, off the first-paint stampede. See src/lib/defer.ts.
   useEffect(() => {
     trackEvent('app_launch');
-    // Load source metadata from backend (populates dynamic source registry + resets filters)
-    void loadSourceMeta().then(() => {
-      useAppStore.getState().resetSourceFilters();
-    });
+
+    // Paint-critical — feed the first visible frame.
     void loadPersistedBriefing();
-    void loadSourceHealth();
     void loadLicense();
-    void loadTrialStatus();
-    void cmd('prune_personalization_cache').catch(() => {});
+
+    // Deferred — none of these gate first paint.
+    return runWhenIdle(() => {
+      // Source metadata populates the dynamic source registry + resets filters
+      // (only visible in the relevance view, never the default Brief view).
+      void loadSourceMeta().then(() => {
+        useAppStore.getState().resetSourceFilters();
+      });
+      void loadSourceHealth();
+      void loadTrialStatus();
+      // Pure maintenance — has no business on the critical mount path.
+      void cmd('prune_personalization_cache').catch(() => {});
+    });
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus]);
 
   // Event listeners: deep-link activation, embedding status, framework/comparison triggers, cached result loading
