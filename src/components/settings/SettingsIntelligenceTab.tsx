@@ -3,6 +3,7 @@ import { memo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { AIProviderSection } from './AIProviderSection';
+import { BlindSpotsAssessSection } from './BlindSpotsAssessSection';
 import { LicenseSection } from './LicenseSection';
 
 import type { Settings } from '../../types';
@@ -115,6 +116,11 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
             </div>
           </div>
         </div>
+
+        {/* Blind Spots — auto-assess toggle */}
+        {settings && (
+          <BlindSpotsAssessSection initialEnabled={settings.auto_assess_blind_spots ?? true} />
+        )}
 
         {/* Inline status feedback — always visible near the buttons */}
         {inlineStatus && (

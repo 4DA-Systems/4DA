@@ -74,6 +74,7 @@ import type {
 import type { PersonalizedLesson as PersonalizedLessonType } from '../types/personalization';
 import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
 import type { BlindSpotTeaser } from '../../src-tauri/bindings/bindings/BlindSpotTeaser';
+import type { BlindSpotAssessment } from '../../src-tauri/bindings/bindings/BlindSpotAssessment';
 import type { CalibrationSprintCard } from '../../src-tauri/bindings/bindings/CalibrationSprintCard';
 import type { CalibrationSprintStatus } from '../../src-tauri/bindings/bindings/CalibrationSprintStatus';
 
@@ -268,6 +269,7 @@ interface CommandMap {
   set_llm_provider: { params: { provider: string; apiKey: string; model: string; baseUrl: string | null; openaiApiKey?: string | null }; result: void };
   set_rerank_config: { params: { enabled: boolean; maxItems: number; minScore: number; dailyTokenLimit: number; dailyCostLimit: number }; result: void };
   set_llm_limits: { params: { dailyTokenLimit: number; dailyCostLimitCents: number }; result: void };
+  set_auto_assess_blind_spots: { params: { enabled: boolean }; result: void };
   test_llm_connection: { params: Record<string, never>; result: { success: boolean; message: string } };
   check_synthesis_capability: { params: Record<string, never>; result: { can_synthesize: boolean; can_explain: boolean; provider: string; model: string; params_billions: number | null; min_params_billions: number; guidance: string } };
   check_ollama_status: { params: { baseUrl: string | null }; result: { operational: boolean; models: string[]; error: string | null } };
@@ -509,6 +511,8 @@ interface CommandMap {
   get_preemption_alerts: { params: Record<string, never>; result: EvidenceFeed };
   get_blind_spots: { params: Record<string, never>; result: EvidenceFeed };
   get_blind_spot_teaser: { params: Record<string, never>; result: BlindSpotTeaser };
+  assess_blind_spots_with_ai: { params: Record<string, never>; result: BlindSpotAssessment };
+  get_cached_blind_spot_assessment: { params: Record<string, never>; result: BlindSpotAssessment | null };
   get_source_health: { params: Record<string, never>; result: { adapters: Array<{ source_type: string; feed_origin: string; status: string; consecutive_failures: number; last_success_at: string | null; last_failure_at: string | null; last_error: string | null }>; total_active: number; total_failing: number; total_disabled: number } };
 
   // -- OSV Local Mirror (Tier 1 verified intelligence) --

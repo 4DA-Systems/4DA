@@ -23,12 +23,16 @@ pub use profile_data_b::*;
 mod profile_data_c;
 pub use profile_data_c::*;
 
+#[path = "profile_data_d.rs"]
+mod profile_data_d;
+pub use profile_data_d::*;
+
 // ============================================================================
 // Profile Registry
 // ============================================================================
 
 /// All available stack profiles, in display order.
-pub static ALL_PROFILES: [&StackProfile; 11] = [
+pub static ALL_PROFILES: [&StackProfile; 16] = [
     &NEXTJS_FULLSTACK,
     &RUST_SYSTEMS,
     &PYTHON_ML,
@@ -40,6 +44,11 @@ pub static ALL_PROFILES: [&StackProfile; 11] = [
     &DEVOPS_SRE,
     &HASKELL_FP,
     &BOOTSTRAP_WEBDEV,
+    &JAVA_ENTERPRISE,
+    &DOTNET,
+    &RUBY_RAILS,
+    &PHP_SYMFONY,
+    &MOBILE_NATIVE,
 ];
 
 #[cfg(test)]

@@ -11,6 +11,45 @@ import {
   sourceTypeLabel,
 } from './types';
 
+// Strip the " (ecosystem)" qualifier from a display name → bare package name.
+export function bareName(displayName: string): string {
+  return displayName.replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+
+// Best-effort ecosystem for a dep row: from the "(eco)" suffix, falling back to
+// the bs_uncov_<eco>_ id prefix.
+export function depEcosystem(dep: DepRow): string {
+  const m = dep.name.match(/\(([^)]+)\)\s*$/);
+  if (m) return m[1]!.trim();
+  if (dep.gap?.id.startsWith('bs_uncov_')) {
+    return dep.gap.id.replace('bs_uncov_', '').split('_')[0] ?? '';
+  }
+  return '';
+}
+
+// Build the canonical registry/search URL for "Investigate" on a dependency.
+export function investigateUrl(name: string, ecosystem: string): string {
+  const eco = ecosystem.toLowerCase();
+  const pkg = encodeURIComponent(name);
+  if (eco === 'crates.io' || eco === 'cargo' || eco === 'rust') return `https://crates.io/crates/${pkg}`;
+  if (eco === 'npm' || eco === 'javascript' || eco === 'typescript') return `https://www.npmjs.com/package/${pkg}`;
+  if (eco === 'pypi' || eco === 'python') return `https://pypi.org/project/${pkg}`;
+  if (eco === 'go' || eco === 'golang') return `https://pkg.go.dev/${pkg}`;
+  return `https://www.google.com/search?q=${encodeURIComponent(`${name} ${ecosystem}`)}`;
+}
+
+const lastInvestigateRef = { current: 0 };
+function openInvestigate(dep: DepRow): void {
+  const now = Date.now();
+  if (now - lastInvestigateRef.current < 500) return; // debounce double-clicks
+  lastInvestigateRef.current = now;
+  const url = investigateUrl(bareName(dep.name), depEcosystem(dep));
+  recordTrustEvent({ eventType: 'acted_on', sourceType: 'gap', topic: dep.name, notes: 'blind_spot_investigate' });
+  import('@tauri-apps/plugin-opener')
+    .then(({ openUrl }) => openUrl(url))
+    .catch(() => window.open(url, '_blank', 'noopener,noreferrer'));
+}
+
 const SignalRow = memo(function SignalRow({
   item, onDismiss,
 }: {
@@ -99,12 +138,13 @@ const SignalRow = memo(function SignalRow({
   );
 });
 
-const DepCoverageRow = memo(function DepCoverageRow({
-  dep, onDismissSignal, onAddWatch,
+export const DepCoverageRow = memo(function DepCoverageRow({
+  dep, onDismissSignal, onAddWatch, aiRecommendation,
 }: {
   dep: DepRow;
   onDismissSignal: (id: string) => void;
   onAddWatch?: (packageName: string, ecosystem: string) => void;
+  aiRecommendation?: string;
 }) {
   const { t } = useTranslation();
   const { getTranslated, requestTranslation } = useTranslatedContent();
@@ -177,38 +217,49 @@ const DepCoverageRow = memo(function DepCoverageRow({
           {t(cfg.labelKey)}
         </span>
       </button>
+      {aiRecommendation && (
+        <div className="px-4 pb-2 -mt-1 ms-[26px] flex items-start gap-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400/80 shrink-0 mt-0.5">
+            {t('blindspots.ai.tag')}
+          </span>
+          <p className="text-[11px] text-text-secondary leading-snug">{aiRecommendation}</p>
+        </div>
+      )}
       {expanded && hasContent && (
         <div className="bg-bg-tertiary/20 border-t border-border/50">
           {dep.gap && (
-            <div className={`px-4 py-2.5 group/gap ${dep.signals.length > 0 ? 'border-b border-border/30' : ''}`}>
-              <div className="flex items-start gap-2">
-                <p className="text-xs text-text-muted flex-1">{gapExplanation}</p>
-                {/* eslint-disable i18next/no-literal-string */}
-                {onAddWatch && dep.gap.id.startsWith('bs_uncov_') && (() => {
-                  const parts = dep.gap.id.replace('bs_uncov_', '').split('_');
-                  const ecosystem = parts[0] ?? '';
-                  return (
-                    <button
-                      onClick={() => onAddWatch(dep.name, ecosystem)}
-                      className="text-xs text-text-muted hover:text-green-400 opacity-0 group-hover/gap:opacity-100 transition-all shrink-0 px-1.5 py-1 rounded hover:bg-green-500/10"
-                      title={t('blindspots.action.watch')}
-                    >
-                      +
-                    </button>
-                  );
-                })()}
-                <button
-                  onClick={() => onDismissSignal(dep.gap!.id)}
-                  className="text-xs text-text-muted hover:text-red-400 opacity-0 group-hover/gap:opacity-100 transition-all shrink-0 px-1.5 py-1 rounded hover:bg-red-500/10"
-                  title={t('blindspots.signal.notRelevant')}
-                >
-                  ✕
-                </button>
-                {/* eslint-enable i18next/no-literal-string */}
-              </div>
+            <div className={`px-4 py-2.5 ${dep.signals.length > 0 ? 'border-b border-border/30' : ''}`}>
+              <p className="text-xs text-text-muted">{gapExplanation}</p>
               {dep.gap.evidence[0]?.relevance_note && (
                 <p className="text-[10px] text-text-muted/70 mt-1">{getTranslated(`${dep.gap.id}:rel`, dep.gap.evidence[0].relevance_note)}</p>
               )}
+              {/* Phase A: actions grouped + always visible, where the eye lands —
+                  no more hover-hidden + buried on the far right. */}
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                {onAddWatch && (
+                  <button
+                    onClick={() => onAddWatch(bareName(dep.name), depEcosystem(dep))}
+                    className="inline-flex items-center text-[11px] px-2 py-1 rounded-md border border-border bg-bg-tertiary/60 text-text-secondary hover:text-green-400 hover:border-green-500/30 hover:bg-green-500/10 transition-colors"
+                    title={t('blindspots.action.watch')}
+                  >
+                    {t('blindspots.action.watchLabel')}
+                  </button>
+                )}
+                <button
+                  onClick={() => openInvestigate(dep)}
+                  className="inline-flex items-center text-[11px] px-2 py-1 rounded-md border border-border bg-bg-tertiary/60 text-text-secondary hover:text-amber-400 hover:border-amber-500/30 hover:bg-amber-500/10 transition-colors"
+                  title={t('blindspots.action.investigate')}
+                >
+                  {t('blindspots.action.investigate')}
+                </button>
+                <button
+                  onClick={() => onDismissSignal(dep.gap!.id)}
+                  className="inline-flex items-center text-[11px] px-2 py-1 rounded-md border border-border bg-bg-tertiary/60 text-text-secondary hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/10 transition-colors"
+                  title={t('blindspots.signal.notRelevant')}
+                >
+                  {t('blindspots.action.dismiss')}
+                </button>
+              </div>
             </div>
           )}
           {dep.signals.length > 0 && (
@@ -245,12 +296,15 @@ interface TierSectionProps {
   onDismissSignal: (id: string) => void;
   onAddWatch?: (packageName: string, ecosystem: string) => void;
   emptyText: string;
+  /** Optional AI one-liner per dep (keyed by display name) — shown when the
+   *  "Assess with AI" triage has run. */
+  aiRecommendations?: Map<string, string>;
 }
 
 export const TierSection = memo(function TierSection({
   dotColor, borderColor, title, subtitle,
   badgeText, badgeColor,
-  depRows, onDismissSignal, onAddWatch, emptyText,
+  depRows, onDismissSignal, onAddWatch, emptyText, aiRecommendations,
 }: TierSectionProps) {
   return (
     <section className="mb-4" aria-label={title}>
@@ -266,7 +320,7 @@ export const TierSection = memo(function TierSection({
         {depRows.length > 0 ? (
           <div>
             {depRows.map(dep => (
-              <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} onAddWatch={onAddWatch} />
+              <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} onAddWatch={onAddWatch} aiRecommendation={aiRecommendations?.get(dep.name)} />
             ))}
           </div>
         ) : (
@@ -305,117 +359,5 @@ export const EmergingSignals = memo(function EmergingSignals({
         </div>
       </div>
     </section>
-  );
-});
-
-export const CoveredSection = memo(function CoveredSection({
-  depRows, onDismissSignal,
-}: {
-  depRows: DepRow[];
-  onDismissSignal: (id: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [showCovered, setShowCovered] = useState(false);
-  const [detailView, setDetailView] = useState(false);
-
-  if (depRows.length === 0) return null;
-
-  return (
-    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
-      <button
-        onClick={() => setShowCovered(prev => !prev)}
-        className="w-full px-4 py-3 flex items-center gap-2 hover:bg-bg-tertiary/30 transition-colors"
-      >
-        <div className="w-2 h-2 rounded-full bg-green-400" />
-        <h3 className="text-sm font-medium text-text-primary flex-1 text-left">
-          {t('blindspots.covered.title')} ({depRows.length})
-        </h3>
-        <span className="text-[10px] text-green-400">
-          {showCovered ? t('blindspots.covered.hide') : t('blindspots.covered.show')}
-        </span>
-      </button>
-      {showCovered && (
-        <div className="border-t border-border">
-          {!detailView ? (
-            <div className="px-4 py-3">
-              <div className="flex flex-wrap gap-1.5">
-                {depRows.map(dep => (
-                  <span
-                    key={dep.name}
-                    className="text-[11px] px-2 py-1 rounded bg-green-500/8 text-green-400/80 border border-green-500/10"
-                  >
-                    {dep.name}
-                  </span>
-                ))}
-              </div>
-              {depRows.some(dep => dep.signals.length > 0) && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setDetailView(true); }}
-                  className="mt-2.5 text-[10px] text-text-muted hover:text-green-400 transition-colors"
-                >
-                  {t('blindspots.covered.details')}
-                </button>
-              )}
-            </div>
-          ) : (
-            <div>
-              <button
-                onClick={(e) => { e.stopPropagation(); setDetailView(false); }}
-                className="w-full px-4 py-1.5 text-[10px] text-text-muted hover:text-green-400 transition-colors text-right"
-              >
-                {t('blindspots.covered.compact')}
-              </button>
-              {depRows.map(dep => (
-                <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-});
-
-/**
- * Phase 2c: a collapsed group for dependencies whose coverage gap applies only
- * to a build target the user does NOT build on the host (e.g. a `cfg(not(windows))`
- * crate on Windows). Surfaced, de-prioritised, never hidden — a cross-platform
- * dev can expand it. Modeled on `CoveredSection`.
- */
-export const OtherBuildTargetsSection = memo(function OtherBuildTargetsSection({
-  depRows, onDismissSignal, onAddWatch,
-}: {
-  depRows: DepRow[];
-  onDismissSignal: (id: string) => void;
-  onAddWatch?: (packageName: string, ecosystem: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [show, setShow] = useState(false);
-
-  if (depRows.length === 0) return null;
-
-  return (
-    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
-      <button
-        onClick={() => setShow(prev => !prev)}
-        aria-expanded={show}
-        className="w-full px-4 py-3 flex items-center gap-2 hover:bg-bg-tertiary/30 transition-colors"
-      >
-        <div className="w-2 h-2 rounded-full bg-[#8A8A8A]" />
-        <h3 className="text-sm font-medium text-text-secondary flex-1 text-left">
-          {t('blindspots.otherTargets.show', { count: depRows.length })}
-        </h3>
-        <span className="text-[10px] text-text-muted">
-          {show ? t('blindspots.otherTargets.hide') : t('blindspots.otherTargets.expand')}
-        </span>
-      </button>
-      {show && (
-        <div className="border-t border-border">
-          {depRows.map(dep => (
-            <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} onAddWatch={onAddWatch} />
-          ))}
-        </div>
-      )}
-    </div>
   );
 });

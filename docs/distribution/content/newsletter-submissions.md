@@ -15,7 +15,7 @@ npx @4da/mcp-server --setup
 **Links:**
 - npm: https://www.npmjs.com/package/@4da/mcp-server
 - Website: https://4da.ai
-- License: MIT
+- License: Apache-2.0
 
 ---
 

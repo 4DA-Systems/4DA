@@ -239,6 +239,14 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
         let new_items_to_embed: Vec<_> = new_items_to_embed
             .into_iter()
             .filter(|(st, _, _, title, _, detected, _)| {
+                // Security advisories (OSV/CVE) are version-matched to a pinned dependency — they
+                // are relevant regardless of the advisory text's DETECTED language (the title
+                // carries an "[id] pkg:" prefix that skews short-title detection, so an English
+                // advisory like "Next.js Cache Poisoning" can be misclassified and wrongly dropped,
+                // silently losing a real exposure). Never language-filter a security source.
+                if st == "osv" || st == "cve" {
+                    return true;
+                }
                 let foreign_by_detect = detected != &user_lang;
                 let foreign_by_script =
                     user_lang == "en" && crate::language_detect::is_predominantly_non_latin(title);
@@ -332,7 +340,21 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                 )> = new_items_to_embed
                     .into_iter()
                     .zip(embeddings.into_iter())
-                    .filter(|(_, embedding)| !embedding.iter().all(|&v| v == 0.0))
+                    // Drop items whose embedding failed (all-zero) — EXCEPT manifest-grounded
+                    // security advisories (OSV/CVE). Their relevance is the version-match to a
+                    // pinned dependency, NOT embedding similarity, so dropping one for a zero/
+                    // failed embedding would silently lose a real exposure. A zero vector is inert
+                    // in cosine similarity, and the ledger + engine matcher ground it by version.
+                    .filter(|((source_type, source_id, _, _, _, _, _), embedding)| {
+                        if embedding.iter().all(|&v| v == 0.0) {
+                            let security = source_type == "osv" || source_type == "cve";
+                            if security {
+                                debug!(target: "4da::ingest", source = %source_type, id = %source_id, "Retaining zero-embedding security advisory (version-grounded)");
+                            }
+                            return security;
+                        }
+                        true
+                    })
                     .map(
                         |(
                             (

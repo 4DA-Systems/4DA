@@ -55,7 +55,7 @@ src/
   hooks/               # Custom hooks
   config/sources.ts    # Source registry (labels, colors)
 
-mcp-4da-server/        # MCP server (MIT licensed, npm publishable)
+mcp-4da-server/        # MCP server (Apache-2.0 licensed, npm publishable)
 ```
 
 ## Contributing a Source Adapter

@@ -271,10 +271,12 @@ fn check_version_affected(
             }
 
             if let Some(fixed_str) = obj.get("fixed").and_then(|v| v.as_str()) {
-                if let Some(ref intro_ver) = introduced {
-                    if let Some(fix_ver) = parse_version(fixed_str) {
-                        if parsed_user >= *intro_ver && parsed_user < fix_ver {
-                            return (true, true);
+                if !is_unknown_bound(fixed_str) {
+                    if let Some(ref intro_ver) = introduced {
+                        if let Some(fix_ver) = parse_version(fixed_str) {
+                            if parsed_user >= *intro_ver && parsed_user < fix_ver {
+                                return (true, true);
+                            }
                         }
                     }
                 }
@@ -282,10 +284,12 @@ fn check_version_affected(
             }
 
             if let Some(la_str) = obj.get("last_affected").and_then(|v| v.as_str()) {
-                if let Some(ref intro_ver) = introduced {
-                    if let Some(la_ver) = parse_version(la_str) {
-                        if parsed_user >= *intro_ver && parsed_user <= la_ver {
-                            return (true, true);
+                if !is_unknown_bound(la_str) {
+                    if let Some(ref intro_ver) = introduced {
+                        if let Some(la_ver) = parse_version(la_str) {
+                            if parsed_user >= *intro_ver && parsed_user <= la_ver {
+                                return (true, true);
+                            }
                         }
                     }
                 }
@@ -303,6 +307,18 @@ fn check_version_affected(
 
     // Went through all ranges, version not in any affected window
     (false, true)
+}
+
+/// Whether an OSV version boundary is an unknown ("not available") sentinel rather than a
+/// concrete version. OSV's PYSEC import appends "-NA" when the exact affected boundary is
+/// unknown; `semver` parses "2.5.0-NA" as a 2.5.0 prerelease, so a naive comparison would
+/// over-match (e.g. torch 2.3.0 <= "2.5.0-NA" => affected) — yet OSV's own `/v1/query`
+/// matcher does NOT place a version inside such a range. Treat it as no usable bound so the
+/// engine stays conservative and consistent with OSV (verified 2026-06-18 via the ledger's
+/// external accuracy audit).
+fn is_unknown_bound(v: &str) -> bool {
+    let t = v.trim();
+    t.ends_with("-NA") || t.ends_with("-na")
 }
 
 /// Parse a version string, handling common non-semver formats.
@@ -490,6 +506,28 @@ mod tests {
         // No SEMVER range matched → not affected (we only skip non-SEMVER ranges)
         assert!(!affected);
         assert!(confirmed);
+    }
+
+    #[test]
+    fn test_na_unknown_boundary_does_not_match() {
+        // Real shape of PYSEC-2025-210 (torch): last_affected "2.5.0-NA"/"2.7.1-NA".
+        // OSV's own matcher does NOT return torch 2.3.0 for it; semver parses "-NA" as a
+        // prerelease and a naive compare would over-match. An unknown bound must not match.
+        let ranges = Some(
+            r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"last_affected":"2.5.0-NA"},{"last_affected":"2.7.1-NA"}]}]"#
+                .to_string(),
+        );
+        let (affected, confirmed) = check_version_affected(Some("2.3.0"), &ranges);
+        assert!(!affected, "unknown '-NA' boundary must not ground a match");
+        assert!(confirmed, "we DID evaluate the ranges (just found no usable bound)");
+
+        // A concrete prerelease/build bound still matches normally.
+        let rc = Some(
+            r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"2.7.1-rc1"}]}]"#
+                .to_string(),
+        );
+        let (affected, _) = check_version_affected(Some("2.5.0"), &rc);
+        assert!(affected, "concrete prerelease bound still compares");
     }
 
     #[test]

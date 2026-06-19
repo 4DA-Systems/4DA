@@ -429,20 +429,25 @@ pub(crate) fn load_default_twitter_handles() -> Vec<String> {
     crate::sources::twitter::default_handle_list()
 }
 
-/// Load GitHub languages from settings (defaults if empty)
+/// Load GitHub languages with precedence: explicit user settings > ACE-detected stack >
+/// hard-coded defaults. The stack fallback keeps the GitHub-trending firehose shaped to the
+/// user's actual languages (a Go/Java/etc. dev no longer gets only rust/ts/python trending).
 pub(crate) fn load_github_languages_from_settings() -> Vec<String> {
     let settings = get_settings_manager().lock();
     let langs = settings.get_github_languages();
     drop(settings);
-    if langs.is_empty() {
-        vec![
-            "rust".to_string(),
-            "typescript".to_string(),
-            "python".to_string(),
-        ]
-    } else {
-        langs
+    if !langs.is_empty() {
+        return langs;
     }
+    let stack = crate::sources::stack_signals::detect().github_languages();
+    if !stack.is_empty() {
+        return stack;
+    }
+    vec![
+        "rust".to_string(),
+        "typescript".to_string(),
+        "python".to_string(),
+    ]
 }
 
 /// Whether the engine runs in strict manifest mode (`FOURDA_STRICT_MANIFEST=1`).
@@ -547,6 +552,7 @@ pub(crate) fn load_ace_packages_for_ecosystem(ecosystem: &str) -> Vec<String> {
         "nuget" | "csharp" => vec!["Csproj"],
         "rubygems" | "ruby" => vec!["Gemfile"],
         "packagist" | "php" => vec!["ComposerJson"],
+        "pub" | "dart" => vec!["PubspecYaml"],
         _ => return Vec::new(),
     };
 
@@ -595,6 +601,7 @@ pub(crate) fn load_ace_packages_with_versions(ecosystem: &str) -> Vec<(String, O
         "nuget" | "csharp" => vec!["Csproj"],
         "rubygems" | "ruby" => vec!["Gemfile"],
         "packagist" | "php" => vec!["ComposerJson"],
+        "pub" | "dart" => vec!["PubspecYaml"],
         _ => return Vec::new(),
     };
 

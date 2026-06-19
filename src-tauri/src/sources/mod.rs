@@ -32,6 +32,7 @@ pub mod lobsters;
 pub mod mastodon;
 pub mod npm_registry;
 pub mod osv;
+mod osv_live;
 mod osv_types;
 pub mod papers_with_code;
 pub mod producthunt;
@@ -39,6 +40,7 @@ pub mod pypi;
 pub mod rate_limiter;
 pub mod reddit;
 pub mod rss;
+pub mod stack_signals;
 pub mod stackoverflow;
 pub mod twitter;
 pub mod youtube;
@@ -640,6 +642,12 @@ pub fn build_all_sources() -> Vec<Box<dyn Source>> {
     let youtube_channels = load_youtube_channels_from_settings();
     let github_languages = load_github_languages_from_settings();
 
+    // Shape the high-frequency content sources to the user's ACE-detected stack instead of
+    // the founder-skewed hard-coded defaults. `detect()` returns empty signals when nothing
+    // is detected (fresh install / skipped scan), and each `with_*` constructor falls back to
+    // its own default on an empty list — so the no-signal path is unchanged.
+    let stack = stack_signals::detect();
+
     vec![
         // News
         Box::new(hackernews::HackerNewsSource::new()),
@@ -652,15 +660,21 @@ pub fn build_all_sources() -> Vec<Box<dyn Source>> {
         Box::new(huggingface::HuggingFaceSource::new()),
         Box::new(papers_with_code::PapersWithCodeSource::new()),
         // Community
-        Box::new(reddit::RedditSource::new()),
+        Box::new(reddit::RedditSource::with_subreddits(
+            stack.reddit_subreddits(),
+        )),
         Box::new(lemmy::LemmySource::new()),
         Box::new(mastodon::MastodonSource::new()),
         Box::new(lobsters::LobstersSource::new()),
         Box::new(devto::DevtoSource::new()),
-        Box::new(stackoverflow::StackOverflowSource::new()),
+        Box::new(stackoverflow::StackOverflowSource::with_tags(
+            stack.stackoverflow_tags(),
+        )),
         // Social
         Box::new(twitter::TwitterSource::with_handles(twitter_handles).with_api_key(x_api_key)),
-        Box::new(bluesky::BlueskySource::new()),
+        Box::new(bluesky::BlueskySource::with_queries(
+            stack.bluesky_queries(),
+        )),
         // Security
         Box::new(cve::CveSource::new()),
         Box::new(osv::OsvSource::new()),

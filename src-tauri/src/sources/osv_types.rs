@@ -68,11 +68,11 @@ pub(super) struct OsvAffected {
     pub versions: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)] // REMOVE BY 2026-11-10: serde-deserialized struct, wire into version range display or drop
+#[derive(Debug, Deserialize, Serialize)]
 pub(super) struct OsvRange {
     #[serde(rename = "type")]
     pub range_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub events: Option<Vec<serde_json::Value>>,
 }
 

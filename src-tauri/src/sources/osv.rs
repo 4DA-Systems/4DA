@@ -65,6 +65,18 @@ impl OsvSource {
                     "org.apache.logging.log4j:log4j-core",
                     "com.google.guava:guava",
                 ],
+                "NuGet" => vec![
+                    "Newtonsoft.Json",
+                    "System.Text.Json",
+                    "Microsoft.Data.SqlClient",
+                ],
+                "RubyGems" => vec!["rails", "nokogiri", "rack"],
+                "Packagist" => vec![
+                    "laravel/framework",
+                    "symfony/http-kernel",
+                    "guzzlehttp/guzzle",
+                ],
+                "Pub" => vec!["http", "dio", "shared_preferences"],
                 _ => vec![],
             };
             default_packages
@@ -220,6 +232,7 @@ fn get_active_osv_ecosystems() -> Vec<String> {
         ("nuget", "NuGet"),
         ("rubygems", "RubyGems"),
         ("packagist", "Packagist"),
+        ("pub", "Pub"),
     ];
 
     ecosystem_map
@@ -240,7 +253,7 @@ fn get_active_osv_ecosystems() -> Vec<String> {
 /// the global popular-package query flow above. The advisory mirror is synced first when
 /// stale so a single `--once` cycle can surface grounded vulns (the headless step-3 sync's
 /// freshness gate then skips the just-synced mirror — no double download).
-async fn matched_advisories_as_items() -> Vec<SourceItem> {
+pub(super) async fn matched_advisories_as_items() -> Vec<SourceItem> {
     let db = match crate::get_database() {
         Ok(db) => db,
         Err(e) => {
@@ -358,7 +371,7 @@ impl Source for OsvSource {
         // Strict manifest mode: route through deterministic dependency matching and
         // suppress the global popular-package query flow entirely.
         if crate::source_fetching::strict_manifest_mode() {
-            return Ok(matched_advisories_as_items().await);
+            return Ok(super::osv_live::live_matched_advisories_as_items(&self.client).await);
         }
 
         // Determine which ecosystems the user actually has dependencies in
@@ -406,7 +419,7 @@ impl Source for OsvSource {
         // Strict manifest mode: deterministic dependency matching (same as the shallow
         // path); the global batch query is suppressed.
         if crate::source_fetching::strict_manifest_mode() {
-            return Ok(matched_advisories_as_items().await);
+            return Ok(super::osv_live::live_matched_advisories_as_items(&self.client).await);
         }
 
         // Only query ecosystems the user has dependencies in

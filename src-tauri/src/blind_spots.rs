@@ -3292,6 +3292,233 @@ fn llm_judged_blind_spot_items() -> Vec<EvidenceItem> {
 }
 
 // ============================================================================
+// AI relevance assessment ("Assess with AI" — Phase B)
+// ============================================================================
+//
+// On-demand LLM triage of the surfaced coverage-gap blind spots. Most uncovered
+// deps are stable, low-chatter library crates (noise); this asks the model — in
+// ONE batched call — which actually warrant the developer's attention and what
+// to do about each. Cached in-process by the surfaced dep-set so re-opening is
+// instant and tokens aren't re-spent. Signal-gated; degrades gracefully when no
+// LLM is configured (returns the `no_llm_configured` error the UI turns into an
+// "add a key" hint). Mirrors the batched-judge pattern in `llm_judge.rs`.
+
+/// Per-dependency AI verdict. `dep_name` is the DISPLAY name ("libc (crates.io)")
+/// so the frontend can join it back to the rendered row.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub struct DepAssessment {
+    pub dep_name: String,
+    pub worth_reviewing: bool,
+    pub recommendation: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub struct BlindSpotAssessment {
+    pub assessments: Vec<DepAssessment>,
+    pub model: String,
+    pub assessed_at: i64,
+    pub from_cache: bool,
+}
+
+/// In-process cache keyed by a hash of the surfaced dep-set, so re-running the
+/// assessment over the same blind spots is instant and free.
+static BS_ASSESSMENT_CACHE: Lazy<Mutex<Option<(u64, BlindSpotAssessment)>>> =
+    Lazy::new(|| Mutex::new(None));
+
+fn assessment_cache_key(names: &[String]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut sorted: Vec<&String> = names.iter().collect();
+    sorted.sort();
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for n in sorted {
+        n.hash(&mut h);
+    }
+    h.finish()
+}
+
+/// LLM provider from settings, or `None` when nothing usable is configured
+/// (hosted provider with no API key). Mirrors `llm_judgments::get_llm_settings`.
+fn assessment_llm_provider() -> Option<crate::settings::LLMProvider> {
+    let mgr = crate::get_settings_manager();
+    let mut guard = mgr.lock();
+    guard.ensure_keys_hydrated();
+    let provider = guard.get().llm.clone();
+    if provider.provider != "ollama" && provider.api_key.is_empty() {
+        return None;
+    }
+    Some(provider)
+}
+
+const BS_ASSESS_SYSTEM_PROMPT: &str = r#"You are triaging dependency "blind spots" for a specific developer's stack. Each item is a dependency in the developer's own project manifest that 4DA's content sources surfaced as uncovered or drifting. Your job: decide which of these genuinely warrant the developer's attention RIGHT NOW, and give one short, concrete sentence on why + what to do.
+
+Be strict — most stable, low-churn library crates/packages with no recent security or breaking-change activity are NOT worth reviewing. Mark `worth_reviewing` true ONLY when there is a real reason to act: an unreviewed security/breaking-change signal, major version churn the developer should evaluate, or a maintenance/abandonment risk for a load-bearing dependency. A dependency merely "having no source coverage" is usually fine (it's just a quiet, mature library) — mark it false with a recommendation like "Stable library, no action needed."
+
+The `recommendation` must be ONE short sentence: the reason plus a concrete next step (e.g. "Review the 19.x breaking changes before upgrading" or "Mature crypto primitive, no action needed").
+
+Output a JSON array ONLY, one object per numbered dependency:
+[{"id": <number>, "worth_reviewing": <true|false>, "recommendation": "<one short sentence>"}]"#;
+
+/// On-demand AI triage of the surfaced blind spots. Async (one LLM call); no
+/// lock is held across the await — all DB/settings reads complete first.
+#[tauri::command]
+pub async fn assess_blind_spots_with_ai() -> std::result::Result<BlindSpotAssessment, String> {
+    crate::settings::require_signal_feature("assess_blind_spots_with_ai")
+        .map_err(|e| e.to_string())?;
+
+    // 1. Gather the surfaced coverage-gap deps (display name + why-surfaced).
+    //    Synchronous — the owned report drops before the LLM await below.
+    let report = generate_blind_spot_report().map_err(|e| e.to_string())?;
+    // (display_name, why_surfaced, force_worth). `force_worth` is the accuracy
+    // safety net: a critical/high-risk dep (it has real security/breaking
+    // signals) is NEVER collapsed to "probably fine" no matter what the model
+    // says — the AI can only ADD attention, never remove it from a risky dep.
+    let deps: Vec<(String, String, bool)> = report
+        .uncovered_dependencies
+        .iter()
+        .map(|d| {
+            let why = if d.available_signal_count > 0 {
+                format!(
+                    "{} unreviewed signal(s), risk={}",
+                    d.available_signal_count, d.risk_level
+                )
+            } else {
+                d.coverage_reason
+                    .clone()
+                    .unwrap_or_else(|| "no confirmed source coverage".to_string())
+            };
+            // Force-keep ONLY deps that have REAL unreviewed signals at high risk
+            // — not a quiet dep that scores "high" merely for being in many
+            // projects. Otherwise a zero-signal "stable, no action" dep would be
+            // wrongly pinned into "worth reviewing".
+            let force_worth =
+                d.available_signal_count > 0 && matches!(d.risk_level.as_str(), "critical" | "high");
+            (d.name.clone(), why, force_worth)
+        })
+        .collect();
+
+    if deps.is_empty() {
+        return Ok(BlindSpotAssessment {
+            assessments: Vec::new(),
+            model: String::new(),
+            assessed_at: now_millis(),
+            from_cache: false,
+        });
+    }
+
+    // 2. Cache check (keyed by the surfaced dep-set).
+    let names: Vec<String> = deps.iter().map(|(n, _, _)| n.clone()).collect();
+    let key = assessment_cache_key(&names);
+    if let Ok(guard) = BS_ASSESSMENT_CACHE.lock() {
+        if let Some((cached_key, cached)) = guard.as_ref() {
+            if *cached_key == key {
+                let mut hit = cached.clone();
+                hit.from_cache = true;
+                return Ok(hit);
+            }
+        }
+    }
+
+    // 3. Provider (graceful degrade when unconfigured).
+    let provider = match assessment_llm_provider() {
+        Some(p) => p,
+        None => return Err("no_llm_configured".to_string()),
+    };
+    let model = provider.model.clone();
+    let context = crate::adversarial::build_user_context_summary();
+
+    // 4. Batched prompt. The deps are the user's OWN manifest entries (trusted
+    //    data), so no untrusted-content wrapping is needed.
+    let items_text = deps
+        .iter()
+        .enumerate()
+        .map(|(i, (name, why, _))| format!("{}. {} — {}", i + 1, name, why))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let user_message = format!(
+        "## Developer context\n{context}\n\n## Surfaced dependency blind spots\n{items_text}\n\nTriage each numbered dependency per the rubric. Output the JSON array only:"
+    );
+
+    // 5. Single LLM call — the only await; no guards held across it.
+    let client = crate::llm::LLMClient::new(provider);
+    let response = client
+        .complete(
+            BS_ASSESS_SYSTEM_PROMPT,
+            vec![crate::llm::Message {
+                role: "user".to_string(),
+                content: user_message,
+            }],
+        )
+        .await
+        .map_err(|e| format!("AI assessment failed: {e}"))?;
+
+    // 6. Parse and cache.
+    let assessments = parse_dep_assessments(&response.content, &deps);
+    let result = BlindSpotAssessment {
+        assessments,
+        model,
+        assessed_at: now_millis(),
+        from_cache: false,
+    };
+    if let Ok(mut guard) = BS_ASSESSMENT_CACHE.lock() {
+        *guard = Some((key, result.clone()));
+    }
+    Ok(result)
+}
+
+/// Parse the model's `[{id, worth_reviewing, recommendation}]` array, joining
+/// each entry back to its dep by 1-based index. Tolerant: a parse failure
+/// yields an empty Vec (the UI then shows "couldn't assess"), never a panic.
+/// The dep tuple's third field (`force_worth`) is the safety guard — a
+/// high-risk dep is kept worth-reviewing regardless of the model's verdict.
+fn parse_dep_assessments(response: &str, deps: &[(String, String, bool)]) -> Vec<DepAssessment> {
+    let json_str = match (response.find('['), response.rfind(']')) {
+        (Some(s), Some(e)) if e >= s => &response[s..=e],
+        _ => response,
+    };
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(json_str).unwrap_or_default();
+    let mut out = Vec::new();
+    for v in parsed {
+        let id = v["id"]
+            .as_u64()
+            .or_else(|| v["id"].as_i64().map(|n| n.max(0) as u64))
+            .unwrap_or(0);
+        if id == 0 || (id as usize) > deps.len() {
+            continue;
+        }
+        let (name, _, force_worth) = &deps[id as usize - 1];
+        out.push(DepAssessment {
+            dep_name: name.clone(),
+            // Safety guard: a high-risk dep can never be collapsed to "fine".
+            worth_reviewing: v["worth_reviewing"].as_bool().unwrap_or(false) || *force_worth,
+            recommendation: truncate_note(v["recommendation"].as_str().unwrap_or("")),
+        });
+    }
+    out
+}
+
+/// Return the in-process AI assessment cache WITHOUT calling the LLM. The
+/// frontend calls this on mount so a previously-run triage persists across
+/// view re-mounts and webview reloads (in dev, the HMR reload loop otherwise
+/// drops the in-flight `assess_blind_spots_with_ai` callback and the result
+/// would vanish). `None` when nothing has been assessed this process.
+#[tauri::command]
+pub fn get_cached_blind_spot_assessment() -> std::result::Result<Option<BlindSpotAssessment>, String>
+{
+    crate::settings::require_signal_feature("get_cached_blind_spot_assessment")
+        .map_err(|e| e.to_string())?;
+    let cached = BS_ASSESSMENT_CACHE.lock().ok().and_then(|g| {
+        g.as_ref().map(|(_, a)| {
+            let mut hit = a.clone();
+            hit.from_cache = true;
+            hit
+        })
+    });
+    Ok(cached)
+}
+
+// ============================================================================
 // Tauri Command
 // ============================================================================
 
@@ -4830,6 +5057,59 @@ mod tests {
         .unwrap();
         // No platform_active column -> graceful empty (nothing de-prioritised).
         assert!(load_platform_inactive_packages(&conn).is_empty());
+    }
+
+    // ─── AI assessment ("Assess with AI", Phase B) ───────────────────
+
+    #[test]
+    fn parse_dep_assessments_joins_by_index_and_tolerates_garbage() {
+        // tuple = (display_name, why, force_worth)
+        let deps = vec![
+            ("libc (crates.io)".to_string(), "no coverage".to_string(), false),
+            ("react (npm)".to_string(), "3 signals".to_string(), false),
+        ];
+        let resp = r#"Sure: [{"id":1,"worth_reviewing":false,"recommendation":"Stable libc, no action."},{"id":2,"worth_reviewing":true,"recommendation":"Review the v19 breaking changes."}]"#;
+        let out = parse_dep_assessments(resp, &deps);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].dep_name, "libc (crates.io)");
+        assert!(!out[0].worth_reviewing);
+        assert_eq!(out[1].dep_name, "react (npm)");
+        assert!(out[1].worth_reviewing);
+        assert!(out[1].recommendation.contains("v19"));
+
+        // Malformed response -> empty (UI shows "couldn't assess"), never panic.
+        assert!(parse_dep_assessments("not json at all", &deps).is_empty());
+        // Out-of-range / zero ids are dropped, not joined to a wrong dep.
+        assert!(
+            parse_dep_assessments(r#"[{"id":99,"worth_reviewing":true,"recommendation":"x"}]"#, &deps)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn parse_dep_assessments_force_worth_overrides_model_for_high_risk() {
+        // A high-risk dep (force_worth=true) stays worth-reviewing even when the
+        // model says "fine" — the AI can add attention, never remove it.
+        let deps = vec![("openssl (crates.io)".to_string(), "4 signals, risk=high".to_string(), true)];
+        let resp = r#"[{"id":1,"worth_reviewing":false,"recommendation":"Looks fine."}]"#;
+        let out = parse_dep_assessments(resp, &deps);
+        assert_eq!(out.len(), 1);
+        assert!(
+            out[0].worth_reviewing,
+            "high-risk dep must never be collapsed to 'probably fine' by the model"
+        );
+    }
+
+    #[test]
+    fn assessment_cache_key_is_order_independent() {
+        let a = assessment_cache_key(&["b".to_string(), "a".to_string()]);
+        let b = assessment_cache_key(&["a".to_string(), "b".to_string()]);
+        assert_eq!(a, b, "key must not depend on dep ordering");
+        assert_ne!(
+            a,
+            assessment_cache_key(&["a".to_string(), "c".to_string()]),
+            "a different dep-set must produce a different key"
+        );
     }
 
     #[test]

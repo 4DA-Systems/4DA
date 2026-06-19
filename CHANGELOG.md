@@ -32,16 +32,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Persistent briefing state with auto-refresh and freshness indicators
 
 **STREETS Playbook (Free)**
-- All 7 STREETS modules included free inside 4DA
+- All 7 STREETS modules free on the open web at 4da.ai/streets
 - Interactive lessons, templates, and sovereign developer profile
-- Suns Dashboard for strategic technology tracking
 
 **Developer Tools**
 - Essential Toolkit with 7 micro-tools for daily development
 - Command Deck with git operations and project management
 - Decision Journal for tracking and reviewing technical decisions
 - Knowledge gap detection identifies blind spots in your project dependencies
-- MCP integration: 33 tools for Claude Code, Cursor, and Copilot
+- MCP integration: 14 tools for Claude Code, Cursor, and Copilot
 
 **Privacy & Security**
 - Local-first — zero telemetry, zero data collection, no 4DA server

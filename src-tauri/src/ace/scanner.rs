@@ -126,6 +126,38 @@ pub struct ProjectSignal {
     pub project_relevance: f32,
 }
 
+// Framework signatures for the P2 ecosystems — substring match on the dependency id
+// (composer "vendor/pkg", maven "groupId:artifactId", NuGet id, pub package). Only actual
+// web/app frameworks; runtimes/ORMs are surfaced via is_notable_dependency() in ace/context.rs.
+const PHP_FRAMEWORKS: &[(&str, &str)] = &[
+    ("laravel/", "laravel"),
+    ("symfony/", "symfony"),
+    ("slim/slim", "slim"),
+    ("cakephp/", "cakephp"),
+    ("laminas/", "laminas"),
+    ("yiisoft/", "yii"),
+];
+const RUBY_FRAMEWORKS: &[(&str, &str)] = &[
+    ("rails", "rails"),
+    ("sinatra", "sinatra"),
+    ("hanami", "hanami"),
+    ("roda", "roda"),
+];
+const JVM_FRAMEWORKS: &[(&str, &str)] = &[
+    ("org.springframework", "spring"),
+    ("io.quarkus", "quarkus"),
+    ("io.micronaut", "micronaut"),
+    ("play.", "play"),
+    ("io.vertx", "vertx"),
+    ("io.ktor", "ktor"),
+];
+const DOTNET_FRAMEWORKS: &[(&str, &str)] = &[
+    ("microsoft.aspnetcore", "aspnet"),
+    ("microsoft.maui", "maui"),
+    ("blazor", "blazor"),
+];
+const DART_FRAMEWORKS: &[(&str, &str)] = &[("flutter", "flutter")];
+
 impl ProjectScanner {
     pub fn new() -> Self {
         let mut skip_dirs = HashSet::new();
@@ -421,7 +453,13 @@ impl ProjectScanner {
             ManifestType::PyprojectToml => self.parse_pyproject_toml(&content, &mut signal),
             ManifestType::RequirementsTxt => self.parse_requirements_txt(&content, &mut signal),
             ManifestType::GoMod => self.parse_go_mod(&content, &mut signal),
-            _ => {} // Basic detection for others
+            ManifestType::ComposerJson => self.parse_composer_json(&content, &mut signal),
+            ManifestType::Gemfile => self.parse_gemfile(&content, &mut signal),
+            ManifestType::PomXml => self.parse_pom_xml(&content, &mut signal),
+            ManifestType::BuildGradle => self.parse_build_gradle(&content, &mut signal),
+            ManifestType::Csproj => self.parse_csproj(&content, &mut signal),
+            ManifestType::PubspecYaml => self.parse_pubspec_yaml(&content, &mut signal),
+            ManifestType::CMakeLists => {} // language detected; no standard dep manifest
         }
 
         Some(signal)
@@ -713,6 +751,245 @@ impl ProjectScanner {
     }
 
     // ========================================================================
+    // Manifest parsers for the remaining ecosystems (PHP / Ruby / Java / C# / Dart).
+    // Each extracts dependency NAMES (the version-bearing path stays the lockfile
+    // parsers below + ACE's version resolver), keyed to the ecosystem OSV expects:
+    // composer "vendor/pkg", maven "groupId:artifactId", NuGet/RubyGems/Pub package ids.
+    // Mirrors parse_package_json / parse_go_mod; framework detection via push_frameworks.
+    // ========================================================================
+
+    /// composer.json (PHP/Packagist). `require` keys are "vendor/package"; ext-*/lib-*/php meta skipped.
+    pub(crate) fn parse_composer_json(&self, content: &str, signal: &mut ProjectSignal) {
+        let Ok(pkg) = serde_json::from_str::<serde_json::Value>(content) else {
+            return;
+        };
+        if let Some(name) = pkg.get("name").and_then(|v| v.as_str()) {
+            signal.project_name = Some(name.to_string());
+        }
+        if let Some(license) = pkg.get("license").and_then(|v| v.as_str()) {
+            signal.project_license = Some(license.to_string());
+        }
+        let is_pkg = |k: &str| k.contains('/') && !k.starts_with("ext-") && !k.starts_with("lib-");
+        if let Some(deps) = pkg.get("require").and_then(|v| v.as_object()) {
+            for key in deps.keys() {
+                if is_pkg(key) {
+                    signal.dependencies.push(key.clone());
+                    Self::push_frameworks(key, PHP_FRAMEWORKS, signal);
+                }
+            }
+        }
+        if let Some(dev) = pkg.get("require-dev").and_then(|v| v.as_object()) {
+            for key in dev.keys() {
+                if is_pkg(key) {
+                    signal.dev_dependencies.push(key.clone());
+                }
+            }
+        }
+    }
+
+    /// Gemfile (Ruby/RubyGems). Lines like `gem "name", "~> 1.2"`; `:development`/`:test` groups -> dev.
+    pub(crate) fn parse_gemfile(&self, content: &str, signal: &mut ProjectSignal) {
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            let Some(rest) = trimmed.strip_prefix("gem ") else {
+                continue;
+            };
+            let Some(name) = Self::extract_first_quoted(rest) else {
+                continue;
+            };
+            if name.is_empty() {
+                continue;
+            }
+            let is_dev = rest.contains(":development") || rest.contains(":test");
+            if is_dev {
+                signal.dev_dependencies.push(name);
+            } else {
+                signal.dependencies.push(name.clone());
+                Self::push_frameworks(&name, RUBY_FRAMEWORKS, signal);
+            }
+        }
+    }
+
+    /// pom.xml (Java/Maven). Each `<dependency>` -> "groupId:artifactId"; `<scope>test</scope>` -> dev.
+    pub(crate) fn parse_pom_xml(&self, content: &str, signal: &mut ProjectSignal) {
+        if let Some(name) = Self::extract_xml_tag(content, "name") {
+            signal.project_name = Some(name);
+        }
+        for block in content.split("<dependency>").skip(1) {
+            let block = &block[..block.find("</dependency>").unwrap_or(block.len())];
+            let (Some(group), Some(artifact)) = (
+                Self::extract_xml_tag(block, "groupId"),
+                Self::extract_xml_tag(block, "artifactId"),
+            ) else {
+                continue;
+            };
+            let coord = format!("{group}:{artifact}");
+            if Self::extract_xml_tag(block, "scope").as_deref() == Some("test") {
+                signal.dev_dependencies.push(coord);
+            } else {
+                signal.dependencies.push(coord.clone());
+                Self::push_frameworks(&coord, JVM_FRAMEWORKS, signal);
+            }
+        }
+    }
+
+    /// build.gradle / build.gradle.kts (Java-Kotlin/Maven coords). `implementation 'g:a:v'`,
+    /// `api("g:a:v")`, etc. `test*` configurations -> dev.
+    pub(crate) fn parse_build_gradle(&self, content: &str, signal: &mut ProjectSignal) {
+        const CONFIGS: &[&str] = &[
+            "implementation",
+            "api",
+            "compileOnly",
+            "runtimeOnly",
+            "compile",
+            "testImplementation",
+            "testRuntimeOnly",
+            "testCompileOnly",
+            "kapt",
+            "annotationProcessor",
+        ];
+        for line in content.lines() {
+            let trimmed = line.trim();
+            let Some(config) = CONFIGS.iter().find(|c| trimmed.starts_with(**c)) else {
+                continue;
+            };
+            let Some(coord) = Self::extract_first_quoted(trimmed) else {
+                continue;
+            };
+            // Maven coordinate is group:artifact:version — key on group:artifact.
+            let parts: Vec<&str> = coord.split(':').collect();
+            if parts.len() < 2 || parts[0].is_empty() || parts[1].is_empty() {
+                continue;
+            }
+            let ga = format!("{}:{}", parts[0], parts[1]);
+            if config.starts_with("test") {
+                signal.dev_dependencies.push(ga);
+            } else {
+                signal.dependencies.push(ga.clone());
+                Self::push_frameworks(&ga, JVM_FRAMEWORKS, signal);
+            }
+        }
+    }
+
+    /// *.csproj (C#/.NET/NuGet). `<PackageReference Include="Name" Version="..." />` -> "Name".
+    pub(crate) fn parse_csproj(&self, content: &str, signal: &mut ProjectSignal) {
+        for block in content.split("<PackageReference").skip(1) {
+            // Bound the search to this element (self-closing `/>` or the opening tag's `>`).
+            let end = block
+                .find("/>")
+                .or_else(|| block.find('>'))
+                .unwrap_or(block.len());
+            let elem = &block[..end];
+            if let Some(name) = Self::extract_xml_attr(elem, "Include") {
+                if !name.is_empty() {
+                    signal.dependencies.push(name.clone());
+                    Self::push_frameworks(&name, DOTNET_FRAMEWORKS, signal);
+                }
+            }
+        }
+    }
+
+    /// pubspec.yaml (Dart/Pub). Top-level `dependencies:` / `dev_dependencies:` blocks; the
+    /// 2-space-indented keys are package names (nested `sdk:`/`git:` lines are ignored).
+    pub(crate) fn parse_pubspec_yaml(&self, content: &str, signal: &mut ProjectSignal) {
+        if let Some(name) = Self::extract_yaml_top_value(content, "name") {
+            signal.project_name = Some(name);
+        }
+        // Some(true) = dependencies, Some(false) = dev_dependencies, None = elsewhere.
+        let mut section: Option<bool> = None;
+        for line in content.lines() {
+            if line.starts_with("dependencies:") {
+                section = Some(true);
+                continue;
+            }
+            if line.starts_with("dev_dependencies:") {
+                section = Some(false);
+                continue;
+            }
+            // A non-indented, non-empty line ends the current block.
+            if !line.starts_with(char::is_whitespace) && !line.trim().is_empty() {
+                section = None;
+                continue;
+            }
+            let Some(is_runtime) = section else {
+                continue;
+            };
+            let indent = line.len() - line.trim_start().len();
+            let t = line.trim();
+            // Only first-level (2-space) keys are package names; deeper lines are sub-fields.
+            if indent != 2 || t.is_empty() || t.starts_with('#') {
+                continue;
+            }
+            let Some(name) = t.split(':').next().map(|s| s.trim().to_string()) else {
+                continue;
+            };
+            if name.is_empty() {
+                continue;
+            }
+            if is_runtime {
+                signal.dependencies.push(name.clone());
+                Self::push_frameworks(&name, DART_FRAMEWORKS, signal);
+            } else {
+                signal.dev_dependencies.push(name);
+            }
+        }
+    }
+
+    /// Push any framework whose pattern is a substring of `dep` (case-insensitive), deduped.
+    fn push_frameworks(dep: &str, table: &[(&str, &str)], signal: &mut ProjectSignal) {
+        let d = dep.to_lowercase();
+        for (pat, fw) in table {
+            if d.contains(pat) && !signal.frameworks.iter().any(|f| f == fw) {
+                signal.frameworks.push((*fw).to_string());
+            }
+        }
+    }
+
+    /// First single- or double-quoted substring (the quote char must match to close).
+    fn extract_first_quoted(s: &str) -> Option<String> {
+        let bytes = s.as_bytes();
+        let start = bytes.iter().position(|&b| b == b'"' || b == b'\'')?;
+        let quote = bytes[start] as char;
+        let rest = &s[start + 1..];
+        let end = rest.find(quote)?;
+        Some(rest[..end].to_string())
+    }
+
+    /// Inner text of the first `<tag>...</tag>` (trimmed). Namespaced/attributed tags not handled.
+    fn extract_xml_tag(s: &str, tag: &str) -> Option<String> {
+        let open = format!("<{tag}>");
+        let close = format!("</{tag}>");
+        let start = s.find(&open)? + open.len();
+        let end = s[start..].find(&close)? + start;
+        Some(s[start..end].trim().to_string())
+    }
+
+    /// Value of the first `attr="..."` attribute.
+    fn extract_xml_attr(s: &str, attr: &str) -> Option<String> {
+        let needle = format!("{attr}=\"");
+        let start = s.find(&needle)? + needle.len();
+        let end = s[start..].find('"')? + start;
+        Some(s[start..end].to_string())
+    }
+
+    /// Value of a top-level (non-indented) `key:` line in simple YAML.
+    fn extract_yaml_top_value(content: &str, key: &str) -> Option<String> {
+        let prefix = format!("{key}:");
+        for line in content.lines() {
+            if let Some(rest) = line.strip_prefix(&prefix) {
+                let v = rest.trim().trim_matches(|c| c == '"' || c == '\'').trim();
+                if !v.is_empty() {
+                    return Some(v.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    // ========================================================================
     // Lockfile Parsers — discover transitive (indirect) dependencies
     // ========================================================================
 
@@ -880,6 +1157,57 @@ impl ProjectScanner {
         }
 
         packages
+    }
+
+    /// Parse a requirements.txt and return (package_name, version) for EXACT (`==`) pins only.
+    /// A `name==X` pin IS the installed version (a pinned requirements.txt is the lock for the
+    /// stack), so it plays the same role poetry.lock does for Poetry projects. Non-exact
+    /// specifiers (`>=`, `~=`, ranges, `===` arbitrary equality) yield no single resolved
+    /// version and are skipped. Environment markers (`; python_version<...`), extras
+    /// (`pkg[extra]==`), and inline comments are stripped.
+    pub(crate) fn parse_requirements_txt_pins(content: &str) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('-') {
+                continue;
+            }
+            // Drop environment markers (after `;`) and inline comments (after ` #`).
+            let core = trimmed
+                .split(';')
+                .next()
+                .unwrap_or(trimmed)
+                .split(" #")
+                .next()
+                .unwrap_or(trimmed)
+                .trim();
+            let name = core
+                .split(&['=', '>', '<', '~', '!', '['][..])
+                .next()
+                .unwrap_or(core)
+                .trim()
+                .to_string();
+            if name.is_empty() {
+                continue;
+            }
+            let Some(idx) = core.find("==") else {
+                continue; // only exact pins carry a resolved version
+            };
+            let after = &core[idx + 2..];
+            if after.starts_with('=') {
+                continue; // `===` arbitrary equality — not a clean version
+            }
+            let version: String = after
+                .trim()
+                .chars()
+                .take_while(|c| !c.is_whitespace() && *c != ',')
+                .collect();
+            let version = version.trim().to_string();
+            if !version.is_empty() {
+                out.push((name, version));
+            }
+        }
+        out
     }
 
     /// Parse a poetry.lock file and return (package_name, version) pairs.
@@ -2223,6 +2551,155 @@ tokio = { version = "1", features = ["full"] }
         assert_eq!(signal.project_license, Some("ISC".to_string()));
     }
 
+    fn p2_signal(mt: ManifestType, lang: &str) -> ProjectSignal {
+        ProjectSignal {
+            manifest_type: mt,
+            manifest_path: PathBuf::from("manifest"),
+            project_name: None,
+            languages: vec![lang.to_string()],
+            frameworks: Vec::new(),
+            dependencies: Vec::new(),
+            dev_dependencies: Vec::new(),
+            target_dependencies: Vec::new(),
+            detected_at: String::new(),
+            project_license: None,
+            project_relevance: 1.0,
+        }
+    }
+
+    #[test]
+    fn test_parse_composer_json() {
+        let content = r#"{
+  "name": "acme/billing",
+  "license": "proprietary",
+  "require": { "php": ">=8.1", "laravel/framework": "^10.0", "guzzlehttp/guzzle": "^7.5", "ext-json": "*" },
+  "require-dev": { "phpunit/phpunit": "^10.0" }
+}"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::ComposerJson, "php");
+        scanner.parse_composer_json(content, &mut signal);
+        assert_eq!(signal.project_name, Some("acme/billing".to_string()));
+        assert!(signal
+            .dependencies
+            .contains(&"laravel/framework".to_string()));
+        assert!(signal
+            .dependencies
+            .contains(&"guzzlehttp/guzzle".to_string()));
+        assert!(
+            !signal.dependencies.contains(&"php".to_string()),
+            "php meta excluded"
+        );
+        assert!(
+            !signal.dependencies.iter().any(|d| d.starts_with("ext-")),
+            "ext-* excluded"
+        );
+        assert!(signal.frameworks.contains(&"laravel".to_string()));
+        assert!(signal
+            .dev_dependencies
+            .contains(&"phpunit/phpunit".to_string()));
+    }
+
+    #[test]
+    fn test_parse_gemfile() {
+        let content = r#"source "https://rubygems.org"
+gem "rails", "~> 7.1"
+gem 'pg'
+gem "rspec-rails", group: :test
+# a comment
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::Gemfile, "ruby");
+        scanner.parse_gemfile(content, &mut signal);
+        assert!(signal.dependencies.contains(&"rails".to_string()));
+        assert!(signal.dependencies.contains(&"pg".to_string()));
+        assert!(signal.frameworks.contains(&"rails".to_string()));
+        assert!(signal.dev_dependencies.contains(&"rspec-rails".to_string()));
+    }
+
+    #[test]
+    fn test_parse_pom_xml() {
+        let content = r#"<project><name>acme-svc</name><dependencies>
+  <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+  <dependency><groupId>junit</groupId><artifactId>junit</artifactId><scope>test</scope></dependency>
+</dependencies></project>"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::PomXml, "java");
+        scanner.parse_pom_xml(content, &mut signal);
+        assert_eq!(signal.project_name, Some("acme-svc".to_string()));
+        assert!(signal
+            .dependencies
+            .contains(&"org.springframework.boot:spring-boot-starter-web".to_string()));
+        assert!(signal.frameworks.contains(&"spring".to_string()));
+        assert!(signal.dev_dependencies.contains(&"junit:junit".to_string()));
+    }
+
+    #[test]
+    fn test_parse_build_gradle() {
+        let content = r#"dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter:3.1.0'
+    api("io.ktor:ktor-server-core:2.3.0")
+    testImplementation "junit:junit:4.13.2"
+}"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::BuildGradle, "java");
+        scanner.parse_build_gradle(content, &mut signal);
+        assert!(signal
+            .dependencies
+            .contains(&"org.springframework.boot:spring-boot-starter".to_string()));
+        assert!(signal
+            .dependencies
+            .contains(&"io.ktor:ktor-server-core".to_string()));
+        assert!(signal.frameworks.contains(&"spring".to_string()));
+        assert!(signal.frameworks.contains(&"ktor".to_string()));
+        assert!(signal.dev_dependencies.contains(&"junit:junit".to_string()));
+    }
+
+    #[test]
+    fn test_parse_csproj() {
+        let content = r#"<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="7.0.0" />
+  </ItemGroup>
+</Project>"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::Csproj, "csharp");
+        scanner.parse_csproj(content, &mut signal);
+        assert!(signal.dependencies.contains(&"Newtonsoft.Json".to_string()));
+        assert!(signal
+            .dependencies
+            .contains(&"Microsoft.AspNetCore.Authentication.JwtBearer".to_string()));
+        assert!(signal.frameworks.contains(&"aspnet".to_string()));
+    }
+
+    #[test]
+    fn test_parse_pubspec_yaml() {
+        let content = r#"name: acme_app
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.1.0
+  provider: ^6.0.5
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  mockito: ^5.4.0
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::PubspecYaml, "dart");
+        scanner.parse_pubspec_yaml(content, &mut signal);
+        assert_eq!(signal.project_name, Some("acme_app".to_string()));
+        assert!(signal.dependencies.contains(&"http".to_string()));
+        assert!(signal.dependencies.contains(&"provider".to_string()));
+        assert!(signal.dependencies.contains(&"flutter".to_string()));
+        assert!(
+            !signal.dependencies.contains(&"sdk".to_string()),
+            "nested sdk: excluded"
+        );
+        assert!(signal.frameworks.contains(&"flutter".to_string()));
+        assert!(signal.dev_dependencies.contains(&"mockito".to_string()));
+    }
+
     #[test]
     fn test_serde_json_parse_keys() {
         let obj = r#"{ "react": "^18.0.0", "next": "^14.0.0" }"#;
@@ -2766,6 +3243,46 @@ version = "2024.2.2"
     #[test]
     fn test_parse_poetry_lock_empty() {
         assert!(ProjectScanner::parse_poetry_lock("").is_empty());
+    }
+
+    // ─── requirements.txt exact-pin parsing ───────────────────────
+
+    #[test]
+    fn test_parse_requirements_txt_pins() {
+        let content = "\
+# Reference stack
+torch==2.3.0
+transformers==4.41.0
+pillow==10.3.0  # inline comment
+fastapi[all]==0.111.0
+uvicorn==0.29.0 ; python_version >= '3.8'
+numpy>=1.26.0
+pandas~=2.2
+flask
+-r other.txt
+weird===1.0.0
+";
+        let pins = ProjectScanner::parse_requirements_txt_pins(content);
+        // Exact pins captured (name + version), extras/markers/comments stripped.
+        assert!(pins.contains(&("torch".to_string(), "2.3.0".to_string())));
+        assert!(pins.contains(&("transformers".to_string(), "4.41.0".to_string())));
+        assert!(pins.contains(&("pillow".to_string(), "10.3.0".to_string())));
+        assert!(pins.contains(&("fastapi".to_string(), "0.111.0".to_string())));
+        assert!(pins.contains(&("uvicorn".to_string(), "0.29.0".to_string())));
+        // Non-exact specifiers, bare names, options, and `===` are NOT captured.
+        for (name, _) in &pins {
+            assert!(
+                !["numpy", "pandas", "flask", "weird"].contains(&name.as_str()),
+                "non-exact/option/arbitrary line wrongly captured: {name}"
+            );
+        }
+        assert_eq!(pins.len(), 5);
+    }
+
+    #[test]
+    fn test_parse_requirements_txt_pins_empty() {
+        assert!(ProjectScanner::parse_requirements_txt_pins("").is_empty());
+        assert!(ProjectScanner::parse_requirements_txt_pins("# only a comment\n-e .\n").is_empty());
     }
 
     // ─── go.sum parsing ───────────────────────────────────────────

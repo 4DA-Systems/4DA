@@ -206,6 +206,10 @@ fn default_reconciler_enabled() -> bool {
     true
 }
 
+fn default_auto_assess_blind_spots() -> bool {
+    true
+}
+
 impl Default for RerankConfig {
     fn default() -> Self {
         Self {
@@ -744,6 +748,15 @@ pub struct Settings {
     /// Whether onboarding wizard has been completed
     #[serde(default)]
     pub onboarding_complete: bool,
+    /// When true, the Blind Spots lens automatically runs the AI triage
+    /// ("Assess with AI") whenever the set of surfaced dependencies changes,
+    /// so the worth-reviewing / probably-fine grouping is always fresh without
+    /// a manual click. Self-limiting: the assessment is cached by the surfaced
+    /// dep-set, so an auto-run costs nothing (no LLM call) unless that set
+    /// actually changed. Signal-gated; degrades to the manual button when no
+    /// LLM is configured. Default: true.
+    #[serde(default = "default_auto_assess_blind_spots")]
+    pub auto_assess_blind_spots: bool,
     /// Email digest configuration
     #[serde(default)]
     pub digest: DigestConfig,
@@ -839,6 +852,7 @@ impl std::fmt::Debug for Settings {
             .field("monitoring", &self.monitoring)
             .field("auto_discovery_completed", &self.auto_discovery_completed)
             .field("onboarding_complete", &self.onboarding_complete)
+            .field("auto_assess_blind_spots", &self.auto_assess_blind_spots)
             .field("rss_feeds", &format!("[{} feeds]", self.rss_feeds.len()))
             .field(
                 "twitter_handles",
@@ -1039,6 +1053,7 @@ impl Default for Settings {
             monitoring: MonitoringConfig::default(),
             auto_discovery_completed: false,
             onboarding_complete: false,
+            auto_assess_blind_spots: true,
             digest: DigestConfig::default(),
             rss_feeds: vec![],
             twitter_handles: vec![],

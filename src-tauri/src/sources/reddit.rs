@@ -263,13 +263,13 @@ enum AccessPath {
 
 struct RedditJsonStrategy {
     client: reqwest::Client,
-    subreddits: Vec<&'static str>,
+    subreddits: Vec<String>,
     max_items: usize,
 }
 
 struct RedditRssStrategy {
     client: reqwest::Client,
-    subreddits: Vec<&'static str>,
+    subreddits: Vec<String>,
     max_items: usize,
 }
 
@@ -281,7 +281,7 @@ struct RedditRssStrategy {
 /// already fired a request per subreddit. Bailing early keeps the fallback's budget intact.
 async fn fetch_via(
     client: &reqwest::Client,
-    subreddits: &[&'static str],
+    subreddits: &[String],
     max_items: usize,
     path: AccessPath,
 ) -> SourceResult<Vec<SourceItem>> {
@@ -296,7 +296,7 @@ async fn fetch_via(
             result,
             Err(SourceError::Forbidden(_)) | Err(SourceError::RateLimited(_))
         );
-        results.push((*sub, result));
+        results.push((sub.as_str(), result));
         if whole_source_block {
             break;
         }
@@ -342,7 +342,7 @@ impl AccessStrategy for RedditRssStrategy {
 /// Build the ordered access-strategy list for a subreddit set: JSON first (richest), RSS fallback.
 fn reddit_strategies(
     client: &reqwest::Client,
-    subreddits: Vec<&'static str>,
+    subreddits: Vec<String>,
     max_items: usize,
 ) -> Vec<Box<dyn AccessStrategy>> {
     vec![
@@ -363,11 +363,22 @@ fn reddit_strategies(
 // Reddit Source
 // ============================================================================
 
+/// Default subreddits when the user's stack is unknown (fresh install / skipped scan).
+const DEFAULT_SUBREDDITS: &[&str] = &[
+    "programming",
+    "technology",
+    "machinelearning",
+    "rust",
+    "typescript",
+    "webdev",
+    "datascience",
+];
+
 /// Reddit source — fetches top posts from tech subreddits via a resilient access-strategy list.
 pub struct RedditSource {
     config: SourceConfig,
     client: reqwest::Client,
-    subreddits: Vec<&'static str>,
+    subreddits: Vec<String>,
 }
 
 impl RedditSource {
@@ -381,16 +392,21 @@ impl RedditSource {
                 custom: None,
             },
             client: super::shared_client(),
-            subreddits: vec![
-                "programming",
-                "technology",
-                "machinelearning",
-                "rust",
-                "typescript",
-                "webdev",
-                "datascience",
-            ],
+            subreddits: DEFAULT_SUBREDDITS
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect(),
         }
+    }
+
+    /// Create a Reddit source whose subreddits are shaped by the user's detected stack.
+    /// Falls back to `DEFAULT_SUBREDDITS` when `subreddits` is empty (no stack signals).
+    pub fn with_subreddits(subreddits: Vec<String>) -> Self {
+        let mut source = Self::new();
+        if !subreddits.is_empty() {
+            source.subreddits = subreddits;
+        }
+        source
     }
 }
 
@@ -500,7 +516,11 @@ impl Source for RedditSource {
             "Deep fetching Reddit"
         );
         // Multiplier of 15 gives ~1500 max items, ~36 per subreddit for comprehensive coverage.
-        let strategies = reddit_strategies(&self.client, deep_subreddits, items_per_category * 15);
+        let strategies = reddit_strategies(
+            &self.client,
+            deep_subreddits.iter().map(|s| (*s).to_string()).collect(),
+            items_per_category * 15,
+        );
         resilient_fetch("reddit", &strategies).await
     }
 

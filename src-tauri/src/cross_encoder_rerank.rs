@@ -328,6 +328,20 @@ pub(crate) fn apply_cross_encoder_reranking(
     results: &mut Vec<crate::SourceRelevance>,
     scoring_ctx: &scoring::ScoringContext,
 ) {
+    // Headless callers (e.g. the receipts ledger) ground items by version/manifest, not by
+    // feed-ranking, and run under a tight per-cycle timeout. Cross-encoder reranking of the
+    // full candidate set (thousands of items, grown further by exhaustive OSV surfacing) is
+    // pure feed-ranking refinement they don't need — and in a debug build it overran the
+    // ledger's 1200s/stack budget (and crashed one cold path). FOURDA_DISABLE_CROSS_ENCODER
+    // lets such callers skip it entirely; desktop/interactive runs leave it unset and keep the
+    // precision boost. Gated here (not at the call sites) so every caller is covered.
+    if std::env::var_os("FOURDA_DISABLE_CROSS_ENCODER").is_some() {
+        debug!(
+            target: "4da::reranker",
+            "FOURDA_DISABLE_CROSS_ENCODER set — skipping cross-encoder reranking"
+        );
+        return;
+    }
     if results.len() <= 1 {
         return;
     }

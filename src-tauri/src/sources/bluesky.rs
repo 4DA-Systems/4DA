@@ -98,6 +98,16 @@ impl BlueskySource {
         }
     }
 
+    /// Create a Bluesky source whose search queries are shaped by the user's detected stack.
+    /// Falls back to `DEFAULT_QUERIES` when `queries` is empty (no stack signals / fresh install).
+    pub fn with_queries(queries: Vec<String>) -> Self {
+        let mut source = Self::new();
+        if !queries.is_empty() {
+            source.queries = queries;
+        }
+        source
+    }
+
     /// Extract the rkey from an AT Protocol URI
     /// Format: at://did:plc:xxx/app.bsky.feed.post/rkey
     fn extract_rkey(uri: &str) -> Option<&str> {

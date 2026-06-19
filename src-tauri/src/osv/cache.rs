@@ -33,6 +33,7 @@ const KNOWN_ECOSYSTEMS: &[&str] = &[
     "NuGet",
     "RubyGems",
     "Packagist",
+    "Pub",
 ];
 
 /// Get the cache directory for OSV ZIP files.

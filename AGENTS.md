@@ -113,7 +113,7 @@ Before modifying architecture or invariants, read the relevant `.ai/` file:
 
 - Agent definitions: `.Codex/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
 - Slash commands: `.Codex/commands/` (project-specific commands)
-- MCP servers: memory (persistent decisions/learnings), 4da (33 intelligence tools)
+- MCP servers: memory (persistent decisions/learnings), 4da (14 tools)
 - Hooks: wisdom gates (PreToolUse), consequence processing (UserPromptSubmit), session capture (Stop), prompt analyzer
 
 ## User Working Preferences

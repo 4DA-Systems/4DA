@@ -1439,10 +1439,21 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                             if let Some(w) = ready_handle.get_webview_window("main") {
                                 let _ = w.navigate(dev_url.clone());
                             }
-                            // Give the navigation up to 2s to trigger frontend-ready.
-                            // main.tsx emits frontend-ready before React mounts
-                            // (~300-500ms), so 2s is generous.
-                            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                            // Give the navigation time to trigger frontend-ready.
+                            // main.tsx emits it before React mounts, but on a COLD
+                            // dev start Vite transforms the whole module graph on the
+                            // first request (~15-20s) before main.tsx even executes.
+                            // A fixed 2s wait expires mid-transform, Phase B then
+                            // re-navigates and RESETS the transform — looping forever
+                            // until it gives up (findings #1/#3). Poll the durable
+                            // ready flag for up to 40s instead: a warm start breaks in
+                            // ~1s, a cold one is never prematurely re-navigated.
+                            for _ in 0..160u32 {
+                                if ready_flag.load(Ordering::SeqCst) {
+                                    break;
+                                }
+                                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                            }
                             break;
                         }
                     }

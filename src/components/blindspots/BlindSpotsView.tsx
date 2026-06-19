@@ -15,7 +15,10 @@ import { useBlindSpotsData } from '../../hooks/use-blind-spots-data';
 import { BlindSpotsPaywall } from './BlindSpotsPaywall';
 import { loadPersistedDismissals, persistDismissal, removeDismissal } from './dismissal-utils';
 import ScoreBar from './ScoreBar';
-import { TierSection, EmergingSignals, CoveredSection, OtherBuildTargetsSection } from './StackCoverageMap';
+import { TierSection, EmergingSignals } from './StackCoverageMap';
+import { CoveredSection, OtherBuildTargetsSection, ProbablyFineSection } from './CollapsedSections';
+import type { DepAssessment } from '../../../src-tauri/bindings/bindings/DepAssessment';
+import type { BlindSpotAssessment } from '../../../src-tauri/bindings/bindings/BlindSpotAssessment';
 
 // ============================================================================
 // Main View — data shaping + layout
@@ -33,6 +36,12 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     })),
   );
   const loadBlindSpots = useAppStore((s) => s.loadBlindSpots);
+  // Auto-assess: the user's toggle + whether a cloud LLM key is present. Auto
+  // runs are gated to cloud-key users so we never auto-spend (or surface a
+  // "no model" hint) unprompted; local-only (Ollama) and key-less users keep
+  // the manual button.
+  const autoAssess = useAppStore((s) => s.settings?.auto_assess_blind_spots);
+  const hasLlmKey = useAppStore((s) => s.settings?.llm?.has_api_key);
   const [dismissed, setDismissed] = useState<Set<string>>(loadPersistedDismissals);
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,6 +86,54 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     void loadBlindSpots();
   }, [loadBlindSpots]);
 
+  // Phase B: on-demand AI triage of the surfaced blind spots. One batched,
+  // cached call; verdicts keyed by dep display name. `no_llm_configured` →
+  // a graceful "add a key" hint rather than an error.
+  const [ai, setAi] = useState<{ map: Map<string, DepAssessment>; model: string } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const applyAssessment = useCallback((a: BlindSpotAssessment | null) => {
+    if (!a || a.assessments.length === 0) return;
+    const map = new Map<string, DepAssessment>();
+    for (const item of a.assessments) map.set(item.dep_name, item);
+    setAi({ map, model: a.model });
+  }, []);
+
+  // `manual` distinguishes a user click (records an "acted-on" trust event)
+  // from an automatic run on a dep-set change (no trust event — the user did
+  // not act). Both hit the same backend command, which is cached by the
+  // surfaced dep-set: an auto-run on an unchanged set returns instantly with
+  // no model call.
+  const runAssess = useCallback((manual: boolean) => {
+    setAiLoading(true);
+    setAiError(null);
+    cmd('assess_blind_spots_with_ai')
+      .then((res) => {
+        applyAssessment(res as BlindSpotAssessment);
+        if (manual) {
+          recordTrustEvent({ eventType: 'acted_on', sourceType: 'gap', notes: 'blind_spot_ai_assess' });
+        }
+      })
+      .catch((e: unknown) => {
+        setAiError(String(e).includes('no_llm_configured') ? 'no_llm' : String(e));
+      })
+      .finally(() => setAiLoading(false));
+  }, [applyAssessment]);
+
+  const handleAssess = useCallback(() => runAssess(true), [runAssess]);
+
+  // Persist the triage across view re-mounts / webview reloads: the backend
+  // caches the last assessment in-process, so on mount we re-hydrate it. This
+  // is what makes the result survive the dev-mode HMR reload loop (which drops
+  // the in-flight assess callback) — and keeps it shown when navigating away
+  // and back in production. Cheap: no LLM call, just a cache read.
+  useEffect(() => {
+    void cmd('get_cached_blind_spot_assessment')
+      .then((res) => applyAssessment(res as BlindSpotAssessment | null))
+      .catch(() => {});
+  }, [applyAssessment]);
+
   const { depRows, unmatchedSignals, recommendations } = useBlindSpotsData(report, dismissed);
 
   const surfacedRef = useRef(new Set<string>());
@@ -91,6 +148,27 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       }
     }
   }, [depRows]);
+
+  // Auto-assess on dep-set change: when the toggle is on and a cloud LLM key is
+  // present, run the triage once per distinct surfaced dep-set. The backend
+  // caches by that exact set, so an unchanged set is a free instant cache read;
+  // a model call happens only when a dependency newly surfaces or drops off.
+  // We track the last auto-assessed signature in a ref so re-renders and the
+  // hourly background scan (which doesn't change the set) don't re-fire it.
+  const autoAssessedSigRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (autoAssess === false || !hasLlmKey || paywalled) return;
+    const gapNames = depRows
+      .filter((d) => d.gap?.lens_hints.other_build_target !== true)
+      .filter((d) => d.status === 'blind_spot' || d.status === 'falling_behind')
+      .map((d) => d.name)
+      .sort();
+    if (gapNames.length === 0) return;
+    const sig = gapNames.join('|');
+    if (autoAssessedSigRef.current === sig) return;
+    autoAssessedSigRef.current = sig;
+    runAssess(false);
+  }, [autoAssess, hasLlmKey, paywalled, depRows, runAssess]);
 
   if (loading) {
     return (
@@ -166,6 +244,19 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const hasContent = hasProblems || unmatchedSignals.length > 0;
   const dataFreshness = report.data_freshness;
 
+  // Phase B: when the AI triage has run, split the host-relevant gap deps into
+  // "worth reviewing" vs "probably fine" by the model's verdict. A dep that
+  // wasn't assessed defaults to worth-reviewing — we never hide what wasn't
+  // judged. Recommendations are keyed by display name for the rows to show.
+  const aiMap = ai?.map ?? null;
+  const aiActive = aiMap !== null;
+  const gapDeps = [...stackDeps, ...ecosystemDeps];
+  const worthReviewing = aiActive ? gapDeps.filter(d => aiMap.get(d.name)?.worth_reviewing !== false) : [];
+  const probablyFine = aiActive ? gapDeps.filter(d => aiMap.get(d.name)?.worth_reviewing === false) : [];
+  const aiRecs = aiActive
+    ? new Map(Array.from(aiMap.entries()).map(([k, v]) => [k, v.recommendation] as const))
+    : undefined;
+
   return (
     <div className="space-y-4 pb-8" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
       <header className="mb-2">
@@ -205,6 +296,26 @@ const BlindSpotsView = memo(function BlindSpotsView() {
               </span>
             )}
           </span>
+        </div>
+      )}
+      {hasProblems && (
+        <div className="flex items-center gap-2 flex-wrap -mt-1">
+          <button
+            onClick={handleAssess}
+            disabled={aiLoading}
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 disabled:opacity-60 transition-colors"
+          >
+            {aiLoading ? t('blindspots.ai.assessing') : t('blindspots.ai.assess')}
+          </button>
+          {ai && !aiLoading && (
+            <span className="text-[10px] text-text-muted">{t('blindspots.ai.assessedWith', { model: ai.model })}</span>
+          )}
+          {aiError === 'no_llm' && (
+            <span className="text-[10px] text-text-muted">{t('blindspots.ai.noModel')}</span>
+          )}
+          {aiError && aiError !== 'no_llm' && (
+            <span className="text-[10px] text-red-400">{t('blindspots.ai.failed')}</span>
+          )}
         </div>
       )}
       {sourceHealth && sourceHealth.total_failing > 0 && (
@@ -275,33 +386,64 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         )
       ) : (
         <>
-          {stackDeps.length > 0 && (
-            <TierSection
-              dotColor="#EF4444"
-              borderColor="rgba(239, 68, 68, 0.2)"
-              title={t('blindspots.tier.stack')}
-              subtitle={t('blindspots.tier.stackSubtitle', { count: stackDeps.length })}
-              badgeText={t('blindspots.tier.needsAttention')}
-              badgeColor="#EF4444"
-              depRows={stackDeps}
-              onDismissSignal={handleDismiss}
-              onAddWatch={handleAddWatch}
-              emptyText={t('blindspots.tier.stackEmpty')}
-            />
-          )}
-          {ecosystemDeps.length > 0 && (
-            <TierSection
-              dotColor="#F59E0B"
-              borderColor="rgba(245, 158, 11, 0.15)"
-              title={t('blindspots.tier.ecosystem')}
-              subtitle={t('blindspots.tier.ecosystemSubtitle', { count: ecosystemDeps.length })}
-              badgeText={t('blindspots.tier.drifting')}
-              badgeColor="#F59E0B"
-              depRows={ecosystemDeps}
-              onDismissSignal={handleDismiss}
-              onAddWatch={handleAddWatch}
-              emptyText={t('blindspots.tier.ecosystemEmpty')}
-            />
+          {aiActive ? (
+            /* Phase B: AI triage active — one "worth reviewing" group + a
+               collapsed "probably fine" bucket, replacing the stack/ecosystem
+               split. Each row carries its one-line AI recommendation. */
+            <>
+              {worthReviewing.length > 0 && (
+                <TierSection
+                  dotColor="#EF4444"
+                  borderColor="rgba(239, 68, 68, 0.2)"
+                  title={t('blindspots.ai.worthReviewing')}
+                  subtitle={t('blindspots.ai.worthReviewingSubtitle', { count: worthReviewing.length })}
+                  badgeText={t('blindspots.tier.needsAttention')}
+                  badgeColor="#EF4444"
+                  depRows={worthReviewing}
+                  onDismissSignal={handleDismiss}
+                  onAddWatch={handleAddWatch}
+                  emptyText={t('blindspots.tier.stackEmpty')}
+                  aiRecommendations={aiRecs}
+                />
+              )}
+              <ProbablyFineSection
+                depRows={probablyFine}
+                onDismissSignal={handleDismiss}
+                onAddWatch={handleAddWatch}
+                aiRecommendations={aiRecs}
+              />
+            </>
+          ) : (
+            <>
+              {stackDeps.length > 0 && (
+                <TierSection
+                  dotColor="#EF4444"
+                  borderColor="rgba(239, 68, 68, 0.2)"
+                  title={t('blindspots.tier.stack')}
+                  subtitle={t('blindspots.tier.stackSubtitle', { count: stackDeps.length })}
+                  badgeText={t('blindspots.tier.needsAttention')}
+                  badgeColor="#EF4444"
+                  depRows={stackDeps}
+                  onDismissSignal={handleDismiss}
+                  onAddWatch={handleAddWatch}
+                  emptyText={t('blindspots.tier.stackEmpty')}
+                />
+              )}
+              {ecosystemDeps.length > 0 && (
+                <TierSection
+                  dotColor="#F59E0B"
+                  borderColor="rgba(245, 158, 11, 0.15)"
+                  title={t('blindspots.tier.ecosystem')}
+                  subtitle={t('blindspots.tier.ecosystemSubtitle', { count: ecosystemDeps.length })}
+                  badgeText={t('blindspots.tier.drifting')}
+                  badgeColor="#F59E0B"
+                  depRows={ecosystemDeps}
+                  onDismissSignal={handleDismiss}
+                  onAddWatch={handleAddWatch}
+                  emptyText={t('blindspots.tier.ecosystemEmpty')}
+                />
+              )}
+            </>
           )}
           <EmergingSignals items={unmatchedSignals} onDismiss={handleDismiss} />
           {recommendations.length > 0 && (
