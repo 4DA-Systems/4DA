@@ -270,7 +270,12 @@ fn stack_to_feed_domains(detected: &[String]) -> Vec<&'static str> {
             }
             "python" => domains.push("python"),
             "go" => domains.push("go"),
-            "java" | "kotlin" | "scala" => domains.push("systems"),
+            "java" | "scala" => domains.push("java"),
+            "kotlin" => domains.extend(["java", "mobile"]),
+            "csharp" | "c#" | "dotnet" | ".net" => domains.push("csharp"),
+            "ruby" => domains.push("ruby"),
+            "php" => domains.push("php"),
+            "swift" | "dart" | "objective-c" => domains.push("mobile"),
             "c" | "cpp" | "c++" => domains.push("systems"),
             _ => {}
         }

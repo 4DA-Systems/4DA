@@ -127,8 +127,8 @@ mod tests {
     fn registry_loads_successfully() {
         let registry = get_curated_registry();
         assert!(
-            registry.all_feeds().len() >= 80,
-            "Expected at least 80 curated feeds, got {}",
+            registry.all_feeds().len() >= 120,
+            "Expected at least 120 curated feeds, got {}",
             registry.all_feeds().len()
         );
     }
