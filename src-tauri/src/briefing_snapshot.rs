@@ -111,6 +111,39 @@ fn snapshot_path() -> PathBuf {
     path
 }
 
+/// Defense-in-depth: an abstention synthesis ("low signal" / "no noteworthy
+/// intelligence") asserts *all clear*. If the briefing nonetheless carries real
+/// content — items, preemption alerts, or escalating chains — that pairing is
+/// self-contradictory and would surface a false all-clear as the cold-boot
+/// headline (the failure observed 2026-06-19: a briefing baked before the
+/// un-abstain fix stored a "Low signal" synthesis on top of 6 items + 5 high
+/// CVEs). In that case we clear the synthesis to `None` so the next cold boot
+/// renders the real items instead of hiding them behind a "nothing to report"
+/// verdict. A stand-alone abstention (no items/alerts/chains — e.g. a
+/// knowledge-gap-only brief) is legitimate and passes through untouched. This
+/// is a safety net beneath the synthesizer's own grounding gate, not a
+/// replacement for it.
+fn drop_contradictory_abstention(mut briefing: BriefingNotification) -> BriefingNotification {
+    let has_real_content = !briefing.items.is_empty()
+        || !briefing.preemption_alerts.is_empty()
+        || !briefing.escalating_chains.is_empty();
+    let is_abstention = briefing
+        .synthesis
+        .as_deref()
+        .is_some_and(crate::monitoring_briefing::is_abstention_synthesis);
+    if has_real_content && is_abstention {
+        warn!(
+            target: "4da::briefing_snapshot",
+            items = briefing.items.len(),
+            alerts = briefing.preemption_alerts.len(),
+            chains = briefing.escalating_chains.len(),
+            "Dropped contradictory abstention synthesis from snapshot — briefing carries real content"
+        );
+        briefing.synthesis = None;
+    }
+    briefing
+}
+
 /// Save the latest briefing to disk. Best-effort — failures are logged
 /// but never propagate. Atomic via temp file + rename.
 ///
@@ -120,12 +153,17 @@ fn snapshot_path() -> PathBuf {
 ///   capture the latest brief at shutdown
 /// - The `complete_scheduled_check` flow when a new briefing is computed
 pub fn save_snapshot(briefing: &BriefingNotification) {
-    // Refuse to save snapshots with no items — they would just produce a
-    // blank screen on next boot, defeating the entire point.
+    // Refuse to save snapshots with no meaningful content — they would just
+    // produce a blank screen on next boot, defeating the entire point.
     if !briefing.has_meaningful_content() {
         debug!(target: "4da::briefing_snapshot", "Skipping snapshot save — no meaningful content");
         return;
     }
+
+    // Never persist an "all clear" abstention on top of real content.
+    let briefing = drop_contradictory_abstention(briefing.clone());
+    let item_count = briefing.items.len();
+    let had_synthesis = briefing.synthesis.is_some();
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -140,7 +178,7 @@ pub fn save_snapshot(briefing: &BriefingNotification) {
         version: SNAPSHOT_VERSION,
         generated_at_unix: now,
         generated_at_display: display,
-        briefing: briefing.clone(),
+        briefing,
     };
 
     let json = match serde_json::to_string(&snapshot) {
@@ -181,8 +219,8 @@ pub fn save_snapshot(briefing: &BriefingNotification) {
 
     info!(
         target: "4da::briefing_snapshot",
-        items = briefing.items.len(),
-        synthesis = briefing.synthesis.is_some(),
+        items = item_count,
+        synthesis = had_synthesis,
         path = %path.display(),
         "Briefing snapshot saved"
     );
@@ -387,6 +425,95 @@ mod tests {
         assert_eq!(
             snapshot.briefing.synthesis.as_deref(),
             Some("Test synthesis paragraph.")
+        );
+
+        std::env::remove_var("FOURDA_BRIEFING_SNAPSHOT_PATH");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ------------------------------------------------------------------
+    // Contradictory-abstention guard (drop_contradictory_abstention)
+    // ------------------------------------------------------------------
+
+    const ABSTENTION: &str = "Low signal -- no noteworthy intelligence overnight.";
+
+    fn briefing_with_synthesis(items: usize, synthesis: Option<&str>) -> BriefingNotification {
+        let mut b = fake_briefing(items);
+        b.synthesis = synthesis.map(|s| s.to_string());
+        b
+    }
+
+    #[test]
+    fn guard_drops_abstention_when_items_present() {
+        // An "all clear" verdict on top of real items is self-contradictory —
+        // strip it so the cold boot shows the items, not a false "nothing here".
+        let out = drop_contradictory_abstention(briefing_with_synthesis(3, Some(ABSTENTION)));
+        assert_eq!(out.synthesis, None);
+        assert_eq!(out.items.len(), 3, "items must be retained");
+    }
+
+    #[test]
+    fn guard_drops_abstention_with_em_dash_variant() {
+        // Detector tolerates the em-dash / "no new" shapes the LLM may emit.
+        let out = drop_contradictory_abstention(briefing_with_synthesis(
+            1,
+            Some("Low signal \u{2014} no new intelligence overnight."),
+        ));
+        assert_eq!(out.synthesis, None);
+    }
+
+    #[test]
+    fn guard_drops_abstention_when_only_preemption_alerts() {
+        // No items, but a high CVE alert is categorically noteworthy — the
+        // alert alone is "real content", so the abstention must go.
+        let mut b = briefing_with_synthesis(0, Some(ABSTENTION));
+        b.preemption_alerts
+            .push(crate::monitoring_briefing::BriefingPreemptionAlert::default());
+        let out = drop_contradictory_abstention(b);
+        assert_eq!(out.synthesis, None);
+    }
+
+    #[test]
+    fn guard_keeps_real_synthesis_with_items() {
+        // A genuine narrative must never be stripped (no false positives).
+        let real = "Three things to know: patch axios, watch Tokio, ship the brief.";
+        let out = drop_contradictory_abstention(briefing_with_synthesis(2, Some(real)));
+        assert_eq!(out.synthesis.as_deref(), Some(real));
+    }
+
+    #[test]
+    fn guard_keeps_standalone_abstention() {
+        // A legitimately quiet brief whose only signal is an aging knowledge
+        // gap (no items/alerts/chains) may keep its abstention — there is no
+        // contradiction to resolve.
+        let mut b = briefing_with_synthesis(0, Some(ABSTENTION));
+        b.knowledge_gaps
+            .push(crate::monitoring_briefing::KnowledgeGap {
+                topic: "rust".into(),
+                days_since_last: 30,
+            });
+        let out = drop_contradictory_abstention(b);
+        assert_eq!(out.synthesis.as_deref(), Some(ABSTENTION));
+    }
+
+    #[test]
+    fn save_snapshot_strips_contradictory_abstention_end_to_end() {
+        // Full persistence path: a "Low signal" brief carrying real items must
+        // round-trip with synthesis cleared, so the loaded snapshot the
+        // frontend reads on cold boot never shows a false all-clear.
+        let _guard = ENV_VAR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let tmp = std::env::temp_dir().join(format!("4da_test_abst_{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let snapshot_file = tmp.join("briefing_snapshot.json");
+        std::env::set_var("FOURDA_BRIEFING_SNAPSHOT_PATH", &snapshot_file);
+
+        save_snapshot(&briefing_with_synthesis(2, Some(ABSTENTION)));
+        let loaded = load_snapshot().expect("snapshot should still be saved (it has items)");
+        assert_eq!(loaded.briefing.items.len(), 2);
+        assert_eq!(
+            loaded.briefing.synthesis, None,
+            "contradictory abstention must be stripped before persistence"
         );
 
         std::env::remove_var("FOURDA_BRIEFING_SNAPSHOT_PATH");
