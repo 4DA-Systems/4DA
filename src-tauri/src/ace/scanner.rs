@@ -882,6 +882,57 @@ impl ProjectScanner {
         packages
     }
 
+    /// Parse a requirements.txt and return (package_name, version) for EXACT (`==`) pins only.
+    /// A `name==X` pin IS the installed version (a pinned requirements.txt is the lock for the
+    /// stack), so it plays the same role poetry.lock does for Poetry projects. Non-exact
+    /// specifiers (`>=`, `~=`, ranges, `===` arbitrary equality) yield no single resolved
+    /// version and are skipped. Environment markers (`; python_version<...`), extras
+    /// (`pkg[extra]==`), and inline comments are stripped.
+    pub(crate) fn parse_requirements_txt_pins(content: &str) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('-') {
+                continue;
+            }
+            // Drop environment markers (after `;`) and inline comments (after ` #`).
+            let core = trimmed
+                .split(';')
+                .next()
+                .unwrap_or(trimmed)
+                .split(" #")
+                .next()
+                .unwrap_or(trimmed)
+                .trim();
+            let name = core
+                .split(&['=', '>', '<', '~', '!', '['][..])
+                .next()
+                .unwrap_or(core)
+                .trim()
+                .to_string();
+            if name.is_empty() {
+                continue;
+            }
+            let Some(idx) = core.find("==") else {
+                continue; // only exact pins carry a resolved version
+            };
+            let after = &core[idx + 2..];
+            if after.starts_with('=') {
+                continue; // `===` arbitrary equality — not a clean version
+            }
+            let version: String = after
+                .trim()
+                .chars()
+                .take_while(|c| !c.is_whitespace() && *c != ',')
+                .collect();
+            let version = version.trim().to_string();
+            if !version.is_empty() {
+                out.push((name, version));
+            }
+        }
+        out
+    }
+
     /// Parse a poetry.lock file and return (package_name, version) pairs.
     /// Format: TOML with `[[package]]` sections containing `name` and `version` fields.
     pub(crate) fn parse_poetry_lock(content: &str) -> Vec<(String, String)> {
@@ -2766,6 +2817,46 @@ version = "2024.2.2"
     #[test]
     fn test_parse_poetry_lock_empty() {
         assert!(ProjectScanner::parse_poetry_lock("").is_empty());
+    }
+
+    // ─── requirements.txt exact-pin parsing ───────────────────────
+
+    #[test]
+    fn test_parse_requirements_txt_pins() {
+        let content = "\
+# Reference stack
+torch==2.3.0
+transformers==4.41.0
+pillow==10.3.0  # inline comment
+fastapi[all]==0.111.0
+uvicorn==0.29.0 ; python_version >= '3.8'
+numpy>=1.26.0
+pandas~=2.2
+flask
+-r other.txt
+weird===1.0.0
+";
+        let pins = ProjectScanner::parse_requirements_txt_pins(content);
+        // Exact pins captured (name + version), extras/markers/comments stripped.
+        assert!(pins.contains(&("torch".to_string(), "2.3.0".to_string())));
+        assert!(pins.contains(&("transformers".to_string(), "4.41.0".to_string())));
+        assert!(pins.contains(&("pillow".to_string(), "10.3.0".to_string())));
+        assert!(pins.contains(&("fastapi".to_string(), "0.111.0".to_string())));
+        assert!(pins.contains(&("uvicorn".to_string(), "0.29.0".to_string())));
+        // Non-exact specifiers, bare names, options, and `===` are NOT captured.
+        for (name, _) in &pins {
+            assert!(
+                !["numpy", "pandas", "flask", "weird"].contains(&name.as_str()),
+                "non-exact/option/arbitrary line wrongly captured: {name}"
+            );
+        }
+        assert_eq!(pins.len(), 5);
+    }
+
+    #[test]
+    fn test_parse_requirements_txt_pins_empty() {
+        assert!(ProjectScanner::parse_requirements_txt_pins("").is_empty());
+        assert!(ProjectScanner::parse_requirements_txt_pins("# only a comment\n-e .\n").is_empty());
     }
 
     // ─── go.sum parsing ───────────────────────────────────────────
