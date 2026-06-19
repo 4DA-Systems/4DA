@@ -22,6 +22,22 @@ fn is_excluded_project_path(project_path: &str) -> bool {
         || (p.contains("appdata") && p.contains("local") && p.contains("temp"))
 }
 
+/// Canonicalize a project path for storage + the `ON CONFLICT` key. MUST match
+/// `temporal::canonicalize_project_path` so `user_dependencies` rows land on the SAME
+/// key as the `project_dependencies` rows written there. Without this, the manifest
+/// scan (which stores the canonical path via `store_direct_dependencies`) and the
+/// lockfile processors (which pass the RAW `dir.to_string_lossy()` scan path) write TWO
+/// rows for one dependency — a null-version row on the canonical path and a versioned
+/// row on the raw path — across every ecosystem. Pure string normalization (no fs
+/// access), so it is deterministic on synthetic/test paths.
+fn canonicalize_project_path(project_path: &str) -> String {
+    if cfg!(windows) {
+        project_path.replace('\\', "/").to_lowercase()
+    } else {
+        project_path.replace('\\', "/")
+    }
+}
+
 impl Database {
     /// Store (upsert) a dependency discovered by ACE scanner.
     pub fn store_dependency(
@@ -33,6 +49,7 @@ impl Database {
         is_dev: bool,
         license: Option<&str>,
     ) -> SqliteResult<()> {
+        let project_path = canonicalize_project_path(project_path);
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, license, detected_at, last_seen_at)
@@ -60,6 +77,7 @@ impl Database {
         ecosystem: &str,
         is_dev: bool,
     ) -> SqliteResult<()> {
+        let project_path = canonicalize_project_path(project_path);
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
@@ -79,6 +97,10 @@ impl Database {
         &self,
         project_path: &str,
     ) -> SqliteResult<Vec<StoredDependency>> {
+        // Canonicalize the query path to match the canonical key stored by
+        // store_dependency / store_transitive_dependency (a UI/raw caller path like
+        // `D:\proj` must still find the canonical `d:/proj` rows).
+        let project_path = canonicalize_project_path(project_path);
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at, license
