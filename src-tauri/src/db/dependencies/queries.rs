@@ -92,6 +92,20 @@ impl Database {
         Ok(())
     }
 
+    /// Timestamp of the most recent ACE scan, as the freshness signal for the headless
+    /// dep-scan gate. `detected_projects.updated_at` is DO-UPDATEd on every scan (by
+    /// `upsert_detected_project`) for every detected project — including ones with no
+    /// recognized dependencies — so it advances each scan where `project_dependencies`
+    /// would stay null. Returns `None` when nothing has ever been scanned (cold start).
+    pub fn last_ace_scan_time(&self) -> SqliteResult<Option<String>> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT MAX(updated_at) FROM detected_projects",
+            [],
+            |row| row.get::<_, Option<String>>(0),
+        )
+    }
+
     /// Get all dependencies for a specific project.
     pub fn get_project_dependencies(
         &self,

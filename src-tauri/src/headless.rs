@@ -204,6 +204,12 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // Never clears or re-indexes existing context — strictly a cold-start self-heal.
     ensure_context_indexed().await;
 
+    // Step 0b — refresh the dependency profile if a manifest changed or it has gone stale.
+    // Decoupled from the context cold-start gate so a dep added or a version bumped on a LIVE
+    // deployment is picked up (the dependency axis + OSV version-matching read these tables
+    // every cycle), not frozen until a re-bootstrap.
+    ensure_dependencies_scanned().await;
+
     // Step 1 — fetch (fills the cache; writes/touches source_items, stamps sources.last_fetch).
     info!(target: "4da::headless", "Cycle step 1/3: fetching sources...");
     match crate::source_fetching::fill_cache_background(handle).await {
@@ -387,17 +393,120 @@ async fn ensure_context_indexed() {
             warn!(target: "4da::headless", error = %e, "Context indexing failed — cycle continues without context");
         }
     }
+}
 
-    // Same cold-start condition, second profile: the dependency axis (and OSV matching) read the
-    // ACE-detected project/dependency tables, which the GUI's onboarding scan normally populates.
-    // Run the full ACE scan over the same configured directories so a headless-first deployment
-    // gets a real dependency profile too. Non-fatal on failure for the same reason as above.
+/// Re-scan budget for the ACE dependency scan, in hours. Env-overridable via
+/// `FOURDA_DEP_SCAN_MAX_AGE_HOURS` (positive integer; blank/invalid falls back to the default).
+/// Mirrors the OSV-sync freshness knob so a deployment can tune dep-scan cadence the same way.
+fn dep_scan_max_age_hours() -> i64 {
+    parse_dep_scan_max_age(std::env::var("FOURDA_DEP_SCAN_MAX_AGE_HOURS").ok())
+}
+
+/// Pure parser for [`dep_scan_max_age_hours`]: a positive integer hours value; any
+/// missing/blank/non-numeric/non-positive input falls back to the 24h default.
+fn parse_dep_scan_max_age(raw: Option<String>) -> i64 {
+    const DEFAULT_DEP_SCAN_MAX_AGE_HOURS: i64 = 24;
+    raw.and_then(|s| s.trim().parse::<i64>().ok())
+        .filter(|&h| h > 0)
+        .unwrap_or(DEFAULT_DEP_SCAN_MAX_AGE_HOURS)
+}
+
+/// Directories never descended into when checking manifest freshness — large, churning, or
+/// vendored trees that never hold a first-party manifest worth re-scanning for.
+const FRESHNESS_SKIP_DIRS: &[&str] = &[
+    "node_modules", "target", "vendor", "dist", "build", ".venv", "venv", "__pycache__",
+    ".next", ".cargo", ".gradle",
+];
+
+/// Manifest + lockfile names that drive the dependency profile. Kept in sync with
+/// `ace::scanner` ManifestType + the lockfile processors; `.csproj` is matched by extension.
+const WATCHED_MANIFESTS: &[&str] = &[
+    "Cargo.toml", "Cargo.lock", "package.json", "package-lock.json", "pnpm-lock.yaml",
+    "yarn.lock", "requirements.txt", "pyproject.toml", "poetry.lock", "go.mod", "go.sum",
+    "Gemfile", "Gemfile.lock", "composer.json", "composer.lock", "pom.xml", "build.gradle",
+    "build.gradle.kts", "pubspec.yaml", "pubspec.lock",
+];
+
+/// True if any watched manifest/lockfile under `dir` (bounded depth, skipping vendored/hidden
+/// trees) was modified strictly after `since_unix_secs` — i.e. a dependency was added/removed
+/// or a version bumped since the last scan, so the dep profile is stale.
+fn manifest_changed_since(dir: &std::path::Path, since_unix_secs: i64, depth: u8) -> bool {
+    if depth > 6 {
+        return false;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let Ok(ft) = entry.file_type() else { continue };
+        let name = entry.file_name();
+        let n = name.to_string_lossy();
+        if ft.is_dir() {
+            if FRESHNESS_SKIP_DIRS.contains(&n.as_ref()) || n.starts_with('.') {
+                continue;
+            }
+            if manifest_changed_since(&entry.path(), since_unix_secs, depth + 1) {
+                return true;
+            }
+        } else if ft.is_file() && (WATCHED_MANIFESTS.contains(&n.as_ref()) || n.ends_with(".csproj"))
+        {
+            if let Ok(modified) = entry.metadata().and_then(|m| m.modified()) {
+                if let Ok(d) = modified.duration_since(std::time::UNIX_EPOCH) {
+                    if d.as_secs() as i64 > since_unix_secs {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Decide whether the ACE dependency scan is due. `last_scan` is the most recent scan time
+/// (`detected_projects.updated_at`, a sqlite `datetime('now')` UTC string) or `None` if never
+/// scanned. Re-scan when: never scanned; a watched manifest/lockfile changed since the last
+/// scan (prompt pickup of a dep add/bump on a running deployment); or the last scan is older
+/// than the freshness budget (safety net for lockfile/transitive drift the mtime walk misses).
+fn dep_scan_due(dirs: &[std::path::PathBuf], last_scan: Option<&str>) -> bool {
+    let Some(last) = last_scan else {
+        return true;
+    };
+    let Ok(naive) = chrono::NaiveDateTime::parse_from_str(last, "%Y-%m-%d %H:%M:%S") else {
+        return true; // unparseable timestamp — re-scan rather than wedge on a stale profile
+    };
+    let now = chrono::Utc::now().naive_utc();
+    if (now - naive).num_hours() >= dep_scan_max_age_hours() {
+        return true;
+    }
+    let since = naive.and_utc().timestamp();
+    dirs.iter().any(|d| manifest_changed_since(d, since, 0))
+}
+
+/// Run the ACE dependency scan when it is DUE (see [`dep_scan_due`]). Unlike context indexing
+/// (a one-time cold-start self-heal gated on an empty index), the dependency profile must track
+/// manifest changes on a LIVE deployment — a dep added or a version bumped should be picked up
+/// without a re-bootstrap, since the dependency axis and OSV version-matching read these tables
+/// every cycle. Failures are logged and non-fatal: a cycle with a stale dep profile still
+/// fetches and scores.
+async fn ensure_dependencies_scanned() {
+    let dirs = crate::get_context_dirs();
+    if dirs.is_empty() {
+        return;
+    }
+    let last_scan = crate::get_database()
+        .ok()
+        .and_then(|db| db.last_ace_scan_time().ok().flatten());
+    if !dep_scan_due(&dirs, last_scan.as_deref()) {
+        return;
+    }
     let dir_strings: Vec<String> = dirs
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
     match crate::ace_commands::ace_full_scan(dir_strings).await {
-        Ok(_) => info!(target: "4da::headless", "ACE dependency scan complete"),
+        Ok(_) => {
+            info!(target: "4da::headless", "ACE dependency scan complete (freshness-gated)");
+        }
         Err(e) => {
             warn!(target: "4da::headless", error = %e, "ACE dependency scan failed — cycle continues without dependency profile");
         }
@@ -500,4 +609,67 @@ fn is_osv_fresh() -> bool {
 
 fn is_cycle_fresh() -> bool {
     is_data_fresh() && is_osv_fresh()
+}
+
+#[cfg(test)]
+mod dep_scan_freshness_tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn parse_dep_scan_max_age_defaults_and_overrides() {
+        assert_eq!(parse_dep_scan_max_age(None), 24);
+        assert_eq!(parse_dep_scan_max_age(Some("".into())), 24);
+        assert_eq!(parse_dep_scan_max_age(Some("  ".into())), 24);
+        assert_eq!(parse_dep_scan_max_age(Some("abc".into())), 24);
+        assert_eq!(parse_dep_scan_max_age(Some("0".into())), 24);
+        assert_eq!(parse_dep_scan_max_age(Some("-5".into())), 24);
+        assert_eq!(parse_dep_scan_max_age(Some("6".into())), 6);
+        assert_eq!(parse_dep_scan_max_age(Some(" 12 ".into())), 12);
+    }
+
+    #[test]
+    fn dep_scan_due_never_scanned_or_stale() {
+        // Never scanned -> always due.
+        assert!(dep_scan_due(&[], None));
+        // Unparseable timestamp -> due (fail safe, don't wedge).
+        assert!(dep_scan_due(&[], Some("not-a-date")));
+        // Far older than the 24h budget -> due.
+        assert!(dep_scan_due(&[], Some("2000-01-01 00:00:00")));
+    }
+
+    #[test]
+    fn dep_scan_due_fresh_and_unchanged_is_not_due() {
+        // Just scanned, and no dirs to find a changed manifest in -> not due.
+        let now = chrono::Utc::now().naive_utc().format("%Y-%m-%d %H:%M:%S").to_string();
+        assert!(!dep_scan_due(&[], Some(&now)));
+    }
+
+    #[test]
+    fn manifest_changed_since_detects_recent_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "[package]\nname='x'\n").unwrap();
+        // Anything modified after the epoch counts as "changed since" 0.
+        assert!(manifest_changed_since(dir.path(), 0, 0));
+        // Nothing is newer than a far-future cutoff.
+        assert!(!manifest_changed_since(dir.path(), 9_999_999_999, 0));
+    }
+
+    #[test]
+    fn manifest_changed_since_ignores_non_manifests_and_vendored_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        // A non-manifest file is not watched.
+        fs::write(dir.path().join("README.md"), "hi").unwrap();
+        assert!(!manifest_changed_since(dir.path(), 0, 0));
+        // A manifest buried in a skipped vendored dir is ignored.
+        let nm = dir.path().join("node_modules").join("dep");
+        fs::create_dir_all(&nm).unwrap();
+        fs::write(nm.join("package.json"), "{}").unwrap();
+        assert!(!manifest_changed_since(dir.path(), 0, 0));
+        // But a real nested manifest IS found.
+        let pkg = dir.path().join("crates").join("inner");
+        fs::create_dir_all(&pkg).unwrap();
+        fs::write(pkg.join("Cargo.toml"), "[package]\nname='y'\n").unwrap();
+        assert!(manifest_changed_since(dir.path(), 0, 0));
+    }
 }
