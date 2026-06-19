@@ -424,6 +424,63 @@ fn extract_advisory_ids_from_evidence(
     ids
 }
 
+/// Collapse briefing preemption alerts that describe the SAME advisory hitting
+/// different packages into a single entry that lists the affected packages.
+///
+/// A single CVE (e.g. GHSA-w24r-5266-9c3c) can flag several installed packages
+/// (@clerk/clerk-react AND @clerk/shared). Surfaced raw, that is two
+/// near-identical rows consuming two of the brief's five slots. Keyed by the
+/// sorted advisory-id set; alerts with no advisory id pass through untouched
+/// (we can't prove two unidentified alerts are the same). Order is preserved,
+/// so the critical-first ranking of the caller is retained.
+fn dedupe_alerts_by_advisory(
+    alerts: Vec<BriefingPreemptionAlert>,
+) -> Vec<BriefingPreemptionAlert> {
+    use std::collections::HashMap;
+    let mut out: Vec<BriefingPreemptionAlert> = Vec::new();
+    let mut index: HashMap<String, usize> = HashMap::new();
+    for alert in alerts {
+        if alert.advisory_ids.is_empty() {
+            out.push(alert);
+            continue;
+        }
+        let mut ids = alert.advisory_ids.clone();
+        ids.sort();
+        let key = ids.join("|");
+        if let Some(&i) = index.get(&key) {
+            merge_alert_packages(&mut out[i], &alert);
+        } else {
+            index.insert(key, out.len());
+            out.push(alert);
+        }
+    }
+    out
+}
+
+/// Fold a duplicate advisory alert's package + projects into the kept alert so
+/// the single row reflects every affected package (e.g. package_name becomes
+/// "@clerk/clerk-react, @clerk/shared").
+fn merge_alert_packages(keep: &mut BriefingPreemptionAlert, dup: &BriefingPreemptionAlert) {
+    if let Some(dup_pkg) = dup.package_name.as_deref().filter(|p| !p.is_empty()) {
+        match keep.package_name.clone() {
+            Some(existing) if !existing.split(", ").any(|p| p == dup_pkg) => {
+                keep.package_name = Some(format!("{existing}, {dup_pkg}"));
+            }
+            None => keep.package_name = Some(dup_pkg.to_string()),
+            _ => {}
+        }
+    }
+    for proj in &dup.affected_projects {
+        if !keep.affected_projects.contains(proj) {
+            keep.affected_projects.push(proj.clone());
+        }
+    }
+    // A direct hit anywhere makes the merged row direct.
+    if dup.is_direct == Some(true) {
+        keep.is_direct = Some(true);
+    }
+}
+
 /// Scan `text` for GHSA-xxxx-xxxx-xxxx and CVE-YYYY-NNNNN patterns,
 /// appending unique matches to `out`.
 fn extract_ids_from_text(text: &str, out: &mut Vec<String>) {
@@ -664,23 +721,24 @@ pub(crate) fn build_enriched_briefing(
     let preemption_alerts: Vec<BriefingPreemptionAlert> =
         match crate::preemption::get_preemption_feed() {
             Ok(feed) => {
-                let critical: Vec<_> = feed
+                // Build a generous pool (critical first, then high), collapse alerts
+                // that share an advisory — one CVE hitting several of your packages
+                // (e.g. GHSA-w24r-5266-9c3c on @clerk/clerk-react AND @clerk/shared)
+                // should be ONE row listing both packages, not two near-identical
+                // rows eating two of the five slots — then cut to five.
+                let critical = feed
                     .alerts
                     .iter()
-                    .filter(|a| matches!(a.urgency, crate::preemption::AlertUrgency::Critical))
-                    .take(5)
-                    .map(|a| BriefingPreemptionAlert::from_preemption_alert(a))
-                    .collect();
-                let high: Vec<_> = feed
+                    .filter(|a| matches!(a.urgency, crate::preemption::AlertUrgency::Critical));
+                let high = feed
                     .alerts
                     .iter()
-                    .filter(|a| matches!(a.urgency, crate::preemption::AlertUrgency::High))
-                    .take(5_usize.saturating_sub(critical.len()))
-                    .map(|a| BriefingPreemptionAlert::from_preemption_alert(a))
+                    .filter(|a| matches!(a.urgency, crate::preemption::AlertUrgency::High));
+                let pool: Vec<BriefingPreemptionAlert> = critical
+                    .chain(high)
+                    .map(BriefingPreemptionAlert::from_preemption_alert)
                     .collect();
-                let mut alerts = critical;
-                alerts.extend(high);
-                alerts
+                dedupe_alerts_by_advisory(pool).into_iter().take(5).collect()
             }
             Err(_) => Vec::new(),
         };
@@ -3555,6 +3613,54 @@ mod tests {
             "HMAC comparison not constant-time",
         ));
         assert!(b.has_meaningful_content());
+    }
+
+    #[test]
+    fn dedupe_collapses_same_advisory_into_one_row_listing_packages() {
+        let mut a1 = make_test_preemption_alert("Clerk auth bypass", "high", "x");
+        a1.package_name = Some("@clerk/clerk-react".into());
+        a1.advisory_ids = vec!["GHSA-w24r-5266-9c3c".into()];
+        a1.affected_projects = vec!["navcal".into()];
+        let mut a2 = make_test_preemption_alert("Clerk auth bypass", "high", "x");
+        a2.package_name = Some("@clerk/shared".into());
+        a2.advisory_ids = vec!["GHSA-w24r-5266-9c3c".into()];
+        a2.affected_projects = vec!["navcal/vercel-workflow".into()];
+        let mut a3 = make_test_preemption_alert("axios advisories", "high", "x");
+        a3.package_name = Some("axios".into());
+        a3.advisory_ids = vec!["GHSA-aaaa-bbbb-cccc".into()];
+
+        let out = dedupe_alerts_by_advisory(vec![a1, a2, a3]);
+        assert_eq!(out.len(), 2, "two Clerk rows collapse to one; axios stays distinct");
+        assert_eq!(
+            out[0].package_name.as_deref(),
+            Some("@clerk/clerk-react, @clerk/shared"),
+            "merged row lists both affected packages"
+        );
+        assert!(
+            out[0].affected_projects.contains(&"navcal/vercel-workflow".to_string()),
+            "merged row unions affected projects"
+        );
+    }
+
+    #[test]
+    fn dedupe_keeps_unidentified_alerts_separate() {
+        // No advisory id -> we can't prove equality -> both rows are kept.
+        let a1 = make_test_preemption_alert("Some alert", "high", "x");
+        let a2 = make_test_preemption_alert("Some alert", "high", "x");
+        assert_eq!(dedupe_alerts_by_advisory(vec![a1, a2]).len(), 2);
+    }
+
+    #[test]
+    fn dedupe_does_not_duplicate_a_package_already_listed() {
+        let mut a1 = make_test_preemption_alert("dup pkg", "high", "x");
+        a1.package_name = Some("axios".into());
+        a1.advisory_ids = vec!["GHSA-x".into()];
+        let mut a2 = make_test_preemption_alert("dup pkg", "high", "x");
+        a2.package_name = Some("axios".into());
+        a2.advisory_ids = vec!["GHSA-x".into()];
+        let out = dedupe_alerts_by_advisory(vec![a1, a2]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].package_name.as_deref(), Some("axios"));
     }
 
     #[test]
