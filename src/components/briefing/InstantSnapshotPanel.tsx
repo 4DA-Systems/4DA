@@ -3,7 +3,7 @@ import { memo } from 'react';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { useTranslation } from 'react-i18next';
 import { getRelevancePresentation } from '../../utils/score';
-import { isAbstentionSynthesis, parseAbstention } from './briefing-synthesis-helpers';
+import { isAbstentionSynthesis } from './briefing-synthesis-helpers';
 import type { InstantBriefingSnapshot } from '../../store/types';
 
 interface InstantSnapshotPanelProps {
@@ -18,6 +18,15 @@ export const InstantSnapshotPanel = memo(function InstantSnapshotPanel({
   snapshot,
 }: InstantSnapshotPanelProps) {
   const { t } = useTranslation();
+
+  // A cached *abstention* ("Low signal — no noteworthy intelligence overnight")
+  // carries nothing worth pre-painting. Echoing yesterday's verdict dead-center
+  // while a fresh analysis is already in flight reads as a definitive "nothing's
+  // happening" when the truth is "today's scan hasn't landed yet" — and asserts a
+  // verdict the system hasn't re-derived (violates Accurate-first). So when the
+  // snapshot is an abstention we render an honest *working* state instead; the real
+  // low-signal verdict, if today warrants it, surfaces once live analysis completes.
+  const isAbstention = isAbstentionSynthesis(snapshot.synthesis);
 
   return (
     <section aria-label={t('briefing.dailyOverview')} className="bg-bg-primary rounded-lg space-y-4">
@@ -45,16 +54,12 @@ export const InstantSnapshotPanel = memo(function InstantSnapshotPanel({
                the "Source items" list with an explicit label so the user
                knows these are the underlying data, not independent bullets.
           */}
-          {isAbstentionSynthesis(snapshot.synthesis) ? (
-            <div className="py-6 text-center space-y-2">
+          {isAbstention ? (
+            <div className="py-8 flex items-center justify-center gap-2.5">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
               <p className="text-xs text-text-muted italic">
-                {parseAbstention(snapshot.synthesis ?? '').headline}
+                {t('briefing.coldBootScanning', "Reading today's sources for new intelligence…")}
               </p>
-              {parseAbstention(snapshot.synthesis ?? '').telemetry != null && (
-                <p className="text-[9px] font-mono text-text-muted/60">
-                  {parseAbstention(snapshot.synthesis ?? '').telemetry}
-                </p>
-              )}
             </div>
           ) : (
             <>
@@ -109,9 +114,11 @@ export const InstantSnapshotPanel = memo(function InstantSnapshotPanel({
               </div>
             </>
           )}
-          <div className="pt-2 text-[10px] text-text-muted italic">
-            {t('briefing.cachedFreshening', 'Cached briefing — fresh intelligence loading…')}
-          </div>
+          {!isAbstention && (
+            <div className="pt-2 text-[10px] text-text-muted italic">
+              {t('briefing.cachedFreshening', 'Cached briefing — fresh intelligence loading…')}
+            </div>
+          )}
         </div>
       </div>
     </section>

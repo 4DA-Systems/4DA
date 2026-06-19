@@ -64,25 +64,58 @@ function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | nul
     : null;
 }
 
-function getSignalLabel(item: SourceRelevance): string | null {
-  const type = item.score_breakdown?.content_type || item.signal_type;
-  switch (type) {
-    case 'security_alert': return 'Security advisory';
-    case 'breaking_change': return 'Breaking change';
-    case 'dependency_update': return 'Dependency update';
-    case 'migration_opportunity': return 'Migration opportunity';
-    case 'tool_discovery': return 'Tool discovery';
-    case 'architecture_insight': return 'Architecture insight';
+/** Canonical signal kind used for the critical-save label + color. */
+type SignalKind =
+  | 'security'
+  | 'breaking'
+  | 'dependency'
+  | 'migration'
+  | 'tool'
+  | 'architecture';
+
+/**
+ * Classify the critical save into a canonical signal kind.
+ *
+ * An item can carry its type in EITHER vocabulary: the signal vocabulary
+ * (`signal_type`: security_alert / breaking_change / tool_discovery / ...) or
+ * the content vocabulary (`score_breakdown.content_type`: security_advisory /
+ * release_notes / show_and_tell / ...). `findMostCriticalSave` already matches
+ * on both fields, so the label/color MUST read both too — otherwise a real CVE
+ * tagged content_type="security_advisory" (signal_type unset) rendered with no
+ * label and the default gold instead of the red "Security advisory" it earned.
+ * Checked in the same priority order as findMostCriticalSave (security first).
+ */
+export function classifySignal(item: SourceRelevance): SignalKind | null {
+  const sig = item.signal_type ?? undefined;
+  const content = item.score_breakdown?.content_type ?? undefined;
+  const has = (v: string) => sig === v || content === v;
+  // 'security_advisory' is the content-vocab twin of the 'security_alert' signal.
+  if (has('security_alert') || has('security_advisory')) return 'security';
+  if (has('breaking_change')) return 'breaking';
+  if (has('dependency_update')) return 'dependency';
+  if (has('migration_opportunity')) return 'migration';
+  if (has('tool_discovery')) return 'tool';
+  if (has('architecture_insight')) return 'architecture';
+  return null;
+}
+
+export function getSignalLabel(item: SourceRelevance): string | null {
+  switch (classifySignal(item)) {
+    case 'security': return 'Security advisory';
+    case 'breaking': return 'Breaking change';
+    case 'dependency': return 'Dependency update';
+    case 'migration': return 'Migration opportunity';
+    case 'tool': return 'Tool discovery';
+    case 'architecture': return 'Architecture insight';
     default: return null;
   }
 }
 
-function getSignalColor(item: SourceRelevance): string {
-  const type = item.score_breakdown?.content_type || item.signal_type;
-  switch (type) {
-    case 'security_alert': return '#EF4444';
-    case 'breaking_change': return 'var(--color-accent-action)';
-    case 'dependency_update': return '#3B82F6';
+export function getSignalColor(item: SourceRelevance): string {
+  switch (classifySignal(item)) {
+    case 'security': return '#EF4444';
+    case 'breaking': return 'var(--color-accent-action)';
+    case 'dependency': return '#3B82F6';
     default: return '#D4AF37';
   }
 }
