@@ -130,6 +130,97 @@ fn is_ambiguous_dep(name: &str) -> bool {
     AMBIGUOUS_DEPS.contains(&name)
 }
 
+/// Ubiquitous frameworks/runtimes whose mere presence in a user's manifest is
+/// only WEAK relevance evidence. Almost every front-end project depends on
+/// `react`; almost every JS service runs on `node`/`vite`. So "Show HN: an AI
+/// CAD tool built with React" matches the user's genuine `react` dep, but that
+/// match alone does NOT make the item in-domain — the item is about AI/CAD, not
+/// about React. These need a CORROBORATING on-stack topic before their dep/stack
+/// match counts as full relevance (mirrors the ambiguous-dep treatment).
+///
+/// Specific libraries (tokio, sqlx, axum, serde, ...) are deliberately NOT here:
+/// a tokio match really does imply the user's async-Rust domain.
+const UBIQUITOUS_FRAMEWORKS: &[&str] = &[
+    // JS/TS view layers + their immediate satellites
+    "react",
+    "react-dom",
+    "react-router-dom",
+    "react-native",
+    "vue",
+    "angular",
+    "svelte",
+    "solid",
+    // Meta-frameworks
+    "next",
+    "nuxt",
+    "astro",
+    "express",
+    // Runtimes
+    "node",
+    "deno",
+    "bun",
+    // Build tooling / bundlers
+    "webpack",
+    "vite",
+    "rollup",
+    "esbuild",
+    // Languages-as-deps (typescript appears in nearly every JS manifest)
+    "typescript",
+    "javascript",
+];
+
+/// Is `name` one of the big ubiquitous frameworks/runtimes whose presence is
+/// weak relevance evidence? Normalizes scope/casing before matching so
+/// `@types/react`, `React`, and `react` all resolve. Used by both
+/// `compute_domain_relevance` (topic tier) and the scoring pipelines (dep
+/// override) so a ubiquitous-only dep match cannot force an off-domain item
+/// to full domain relevance.
+pub(crate) fn is_ubiquitous_framework(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    // Strip an npm scope prefix: "@scope/pkg" -> "pkg".
+    let stripped = lower
+        .rsplit_once('/')
+        .map(|(_, pkg)| pkg)
+        .unwrap_or(lower.as_str());
+    UBIQUITOUS_FRAMEWORKS.contains(&stripped)
+}
+
+/// Does any OTHER topic corroborate that this ubiquitous-framework topic is
+/// genuinely about the framework? A framework's adjacency-map siblings
+/// (react → jsx/hooks/vite/webpack/next, vue → vuejs/nuxt/vite, ...) are
+/// strong ecosystem signals: "React hooks replacing a polling loop" is real
+/// React content, whereas "AI CAD tool built with React" has no React-ecosystem
+/// sibling topic. This complements `has_corroboration` (which only recognizes
+/// corroborators that are themselves in the user's stack) so that genuine
+/// framework articles keep full relevance without the user having declared
+/// every ecosystem term.
+fn has_ecosystem_corroboration(framework: &str, topics: &[String]) -> bool {
+    let lower = framework.to_lowercase();
+    let stripped = lower
+        .rsplit_once('/')
+        .map(|(_, pkg)| pkg)
+        .unwrap_or(lower.as_str());
+    let map = adjacency_map();
+    let Some(siblings) = map.get(stripped) else {
+        return false;
+    };
+    topics.iter().any(|t| {
+        let tl = t.to_lowercase();
+        tl != stripped && siblings.iter().any(|s| fuzzy_tech_match(&tl, s))
+    })
+}
+
+/// A ubiquitous framework topic counts as genuinely in-domain only when it is
+/// corroborated either by another on-stack topic (`has_corroboration`) OR by a
+/// framework-ecosystem sibling topic (`has_ecosystem_corroboration`).
+fn ubiquitous_match_is_corroborated(
+    framework: &str,
+    topics: &[String],
+    profile: &DomainProfile,
+) -> bool {
+    has_corroboration(topics, framework, profile) || has_ecosystem_corroboration(framework, topics)
+}
+
 /// Check if ANY other topic (besides `skip`) corroborates domain membership.
 /// Primary stack matches always corroborate. all_tech matches only corroborate
 /// if the corroborating topic itself is NOT ambiguous — otherwise "async" (which
@@ -181,13 +272,28 @@ pub fn compute_domain_relevance(topics: &[String], profile: &DomainProfile) -> f
     for topic in topics {
         let lower = topic.to_lowercase();
 
-        // Check primary stack (highest tier)
+        // Check primary stack (highest tier).
+        //
+        // Ubiquitous frameworks (react, vue, node, ...) are weak evidence even
+        // when declared: "Show HN: AI CAD tool built with React" matches a React
+        // user's stack on the single incidental `react` topic while its REAL
+        // topics (ai, cad) are off-stack. Such a match must NOT ride to 1.0
+        // without a corroborating on-stack topic. A genuine React item (react +
+        // hooks + jsx, or react alongside another on-stack tech) IS corroborated
+        // and keeps 1.0; an off-domain item that merely mentions react drops to
+        // interest-level so the off-domain penalty applies.
         if profile
             .primary_stack
             .iter()
             .any(|t| fuzzy_tech_match(&lower, t))
         {
-            best_relevance = best_relevance.max(1.0);
+            if is_ubiquitous_framework(&lower)
+                && !ubiquitous_match_is_corroborated(&lower, topics, profile)
+            {
+                best_relevance = best_relevance.max(0.50);
+            } else {
+                best_relevance = best_relevance.max(1.0);
+            }
             continue;
         }
 
@@ -205,6 +311,13 @@ pub fn compute_domain_relevance(topics: &[String], profile: &DomainProfile) -> f
                     // Ambiguous dep with no corroboration → downgrade to interest-level
                     best_relevance = best_relevance.max(0.50);
                 }
+            } else if is_ubiquitous_framework(&lower)
+                && !ubiquitous_match_is_corroborated(&lower, topics, profile)
+            {
+                // Ubiquitous framework dep with no corroborating on-stack OR
+                // ecosystem-sibling topic → downgrade to interest-level so the
+                // off-domain penalty applies.
+                best_relevance = best_relevance.max(0.50);
             } else {
                 best_relevance = best_relevance.max(0.85);
             }
@@ -1243,13 +1356,111 @@ mod tests {
 
     #[test]
     fn test_mixed_stack_comparison_not_suppressed() {
-        // "React vs Angular" — react is on-stack, so no suppression
+        // "React vs Angular" — react is ubiquitous and the ONLY on-stack topic
+        // is react itself (angular is off-stack), so there is no corroboration.
+        // Post ubiquitous-framework fix this downgrades to interest-level (0.50)
+        // rather than riding to 1.0 on the single incidental react match.
+        // (Before the fix this asserted 1.0.)
         let profile = rust_tauri_profile();
         let topics = vec!["react".to_string(), "angular".to_string()];
         assert_eq!(
             compute_domain_relevance(&topics, &profile),
-            1.0,
-            "Comparison article with on-stack tech should not be suppressed"
+            0.50,
+            "Bare react+angular has no corroborating on-stack topic — downgraded"
+        );
+    }
+
+    // ========================================================================
+    // Ubiquitous-framework relevance correction (PIPELINE_VERSION 8)
+    // ========================================================================
+
+    #[test]
+    fn test_is_ubiquitous_framework() {
+        // Big ubiquitous frameworks/runtimes → true (weak relevance evidence)
+        assert!(is_ubiquitous_framework("react"));
+        assert!(is_ubiquitous_framework("React")); // case-insensitive
+        assert!(is_ubiquitous_framework("react-dom"));
+        assert!(is_ubiquitous_framework("vue"));
+        assert!(is_ubiquitous_framework("node"));
+        assert!(is_ubiquitous_framework("vite"));
+        assert!(is_ubiquitous_framework("@types/react")); // scope stripped → react
+                                                          // Specific libraries → false (a match really implies the user's domain)
+        assert!(!is_ubiquitous_framework("tokio"));
+        assert!(!is_ubiquitous_framework("sqlx"));
+        assert!(!is_ubiquitous_framework("axum"));
+        assert!(!is_ubiquitous_framework("serde"));
+    }
+
+    #[test]
+    fn test_ubiquitous_dep_without_corroboration_downgraded() {
+        // The live bug: "Launch HN: Adam — Open-Source AI CAD" matched the user's
+        // genuine `react` dep but its real topics are ai/cad (off-stack). With no
+        // corroborating on-stack topic, react alone must NOT grant full relevance.
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["react".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["react".to_string()]),
+            dependency_names: HashSet::from(["react".to_string()]),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
+        };
+        let topics = vec!["ai".to_string(), "cad".to_string(), "react".to_string()];
+        let rel = compute_domain_relevance(&topics, &profile);
+        assert!(
+            rel <= 0.50,
+            "Off-domain AI/CAD item that merely mentions react should be <= 0.50, got {rel}"
+        );
+    }
+
+    #[test]
+    fn test_corroborated_ubiquitous_dep_stays_high() {
+        // Guard against over-correction: a GENUINE React item whose topics include
+        // a corroborating on-stack tech keeps full relevance.
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["react".to_string(), "typescript".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from([
+                "react".to_string(),
+                "typescript".to_string(),
+                "jsx".to_string(),
+            ]),
+            dependency_names: HashSet::from(["react".to_string()]),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
+        };
+        // "react + typescript + jsx" — typescript/jsx corroborate the react match.
+        let topics = vec![
+            "react".to_string(),
+            "typescript".to_string(),
+            "jsx".to_string(),
+        ];
+        let rel = compute_domain_relevance(&topics, &profile);
+        assert!(
+            rel >= 0.85,
+            "Corroborated genuine React item should stay high (>=0.85), got {rel}"
+        );
+    }
+
+    #[test]
+    fn test_specific_dep_still_grants_full_relevance() {
+        // A SPECIFIC (non-ubiquitous) dep match is strong evidence and is NOT
+        // downgraded — tokio alone implies the user's async-Rust domain.
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["rust".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["rust".to_string(), "tokio".to_string()]),
+            dependency_names: HashSet::from(["tokio".to_string()]),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
+        };
+        let topics = vec!["tokio".to_string()];
+        assert_eq!(
+            compute_domain_relevance(&topics, &profile),
+            0.85,
+            "Specific dep (tokio) keeps dependency-tier relevance"
         );
     }
 }

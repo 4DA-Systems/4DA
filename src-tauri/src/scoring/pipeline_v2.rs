@@ -574,7 +574,20 @@ fn extract_signals(
 
     // Direct dependencies ARE part of the user's stack — promote to primary
     // so they receive the domain gate boost instead of neutral treatment.
-    if dep_match_score >= 0.50 && !ctx.domain_profile.is_empty() {
+    //
+    // EXCEPTION: a match on a UBIQUITOUS framework alone (react, vue, node, ...)
+    // is not enough — almost every JS project depends on react, so "Show HN: an
+    // AI CAD tool built with React" would otherwise be forced to domain 1.0 and
+    // scored CORE despite being completely off-domain. Only override when at
+    // least one matched dep is a SPECIFIC (non-ubiquitous) library; if every
+    // match is a ubiquitous framework, let the (corrected) topic-based
+    // domain_relevance stand so the off-domain penalty can apply.
+    if dep_match_score >= 0.50
+        && !ctx.domain_profile.is_empty()
+        && matched_deps
+            .iter()
+            .any(|d| !crate::domain_profile::is_ubiquitous_framework(&d.package_name))
+    {
         domain_relevance = domain_relevance.max(1.0);
     }
 

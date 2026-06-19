@@ -424,6 +424,63 @@ fn extract_advisory_ids_from_evidence(
     ids
 }
 
+/// Collapse briefing preemption alerts that describe the SAME advisory hitting
+/// different packages into a single entry that lists the affected packages.
+///
+/// A single CVE (e.g. GHSA-w24r-5266-9c3c) can flag several installed packages
+/// (@clerk/clerk-react AND @clerk/shared). Surfaced raw, that is two
+/// near-identical rows consuming two of the brief's five slots. Keyed by the
+/// sorted advisory-id set; alerts with no advisory id pass through untouched
+/// (we can't prove two unidentified alerts are the same). Order is preserved,
+/// so the critical-first ranking of the caller is retained.
+fn dedupe_alerts_by_advisory(
+    alerts: Vec<BriefingPreemptionAlert>,
+) -> Vec<BriefingPreemptionAlert> {
+    use std::collections::HashMap;
+    let mut out: Vec<BriefingPreemptionAlert> = Vec::new();
+    let mut index: HashMap<String, usize> = HashMap::new();
+    for alert in alerts {
+        if alert.advisory_ids.is_empty() {
+            out.push(alert);
+            continue;
+        }
+        let mut ids = alert.advisory_ids.clone();
+        ids.sort();
+        let key = ids.join("|");
+        if let Some(&i) = index.get(&key) {
+            merge_alert_packages(&mut out[i], &alert);
+        } else {
+            index.insert(key, out.len());
+            out.push(alert);
+        }
+    }
+    out
+}
+
+/// Fold a duplicate advisory alert's package + projects into the kept alert so
+/// the single row reflects every affected package (e.g. package_name becomes
+/// "@clerk/clerk-react, @clerk/shared").
+fn merge_alert_packages(keep: &mut BriefingPreemptionAlert, dup: &BriefingPreemptionAlert) {
+    if let Some(dup_pkg) = dup.package_name.as_deref().filter(|p| !p.is_empty()) {
+        match keep.package_name.clone() {
+            Some(existing) if !existing.split(", ").any(|p| p == dup_pkg) => {
+                keep.package_name = Some(format!("{existing}, {dup_pkg}"));
+            }
+            None => keep.package_name = Some(dup_pkg.to_string()),
+            _ => {}
+        }
+    }
+    for proj in &dup.affected_projects {
+        if !keep.affected_projects.contains(proj) {
+            keep.affected_projects.push(proj.clone());
+        }
+    }
+    // A direct hit anywhere makes the merged row direct.
+    if dup.is_direct == Some(true) {
+        keep.is_direct = Some(true);
+    }
+}
+
 /// Scan `text` for GHSA-xxxx-xxxx-xxxx and CVE-YYYY-NNNNN patterns,
 /// appending unique matches to `out`.
 fn extract_ids_from_text(text: &str, out: &mut Vec<String>) {
@@ -664,23 +721,24 @@ pub(crate) fn build_enriched_briefing(
     let preemption_alerts: Vec<BriefingPreemptionAlert> =
         match crate::preemption::get_preemption_feed() {
             Ok(feed) => {
-                let critical: Vec<_> = feed
+                // Build a generous pool (critical first, then high), collapse alerts
+                // that share an advisory — one CVE hitting several of your packages
+                // (e.g. GHSA-w24r-5266-9c3c on @clerk/clerk-react AND @clerk/shared)
+                // should be ONE row listing both packages, not two near-identical
+                // rows eating two of the five slots — then cut to five.
+                let critical = feed
                     .alerts
                     .iter()
-                    .filter(|a| matches!(a.urgency, crate::preemption::AlertUrgency::Critical))
-                    .take(5)
-                    .map(|a| BriefingPreemptionAlert::from_preemption_alert(a))
-                    .collect();
-                let high: Vec<_> = feed
+                    .filter(|a| matches!(a.urgency, crate::preemption::AlertUrgency::Critical));
+                let high = feed
                     .alerts
                     .iter()
-                    .filter(|a| matches!(a.urgency, crate::preemption::AlertUrgency::High))
-                    .take(5_usize.saturating_sub(critical.len()))
-                    .map(|a| BriefingPreemptionAlert::from_preemption_alert(a))
+                    .filter(|a| matches!(a.urgency, crate::preemption::AlertUrgency::High));
+                let pool: Vec<BriefingPreemptionAlert> = critical
+                    .chain(high)
+                    .map(BriefingPreemptionAlert::from_preemption_alert)
                     .collect();
-                let mut alerts = critical;
-                alerts.extend(high);
-                alerts
+                dedupe_alerts_by_advisory(pool).into_iter().take(5).collect()
             }
             Err(_) => Vec::new(),
         };
@@ -2058,8 +2116,77 @@ pub(crate) struct SynthesisResult {
     pub synthesis_tier: String,
 }
 
-/// Synthesize a narrative morning intelligence briefing using LLM.
+/// Short, human-readable label for a project path: the last one or two path
+/// components (e.g. "c:/users/.../kairos-mvp/backend" -> "kairos-mvp/backend").
+/// Gives the synthesizer a concrete project to name instead of inventing one.
+fn project_label(path: &str) -> String {
+    let norm = path.replace('\\', "/");
+    let parts: Vec<&str> = norm
+        .trim_end_matches('/')
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
+    match parts.len() {
+        0 => path.to_string(),
+        1 => parts[0].to_string(),
+        n => format!("{}/{}", parts[n - 2], parts[n - 1]),
+    }
+}
+
+/// The exact prose the synthesis gates emit when they reject output (LLM
+/// abstention, failed groundedness, or a wrong package version). Used to detect
+/// a quality-rejection so the retry wrapper can re-attempt.
+const ABSTENTION_PROSE: &str = "Low signal -- no noteworthy intelligence overnight.";
+
+fn is_abstention_prose(prose: &str) -> bool {
+    prose.trim_start().starts_with(ABSTENTION_PROSE)
+}
+
+/// Synthesize a narrative morning intelligence briefing, retrying on a quality
+/// rejection. LLM output is non-deterministic (default temperature), so a brief
+/// that gets rejected for a fabricated/transposed version (e.g. "jsonwebtoken to
+/// 5.61.6", caught by `check_factual_claims`) usually synthesizes cleanly on a
+/// re-attempt. We only retry when the brief HAS content to synthesize — a
+/// genuinely quiet day abstains on the first pass without burning extra calls.
 pub(crate) async fn synthesize_morning_briefing(
+    briefing: &BriefingNotification,
+) -> std::result::Result<SynthesisResult, String> {
+    const MAX_ATTEMPTS: u32 = 3;
+    // A brief with <2 pieces of content has nothing to synthesize; a first-pass
+    // abstention there is legitimate, so don't retry (and don't burn LLM calls).
+    let has_content = briefing.items.len() + briefing.preemption_alerts.len() >= 2;
+
+    let mut last: Option<SynthesisResult> = None;
+    for attempt in 1..=MAX_ATTEMPTS {
+        let result = synthesize_morning_briefing_once(briefing).await?;
+        if !is_abstention_prose(&result.prose) || !has_content {
+            if attempt > 1 {
+                tracing::info!(
+                    target: "4da::briefing",
+                    attempt,
+                    "Synthesis accepted on retry after an earlier quality rejection"
+                );
+            }
+            return Ok(result);
+        }
+        tracing::warn!(
+            target: "4da::briefing",
+            attempt,
+            max = MAX_ATTEMPTS,
+            "Synthesis abstained on a content-bearing brief — retrying for an accurate generation"
+        );
+        last = Some(result);
+    }
+    tracing::warn!(
+        target: "4da::briefing",
+        "Synthesis abstained on all attempts — serving the honest quiet state"
+    );
+    Ok(last.expect("loop runs at least once"))
+}
+
+/// One synthesis attempt (LLM call + groundedness + factual gates). Wrapped by
+/// `synthesize_morning_briefing`, which retries this on a quality rejection.
+async fn synthesize_morning_briefing_once(
     briefing: &BriefingNotification,
 ) -> std::result::Result<SynthesisResult, String> {
     let configured_settings = {
@@ -2201,6 +2328,74 @@ pub(crate) async fn synthesize_morning_briefing(
         format!("\nBlind spots:\n{g}\n")
     };
 
+    // Security/preemption alerts are the highest-priority content (system
+    // prompt priority #1: CVEs in the developer's dependencies), but they live
+    // in `preemption_alerts`, NOT in `items` — the cross-surface dedup pulls
+    // CVE items out of `items` into alerts. Feed them to the synthesizer
+    // explicitly, or on a CVE-heavy day it only sees the low-signal leftovers
+    // and abstains. See briefing_groundedness for the matching corpus/packages.
+    let preemption_text = if briefing.preemption_alerts.is_empty() {
+        String::new()
+    } else {
+        // Order so primary-app issues lead, then side projects, then dev-only:
+        // "what's important right now" weights the app you ship above side work.
+        let mut ordered: Vec<&BriefingPreemptionAlert> =
+            briefing.preemption_alerts.iter().collect();
+        ordered.sort_by_key(|a| match a.scope.as_deref() {
+            Some("primary") => 0u8,
+            Some("dev") => 2,
+            _ => 1, // external / unknown
+        });
+        let p = ordered
+            .iter()
+            .map(|a| {
+                let pkg = a
+                    .package_name
+                    .as_deref()
+                    .map(|p| format!(" [{p}]"))
+                    .unwrap_or_default();
+                let dep_kind = match a.is_direct {
+                    Some(true) => "direct dep",
+                    Some(false) => "transitive dep",
+                    None => "dependency",
+                };
+                // Scope + concrete project so the model anchors to real paths
+                // instead of inventing a use-case ("webhook flows").
+                let scope_label = match a.scope.as_deref() {
+                    Some("primary") => "in your PRIMARY app",
+                    Some("dev") => "dev-only dependency",
+                    Some("external") => "in a SIDE project (not the app you ship)",
+                    _ => "scope unknown",
+                };
+                let projects = if a.affected_projects.is_empty() {
+                    String::new()
+                } else {
+                    let names: Vec<String> =
+                        a.affected_projects.iter().map(|p| project_label(p)).collect();
+                    format!(", project: {}", names.join(", "))
+                };
+                let fix = match (a.installed_version.as_deref(), a.fixed_version.as_deref()) {
+                    (Some(cur), Some(fixed)) => format!("; installed {cur}, fix in {fixed}"),
+                    (None, Some(fixed)) => format!("; fix in {fixed}"),
+                    (Some(cur), None) => format!("; installed {cur}"),
+                    (None, None) => String::new(),
+                };
+                format!(
+                    "- [{}] {}{} ({}, {}{}{})",
+                    a.urgency.to_uppercase(),
+                    a.title,
+                    pkg,
+                    dep_kind,
+                    scope_label,
+                    projects,
+                    fix
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("\nSECURITY ALERTS in your dependencies (HIGHEST priority -- lead with these):\n{p}\n")
+    };
+
     let system_prompt = r#"You are an intelligence analyst writing a morning brief for a developer's desktop widget.
 
 YOUR JOB: synthesize, don't summarize. Find the 1-2 strongest threads across all signals, explain WHY they matter together, and state what to do. The signal list below handles individual items -- your job is the "so what?" that a senior dev can't see by scanning titles.
@@ -2212,7 +2407,7 @@ PRIORITY ORDER for picking clusters:
 4. Everything else -- skip unless it compounds with (1) or (2)
 
 WHAT GOOD LOOKS LIKE:
-"Tokio 1.38.x has a confirmed RCE via malformed HTTP/2 frames -- if you're on 1.38.0-1.38.5, upgrade to 1.38.6 today. Upstream says the HTTP/2 parser rewrite lands in 1.39, so this is a stopgap patch.
+"Tokio has a confirmed RCE via malformed HTTP/2 frames -- patch it today; the alerts list below has the exact fixed version. Upstream's HTTP/2 parser rewrite is still pending, so this is a stopgap.
 
 Embedding fine-tuning research shows significant retrieval gains on domain-specific corpora -- worth prototyping against your scoring pipeline given the current relevance accuracy work."
 
@@ -2243,8 +2438,16 @@ QUALITY RULES:
 8. If only 1 cluster is strong, write 1 cluster. Don't force a second cluster from weak signals.
 9. NEVER invent numbers, percentages, or statistics not explicitly stated in the signals. "2-3x", "35%", "second this quarter" are claims -- they must come from the input, not your imagination.
 10. ONLY mention technologies that appear in the developer's installed dependencies list or tech stack. If a signal mentions a package NOT in the developer's dependency list, do not claim it "impacts your stack" or "affects your applications". You may still mention it as industry news, but frame it accordingly: "X released Y" not "X affects your stack".
+11. PROJECTS ARE GROUND TRUTH. Each security alert states its project and scope. Reference the actual project by name (e.g. "in kairos-mvp/backend"). NEVER invent a use-case, feature, or flow the input does not state -- do not say "auth flows", "webhook flows", "payment path" etc. unless those exact words appear in the input. The path is data; the use-case is your imagination.
+12. NO CROSS-PROJECT COMPOUNDING. Two issues only "compound", "combine", or form a "combined exposure" when they are in the SAME project/path. If alert A is in project X and alert B is in project Y, they are SEPARATE issues -- say so, or cover only the strongest. Never manufacture a combined-attack-surface narrative across different projects.
+13. RESPECT SCOPE. An alert marked "in a SIDE project" or "dev-only" is NOT in the app the developer ships. Do not imply it is active core work or that "the attack surface is live" in their main product. State the scope honestly: "in your side project navcal" not "in flows you're actively working on". Lead with PRIMARY-app issues; for side projects, name the project and label it as such.
+14. DO NOT WRITE VERSION NUMBERS. Never put a version number (e.g. 1.16.0, 5.61.6, 9.3.1) in your prose. Name the package and the action -- "upgrade jsonwebtoken", "patch axios" -- and let the SECURITY ALERTS list below carry the exact installed/fixed versions. Stating versions yourself reliably transposes them between packages (e.g. attaching Clerk's 5.61.6 to axios); the list owns versions, you own the "so what".
 
 BANNED:
+- Inventing a use-case/feature/flow not stated in the input ("auth flows", "webhook flows", "billing path") -- name the project, not an imagined purpose
+- Claiming two issues "compound" / "combine" / are a "combined exposure" when they are in different projects -- that is a fabricated narrative
+- Implying a side-project or dev-only dependency is active core work or a live threat to the shipped app
+- Writing ANY version number in the prose (1.16.0, 5.61.6, 9.3.1, etc.) -- name the package; the alerts list shows the exact version
 - Restating signal titles without adding context or connecting dots
 - Speculative implications: "could impact", "might affect", "may influence" without evidence in the signals
 - Transition padding: "meanwhile", "in another domain", "in a related vein", "additionally", "furthermore"
@@ -2287,12 +2490,13 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
 
     let user_prompt = format!(
         "Developer context:\nTech stack: {tech}\nWorking on: {topics}\n\
-         Installed dependencies: {deps}\n\n\
+         Installed dependencies: {deps}\n{preemption}\n\
          {count} signals:\n{items}\n{chains}{gaps}\n\
          Synthesize my morning intelligence briefing.",
         tech = tech_summary,
         topics = topics_summary,
         deps = deps_summary,
+        preemption = preemption_text,
         count = briefing.items.len(),
         items = items_text,
         chains = chains_text,
@@ -2304,7 +2508,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         content: user_prompt,
     }];
 
-    let corpus: Vec<String> = briefing
+    let mut corpus: Vec<String> = briefing
         .items
         .iter()
         .map(|i| {
@@ -2318,6 +2522,67 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                 c.push_str(dep);
             }
             c
+        })
+        .collect();
+    // The security alerts now lead the prompt, so the synthesis will reference
+    // them — ground those sentences by adding the alert text to the corpus.
+    for a in &briefing.preemption_alerts {
+        let mut c = a.title.clone();
+        if !a.explanation.is_empty() {
+            c.push(' ');
+            c.push_str(&a.explanation);
+        }
+        for v in [&a.package_name, &a.installed_version, &a.fixed_version]
+            .into_iter()
+            .flatten()
+        {
+            c.push(' ');
+            c.push_str(v);
+        }
+        corpus.push(c);
+    }
+
+    // Known package/dependency names for the groundedness allowlist — bare
+    // lowercase names ("axios", "jsonwebtoken") the capitalized salient-term
+    // extractor cannot see on its own.
+    let packages: Vec<String> = {
+        let mut s: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for a in &briefing.preemption_alerts {
+            if let Some(p) = a.package_name.as_deref().filter(|p| !p.is_empty()) {
+                s.insert(p.to_lowercase());
+            }
+        }
+        for i in &briefing.items {
+            for dep in i.matched_deps.iter().filter(|d| !d.is_empty()) {
+                s.insert(dep.to_lowercase());
+            }
+        }
+        s.into_iter().collect()
+    };
+
+    // Factual ground truth for the deterministic version check: each alert's
+    // package and the versions it is legitimate to cite (installed + fix).
+    // Packages with no known version are omitted — we can't fault a claim we
+    // have no data to contradict.
+    let package_facts: Vec<crate::briefing_groundedness::PackageFact> = briefing
+        .preemption_alerts
+        .iter()
+        .filter_map(|a| {
+            let name = a.package_name.as_deref().filter(|p| !p.is_empty())?;
+            let mut versions = Vec::new();
+            if let Some(v) = a.installed_version.as_deref().filter(|v| !v.is_empty()) {
+                versions.push(v.to_string());
+            }
+            if let Some(v) = a.fixed_version.as_deref().filter(|v| !v.is_empty()) {
+                versions.push(v.to_string());
+            }
+            if versions.is_empty() {
+                return None;
+            }
+            Some(crate::briefing_groundedness::PackageFact {
+                name: name.to_string(),
+                versions,
+            })
         })
         .collect();
 
@@ -2374,7 +2639,9 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
 
                         let prose = output.to_prose();
                         let report =
-                            crate::briefing_groundedness::validate_groundedness(&prose, &corpus);
+                            crate::briefing_groundedness::validate_groundedness_with_packages(
+                                &prose, &corpus, &packages,
+                            );
                         if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
                             tracing::warn!(
                                 target: "4da::briefing",
@@ -2392,10 +2659,31 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                             });
                         }
 
+                        // Deterministic factual backstop: reject fabricated
+                        // version numbers the fuzzy grounding check can't catch.
+                        let fact_violations =
+                            crate::briefing_groundedness::check_factual_claims(&prose, &package_facts);
+                        if !fact_violations.is_empty() {
+                            tracing::warn!(
+                                target: "4da::briefing",
+                                violations = ?fact_violations,
+                                "Structured synthesis stated wrong package versions — abstaining"
+                            );
+                            return Ok(SynthesisResult {
+                                prose: "Low signal -- no noteworthy intelligence overnight."
+                                    .to_string(),
+                                clusters: None,
+                                provider_used: provider_label.clone(),
+                                synthesis_tier: tier.as_str().to_string(),
+                            });
+                        }
+
                         tracing::info!(
                             target: "4da::briefing",
                             confidence = report.confidence,
-                            "Structured synthesis passed groundedness"
+                            claim_confidence = report.claim_confidence(),
+                            claim_terms = report.claim_terms,
+                            "Structured synthesis passed groundedness + factual checks"
                         );
 
                         let mut synthesis = prose;
@@ -2659,8 +2947,11 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
             ..response
         };
 
-        let report =
-            crate::briefing_groundedness::validate_groundedness(&response.content, &corpus);
+        let report = crate::briefing_groundedness::validate_groundedness_with_packages(
+            &response.content,
+            &corpus,
+            &packages,
+        );
 
         if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
             tracing::warn!(
@@ -2679,11 +2970,28 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
             });
         }
 
+        let fact_violations =
+            crate::briefing_groundedness::check_factual_claims(&response.content, &package_facts);
+        if !fact_violations.is_empty() {
+            tracing::warn!(
+                target: "4da::briefing",
+                violations = ?fact_violations,
+                "Morning brief synthesis stated wrong package versions — falling back to abstention"
+            );
+            return Ok(SynthesisResult {
+                prose: "Low signal -- no noteworthy intelligence overnight.".to_string(),
+                clusters: None,
+                provider_used: provider_label.clone(),
+                synthesis_tier: tier.as_str().to_string(),
+            });
+        }
+
         tracing::info!(
             target: "4da::briefing",
             confidence = report.confidence,
             total_terms = report.total_terms,
-            "Groundedness check passed"
+            claim_confidence = report.claim_confidence(),
+            "Groundedness + factual checks passed"
         );
 
         let mut synthesis = response.content;
@@ -3359,6 +3667,69 @@ mod tests {
             "HMAC comparison not constant-time",
         ));
         assert!(b.has_meaningful_content());
+    }
+
+    #[test]
+    fn dedupe_collapses_same_advisory_into_one_row_listing_packages() {
+        let mut a1 = make_test_preemption_alert("Clerk auth bypass", "high", "x");
+        a1.package_name = Some("@clerk/clerk-react".into());
+        a1.advisory_ids = vec!["GHSA-w24r-5266-9c3c".into()];
+        a1.affected_projects = vec!["navcal".into()];
+        let mut a2 = make_test_preemption_alert("Clerk auth bypass", "high", "x");
+        a2.package_name = Some("@clerk/shared".into());
+        a2.advisory_ids = vec!["GHSA-w24r-5266-9c3c".into()];
+        a2.affected_projects = vec!["navcal/vercel-workflow".into()];
+        let mut a3 = make_test_preemption_alert("axios advisories", "high", "x");
+        a3.package_name = Some("axios".into());
+        a3.advisory_ids = vec!["GHSA-aaaa-bbbb-cccc".into()];
+
+        let out = dedupe_alerts_by_advisory(vec![a1, a2, a3]);
+        assert_eq!(out.len(), 2, "two Clerk rows collapse to one; axios stays distinct");
+        assert_eq!(
+            out[0].package_name.as_deref(),
+            Some("@clerk/clerk-react, @clerk/shared"),
+            "merged row lists both affected packages"
+        );
+        assert!(
+            out[0].affected_projects.contains(&"navcal/vercel-workflow".to_string()),
+            "merged row unions affected projects"
+        );
+    }
+
+    #[test]
+    fn dedupe_keeps_unidentified_alerts_separate() {
+        // No advisory id -> we can't prove equality -> both rows are kept.
+        let a1 = make_test_preemption_alert("Some alert", "high", "x");
+        let a2 = make_test_preemption_alert("Some alert", "high", "x");
+        assert_eq!(dedupe_alerts_by_advisory(vec![a1, a2]).len(), 2);
+    }
+
+    #[test]
+    fn dedupe_does_not_duplicate_a_package_already_listed() {
+        let mut a1 = make_test_preemption_alert("dup pkg", "high", "x");
+        a1.package_name = Some("axios".into());
+        a1.advisory_ids = vec!["GHSA-x".into()];
+        let mut a2 = make_test_preemption_alert("dup pkg", "high", "x");
+        a2.package_name = Some("axios".into());
+        a2.advisory_ids = vec!["GHSA-x".into()];
+        let out = dedupe_alerts_by_advisory(vec![a1, a2]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].package_name.as_deref(), Some("axios"));
+    }
+
+    #[test]
+    fn is_abstention_prose_detects_gate_rejections_but_not_real_synthesis() {
+        // The exact prose every synthesis gate emits on rejection — must match so
+        // the retry wrapper re-attempts instead of shipping a blank brief.
+        assert!(is_abstention_prose(ABSTENTION_PROSE));
+        assert!(is_abstention_prose(
+            "Low signal -- no noteworthy intelligence overnight.\n\n(8 items)"
+        ));
+        // Real synthesis must NOT read as abstention (else we'd retry good output).
+        assert!(!is_abstention_prose(
+            "Upgrade jsonwebtoken to 10.3.0 in 4da/relay; it has a type confusion flaw."
+        ));
+        assert!(!is_abstention_prose(""));
     }
 
     #[test]

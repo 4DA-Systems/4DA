@@ -150,6 +150,34 @@ pub(super) fn extract_salient_terms(text: &str) -> Vec<String> {
         }
     }
 
+    // --- Phase 4: scoped package identifiers (case-insensitive) ------------
+    // Modern dependency/security briefs are dominated by lowercase package
+    // names the capitalized phases (2 & 3) never see. Scoped npm names like
+    // "@ai-sdk/provider-utils" or "@clerk/clerk-react" are unambiguous package
+    // tokens regardless of case, so we surface them here. Bare lowercase names
+    // ("axios", "jsonwebtoken") and hyphenated ones ("clerk-react") are handled
+    // by the package allowlist in `validate_groundedness_with_packages`, which
+    // matches the brief's actual dependencies and so carries no risk of
+    // counting ordinary hyphenated English ("real-world", "well-known").
+    for token in &tokens {
+        let stripped = token.trim_matches(|c: char| {
+            matches!(
+                c,
+                '.' | ',' | ';' | ':' | '!' | '?' | '(' | ')' | '"' | '\'' | '`' | '[' | ']'
+            )
+        });
+        if stripped.starts_with('@')
+            && stripped.contains('/')
+            && stripped.chars().filter(|c| c.is_alphabetic()).count() >= 3
+        {
+            let key = stripped.to_lowercase();
+            if !seen.contains(&key) {
+                seen.insert(key);
+                out.push(stripped.to_string());
+            }
+        }
+    }
+
     out
 }
 
