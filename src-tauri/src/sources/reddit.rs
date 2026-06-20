@@ -238,7 +238,7 @@ fn aggregate(
             }));
     }
 
-    all.sort_by(|a, b| item_score(b).cmp(&item_score(a)));
+    all.sort_by_key(|b| std::cmp::Reverse(item_score(b)));
     all.truncate(max_items);
     Ok(all)
 }
@@ -307,7 +307,7 @@ async fn fetch_via(
 
 #[async_trait]
 impl AccessStrategy for RedditJsonStrategy {
-    fn label(&self) -> &str {
+    fn label(&self) -> &'static str {
         "reddit:json"
     }
 
@@ -324,7 +324,7 @@ impl AccessStrategy for RedditJsonStrategy {
 
 #[async_trait]
 impl AccessStrategy for RedditRssStrategy {
-    fn label(&self) -> &str {
+    fn label(&self) -> &'static str {
         "reddit:rss"
     }
 
