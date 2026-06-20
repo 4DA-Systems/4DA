@@ -159,7 +159,7 @@ ammonia = "4"
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_System_Console", "Win32_System_Memory", "Win32_UI_Shell", "Win32_System_Power", "Win32_System_SystemInformation"] }
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Memory", "Win32_UI_Shell", "Win32_System_Power", "Win32_System_SystemInformation"] }
 winreg = "0.55"
 tauri-winrt-notification = "0.6"
 
