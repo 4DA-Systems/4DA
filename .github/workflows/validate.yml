@@ -18,8 +18,60 @@ env:
   NODE_OPTIONS: '--max-old-space-size=8192'
 
 jobs:
+  # Detect which parts of the tree a PR actually touches, so the heavy jobs
+  # below can skip when irrelevant. This is the throughput lever: most PRs (and
+  # nearly every Dependabot npm-subpackage bump) touch ONE area, yet previously
+  # paid for the full frontend + MCP + Rust-matrix suite on the single
+  # self-hosted runner — the cause of the merge-queue backlog.
+  #
+  # CRITICAL: filtering is done at the JOB level (via this job's outputs), NOT
+  # with `on: pull_request: paths:`. A required status check that is filtered
+  # out at the workflow level never reports, which leaves branch protection
+  # waiting forever ("Expected — Waiting for status"). Here the workflow always
+  # runs and the `Validate Success` aggregate always reports; only the heavy
+  # legs conditionally skip (a skipped leg counts as success in the aggregate).
+  changes:
+    name: Detect changes
+    # PR-only: dorny/paths-filter resolves changed files via the API on PRs
+    # (robust, no git history needed). On workflow_dispatch this job skips and
+    # the heavy legs run via their `github.event_name == 'workflow_dispatch'`
+    # clause, so the detector never runs where it lacks a reliable base diff.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      mcp: ${{ steps.filter.outputs.mcp }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter
+        with:
+          filters: |
+            workflows:
+              - '.github/workflows/**'
+            rust:
+              - 'src-tauri/**'
+            frontend:
+              - 'src/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'index.html'
+              - 'vite.config.*'
+              - 'tsconfig*.json'
+              - 'tailwind.config.*'
+              - 'scripts/**'
+              - 'public/**'
+              - 'locales/**'
+            mcp:
+              - 'mcp-4da-server/**'
+
   frontend:
     name: Frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, windows, 4da]
     timeout-minutes: 30
     defaults:
@@ -100,7 +152,12 @@ jobs:
 
   mcp-server:
     name: MCP Server
-    needs: frontend
+    # Independent of `frontend` (the old needs:frontend chain forced these to
+    # serialize and meant skipping frontend skipped everything downstream).
+    # Gating on `changes` lets each leg run/skip on its own and parallelize
+    # across multiple runners.
+    needs: changes
+    if: needs.changes.outputs.mcp == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, windows, 4da]
     timeout-minutes: 15
     defaults:
@@ -136,9 +193,16 @@ jobs:
 
   rust:
     name: Rust (${{ matrix.label }})
-    needs: mcp-server
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, windows, 4da]
-    timeout-minutes: 45
+    # 75 not 45: the self-hosted box is shared with the whole fleet's dev/cargo
+    # churn (dozens of concurrent cargo processes), so a COLD compile here can
+    # crawl well past 45 min under contention — long enough to false-timeout a
+    # legitimate build (observed on the first run of this very change). Warm
+    # runs (clean:false) finish in ~12 min; this ceiling only ever bites a cold,
+    # heavily-contended compile, and is still a real hang backstop.
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -156,16 +220,19 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
         with:
-          clean: true
+          # clean: false PRESERVES src-tauri/target between runs on the
+          # self-hosted runner — the single biggest throughput win. With the
+          # old `clean: true`, every PR wiped target/ and paid a full cold
+          # compile (~10 min/leg); a warm incremental build is ~1-2 min. cargo's
+          # fingerprinting makes a persisted target safe (stale objects are
+          # recompiled, not trusted). The pristine-clone guarantee is
+          # hermetic.yml's job (cold by design); Validate optimises for speed.
+          # clean: false also keeps the pre-fetched src-tauri/models/, so the
+          # tauri build script no longer hard-fails on a missing bundle
+          # resource. The fetch step below stays as an idempotent safety net
+          # (instant when the models are already present).
+          clean: false
 
-      # `clean: true` above wipes the gitignored src-tauri/models/ that the
-      # self-hosted runner carries pre-fetched. cargo's tauri build script then
-      # hard-fails with "resource path `models` doesn't exist" before clippy /
-      # tests can run (every PR's Rust check was red on this, not on real
-      # defects). Re-fetch them here — pure-node, no deps, instant when already
-      # present, same source as hermetic.yml / release.yml. The sibling
-      # frontend / mcp-server jobs avoid this by using clean: false; the Rust
-      # job keeps a pristine tree and re-provisions the bundle resource instead.
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
@@ -238,7 +305,9 @@ jobs:
   validate-success:
     name: Validate Success
     if: always()
-    needs: [frontend, mcp-server, rust]
+    # Includes `changes` so a failure in the path-detector itself is caught.
+    # Path-filtered legs report "skipped", which the check below treats as pass.
+    needs: [changes, frontend, mcp-server, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
