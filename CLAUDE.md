@@ -111,6 +111,14 @@ Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
   - `pnpm run validate:vite-smoke` does a cold-start and verifies 13 critical routes
   - `pnpm run validate` includes the smoke test
   **If it happens:** `taskkill /F /IM fourda.exe && pnpm install --frozen-lockfile`
+- **Ghost tray icons** — each `fourda.exe` registers one Windows tray icon at
+  startup. Windows removes it only when the process runs its `Drop` (the app
+  now does this explicitly on `RunEvent::Exit`, so a clean quit removes it).
+  **Force-killing** (`taskkill /F`, cargo-watch's restart, a crash) skips `Drop`
+  — Windows can't be told to remove it, so the icon becomes a "ghost" that piles
+  up in the tray-overflow flyout after many dev kill/relaunch cycles. This is a
+  dev artifact, not a shipped-app bug (users quit cleanly). **To sweep them:**
+  `pnpm run flush-tray-ghosts` (restarts explorer.exe; `--dry-run` to preview).
 
 ## Reference Docs
 
