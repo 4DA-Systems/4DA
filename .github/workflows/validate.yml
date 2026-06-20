@@ -5,6 +5,13 @@ on:
     branches: [main, develop]
   workflow_dispatch: {}
 
+# Cancel superseded runs on the same ref. This workflow is PR-only, so a new
+# push to a PR makes the in-flight run moot — cancelling it frees the shared
+# self-hosted runner immediately instead of queueing redundant work behind it.
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -14,6 +21,7 @@ jobs:
   frontend:
     name: Frontend
     runs-on: [self-hosted, windows, 4da]
+    timeout-minutes: 30
     defaults:
       run:
         shell: pwsh
@@ -94,6 +102,7 @@ jobs:
     name: MCP Server
     needs: frontend
     runs-on: [self-hosted, windows, 4da]
+    timeout-minutes: 15
     defaults:
       run:
         shell: pwsh
@@ -129,6 +138,7 @@ jobs:
     name: Rust (${{ matrix.label }})
     needs: mcp-server
     runs-on: [self-hosted, windows, 4da]
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -214,6 +224,38 @@ jobs:
             exit 1
           }
           Remove-Item test-output.txt -ErrorAction SilentlyContinue
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Aggregate gate: a SINGLE status check to require in branch protection.
+  # Listing each matrix leg (Rust default / experimental, Frontend, MCP) as a
+  # required check is brittle — renaming a job silently drops it from the gate.
+  # This job depends on all of them and fails if any FAILED or was CANCELLED; a
+  # SKIPPED job (a conditional leg that legitimately did not apply) passes.
+  # Runs on a hosted runner so the gate itself never ties up the self-hosted box.
+  # Require ONLY "Validate Success" (plus "Hermetic Success") in branch protection.
+  # Pattern mirrors victauri's ci.yml `ci-success` job.
+  # ─────────────────────────────────────────────────────────────────────
+  validate-success:
+    name: Validate Success
+    if: always()
+    needs: [frontend, mcp-server, rust]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify all required jobs succeeded
+        shell: bash
+        run: |
+          results='${{ join(needs.*.result, ',') }}'
+          echo "dependency results: $results"
+          case ",$results," in
+            *,failure,* | *,cancelled,*)
+              echo "::error::a required Validate job failed or was cancelled ($results)"
+              exit 1
+              ;;
+            *)
+              echo "all required Validate jobs succeeded (or were skipped as not-applicable)"
+              ;;
+          esac
 
   # ── Cross-platform validation ──
   # Moved to .github/workflows/hermetic.yml (the "Hermetic Fresh-Clone" gate).
