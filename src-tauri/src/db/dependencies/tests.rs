@@ -66,7 +66,11 @@ fn store_dependency_dedups_raw_and_canonical_paths() {
 
     let via_raw = db.get_project_dependencies("proj\\app").unwrap();
     let via_canon = db.get_project_dependencies("proj/app").unwrap();
-    assert_eq!(via_raw.len(), 1, "raw + canonical writes must collapse to one row");
+    assert_eq!(
+        via_raw.len(),
+        1,
+        "raw + canonical writes must collapse to one row"
+    );
     assert_eq!(via_canon.len(), 1, "found via the canonical path too");
     assert_eq!(
         via_raw[0].version.as_deref(),

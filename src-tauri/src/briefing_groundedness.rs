@@ -144,7 +144,9 @@ pub fn validate_groundedness_with_packages(
             terms.iter().map(|t| t.to_lowercase()).collect();
         for raw in output.split_whitespace() {
             let tok = raw
-                .trim_matches(|c: char| !c.is_alphanumeric() && !matches!(c, '@' | '/' | '-' | '_' | '.'))
+                .trim_matches(|c: char| {
+                    !c.is_alphanumeric() && !matches!(c, '@' | '/' | '-' | '_' | '.')
+                })
                 .trim_matches(|c: char| matches!(c, '.' | '-' | '_'));
             let key = tok.to_lowercase();
             if !key.is_empty() && pkg_set.contains(&key) && !seen.contains(&key) {
@@ -294,7 +296,10 @@ pub fn check_factual_claims(prose: &str, facts: &[PackageFact]) -> Vec<String> {
                 .trim_matches(|c: char| !c.is_ascii_digit() && c != '.')
                 .trim_matches('.');
             if looks_like_version_token(v)
-                && !fact.versions.iter().any(|allowed| version_matches(v, allowed))
+                && !fact
+                    .versions
+                    .iter()
+                    .any(|allowed| version_matches(v, allowed))
             {
                 violations.push(format!(
                     "{} cited version {} (on record: {})",
@@ -560,9 +565,8 @@ mod tests {
     fn ordinary_hyphenated_english_is_not_salient() {
         // Guard the package-shape heuristic against counting common hyphenated
         // English, which would read as ungrounded and tank confidence.
-        let terms = extract_salient_terms(
-            "this real-world, well-known, open-source pattern is long-term.",
-        );
+        let terms =
+            extract_salient_terms("this real-world, well-known, open-source pattern is long-term.");
         assert!(
             terms.is_empty(),
             "hyphenated English leaked as salient terms: {terms:?}"
@@ -587,9 +591,7 @@ mod tests {
         // text + advisory explanations) the content is grounded and passes.
         // The claim layer is telemetry-only — it must never gate this away.
         let output = "Tokio has a confirmed advisory. Upgrade Tokio to 1.38.6 today.";
-        let c = corpus(&[
-            "tokio security advisory: upgrade tokio to 1.38.6 to patch the runtime",
-        ]);
+        let c = corpus(&["tokio security advisory: upgrade tokio to 1.38.6 to patch the runtime"]);
         let r = validate_groundedness(output, &c);
         assert!(
             r.is_acceptable(0.65),
@@ -675,7 +677,13 @@ mod tests {
         let c = corpus(&["axios advisory affecting your stack"]);
         let packages = vec!["axios".to_string()];
         let r = validate_groundedness_with_packages(output, &c, &packages);
-        assert!(r.claim_terms >= 1, "Apache Kafka should count as a claim term");
-        assert!(r.claim_confidence() < 1.0, "ungrounded claim lowers claim_confidence");
+        assert!(
+            r.claim_terms >= 1,
+            "Apache Kafka should count as a claim term"
+        );
+        assert!(
+            r.claim_confidence() < 1.0,
+            "ungrounded claim lowers claim_confidence"
+        );
     }
 }

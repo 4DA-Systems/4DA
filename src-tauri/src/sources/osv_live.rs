@@ -214,7 +214,11 @@ fn gather_versioned_auditable_deps(db: &crate::db::Database) -> Vec<(String, Str
             version.to_string(),
         );
         if seen.insert(key) {
-            out.push((eco.to_string(), dep.package_name.clone(), version.to_string()));
+            out.push((
+                eco.to_string(),
+                dep.package_name.clone(),
+                version.to_string(),
+            ));
         }
     }
     out
@@ -299,8 +303,7 @@ fn fixed_version_for(vuln: &OsvVulnerability, package: &str, ecosystem: &str) ->
         let Some(pkg) = &affected.package else {
             continue;
         };
-        if !pkg.name.eq_ignore_ascii_case(package)
-            || !pkg.ecosystem.eq_ignore_ascii_case(ecosystem)
+        if !pkg.name.eq_ignore_ascii_case(package) || !pkg.ecosystem.eq_ignore_ascii_case(ecosystem)
         {
             continue;
         }
@@ -315,9 +318,7 @@ fn fixed_version_for(vuln: &OsvVulnerability, package: &str, ecosystem: &str) ->
                     .and_then(serde_json::Value::as_str)
                 {
                     let trimmed = fixed.trim();
-                    if !trimmed.is_empty()
-                        && !trimmed.ends_with("-NA")
-                        && !trimmed.ends_with("-na")
+                    if !trimmed.is_empty() && !trimmed.ends_with("-NA") && !trimmed.ends_with("-na")
                     {
                         return Some(trimmed.to_string());
                     }
@@ -499,9 +500,15 @@ mod tests {
         assert_eq!(name, "next");
         assert_eq!(eco, "npm");
         let rj = ranges_json.as_ref().unwrap();
-        assert!(rj.contains("13.4.6") && rj.contains("16.0.0"), "BOTH branches present: {rj}");
+        assert!(
+            rj.contains("13.4.6") && rj.contains("16.0.0"),
+            "BOTH branches present: {rj}"
+        );
         let fj = fixed_json.as_ref().unwrap();
-        assert!(fj.contains("15.5.16") && fj.contains("16.2.5"), "both fixes present: {fj}");
+        assert!(
+            fj.contains("15.5.16") && fj.contains("16.2.5"),
+            "both fixes present: {fj}"
+        );
     }
 
     #[test]
