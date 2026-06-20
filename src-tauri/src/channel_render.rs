@@ -464,8 +464,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
 /// risks memory pressure — keep those sequential.
 fn stale_render_concurrency(provider: &str, base_url: Option<&str>) -> usize {
     let url = base_url.unwrap_or("");
-    let is_local =
-        provider == "ollama" || url.contains("localhost") || url.contains("127.0.0.1");
+    let is_local = provider == "ollama" || url.contains("localhost") || url.contains("127.0.0.1");
     if is_local {
         1
     } else {
@@ -525,8 +524,8 @@ pub(crate) async fn auto_render_stale_channels() -> Result<()> {
     let jobs: Vec<(i64, String)> = stale.iter().map(|ch| (ch.id, ch.slug.clone())).collect();
 
     use futures::StreamExt;
-    let outcomes: Vec<bool> = futures::stream::iter(jobs.into_iter().map(|(id, slug)| {
-        async move {
+    let outcomes: Vec<bool> =
+        futures::stream::iter(jobs.into_iter().map(|(id, slug)| async move {
             match render_channel(id).await {
                 Ok(render) => {
                     info!(
@@ -547,11 +546,10 @@ pub(crate) async fn auto_render_stale_channels() -> Result<()> {
                     false
                 }
             }
-        }
-    }))
-    .buffer_unordered(concurrency)
-    .collect()
-    .await;
+        }))
+        .buffer_unordered(concurrency)
+        .collect()
+        .await;
 
     let rendered = outcomes.iter().filter(|ok| **ok).count();
     info!(

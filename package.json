@@ -72,6 +72,7 @@
     "validate:all": "pnpm run i18n:types && pnpm run validate && pnpm run validate:rust && pnpm run validate:mcp && pnpm run validate:translations",
     "audit:public-ready": "node scripts/public-readiness-audit.cjs",
     "ops:source-health": "node scripts/source-pipeline-health.cjs",
+    "flush-tray-ghosts": "node scripts/flush-tray-ghosts.cjs",
     "generate:knowledge": "node scripts/generate-knowledge.cjs",
     "sentinel": "node scripts/sentinel-scan.cjs",
     "sentinel:quick": "node scripts/sentinel-scan.cjs --quick",

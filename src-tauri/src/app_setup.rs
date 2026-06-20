@@ -1697,6 +1697,26 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
         let state = get_monitoring_state();
         state.set_enabled(false);
 
+        // Remove our system-tray icon explicitly before the OS event loop ends.
+        // On Windows, tao's event loop process::exit()s when it terminates, so
+        // this `RunEvent::Exit` callback is the LAST place our code runs — the
+        // `App` (and our `Mutex<Option<TrayIcon>>` managed state) is never
+        // dropped. The platform tray icon lives in an `Rc` whose `Drop`
+        // (Shell_NotifyIcon NIM_DELETE) only fires when the last clone drops.
+        // Two strong clones exist at runtime: this managed-state one and the
+        // one Tauri keeps in its resources table. Tauri's `cleanup_before_exit`
+        // (invoked right after this callback) drops the resources-table clone;
+        // dropping OUR clone here takes the refcount to zero so NIM_DELETE
+        // actually fires. Without this, a clean quit leaks a "ghost" tray icon
+        // that lingers in the Windows tray-overflow flyout until the shell is
+        // refreshed. Runs on the main (event-loop) thread that created the icon,
+        // so the Win32 teardown happens on the correct thread.
+        if let Some(tray_state) =
+            app_handle.try_state::<parking_lot::Mutex<Option<tauri::tray::TrayIcon<tauri::Wry>>>>()
+        {
+            let _ = tray_state.lock().take();
+        }
+
         // Sovereign Cold Boot — remove the startup-watchdog markers so the
         // next launch knows this was a clean shutdown (no crash recovery toast).
         crate::startup_watchdog::mark_clean_shutdown();
