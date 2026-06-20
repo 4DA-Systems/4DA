@@ -73,14 +73,20 @@ mod tests {
 
     #[test]
     fn test_reverse_trial_auto_starts_on_first_launch() {
-        // Genuine first run via the real constructor (hydrate=true) into an empty
-        // temp dir: the 14-day Signal trial must auto-start and be active. A second
-        // load of the same dir must NOT re-trigger — the timestamp stays put.
-        let tmp = std::env::temp_dir().join("4da_test_reverse_trial");
+        // Hermetic first run: `new_for_reverse_trial_test` considers the trial
+        // but does NOT hydrate the platform keychain — otherwise the operator's
+        // real ~285-char license key (present on the dev machine AND the
+        // self-hosted CI runner) loads, `license_key.is_empty()` is false, the
+        // trial is correctly skipped, and this test wrongly fails. A unique
+        // per-process dir avoids collision between the parallel default /
+        // experimental CI matrix jobs. The 14-day Signal trial must auto-start
+        // and be active; a second load of the same dir must NOT re-trigger.
+        let tmp =
+            std::env::temp_dir().join(format!("4da_test_reverse_trial_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).expect("create temp dir");
 
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_for_reverse_trial_test(&tmp);
         let started_at = manager.get().license.trial_started_at.clone();
         assert!(
             started_at.is_some(),
@@ -92,7 +98,7 @@ mod tests {
         );
 
         // Idempotency: re-loading the same data dir must keep the original timestamp.
-        let reloaded = SettingsManager::new(&tmp);
+        let reloaded = SettingsManager::new_for_reverse_trial_test(&tmp);
         assert_eq!(
             reloaded.get().license.trial_started_at,
             started_at,
