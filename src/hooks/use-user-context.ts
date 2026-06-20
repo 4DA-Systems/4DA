@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useEffect } from 'react';
 import { useAppStore } from '../store';
+import { runWhenIdle } from '../lib/defer';
 
 /**
  * User context hook — thin wrapper around Zustand store.
@@ -25,8 +26,13 @@ export function useUserContext(_onStatusChange?: (status: string) => void) {
   const removeTechStack = useAppStore(s => s.removeTechStack);
   const updateRole = useAppStore(s => s.updateRole);
 
+  // Deferred to idle: user context (interests/exclusions/identity) is only
+  // rendered in Settings + context views, never the default Brief view, so it
+  // stays off the first-paint IPC stampede (see src/lib/defer.ts).
   useEffect(() => {
-    void loadUserContext();
+    return runWhenIdle(() => {
+      void loadUserContext();
+    });
   }, [loadUserContext]);
 
   return {
