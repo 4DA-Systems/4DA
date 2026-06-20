@@ -166,3 +166,16 @@ updates:
     commit-message:
       prefix: "chore(paddle)"
       include: "scope"
+    ignore:
+      # undici is a transitive dep of the `vercel` deploy CLI (a devDependency),
+      # NOT of the shipped serverless runtime — api/ imports only Node's built-in
+      # `crypto`, so runtime exposure is nil. It appears across three majors
+      # (5.x / 6.x / 7.x) deep inside vercel's tree with no atomic update path,
+      # so Dependabot's security update for it errors out ("encountered one or
+      # more errors") on every advisory — that is the recurring red on this dir.
+      # The real fix rides with vercel's own version bumps (which Dependabot does
+      # propose). Ignore undici here to stop the perpetual failed-update noise.
+      # NOTE: the VS Code extension had the same transitive-undici advisory and
+      # was fixed properly via a package.json `overrides` pin (single 7.x major,
+      # safe) — this ignore is only for paddle's untestable multi-major case.
+      - dependency-name: "undici"

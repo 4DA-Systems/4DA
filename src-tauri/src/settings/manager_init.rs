@@ -13,17 +13,34 @@ impl SettingsManager {
     /// Create a new settings manager, loading from disk if available.
     /// Hydrates API keys from the platform keychain.
     pub fn new(data_dir: &std::path::Path) -> Self {
-        Self::new_inner(data_dir, true)
+        Self::new_inner(data_dir, true, true)
     }
 
     /// Test-only constructor that skips keychain hydration so tests
     /// are not polluted by real keys stored on the dev machine.
     #[cfg(test)]
     pub fn new_without_keychain(data_dir: &std::path::Path) -> Self {
-        Self::new_inner(data_dir, false)
+        Self::new_inner(data_dir, false, false)
     }
 
-    fn new_inner(data_dir: &std::path::Path, hydrate_keychain: bool) -> Self {
+    /// Test-only constructor for exercising the reverse-trial auto-start in a
+    /// hermetic license state: it does NOT hydrate the platform keychain (so a
+    /// real license_key on the dev/CI machine can't leak in and suppress the
+    /// trial), yet still considers the trial. Without this, the real `new()`
+    /// loads the operator's ~285-char license key on the self-hosted CI runner,
+    /// `license_key.is_empty()` is false, the trial is (correctly) skipped, and
+    /// the test wrongly fails. Production behavior is unchanged — only the
+    /// keychain-vs-trial coupling is decoupled for testability.
+    #[cfg(test)]
+    pub fn new_for_reverse_trial_test(data_dir: &std::path::Path) -> Self {
+        Self::new_inner(data_dir, false, true)
+    }
+
+    fn new_inner(
+        data_dir: &std::path::Path,
+        hydrate_keychain: bool,
+        consider_reverse_trial: bool,
+    ) -> Self {
         let settings_path = data_dir.join("settings.json");
         let usage_path = data_dir.join("usage.json");
 
@@ -271,9 +288,13 @@ impl SettingsManager {
         // Every brand-new install experiences the full product (Preemption, Blind
         // Spots, Signal Chains, …) for 14 days, then converts or drops to Free.
         // Fires exactly once: once `trial_started_at` is set it never re-triggers,
-        // and a real license (paid tier or key) opts out. Gated on `hydrate_keychain`
-        // so the test constructor (`new_without_keychain`) never silently grants a trial.
-        if hydrate_keychain
+        // and a real license (paid tier or key) opts out. Gated on
+        // `consider_reverse_trial` (true for the production `new()`, false for
+        // `new_without_keychain`) — kept separate from `hydrate_keychain` so a
+        // hermetic test can exercise the trial without the real keychain's
+        // license leaking in. Production `new()` passes both true, so behavior
+        // is identical to gating on `hydrate_keychain`.
+        if consider_reverse_trial
             && settings.license.trial_started_at.is_none()
             && settings.license.license_key.is_empty()
             && settings.license.tier == "free"

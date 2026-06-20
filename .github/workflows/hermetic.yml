@@ -55,6 +55,10 @@ jobs:
   fresh-clone:
     name: Fresh clone (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Cold, cacheless build + full test suite on two platforms. Runs have
+    # historically landed ~16-18 min; 45 caps a hung network fetch or a runner
+    # that wedges, instead of burning the 6h default.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -132,3 +136,32 @@ jobs:
           FOURDA_DATA_DIR: ${{ runner.temp }}/4da-hermetic-data
           FOURDA_DB_PATH: ${{ runner.temp }}/4da-hermetic-data/4da.db
         run: cargo test --lib
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Aggregate gate: a SINGLE status check to require in branch protection,
+  # collapsing the ubuntu + windows matrix legs into one stable name. Renaming
+  # or adding an OS leg cannot silently drop it from the gate. Fails if any leg
+  # FAILED or was CANCELLED; a SKIPPED leg passes. Mirrors validate.yml's
+  # `validate-success` and victauri's `ci-success`.
+  # ─────────────────────────────────────────────────────────────────────
+  hermetic-success:
+    name: Hermetic Success
+    if: always()
+    needs: [fresh-clone]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify the fresh-clone matrix succeeded
+        shell: bash
+        run: |
+          results='${{ join(needs.*.result, ',') }}'
+          echo "dependency results: $results"
+          case ",$results," in
+            *,failure,* | *,cancelled,*)
+              echo "::error::a Hermetic Fresh-Clone leg failed or was cancelled ($results)"
+              exit 1
+              ;;
+            *)
+              echo "all Hermetic Fresh-Clone legs succeeded"
+              ;;
+          esac
