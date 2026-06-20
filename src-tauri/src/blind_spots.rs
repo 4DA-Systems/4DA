@@ -3392,8 +3392,8 @@ pub async fn assess_blind_spots_with_ai() -> std::result::Result<BlindSpotAssess
             // — not a quiet dep that scores "high" merely for being in many
             // projects. Otherwise a zero-signal "stable, no action" dep would be
             // wrongly pinned into "worth reviewing".
-            let force_worth =
-                d.available_signal_count > 0 && matches!(d.risk_level.as_str(), "critical" | "high");
+            let force_worth = d.available_signal_count > 0
+                && matches!(d.risk_level.as_str(), "critical" | "high");
             (d.name.clone(), why, force_worth)
         })
         .collect();
@@ -5065,7 +5065,11 @@ mod tests {
     fn parse_dep_assessments_joins_by_index_and_tolerates_garbage() {
         // tuple = (display_name, why, force_worth)
         let deps = vec![
-            ("libc (crates.io)".to_string(), "no coverage".to_string(), false),
+            (
+                "libc (crates.io)".to_string(),
+                "no coverage".to_string(),
+                false,
+            ),
             ("react (npm)".to_string(), "3 signals".to_string(), false),
         ];
         let resp = r#"Sure: [{"id":1,"worth_reviewing":false,"recommendation":"Stable libc, no action."},{"id":2,"worth_reviewing":true,"recommendation":"Review the v19 breaking changes."}]"#;
@@ -5080,17 +5084,22 @@ mod tests {
         // Malformed response -> empty (UI shows "couldn't assess"), never panic.
         assert!(parse_dep_assessments("not json at all", &deps).is_empty());
         // Out-of-range / zero ids are dropped, not joined to a wrong dep.
-        assert!(
-            parse_dep_assessments(r#"[{"id":99,"worth_reviewing":true,"recommendation":"x"}]"#, &deps)
-                .is_empty()
-        );
+        assert!(parse_dep_assessments(
+            r#"[{"id":99,"worth_reviewing":true,"recommendation":"x"}]"#,
+            &deps
+        )
+        .is_empty());
     }
 
     #[test]
     fn parse_dep_assessments_force_worth_overrides_model_for_high_risk() {
         // A high-risk dep (force_worth=true) stays worth-reviewing even when the
         // model says "fine" — the AI can add attention, never remove it.
-        let deps = vec![("openssl (crates.io)".to_string(), "4 signals, risk=high".to_string(), true)];
+        let deps = vec![(
+            "openssl (crates.io)".to_string(),
+            "4 signals, risk=high".to_string(),
+            true,
+        )];
         let resp = r#"[{"id":1,"worth_reviewing":false,"recommendation":"Looks fine."}]"#;
         let out = parse_dep_assessments(resp, &deps);
         assert_eq!(out.len(), 1);
