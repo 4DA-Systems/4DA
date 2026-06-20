@@ -414,17 +414,42 @@ fn parse_dep_scan_max_age(raw: Option<String>) -> i64 {
 /// Directories never descended into when checking manifest freshness — large, churning, or
 /// vendored trees that never hold a first-party manifest worth re-scanning for.
 const FRESHNESS_SKIP_DIRS: &[&str] = &[
-    "node_modules", "target", "vendor", "dist", "build", ".venv", "venv", "__pycache__",
-    ".next", ".cargo", ".gradle",
+    "node_modules",
+    "target",
+    "vendor",
+    "dist",
+    "build",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".next",
+    ".cargo",
+    ".gradle",
 ];
 
 /// Manifest + lockfile names that drive the dependency profile. Kept in sync with
 /// `ace::scanner` ManifestType + the lockfile processors; `.csproj` is matched by extension.
 const WATCHED_MANIFESTS: &[&str] = &[
-    "Cargo.toml", "Cargo.lock", "package.json", "package-lock.json", "pnpm-lock.yaml",
-    "yarn.lock", "requirements.txt", "pyproject.toml", "poetry.lock", "go.mod", "go.sum",
-    "Gemfile", "Gemfile.lock", "composer.json", "composer.lock", "pom.xml", "build.gradle",
-    "build.gradle.kts", "pubspec.yaml", "pubspec.lock",
+    "Cargo.toml",
+    "Cargo.lock",
+    "package.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "requirements.txt",
+    "pyproject.toml",
+    "poetry.lock",
+    "go.mod",
+    "go.sum",
+    "Gemfile",
+    "Gemfile.lock",
+    "composer.json",
+    "composer.lock",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "pubspec.yaml",
+    "pubspec.lock",
 ];
 
 /// True if any watched manifest/lockfile under `dir` (bounded depth, skipping vendored/hidden
@@ -448,7 +473,8 @@ fn manifest_changed_since(dir: &std::path::Path, since_unix_secs: i64, depth: u8
             if manifest_changed_since(&entry.path(), since_unix_secs, depth + 1) {
                 return true;
             }
-        } else if ft.is_file() && (WATCHED_MANIFESTS.contains(&n.as_ref()) || n.ends_with(".csproj"))
+        } else if ft.is_file()
+            && (WATCHED_MANIFESTS.contains(&n.as_ref()) || n.ends_with(".csproj"))
         {
             if let Ok(modified) = entry.metadata().and_then(|m| m.modified()) {
                 if let Ok(d) = modified.duration_since(std::time::UNIX_EPOCH) {
@@ -641,7 +667,10 @@ mod dep_scan_freshness_tests {
     #[test]
     fn dep_scan_due_fresh_and_unchanged_is_not_due() {
         // Just scanned, and no dirs to find a changed manifest in -> not due.
-        let now = chrono::Utc::now().naive_utc().format("%Y-%m-%d %H:%M:%S").to_string();
+        let now = chrono::Utc::now()
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
         assert!(!dep_scan_due(&[], Some(&now)));
     }
 

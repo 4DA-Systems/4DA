@@ -376,8 +376,15 @@ fn process_requirements_txt(db: &Database, dir: &PathBuf, project_path: &str) ->
     for (name, version) in &pins {
         // requirements.txt entries are direct deps; store_dependency upserts the version onto the
         // existing direct row (COALESCE keeps it if a later manifest pass re-stores version-less).
-        db.store_dependency(project_path, name, Some(version.as_str()), "python", false, None)
-            .ok();
+        db.store_dependency(
+            project_path,
+            name,
+            Some(version.as_str()),
+            "python",
+            false,
+            None,
+        )
+        .ok();
         count += 1;
     }
     count

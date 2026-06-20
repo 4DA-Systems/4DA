@@ -433,9 +433,7 @@ fn extract_advisory_ids_from_evidence(
 /// sorted advisory-id set; alerts with no advisory id pass through untouched
 /// (we can't prove two unidentified alerts are the same). Order is preserved,
 /// so the critical-first ranking of the caller is retained.
-fn dedupe_alerts_by_advisory(
-    alerts: Vec<BriefingPreemptionAlert>,
-) -> Vec<BriefingPreemptionAlert> {
+fn dedupe_alerts_by_advisory(alerts: Vec<BriefingPreemptionAlert>) -> Vec<BriefingPreemptionAlert> {
     use std::collections::HashMap;
     let mut out: Vec<BriefingPreemptionAlert> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
@@ -738,7 +736,10 @@ pub(crate) fn build_enriched_briefing(
                     .chain(high)
                     .map(BriefingPreemptionAlert::from_preemption_alert)
                     .collect();
-                dedupe_alerts_by_advisory(pool).into_iter().take(5).collect()
+                dedupe_alerts_by_advisory(pool)
+                    .into_iter()
+                    .take(5)
+                    .collect()
             }
             Err(_) => Vec::new(),
         };
@@ -2370,8 +2371,11 @@ async fn synthesize_morning_briefing_once(
                 let projects = if a.affected_projects.is_empty() {
                     String::new()
                 } else {
-                    let names: Vec<String> =
-                        a.affected_projects.iter().map(|p| project_label(p)).collect();
+                    let names: Vec<String> = a
+                        .affected_projects
+                        .iter()
+                        .map(|p| project_label(p))
+                        .collect();
                     format!(", project: {}", names.join(", "))
                 };
                 let fix = match (a.installed_version.as_deref(), a.fixed_version.as_deref()) {
@@ -2393,7 +2397,9 @@ async fn synthesize_morning_briefing_once(
             })
             .collect::<Vec<_>>()
             .join("\n");
-        format!("\nSECURITY ALERTS in your dependencies (HIGHEST priority -- lead with these):\n{p}\n")
+        format!(
+            "\nSECURITY ALERTS in your dependencies (HIGHEST priority -- lead with these):\n{p}\n"
+        )
     };
 
     let system_prompt = r#"You are an intelligence analyst writing a morning brief for a developer's desktop widget.
@@ -2661,8 +2667,10 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
 
                         // Deterministic factual backstop: reject fabricated
                         // version numbers the fuzzy grounding check can't catch.
-                        let fact_violations =
-                            crate::briefing_groundedness::check_factual_claims(&prose, &package_facts);
+                        let fact_violations = crate::briefing_groundedness::check_factual_claims(
+                            &prose,
+                            &package_facts,
+                        );
                         if !fact_violations.is_empty() {
                             tracing::warn!(
                                 target: "4da::briefing",
@@ -3684,14 +3692,20 @@ mod tests {
         a3.advisory_ids = vec!["GHSA-aaaa-bbbb-cccc".into()];
 
         let out = dedupe_alerts_by_advisory(vec![a1, a2, a3]);
-        assert_eq!(out.len(), 2, "two Clerk rows collapse to one; axios stays distinct");
+        assert_eq!(
+            out.len(),
+            2,
+            "two Clerk rows collapse to one; axios stays distinct"
+        );
         assert_eq!(
             out[0].package_name.as_deref(),
             Some("@clerk/clerk-react, @clerk/shared"),
             "merged row lists both affected packages"
         );
         assert!(
-            out[0].affected_projects.contains(&"navcal/vercel-workflow".to_string()),
+            out[0]
+                .affected_projects
+                .contains(&"navcal/vercel-workflow".to_string()),
             "merged row unions affected projects"
         );
     }

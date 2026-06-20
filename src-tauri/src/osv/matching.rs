@@ -519,7 +519,10 @@ mod tests {
         );
         let (affected, confirmed) = check_version_affected(Some("2.3.0"), &ranges);
         assert!(!affected, "unknown '-NA' boundary must not ground a match");
-        assert!(confirmed, "we DID evaluate the ranges (just found no usable bound)");
+        assert!(
+            confirmed,
+            "we DID evaluate the ranges (just found no usable bound)"
+        );
 
         // A concrete prerelease/build bound still matches normally.
         let rc = Some(
