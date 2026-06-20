@@ -148,6 +148,23 @@ jobs:
         with:
           clean: true
 
+      # `clean: true` above wipes the gitignored src-tauri/models/ that the
+      # self-hosted runner carries pre-fetched. cargo's tauri build script then
+      # hard-fails with "resource path `models` doesn't exist" before clippy /
+      # tests can run (every PR's Rust check was red on this, not on real
+      # defects). Re-fetch them here — pure-node, no deps, instant when already
+      # present, same source as hermetic.yml / release.yml. The sibling
+      # frontend / mcp-server jobs avoid this by using clean: false; the Rust
+      # job keeps a pristine tree and re-provisions the bundle resource instead.
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: '22'
+
+      - name: Fetch OCR bundle resources (build dependency)
+        working-directory: .
+        run: node scripts/fetch-ocr-models.cjs
+
       - name: Check formatting
         if: matrix.label == 'default'
         run: cargo fmt --check

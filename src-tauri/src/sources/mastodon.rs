@@ -340,7 +340,7 @@ async fn fetch_via(
             .unwrap_or_else(|| SourceError::Other("mastodon: no tags configured".to_string())));
     }
 
-    all.sort_by(|a, b| item_score(b).cmp(&item_score(a)));
+    all.sort_by_key(|b| std::cmp::Reverse(item_score(b)));
     all.truncate(max_items);
     Ok(all)
 }
