@@ -454,9 +454,34 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
 // Auto-Render Stale Channels
 // ============================================================================
 
+/// Concurrency for auto-rendering stale channels, chosen by LLM backend.
+///
+/// Cloud APIs (Anthropic, OpenAI, remote OpenAI-compatible) serve requests in
+/// parallel, so rendering N stale channels concurrently collapses N*~20s of
+/// sequential LLM latency into roughly the slowest single render. A local
+/// single-GPU backend (Ollama, or a llama-server reached on localhost)
+/// serializes requests on the GPU, so concurrency buys nothing there and only
+/// risks memory pressure — keep those sequential.
+fn stale_render_concurrency(provider: &str, base_url: Option<&str>) -> usize {
+    let url = base_url.unwrap_or("");
+    let is_local =
+        provider == "ollama" || url.contains("localhost") || url.contains("127.0.0.1");
+    if is_local {
+        1
+    } else {
+        3
+    }
+}
+
 /// Render all channels that are stale or never rendered.
 /// Iterates through every active channel, checks freshness, and renders
 /// any that need updating. Logs each attempt and continues on failure.
+///
+/// Stale channels render CONCURRENTLY when the LLM backend is a cloud API
+/// (see [`stale_render_concurrency`]) — this is the fix for the sequential
+/// ~20s-per-channel cost (3 channels = ~60s) measured in the logs. Each
+/// `render_channel` is self-contained and holds no locks across its `.await`,
+/// so concurrent execution is safe; DB writes serialize on the connection mutex.
 pub(crate) async fn auto_render_stale_channels() -> Result<()> {
     let db = crate::get_database()?;
     let channels = db.list_channels()?;
@@ -472,33 +497,71 @@ pub(crate) async fn auto_render_stale_channels() -> Result<()> {
         })
         .collect();
 
+    let concurrency = {
+        let guard = crate::get_settings_manager().lock();
+        let llm = &guard.get().llm;
+        stale_render_concurrency(&llm.provider, llm.base_url.as_deref())
+    };
+
     info!(
         target: "4da::channels",
         total = channels.len(),
         stale = stale.len(),
+        concurrency,
         "Auto-rendering stale channels"
     );
 
-    for ch in &stale {
-        match render_channel(ch.id).await {
-            Ok(render) => {
-                info!(
-                    target: "4da::channels",
-                    channel = %ch.slug,
-                    version = render.version,
-                    "Auto-rendered channel"
-                );
-            }
-            Err(e) => {
-                warn!(
-                    target: "4da::channels",
-                    channel = %ch.slug,
-                    error = %e,
-                    "Auto-render failed for channel, continuing"
-                );
+    if stale.is_empty() {
+        return Ok(());
+    }
+
+    let started = std::time::Instant::now();
+
+    // Render up to `concurrency` channels at once. Materialize owned (id, slug)
+    // pairs first so each future captures only owned data (no borrow of `stale`)
+    // — keeps the combined future `Send + 'static` for the spawn at the call site.
+    // `render_channel` holds no locks across its `.await`, and DB writes serialize
+    // on the connection mutex, so concurrent execution is safe.
+    let jobs: Vec<(i64, String)> = stale.iter().map(|ch| (ch.id, ch.slug.clone())).collect();
+
+    use futures::StreamExt;
+    let outcomes: Vec<bool> = futures::stream::iter(jobs.into_iter().map(|(id, slug)| {
+        async move {
+            match render_channel(id).await {
+                Ok(render) => {
+                    info!(
+                        target: "4da::channels",
+                        channel = %slug,
+                        version = render.version,
+                        "Auto-rendered channel"
+                    );
+                    true
+                }
+                Err(e) => {
+                    warn!(
+                        target: "4da::channels",
+                        channel = %slug,
+                        error = %e,
+                        "Auto-render failed for channel, continuing"
+                    );
+                    false
+                }
             }
         }
-    }
+    }))
+    .buffer_unordered(concurrency)
+    .collect()
+    .await;
+
+    let rendered = outcomes.iter().filter(|ok| **ok).count();
+    info!(
+        target: "4da::channels",
+        rendered,
+        stale = stale.len(),
+        concurrency,
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        "Stale-channel render cycle complete"
+    );
 
     Ok(())
 }
@@ -511,6 +574,36 @@ pub(crate) async fn auto_render_stale_channels() -> Result<()> {
 mod tests {
     use super::*;
     use crate::channels::ChannelStatus;
+
+    #[test]
+    fn stale_render_concurrency_serializes_local_backends() {
+        // Ollama and any localhost/127.0.0.1 base_url (e.g. a local llama-server
+        // behind the openai-compatible provider) must stay sequential — a single
+        // GPU serializes anyway and concurrency only risks memory pressure.
+        assert_eq!(stale_render_concurrency("ollama", None), 1);
+        assert_eq!(
+            stale_render_concurrency("openai-compatible", Some("http://localhost:8080/v1")),
+            1
+        );
+        assert_eq!(
+            stale_render_concurrency("anthropic", Some("http://127.0.0.1:1234")),
+            1
+        );
+    }
+
+    #[test]
+    fn stale_render_concurrency_parallelizes_cloud_backends() {
+        // Cloud APIs serve requests in parallel — render stale channels concurrently.
+        assert_eq!(stale_render_concurrency("anthropic", None), 3);
+        assert_eq!(
+            stale_render_concurrency("openai", Some("https://api.openai.com/v1")),
+            3
+        );
+        assert_eq!(
+            stale_render_concurrency("openai-compatible", Some("https://api.groq.com/openai/v1")),
+            3
+        );
+    }
 
     #[test]
     fn test_fallback_content_empty() {
