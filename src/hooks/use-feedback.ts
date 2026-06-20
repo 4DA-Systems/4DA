@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useEffect } from 'react';
 import { useAppStore } from '../store';
+import { runWhenIdle } from '../lib/defer';
 
 /**
  * Feedback hook — thin wrapper around Zustand store.
@@ -16,9 +17,14 @@ export function useFeedback() {
   const loadPersistedSavedIds = useAppStore(s => s.loadPersistedSavedIds);
   const recordInteraction = useAppStore(s => s.recordInteraction);
 
+  // Deferred to idle: learned affinities + persisted saved-item ids influence
+  // ranking/badging but are not first-paint-critical, so they stay off the mount
+  // IPC stampede (see src/lib/defer.ts).
   useEffect(() => {
-    void loadLearnedBehavior();
-    void loadPersistedSavedIds();
+    return runWhenIdle(() => {
+      void loadLearnedBehavior();
+      void loadPersistedSavedIds();
+    });
   }, [loadLearnedBehavior, loadPersistedSavedIds]);
 
   return {
