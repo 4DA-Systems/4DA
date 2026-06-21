@@ -195,14 +195,23 @@ jobs:
     name: Rust (${{ matrix.label }})
     needs: changes
     if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, windows, 4da]
-    # 75 not 45: the self-hosted box is shared with the whole fleet's dev/cargo
-    # churn (dozens of concurrent cargo processes), so a COLD compile here can
-    # crawl well past 45 min under contention — long enough to false-timeout a
-    # legitimate build (observed on the first run of this very change). Warm
-    # runs (clean:false) finish in ~12 min; this ceiling only ever bites a cold,
-    # heavily-contended compile, and is still a real hang backstop.
-    timeout-minutes: 75
+    # GitHub-HOSTED ubuntu, NOT the self-hosted box. The self-hosted Windows
+    # runner shares 16 cores with the whole fleet's dev/cargo churn, so Rust
+    # compiles there crawl under contention (a cold leg false-timed-out at 45m,
+    # forcing the 75m bump). Hosted runners are dedicated + ephemeral; with
+    # Swatinem/rust-cache a warm build is ~3-5 min and is immune to fleet load.
+    #
+    # Platform coverage: default-feature `cargo test --lib` is already proven on
+    # ubuntu AND windows by hermetic.yml's fresh-clone matrix, so default
+    # behaviour keeps two-platform coverage. The trade-off is that the
+    # EXPERIMENTAL-feature leg now runs on ubuntu only (it previously ran on the
+    # self-hosted Windows box) — acceptable: the experimental surface is not
+    # Windows-specific. Cost: cheap 1x ubuntu minutes (the macOS 10x tier is the
+    # real billing risk, not this); deepening hosted-minute reliance is hedged by
+    # the Verax-CI gate. cargo-audit/deny use prebuilt binaries (taiki-e) to skip
+    # a ~3-min source compile each.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -215,23 +224,34 @@ jobs:
             test-floor: 0
     defaults:
       run:
-        shell: pwsh
+        shell: bash
         working-directory: src-tauri
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+
+      - name: Install Linux system dependencies (tauri / webkit)
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install Rust toolchain
+        # `stable`, matching hermetic.yml. The clippy lints the latest stable
+        # surfaces (incl. unix-cfg'd code the Windows self-hosted runner never
+        # compiled) have been FIXED in source, so -D warnings passes here. The
+        # repo's rust-toolchain.toml (1.93.1) still governs the actual build via
+        # rustup where it is honored; this job's value is fast, parallel,
+        # contention-free clippy/audit/test on a dedicated runner.
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          # clean: false PRESERVES src-tauri/target between runs on the
-          # self-hosted runner — the single biggest throughput win. With the
-          # old `clean: true`, every PR wiped target/ and paid a full cold
-          # compile (~10 min/leg); a warm incremental build is ~1-2 min. cargo's
-          # fingerprinting makes a persisted target safe (stale objects are
-          # recompiled, not trusted). The pristine-clone guarantee is
-          # hermetic.yml's job (cold by design); Validate optimises for speed.
-          # clean: false also keeps the pre-fetched src-tauri/models/, so the
-          # tauri build script no longer hard-fails on a missing bundle
-          # resource. The fetch step below stays as an idempotent safety net
-          # (instant when the models are already present).
-          clean: false
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@aa7c1c80a07a27a84c0aa76d0cef0aad3830e330 # v2.7.8
+        with:
+          workspaces: src-tauri
+          # Save the cache only from main — PR builds reuse it but don't churn it.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
@@ -249,10 +269,11 @@ jobs:
       - name: Clippy lints
         run: cargo clippy ${{ matrix.cargo-features }} -- -D warnings
 
-      - name: Install cargo-audit
+      - name: Install cargo-audit + cargo-deny (prebuilt)
         if: matrix.label == 'default'
-        working-directory: .
-        run: cargo install cargo-audit --locked
+        uses: taiki-e/install-action@25435dc8dd3baed7417e0c96d3fe89013a5b2e09 # v2
+        with:
+          tool: cargo-audit,cargo-deny
 
       - name: Security audit
         if: matrix.label == 'default'
@@ -260,37 +281,31 @@ jobs:
 
       - name: Supply chain policy check
         if: matrix.label == 'default'
-        run: |
-          cargo install cargo-deny --locked
-          cargo deny check
+        run: cargo deny check
 
       - name: Compile-gate (cargo test --no-run)
-        # Fast-fail if the test binary stops compiling. Wave 1 blocker was a
-        # silent compile break in the test tree that only showed up after
-        # the slow full test run — this step catches it in seconds.
+        # Fast-fail if the test binary stops compiling, before the slow test run.
         run: cargo test --lib ${{ matrix.cargo-features }} --no-run
 
       - name: Run unit tests and verify count floor
         run: |
-          cargo test --lib ${{ matrix.cargo-features }} 2>&1 | Out-File -FilePath test-output.txt -Encoding utf8
-          $testExit = $LASTEXITCODE
-          $output = Get-Content test-output.txt
-          $output | Select-Object -Last 10
-          if ($testExit -ne 0) {
-            Write-Output "::error::Tests exited with code $testExit"
+          set -o pipefail
+          cargo test --lib ${{ matrix.cargo-features }} 2>&1 | tee test-output.txt
+          status=${PIPESTATUS[0]}
+          tail -n 10 test-output.txt
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Tests exited with code $status"
             exit 1
-          }
-          $count = 0
-          foreach ($line in $output) {
-            if ($line -match 'ok\.\s+(\d+)\s+passed') { $count = [int]$Matches[1] }
-          }
-          Write-Output "Rust tests passed: $count"
-          $floor = [int]'${{ matrix.test-floor }}'
-          if ($floor -gt 0 -and $count -lt $floor) {
-            Write-Output "::error::Rust test count dropped below $floor (got $count)"
+          fi
+          count=$(grep -oE 'test result: ok\. [0-9]+ passed' test-output.txt | grep -oE '[0-9]+' | tail -1)
+          count=${count:-0}
+          echo "Rust tests passed: $count"
+          floor=${{ matrix.test-floor }}
+          if [ "$floor" -gt 0 ] && [ "$count" -lt "$floor" ]; then
+            echo "::error::Rust test count dropped below $floor (got $count)"
             exit 1
-          }
-          Remove-Item test-output.txt -ErrorAction SilentlyContinue
+          fi
+          rm -f test-output.txt
 
   # ─────────────────────────────────────────────────────────────────────
   # Aggregate gate: a SINGLE status check to require in branch protection.
