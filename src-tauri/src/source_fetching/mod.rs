@@ -487,6 +487,7 @@ fn ecosystem_token(eco: &str) -> Option<&'static str> {
         "nuget" | "csharp" | "c#" | "dotnet" => "nuget",
         "rubygems" | "ruby" | "gem" => "rubygems",
         "packagist" | "php" | "composer" => "packagist",
+        "pub" | "dart" | "flutter" => "pub",
         _ => return None,
     })
 }
@@ -651,6 +652,14 @@ mod strict_manifest_tests {
         assert_eq!(ecosystem_token("pypi"), ecosystem_token("python"));
         assert_eq!(ecosystem_token("pypi"), ecosystem_token("pip"));
         assert_eq!(ecosystem_token("go"), ecosystem_token("golang"));
+        // Language name and registry alias must canonicalize together for ALL supported stacks —
+        // the strict-manifest package gather compares deps (tagged by language) to source keys.
+        assert_eq!(ecosystem_token("csharp"), ecosystem_token("nuget"));
+        assert_eq!(ecosystem_token("php"), ecosystem_token("packagist"));
+        assert_eq!(ecosystem_token("dart"), ecosystem_token("pub"));
+        assert_eq!(ecosystem_token("dart"), Some("pub"));
+        assert_eq!(ecosystem_token("flutter"), Some("pub"));
+        assert_eq!(ecosystem_token("java"), ecosystem_token("maven"));
     }
 
     #[test]
