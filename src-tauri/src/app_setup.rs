@@ -709,23 +709,30 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         if let Ok(conn) = crate::open_db_connection() {
             let mut total_deleted: usize = 0;
 
-            // Purge stale worktree paths from project_dependencies.
-            // Claude Code worktrees create ephemeral copies at .claude/worktrees/agent-*
-            // which get scanned into project_dependencies but are deleted after the
-            // agent completes. These stale paths cause the Preemption page to show
-            // "AFFECTED PROJECTS: D:\4DA\.claude\worktrees\agent-a0249898\..." noise.
+            // Purge ALL .claude/ paths from project_dependencies.
+            // The .claude/ tree is Claude Code agent infrastructure — agent
+            // worktrees (.claude/worktrees/agent-*, ephemeral repo copies) AND
+            // scratch fixtures (.claude/plans/ledger-fixtures/*, throwaway
+            // multi-ecosystem test projects). Neither is a real user project.
+            // Before the scanner was taught to exclude the whole .claude/ tree it
+            // ingested these as real projects, surfacing foreign stacks (flutter,
+            // laravel, spring, csharp) as the user's and corrupting the "Affects
+            // You" grounding pool. Paths are stored lowercased with forward
+            // slashes (see migration 67), so '%/.claude/%' matches every install;
+            // the backslash variant is belt-and-suspenders for any un-normalized row.
             match conn.execute(
-                "DELETE FROM project_dependencies WHERE project_path LIKE '%worktrees%agent-%'",
+                "DELETE FROM project_dependencies \
+                 WHERE project_path LIKE '%/.claude/%' OR project_path LIKE '%\\.claude\\%'",
                 [],
             ) {
                 Ok(n) => {
                     total_deleted += n;
                     if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: stale worktree project dependencies");
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: .claude/ agent-infra project dependencies (worktrees + fixtures)");
                     }
                 }
                 Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: worktree deps failed");
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: .claude deps failed");
                 }
             }
 
