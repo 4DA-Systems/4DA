@@ -58,7 +58,7 @@ jobs:
             runner: macos-14
             target: x86_64-apple-darwin
           - label: Linux
-            # ubuntu-22.04 is the minimum — Tauri 2.0 requires libwebkit2gtk-4.1-dev
+            # ubuntu-22.04 is the minimum - Tauri 2.0 requires libwebkit2gtk-4.1-dev
             # which is NOT available on ubuntu-20.04 (only has webkit2gtk 4.0)
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
@@ -78,7 +78,7 @@ jobs:
           # Node 22 (was 20): on Node 20 the Windows leg's `better-sqlite3`
           # prebuild-install finds no matching ABI prebuilt, falls back to a
           # node-gyp native build, and node-gyp's Visual Studio finder crashes
-          # (ERR_CHILD_PROCESS_STDIO_MAXBUFFER) → install fails before signing.
+          # (ERR_CHILD_PROCESS_STDIO_MAXBUFFER) -> install fails before signing.
           # Node 22 has a published prebuilt (proven green by hermetic.yml's
           # Node-22 windows leg), so no native build is attempted.
           node-version: '22'
@@ -131,7 +131,7 @@ jobs:
         shell: bash
         run: |
           cargo install cargo-deny --locked --quiet 2>/dev/null || true
-          cd src-tauri && cargo deny check 2>/dev/null || echo "::warning::cargo-deny check failed — review supply chain"
+          cd src-tauri && cargo deny check 2>/dev/null || echo "::warning::cargo-deny check failed - review supply chain"
 
       - name: Install SSL.com CodeSignTool (Windows EV signing)
         if: runner.os == 'Windows' && env.SSL_COM_CREDENTIAL_ID != ''
@@ -150,17 +150,53 @@ jobs:
           # release and replace PLACEHOLDER_SHA256_FILL_IN below. Once set,
           # uncomment the `if` block to enforce it. Leaving verification
           # off is tolerated only because SSL.com publishes the tool over
-          # HTTPS without a separate checksum endpoint — pin the hash
+          # HTTPS without a separate checksum endpoint - pin the hash
           # ourselves and update it whenever we intentionally upgrade.
           $expected = "033b55dcb6a5f64cd9e3893dd960f1d7606e97e57bacdb60bae88720eece0c8b"
           $actual = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "CodeSignTool.zip SHA-256: $actual"
-          if ($actual -ne $expected.ToLowerInvariant()) { Write-Error "CodeSignTool SHA-256 mismatch — expected $expected, got $actual"; exit 1 }
+          if ($actual -ne $expected.ToLowerInvariant()) { Write-Error "CodeSignTool SHA-256 mismatch - expected $expected, got $actual"; exit 1 }
 
           Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
           # Add to PATH for signCommand
           $cstDir = Get-ChildItem -Path $extractPath -Directory | Select-Object -First 1
           echo "$($cstDir.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Pre-sign bundled ORT dylib (macOS notarization)
+        # tauri bundles src-tauri/models/ort/libonnxruntime.dylib as a plain
+        # *resource* and never code-signs it, so Apple notarization rejects the
+        # whole app (issues #3087721/#3087733: the dylib is unsigned / lacks a
+        # hardened runtime). Place the dylib now and sign it (hardened runtime +
+        # secure timestamp) using a dedicated keychain set up here, BEFORE
+        # tauri-action builds. tauri's beforeBuildCommand re-runs bundle:resources
+        # but skips the dylib (already present >1MB), preserving this signature.
+        # --keychain is passed explicitly so this does NOT disturb tauri-action's
+        # own keychain/search-list used to sign the .app + notarize.
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/ort-sign.keychain-db"
+          KPW="$(openssl rand -hex 20)"
+          security create-keychain -p "$KPW" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KPW" "$KEYCHAIN"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/ort-cert.p12"
+          security import "$RUNNER_TEMP/ort-cert.p12" -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KPW" "$KEYCHAIN" >/dev/null
+          rm -f "$RUNNER_TEMP/ort-cert.p12"
+          # Place the ORT dylib (+ embedding model) now so we can sign the dylib.
+          pnpm run bundle:resources
+          DYLIB="src-tauri/models/ort/libonnxruntime.dylib"
+          codesign --force --options runtime --timestamp \
+            --keychain "$KEYCHAIN" --sign "$APPLE_SIGNING_IDENTITY" "$DYLIB"
+          codesign --verify --strict --verbose=2 "$DYLIB"
+          echo "Pre-signed $DYLIB for notarization."
 
       - name: Build and release
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
@@ -183,7 +219,7 @@ jobs:
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
-          # Explicit — tauri-action generates and merges latest.json across
+          # Explicit - tauri-action generates and merges latest.json across
           # matrix jobs when updater signing is configured. The updater
           # endpoint in tauri.conf.json (releases/latest/download/latest.json)
           # depends on this file existing on every release.
@@ -200,16 +236,16 @@ jobs:
           foreach ($f in $bundles) {
             $sig = Get-AuthenticodeSignature -FilePath $f.FullName
             if ($sig.Status -eq 'Valid') {
-              Write-Host "  SIGNED: $($f.Name) — $($sig.SignerCertificate.Subject)"
+              Write-Host "  SIGNED: $($f.Name) - $($sig.SignerCertificate.Subject)"
               $signed++
             } else {
-              Write-Error "  UNSIGNED: $($f.Name) — status: $($sig.Status)"
+              Write-Error "  UNSIGNED: $($f.Name) - status: $($sig.Status)"
               $failed++
             }
           }
           Write-Host ""
           Write-Host "Signature check: $signed signed, $failed unsigned"
-          if ($failed -gt 0) { Write-Error "One or more binaries are unsigned — release blocked"; exit 1 }
+          if ($failed -gt 0) { Write-Error "One or more binaries are unsigned - release blocked"; exit 1 }
           if ($signed -eq 0) { Write-Warning "No .exe or .msi found in bundle output" }
 
       - name: Verify macOS code signature and notarization
@@ -223,7 +259,7 @@ jobs:
           signed=0
           failed=0
 
-          # Verify .app bundle — must be signed + notarized
+          # Verify .app bundle - must be signed + notarized
           APP_PATH=$(find "$BUNDLE_DIR" -name "*.app" -maxdepth 3 | head -1)
           if [[ -n "$APP_PATH" ]]; then
             echo "=== .app bundle: $APP_PATH ==="
@@ -244,14 +280,14 @@ jobs:
             if spctl --assess --verbose --type execute "$APP_PATH" 2>&1; then
               echo "  NOTARIZED: Gatekeeper accepts this app"
             else
-              echo "::warning::Gatekeeper assessment failed — notarization may still be propagating"
+              echo "::warning::Gatekeeper assessment failed - notarization may still be propagating"
             fi
           else
             echo "::error::No .app bundle found in $BUNDLE_DIR"
             failed=$((failed + 1))
           fi
 
-          # Verify .dmg installer — must be signed
+          # Verify .dmg installer - must be signed
           DMG_PATH=$(find "$BUNDLE_DIR" -name "*.dmg" -maxdepth 3 | head -1)
           if [[ -n "$DMG_PATH" ]]; then
             echo ""
@@ -260,14 +296,14 @@ jobs:
               echo "  SIGNED: $(basename "$DMG_PATH")"
               signed=$((signed + 1))
             else
-              echo "::warning::DMG signature verification failed — $(basename "$DMG_PATH")"
+              echo "::warning::DMG signature verification failed - $(basename "$DMG_PATH")"
             fi
           fi
 
           echo ""
           echo "macOS signature check: $signed signed, $failed failed"
           if [[ $failed -gt 0 ]]; then
-            echo "::error::One or more macOS artifacts are unsigned — release blocked"
+            echo "::error::One or more macOS artifacts are unsigned - release blocked"
             exit 1
           fi
           if [[ $signed -eq 0 ]]; then
@@ -329,7 +365,7 @@ jobs:
           > "$CHECKSUMS_FILE"
 
           # Hash all installer artifacts produced by the Tauri bundler.
-          # Ignore update bundles (.tar.gz / .zip with matching .sig) — those are
+          # Ignore update bundles (.tar.gz / .zip with matching .sig) - those are
           # verified by Tauri's updater via the minisign signature, not SHA-256.
           if [[ -d "$BUNDLE_DIR" ]]; then
             find "$BUNDLE_DIR" -type f \( \
@@ -343,7 +379,7 @@ jobs:
               NAME=$(basename "$f")
               HASH_LINE=$($HASHER "$f" | awk '{print $1}')
               echo "${HASH_LINE}  ${NAME}" >> "$CHECKSUMS_FILE"
-              # Per-file sidecar — users can run `sha256sum -c <file>.sha256`
+              # Per-file sidecar - users can run `sha256sum -c <file>.sha256`
               echo "${HASH_LINE}  ${NAME}" > "${f}.sha256"
               gh release upload "$TAG" "${f}.sha256" --clobber
             done
@@ -375,7 +411,7 @@ jobs:
         if: matrix.label == 'Windows'
         shell: bash
         run: |
-          # SBOMs are a release-gate artefact — a silent "note" fallback would
+          # SBOMs are a release-gate artefact - a silent "note" fallback would
           # publish a release with no machine-verifiable dependency inventory.
           # Hard-fail the job if generation breaks, so someone has to look.
           set -e
@@ -451,7 +487,7 @@ jobs:
             cat SHASUMS256.txt
             gh release upload "$TAG" SHASUMS256.txt --repo "$GH_REPO" --clobber
           else
-            echo "::warning::No per-platform SHASUMS256 files found — consolidated file not created."
+            echo "::warning::No per-platform SHASUMS256 files found - consolidated file not created."
           fi
 
       - name: Verify release artifacts
@@ -467,7 +503,7 @@ jobs:
           echo "Release assets:"
           echo "$ASSETS" | sed 's/^/  - /'
 
-          # Required artifacts — fail the release if any are missing.
+          # Required artifacts - fail the release if any are missing.
           REQUIRED=(
             "SHASUMS256.txt"
           )
@@ -481,11 +517,11 @@ jobs:
 
           # Desirable-but-not-fatal checks.
           if ! echo "$ASSETS" | grep -qx "latest.json"; then
-            echo "::warning::latest.json (auto-updater manifest) not present — updater won't work until fixed."
+            echo "::warning::latest.json (auto-updater manifest) not present - updater won't work until fixed."
           fi
           for PATTERN in "\\.exe$" "\\.dmg$" "\\.AppImage$"; do
             if ! echo "$ASSETS" | grep -qE "$PATTERN"; then
-              echo "::warning::No asset matches $PATTERN — platform coverage incomplete."
+              echo "::warning::No asset matches $PATTERN - platform coverage incomplete."
             fi
           done
 
@@ -543,6 +579,6 @@ jobs:
           if [ -n "$NODE_AUTH_TOKEN" ]; then
             npm publish --access public --provenance || echo "Publish skipped (version may already exist)"
           else
-            echo "NPM_TOKEN secret not set — skipping npm publish."
+            echo "NPM_TOKEN secret not set - skipping npm publish."
             echo "To enable: add NPM_TOKEN to repo secrets (npm token create --type granular)"
           fi

@@ -203,27 +203,10 @@ async function downloadForPlatform(platformKey) {
   const finalSize = (fs.statSync(destPath).size / 1048576).toFixed(1);
   console.log(`  ${platformKey}: ${spec.lib} ready (${finalSize}MB)`);
 
-  // macOS notarization requires EVERY Mach-O inside the .app to be code-signed
-  // with a secure timestamp + hardened runtime. Tauri bundles this dylib as a
-  // plain *resource* and never signs it, so Apple notarization rejects the app
-  // ("libonnxruntime.dylib ... not signed" / no hardened runtime). Sign it here,
-  // right after it lands, when building on macOS with the signing identity
-  // present (no-op on dev machines / Linux / Windows or when the identity is
-  // unset). Tauri's later app-bundle signing seals — but preserves — this sig.
-  if (
-    spec.lib.endsWith('.dylib') &&
-    process.platform === 'darwin' &&
-    process.env.APPLE_SIGNING_IDENTITY
-  ) {
-    console.log(`  ${platformKey}: code-signing ${spec.lib} for notarization...`);
-    execSync(
-      `codesign --force --options runtime --timestamp ` +
-        `--sign "${process.env.APPLE_SIGNING_IDENTITY}" "${destPath}"`,
-      { stdio: 'inherit' }
-    );
-    execSync(`codesign --verify --strict "${destPath}"`, { stdio: 'inherit' });
-    console.log(`  ${platformKey}: ${spec.lib} signed + verified`);
-  }
+  // NOTE: the macOS dylib is code-signed for notarization by a dedicated
+  // release.yml step (which imports the Apple cert into a keychain first) - NOT
+  // here: bundle:resources runs as tauri's beforeBuildCommand before any signing
+  // keychain exists ("item could not be found in the keychain").
 }
 
 async function main() {
