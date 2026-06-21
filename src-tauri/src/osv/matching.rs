@@ -351,9 +351,12 @@ fn normalize_ecosystem(eco: &str) -> &str {
         "python" | "pip" | "pypi" => "PyPI",
         "go" | "golang" => "Go",
         "ruby" | "rubygems" => "RubyGems",
-        "java" | "maven" => "Maven",
-        "nuget" => "NuGet",
-        "packagist" => "Packagist",
+        "java" | "maven" | "kotlin" => "Maven",
+        // Accept the ACE language name as well as the registry alias (csharp/php/dart) so the
+        // engine's own dependency-alert matcher resolves these stacks; Pub was absent entirely.
+        "csharp" | "c#" | "dotnet" | "nuget" => "NuGet",
+        "php" | "composer" | "packagist" => "Packagist",
+        "dart" | "flutter" | "pub" => "Pub",
         _ => eco,
     }
 }
