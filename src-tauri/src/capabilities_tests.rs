@@ -2,6 +2,27 @@
 
 use super::*;
 
+use std::sync::Mutex;
+
+// Every test that touches the GLOBAL `CAPABILITY_REGISTRY` must run serially.
+// cargo runs tests in parallel across threads; the public-API tests below do
+// several SEPARATE lock acquisitions (e.g. report_degraded -> is_full assert ->
+// report_restored), and between them a sibling registry-direct test's `reset()`
+// (which sets EVERY capability — including the one under assertion — back to
+// Full) can interleave and flip the value mid-assert. That is the exact race
+// that flaked `public_api_report_degraded_then_restored` under load. Acquire
+// this guard at the top of every registry-touching test and hold it for the
+// whole body; the pure tests (serialization / enum) need no guard.
+// `into_inner()` recovers a poisoned lock so one failing test does not
+// cascade-fail the rest with an unrelated PoisonError.
+static REGISTRY_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+fn serial_guard() -> std::sync::MutexGuard<'static, ()> {
+    REGISTRY_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 // -----------------------------------------------------------------------
 // Helper: inline state check (avoids releasing and re-acquiring the lock)
 // -----------------------------------------------------------------------
@@ -56,6 +77,7 @@ fn count_states(reg: &HashMap<Capability, CapabilityState>) -> (u32, u32, u32) {
 
 #[test]
 fn registry_contains_all_capabilities() {
+    let _serial = serial_guard();
     let registry = CAPABILITY_REGISTRY.read();
     assert_eq!(registry.len(), Capability::all().len());
     for &cap in Capability::all() {
@@ -69,6 +91,7 @@ fn registry_contains_all_capabilities() {
 
 #[test]
 fn reset_sets_all_to_full() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     registry.insert(
         Capability::EmbeddingSearch,
@@ -86,6 +109,7 @@ fn reset_sets_all_to_full() {
 
 #[test]
 fn degradation_transition() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
     let cap = Capability::EmbeddingSearch;
@@ -112,6 +136,7 @@ fn degradation_transition() {
 
 #[test]
 fn unavailable_transition() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
     let cap = Capability::VectorSearch;
@@ -139,6 +164,7 @@ fn unavailable_transition() {
 
 #[test]
 fn restoration_after_degradation() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
     let cap = Capability::LlmReranking;
@@ -158,6 +184,7 @@ fn restoration_after_degradation() {
 
 #[test]
 fn restoration_after_unavailable() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
     let cap = Capability::CredentialStorage;
@@ -177,6 +204,7 @@ fn restoration_after_unavailable() {
 
 #[test]
 fn is_available_for_full_and_degraded_not_unavailable() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
     let cap = Capability::SourceFetching;
@@ -202,6 +230,7 @@ fn is_available_for_full_and_degraded_not_unavailable() {
 
 #[test]
 fn is_full_only_for_full_state() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
     let cap = Capability::AceContext;
@@ -221,6 +250,7 @@ fn is_full_only_for_full_state() {
 
 #[test]
 fn summary_counts_are_correct() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
 
@@ -256,6 +286,7 @@ fn summary_counts_are_correct() {
 
 #[test]
 fn redundant_degraded_report_updates_fields() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
     let cap = Capability::Notifications;
@@ -277,6 +308,7 @@ fn redundant_degraded_report_updates_fields() {
 
 #[test]
 fn redundant_unavailable_report_updates_fields() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
     let cap = Capability::VectorSearch;
@@ -299,6 +331,7 @@ fn redundant_unavailable_report_updates_fields() {
 
 #[test]
 fn redundant_restored_on_full_is_noop() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
     let cap = Capability::BriefingGeneration;
@@ -310,6 +343,7 @@ fn redundant_restored_on_full_is_noop() {
 
 #[test]
 fn transition_from_degraded_to_unavailable() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
     let cap = Capability::SourceFetching;
@@ -326,6 +360,7 @@ fn transition_from_degraded_to_unavailable() {
 
 #[test]
 fn transition_from_unavailable_to_degraded() {
+    let _serial = serial_guard();
     let mut registry = CAPABILITY_REGISTRY.write();
     reset(&mut registry);
     let cap = Capability::AceContext;
@@ -350,7 +385,7 @@ fn transition_from_unavailable_to_degraded() {
 
 #[test]
 fn public_api_report_degraded_then_restored() {
-    // Use a capability unlikely to conflict with other tests
+    let _serial = serial_guard();
     let cap = Capability::BriefingGeneration;
     report_degraded(cap, "LLM offline", "Using cached briefing");
     assert!(is_available(cap));
@@ -361,6 +396,7 @@ fn public_api_report_degraded_then_restored() {
 
 #[test]
 fn public_api_report_unavailable_then_restored() {
+    let _serial = serial_guard();
     let cap = Capability::Notifications;
     report_unavailable(cap, "Permission denied", "Grant notification permission");
     assert!(!is_available(cap));
@@ -370,12 +406,14 @@ fn public_api_report_unavailable_then_restored() {
 
 #[test]
 fn public_api_get_all_states_returns_map() {
+    let _serial = serial_guard();
     let states = get_all_states();
     assert_eq!(states.len(), Capability::all().len());
 }
 
 #[test]
 fn public_api_get_summary_returns_correct_total() {
+    let _serial = serial_guard();
     let summary = get_summary();
     assert_eq!(summary.total, Capability::all().len() as u32);
     assert_eq!(
