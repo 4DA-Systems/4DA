@@ -236,9 +236,15 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install Rust toolchain
+        # Pin to the repo's security-reviewed toolchain (src-tauri/rust-toolchain.toml
+        # channel = "1.93.1"), NOT `stable`. `stable` pulls the latest clippy, which
+        # flags newer lints the pinned compiler doesn't — that turned `-D warnings`
+        # into 6 false failures here, and it would also bypass the supply-chain pin
+        # ("prevents silent auto-updates"). Keep this version in lockstep with
+        # rust-toolchain.toml when that file is bumped.
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          toolchain: stable
+          toolchain: "1.93.1"
           components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@aa7c1c80a07a27a84c0aa76d0cef0aad3830e330 # v2.7.8
