@@ -53,10 +53,25 @@ const ECOSYSTEM_NORMALIZE: &[(&str, &str)] = &[
     ("golang", "Go"),
     ("java", "Maven"),
     ("maven", "Maven"),
+    ("kotlin", "Maven"),
     ("ruby", "RubyGems"),
     ("rubygems", "RubyGems"),
+    // The ACE scanner tags scanned dependencies with the project LANGUAGE (see
+    // project_dependencies.language: "csharp"/"php"/"dart"), not the package-registry name.
+    // Java/Ruby above carry BOTH the language key and the registry-alias key, so they resolve;
+    // these three previously had ONLY the registry alias ("nuget"/"packagist"/"pub"), so a
+    // csharp/php/dart dependency normalized to nothing and its whole ecosystem was silently
+    // skipped — no advisory sync, no vulnerabilities surfaced. The cross-stack ledger gate
+    // (4da-ledger verify-stack-coverage) caught this: C#/PHP/Dart fixtures grounded against
+    // live OSV but the engine surfaced zero. Add the language-name keys to close the gap.
+    ("csharp", "NuGet"),
+    ("c#", "NuGet"),
+    ("dotnet", "NuGet"),
     ("nuget", "NuGet"),
+    ("php", "Packagist"),
     ("packagist", "Packagist"),
+    ("dart", "Pub"),
+    ("flutter", "Pub"),
     ("pub", "Pub"),
     // Already-canonical names pass through
     ("npm", "npm"),
@@ -594,6 +609,21 @@ mod tests {
         assert_eq!(normalize_to_osv("go"), "Go");
         assert_eq!(normalize_to_osv("golang"), "Go");
         assert_eq!(normalize_to_osv("unknown"), "unknown");
+        // Language-name keys must resolve, not just registry aliases — the ACE scanner tags
+        // scanned deps with the language ("csharp"/"php"/"dart"), so without these a whole
+        // ecosystem's advisories were silently skipped (regression guard for the langmap gap).
+        assert_eq!(normalize_to_osv("java"), "Maven");
+        assert_eq!(normalize_to_osv("kotlin"), "Maven");
+        assert_eq!(normalize_to_osv("ruby"), "RubyGems");
+        assert_eq!(normalize_to_osv("csharp"), "NuGet");
+        assert_eq!(normalize_to_osv("C#"), "NuGet"); // case-insensitive
+        assert_eq!(normalize_to_osv("dotnet"), "NuGet");
+        assert_eq!(normalize_to_osv("nuget"), "NuGet");
+        assert_eq!(normalize_to_osv("php"), "Packagist");
+        assert_eq!(normalize_to_osv("packagist"), "Packagist");
+        assert_eq!(normalize_to_osv("dart"), "Pub");
+        assert_eq!(normalize_to_osv("flutter"), "Pub");
+        assert_eq!(normalize_to_osv("pub"), "Pub");
     }
 
     #[test]

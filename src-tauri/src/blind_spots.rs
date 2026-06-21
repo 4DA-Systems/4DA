@@ -611,6 +611,9 @@ fn ecosystem_source_types(ecosystem: &str) -> Vec<String> {
         "go" | "golang" => vec!["go_modules".into(), "osv".into(), "github".into()],
         "maven" | "java" | "kotlin" => vec!["osv".into(), "github".into()],
         "nuget" | "csharp" | "dotnet" => vec!["osv".into(), "github".into()],
+        "packagist" | "php" | "composer" => vec!["osv".into(), "github".into()],
+        "rubygems" | "ruby" => vec!["osv".into(), "github".into()],
+        "pub" | "dart" | "flutter" => vec!["osv".into(), "github".into()],
         _ => vec!["osv".into()],
     }
 }
@@ -1509,6 +1512,7 @@ fn format_dep_display_name(package_name: &str, ecosystem: &str) -> String {
         "csharp" | "dotnet" | "nuget" => "NuGet",
         "php" | "packagist" => "Packagist",
         "ruby" | "rubygems" => "RubyGems",
+        "dart" | "flutter" | "pub" => "Pub",
         "swift" | "cocoapods" => "CocoaPods",
         _ => {
             if ecosystem.is_empty() {
