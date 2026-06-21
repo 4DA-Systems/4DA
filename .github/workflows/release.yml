@@ -232,6 +232,23 @@ jobs:
           # depends on this file existing on every release.
           includeUpdaterJson: true
 
+      - name: Windows signing debug log (always)
+        # tauri suppresses the signCommand's output and reports only a generic
+        # "failed to run powershell". sign-windows.ps1 tees the real CodeSignTool
+        # output + exit code to this file; print it so the actual error is
+        # visible whether or not the build step succeeded.
+        if: always() && runner.os == 'Windows'
+        shell: bash
+        run: |
+          LOG="$RUNNER_TEMP/sign-windows-debug.log"
+          if [ -f "$LOG" ]; then
+            echo "===== sign-windows-debug.log ====="
+            cat "$LOG"
+            echo "===== end ====="
+          else
+            echo "::warning::no sign-windows-debug.log found (signCommand may not have run)"
+          fi
+
       - name: Verify Windows Authenticode signature
         if: runner.os == 'Windows' && env.SSL_COM_CREDENTIAL_ID != ''
         env:
