@@ -4,9 +4,10 @@ import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../types';
 import { useLicense } from '../hooks/use-license';
 import { SignalUpgradeCTA } from './SignalUpgradeCTA';
-import { SIGNAL_CONFIG, PRIORITY_CONFIG, SIGNAL_LABELS, LANES } from './signals/signal-config';
+import { SIGNAL_CONFIG, PRIORITY_CONFIG, SIGNAL_LABELS, EVIDENCE_POOLS } from './signals/signal-config';
 import { SignalRow } from './signals/SignalRow';
 import type { SignalItem } from './signals/SignalRow';
+import { computeEvidencePool, groundingDeps, type EvidencePool } from './signals/evidence-pool';
 
 // ============================================================================
 // Types
@@ -27,7 +28,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
   const { isPro } = useLicense();
 
-  const { signals, filtered, typeCounts, priorityCounts, lanes } = useMemo(() => {
+  const { signals, filtered, typeCounts, priorityCounts, poolCounts, pools } = useMemo(() => {
     const signals: SignalItem[] = results
       .filter((r) => r.signal_type && r.signal_priority && r.signal_action)
       .map((r) => ({
@@ -42,6 +43,8 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
         signal_triggers: r.signal_triggers || [],
         similar_count: r.similar_count || 0,
         similar_titles: r.similar_titles || [],
+        pool: computeEvidencePool(r),
+        grounding: groundingDeps(r),
       }));
 
     const priorityOrder: Record<string, number> = { critical: 4, alert: 3, advisory: 2, watch: 1 };
@@ -57,26 +60,22 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
 
     const typeCounts: Record<string, number> = {};
     const priorityCounts: Record<string, number> = {};
+    const poolCounts: Record<EvidencePool, number> = { affects_you: 0, in_orbit: 0, ambient: 0 };
     for (const s of signals) {
       typeCounts[s.signal_type] = (typeCounts[s.signal_type] || 0) + 1;
       priorityCounts[s.signal_priority] = (priorityCounts[s.signal_priority] || 0) + 1;
+      poolCounts[s.pool] += 1;
     }
 
-    // Group filtered signals into lanes. Each signal goes into the first
-    // matching lane; "Critical Now" requires both type AND priority match.
-    const claimed = new Set<number>();
-    const lanes = LANES.map((lane) => {
-      const items = filtered.filter((s) => {
-        if (claimed.has(s.id)) return false;
-        if (!lane.types.has(s.signal_type)) return false;
-        if (lane.priorityFilter && !lane.priorityFilter.has(s.signal_priority)) return false;
-        return true;
-      });
-      for (const item of items) claimed.add(item.id);
-      return { config: lane, items };
-    });
+    // Group by evidence pool, not by signal type. Each signal belongs to
+    // exactly one pool (grounding-based), so no claim-tracking is needed.
+    // Within a pool, the priority-then-score sort from `filtered` is preserved.
+    const pools = EVIDENCE_POOLS.map((config) => ({
+      config,
+      items: filtered.filter((s) => s.pool === config.key),
+    }));
 
-    return { signals, sorted, filtered, typeCounts, priorityCounts, lanes };
+    return { signals, sorted, filtered, typeCounts, priorityCounts, poolCounts, pools };
   }, [results, typeFilter, priorityFilter]);
 
   if (signals.length === 0) return (
@@ -87,6 +86,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
 
   const criticalCount = priorityCounts['critical'] || 0;
   const highCount = priorityCounts['alert'] || 0;
+  const affectsYouCount = poolCounts.affects_you;
 
   return (
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
@@ -105,11 +105,10 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
             <h2 className="font-medium text-text-primary">{t('signals.title')}</h2>
             <p className="text-xs text-text-muted">
               {t('signals.actionable', { count: signals.length })}
-              {criticalCount > 0 && (
-                <span className="ms-2 text-red-400">{t('signals.critical', { count: criticalCount })}</span>
-              )}
-              {highCount > 0 && (
-                <span className="ms-2 text-orange-400">{t('signals.high', { count: highCount })}</span>
+              {affectsYouCount > 0 && (
+                <span className="ms-2 text-emerald-400">
+                  {t('signals.affectsYouCount', { count: affectsYouCount })}
+                </span>
               )}
             </p>
           </div>
@@ -237,7 +236,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
             )}
           </div>
 
-          {/* Signal Items — grouped by lane */}
+          {/* Signal Items — grouped by evidence pool (grounding, not score) */}
           <div className="space-y-4 max-h-[500px] overflow-y-auto" role="list" aria-label={t('signals.title')}>
             {filtered.length === 0 ? (
               <p className="text-center text-sm text-text-muted py-4">{t('signals.noMatch')}</p>
@@ -249,16 +248,21 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
                 ))}
               </div>
             ) : (
-              /* Unfiltered: show grouped lanes */
-              lanes.filter((l) => l.items.length > 0).map((lane) => (
-                <div key={lane.config.key}>
-                  <div className={`flex items-center gap-2 mb-2 pb-1 border-b ${lane.config.borderColor}`}>
-                    <span className="text-xs" aria-hidden="true">{lane.config.icon}</span>
-                    <span className={`text-xs font-medium ${lane.config.color}`}>{lane.config.label}</span>
-                    <span className="text-[10px] text-text-muted">{lane.items.length}</span>
+              /* Unfiltered: group by evidence pool. Ambient is dimmed (visible but de-emphasized). */
+              pools.filter((p) => p.items.length > 0).map((pool) => (
+                <div key={pool.config.key} className={pool.config.dim ? 'opacity-60' : ''}>
+                  <div className={`flex items-center gap-2 mb-2 pb-1 border-b ${pool.config.borderColor}`}>
+                    <span className="text-xs" aria-hidden="true">{pool.config.icon}</span>
+                    <span className={`text-xs font-medium ${pool.config.color}`}>
+                      {t(pool.config.labelKey)}
+                    </span>
+                    <span className="text-[10px] text-text-muted">{pool.items.length}</span>
+                    <span className="text-[10px] text-text-muted ms-1 hidden sm:inline">
+                      · {t(pool.config.sublabelKey)}
+                    </span>
                   </div>
                   <div className="space-y-2">
-                    {lane.items.map((signal) => (
+                    {pool.items.map((signal) => (
                       <SignalRow key={signal.id} signal={signal} />
                     ))}
                   </div>

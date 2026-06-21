@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { AIProviderSection } from './AIProviderSection';
 import { BlindSpotsAssessSection } from './BlindSpotsAssessSection';
+import { YourStackSection } from './YourStackSection';
 import { LicenseSection } from './LicenseSection';
 
 import type { Settings } from '../../types';
@@ -121,6 +122,9 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
         {settings && (
           <BlindSpotsAssessSection initialEnabled={settings.auto_assess_blind_spots ?? true} />
         )}
+
+        {/* Your Stack — user-controlled project allowlist for grounding */}
+        <YourStackSection />
 
         {/* Inline status feedback — always visible near the buttons */}
         {inlineStatus && (

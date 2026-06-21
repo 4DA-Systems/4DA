@@ -787,6 +787,8 @@ interface CommandMap {
 
   // -- Dependency Intelligence --
   get_dependency_overview: { params: Record<string, never>; result: DependencyOverview };
+  list_projects_with_stack_status: { params: Record<string, never>; result: Array<{ path: string; name: string; dependency_count: number; included: boolean }> };
+  set_project_in_stack: { params: { path: string; included: boolean }; result: void };
   get_project_deps: { params: { projectPath: string }; result: ProjectDepsResult };
   get_dependency_alerts: { params: Record<string, never>; result: DependencyAlertsResult };
   resolve_dependency_alert: { params: { alertId: number }; result: void };

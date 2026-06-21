@@ -1234,6 +1234,8 @@ pub fn run() {
             model_registry::refresh_model_registry,
             // Dependency Intelligence
             dependency_commands::get_dependency_overview,
+            dependency_commands::list_projects_with_stack_status,
+            dependency_commands::set_project_in_stack,
             dependency_commands::get_project_deps,
             dependency_commands::get_dependency_alerts,
             dependency_commands::resolve_dependency_alert,

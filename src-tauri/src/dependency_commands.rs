@@ -257,6 +257,80 @@ fn check_license_compatibility(license: &str) -> (&'static str, &'static str) {
 }
 
 // ============================================================================
+// Project allowlist ("Your Stack") — user-controlled grounding scope
+// ============================================================================
+
+/// List locally-detected projects (that carry dependencies) with whether each
+/// currently counts toward the user's stack grounding. Drives the "Your Stack"
+/// settings UI. Reads the same `project_dependencies` table the relevance
+/// grounding consumes, so the toggle maps 1:1 to what "Affects You" sees.
+#[tauri::command]
+pub async fn list_projects_with_stack_status() -> Result<serde_json::Value> {
+    let conn = crate::open_db_connection().context("Failed to open database")?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT project_path, COUNT(*) AS dep_count
+             FROM project_dependencies
+             GROUP BY project_path
+             ORDER BY dep_count DESC",
+        )
+        .context("Failed to prepare project query")?;
+    let rows: Vec<(String, i64)> = stmt
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+        .context("Failed to query projects")?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let excluded: Vec<String> = crate::get_settings_manager()
+        .lock()
+        .get_excluded_project_paths()
+        .iter()
+        .map(|p| p.to_lowercase())
+        .collect();
+
+    let projects: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(path, dep_count)| {
+            let pl = path.to_lowercase();
+            let included = !excluded.iter().any(|ex| pl.starts_with(ex.as_str()));
+            let name = path
+                .rsplit(['/', '\\'])
+                .find(|s| !s.is_empty())
+                .unwrap_or(&path)
+                .to_string();
+            serde_json::json!({
+                "path": path,
+                "name": name,
+                "dependency_count": dep_count,
+                "included": included,
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!(projects))
+}
+
+/// Include or exclude a project from the user's stack grounding. Excluding a
+/// project drops its deps from relevance scoring on the next analysis.
+#[tauri::command]
+pub async fn set_project_in_stack(path: String, included: bool) -> Result<()> {
+    let path = crate::ipc_guard::validate_path_input("path", &path)?;
+    let manager = crate::get_settings_manager();
+    let mut guard = manager.lock();
+    let mut excluded = guard.get_excluded_project_paths();
+    let pl = path.to_lowercase();
+    // Remove any existing entry for this path first (idempotent).
+    excluded.retain(|e| e.to_lowercase() != pl);
+    if !included {
+        excluded.push(path);
+    }
+    guard
+        .set_excluded_project_paths(excluded)
+        .context("Failed to persist stack selection")?;
+    Ok(())
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 

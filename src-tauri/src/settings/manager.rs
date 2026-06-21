@@ -514,6 +514,17 @@ impl SettingsManager {
         self.save()
     }
 
+    /// Get project paths excluded from the user's stack grounding
+    pub fn get_excluded_project_paths(&self) -> Vec<String> {
+        self.settings.excluded_project_paths.clone()
+    }
+
+    /// Set project paths excluded from the user's stack grounding
+    pub fn set_excluded_project_paths(&mut self, paths: Vec<String>) -> Result<()> {
+        self.settings.excluded_project_paths = paths;
+        self.save()
+    }
+
     /// Get disabled default YouTube channels
     pub fn get_disabled_default_youtube_channels(&self) -> Vec<String> {
         self.settings.disabled_default_youtube_channels.clone()

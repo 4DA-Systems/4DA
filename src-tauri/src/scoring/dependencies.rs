@@ -574,6 +574,28 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
         Err(_) => return (HashSet::new(), HashMap::new()),
     };
 
+    // Honor the user's project allowlist: drop deps from projects the user
+    // excluded from their stack (test fixtures, scaffolding) so they don't
+    // pollute relevance grounding. Prefix-matched, case-insensitive — mirrors
+    // temporal's active-root normalization.
+    let excluded: Vec<String> = crate::get_settings_manager()
+        .lock()
+        .get_excluded_project_paths()
+        .iter()
+        .map(|p| p.to_lowercase())
+        .collect();
+    let all_deps: Vec<_> = if excluded.is_empty() {
+        all_deps
+    } else {
+        all_deps
+            .into_iter()
+            .filter(|dep| {
+                let p = dep.project_path.to_lowercase();
+                !excluded.iter().any(|ex| p.starts_with(ex.as_str()))
+            })
+            .collect()
+    };
+
     let mut names = HashSet::new();
     let mut details = HashMap::new();
 

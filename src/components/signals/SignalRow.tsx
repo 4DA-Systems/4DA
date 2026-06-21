@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { getSourceLabel } from '../../config/sources';
 import { getRelevancePresentation } from '../../utils/score';
 import { SIGNAL_CONFIG, PRIORITY_CONFIG, SIGNAL_LABELS } from './signal-config';
+import type { EvidencePool } from './evidence-pool';
 
 export interface SignalItem {
   id: number;
@@ -17,6 +18,10 @@ export interface SignalItem {
   signal_triggers: string[];
   similar_count: number;
   similar_titles: string[];
+  /** Which evidence pool this signal was assigned to. */
+  pool: EvidencePool;
+  /** Package names from the user's stack that grounded this item (Pool A). */
+  grounding: string[];
 }
 
 export const SignalRow = ({ signal }: { signal: SignalItem }) => {
@@ -73,6 +78,14 @@ export const SignalRow = ({ signal }: { signal: SignalItem }) => {
               {t(getRelevancePresentation(signal.top_score).labelKey)}
             </span>
             <span className="text-[10px] text-text-muted">{sourceLabel}</span>
+            {signal.grounding.length > 0 && (
+              <span
+                className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                title={t('signals.groundedIn')}
+              >
+                🎯 {signal.grounding.slice(0, 3).join(', ')}{signal.grounding.length > 3 ? '…' : ''}
+              </span>
+            )}
             {signal.signal_triggers.length > 0 && (
               <button
                 onClick={() => setShowTriggers(!showTriggers)}
