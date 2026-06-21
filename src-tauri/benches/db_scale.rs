@@ -54,24 +54,6 @@ fn bench_inserts(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_knn_query(c: &mut Criterion) {
-    let mut group = c.benchmark_group("db_knn_query");
-
-    for db_size in [100, 1000, 5000] {
-        let db = populated_db(db_size);
-        let query_emb = seed_embedding("query-vector");
-
-        group.bench_with_input(BenchmarkId::new("k5_from", db_size), &db_size, |b, _| {
-            b.iter(|| {
-                db.find_similar_source_items(&query_emb, 5)
-                    .expect("knn query")
-            });
-        });
-    }
-
-    group.finish();
-}
-
 fn bench_upsert_existing(c: &mut Criterion) {
     let mut group = c.benchmark_group("db_upsert_existing");
     group.sample_size(20);
@@ -120,7 +102,6 @@ fn bench_stats_query(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_inserts,
-    bench_knn_query,
     bench_upsert_existing,
     bench_stats_query
 );
