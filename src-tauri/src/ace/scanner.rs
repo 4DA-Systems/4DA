@@ -174,6 +174,14 @@ impl ProjectScanner {
         skip_dirs.insert("vendor".to_string());
         skip_dirs.insert(".cargo".to_string());
         skip_dirs.insert("pkg".to_string());
+        // Claude Code agent infrastructure — NOT a real user project. Holds
+        // plans, scratch fixtures (e.g. the multi-ecosystem ledger fixtures
+        // under .claude/plans/ledger-fixtures/), agent worktrees and scripts.
+        // Scanning it pollutes project_dependencies with languages/packages the
+        // user never uses, corrupting the "Affects You" grounding pool. The
+        // multi-segment .claude/... paths are also caught by is_excluded_path
+        // below so a scan rooted *inside* .claude is excluded too.
+        skip_dirs.insert(".claude".to_string());
         // Sensitive directories — prevent scanning credentials, keys, secrets
         skip_dirs.insert(".ssh".to_string());
         skip_dirs.insert(".aws".to_string());
@@ -217,15 +225,22 @@ impl ProjectScanner {
     /// should be excluded from scanning. These are multi-segment path patterns
     /// that can't be caught by the single-name `skip_dirs` check.
     fn is_excluded_path(path: &Path) -> bool {
-        // Normalize to forward slashes for consistent matching on all platforms
         let path_str = path.to_string_lossy();
 
-        // Patterns that indicate this is NOT a real project directory:
-        // - .claude/worktrees/ — Claude Code agent worktrees (temporary repo copies)
-        // - .git/worktrees/   — git's internal worktree metadata
+        // Patterns that indicate this is NOT a real user project directory.
+        // Both path separators are matched literally so the check is correct on
+        // every platform (and so backslash Windows paths are still excluded when
+        // tests run on a Linux CI runner, where '\\' is not a path separator).
+        //
+        // - .claude/  — the ENTIRE Claude Code agent-infrastructure tree: plans,
+        //   scratch fixtures (e.g. the multi-ecosystem ledger fixtures under
+        //   .claude/plans/ledger-fixtures/ that surfaced flutter/laravel/spring
+        //   as the user's stack), agent worktrees, scripts. None of it is a real
+        //   project; manifests here pollute the dependency / "Affects You" pool.
+        // - .git/worktrees/ — git's internal worktree metadata.
         for pattern in &[
-            ".claude/worktrees/",
-            ".claude\\worktrees\\",
+            "/.claude/",
+            "\\.claude\\",
             ".git/worktrees/",
             ".git\\worktrees\\",
         ] {
@@ -293,10 +308,11 @@ impl ProjectScanner {
         }
 
         // Skip paths that contain known non-project subdirectory patterns.
-        // These are multi-segment paths that can't be caught by the single-name
-        // skip_dirs check above:
-        // - .claude/worktrees/  — orphaned Claude Code agent worktrees (copies of the same repo)
-        // - .git/worktrees/     — git's own worktree metadata
+        // These are multi-segment paths that catch a scan rooted *inside* an
+        // excluded tree, where the single-name skip_dirs check above never sees
+        // the excluded ancestor as a directory node:
+        // - .claude/        — Claude Code agent infrastructure (plans, fixtures, worktrees)
+        // - .git/worktrees/ — git's own worktree metadata
         if Self::is_excluded_path(path) {
             return Ok(());
         }
@@ -3409,6 +3425,28 @@ BUNDLED WITH
     }
 
     #[test]
+    fn test_excluded_path_claude_tree_whole() {
+        // The ENTIRE .claude/ tree is excluded — not just worktrees. These are
+        // the exact paths that polluted project_dependencies with foreign stacks
+        // (flutter/laravel/spring/csharp) the user never uses.
+        for p in &[
+            "/home/user/project/.claude/plans/ledger-fixtures/flutter-app",
+            "/home/user/project/.claude/plans/ledger-fixtures/php-laravel-app",
+            "/home/user/project/.claude/scripts",
+            "/home/user/project/.claude/agents",
+        ] {
+            assert!(
+                ProjectScanner::is_excluded_path(Path::new(p)),
+                "expected {p} to be excluded"
+            );
+        }
+        // Windows-style separators (still excluded when tests run on Linux CI).
+        assert!(ProjectScanner::is_excluded_path(Path::new(
+            r"D:\4DA\.claude\plans\ledger-fixtures\flutter-app"
+        )));
+    }
+
+    #[test]
     fn test_excluded_path_git_worktrees() {
         assert!(ProjectScanner::is_excluded_path(Path::new(
             "/home/user/project/.git/worktrees/feature-branch"
@@ -3429,9 +3467,10 @@ BUNDLED WITH
         assert!(!ProjectScanner::is_excluded_path(Path::new(
             "/home/user/worktrees/my-project"
         )));
-        // .claude directory itself is fine — only .claude/worktrees/ is excluded
+        // A real project dir that merely contains "claude" in its name (no
+        // separator boundary) must NOT be excluded — only the .claude/ tree is.
         assert!(!ProjectScanner::is_excluded_path(Path::new(
-            "/home/user/project/.claude/plans"
+            "/home/user/project/claude-client/src"
         )));
     }
 
@@ -3473,5 +3512,43 @@ BUNDLED WITH
             ManifestType::CargoToml,
             "Should find the real Cargo.toml, not the worktree package.json"
         );
+    }
+
+    #[test]
+    fn test_scan_skips_claude_plans_fixture_manifests() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // A real project at root.
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname = \"real-project\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+
+        // A throwaway multi-ecosystem fixture under .claude/plans/ — exactly the
+        // shape that polluted the dependency pool with a foreign stack. Must be
+        // skipped: the user does not use flutter.
+        let fixture_dir = dir
+            .path()
+            .join(".claude")
+            .join("plans")
+            .join("ledger-fixtures")
+            .join("flutter-app");
+        std::fs::create_dir_all(&fixture_dir).unwrap();
+        std::fs::write(
+            fixture_dir.join("pubspec.yaml"),
+            "name: flutter_app\ndependencies:\n  flutter:\n    sdk: flutter\n  http: ^1.0.0\n",
+        )
+        .unwrap();
+
+        let scanner = ProjectScanner::new();
+        let signals = scanner.scan_directory(dir.path()).unwrap();
+
+        assert_eq!(
+            signals.len(),
+            1,
+            "Should only find the real project, not the .claude/plans fixture"
+        );
+        assert_eq!(signals[0].manifest_type, ManifestType::CargoToml);
     }
 }
