@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+import type { EvidencePool } from './evidence-pool';
 
 // ============================================================================
 // Signal & Priority display configuration
@@ -27,6 +28,48 @@ export interface LaneConfig {
   types: Set<string>;
   priorityFilter?: Set<string>;
 }
+
+export interface EvidencePoolStyle {
+  key: EvidencePool;
+  /** i18n key for the pool heading (see src/locales/en/ui.json). */
+  labelKey: string;
+  /** i18n key for the one-line "what this pool means" subheading. */
+  sublabelKey: string;
+  icon: string;
+  color: string;
+  borderColor: string;
+  /** Pool C: visible but de-emphasized (dimmed, smaller). */
+  dim?: boolean;
+}
+
+// Order matters: highest-trust pool first.
+export const EVIDENCE_POOLS: EvidencePoolStyle[] = [
+  {
+    key: 'affects_you',
+    labelKey: 'signals.poolAffectsYou',
+    sublabelKey: 'signals.poolAffectsYouSub',
+    icon: '🎯',
+    color: 'text-emerald-400',
+    borderColor: 'border-emerald-500/30',
+  },
+  {
+    key: 'in_orbit',
+    labelKey: 'signals.poolInOrbit',
+    sublabelKey: 'signals.poolInOrbitSub',
+    icon: '🛰',
+    color: 'text-blue-400',
+    borderColor: 'border-blue-500/30',
+  },
+  {
+    key: 'ambient',
+    labelKey: 'signals.poolAmbient',
+    sublabelKey: 'signals.poolAmbientSub',
+    icon: '🌫',
+    color: 'text-text-muted',
+    borderColor: 'border-border',
+    dim: true,
+  },
+];
 
 export const SIGNAL_CONFIG: Record<string, SignalStyleConfig> = {
   security_alert: { icon: '🛡', color: 'text-red-400', borderColor: 'border-red-500/30', bgColor: 'bg-red-500/10' },

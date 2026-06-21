@@ -3183,5 +3183,13 @@
   "blindspots.otherTargets.expand": "Mostra",
   "blindspots.otherTargets.hide": "Nascondi",
   "blindspots.otherTargets.badge": "Altro target",
-  "blindspots.otherTargets.badgeHint": "Compilata solo per un target che non compili su questa macchina — mostrata, ma con priorità ridotta."
+  "blindspots.otherTargets.badgeHint": "Compilata solo per un target che non compili su questa macchina — mostrata, ma con priorità ridotta.",
+  "signals.affectsYouCount": "🎯 {{count}} affecting you",
+  "signals.groundedIn": "Matches your dependencies",
+  "signals.poolAffectsYou": "Affects You",
+  "signals.poolAffectsYouSub": "Grounded in your dependencies",
+  "signals.poolInOrbit": "In Your Orbit",
+  "signals.poolInOrbitSub": "Inside your stack — not tied to a specific package",
+  "signals.poolAmbient": "Ambient",
+  "signals.poolAmbientSub": "Topically similar — lower confidence"
 }

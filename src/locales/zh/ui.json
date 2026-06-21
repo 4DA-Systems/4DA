@@ -3037,5 +3037,13 @@
   "blindspots.otherTargets.expand": "显示",
   "blindspots.otherTargets.hide": "隐藏",
   "blindspots.otherTargets.badge": "其他目标",
-  "blindspots.otherTargets.badgeHint": "仅为你在本机上不构建的目标而构建——会显示，但已降低优先级。"
+  "blindspots.otherTargets.badgeHint": "仅为你在本机上不构建的目标而构建——会显示，但已降低优先级。",
+  "signals.affectsYouCount": "🎯 {{count}} affecting you",
+  "signals.groundedIn": "Matches your dependencies",
+  "signals.poolAffectsYou": "Affects You",
+  "signals.poolAffectsYouSub": "Grounded in your dependencies",
+  "signals.poolInOrbit": "In Your Orbit",
+  "signals.poolInOrbitSub": "Inside your stack — not tied to a specific package",
+  "signals.poolAmbient": "Ambient",
+  "signals.poolAmbientSub": "Topically similar — lower confidence"
 }

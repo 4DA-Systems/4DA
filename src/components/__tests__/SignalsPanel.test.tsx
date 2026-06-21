@@ -94,26 +94,60 @@ describe('SignalsPanel', () => {
     expect(screen.getByText('signals.actionable')).toBeInTheDocument();
   });
 
-  it('displays critical count badge when critical signals exist', () => {
+  it('leads the header with an "affecting you" count when a grounded signal exists', () => {
     render(
       <SignalsPanel
         results={[
-          makeSignalItem({ id: 1, signal_priority: 'critical', signal_action: 'Emergency patch' }),
+          makeSignalItem({
+            id: 1,
+            signal_priority: 'critical',
+            signal_action: 'Emergency patch',
+            // Grounded: matched the user's actual dependency.
+            score_breakdown: { matched_deps: ['react'] } as never,
+          }),
         ]}
       />,
     );
-    expect(screen.getByText('signals.critical')).toBeInTheDocument();
+    expect(screen.getByText('signals.affectsYouCount')).toBeInTheDocument();
   });
 
-  it('displays high count badge when high priority signals exist', () => {
+  it('does NOT surface a raw critical badge for an ungrounded critical signal', () => {
+    // The core fix: a critical-priority signal with no tie to the user's stack
+    // must not scream "critical" in the header. It is routed to the Ambient pool
+    // and the header leads with grounded ("affecting you") counts only.
     render(
       <SignalsPanel
         results={[
-          makeSignalItem({ id: 1, signal_priority: 'alert', signal_action: 'Update soon' }),
+          makeSignalItem({
+            id: 1,
+            signal_priority: 'critical',
+            signal_action: 'Some industry CVE in the news',
+            // Ungrounded: no matched_deps, low domain relevance.
+            score_breakdown: { matched_deps: [], domain_relevance: 0.15 } as never,
+          }),
         ]}
       />,
     );
-    expect(screen.getByText('signals.high')).toBeInTheDocument();
+    expect(screen.queryByText('signals.critical')).not.toBeInTheDocument();
+    expect(screen.queryByText('signals.affectsYouCount')).not.toBeInTheDocument();
+    // It still renders as a signal, just in the de-emphasized Ambient pool.
+    expect(screen.getByText('Some industry CVE in the news')).toBeInTheDocument();
+  });
+
+  it('routes a grounded critical into the Affects You pool', () => {
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({
+            id: 1,
+            signal_priority: 'critical',
+            signal_action: 'CVE in your installed axios',
+            score_breakdown: { matched_deps: ['axios'] } as never,
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText('signals.poolAffectsYou')).toBeInTheDocument();
   });
 
   it('sorts signals by priority (critical first)', () => {

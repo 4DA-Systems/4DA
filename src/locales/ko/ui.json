@@ -3064,5 +3064,13 @@
   "blindspots.otherTargets.expand": "표시",
   "blindspots.otherTargets.hide": "숨기기",
   "blindspots.otherTargets.badge": "다른 대상",
-  "blindspots.otherTargets.badgeHint": "이 컴퓨터에서 빌드하지 않는 대상에서만 빌드됩니다 — 표시하되 우선순위를 낮춥니다."
+  "blindspots.otherTargets.badgeHint": "이 컴퓨터에서 빌드하지 않는 대상에서만 빌드됩니다 — 표시하되 우선순위를 낮춥니다.",
+  "signals.affectsYouCount": "🎯 {{count}} affecting you",
+  "signals.groundedIn": "Matches your dependencies",
+  "signals.poolAffectsYou": "Affects You",
+  "signals.poolAffectsYouSub": "Grounded in your dependencies",
+  "signals.poolInOrbit": "In Your Orbit",
+  "signals.poolInOrbitSub": "Inside your stack — not tied to a specific package",
+  "signals.poolAmbient": "Ambient",
+  "signals.poolAmbientSub": "Topically similar — lower confidence"
 }

@@ -3067,5 +3067,13 @@
   "blindspots.otherTargets.expand": "表示",
   "blindspots.otherTargets.hide": "非表示",
   "blindspots.otherTargets.badge": "他のターゲット",
-  "blindspots.otherTargets.badgeHint": "このマシンではビルドしないターゲット向けにのみビルドされます。表示はしますが、優先度を下げています。"
+  "blindspots.otherTargets.badgeHint": "このマシンではビルドしないターゲット向けにのみビルドされます。表示はしますが、優先度を下げています。",
+  "signals.affectsYouCount": "🎯 {{count}} affecting you",
+  "signals.groundedIn": "Matches your dependencies",
+  "signals.poolAffectsYou": "Affects You",
+  "signals.poolAffectsYouSub": "Grounded in your dependencies",
+  "signals.poolInOrbit": "In Your Orbit",
+  "signals.poolInOrbitSub": "Inside your stack — not tied to a specific package",
+  "signals.poolAmbient": "Ambient",
+  "signals.poolAmbientSub": "Topically similar — lower confidence"
 }

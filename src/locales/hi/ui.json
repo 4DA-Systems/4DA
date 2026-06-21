@@ -3104,5 +3104,13 @@
   "blindspots.otherTargets.expand": "दिखाएँ",
   "blindspots.otherTargets.hide": "छिपाएँ",
   "blindspots.otherTargets.badge": "अन्य टारगेट",
-  "blindspots.otherTargets.badgeHint": "केवल ऐसे टारगेट के लिए बिल्ड होती है जिसे आप इस मशीन पर बिल्ड नहीं करते — दिखाया गया, पर कम प्राथमिकता दी गई।"
+  "blindspots.otherTargets.badgeHint": "केवल ऐसे टारगेट के लिए बिल्ड होती है जिसे आप इस मशीन पर बिल्ड नहीं करते — दिखाया गया, पर कम प्राथमिकता दी गई।",
+  "signals.affectsYouCount": "🎯 {{count}} affecting you",
+  "signals.groundedIn": "Matches your dependencies",
+  "signals.poolAffectsYou": "Affects You",
+  "signals.poolAffectsYouSub": "Grounded in your dependencies",
+  "signals.poolInOrbit": "In Your Orbit",
+  "signals.poolInOrbitSub": "Inside your stack — not tied to a specific package",
+  "signals.poolAmbient": "Ambient",
+  "signals.poolAmbientSub": "Topically similar — lower confidence"
 }

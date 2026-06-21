@@ -3096,5 +3096,13 @@
   "blindspots.otherTargets.expand": "Göster",
   "blindspots.otherTargets.hide": "Gizle",
   "blindspots.otherTargets.badge": "Diğer hedef",
-  "blindspots.otherTargets.badgeHint": "Yalnızca bu makinede derlemediğiniz bir hedef için derlenir — gösterilir, ancak önceliği düşürülür."
+  "blindspots.otherTargets.badgeHint": "Yalnızca bu makinede derlemediğiniz bir hedef için derlenir — gösterilir, ancak önceliği düşürülür.",
+  "signals.affectsYouCount": "🎯 {{count}} affecting you",
+  "signals.groundedIn": "Matches your dependencies",
+  "signals.poolAffectsYou": "Affects You",
+  "signals.poolAffectsYouSub": "Grounded in your dependencies",
+  "signals.poolInOrbit": "In Your Orbit",
+  "signals.poolInOrbitSub": "Inside your stack — not tied to a specific package",
+  "signals.poolAmbient": "Ambient",
+  "signals.poolAmbientSub": "Topically similar — lower confidence"
 }
