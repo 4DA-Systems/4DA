@@ -4,22 +4,49 @@
 
 echo "Running CADE pre-push validation..."
 
+# ── Path-aware gating ──────────────────────────────────────────────────────
+# The two heavy local checks (full frontend tests, cargo clippy) are an exact
+# duplicate of jobs that now run as REQUIRED, branch-protected CI gates
+# (.github/workflows/validate.yml). Run them locally ONLY when their files
+# changed; the fast checks (fmt, translations, compound-quality, audits, secret
+# scan) always run. CI stays the authoritative gate — this just removes
+# redundant local waits on unrelated pushes (e.g. a Rust-only or docs-only push
+# no longer pays the ~5-min frontend suite + cold clippy). Conservative: if the
+# diff base can't be determined, every heavy check runs (safe default).
+CHANGED=""
+if BASE=$(git merge-base origin/main HEAD 2>/dev/null) && [ -n "$BASE" ]; then
+    CHANGED=$(git diff --name-only "$BASE"...HEAD 2>/dev/null)
+fi
+if [ -z "$CHANGED" ]; then
+    FE_CHANGED=1
+    RUST_CHANGED=1
+    echo "Pre-push: change range unknown — running all checks."
+else
+    if echo "$CHANGED" | grep -qE '^(src/|package\.json|pnpm-lock\.yaml|index\.html|vite\.config\.|tsconfig.*json|tailwind\.config\.|public/|locales/|scripts/)'; then FE_CHANGED=1; else FE_CHANGED=0; fi
+    if echo "$CHANGED" | grep -qE '^src-tauri/'; then RUST_CHANGED=1; else RUST_CHANGED=0; fi
+fi
+
 # TypeScript type check (fresh, no incremental — catches stale cache issues)
-echo "Checking TypeScript types..."
-node --max-old-space-size=8192 node_modules/typescript/bin/tsc --noEmit || {
-    echo "TypeScript check failed. Fix type errors before pushing."
-    exit 1
-}
+if [ "$FE_CHANGED" = "1" ]; then
+    echo "Checking TypeScript types..."
+    node --max-old-space-size=8192 node_modules/typescript/bin/tsc --noEmit || {
+        echo "TypeScript check failed. Fix type errors before pushing."
+        exit 1
+    }
 
-# Full frontend tests
-echo "Running frontend tests..."
-NODE_OPTIONS="--max-old-space-size=4096" pnpm run test -- --run 2>/dev/null || {
-    echo "Frontend tests failed. Fix failing tests before pushing."
-    exit 1
-}
+    # Full frontend tests (CI's Frontend job is the required gate; this is fast feedback)
+    echo "Running frontend tests..."
+    NODE_OPTIONS="--max-old-space-size=4096" pnpm run test -- --run 2>/dev/null || {
+        echo "Frontend tests failed. Fix failing tests before pushing."
+        exit 1
+    }
+else
+    echo "Skipping TypeScript + frontend tests (no frontend changes; CI gates them)."
+fi
 
-# Rust formatting + lint check (skip if cargo is not available or src-tauri missing)
-if [ -f "src-tauri/Cargo.toml" ] && command -v cargo > /dev/null 2>&1; then
+# Rust formatting + lint check — only when src-tauri changed (CI's Rust job is
+# the required gate). Skipped on non-Rust pushes to avoid a cold clippy compile.
+if [ "$RUST_CHANGED" = "1" ] && [ -f "src-tauri/Cargo.toml" ] && command -v cargo > /dev/null 2>&1; then
     echo "Checking Rust formatting..."
     (cd src-tauri && cargo fmt --check 2>&1) || {
         echo "Rust formatting failed. Run 'cd src-tauri && cargo fmt' then re-push."
