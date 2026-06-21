@@ -190,6 +190,13 @@ jobs:
             -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -f pkcs12
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KPW" "$KEYCHAIN" >/dev/null
           rm -f "$RUNNER_TEMP/ort-cert.p12"
+          # Add our keychain to the user search list so `codesign` can actually
+          # FIND the identity. `--keychain` alone is unreliable — codesign locates
+          # signing identities via the search list, not the --keychain flag (that
+          # was why the previous attempt still hit "item could not be found in the
+          # keychain"). Prepend ours, keeping the existing entries. tauri-action
+          # re-configures the search list afterwards for its own .app signing.
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
           # Place the ORT dylib (+ embedding model) now so we can sign the dylib.
           pnpm run bundle:resources
           DYLIB="src-tauri/models/ort/libonnxruntime.dylib"
