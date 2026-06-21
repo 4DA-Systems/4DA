@@ -52,8 +52,46 @@ env:
   NODE_OPTIONS: '--max-old-space-size=8192'
 
 jobs:
+  # On PRs, decide whether the cold fresh-clone build is worth GitHub-HOSTED
+  # minutes. A docs-only PR (markdown, plans) cannot break a fresh clone, so it
+  # skips the build entirely — this protects the shared account's metered hosted
+  # minutes (the macOS-heavy victauri builds can exhaust them). Push-to-main,
+  # the nightly schedule, and manual dispatch ALWAYS run the full canary — the
+  # whole point of Hermetic is to catch drift there, so it is never filtered.
+  changes:
+    name: Detect changes
+    # PR-only (see note in validate.yml): push/schedule/dispatch skip this and
+    # always build via fresh-clone's `github.event_name != 'pull_request'` clause.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'src-tauri/**'
+              - 'mcp-4da-server/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'index.html'
+              - 'vite.config.*'
+              - 'tsconfig*.json'
+              - 'scripts/**'
+              - '.github/workflows/**'
+
   fresh-clone:
     name: Fresh clone (${{ matrix.os }})
+    needs: changes
+    # Always run on push/schedule/dispatch (the canary); on PRs, only when code
+    # that could affect a fresh clone changed. A skipped run still reports via
+    # the `Hermetic Success` aggregate below (skipped == pass).
+    if: github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     # Cold, cacheless build + full test suite on two platforms. Runs have
     # historically landed ~16-18 min; 45 caps a hung network fetch or a runner
@@ -147,7 +185,9 @@ jobs:
   hermetic-success:
     name: Hermetic Success
     if: always()
-    needs: [fresh-clone]
+    # `changes` included so a detector failure is caught; a path-filtered
+    # skip of `fresh-clone` reports "skipped", treated as pass below.
+    needs: [changes, fresh-clone]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
