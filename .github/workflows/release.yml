@@ -263,60 +263,47 @@ jobs:
         run: |
           set -e
           BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle"
-          signed=0
-          failed=0
 
-          # Verify .app bundle - must be signed + notarized
-          APP_PATH=$(find "$BUNDLE_DIR" -name "*.app" -maxdepth 3 | head -1)
+          # The .dmg is the shipped, notarized artifact: bundle.targets lists
+          # only "dmg" for macOS, so the .app is packaged INSIDE the .dmg and is
+          # NOT necessarily left standalone in bundle/macos after packaging.
+          # Gate on the .dmg being code-signed; verify a standalone .app too IF
+          # one is present, but do not require it (that false-failed the previous
+          # run even though tauri's build+sign+notarize succeeded).
+
+          APP_PATH=$(find "$BUNDLE_DIR" -name "*.app" -maxdepth 4 | head -1)
           if [[ -n "$APP_PATH" ]]; then
             echo "=== .app bundle: $APP_PATH ==="
-
-            echo "  Code signature (codesign --verify --deep --strict):"
             if codesign --verify --deep --strict "$APP_PATH" 2>&1; then
               echo "  SIGNED: $(codesign -d --verbose=1 "$APP_PATH" 2>&1 | grep 'Authority=' | head -1)"
-              signed=$((signed + 1))
             else
-              echo "::error::Code signature verification FAILED for .app bundle"
-              failed=$((failed + 1))
+              echo "::error::Code signature verification FAILED for the .app bundle"
+              exit 1
             fi
-
-            echo "  Entitlements:"
-            codesign -d --entitlements :- "$APP_PATH" 2>&1 | head -20 || true
-
-            echo "  Gatekeeper assessment (spctl):"
-            if spctl --assess --verbose --type execute "$APP_PATH" 2>&1; then
-              echo "  NOTARIZED: Gatekeeper accepts this app"
-            else
-              echo "::warning::Gatekeeper assessment failed - notarization may still be propagating"
-            fi
+            spctl --assess --verbose --type execute "$APP_PATH" 2>&1 \
+              && echo "  NOTARIZED: Gatekeeper accepts the app" \
+              || echo "::warning::Gatekeeper assessment on .app failed (may still be propagating)"
           else
-            echo "::error::No .app bundle found in $BUNDLE_DIR"
-            failed=$((failed + 1))
+            echo "::notice::No standalone .app in $BUNDLE_DIR - expected (only .dmg is targeted; the notarized .app ships inside the .dmg)."
           fi
 
-          # Verify .dmg installer - must be signed
-          DMG_PATH=$(find "$BUNDLE_DIR" -name "*.dmg" -maxdepth 3 | head -1)
-          if [[ -n "$DMG_PATH" ]]; then
-            echo ""
-            echo "=== DMG installer: $DMG_PATH ==="
-            if codesign --verify --deep --strict "$DMG_PATH" 2>&1; then
-              echo "  SIGNED: $(basename "$DMG_PATH")"
-              signed=$((signed + 1))
-            else
-              echo "::warning::DMG signature verification failed - $(basename "$DMG_PATH")"
-            fi
-          fi
-
-          echo ""
-          echo "macOS signature check: $signed signed, $failed failed"
-          if [[ $failed -gt 0 ]]; then
-            echo "::error::One or more macOS artifacts are unsigned - release blocked"
+          # The .dmg is REQUIRED and must be signed - this is the release gate.
+          DMG_PATH=$(find "$BUNDLE_DIR" -name "*.dmg" -maxdepth 4 | head -1)
+          if [[ -z "$DMG_PATH" ]]; then
+            echo "::error::No .dmg installer found in $BUNDLE_DIR - release blocked"
             exit 1
           fi
-          if [[ $signed -eq 0 ]]; then
-            echo "::error::No signed macOS artifacts found"
+          echo "=== DMG installer: $DMG_PATH ==="
+          if codesign --verify --strict "$DMG_PATH" 2>&1; then
+            echo "  SIGNED: $(basename "$DMG_PATH")"
+          else
+            echo "::error::DMG signature verification FAILED - $(basename "$DMG_PATH") - release blocked"
             exit 1
           fi
+          spctl --assess --verbose --type install "$DMG_PATH" 2>&1 \
+            && echo "  Gatekeeper accepts the .dmg installer" \
+            || echo "::warning::Gatekeeper assessment on .dmg failed (may still be propagating)"
+          echo "macOS verification passed: .dmg is code-signed."
 
       - name: Report binary sizes
         shell: bash

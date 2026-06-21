@@ -186,7 +186,19 @@ async function downloadForPlatform(platformKey) {
   }
 
   console.log(`  ${platformKey}: downloading ORT ${ORT_VERSION}...`);
-  const buffer = await download(spec.url);
+  // Retry transient network failures (e.g. ECONNRESET mid-download) so a single
+  // blip doesn't fail the whole signed release.
+  let buffer;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      buffer = await download(spec.url);
+      break;
+    } catch (e) {
+      if (attempt >= 4) throw e;
+      console.error(`\n  ${platformKey}: download attempt ${attempt}/4 failed (${e.message}); retrying...`);
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
+  }
   console.log(`  ${platformKey}: extracting ${spec.lib}...`);
 
   if (spec.archive === 'zip') {
