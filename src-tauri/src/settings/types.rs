@@ -778,6 +778,11 @@ pub struct Settings {
     /// RSS feeds from defaults that user has disabled
     #[serde(default)]
     pub disabled_default_rss_feeds: Vec<String>,
+    /// Local project paths the user has EXCLUDED from their stack. Deps from
+    /// these projects (e.g. test fixtures, scaffolding) do not feed relevance
+    /// grounding ("Affects You"). Empty = every detected project counts.
+    #[serde(default)]
+    pub excluded_project_paths: Vec<String>,
     /// YouTube channels from defaults that user has disabled
     #[serde(default)]
     pub disabled_default_youtube_channels: Vec<String>,
@@ -1061,6 +1066,7 @@ impl Default for Settings {
             x_api_key: SensitiveString::default(),
             youtube_channels: vec![],
             disabled_default_rss_feeds: vec![],
+            excluded_project_paths: vec![],
             disabled_default_youtube_channels: vec![],
             disabled_default_twitter_handles: vec![],
             github_languages: vec![],
