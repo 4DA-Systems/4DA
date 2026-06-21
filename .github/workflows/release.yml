@@ -75,7 +75,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
-          node-version: '20'
+          # Node 22 (was 20): on Node 20 the Windows leg's `better-sqlite3`
+          # prebuild-install finds no matching ABI prebuilt, falls back to a
+          # node-gyp native build, and node-gyp's Visual Studio finder crashes
+          # (ERR_CHILD_PROCESS_STDIO_MAXBUFFER) → install fails before signing.
+          # Node 22 has a published prebuilt (proven green by hermetic.yml's
+          # Node-22 windows leg), so no native build is attempted.
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install Rust toolchain
