@@ -231,11 +231,15 @@ fn dep_ecosystem_to_osv(ecosystem: &str) -> Option<&'static str> {
         "rust" | "crates.io" => Some("crates.io"),
         "python" | "pypi" | "pip" => Some("PyPI"),
         "go" | "golang" => Some("Go"),
-        "java" | "maven" => Some("Maven"),
+        "java" | "maven" | "kotlin" => Some("Maven"),
         "ruby" | "rubygems" => Some("RubyGems"),
-        "nuget" => Some("NuGet"),
-        "packagist" => Some("Packagist"),
-        "pub" => Some("Pub"),
+        // The ACE scanner tags these deps with the LANGUAGE name (csharp/php/dart), not the
+        // registry alias — without these arms gather_versioned_auditable_deps dropped every
+        // C#/PHP/Dart dep, the live version query ran on an empty set, and the whole stack
+        // surfaced ZERO advisories (the ledger cross-stack gate caught it).
+        "csharp" | "c#" | "dotnet" | "nuget" => Some("NuGet"),
+        "php" | "composer" | "packagist" => Some("Packagist"),
+        "dart" | "flutter" | "pub" => Some("Pub"),
         _ => None,
     }
 }
@@ -565,6 +569,15 @@ mod tests {
         assert_eq!(dep_ecosystem_to_osv("typescript"), Some("npm"));
         assert_eq!(dep_ecosystem_to_osv("pypi"), Some("PyPI"));
         assert_eq!(dep_ecosystem_to_osv("go"), Some("Go"));
+        // Language-name keys must resolve (ACE tags scanned deps by language) — regression guard
+        // for the gap that surfaced ZERO C#/PHP/Dart advisories in strict mode.
+        assert_eq!(dep_ecosystem_to_osv("csharp"), Some("NuGet"));
+        assert_eq!(dep_ecosystem_to_osv("nuget"), Some("NuGet"));
+        assert_eq!(dep_ecosystem_to_osv("php"), Some("Packagist"));
+        assert_eq!(dep_ecosystem_to_osv("packagist"), Some("Packagist"));
+        assert_eq!(dep_ecosystem_to_osv("dart"), Some("Pub"));
+        assert_eq!(dep_ecosystem_to_osv("flutter"), Some("Pub"));
+        assert_eq!(dep_ecosystem_to_osv("pub"), Some("Pub"));
         assert_eq!(dep_ecosystem_to_osv("cocoapods"), None);
     }
 }
