@@ -215,7 +215,7 @@ fn check_disk_space() -> Option<String> {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 // df output: header line + one data line per filesystem.
                 // We want the last data line (covers the data_dir's mount).
-                if let Some(last) = stdout.lines().filter(|l| !l.is_empty()).next_back() {
+                if let Some(last) = stdout.lines().rfind(|l| !l.is_empty()) {
                     // df output: Filesystem 1G-blocks Used Available Use% Mounted
                     let parts: Vec<&str> = last.split_whitespace().collect();
                     if parts.len() >= 4 {

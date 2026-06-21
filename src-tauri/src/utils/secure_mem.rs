@@ -29,7 +29,7 @@ pub(crate) fn lock_memory(data: &[u8]) -> bool {
     {
         // SAFETY: mlock is safe to call on any valid memory region.
         // It pins the pages in physical RAM until munlock or process exit.
-        let result = unsafe { libc::mlock(data.as_ptr() as *const libc::c_void, data.len()) };
+        let result = unsafe { libc::mlock(data.as_ptr().cast::<libc::c_void>(), data.len()) };
         if result != 0 {
             tracing::warn!(
                 target: "4da::security",
@@ -83,7 +83,7 @@ pub(crate) fn unlock_memory(data: &[u8]) {
         // SAFETY: munlock is safe on any valid region — it simply marks
         // pages as eligible for paging again.
         unsafe {
-            libc::munlock(data.as_ptr() as *const libc::c_void, data.len());
+            libc::munlock(data.as_ptr().cast::<libc::c_void>(), data.len());
         }
     }
 

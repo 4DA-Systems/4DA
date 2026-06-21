@@ -184,7 +184,7 @@ fn detect_gpu_platform() -> Option<GpuInfo> {
         let lower = line.to_lowercase();
         if lower.contains("vga") || lower.contains("3d") || lower.contains("display") {
             // "01:00.0 VGA compatible controller: NVIDIA Corporation ..."
-            let name = line.split(':').last()?.trim().to_string();
+            let name = line.split(':').next_back()?.trim().to_string();
             return Some(GpuInfo {
                 vendor: infer_vendor(&name),
                 name,

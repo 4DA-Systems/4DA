@@ -417,7 +417,12 @@ fn get_available_disk_space(path: &Path) -> u64 {
         unsafe {
             let mut stat: libc::statvfs = std::mem::zeroed();
             if libc::statvfs(path_cstr.as_ptr(), &mut stat) == 0 {
-                stat.f_bavail as u64 * stat.f_frsize as u64
+                // The casts are redundant on Linux (these libc fields are u64) but
+                // REQUIRED on macOS, where f_bavail/f_frsize are u32 — keep them for
+                // portability and silence the Linux-only `unnecessary_cast` lint.
+                #[allow(clippy::unnecessary_cast)]
+                let bytes = stat.f_bavail as u64 * stat.f_frsize as u64;
+                bytes
             } else {
                 0
             }
