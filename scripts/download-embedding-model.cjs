@@ -142,7 +142,19 @@ async function main() {
     const url = `https://huggingface.co/${MODEL_REPO}/resolve/main/${remote}`;
     console.log(`  ${local}: downloading...`);
 
-    const buffer = await downloadBuffer(url);
+    // Retry transient network failures (e.g. ECONNRESET mid-download) so a
+    // single blip doesn't fail the whole signed release.
+    let buffer;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        buffer = await downloadBuffer(url);
+        break;
+      } catch (e) {
+        if (attempt >= 4) throw e;
+        console.error(`  ${local}: download attempt ${attempt}/4 failed (${e.message}); retrying...`);
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+      }
+    }
     fs.writeFileSync(dest, buffer);
 
     const mb = (buffer.length / 1048576).toFixed(2);
