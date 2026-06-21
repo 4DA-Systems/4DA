@@ -520,8 +520,14 @@ impl Database {
     /// Delete source_items older than the given number of days.
     pub fn cleanup_old_items(&self, max_age_days: u32) -> SqliteResult<usize> {
         let conn = self.conn.lock();
+        // Age is measured in whole DAYS, so compare against a DATE (midnight)
+        // boundary, not the current instant. With `datetime('now', '-N days')`
+        // a 0-day threshold resolves to "right now" and deletes items inserted
+        // microseconds ago (last_seen < now) — a time-of-day race. `date('now',
+        // '-N days')` means "older than midnight N days ago", so today's items
+        // always survive a 0-day cleanup and the boundary is deterministic.
         let deleted = conn.execute(
-            "DELETE FROM source_items WHERE last_seen < datetime('now', ?1)",
+            "DELETE FROM source_items WHERE last_seen < date('now', ?1)",
             params![format!("-{} days", max_age_days)],
         )?;
         if let Err(e) = conn.execute(
@@ -644,14 +650,14 @@ mod tests {
 
         assert_eq!(db.total_item_count().unwrap(), 3);
 
-        // Cleanup with 0 days should delete everything (all items have last_seen = now,
-        // but datetime('now', '-0 days') = now, so items with last_seen < now won't match
-        // unless they are strictly older). Items inserted just now should survive.
+        // Cleanup with a 0-day threshold deletes items older than midnight today
+        // (date('now', '-0 days')). Items inserted just now have last_seen = today,
+        // so none are older than that boundary — deterministically zero deleted,
+        // with no dependence on how much wall-clock elapses during the test.
         let deleted = db.cleanup_old_items(0).unwrap();
-        // Items were just created so last_seen = now; they should NOT be older than now
         assert_eq!(
             deleted, 0,
-            "Items created just now should not be deleted with 0 day threshold"
+            "Items seen today should not be deleted with a 0 day threshold"
         );
         assert_eq!(db.total_item_count().unwrap(), 3);
 
