@@ -127,16 +127,44 @@ function extractZipLib(buffer, libName, destPath) {
   }
 }
 
+// Recursively find a file by exact name under `dir`. Returns the full path or null.
+function findFileByName(dir, name) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const hit = findFileByName(full, name);
+      if (hit) return hit;
+    } else if (entry.name === name) {
+      return full;
+    }
+  }
+  return null;
+}
+
 function extractTgzLib(buffer, libName, destPath) {
-  const tmpTgz = path.join(DEST_DIR, '_tmp.tgz');
-  fs.writeFileSync(tmpTgz, buffer);
+  const tmpDir = path.join(DEST_DIR, '_tmp_extract');
   try {
-    execSync(
-      `tar xzf "${tmpTgz}" --strip-components=2 -C "${DEST_DIR}" --include="*/${libName}"`,
-      { stdio: 'pipe' }
-    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.mkdirSync(tmpDir, { recursive: true });
+    // Write the archive INTO the extract dir and invoke tar with cwd + a
+    // RELATIVE name. Two cross-platform traps this avoids:
+    //   1. The previous `--include="*/lib"` is a bsdtar/libarchive flag that GNU
+    //      tar (Linux) does NOT understand -> the Linux release leg died with a
+    //      fatal tar error. Plain `tar xzf` works on GNU tar + bsdtar alike.
+    //   2. An absolute Windows path (`D:\...tgz`) makes GNU tar treat `D:` as a
+    //      remote host ("Cannot connect to D:"). A relative name under cwd
+    //      sidesteps that on every tar flavor.
+    // Extract everything, then locate the lib in Node (tar-flavor-agnostic).
+    const tgzName = '_ort.tgz';
+    fs.writeFileSync(path.join(tmpDir, tgzName), buffer);
+    execSync(`tar xzf "${tgzName}"`, { cwd: tmpDir, stdio: 'pipe' });
+    const found = findFileByName(tmpDir, libName);
+    if (!found) {
+      throw new Error(`${libName} not found inside the downloaded ORT archive`);
+    }
+    fs.copyFileSync(found, destPath);
   } finally {
-    try { fs.unlinkSync(tmpTgz); } catch {}
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
 }
 
@@ -174,6 +202,28 @@ async function downloadForPlatform(platformKey) {
 
   const finalSize = (fs.statSync(destPath).size / 1048576).toFixed(1);
   console.log(`  ${platformKey}: ${spec.lib} ready (${finalSize}MB)`);
+
+  // macOS notarization requires EVERY Mach-O inside the .app to be code-signed
+  // with a secure timestamp + hardened runtime. Tauri bundles this dylib as a
+  // plain *resource* and never signs it, so Apple notarization rejects the app
+  // ("libonnxruntime.dylib ... not signed" / no hardened runtime). Sign it here,
+  // right after it lands, when building on macOS with the signing identity
+  // present (no-op on dev machines / Linux / Windows or when the identity is
+  // unset). Tauri's later app-bundle signing seals — but preserves — this sig.
+  if (
+    spec.lib.endsWith('.dylib') &&
+    process.platform === 'darwin' &&
+    process.env.APPLE_SIGNING_IDENTITY
+  ) {
+    console.log(`  ${platformKey}: code-signing ${spec.lib} for notarization...`);
+    execSync(
+      `codesign --force --options runtime --timestamp ` +
+        `--sign "${process.env.APPLE_SIGNING_IDENTITY}" "${destPath}"`,
+      { stdio: 'inherit' }
+    );
+    execSync(`codesign --verify --strict "${destPath}"`, { stdio: 'inherit' });
+    console.log(`  ${platformKey}: ${spec.lib} signed + verified`);
+  }
 }
 
 async function main() {
