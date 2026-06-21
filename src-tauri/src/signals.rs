@@ -610,7 +610,8 @@ impl SignalClassifier {
         //
         // Gate 1: Single source → max Advisory
         // Gate 2: 2 sources → max Alert
-        // Gate 3: Critical requires dependency match OR (3+ sources AND escalating chain)
+        // Gate 3: Critical requires a CONFIRMED dependency match (grounding) — a
+        //         poster cannot fabricate an edge to the user's installed packages
         // Boost: Escalating/Peak chain phase promotes by 1 tier
         let corroboration_sources = corroboration.source_count.max(1);
         let dependency_confirmed = corroboration.dependency_match;
@@ -636,16 +637,16 @@ impl SignalClassifier {
             priority = SignalPriority::Alert;
         }
 
-        // Critical hard gate: requires dependency match OR (3+ sources AND chain escalating/peak)
-        if priority == SignalPriority::Critical {
-            let chain_escalating = corroboration
-                .chain_phase
-                .as_deref()
-                .is_some_and(|p| p == "escalating" || p == "peak");
-            let has_strong_chain = corroboration_sources >= 3 && chain_escalating;
-            if !dependency_confirmed && !has_strong_chain {
-                priority = SignalPriority::Alert;
-            }
+        // Critical hard gate: Critical requires a CONFIRMED dependency edge to the
+        // user's stack. Cross-source count and chain phase are derived from
+        // title-string matching (see build_corroboration) — gameable and NOT
+        // grounded — so they alone must never reach Critical. Without this, generic
+        // CVE/security NEWS that 3+ sources happened to cover surfaced as "critical"
+        // against stacks the user doesn't run (an LLM release was even mislabeled
+        // security_alert/critical). Matches the documented intent above:
+        // Critical = active exploitation + dependency match + corroborated.
+        if priority == SignalPriority::Critical && !dependency_confirmed {
+            priority = SignalPriority::Alert;
         }
 
         // Generate action text using ONLY declared tech match (prevents "python workflow" for Rust devs)
@@ -1436,6 +1437,55 @@ mod tests {
         );
         let c = result.expect("Real RCE should still be detected");
         assert_eq!(c.signal_type, SignalType::SecurityAlert);
+    }
+
+    #[test]
+    fn test_ungrounded_security_news_caps_below_critical() {
+        // Generic security NEWS with broad cross-source coverage AND an escalating
+        // chain — but NO edge to the user's installed deps — must NOT reach Critical.
+        // Pre-fix, the has_strong_chain bypass let it; now grounding is required.
+        let classifier = SignalClassifier::new();
+        let result = classifier.classify(
+            "Critical RCE exploit actively used in the wild — CVE-2026-7777",
+            "A remote code execution vulnerability is being actively exploited.",
+            0.9,
+            &["node".to_string()],
+            &["node".to_string()],
+            &CorroborationContext {
+                source_count: 5,
+                dependency_match: false, // NOT in the user's stack
+                chain_phase: Some("escalating".to_string()),
+            },
+        );
+        let c = result.expect("Should still classify as a security signal");
+        assert_eq!(c.signal_type, SignalType::SecurityAlert);
+        assert!(
+            c.priority <= SignalPriority::Alert,
+            "ungrounded security news must not reach Critical, got {:?}",
+            c.priority
+        );
+        assert!(!c.dependency_confirmed);
+    }
+
+    #[test]
+    fn test_grounded_security_can_reach_critical() {
+        // Same scary signal, but WITH a confirmed dependency edge → Critical allowed.
+        let classifier = SignalClassifier::new();
+        let result = classifier.classify(
+            "Critical RCE exploit actively used in the wild — CVE-2026-7777",
+            "A remote code execution vulnerability is being actively exploited.",
+            0.9,
+            &["node".to_string()],
+            &["node".to_string()],
+            &CorroborationContext {
+                source_count: 5,
+                dependency_match: true, // confirmed edge to the user's stack
+                chain_phase: Some("escalating".to_string()),
+            },
+        );
+        let c = result.expect("Should classify");
+        assert_eq!(c.priority, SignalPriority::Critical);
+        assert!(c.dependency_confirmed);
     }
 
     #[test]

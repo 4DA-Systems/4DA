@@ -472,6 +472,54 @@ describe("4DA MCP Tool Handlers", () => {
         expect(typeof item.relevance_score).toBe("number");
         expect(item.relevance_score).toBeGreaterThanOrEqual(0);
         expect(item.relevance_score).toBeLessThanOrEqual(1);
+        expect(item).toHaveProperty("evidence_class");
+        expect([
+          "osv_verified",
+          "dependency_grounded",
+          "semantic_only",
+          "keyword_heuristic",
+        ]).toContain(item.evidence_class);
+      }
+    });
+
+    it("derives evidence_class from grounding on the Rust-scored path", () => {
+      seedUserContext(db);
+      const raw = db.getRawDb();
+      // Promote the test DB to the "Rust-scored" shape so the grounded path runs.
+      raw.exec("ALTER TABLE source_items ADD COLUMN relevance_score REAL");
+      raw.exec("ALTER TABLE source_items ADD COLUMN content_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_priority TEXT");
+      raw.exec(
+        "CREATE TABLE source_item_dependencies (id INTEGER PRIMARY KEY AUTOINCREMENT, source_item_id INTEGER, package_name TEXT)",
+      );
+
+      const grounded = insertSourceItem(db, { title: "React 19 release notes", content: "react" });
+      const security = insertSourceItem(db, { title: "CVE in axios", content: "axios advisory" });
+      const semantic = insertSourceItem(db, { title: "A Rust blog post", content: "rust musings" });
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.9 WHERE id IN (?, ?, ?)")
+        .run(grounded, security, semantic);
+      raw.prepare("UPDATE source_items SET content_type = 'security_advisory' WHERE id = ?").run(security);
+      const insDep = raw.prepare(
+        "INSERT INTO source_item_dependencies (source_item_id, package_name) VALUES (?, ?)",
+      );
+      insDep.run(grounded, "react");
+      insDep.run(security, "axios"); // semantic intentionally gets no dependency row
+
+      const result = executeGetRelevantContent(db, { min_score: 0.5, since_hours: 1, limit: 50 });
+      const byId = new Map(result.map((r) => [r.id, r.evidence_class]));
+      expect(byId.get(grounded)).toBe("dependency_grounded");
+      expect(byId.get(security)).toBe("osv_verified"); // grounded + security advisory
+      expect(byId.get(semantic)).toBe("semantic_only"); // no dependency edge
+    });
+
+    it("labels standalone keyword-scored items as keyword_heuristic", () => {
+      seedUserContext(db);
+      insertSourceItem(db, { title: "Rust async patterns", content: "async rust for developer tools" });
+      const result = executeGetRelevantContent(db, { min_score: 0.01, since_hours: 1 });
+      for (const item of result) {
+        expect(item.evidence_class).toBe("keyword_heuristic");
       }
     });
 

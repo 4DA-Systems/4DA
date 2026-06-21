@@ -860,10 +860,17 @@ export class FourDADatabase {
     limit: number,
     sinceDate: string,
   ): RelevantItem[] {
+    // Grounding subquery — guarded: older/partial 4DA DBs may have relevance_score
+    // (so the Rust path runs) but lack source_item_dependencies. Fall back to 0
+    // (→ evidence_class "semantic_only") rather than throwing.
+    const depCount = this.hasColumn("source_item_dependencies", "source_item_id")
+      ? `(SELECT COUNT(*) FROM source_item_dependencies d WHERE d.source_item_id = source_items.id)`
+      : `0`;
     let query = `
       SELECT id, source_type, source_id, url, title, content, content_hash,
              created_at, last_seen, relevance_score, content_type,
-             signal_type, signal_priority
+             signal_type, signal_priority,
+             ${depCount} AS dep_match_count
       FROM source_items
       WHERE relevance_score >= ?
         AND datetime(created_at) >= datetime(?)
@@ -879,7 +886,7 @@ export class FourDADatabase {
     params.push(limit);
 
     const stmt = this.db.prepare(query);
-    const items = stmt.all(...params) as Array<SourceItem & { relevance_score: number; content_type: string | null; signal_type: string | null; signal_priority: string | null }>;
+    const items = stmt.all(...params) as Array<SourceItem & { relevance_score: number; content_type: string | null; signal_type: string | null; signal_priority: string | null; dep_match_count: number }>;
 
     const now = Date.now();
     return items.map((item) => {
@@ -893,6 +900,15 @@ export class FourDADatabase {
             : `${Math.round(hoursAgo / 24)} days ago`;
 
       const necessity = this.getNecessityForItem(item.id);
+
+      // Provenance: grounded (matched one of the user's installed deps) vs
+      // semantic-only. A grounded security advisory is the OSV-verified gold tier.
+      const grounded = (item.dep_match_count ?? 0) > 0;
+      const evidence_class: RelevantItem["evidence_class"] = grounded
+        ? item.content_type === "security_advisory"
+          ? "osv_verified"
+          : "dependency_grounded"
+        : "semantic_only";
 
       return {
         id: item.id,
@@ -910,6 +926,7 @@ export class FourDADatabase {
         necessity_urgency: necessity.urgency,
         signal_type: item.signal_type ?? null,
         signal_priority: item.signal_priority ?? null,
+        evidence_class,
       };
     });
   }
@@ -977,6 +994,8 @@ export class FourDADatabase {
           necessity_urgency: necessity.urgency,
           signal_type: null,
           signal_priority: null,
+          // Standalone keyword scorer — no Rust pipeline, no dependency grounding.
+          evidence_class: "keyword_heuristic",
         });
       }
     }
