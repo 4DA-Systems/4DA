@@ -49,6 +49,19 @@ export interface RelevantItem {
   signal_type: string | null;
   /** Pipeline-computed signal priority (critical, high, medium, low) */
   signal_priority: string | null;
+  /**
+   * Provenance of this item's relevance — how an autonomous agent should weight it.
+   * Scores alone are NOT comparable across classes; gate actions on this, not the float:
+   *  - "osv_verified": a security advisory matching one of YOUR installed dependencies — safe to act on
+   *  - "dependency_grounded": matched one of your declared dependencies — trustworthy
+   *  - "semantic_only": topical/embedding relevance with NO dependency edge — verify before acting
+   *  - "keyword_heuristic": standalone-mode keyword score (no Rust pipeline) — weakest signal
+   */
+  evidence_class:
+    | "osv_verified"
+    | "dependency_grounded"
+    | "semantic_only"
+    | "keyword_heuristic";
 }
 
 // =============================================================================
