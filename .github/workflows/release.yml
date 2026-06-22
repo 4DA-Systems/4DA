@@ -158,9 +158,21 @@ jobs:
           if ($actual -ne $expected.ToLowerInvariant()) { Write-Error "CodeSignTool SHA-256 mismatch - expected $expected, got $actual"; exit 1 }
 
           Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-          # Add to PATH for signCommand
-          $cstDir = Get-ChildItem -Path $extractPath -Directory | Select-Object -First 1
-          echo "$($cstDir.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          # Resolve the ABSOLUTE path to CodeSignTool.bat and export it as an env
+          # var. The previous approach only added the dir to GITHUB_PATH, but the
+          # signCommand subprocess tauri spawns did NOT see it on PATH
+          # ("CodeSignTool: NOT FOUND on PATH" in the sign debug log), so signing
+          # failed. sign-windows.ps1 now invokes $env:CODESIGNTOOL_BAT directly.
+          $cstBat = Get-ChildItem -Path $extractPath -Recurse -Filter "CodeSignTool.bat" | Select-Object -First 1
+          if (-not $cstBat) {
+            Write-Error "CodeSignTool.bat not found under $extractPath after extraction"
+            Get-ChildItem -Path $extractPath -Recurse -Depth 2 | Select-Object FullName | Format-Table -AutoSize
+            exit 1
+          }
+          Write-Host "CodeSignTool.bat: $($cstBat.FullName)"
+          echo "CODESIGNTOOL_BAT=$($cstBat.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          # Keep the dir on PATH too (belt-and-suspenders for any other consumer).
+          echo "$($cstBat.Directory.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
       - name: Pre-sign bundled ORT dylib (macOS notarization)
         # tauri bundles src-tauri/models/ort/libonnxruntime.dylib as a plain
@@ -231,6 +243,23 @@ jobs:
           # endpoint in tauri.conf.json (releases/latest/download/latest.json)
           # depends on this file existing on every release.
           includeUpdaterJson: true
+
+      - name: Windows signing debug log (always)
+        # tauri suppresses the signCommand's output and reports only a generic
+        # "failed to run powershell". sign-windows.ps1 tees the real CodeSignTool
+        # output + exit code to this file; print it so the actual error is
+        # visible whether or not the build step succeeded.
+        if: always() && runner.os == 'Windows'
+        shell: bash
+        run: |
+          LOG="$RUNNER_TEMP/sign-windows-debug.log"
+          if [ -f "$LOG" ]; then
+            echo "===== sign-windows-debug.log ====="
+            cat "$LOG"
+            echo "===== end ====="
+          else
+            echo "::warning::no sign-windows-debug.log found (signCommand may not have run)"
+          fi
 
       - name: Verify Windows Authenticode signature
         if: runner.os == 'Windows' && env.SSL_COM_CREDENTIAL_ID != ''
