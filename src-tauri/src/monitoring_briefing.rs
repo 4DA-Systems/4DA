@@ -916,7 +916,7 @@ pub(crate) fn build_enriched_briefing(
             ongoing_topics: vec![],
             knowledge_gaps: vec![],
             escalating_chains,
-            synthesis: Some("Low signal — no new intelligence overnight.".to_string()),
+            synthesis: Some(ABSTENTION_NO_NEW.to_string()),
             preemption_alerts: vec![],
             blind_spot_score: None,
             labels: Some(build_briefing_labels(lang)),
@@ -2210,14 +2210,18 @@ fn project_label(path: &str) -> String {
     }
 }
 
-/// The exact prose the synthesis gates emit when they reject output (LLM
-/// abstention, failed groundedness, or a wrong package version). Used to detect
-/// a quality-rejection so the retry wrapper can re-attempt.
+/// The canonical abstention prose the synthesis gates emit on rejection (failed
+/// groundedness or a wrong package version). Defined once and referenced at every
+/// gate emission site so the string can't drift. ASCII dashes ("--") match the
+/// system prompt's instruction. Detection of this — and the `ABSTENTION_NO_NEW`
+/// variant — is centralized in `is_abstention_synthesis`.
 const ABSTENTION_PROSE: &str = "Low signal -- no noteworthy intelligence overnight.";
 
-fn is_abstention_prose(prose: &str) -> bool {
-    prose.trim_start().starts_with(ABSTENTION_PROSE)
-}
+/// The abstention prose for a genuinely quiet briefing — every item was
+/// already-seen (novelty-filtered) leaving only ongoing topics, so there IS
+/// intelligence, just nothing NEW. Emitted by `build_enriched_briefing`; worded
+/// distinctly from the gate form but recognized by the same detector.
+const ABSTENTION_NO_NEW: &str = "Low signal — no new intelligence overnight.";
 
 /// Synthesize a narrative morning intelligence briefing, retrying on a quality
 /// rejection. LLM output is non-deterministic (default temperature), so a brief
@@ -2236,7 +2240,7 @@ pub(crate) async fn synthesize_morning_briefing(
     let mut last: Option<SynthesisResult> = None;
     for attempt in 1..=MAX_ATTEMPTS {
         let result = synthesize_morning_briefing_once(briefing).await?;
-        if !is_abstention_prose(&result.prose) || !has_content {
+        if !is_abstention_synthesis(&result.prose) || !has_content {
             if attempt > 1 {
                 tracing::info!(
                     target: "4da::briefing",
@@ -2768,8 +2772,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                                 "Structured synthesis failed groundedness — abstaining"
                             );
                             return Ok(SynthesisResult {
-                                prose: "Low signal -- no noteworthy intelligence overnight."
-                                    .to_string(),
+                                prose: ABSTENTION_PROSE.to_string(),
                                 clusters: None,
                                 provider_used: provider_label.clone(),
                                 synthesis_tier: tier.as_str().to_string(),
@@ -2789,8 +2792,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                                 "Structured synthesis stated wrong package versions — abstaining"
                             );
                             return Ok(SynthesisResult {
-                                prose: "Low signal -- no noteworthy intelligence overnight."
-                                    .to_string(),
+                                prose: ABSTENTION_PROSE.to_string(),
                                 clusters: None,
                                 provider_used: provider_label.clone(),
                                 synthesis_tier: tier.as_str().to_string(),
@@ -3082,7 +3084,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                 "Morning brief synthesis failed groundedness check — falling back to abstention"
             );
             return Ok(SynthesisResult {
-                prose: "Low signal -- no noteworthy intelligence overnight.".to_string(),
+                prose: ABSTENTION_PROSE.to_string(),
                 clusters: None,
                 provider_used: provider_label.clone(),
                 synthesis_tier: tier.as_str().to_string(),
@@ -3098,7 +3100,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                 "Morning brief synthesis stated wrong package versions — falling back to abstention"
             );
             return Ok(SynthesisResult {
-                prose: "Low signal -- no noteworthy intelligence overnight.".to_string(),
+                prose: ABSTENTION_PROSE.to_string(),
                 clusters: None,
                 provider_used: provider_label.clone(),
                 synthesis_tier: tier.as_str().to_string(),
@@ -3926,18 +3928,21 @@ mod tests {
     }
 
     #[test]
-    fn is_abstention_prose_detects_gate_rejections_but_not_real_synthesis() {
-        // The exact prose every synthesis gate emits on rejection — must match so
-        // the retry wrapper re-attempts instead of shipping a blank brief.
-        assert!(is_abstention_prose(ABSTENTION_PROSE));
-        assert!(is_abstention_prose(
+    fn abstention_detector_matches_gate_rejections_but_not_real_synthesis() {
+        // The canonical prose every synthesis gate emits on rejection — must match
+        // so the retry wrapper re-attempts instead of shipping a blank brief.
+        assert!(is_abstention_synthesis(ABSTENTION_PROSE));
+        assert!(is_abstention_synthesis(
             "Low signal -- no noteworthy intelligence overnight.\n\n(8 items)"
         ));
+        // The quiet-day variant (build_enriched_briefing) is recognized too —
+        // proving the retry wrapper is no longer blind to the "no new" wording.
+        assert!(is_abstention_synthesis(ABSTENTION_NO_NEW));
         // Real synthesis must NOT read as abstention (else we'd retry good output).
-        assert!(!is_abstention_prose(
+        assert!(!is_abstention_synthesis(
             "Upgrade jsonwebtoken to 10.3.0 in 4da/relay; it has a type confusion flaw."
         ));
-        assert!(!is_abstention_prose(""));
+        assert!(!is_abstention_synthesis(""));
     }
 
     #[test]

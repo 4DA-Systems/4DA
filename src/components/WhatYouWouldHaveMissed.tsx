@@ -29,14 +29,7 @@ import { SignalUpgradeCTA } from './SignalUpgradeCTA';
  * content_type="security_advisory" (signal_type unset) is skipped at the
  * security tier and a lower-priority item wins the hero card.
  */
-const KIND_PRIORITY_ORDER: SignalKind[] = [
-  'security',
-  'breaking',
-  'dependency',
-  'migration',
-  'tool',
-  'architecture',
-];
+const KIND_PRIORITY_ORDER: SignalKind[] = ['security', 'breaking', 'tool'];
 
 export function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | null {
   // For security items, require dependency confirmation — an irrelevant CVE as hero card destroys trust
@@ -69,14 +62,16 @@ export function findMostCriticalSave(results: SourceRelevance[]): SourceRelevanc
     : null;
 }
 
-/** Canonical signal kind used for the critical-save label + color. */
-type SignalKind =
-  | 'security'
-  | 'breaking'
-  | 'dependency'
-  | 'migration'
-  | 'tool'
-  | 'architecture';
+/**
+ * Canonical signal kind used for the critical-save label + color.
+ *
+ * Only kinds the backend can actually produce. `dependency_update`,
+ * `migration_opportunity`, and `architecture_insight` were never wired into the
+ * Rust `SignalType` enum (signals.rs) or the `ContentType` vocab, so branches
+ * for them could never fire — removed as dead code rather than left as a false
+ * promise (the same parallel-vocab drift that caused the security_advisory bug).
+ */
+type SignalKind = 'security' | 'breaking' | 'tool';
 
 /**
  * Classify the critical save into a canonical signal kind.
@@ -97,10 +92,7 @@ export function classifySignal(item: SourceRelevance): SignalKind | null {
   // 'security_advisory' is the content-vocab twin of the 'security_alert' signal.
   if (has('security_alert') || has('security_advisory')) return 'security';
   if (has('breaking_change')) return 'breaking';
-  if (has('dependency_update')) return 'dependency';
-  if (has('migration_opportunity')) return 'migration';
   if (has('tool_discovery')) return 'tool';
-  if (has('architecture_insight')) return 'architecture';
   return null;
 }
 
@@ -108,10 +100,7 @@ export function getSignalLabel(item: SourceRelevance): string | null {
   switch (classifySignal(item)) {
     case 'security': return 'Security advisory';
     case 'breaking': return 'Breaking change';
-    case 'dependency': return 'Dependency update';
-    case 'migration': return 'Migration opportunity';
     case 'tool': return 'Tool discovery';
-    case 'architecture': return 'Architecture insight';
     default: return null;
   }
 }
@@ -120,7 +109,6 @@ export function getSignalColor(item: SourceRelevance): string {
   switch (classifySignal(item)) {
     case 'security': return '#EF4444';
     case 'breaking': return 'var(--color-accent-action)';
-    case 'dependency': return '#3B82F6';
     default: return '#D4AF37';
   }
 }
