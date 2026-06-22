@@ -26,6 +26,16 @@ if (-not $env:SSL_COM_CREDENTIAL_ID) {
 
 Log "Signing: $FilePath"
 
+# Tauri invokes signCommand for EVERY file in the bundle pipeline, including NSIS
+# plugin DLLs and transient .tmp files. CodeSignTool errors on non-PE inputs
+# ("Unsupported file format - tmp"); skip anything not a signable PE artifact.
+$ext = [System.IO.Path]::GetExtension($FilePath).ToLowerInvariant()
+$signable = @('.exe', '.dll', '.msi', '.msix', '.appx', '.cab', '.sys', '.ocx', '.ps1')
+if ($signable -notcontains $ext) {
+    Log "Skipping non-signable file ($ext): $FilePath"
+    exit 0
+}
+
 # Resolve CodeSignTool by ABSOLUTE path (CODESIGNTOOL_BAT, set by the install
 # step) — the signCommand subprocess does NOT reliably inherit the GITHUB_PATH
 # addition, so a bare `CodeSignTool` was "not recognized". Fall back to PATH.
@@ -64,9 +74,14 @@ try {
     $text = ($output | Out-String)
     Write-Host $text
     try { Add-Content -Path $logFile -Value $text -ErrorAction SilentlyContinue } catch {}
-    if ($code -ne 0) {
-        Log "CodeSignTool FAILED with exit code $code"
-        exit $code
+    # CodeSignTool exits 0 EVEN ON FAILURE (e.g. eSigner auth rejection prints
+    # "Error: The provided authorization grant is invalid..." then returns 0).
+    # Treat any "Error:" line as failure so the build stops at the real cause
+    # instead of producing an unsigned binary that only the later verify catches.
+    if ($code -ne 0 -or ($text -match '(?im)^\s*Error:')) {
+        Log "CodeSignTool FAILED (exit=$code) for $FilePath"
+        if ($code -eq 0) { Log "  (exit code was 0 but output contained an Error: line)" }
+        exit 1
     }
     Log "Signed successfully: $FilePath"
 } catch {
