@@ -283,6 +283,13 @@ pub fn check_factual_claims(prose: &str, facts: &[PackageFact]) -> Vec<String> {
     for (i, fi) in pkg_at.iter().enumerate() {
         let Some(fact_idx) = *fi else { continue };
         let fact = &facts[fact_idx];
+        // If the package mention ITSELF ends the sentence ("...affects axios.
+        // React 19.2 just shipped."), no following token belongs to it — don't
+        // attribute a next-sentence version to it. The forward scan below only
+        // checks the boundary on *following* tokens, so this guards position i.
+        if tokens[i].ends_with(|c: char| matches!(c, '.' | '!' | '?')) {
+            continue;
+        }
         // Scan forward within the SAME sentence, stopping at the next package
         // mention, for version tokens to attribute to this package. Bounding to
         // the sentence prevents a version in a later sentence from being
@@ -318,12 +325,18 @@ pub fn check_factual_claims(prose: &str, facts: &[PackageFact]) -> Vec<String> {
 }
 
 /// A token like "1.16", "10.3.0", "1.12.2" — at least one dot between digits.
+/// Calendar dates ("2025.02.15") are explicitly excluded so a date sitting near
+/// a package name is never mistaken for a fabricated version (the same guard the
+/// sibling salient-term extractor applies).
 fn looks_like_version_token(t: &str) -> bool {
     let bytes: Vec<char> = t.chars().collect();
     if !t.contains('.') {
         return false;
     }
     if !t.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        return false;
+    }
+    if nlp::looks_like_date(t) {
         return false;
     }
     bytes.first().is_some_and(|c| c.is_ascii_digit())
@@ -646,6 +659,31 @@ mod tests {
         assert!(
             check_factual_claims(prose, &f).is_empty(),
             "a later-sentence version must not be attributed to axios"
+        );
+    }
+
+    #[test]
+    fn factual_check_ignores_version_when_package_ends_sentence() {
+        // The package mention ITSELF ends the sentence ("...affects axios."); the
+        // 19.2 in the next sentence must not be attributed to it (merged_bug_007
+        // gap 1 — the forward scan only checked boundaries on following tokens).
+        let prose = "A high CVE affects axios. React 19.2 is unrelated.";
+        let f = facts(&[("axios", &["1.12.2", "1.16.0"])]);
+        assert!(
+            check_factual_claims(prose, &f).is_empty(),
+            "a version after a sentence-ending package must not attribute to it"
+        );
+    }
+
+    #[test]
+    fn factual_check_ignores_calendar_dates_as_versions() {
+        // A 3-part calendar date near a package is not a fabricated version
+        // (merged_bug_007 gap 2 — looks_like_version_token now excludes dates).
+        let prose = "Upgrade axios; the 2025.02.15 advisory has the details.";
+        let f = facts(&[("axios", &["1.16.0"])]);
+        assert!(
+            check_factual_claims(prose, &f).is_empty(),
+            "a calendar date must not be treated as a fabricated version"
         );
     }
 

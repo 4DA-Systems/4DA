@@ -22,31 +22,36 @@ import { SignalUpgradeCTA } from './SignalUpgradeCTA';
  * This is the feature that makes users think "I can never go back."
  */
 
-const SIGNAL_PRIORITY_ORDER = [
-  'security_alert',
-  'breaking_change',
-  'dependency_update',
-  'migration_opportunity',
-  'tool_discovery',
-  'architecture_insight',
+/**
+ * Priority order for the hero "critical save", security first. Keyed on the
+ * canonical SignalKind (not a raw vocab string) so the chooser reads the SAME
+ * dual-vocabulary classifier as the label/color — otherwise a real CVE tagged
+ * content_type="security_advisory" (signal_type unset) is skipped at the
+ * security tier and a lower-priority item wins the hero card.
+ */
+const KIND_PRIORITY_ORDER: SignalKind[] = [
+  'security',
+  'breaking',
+  'dependency',
+  'migration',
+  'tool',
+  'architecture',
 ];
 
-function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | null {
+export function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | null {
   // For security items, require dependency confirmation — an irrelevant CVE as hero card destroys trust
-  for (const priority of SIGNAL_PRIORITY_ORDER) {
-    const isSecurityType = priority === 'security_alert' || priority === 'breaking_change';
+  for (const kind of KIND_PRIORITY_ORDER) {
+    const isSecurityType = kind === 'security' || kind === 'breaking';
     const match = results.find(
-      r => (r.score_breakdown?.content_type === priority || r.signal_type === priority)
+      r => classifySignal(r) === kind
         && (!isSecurityType || (r.score_breakdown?.dep_match_score ?? 0) > 0.2)
     );
     if (match) return match;
   }
 
   // Fallback: security items without dep match (still better than nothing)
-  for (const priority of SIGNAL_PRIORITY_ORDER) {
-    const match = results.find(
-      r => r.score_breakdown?.content_type === priority || r.signal_type === priority
-    );
+  for (const kind of KIND_PRIORITY_ORDER) {
+    const match = results.find(r => classifySignal(r) === kind);
     if (match) return match;
   }
 

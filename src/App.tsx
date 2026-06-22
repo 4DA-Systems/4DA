@@ -206,9 +206,14 @@ function App() {
   useEffect(() => {
     trackEvent('app_launch');
 
-    // Paint-critical — feed the first visible frame.
+    // Paint-critical — feed the first visible frame. loadLicense + loadTrialStatus
+    // are a paired identity probe: the tier badge AND every isPro-gated surface
+    // read trialStatus (a reverse-trial user is tier="free" but trialStatus.active),
+    // so deferring the trial probe would flash "FREE" + the free experience for the
+    // whole idle gap on every cold boot. Both are tiny; keep them together.
     void loadPersistedBriefing();
     void loadLicense();
+    void loadTrialStatus();
 
     // Deferred — none of these gate first paint.
     return runWhenIdle(() => {
@@ -218,7 +223,6 @@ function App() {
         useAppStore.getState().resetSourceFilters();
       });
       void loadSourceHealth();
-      void loadTrialStatus();
       // Pure maintenance — has no business on the critical mount path.
       void cmd('prune_personalization_cache').catch(() => {});
     });

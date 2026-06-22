@@ -306,6 +306,23 @@ pub struct ChainSummary {
     pub confidence: f64,
 }
 
+/// One underlying package's real versions inside an advisory-merged alert row.
+///
+/// When several packages share a single advisory they collapse into one display
+/// row (see `merge_alert_packages`), at which point `package_name` becomes a
+/// lossy comma-joined label ("@clerk/clerk-react, @clerk/shared") and the single
+/// `installed_version`/`fixed_version` fields can only hold one package's pair.
+/// The deterministic factual-version check needs every package's own versions,
+/// so the merge preserves them here.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MergedPackageVersion {
+    pub package_name: String,
+    #[serde(default)]
+    pub installed_version: Option<String>,
+    #[serde(default)]
+    pub fixed_version: Option<String>,
+}
+
 /// A preemption alert included in the morning briefing (critical/high only).
 ///
 /// Carries the rich evidence fields from the backend `PreemptionAlert` so the
@@ -353,6 +370,13 @@ pub struct BriefingPreemptionAlert {
     /// "primary" = the 4DA app itself, "external" = a side project, "dev" = dev-only dependency.
     #[serde(default)]
     pub scope: Option<String>,
+    /// Per-package versions for advisory-merged rows. Empty for a single-package
+    /// alert (its own `package_name`/`installed_version`/`fixed_version` are
+    /// faithful); populated by `merge_alert_packages` when multiple packages share
+    /// one advisory, so the factual-version check can validate each package's real
+    /// (installed, fix) pair rather than only the first merged package's.
+    #[serde(default)]
+    pub merged_package_versions: Vec<MergedPackageVersion>,
 }
 
 impl BriefingPreemptionAlert {
@@ -385,6 +409,7 @@ impl BriefingPreemptionAlert {
             source_url,
             suggested_actions,
             scope: None,
+            merged_package_versions: Vec::new(),
         }
     }
 }
@@ -459,6 +484,18 @@ fn dedupe_alerts_by_advisory(alerts: Vec<BriefingPreemptionAlert>) -> Vec<Briefi
 /// the single row reflects every affected package (e.g. package_name becomes
 /// "@clerk/clerk-react, @clerk/shared").
 fn merge_alert_packages(keep: &mut BriefingPreemptionAlert, dup: &BriefingPreemptionAlert) {
+    // Before the display name is lossily comma-joined, capture the kept alert's
+    // OWN package + versions so the per-package fact list stays complete. Seed
+    // once, on the first merge, while `keep.package_name` is still a single name.
+    if keep.merged_package_versions.is_empty() {
+        if let Some(p) = keep.package_name.as_deref().filter(|p| !p.is_empty()) {
+            keep.merged_package_versions.push(MergedPackageVersion {
+                package_name: p.to_string(),
+                installed_version: keep.installed_version.clone(),
+                fixed_version: keep.fixed_version.clone(),
+            });
+        }
+    }
     if let Some(dup_pkg) = dup.package_name.as_deref().filter(|p| !p.is_empty()) {
         match keep.package_name.clone() {
             Some(existing) if !existing.split(", ").any(|p| p == dup_pkg) => {
@@ -466,6 +503,18 @@ fn merge_alert_packages(keep: &mut BriefingPreemptionAlert, dup: &BriefingPreemp
             }
             None => keep.package_name = Some(dup_pkg.to_string()),
             _ => {}
+        }
+        // Preserve the merged package's real versions for the factual check.
+        if !keep
+            .merged_package_versions
+            .iter()
+            .any(|m| m.package_name == dup_pkg)
+        {
+            keep.merged_package_versions.push(MergedPackageVersion {
+                package_name: dup_pkg.to_string(),
+                installed_version: dup.installed_version.clone(),
+                fixed_version: dup.fixed_version.clone(),
+            });
         }
     }
     for proj in &dup.affected_projects {
@@ -642,9 +691,36 @@ impl BriefingNotification {
 }
 
 /// Returns true if the synthesis text is a "nothing to report" abstention.
+///
+/// Anchored to the canonical abstention opening on the FIRST LINE only, folding
+/// every dash variant (the prompt's literal "--", the em/en-dash) and whitespace
+/// run into single spaces. Mirrors the frontend `isAbstentionSynthesis`
+/// (briefing-synthesis-helpers.ts) so both sides agree on the contract.
+///
+/// Anchoring matters because this gate also clears the cold-boot snapshot
+/// synthesis (`briefing_snapshot::drop_contradictory_abstention`): a lax
+/// `contains("no noteworthy")` would strip a legitimate brief that merely uses
+/// the phrase mid-prose ("...no noteworthy followups on Tokio yet..."), and a
+/// bare `starts_with("low signal")` would misfire on "Low signal strength on the
+/// wifi today, but plenty to report."
 pub(crate) fn is_abstention_synthesis(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    lower.starts_with("low signal") || lower.contains("no noteworthy")
+    let first_line = text.trim_start().lines().next().unwrap_or("");
+    // Fold dashes (incl. the literal "--") to spaces so split_whitespace also
+    // breaks on them; then collapse to single-spaced lowercase.
+    let folded: String = first_line
+        .chars()
+        .map(|c| {
+            if matches!(c, '\u{2010}'..='\u{2015}' | '\u{2212}' | '-') {
+                ' '
+            } else {
+                c
+            }
+        })
+        .flat_map(char::to_lowercase)
+        .collect();
+    let normalized = folded.split_whitespace().collect::<Vec<_>>().join(" ");
+    normalized.starts_with("low signal no noteworthy intelligence")
+        || normalized.starts_with("low signal no new intelligence")
 }
 
 // ============================================================================
@@ -2554,8 +2630,13 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
     let packages: Vec<String> = {
         let mut s: std::collections::HashSet<String> = std::collections::HashSet::new();
         for a in &briefing.preemption_alerts {
+            // `package_name` may be a comma-joined advisory-merged label
+            // ("@clerk/clerk-react, @clerk/shared") — split so each real package
+            // name lands in the allowlist (package names never contain ", ").
             if let Some(p) = a.package_name.as_deref().filter(|p| !p.is_empty()) {
-                s.insert(p.to_lowercase());
+                for name in p.split(", ") {
+                    s.insert(name.to_lowercase());
+                }
             }
         }
         for i in &briefing.items {
@@ -2570,25 +2651,55 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
     // package and the versions it is legitimate to cite (installed + fix).
     // Packages with no known version are omitted — we can't fault a claim we
     // have no data to contradict.
+    let mk_fact = |name: &str, installed: Option<&str>, fixed: Option<&str>| {
+        let name = name.trim();
+        if name.is_empty() {
+            return None;
+        }
+        let mut versions = Vec::new();
+        if let Some(v) = installed.filter(|v| !v.is_empty()) {
+            versions.push(v.to_string());
+        }
+        if let Some(v) = fixed.filter(|v| !v.is_empty()) {
+            versions.push(v.to_string());
+        }
+        if versions.is_empty() {
+            return None;
+        }
+        Some(crate::briefing_groundedness::PackageFact {
+            name: name.to_string(),
+            versions,
+        })
+    };
     let package_facts: Vec<crate::briefing_groundedness::PackageFact> = briefing
         .preemption_alerts
         .iter()
-        .filter_map(|a| {
-            let name = a.package_name.as_deref().filter(|p| !p.is_empty())?;
-            let mut versions = Vec::new();
-            if let Some(v) = a.installed_version.as_deref().filter(|v| !v.is_empty()) {
-                versions.push(v.to_string());
+        .flat_map(|a| {
+            // Advisory-merged row: emit one fact per underlying package with its
+            // OWN versions. The comma-joined `package_name` + single version
+            // fields are display-only and lossy for these multi-package rows, so
+            // checking them directly would skip every merged package's version.
+            if !a.merged_package_versions.is_empty() {
+                return a
+                    .merged_package_versions
+                    .iter()
+                    .filter_map(|m| {
+                        mk_fact(
+                            m.package_name.as_str(),
+                            m.installed_version.as_deref(),
+                            m.fixed_version.as_deref(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
             }
-            if let Some(v) = a.fixed_version.as_deref().filter(|v| !v.is_empty()) {
-                versions.push(v.to_string());
-            }
-            if versions.is_empty() {
-                return None;
-            }
-            Some(crate::briefing_groundedness::PackageFact {
-                name: name.to_string(),
-                versions,
-            })
+            // Single-package alert: its own fields are faithful.
+            mk_fact(
+                a.package_name.as_deref().unwrap_or(""),
+                a.installed_version.as_deref(),
+                a.fixed_version.as_deref(),
+            )
+            .into_iter()
+            .collect::<Vec<_>>()
         })
         .collect();
 
@@ -3658,6 +3769,7 @@ mod tests {
             source_url: None,
             suggested_actions: vec![],
             scope: None,
+            merged_package_versions: Vec::new(),
         }
     }
 
@@ -3729,6 +3841,88 @@ mod tests {
         let out = dedupe_alerts_by_advisory(vec![a1, a2]);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].package_name.as_deref(), Some("axios"));
+    }
+
+    #[test]
+    fn dedupe_preserves_per_package_versions_for_merged_advisory() {
+        // One advisory hitting two packages with DIFFERENT versions must preserve
+        // EACH package's real (installed, fix) pair. The comma-joined display
+        // `package_name` + single version fields are lossy for merged rows; the
+        // factual-version check reads `merged_package_versions` instead so it can
+        // validate every package, not just the first merged one (bug_004).
+        let mut a1 = make_test_preemption_alert("Clerk auth bypass", "high", "x");
+        a1.package_name = Some("@clerk/clerk-react".into());
+        a1.installed_version = Some("5.0.0".into());
+        a1.fixed_version = Some("5.0.1".into());
+        a1.advisory_ids = vec!["GHSA-w24r-5266-9c3c".into()];
+        let mut a2 = make_test_preemption_alert("Clerk auth bypass", "high", "x");
+        a2.package_name = Some("@clerk/shared".into());
+        a2.installed_version = Some("2.0.0".into());
+        a2.fixed_version = Some("2.0.1".into());
+        a2.advisory_ids = vec!["GHSA-w24r-5266-9c3c".into()];
+
+        let out = dedupe_alerts_by_advisory(vec![a1, a2]);
+        assert_eq!(out.len(), 1, "same advisory collapses to one row");
+        let merged = &out[0].merged_package_versions;
+        assert_eq!(merged.len(), 2, "both packages' versions preserved");
+        let react = merged
+            .iter()
+            .find(|m| m.package_name == "@clerk/clerk-react")
+            .expect("react package preserved");
+        assert_eq!(react.installed_version.as_deref(), Some("5.0.0"));
+        assert_eq!(react.fixed_version.as_deref(), Some("5.0.1"));
+        let shared = merged
+            .iter()
+            .find(|m| m.package_name == "@clerk/shared")
+            .expect("shared package preserved");
+        assert_eq!(shared.installed_version.as_deref(), Some("2.0.0"));
+        assert_eq!(shared.fixed_version.as_deref(), Some("2.0.1"));
+    }
+
+    #[test]
+    fn dedupe_single_package_alert_has_no_merged_versions() {
+        // A non-merged alert keeps merged_package_versions empty — the fact
+        // builder then reads its own faithful package_name/version fields.
+        let mut a1 = make_test_preemption_alert("axios advisory", "high", "x");
+        a1.package_name = Some("axios".into());
+        a1.advisory_ids = vec!["GHSA-aaaa-bbbb-cccc".into()];
+        let out = dedupe_alerts_by_advisory(vec![a1]);
+        assert_eq!(out.len(), 1);
+        assert!(out[0].merged_package_versions.is_empty());
+    }
+
+    #[test]
+    fn is_abstention_synthesis_anchors_on_canonical_first_line() {
+        // Canonical abstentions: both dash forms, both wordings, any case, plus a
+        // telemetry tail on a later line.
+        assert!(is_abstention_synthesis(
+            "Low signal -- no noteworthy intelligence overnight."
+        ));
+        assert!(is_abstention_synthesis(
+            "Low signal \u{2014} no new intelligence overnight."
+        ));
+        assert!(is_abstention_synthesis(
+            "Low signal \u{2013} no noteworthy intelligence overnight."
+        ));
+        assert!(is_abstention_synthesis(
+            "LOW SIGNAL - NO NOTEWORTHY INTELLIGENCE OVERNIGHT."
+        ));
+        assert!(is_abstention_synthesis(
+            "Low signal -- no noteworthy intelligence overnight.\n\n(25 items scanned, synthesis skipped)"
+        ));
+        // NOT abstentions — the two false positives the old lax detector tripped:
+        // "no noteworthy" used mid-prose (bug_018) ...
+        assert!(!is_abstention_synthesis(
+            "PRIORITY: patch axios; no noteworthy followups on Tokio yet. Three things to know."
+        ));
+        // ... and a real synthesis that merely opens with the words "low signal".
+        assert!(!is_abstention_synthesis(
+            "Low signal strength on the wifi today, but plenty to report."
+        ));
+        assert!(!is_abstention_synthesis(
+            "Three things to know: patch axios, watch Tokio, ship the brief."
+        ));
+        assert!(!is_abstention_synthesis(""));
     }
 
     #[test]
@@ -4112,6 +4306,7 @@ mod tests {
             source_url: Some("https://nvd.nist.gov/vuln/detail/CVE-2020-28500".into()),
             suggested_actions: vec!["Update lodash to >= 4.17.21".into()],
             scope: None,
+            merged_package_versions: Vec::new(),
         };
 
         let json = serde_json::to_value(&alert).expect("serialize");

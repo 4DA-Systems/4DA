@@ -1508,7 +1508,7 @@ fn format_dep_display_name(package_name: &str, ecosystem: &str) -> String {
         "go" | "golang" => "Go",
         "java" | "kotlin" | "maven" => "Maven",
         "csharp" | "dotnet" | "nuget" => "NuGet",
-        "php" | "packagist" => "Packagist",
+        "php" | "packagist" | "composer" => "Packagist",
         "ruby" | "rubygems" => "RubyGems",
         "dart" | "flutter" | "pub" => "Pub",
         "swift" | "cocoapods" => "CocoaPods",
@@ -3699,6 +3699,21 @@ mod tests {
         assert_eq!(Urgency::High.min(Urgency::Critical), Urgency::Critical);
         assert_eq!(Urgency::High.min(Urgency::Medium), Urgency::High);
         assert_eq!(Urgency::High.min(Urgency::Watch), Urgency::High);
+    }
+
+    #[test]
+    fn format_dep_display_name_maps_composer_to_packagist() {
+        // "composer" is a first-class Packagist alias — parity with
+        // ecosystem_source_types — so it must render "(Packagist)", not fall
+        // through to the generic "(composer)" (bug_005).
+        assert_eq!(
+            format_dep_display_name("laravel/framework", "composer"),
+            "laravel/framework (Packagist)"
+        );
+        assert_eq!(
+            format_dep_display_name("monolog/monolog", "php"),
+            "monolog/monolog (Packagist)"
+        );
     }
 
     // ─── Free teaser (tier rebalance) ────────────────────────────────
@@ -5985,6 +6000,7 @@ mod tests {
                 source_url: Some("https://rustsec.org/advisories/CVE-2026-9999".into()),
                 suggested_actions: vec!["Upgrade serde to 1.0.201".into()],
                 scope: None,
+                merged_package_versions: Vec::new(),
             }],
             blind_spot_score: None,
             labels: None,

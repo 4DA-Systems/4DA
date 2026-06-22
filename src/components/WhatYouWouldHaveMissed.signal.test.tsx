@@ -1,19 +1,24 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect } from 'vitest';
 
-import { classifySignal, getSignalLabel, getSignalColor } from './WhatYouWouldHaveMissed';
+import { classifySignal, getSignalLabel, getSignalColor, findMostCriticalSave } from './WhatYouWouldHaveMissed';
 import type { SourceRelevance } from '../types/analysis';
 
-// Minimal SourceRelevance factory — only the fields the label/color logic reads.
+// Minimal SourceRelevance factory — only the fields the label/color + chooser read.
 function item(partial: {
   signal_type?: string | null;
   content_type?: string | null;
+  dep_match_score?: number;
+  top_score?: number;
 }): SourceRelevance {
   return {
     title: 'x',
-    top_score: 0.9,
+    top_score: partial.top_score ?? 0.9,
     signal_type: partial.signal_type ?? null,
-    score_breakdown: { content_type: partial.content_type ?? null },
+    score_breakdown: {
+      content_type: partial.content_type ?? null,
+      dep_match_score: partial.dep_match_score ?? 0,
+    },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any as SourceRelevance;
 }
@@ -59,5 +64,25 @@ describe('WhatYouWouldHaveMissed signal classification', () => {
     expect(classifySignal(it_)).toBeNull();
     expect(getSignalLabel(it_)).toBeNull();
     expect(getSignalColor(it_)).toBe(GOLD);
+  });
+});
+
+describe('findMostCriticalSave hero selection', () => {
+  it('picks a dep-confirmed content-vocab CVE over a lower-priority tool item (the bug)', () => {
+    // Real CVEs arrive as content_type="security_advisory" with signal_type unset.
+    // The old chooser compared the signal-vocab string against both fields, so it
+    // skipped this at the security tier and a Show HN won the hero card (bug_001).
+    const cve = item({ content_type: 'security_advisory', signal_type: null, dep_match_score: 0.4, top_score: 0.72 });
+    const showHn = item({ signal_type: 'tool_discovery', content_type: 'show_and_tell', dep_match_score: 0, top_score: 0.55 });
+    expect(findMostCriticalSave([showHn, cve])).toBe(cve);
+  });
+
+  it('still requires dependency confirmation for security items', () => {
+    // A security advisory with no dep match must NOT be hero'd just for being
+    // security — an irrelevant CVE as hero card destroys trust. It loses to a
+    // (dep-unconstrained) tool item in the priority walk.
+    const irrelevantCve = item({ content_type: 'security_advisory', dep_match_score: 0, top_score: 0.9 });
+    const tool = item({ signal_type: 'tool_discovery', dep_match_score: 0, top_score: 0.5 });
+    expect(findMostCriticalSave([irrelevantCve, tool])).toBe(tool);
   });
 });
