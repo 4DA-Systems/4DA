@@ -1605,9 +1605,7 @@ fn classify_signals(
             // Prevents single-subterm matches (e.g. "react" from "sentry-react") from
             // triggering misleading Critical alerts.
             if !matched_deps.is_empty() {
-                let has_strong_dep = matched_deps
-                    .iter()
-                    .any(|d| !d.is_dev && d.confidence >= 0.40);
+                let has_strong_dep = dependencies::is_strongly_grounded(matched_deps);
                 if c.signal_type == signals::SignalType::SecurityAlert && has_strong_dep {
                     c.priority = signals::SignalPriority::Critical;
                     // Use the highest-confidence match for the alert name
@@ -1653,9 +1651,7 @@ fn classify_signals(
             // TRUST GATE: Critical requires verified dependency evidence.
             // If signal classifier set Critical but there's no strong direct dep match, downgrade.
             if c.priority == signals::SignalPriority::Critical {
-                let has_strong_direct_dep = matched_deps
-                    .iter()
-                    .any(|d| !d.is_dev && d.confidence >= 0.40 && d.is_direct);
+                let has_strong_direct_dep = dependencies::is_strongly_grounded_direct(matched_deps);
                 if !has_strong_direct_dep {
                     c.priority = signals::SignalPriority::Alert;
                     if matched_deps.is_empty() {
@@ -2114,7 +2110,7 @@ pub(crate) fn score_item(
         // names this dependency in the same ecosystem.
         let advisory_ecosystems = extract_advisory_ecosystems(input.content);
         let has_strong_dep = raw.matched_deps.iter().any(|d| {
-            if d.is_dev || d.confidence < 0.40 {
+            if !dependencies::is_strong_grounding_match(d) {
                 return false;
             }
             if advisory_ecosystems.is_empty() {
@@ -2197,6 +2193,7 @@ pub(crate) fn score_item(
         confirmation_mult,
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names,
+        strongly_grounded: dependencies::is_strongly_grounded(&raw.matched_deps),
         domain_relevance: raw.domain_relevance,
         content_quality_mult,
         novelty_mult,

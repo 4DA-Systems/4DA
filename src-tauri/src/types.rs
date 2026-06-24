@@ -80,6 +80,12 @@ pub struct ScoreBreakdown {
     /// Package names from user's dependency graph that matched this content
     #[serde(default)]
     pub matched_deps: Vec<String>,
+    /// Canonical grounding verdict: true when at least one matched dependency is
+    /// a strong, non-dev, non-ambiguous edge (confidence >= the strong floor).
+    /// This is the SINGLE source of truth the frontend evidence pool and the
+    /// Critical gate both read — do not re-derive grounding from `matched_deps`.
+    #[serde(default)]
+    pub strongly_grounded: bool,
     /// Domain relevance (0.15 off-domain to 1.0 primary stack match)
     #[serde(default = "default_domain_relevance")]
     pub domain_relevance: f32,

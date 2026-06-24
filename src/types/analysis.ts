@@ -62,6 +62,12 @@ export interface ScoreBreakdown {
   dep_match_score?: number;
   /** Package names from user's dependency graph that matched this content */
   matched_deps?: string[];
+  /**
+   * Canonical grounding verdict from the backend: true when at least one matched
+   * dependency is a strong, non-dev, non-ambiguous edge. The single source of
+   * truth for "Affects You" placement — do not re-derive from matched_deps.length.
+   */
+  strongly_grounded?: boolean;
   /** Domain relevance (0.15 off-domain to 1.0 primary stack match) */
   domain_relevance?: number;
   /** Content quality multiplier (0.5 clickbait to 1.2 authoritative) */

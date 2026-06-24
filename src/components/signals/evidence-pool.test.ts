@@ -16,11 +16,33 @@ function item(partial: Partial<SourceRelevance>): SourceRelevance {
 }
 
 describe('computeEvidencePool', () => {
-  it('routes a dependency-matched item to Affects You', () => {
-    const r = item({ score_breakdown: { matched_deps: ['react'] } as never });
+  it('routes a strongly-grounded item to Affects You', () => {
+    const r = item({
+      score_breakdown: { strongly_grounded: true, matched_deps: ['react'] } as never,
+    });
     expect(isGrounded(r)).toBe(true);
     expect(computeEvidencePool(r)).toBe('affects_you');
     expect(groundingDeps(r)).toEqual(['react']);
+  });
+
+  it('does NOT ground a matched_deps-only item that the backend judged not strong', () => {
+    // The windows-sys phantom: a bare `windows` subterm hit on a "Windows
+    // 0-day" OS headline populates matched_deps, but strongly_grounded is false.
+    // matched_deps.length must no longer drive placement.
+    const r = item({
+      score_breakdown: {
+        matched_deps: ['windows-sys'],
+        strongly_grounded: false,
+        domain_relevance: 0.2,
+      } as never,
+    });
+    expect(isGrounded(r)).toBe(false);
+    expect(computeEvidencePool(r)).toBe('ambient');
+  });
+
+  it('treats a missing strongly_grounded flag (legacy/un-rescored item) as ungrounded', () => {
+    const r = item({ score_breakdown: { matched_deps: ['react'], domain_relevance: 0.2 } as never });
+    expect(isGrounded(r)).toBe(false);
   });
 
   it('routes a confirmed advisory (is_critical_alert) to Affects You even with no matched_deps', () => {

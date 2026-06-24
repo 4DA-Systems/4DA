@@ -27,6 +27,13 @@ dep_match_score: number,
  */
 matched_deps: Array<string>, 
 /**
+ * Canonical grounding verdict: true when at least one matched dependency is
+ * a strong, non-dev, non-ambiguous edge (confidence >= the strong floor).
+ * This is the SINGLE source of truth the frontend evidence pool and the
+ * Critical gate both read — do not re-derive grounding from `matched_deps`.
+ */
+strongly_grounded: boolean, 
+/**
  * Domain relevance (0.15 off-domain to 1.0 primary stack match)
  */
 domain_relevance: number, 

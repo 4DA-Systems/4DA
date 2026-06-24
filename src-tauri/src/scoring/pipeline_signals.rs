@@ -58,8 +58,12 @@ pub(super) fn build_corroboration(
         }
     };
 
-    // 2. Dependency match — already computed by the pipeline
-    let dependency_match = !matched_deps.is_empty() && matched_deps.iter().any(|d| !d.is_dev);
+    // 2. Dependency match — the single canonical grounding predicate. A bare
+    //    non-dev hit is NOT enough; the classifier's Critical hard-gate trusts
+    //    this flag, so it must mean the same "strongly grounded" as the
+    //    evidence pool and the persisted link set (non-dev, confidence >= the
+    //    strong floor, non-ambiguous name).
+    let dependency_match = dependencies::is_strongly_grounded(matched_deps);
 
     // 3. Signal chain phase — detect if topics appear across multiple days
     //    (lightweight chain detection without the full detect_chains() machinery)

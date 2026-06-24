@@ -47,6 +47,42 @@ pub(crate) enum VersionDelta {
     Unknown,
 }
 
+/// Confidence at or above which a single non-dev dependency match is "strong"
+/// enough to ground an item in the user's stack. A full-package-name title hit
+/// scores 0.5; an ambiguous subterm with nearby language context scores ~0.4;
+/// bare prose coincidences sit below. 0.40 is the trust floor shared by EVERY
+/// grounding layer — the Critical gate, the evidence-pool "Affects You"
+/// placement, and the persisted-link reconciler — so they all agree on the
+/// single question "is this item grounded in the user's dependencies?".
+pub(crate) const STRONG_GROUNDING_CONFIDENCE: f32 = 0.40;
+
+/// True when `d` is a trustworthy grounding edge on its own: a non-dev match at
+/// or above the strong-confidence floor whose package name is not so word-like
+/// that a bare text hit can't be trusted. Mirrors the persistence-layer denylist
+/// (`is_ambiguous_package_name`) so the gate, the pool, and the persisted
+/// `source_item_dependencies` set never disagree about what counts as grounded.
+pub(crate) fn is_strong_grounding_match(d: &DepMatch) -> bool {
+    !d.is_dev
+        && d.confidence >= STRONG_GROUNDING_CONFIDENCE
+        && !crate::package_ambiguity::is_ambiguous_package_name(&d.package_name)
+}
+
+/// The single canonical "is this item grounded in the user's stack?" predicate.
+/// True when any matched dependency is a trustworthy grounding edge. Shared by
+/// the Critical-signal gate (`pipeline_signals`/`pipeline_v2`), the evidence
+/// pool, and the persisted score breakdown so grounding is computed ONE way.
+pub(crate) fn is_strongly_grounded(deps: &[DepMatch]) -> bool {
+    deps.iter().any(is_strong_grounding_match)
+}
+
+/// As [`is_strongly_grounded`], but additionally requires the edge to be a
+/// DIRECT dependency — the trust floor for a Critical alert. A CVE in a package
+/// the user chose directly is urgent; one reached only transitively is watch-level.
+pub(crate) fn is_strongly_grounded_direct(deps: &[DepMatch]) -> bool {
+    deps.iter()
+        .any(|d| is_strong_grounding_match(d) && d.is_direct)
+}
+
 /// Common English words AND generic tech stems that collide with package names.
 /// These require nearby language-context words to match.
 ///
@@ -238,6 +274,20 @@ const COMMON_ENGLISH_WORDS: &[&str] = &[
     "extra",
     "super",
     "auto",
+    // OS / platform proper nouns. These are also real package names or subterms
+    // of platform crates (`windows`/`windows-sys`, `linux-*`, `android-*`), but
+    // they appear constantly in titles as the OPERATING SYSTEM, not the package
+    // ("Windows 0-day", "Linux kernel CVE"). A bare subterm hit against such a
+    // title falsely grounded `windows-sys` to an OS advisory (the 2026-06-24
+    // dogfood case). Requiring nearby language context ("crate", "cargo",
+    // "package") lets a genuine `windows-sys` advisory still ground while the OS
+    // headline does not. The full normalized name (`windows-sys`) still matches
+    // directly — only the bare proper-noun subterm is gated.
+    "windows",
+    "linux",
+    "android",
+    "macos",
+    "unix",
 ];
 
 /// Language-context words that disambiguate package names from English
@@ -1146,6 +1196,110 @@ mod tests {
             "older-version content ({older_score}) must score below current-version ({current_score})"
         );
         assert_eq!(older[0].version_delta, VersionDelta::OlderMajor);
+    }
+
+    // ── Canonical grounding predicate ─────────────────────────────────────
+
+    /// Build a DepMatch for predicate tests without going through matching.
+    fn grounding_match(name: &str, confidence: f32, is_dev: bool, is_direct: bool) -> DepMatch {
+        DepMatch {
+            package_name: name.to_string(),
+            confidence,
+            version_delta: VersionDelta::Unknown,
+            is_dev,
+            is_direct,
+            version: None,
+            ecosystem: "rust".to_string(),
+        }
+    }
+
+    #[test]
+    fn strong_grounding_requires_nondev_confident_unambiguous() {
+        // A direct, confident, distinctively-named match grounds.
+        assert!(is_strongly_grounded(&[grounding_match(
+            "axios", 0.5, false, true
+        )]));
+        assert!(is_strongly_grounded_direct(&[grounding_match(
+            "axios", 0.5, false, true
+        )]));
+
+        // Dev-only matches never ground (a CVE in a test harness isn't urgent).
+        assert!(!is_strongly_grounded(&[grounding_match(
+            "axios", 0.9, true, true
+        )]));
+
+        // Below the strong-confidence floor → not grounded.
+        assert!(!is_strongly_grounded(&[grounding_match(
+            "axios", 0.30, false, true
+        )]));
+
+        // Word-like / ambiguous package names need ecosystem proof the bare
+        // match doesn't carry — they must NOT ground on confidence alone. This
+        // is the term that keeps the gate in lockstep with the persisted set.
+        assert!(!is_strongly_grounded(&[grounding_match(
+            "config", 0.9, false, true
+        )]));
+        assert!(!is_strongly_grounded(&[grounding_match(
+            "core", 0.9, false, true
+        )]));
+    }
+
+    #[test]
+    fn strong_grounding_direct_excludes_transitive() {
+        // A strong but TRANSITIVE edge grounds in general, but not at the
+        // Critical (direct-only) trust floor.
+        let transitive = [grounding_match("openssl-sys", 0.6, false, false)];
+        assert!(is_strongly_grounded(&transitive));
+        assert!(!is_strongly_grounded_direct(&transitive));
+    }
+
+    #[test]
+    fn windows_os_headline_does_not_strongly_ground_windows_sys() {
+        // The 2026-06-24 dogfood regression: the `windows-sys` crate matched
+        // an OS-level "Windows 0-day" headline via the bare `windows` subterm
+        // and was wrongly surfaced as a Critical affecting the user's stack.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.dependency_info.insert(
+            "windows-sys".to_string(),
+            DepInfo {
+                package_name: "windows-sys".to_string(),
+                version: Some("0.52.0".to_string()),
+                is_dev: false,
+                is_direct: true,
+                // Mirrors extract_search_terms: full name + the bare subterms.
+                search_terms: vec![
+                    "windows-sys".to_string(),
+                    "windows".to_string(),
+                    "sys".to_string(),
+                ],
+                ecosystem: "rust".to_string(),
+            },
+        );
+
+        // OS headline, no package/ecosystem context anywhere → must NOT ground.
+        let (os_matches, _) = match_dependencies(
+            "Windows 0-day exploit actively used in the wild",
+            "Attackers are targeting the Windows operating system kernel.",
+            &[],
+            &ace_ctx,
+        );
+        assert!(
+            !is_strongly_grounded(&os_matches),
+            "an OS 'Windows 0-day' headline must not strongly ground the windows-sys crate, got {os_matches:?}"
+        );
+
+        // A genuine advisory naming the crate WITH ecosystem context still
+        // grounds — the fix preserves real grounding, it doesn't blanket-block.
+        let (crate_matches, _) = match_dependencies(
+            "windows-sys 0.52 RUSTSEC advisory: unsound API",
+            "The windows-sys crate on crates.io has a vulnerability; cargo update.",
+            &[],
+            &ace_ctx,
+        );
+        assert!(
+            is_strongly_grounded(&crate_matches),
+            "a real windows-sys crate advisory must still strongly ground, got {crate_matches:?}"
+        );
     }
 
     #[test]
