@@ -173,7 +173,7 @@ pub fn context_hash(ctx: &PersonalizationContext) -> String {
     let json = serde_json::to_string(ctx).unwrap_or_default();
     let mut hasher = Sha256::new();
     hasher.update(json.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 // ============================================================================

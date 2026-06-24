@@ -20,7 +20,7 @@ pub(super) fn content_hash(text: &str) -> String {
     let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut hasher = Sha256::new();
     hasher.update(normalized.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 /// Look up a cached translation.

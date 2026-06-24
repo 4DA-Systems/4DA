@@ -116,7 +116,7 @@ fn generate_hex_key() -> String {
 
     // Random bytes from the OS (primary entropy source)
     let mut random_bytes = [0u8; 32];
-    if getrandom::getrandom(&mut random_bytes).is_ok() {
+    if getrandom::fill(&mut random_bytes).is_ok() {
         hasher.update(&random_bytes);
     }
 
