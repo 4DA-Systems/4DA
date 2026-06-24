@@ -107,7 +107,7 @@ pub fn analysis_to_multiplier(analysis: &ContentAnalysis, is_senior_audience: bo
 pub fn content_hash(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 // =============================================================================

@@ -93,7 +93,7 @@ fn signing_seed() -> Option<[u8; 32]> {
         }
         // First run: generate, persist to the keychain, publish the public key.
         let mut seed = [0u8; 32];
-        if getrandom::getrandom(&mut seed).is_err() {
+        if getrandom::fill(&mut seed).is_err() {
             warn!(target: "4da::engine_runs", "No CSPRNG available — engine_runs receipts will be unsigned");
             return None;
         }

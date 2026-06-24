@@ -75,10 +75,10 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 sqlite-vec = "0.1"
 
 # Hashing for deduplication
-sha2 = "0.10"
-hmac = "0.12"
+sha2 = "0.11"
+hmac = "0.13"
 hex = "0.4"
-getrandom = "0.2"
+getrandom = "0.4"
 
 # Timestamps
 chrono = { version = "0.4", features = ["serde"] }
@@ -145,7 +145,7 @@ x509-cert = { version = "0.3.0-pre", optional = true }
 # Team sync — E2E encrypted metadata relay (AD-023)
 chacha20poly1305 = "0.10"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
-hkdf = "0.12"
+hkdf = "0.13"
 uuid = { version = "1", features = ["v4", "serde"] }
 rand = "0.8"
 zeroize = "1"
@@ -159,7 +159,7 @@ ammonia = "4"
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_System_Console", "Win32_System_Memory", "Win32_UI_Shell", "Win32_System_Power", "Win32_System_SystemInformation"] }
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Memory", "Win32_UI_Shell", "Win32_System_Power", "Win32_System_SystemInformation"] }
 winreg = "0.55"
 tauri-winrt-notification = "0.6"
 

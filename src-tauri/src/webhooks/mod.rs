@@ -38,7 +38,7 @@ mod types;
 mod tests;
 
 use anyhow::{Context, Result};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use rusqlite::Connection;
 use sha2::Sha256;
 
