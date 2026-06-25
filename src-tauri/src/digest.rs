@@ -162,7 +162,7 @@ impl Digest {
 
         // Sort groups by item count (largest first)
         let mut sorted: Vec<_> = groups.into_iter().collect();
-        sorted.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+        sorted.sort_by_key(|b| std::cmp::Reverse(b.1.len()));
         sorted
     }
 
@@ -201,7 +201,7 @@ impl Digest {
 
         // Get top topics
         let mut top_topics: Vec<(String, usize)> = topic_counts.into_iter().collect();
-        top_topics.sort_by(|a, b| b.1.cmp(&a.1));
+        top_topics.sort_by_key(|b| std::cmp::Reverse(b.1));
         top_topics.truncate(5);
 
         // Calculate average relevance

@@ -5,7 +5,7 @@ description = "4DA - All signal. No feed."
 authors = ["4DA Systems Pty Ltd"]
 license = "FSL-1.1-Apache-2.0"
 edition = "2021"
-rust-version = "1.93"
+rust-version = "1.95"
 default-run = "fourda"
 publish = false
 
@@ -119,7 +119,7 @@ semver = "1"
 tauri-plugin-autostart = "2"
 
 # System hardware detection (RAM, CPU) for model recommendations
-sysinfo = { version = "0.38", default-features = false, features = ["system"] }
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 # AI agent introspection & control (MCP server, zero-cost in release builds)
 # Caret-compatible (not "=") so patch/minor Victauri releases flow in via

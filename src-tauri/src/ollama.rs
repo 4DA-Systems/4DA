@@ -107,7 +107,7 @@ pub(crate) async fn warm_model(model: &str, base_url: &str, app: &AppHandle) {
 
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
-        .timeout(std::time::Duration::from_secs(120))
+        .timeout(std::time::Duration::from_mins(2))
         .build()
         .unwrap_or_else(|e| {
             warn!("Failed to build HTTP client: {e}, using default");

@@ -244,7 +244,7 @@ impl GitAnalyzer {
             .filter(|(_, &count)| count > 0)
             .map(|(h, &count)| (h as u8, count))
             .collect();
-        peak_hour_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        peak_hour_pairs.sort_by_key(|b| std::cmp::Reverse(b.1));
         let peak_hours: Vec<u8> = peak_hour_pairs
             .into_iter()
             .take(5)

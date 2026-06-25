@@ -201,7 +201,7 @@ pub(crate) async fn run_cargo_audit(project_path: &Path) -> Vec<LocalAuditFindin
     }
 
     // Run cargo audit
-    let result = tokio::time::timeout(Duration::from_secs(60), async {
+    let result = tokio::time::timeout(Duration::from_mins(1), async {
         let mut cmd = Command::new("cargo");
         cmd.args(["audit", "--json"]).current_dir(project_path);
         suppress_console_window(&mut cmd);

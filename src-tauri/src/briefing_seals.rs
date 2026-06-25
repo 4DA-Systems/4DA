@@ -417,7 +417,7 @@ fn count_topics(topics: &[String]) -> Vec<(String, usize)> {
         *counts.entry(t.to_lowercase()).or_default() += 1;
     }
     let mut sorted: Vec<(String, usize)> = counts.into_iter().collect();
-    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted.sort_by_key(|b| std::cmp::Reverse(b.1));
     sorted
 }
 

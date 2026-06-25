@@ -1983,36 +1983,34 @@ pub(crate) fn extract_imports_from_source(path: &Path) -> Vec<String> {
                 }
             }
             // TypeScript/JavaScript: import ... from 'pkg', import 'pkg'
-            "ts" | "tsx" | "js" | "jsx" => {
-                if trimmed.starts_with("import ") {
-                    // import { x } from 'pkg' or import x from 'pkg'
-                    if let Some(from_part) = trimmed.split(" from ").nth(1) {
-                        let pkg = from_part
-                            .trim()
-                            .trim_matches(|c| c == '\'' || c == '"' || c == ';');
+            "ts" | "tsx" | "js" | "jsx" if trimmed.starts_with("import ") => {
+                // import { x } from 'pkg' or import x from 'pkg'
+                if let Some(from_part) = trimmed.split(" from ").nth(1) {
+                    let pkg = from_part
+                        .trim()
+                        .trim_matches(|c| c == '\'' || c == '"' || c == ';');
+                    if !pkg.starts_with('.') && !pkg.starts_with('/') && !pkg.is_empty() {
+                        // Extract package name (handle scoped: @scope/pkg)
+                        let name = if pkg.starts_with('@') {
+                            pkg.splitn(3, '/').take(2).collect::<Vec<_>>().join("/")
+                        } else {
+                            pkg.split('/').next().unwrap_or(pkg).to_string()
+                        };
+                        imports.insert(name);
+                    }
+                }
+                // import 'pkg' (side-effect import)
+                else if let Some(start) = trimmed.find('\'').or_else(|| trimmed.find('"')) {
+                    let rest = &trimmed[start + 1..];
+                    if let Some(end) = rest.find('\'').or_else(|| rest.find('"')) {
+                        let pkg = &rest[..end];
                         if !pkg.starts_with('.') && !pkg.starts_with('/') && !pkg.is_empty() {
-                            // Extract package name (handle scoped: @scope/pkg)
                             let name = if pkg.starts_with('@') {
                                 pkg.splitn(3, '/').take(2).collect::<Vec<_>>().join("/")
                             } else {
                                 pkg.split('/').next().unwrap_or(pkg).to_string()
                             };
                             imports.insert(name);
-                        }
-                    }
-                    // import 'pkg' (side-effect import)
-                    else if let Some(start) = trimmed.find('\'').or_else(|| trimmed.find('"')) {
-                        let rest = &trimmed[start + 1..];
-                        if let Some(end) = rest.find('\'').or_else(|| rest.find('"')) {
-                            let pkg = &rest[..end];
-                            if !pkg.starts_with('.') && !pkg.starts_with('/') && !pkg.is_empty() {
-                                let name = if pkg.starts_with('@') {
-                                    pkg.splitn(3, '/').take(2).collect::<Vec<_>>().join("/")
-                                } else {
-                                    pkg.split('/').next().unwrap_or(pkg).to_string()
-                                };
-                                imports.insert(name);
-                            }
                         }
                     }
                 }
@@ -2037,17 +2035,15 @@ pub(crate) fn extract_imports_from_source(path: &Path) -> Vec<String> {
                 }
             }
             // Go: import "pkg"
-            "go" => {
-                if trimmed.starts_with("import ") || trimmed.starts_with('"') {
-                    if let Some(start) = trimmed.find('"') {
-                        let rest = &trimmed[start + 1..];
-                        if let Some(end) = rest.find('"') {
-                            let pkg = &rest[..end];
-                            // Extract last path segment as package name
-                            if let Some(name) = pkg.rsplit('/').next() {
-                                if !name.is_empty() {
-                                    imports.insert(name.to_string());
-                                }
+            "go" if (trimmed.starts_with("import ") || trimmed.starts_with('"')) => {
+                if let Some(start) = trimmed.find('"') {
+                    let rest = &trimmed[start + 1..];
+                    if let Some(end) = rest.find('"') {
+                        let pkg = &rest[..end];
+                        // Extract last path segment as package name
+                        if let Some(name) = pkg.rsplit('/').next() {
+                            if !name.is_empty() {
+                                imports.insert(name.to_string());
                             }
                         }
                     }

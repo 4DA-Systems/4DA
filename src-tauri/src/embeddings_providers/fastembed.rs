@@ -92,7 +92,7 @@ fn ensure_ort_runtime(
 
     let archive_path = ort_dir.join("ort_download.tmp");
     let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(600))
+        .timeout(std::time::Duration::from_mins(10))
         .build()
         .map_err(|e| FourDaError::from(format!("HTTP client init: {e}")))?;
     let mut response = client

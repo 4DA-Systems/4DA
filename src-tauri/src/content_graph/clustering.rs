@@ -83,7 +83,7 @@ pub(super) fn assign_cluster_labels(items: &[RawItem], clusters: &mut [GraphClus
         }
 
         let mut words: Vec<(String, usize)> = word_freq.into_iter().collect();
-        words.sort_by(|a, b| b.1.cmp(&a.1));
+        words.sort_by_key(|b| std::cmp::Reverse(b.1));
         cluster.label = words
             .iter()
             .take(3)

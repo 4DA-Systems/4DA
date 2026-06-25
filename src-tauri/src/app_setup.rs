@@ -1219,7 +1219,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // This is the ONLY timer in the void engine - everything else is change-driven
     let app_handle_staleness = app_handle.clone();
     tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        let mut interval = tokio::time::interval(std::time::Duration::from_mins(1));
         loop {
             interval.tick().await;
             if let Ok(db) = get_database() {
@@ -1493,7 +1493,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     // number of navigates — instead of thrashing the webview
                     // every 3s for 5 minutes.
                     let recovery_began = std::time::Instant::now();
-                    let recovery_max = std::time::Duration::from_secs(120);
+                    let recovery_max = std::time::Duration::from_mins(2);
                     let max_navigates = 4_u32;
                     let mut consecutive_navigates = 0_u32;
                     let mut backoff = std::time::Duration::from_secs(3);
@@ -1592,9 +1592,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             // Boot grace: let the rest of startup finish before spinning
             // up the first fit. Prevents lock contention on DB during the
             // first 5 minutes when other tasks are aggressively reading.
-            tokio::time::sleep(std::time::Duration::from_secs(5 * 60)).await;
+            tokio::time::sleep(std::time::Duration::from_mins(5)).await;
 
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 3600));
+            let mut interval = tokio::time::interval(std::time::Duration::from_hours(24));
             // First tick: fires immediately after the sleep (tokio default).
             // Subsequent ticks: aligned 24h apart. If the app is suspended
             // mid-tick, Tokio catches up on wake — we don't over-fit

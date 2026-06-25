@@ -273,7 +273,7 @@ pub(crate) async fn score_items_full(
         },
     );
     match tokio::time::timeout(
-        std::time::Duration::from_secs(120),
+        std::time::Duration::from_mins(2),
         crate::analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx),
     )
     .await

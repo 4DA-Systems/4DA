@@ -390,7 +390,7 @@ async fn analyze_cached_content_inner(
         0,
     );
     match tokio::time::timeout(
-        std::time::Duration::from_secs(120),
+        std::time::Duration::from_mins(2),
         crate::source_fetching::fill_cache_background(app),
     )
     .await
@@ -599,7 +599,7 @@ async fn analyze_cached_content_inner(
             },
         );
         match tokio::time::timeout(
-            std::time::Duration::from_secs(120),
+            std::time::Duration::from_mins(2),
             analysis_rerank::apply_llm_reranking(app, &mut new_results, &scoring_ctx),
         )
         .await

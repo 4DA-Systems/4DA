@@ -215,7 +215,7 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
             .filter(|(_, &count)| count > 0)
             .map(|(h, &count)| (h as u8, count))
             .collect();
-        hour_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        hour_pairs.sort_by_key(|b| std::cmp::Reverse(b.1));
         let aggregate_peak_hours: Vec<u8> =
             hour_pairs.into_iter().take(5).map(|(h, _)| h).collect();
         if !aggregate_peak_hours.is_empty() {
@@ -385,15 +385,11 @@ pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
     let mut key_packages: Vec<String> = Vec::new();
     for t in &tech {
         match t.category {
-            ace::TechCategory::Language => {
-                if !languages.contains(&t.name) {
-                    languages.push(t.name.clone());
-                }
+            ace::TechCategory::Language if !languages.contains(&t.name) => {
+                languages.push(t.name.clone());
             }
-            ace::TechCategory::Framework => {
-                if !frameworks.contains(&t.name) {
-                    frameworks.push(t.name.clone());
-                }
+            ace::TechCategory::Framework if !frameworks.contains(&t.name) => {
+                frameworks.push(t.name.clone());
             }
             ace::TechCategory::Library => {
                 let ev_str = t.evidence.join(" ").to_lowercase();

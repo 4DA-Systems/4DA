@@ -79,7 +79,7 @@ mod rate_limit {
         let mut attempts = ACTIVATION_ATTEMPTS.lock();
         let now = std::time::Instant::now();
         let one_minute_ago = now
-            .checked_sub(std::time::Duration::from_secs(60))
+            .checked_sub(std::time::Duration::from_mins(1))
             .unwrap_or(now);
 
         // Remove attempts older than 1 minute

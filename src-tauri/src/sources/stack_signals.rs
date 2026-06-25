@@ -60,16 +60,17 @@ pub(crate) fn detect_from_conn(conn: &rusqlite::Connection) -> StackSignals {
             continue;
         }
         match category.as_str() {
-            "language" => {
-                if signals.languages.len() < MAX_LANGUAGES && !signals.languages.contains(&norm) {
-                    signals.languages.push(norm);
-                }
+            "language"
+                if signals.languages.len() < MAX_LANGUAGES
+                    && !signals.languages.contains(&norm) =>
+            {
+                signals.languages.push(norm);
             }
-            "framework" => {
-                if signals.frameworks.len() < MAX_FRAMEWORKS && !signals.frameworks.contains(&norm)
-                {
-                    signals.frameworks.push(norm);
-                }
+            "framework"
+                if signals.frameworks.len() < MAX_FRAMEWORKS
+                    && !signals.frameworks.contains(&norm) =>
+            {
+                signals.frameworks.push(norm);
             }
             _ => {}
         }
