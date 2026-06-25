@@ -597,6 +597,7 @@ pub(crate) fn score_item(
         confirmation_mult,
         dep_match_score,
         matched_deps: matched_dep_names,
+        strongly_grounded: super::dependencies::is_strongly_grounded(&matched_deps),
         domain_relevance,
         content_quality_mult,
         novelty_mult: novelty.multiplier,

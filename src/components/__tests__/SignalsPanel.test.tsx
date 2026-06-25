@@ -102,8 +102,8 @@ describe('SignalsPanel', () => {
             id: 1,
             signal_priority: 'critical',
             signal_action: 'Emergency patch',
-            // Grounded: matched the user's actual dependency.
-            score_breakdown: { matched_deps: ['react'] } as never,
+            // Grounded: a strong, non-ambiguous edge to the user's dependency.
+            score_breakdown: { matched_deps: ['react'], strongly_grounded: true } as never,
           }),
         ]}
       />,
@@ -142,7 +142,7 @@ describe('SignalsPanel', () => {
             id: 1,
             signal_priority: 'critical',
             signal_action: 'CVE in your installed axios',
-            score_breakdown: { matched_deps: ['axios'] } as never,
+            score_breakdown: { matched_deps: ['axios'], strongly_grounded: true } as never,
           }),
         ]}
       />,

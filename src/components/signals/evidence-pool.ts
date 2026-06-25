@@ -32,10 +32,17 @@ export const ORBIT_DOMAIN_THRESHOLD = 0.7;
  */
 export function isGrounded(r: SourceRelevance): boolean {
   return (
+    // Independent advisory routes — a backend-confirmed CVE edge grounds the
+    // item regardless of dep-name matching (kept so a real advisory whose title
+    // doesn't name the package still surfaces).
     r.is_critical_alert === true ||
     r.applicability === 'affected' ||
     r.applicability === 'likely_affected' ||
-    (r.score_breakdown?.matched_deps?.length ?? 0) > 0
+    // Canonical dependency grounding: the backend's single verdict (strong,
+    // non-dev, non-ambiguous edge). NOT matched_deps.length — a bare word-like
+    // subterm hit (e.g. "windows" from windows-sys on a "Windows 0-day" OS
+    // headline) populates matched_deps but is not real grounding.
+    r.score_breakdown?.strongly_grounded === true
   );
 }
 
