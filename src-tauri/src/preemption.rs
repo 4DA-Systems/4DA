@@ -49,7 +49,7 @@ static PREEMPTION_FEED_CACHE: Lazy<Mutex<Option<CachedPreemptionFeed>>> =
     Lazy::new(|| Mutex::new(None));
 
 /// How long a computed feed stays fresh before the next call recomputes.
-const PREEMPTION_CACHE_TTL: Duration = Duration::from_secs(600);
+const PREEMPTION_CACHE_TTL: Duration = Duration::from_mins(10);
 
 /// Return the cached feed if it exists and is within TTL. Clones under the lock
 /// and drops the guard before returning — never held across an await point.

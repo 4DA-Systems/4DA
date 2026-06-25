@@ -121,7 +121,7 @@ pub(crate) fn analyze_convergence(
     }
 
     // Sort shared by adoption (most shared first)
-    shared.sort_by(|a, b| b.project_count.cmp(&a.project_count));
+    shared.sort_by_key(|b| std::cmp::Reverse(b.project_count));
 
     // Convergence score: ratio of shared tech instances to total
     let total_instances: usize = tech_projects.values().map(std::vec::Vec::len).sum();
@@ -203,7 +203,7 @@ pub(crate) fn find_cross_project_deps(
         .map(|((name, eco), projects)| (name, eco, projects))
         .collect();
 
-    cross.sort_by(|a, b| b.2.len().cmp(&a.2.len()));
+    cross.sort_by_key(|b| std::cmp::Reverse(b.2.len()));
     cross
 }
 

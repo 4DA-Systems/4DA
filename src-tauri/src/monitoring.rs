@@ -300,7 +300,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             state.last_check.store(seed_now, Ordering::Relaxed);
         }
 
-        let mut interval = tokio::time::interval(Duration::from_secs(60)); // Check every minute
+        let mut interval = tokio::time::interval(Duration::from_mins(1)); // Check every minute
         let mut last_wake_time = std::time::Instant::now();
         let scheduler_started_at = std::time::Instant::now();
 
@@ -332,7 +332,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
 
             // Power-aware scheduling: detect sleep/wake and stagger deferred jobs
             let elapsed_since_last = last_wake_time.elapsed();
-            let likely_woke_from_sleep = elapsed_since_last > Duration::from_secs(120);
+            let likely_woke_from_sleep = elapsed_since_last > Duration::from_mins(2);
             if likely_woke_from_sleep {
                 // System likely slept — stagger jobs to avoid CPU spike on wake
                 info!(target: "4da::monitor", elapsed_secs = elapsed_since_last.as_secs(), "Detected wake from sleep — staggering deferred jobs");

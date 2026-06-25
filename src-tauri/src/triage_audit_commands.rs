@@ -277,7 +277,7 @@ pub(crate) async fn measure_triage_recall(
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
-    keep_reason_histogram.sort_by(|a, b| b.1.cmp(&a.1));
+    keep_reason_histogram.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     Ok(TriageAuditReport {
         total_items,
