@@ -229,6 +229,7 @@ mod tests {
             confirmation_mult: 1.0,
             dep_match_score: 0.0,
             matched_deps: vec![],
+            strongly_grounded: false,
             domain_relevance: 1.0,
             content_quality_mult: 1.0,
             novelty_mult: 1.0,
