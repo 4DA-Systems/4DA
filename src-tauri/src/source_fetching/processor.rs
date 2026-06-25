@@ -339,7 +339,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                     Option<String>,
                 )> = new_items_to_embed
                     .into_iter()
-                    .zip(embeddings.into_iter())
+                    .zip(embeddings)
                     // Drop items whose embedding failed (all-zero) — EXCEPT manifest-grounded
                     // security advisories (OSV/CVE). Their relevance is the version-match to a
                     // pinned dependency, NOT embedding similarity, so dropping one for a zero/

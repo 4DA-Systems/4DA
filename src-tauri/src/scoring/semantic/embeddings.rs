@@ -85,7 +85,7 @@ pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String
             let mut cache_guard = cache.lock();
 
             let ace_conn = get_ace_engine().ok().map(|ace| ace.get_conn().clone());
-            for (topic, embedding) in batch.into_iter().zip(embeddings.into_iter()) {
+            for (topic, embedding) in batch.into_iter().zip(embeddings) {
                 if let Some(ref conn) = ace_conn {
                     if let Err(e) = ace::store_topic_embedding(conn, &topic, &embedding) {
                         tracing::warn!("Failed to store topic embedding: {e}");

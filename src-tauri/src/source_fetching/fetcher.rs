@@ -532,9 +532,7 @@ pub(crate) async fn fetch_all_sources(
             // Batch upsert: separate successful and failed embeddings
             let mut items_to_insert = Vec::new();
             let mut pending_items = Vec::new();
-            for ((item, embed_text), embedding) in
-                new_items_to_embed.into_iter().zip(embeddings.into_iter())
-            {
+            for ((item, embed_text), embedding) in new_items_to_embed.into_iter().zip(embeddings) {
                 // Decode HTML entities at ingestion time so DB always has clean text.
                 // This ensures dedup, embeddings, and display all see the same clean text.
                 let clean_title = crate::decode_html_entities(&item.title);

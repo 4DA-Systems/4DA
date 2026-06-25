@@ -52,7 +52,7 @@ impl ScoringTelemetry {
         // Log per-source breakdown if there are multiple sources
         if self.source_breakdown.len() > 1 {
             let mut sources: Vec<_> = self.source_breakdown.iter().collect();
-            sources.sort_by(|a, b| b.1 .1.cmp(&a.1 .1));
+            sources.sort_by_key(|b| std::cmp::Reverse(b.1 .1));
             let summary: Vec<String> = sources
                 .iter()
                 .map(|(src, (total, relevant))| format!("{src}={relevant}/{total}"))
