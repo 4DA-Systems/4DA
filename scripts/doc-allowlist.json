@@ -36,6 +36,7 @@
     "_comment": "Architecture references only. Audits, plans, debt logs, launch-blocking docs belong in .claude/plans/ (gitignored).",
     "files": [
       "ARCHITECTURE.md",
+      "DECISIONS.md",
       "INVARIANTS.md",
       "WISDOM.md",
       "WISDOM-REFERENCE.md",
