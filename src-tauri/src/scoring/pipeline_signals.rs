@@ -395,3 +395,146 @@ pub(super) fn compute_quality_composite(
         stack_competing_mult,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::adjust_dna_for_experience;
+    use crate::content_dna::ContentType;
+
+    /// Float comparison helper — experience adjustments are exact products,
+    /// but we compare with an epsilon to stay robust to f32 representation.
+    fn approx(a: f32, b: f32) {
+        assert!(
+            (a - b).abs() < 1e-5,
+            "expected {b}, got {a} (diff {})",
+            (a - b).abs()
+        );
+    }
+
+    const BASE: f32 = 0.80;
+
+    // ---- "learning" experience level: tutorials/questions are signal, not noise ----
+
+    #[test]
+    fn learning_boosts_tutorials() {
+        approx(
+            adjust_dna_for_experience(&ContentType::Tutorial, BASE, Some("learning")),
+            BASE * 1.35,
+        );
+    }
+
+    #[test]
+    fn learning_boosts_questions_and_help_requests() {
+        approx(
+            adjust_dna_for_experience(&ContentType::Question, BASE, Some("learning")),
+            BASE * 1.30,
+        );
+        approx(
+            adjust_dna_for_experience(&ContentType::HelpRequest, BASE, Some("learning")),
+            BASE * 1.25,
+        );
+    }
+
+    #[test]
+    fn learning_mildly_boosts_show_and_tell() {
+        approx(
+            adjust_dna_for_experience(&ContentType::ShowAndTell, BASE, Some("learning")),
+            BASE * 1.15,
+        );
+    }
+
+    #[test]
+    fn learning_dampens_deep_dives() {
+        // Deep dives can overwhelm learners — the only sub-1.0 multiplier here.
+        approx(
+            adjust_dna_for_experience(&ContentType::DeepDive, BASE, Some("learning")),
+            BASE * 0.90,
+        );
+    }
+
+    #[test]
+    fn learning_leaves_unlisted_types_unchanged() {
+        // ReleaseNotes is not in the "learning" arm — must pass through untouched.
+        approx(
+            adjust_dna_for_experience(&ContentType::ReleaseNotes, BASE, Some("learning")),
+            BASE,
+        );
+    }
+
+    // ---- "building" experience level: a mild lift on a narrower set ----
+
+    #[test]
+    fn building_mildly_boosts_tutorials_and_questions() {
+        approx(
+            adjust_dna_for_experience(&ContentType::Tutorial, BASE, Some("building")),
+            BASE * 1.10,
+        );
+        approx(
+            adjust_dna_for_experience(&ContentType::Question, BASE, Some("building")),
+            BASE * 1.10,
+        );
+    }
+
+    #[test]
+    fn building_mildly_boosts_show_and_tell() {
+        approx(
+            adjust_dna_for_experience(&ContentType::ShowAndTell, BASE, Some("building")),
+            BASE * 1.05,
+        );
+    }
+
+    #[test]
+    fn building_leaves_deep_dives_and_help_requests_unchanged() {
+        // DeepDive and HelpRequest are NOT in the "building" arm.
+        approx(
+            adjust_dna_for_experience(&ContentType::DeepDive, BASE, Some("building")),
+            BASE,
+        );
+        approx(
+            adjust_dna_for_experience(&ContentType::HelpRequest, BASE, Some("building")),
+            BASE,
+        );
+    }
+
+    // ---- experienced / unset levels: current calibration is preserved verbatim ----
+
+    #[test]
+    fn shipping_and_leading_preserve_base_calibration() {
+        for level in ["shipping", "leading"] {
+            for ct in [
+                ContentType::Tutorial,
+                ContentType::Question,
+                ContentType::DeepDive,
+                ContentType::ShowAndTell,
+            ] {
+                approx(adjust_dna_for_experience(&ct, BASE, Some(level)), BASE);
+            }
+        }
+    }
+
+    #[test]
+    fn none_and_unknown_levels_preserve_base_calibration() {
+        approx(
+            adjust_dna_for_experience(&ContentType::Tutorial, BASE, None),
+            BASE,
+        );
+        // An unrecognized level string falls through to the default arm.
+        approx(
+            adjust_dna_for_experience(&ContentType::Tutorial, BASE, Some("expert")),
+            BASE,
+        );
+    }
+
+    #[test]
+    fn adjustment_scales_linearly_with_base() {
+        // The multiplier is independent of the base magnitude.
+        approx(
+            adjust_dna_for_experience(&ContentType::Tutorial, 0.5, Some("learning")),
+            0.5 * 1.35,
+        );
+        approx(
+            adjust_dna_for_experience(&ContentType::Tutorial, 1.0, Some("learning")),
+            1.35,
+        );
+    }
+}
