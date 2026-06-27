@@ -101,8 +101,12 @@ impl PdfExtractor {
                                         if !text.is_empty() {
                                             metadata.insert(key.to_lowercase(), text);
                                         }
-                                    } else if let Ok(text) = value.as_name_str() {
-                                        metadata.insert(key.to_lowercase(), text.to_string());
+                                    } else if let Ok(name_bytes) = value.as_name() {
+                                        // lopdf 0.42 removed as_name_str; as_name returns &[u8].
+                                        let text = String::from_utf8_lossy(name_bytes).to_string();
+                                        if !text.is_empty() {
+                                            metadata.insert(key.to_lowercase(), text);
+                                        }
                                     }
                                 }
                             }

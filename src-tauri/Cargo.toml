@@ -97,8 +97,8 @@ base64 = "0.22"
 
 # Phase 1: Multi-format document extraction (basic support)
 # Note: Using pure Rust alternatives instead of C library bindings
-pdf-extract = "0.7"          # PDF text extraction
-lopdf = "0.32"               # PDF manipulation
+pdf-extract = "0.12"         # PDF text extraction (0.12 uses lopdf ^0.42; RUSTSEC-2026-0187)
+lopdf = "0.42"               # PDF manipulation (RUSTSEC-2026-0187: stack overflow fixed in 0.42)
 docx-rs = "0.4"              # Word document parsing
 calamine = "0.25"            # Excel spreadsheet parsing
 image = "0.25"                                    # Image analysis (OCR + file extraction)
