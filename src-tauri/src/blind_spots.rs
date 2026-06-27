@@ -48,8 +48,11 @@ pub fn invalidate_blind_spot_cache() {
 // Types
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "bindings/")]
+// Internal scaffolding for blind-spot computation. NOT a typed API surface:
+// the canonical output is `EvidenceItem`/`EvidenceFeed` (get_blind_spots returns
+// EvidenceFeed). These structs never cross the IPC boundary, so they no longer
+// derive `TS` / `#[ts(export)]` (doctrine rule 1 + rule 8: no dead exported types).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlindSpotReport {
     /// 0-100, higher = more blind spots
     pub overall_score: f32,
@@ -64,12 +67,10 @@ pub struct BlindSpotReport {
     /// Source data freshness summary. When is_stale is true, the frontend should
     /// warn that blind spot analysis may be based on outdated data.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub data_freshness: Option<DataFreshness>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "bindings/")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UncoveredDep {
     pub name: String,
     /// npm, cargo, pip, etc.
@@ -121,8 +122,7 @@ pub struct AdapterStatus {
     pub last_checked: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "bindings/")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StaleTopic {
     pub topic: String,
     pub last_engagement_days: u32,
@@ -130,8 +130,7 @@ pub struct StaleTopic {
     pub missed_signal_count: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "bindings/")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MissedSignal {
     pub item_id: i64,
     pub title: String,
@@ -154,8 +153,7 @@ pub struct MissedSignal {
     pub content_type: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "bindings/")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlindSpotRecommendation {
     /// e.g., "Set up a watch for Rust security"
     pub action: String,
@@ -4606,6 +4604,31 @@ mod tests {
         assert_eq!(feed.score, Some(68.0));
         assert_eq!(feed.critical_count, 2); // uncovered "critical" + missed "vulnerability" (tier 4)
         assert_eq!(feed.high_count, 1); // high-priority recommendation
+    }
+
+    #[test]
+    fn feed_items_use_canonical_evidence_contract() {
+        // The legacy BlindSpotReport structs no longer cross the IPC boundary;
+        // the canonical contract is the EvidenceItem id-prefix + kind. The
+        // frontend (use-blind-spots-data) routes purely on these id prefixes,
+        // so pin them: a drift here would silently break the Blind Spots tab.
+        let feed = blind_spot_report_to_feed(&report_sample());
+        let count_prefix = |p: &str| feed.items.iter().filter(|i| i.id.starts_with(p)).count();
+        assert_eq!(count_prefix("bs_uncov_"), 1, "one uncovered-dependency gap");
+        assert_eq!(count_prefix("bs_stale_"), 1, "one stale-topic gap");
+        assert_eq!(count_prefix("bs_missed_"), 1, "one missed signal");
+        assert_eq!(count_prefix("bs_rec_"), 1, "one recommendation");
+
+        let kind_of = |p: &str| {
+            feed.items
+                .iter()
+                .find(|i| i.id.starts_with(p))
+                .map(|i| i.kind)
+        };
+        assert_eq!(kind_of("bs_uncov_"), Some(EvidenceKind::Gap));
+        assert_eq!(kind_of("bs_stale_"), Some(EvidenceKind::Gap));
+        assert_eq!(kind_of("bs_missed_"), Some(EvidenceKind::MissedSignal));
+        assert_eq!(kind_of("bs_rec_"), Some(EvidenceKind::Alert));
     }
 
     #[test]
