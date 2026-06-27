@@ -1,0 +1,13 @@
+{
+  "_comment": "Verax Tier-0 local pre-push gate for 4DA (TypeScript/Tauri + node + cargo). Runs the FAST / DETERMINISTIC / OFFLINE subset of .github/workflows/validate.yml's Frontend job at $0, no GitHub dependency: typecheck (tsc), eslint, the vitest suite, the script self-tests, and the structural validators (file-sizes, no-window-spawns, IPC commands, i18n translations). DELIBERATELY EXCLUDED from the per-push gate (they belong in a merge-time Tier-1 / CI): `pnpm audit` (network), `validate:vite-smoke` (a full vite build — slow), and the Cargo/Tauri `src-tauri` build (heavy — a Tier-1 concern). Assumes deps installed (pnpm install). Run via .githooks/pre-push (install: tools/install-gate.sh) or `verax pipeline --spec .verax/gate.json`.",
+  "jobs": [
+    {"id": "typecheck",   "cmd": "pnpm run typecheck",                        "cost": 4, "inputs": ["src", "tsconfig.json", "tsconfig.node.json", "package.json"]},
+    {"id": "lint",        "cmd": "pnpm run lint",                             "cost": 4, "inputs": ["src", "package.json"]},
+    {"id": "test",        "cmd": "pnpm run test",                             "cost": 4, "inputs": ["src", "package.json"]},
+    {"id": "test-scripts","cmd": "pnpm run test:scripts",                     "cost": 1, "inputs": ["scripts"]},
+    {"id": "sizes",       "cmd": "node scripts/check-file-sizes.cjs --ci",    "cost": 1, "inputs": ["src", "scripts"]},
+    {"id": "no-window",   "cmd": "node scripts/check-no-window-spawns.cjs",   "cost": 1, "inputs": ["src", "scripts", "src-tauri"]},
+    {"id": "commands",    "cmd": "node scripts/validate-commands.cjs",        "cost": 1, "inputs": ["src", "src-tauri", "scripts"]},
+    {"id": "translations","cmd": "node scripts/validate-translations.cjs",    "cost": 1, "inputs": ["src", "scripts"]}
+  ]
+}
