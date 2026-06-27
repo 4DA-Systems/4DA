@@ -399,7 +399,47 @@ pub(super) fn compute_quality_composite(
 #[cfg(test)]
 mod tests {
     use super::adjust_dna_for_experience;
+    use super::build_corroboration;
+    use super::dependencies::{DepMatch, VersionDelta};
     use crate::content_dna::ContentType;
+    use crate::db::Database;
+    use crate::test_utils::{insert_test_item, test_db};
+
+    /// Build a `DepMatch` for grounding tests. A non-dev match with confidence
+    /// >= `STRONG_GROUNDING_CONFIDENCE` (0.40) and a non-ambiguous name is
+    /// "strongly grounded"; flip `is_dev` or drop the confidence to break it.
+    fn dep(name: &str, confidence: f32, is_dev: bool) -> DepMatch {
+        DepMatch {
+            package_name: name.to_string(),
+            confidence,
+            version_delta: VersionDelta::Unknown,
+            is_dev,
+            is_direct: true,
+            version: None,
+            ecosystem: "rust".to_string(),
+        }
+    }
+
+    /// Insert one item per entry in `day_offsets`, each titled with `topic`, and
+    /// back-date its `created_at` by that many days. Drives the distinct-day
+    /// chain-phase detection in `build_corroboration`.
+    fn insert_topic_on_days(db: &Database, source_type: &str, topic: &str, day_offsets: &[i64]) {
+        for (i, &days) in day_offsets.iter().enumerate() {
+            let id = insert_test_item(
+                db,
+                source_type,
+                &format!("{topic}-{i}"),
+                &format!("{topic} update {i}"),
+                "body",
+            );
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET created_at = datetime('now', ?1) WHERE id = ?2",
+                rusqlite::params![format!("-{days} days"), id],
+            )
+            .expect("backdate created_at");
+        }
+    }
 
     /// Float comparison helper — experience adjustments are exact products,
     /// but we compare with an epsilon to stay robust to f32 representation.
@@ -536,5 +576,105 @@ mod tests {
             adjust_dna_for_experience(&ContentType::Tutorial, 1.0, Some("learning")),
             1.35,
         );
+    }
+
+    // ---- build_corroboration: real corroboration context from the DB ----
+
+    #[test]
+    fn corroboration_empty_topics_is_default() {
+        // No topics → no DB work, the canonical default context. The default
+        // is deliberately *restrictive*: source_count = 1 (single-source gate
+        // applies), not 0, so an un-topiced item is never treated as corroborated.
+        let db = test_db();
+        let c = build_corroboration(&db, &[], &[]);
+        assert_eq!(c.source_count, 1);
+        assert!(!c.dependency_match);
+        assert!(c.chain_phase.is_none());
+    }
+
+    #[test]
+    fn corroboration_counts_distinct_source_types() {
+        // Three different source types all talking about "rust" → source_count 3.
+        let db = test_db();
+        insert_test_item(&db, "hackernews", "a", "Rust 2.0 released", "body");
+        insert_test_item(&db, "reddit", "b", "Why Rust wins", "body");
+        insert_test_item(&db, "github", "c", "rust-lang/rust news", "body");
+        // An unrelated item must not inflate the count.
+        insert_test_item(&db, "lobsters", "d", "Python tips", "body");
+
+        let c = build_corroboration(&db, &["rust".to_string()], &[]);
+        assert_eq!(
+            c.source_count, 3,
+            "three distinct source types mention rust"
+        );
+        // All inserted same-day → only one distinct day → no chain phase.
+        assert!(c.chain_phase.is_none());
+    }
+
+    #[test]
+    fn corroboration_source_count_zero_when_no_title_match() {
+        let db = test_db();
+        insert_test_item(&db, "hackernews", "a", "Python tips", "body");
+        let c = build_corroboration(&db, &["nonexistent-topic".to_string()], &[]);
+        assert_eq!(c.source_count, 0);
+    }
+
+    #[test]
+    fn corroboration_dependency_match_true_for_strong_grounding() {
+        let db = test_db();
+        // Non-dev, confident, non-ambiguous package name → strongly grounded.
+        let c = build_corroboration(&db, &["x".to_string()], &[dep("tokio", 0.95, false)]);
+        assert!(c.dependency_match);
+    }
+
+    #[test]
+    fn corroboration_dependency_match_false_for_dev_or_weak_dep() {
+        let db = test_db();
+        // Dev dependency is not a grounding edge even at high confidence.
+        let c1 = build_corroboration(&db, &["x".to_string()], &[dep("tokio", 0.95, true)]);
+        assert!(!c1.dependency_match);
+        // Confidence below the 0.40 strong floor does not ground.
+        let c2 = build_corroboration(&db, &["x".to_string()], &[dep("tokio", 0.30, false)]);
+        assert!(!c2.dependency_match);
+        // No deps at all.
+        let c3 = build_corroboration(&db, &["x".to_string()], &[]);
+        assert!(!c3.dependency_match);
+    }
+
+    #[test]
+    fn corroboration_chain_phase_active_escalating_peak() {
+        // 2 distinct days → "active".
+        let db = test_db();
+        insert_topic_on_days(&db, "hackernews", "kubernetes", &[0, 1]);
+        assert_eq!(
+            build_corroboration(&db, &["kubernetes".to_string()], &[]).chain_phase,
+            Some("active".to_string())
+        );
+
+        // 3 distinct days → "escalating".
+        let db = test_db();
+        insert_topic_on_days(&db, "hackernews", "kubernetes", &[0, 1, 2]);
+        assert_eq!(
+            build_corroboration(&db, &["kubernetes".to_string()], &[]).chain_phase,
+            Some("escalating".to_string())
+        );
+
+        // 4+ distinct days → "peak".
+        let db = test_db();
+        insert_topic_on_days(&db, "hackernews", "kubernetes", &[0, 1, 2, 3]);
+        assert_eq!(
+            build_corroboration(&db, &["kubernetes".to_string()], &[]).chain_phase,
+            Some("peak".to_string())
+        );
+    }
+
+    #[test]
+    fn corroboration_chain_phase_ignores_items_outside_7_day_window() {
+        // Two appearances, but one is 10 days old → only one in-window day → no chain.
+        let db = test_db();
+        insert_topic_on_days(&db, "hackernews", "graphql", &[0, 10]);
+        assert!(build_corroboration(&db, &["graphql".to_string()], &[])
+            .chain_phase
+            .is_none());
     }
 }
