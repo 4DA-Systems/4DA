@@ -53,9 +53,9 @@ is_stale: boolean,
 no_recent_fetches: boolean, 
 /**
  * Items scored in the most recent fetch+score cycle, read from the latest
- * `engine_runs` receipt (Verax ground truth). Written by BOTH the in-app
+ * `engine_runs` receipt (verifier ground truth). Written by BOTH the in-app
  * background scheduler AND the headless engine — so it is populated even when
- * the external Verax verifier / headless task is disabled. None only when no
+ * the external verifier / headless task is disabled. None only when no
  * cycle has ever recorded a receipt (brand-new install); the freshness line
  * then falls back to the `newest_item_age_hours` watermark.
  */

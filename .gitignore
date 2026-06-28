@@ -388,5 +388,5 @@ temp/
 target-verify/
 
 # Engine attribution pubkey — per-install RUNTIME artifact: regenerated each run and read by the
-# Verax verifier from the data dir (src/engine_runs.rs). Public key, but not a repo-tracked file.
+# external verifier from the data dir (src/engine_runs.rs). Public key, but not a repo-tracked file.
 data/engine_receipt_pubkey.hex

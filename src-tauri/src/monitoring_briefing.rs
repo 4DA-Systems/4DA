@@ -54,9 +54,9 @@ pub struct DataFreshness {
     /// even if the system is not fully stale. Signals degraded freshness.
     pub no_recent_fetches: bool,
     /// Items scored in the most recent fetch+score cycle, read from the latest
-    /// `engine_runs` receipt (Verax ground truth). Written by BOTH the in-app
+    /// `engine_runs` receipt (verifier ground truth). Written by BOTH the in-app
     /// background scheduler AND the headless engine — so it is populated even when
-    /// the external Verax verifier / headless task is disabled. None only when no
+    /// the external verifier / headless task is disabled. None only when no
     /// cycle has ever recorded a receipt (brand-new install); the freshness line
     /// then falls back to the `newest_item_age_hours` watermark.
     #[serde(default)]
@@ -150,7 +150,7 @@ pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> D
         .query_row("SELECT COUNT(*) FROM feed_health", [], |row| row.get(0))
         .unwrap_or(0);
 
-    // Verax freshness receipt — the most recent engine_runs row records what the last
+    // Freshness receipt — the most recent engine_runs row records what the last
     // fetch+score cycle actually did (ground truth, written by the GUI scheduler and the
     // headless engine alike). Powers the brief's "Scanned N · X/Y sources · Zm ago"
     // provenance line. The table may not exist on a brand-new DB; the query then errors
@@ -829,7 +829,7 @@ pub(crate) fn build_enriched_briefing(
 
     // Abstention: when novelty filtering removed all items AND all preemption
     // alerts, the briefing has nothing new. Return a "low signal" abstention; the
-    // frontend pairs it with the Verax freshness line (data_freshness) so silence
+    // frontend pairs it with the freshness line (data_freshness) so silence
     // reads as proof the system looked, not as a void. Absence lists ("still
     // tracking" / "quiet sources") are deliberately omitted — see the main return.
     if items.is_empty() && preemption_alerts.is_empty() && !ongoing_topics.is_empty() {

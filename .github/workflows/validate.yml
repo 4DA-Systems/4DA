@@ -208,7 +208,7 @@ jobs:
     # self-hosted Windows box) — acceptable: the experimental surface is not
     # Windows-specific. Cost: cheap 1x ubuntu minutes (the macOS 10x tier is the
     # real billing risk, not this); deepening hosted-minute reliance is hedged by
-    # the Verax-CI gate. cargo-audit/deny use prebuilt binaries (taiki-e) to skip
+    # the local pre-push CI gate. cargo-audit/deny use prebuilt binaries (taiki-e) to skip
     # a ~3-min source compile each.
     runs-on: ubuntu-latest
     timeout-minutes: 30

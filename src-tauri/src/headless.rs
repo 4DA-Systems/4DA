@@ -188,7 +188,7 @@ async fn run_drain_to_completion() -> i32 {
 async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: bool) -> i32 {
     let started = Instant::now();
     let mut receipt = RunReceipt::begin(trigger);
-    // Attribution token: a verifier (e.g. Verax) injects FOURDA_ENGINE_NONCE when it invokes the
+    // Attribution token: an external verifier injects FOURDA_ENGINE_NONCE when it invokes the
     // engine for a specific task; the engine stamps it into the receipt so an attribution proof can
     // require the receipt's nonce to match the task's — defeating a free-ride on a concurrent refresh
     // (whose receipt carries no such nonce). Unset for normal/scheduled/daemon runs.

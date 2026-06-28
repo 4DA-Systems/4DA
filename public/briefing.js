@@ -213,10 +213,10 @@ function formatAgo(minutes) {
 }
 
 /**
- * Build the Verax freshness line from data_freshness. Prefers the engine-run
+ * Build the freshness line from data_freshness. Prefers the engine-run
  * receipt ("Scanned 421 · 20/20 sources · 4m ago"); falls back to the raw item
  * watermark ("Freshest item 4m ago") when no receipt exists — so the line always
- * shows real freshness even with the headless engine / Verax verifier disabled.
+ * shows real freshness even with the headless engine / external verifier disabled.
  */
 function buildFreshnessLine(df) {
   if (!df) return '';
@@ -479,7 +479,7 @@ function renderBriefing(data) {
     itemsList.innerHTML = html;
   }
 
-  // Verax freshness line — always present, on every brief. The visible daily proof
+  // Freshness line — always present, on every brief. The visible daily proof
   // that the data is live, and the trust anchor for a quiet brief.
   renderFreshnessLine(data.data_freshness);
 }

@@ -24,7 +24,7 @@ use fourda_lib::{handle_scheduler_cli, run_headless, HeadlessMode};
 fn main() {
     // Scheduler subcommands install/remove/inspect an OS task that runs THIS console binary
     // (`fourda-engine --once`) on an interval — handy for setting up background refresh on a machine
-    // that runs the engine standalone (e.g. the Verax test host). Exits when handled.
+    // that runs the engine standalone (e.g. an external verification host). Exits when handled.
     if let Some(code) = handle_scheduler_cli(std::env::args().skip(1), "--once") {
         std::process::exit(code);
     }
