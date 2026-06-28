@@ -24,16 +24,6 @@
       ],
       "command": "npx"
     },
-    "verax": {
-      "args": [
-        "mcp"
-      ],
-      "command": "D:\\dev-cache\\.cargo\\bin\\verax.exe",
-      "env": {
-        "VERAX_URL": "http://127.0.0.1:7575",
-        "VERAX_TOKEN": "365034629bca4b8ba95e0e72c7ba102c"
-      }
-    },
     "victauri": {
       "_comment": "Victauri MCP â€” stdio bridge to running 4DA dev server",
       "args": [

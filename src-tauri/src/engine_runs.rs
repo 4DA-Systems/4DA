@@ -4,7 +4,7 @@
 //! Every fetch+score cycle — whether driven by the GUI's background scheduler or by the
 //! headless `fourda-engine` binary — writes a row here recording *what actually happened*.
 //! This is the ground-truth layer the MCP server reads to stop serving stale data as if it
-//! were live, and the state an external verifier (Verax) re-checks: a refresh that exits 0
+//! were live, and the state an external verifier re-checks: a refresh that exits 0
 //! but silently no-ops is divergence, so the receipt records the real watermark and a content
 //! fingerprint, not just "the cycle ran".
 //!
@@ -376,7 +376,7 @@ fn now_rfc3339() -> String {
 }
 
 // ============================================================================
-// Tests — the signing contract an external verifier (Verax) depends on
+// Tests — the signing contract an external verifier depends on
 // ============================================================================
 //
 // These exercise the canonical-serialization + Ed25519 sign/verify primitives directly with a
