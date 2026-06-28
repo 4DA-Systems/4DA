@@ -24,16 +24,6 @@
       ],
       "command": "npx"
     },
-    "external-verifier": {
-      "args": [
-        "mcp"
-      ],
-      "command": "D:\\dev-cache\\.cargo\\bin\\external-verifier.exe",
-      "env": {
-        "[redacted-url]": "http://127.0.0.1:7575",
-        "[redacted-token]": "[redacted-token-value]"
-      }
-    },
     "victauri": {
       "_comment": "Victauri MCP â€” stdio bridge to running 4DA dev server",
       "args": [
