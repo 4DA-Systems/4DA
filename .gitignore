@@ -393,3 +393,13 @@ data/engine_receipt_pubkey.hex
 
 # Local multi-terminal coordination scratchpad (ephemeral; coordinate on the board, not a tracked file)
 .claude/TERMINALS.md
+
+# Verax artifacts must NEVER enter this PUBLIC repo (Verax is a separate private asset).
+# Written into the working tree by the verifier / self-gate runs and the coordination board.
+# Enforced by scripts/verax-leak-rules.cjs (pre-commit gate + public-readiness audit).
+.self-gate-receipts/
+.verax-log.jsonl
+.verax-log.jsonl.head
+.verax-board.*
+.mcp.json.bak*
+.mcp.local.json
