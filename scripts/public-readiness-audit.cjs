@@ -27,6 +27,7 @@ const { execSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { scanthe external verifierLeakFile } = require('./private-asset-guard.cjs');
 
 const RED = '\x1b[31m';
 const YELLOW = '\x1b[33m';
@@ -267,6 +268,16 @@ function check7_presence(files, findings) {
   }
 }
 
+// the external verifier is a separate PRIVATE asset; this PUBLIC repo must never disclose it.
+// Shared rules live in scripts/private-asset-guard.cjs (also used by the pre-commit gate).
+function check8_external-verifierLeak(files, findings) {
+  for (const f of files) {
+    for (const hit of scanthe external verifierLeakFile(REPO_ROOT, f)) {
+      findings.push({ sev: hit.sev, rule: 'external-verifier-leak', file: f, msg: hit.msg });
+    }
+  }
+}
+
 function main() {
   const files = getTrackedFiles();
   const findings = [];
@@ -278,6 +289,7 @@ function main() {
   check5_secrets(files, findings);
   check6_aggressivePhrasing(files, findings);
   check7_presence(files, findings);
+  check8_external-verifierLeak(files, findings);
 
   const blocks = findings.filter(f => f.sev === 'block');
   const warns  = findings.filter(f => f.sev === 'warn');
