@@ -403,3 +403,9 @@ data/engine_receipt_pubkey.hex
 .verax-board.*
 .mcp.json.bak*
 .mcp.local.json
+
+# Manual DB snapshots taken before risky migrations/dogfood runs (e.g.
+# 4da.db-wal.bak-pre-v8-*). Operator backups — kept on disk, never tracked.
+# (main already ignores data/*.db.bak*; these add the -wal.bak variant.)
+data/*.bak-*
+data/*.db-wal.bak*

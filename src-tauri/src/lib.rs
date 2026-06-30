@@ -227,6 +227,7 @@ mod digest_config;
 mod digest_email;
 mod domain_profile;
 mod domain_profile_data;
+mod ecosystem;
 mod entity_extraction;
 mod triage_audit_commands;
 // Silent-Failure Defense Layer 1 — typed wrappers for external boundaries.

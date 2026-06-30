@@ -224,24 +224,14 @@ fn gather_versioned_auditable_deps(db: &crate::db::Database) -> Vec<(String, Str
     out
 }
 
-/// Map an ACE/DB ecosystem name to its OSV ecosystem id (`None` = unsupported by OSV).
+/// Map an ACE/DB ecosystem name to its OSV ecosystem id (`None` = unsupported by
+/// OSV). Alias recognition is centralized in [`crate::ecosystem::Ecosystem`]: the
+/// ACE scanner tags deps with the LANGUAGE name (csharp/php/dart), which `parse`
+/// accepts alongside the registry aliases — without that, the live version query
+/// dropped every C#/PHP/Dart dep and the whole stack surfaced ZERO advisories
+/// (the ledger cross-stack gate caught it).
 fn dep_ecosystem_to_osv(ecosystem: &str) -> Option<&'static str> {
-    match ecosystem.to_lowercase().as_str() {
-        "npm" | "javascript" | "typescript" => Some("npm"),
-        "rust" | "crates.io" => Some("crates.io"),
-        "python" | "pypi" | "pip" => Some("PyPI"),
-        "go" | "golang" => Some("Go"),
-        "java" | "maven" | "kotlin" => Some("Maven"),
-        "ruby" | "rubygems" => Some("RubyGems"),
-        // The ACE scanner tags these deps with the LANGUAGE name (csharp/php/dart), not the
-        // registry alias — without these arms gather_versioned_auditable_deps dropped every
-        // C#/PHP/Dart dep, the live version query ran on an empty set, and the whole stack
-        // surfaced ZERO advisories (the ledger cross-stack gate caught it).
-        "csharp" | "c#" | "dotnet" | "nuget" => Some("NuGet"),
-        "php" | "composer" | "packagist" => Some("Packagist"),
-        "dart" | "flutter" | "pub" => Some("Pub"),
-        _ => None,
-    }
+    crate::ecosystem::Ecosystem::parse(ecosystem).map(|e| e.osv_name())
 }
 
 /// Build a grounding-compatible `SourceItem` from a live-hydrated OSV advisory matched to a
