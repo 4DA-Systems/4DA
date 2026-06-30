@@ -54,7 +54,7 @@ tracing-appender = "0.2"
 notify = "8"
 
 # HTML parsing (for HN content scraping)
-scraper = "0.23"
+scraper = "0.27"
 
 # Embeddings (local MiniLM model)
 # In-process embedding via ONNX Runtime — zero network, zero config, privacy preserved.
