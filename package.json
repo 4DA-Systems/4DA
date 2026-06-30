@@ -95,7 +95,7 @@
     "@tauri-apps/plugin-opener": "^2.5.4",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "@xyflow/react": "^12.10.2",
-    "i18next": "^26.3.0",
+    "i18next": "^26.3.3",
     "i18next-resources-to-backend": "^1.2.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
