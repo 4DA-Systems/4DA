@@ -598,22 +598,10 @@ fn load_platform_inactive_packages(
 
 /// Map ecosystem names to the source adapter types that should cover them.
 fn ecosystem_source_types(ecosystem: &str) -> Vec<String> {
-    match ecosystem.to_lowercase().as_str() {
-        "npm" | "javascript" | "typescript" => {
-            vec!["npm_registry".into(), "osv".into(), "github".into()]
-        }
-        "crates.io" | "cargo" | "rust" => {
-            vec!["crates_io".into(), "osv".into(), "github".into()]
-        }
-        "pypi" | "python" => vec!["pypi".into(), "osv".into(), "github".into()],
-        "go" | "golang" => vec!["go_modules".into(), "osv".into(), "github".into()],
-        "maven" | "java" | "kotlin" => vec!["osv".into(), "github".into()],
-        "nuget" | "csharp" | "dotnet" => vec!["osv".into(), "github".into()],
-        "packagist" | "php" | "composer" => vec!["osv".into(), "github".into()],
-        "rubygems" | "ruby" => vec!["osv".into(), "github".into()],
-        "pub" | "dart" | "flutter" => vec!["osv".into(), "github".into()],
-        _ => vec!["osv".into()],
-    }
+    // Alias recognition is centralized in `crate::ecosystem::Ecosystem`. Unknown
+    // ecosystems still get OSV — the universal advisory source.
+    crate::ecosystem::Ecosystem::parse(ecosystem)
+        .map_or_else(|| vec!["osv".to_string()], |e| e.source_types())
 }
 
 /// Diagnose WHY a dependency has no or limited source coverage.
@@ -1501,18 +1489,13 @@ fn sid_match_type_to_coverage(sid_match_type: &str) -> &'static str {
 
 /// Format a dependency name with its ecosystem qualifier for display.
 fn format_dep_display_name(package_name: &str, ecosystem: &str) -> String {
-    let qualifier = match ecosystem.to_lowercase().as_str() {
-        "rust" | "cargo" | "crates.io" => "crates.io",
-        "javascript" | "typescript" | "npm" => "npm",
-        "python" | "pypi" => "PyPI",
-        "go" | "golang" => "Go",
-        "java" | "kotlin" | "maven" => "Maven",
-        "csharp" | "dotnet" | "nuget" => "NuGet",
-        "php" | "packagist" => "Packagist",
-        "ruby" | "rubygems" => "RubyGems",
-        "dart" | "flutter" | "pub" => "Pub",
-        "swift" | "cocoapods" => "CocoaPods",
-        _ => {
+    // Alias recognition is centralized in `crate::ecosystem::Ecosystem`. Swift/
+    // CocoaPods isn't an OSV ecosystem (so `parse` returns None) but still earns a
+    // friendly label; anything else falls back to the raw "(ecosystem)" qualifier.
+    let qualifier = match crate::ecosystem::Ecosystem::parse(ecosystem) {
+        Some(e) => e.display_label(),
+        None if matches!(ecosystem.to_lowercase().as_str(), "swift" | "cocoapods") => "CocoaPods",
+        None => {
             if ecosystem.is_empty() {
                 return package_name.to_string();
             }
@@ -3699,6 +3682,21 @@ mod tests {
         assert_eq!(Urgency::High.min(Urgency::Critical), Urgency::Critical);
         assert_eq!(Urgency::High.min(Urgency::Medium), Urgency::High);
         assert_eq!(Urgency::High.min(Urgency::Watch), Urgency::High);
+    }
+
+    #[test]
+    fn format_dep_display_name_maps_composer_to_packagist() {
+        // "composer" is a first-class Packagist alias — parity with
+        // ecosystem_source_types — so it must render "(Packagist)", not fall
+        // through to the generic "(composer)" (bug_005).
+        assert_eq!(
+            format_dep_display_name("laravel/framework", "composer"),
+            "laravel/framework (Packagist)"
+        );
+        assert_eq!(
+            format_dep_display_name("monolog/monolog", "php"),
+            "monolog/monolog (Packagist)"
+        );
     }
 
     // ─── Free teaser (tier rebalance) ────────────────────────────────
@@ -5985,6 +5983,7 @@ mod tests {
                 source_url: Some("https://rustsec.org/advisories/CVE-2026-9999".into()),
                 suggested_actions: vec!["Upgrade serde to 1.0.201".into()],
                 scope: None,
+                merged_package_versions: Vec::new(),
             }],
             blind_spot_score: None,
             labels: None,

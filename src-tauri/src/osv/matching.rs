@@ -343,22 +343,12 @@ fn parse_version(ver: &str) -> Option<Version> {
     None
 }
 
-/// Normalize ecosystem names to canonical forms for matching.
+/// Normalize an ecosystem name to its OSV identifier for matching. Alias
+/// recognition (registry name, ACE language name, csharp/php/dart, etc.) is
+/// centralized in [`crate::ecosystem::Ecosystem`]; unknown ecosystems pass
+/// through unchanged.
 fn normalize_ecosystem(eco: &str) -> &str {
-    match eco.to_lowercase().as_str() {
-        "javascript" | "typescript" | "npm" => "npm",
-        "rust" | "crates.io" => "crates.io",
-        "python" | "pip" | "pypi" => "PyPI",
-        "go" | "golang" => "Go",
-        "ruby" | "rubygems" => "RubyGems",
-        "java" | "maven" | "kotlin" => "Maven",
-        // Accept the ACE language name as well as the registry alias (csharp/php/dart) so the
-        // engine's own dependency-alert matcher resolves these stacks; Pub was absent entirely.
-        "csharp" | "c#" | "dotnet" | "nuget" => "NuGet",
-        "php" | "composer" | "packagist" => "Packagist",
-        "dart" | "flutter" | "pub" => "Pub",
-        _ => eco,
-    }
+    crate::ecosystem::Ecosystem::parse(eco).map_or(eco, |e| e.osv_name())
 }
 
 // ============================================================================

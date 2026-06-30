@@ -22,31 +22,29 @@ import { SignalUpgradeCTA } from './SignalUpgradeCTA';
  * This is the feature that makes users think "I can never go back."
  */
 
-const SIGNAL_PRIORITY_ORDER = [
-  'security_alert',
-  'breaking_change',
-  'dependency_update',
-  'migration_opportunity',
-  'tool_discovery',
-  'architecture_insight',
-];
+/**
+ * Priority order for the hero "critical save", security first. Keyed on the
+ * canonical SignalKind (not a raw vocab string) so the chooser reads the SAME
+ * dual-vocabulary classifier as the label/color — otherwise a real CVE tagged
+ * content_type="security_advisory" (signal_type unset) is skipped at the
+ * security tier and a lower-priority item wins the hero card.
+ */
+const KIND_PRIORITY_ORDER: SignalKind[] = ['security', 'breaking', 'tool'];
 
-function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | null {
+export function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | null {
   // For security items, require dependency confirmation — an irrelevant CVE as hero card destroys trust
-  for (const priority of SIGNAL_PRIORITY_ORDER) {
-    const isSecurityType = priority === 'security_alert' || priority === 'breaking_change';
+  for (const kind of KIND_PRIORITY_ORDER) {
+    const isSecurityType = kind === 'security' || kind === 'breaking';
     const match = results.find(
-      r => (r.score_breakdown?.content_type === priority || r.signal_type === priority)
+      r => classifySignal(r) === kind
         && (!isSecurityType || (r.score_breakdown?.dep_match_score ?? 0) > 0.2)
     );
     if (match) return match;
   }
 
   // Fallback: security items without dep match (still better than nothing)
-  for (const priority of SIGNAL_PRIORITY_ORDER) {
-    const match = results.find(
-      r => r.score_breakdown?.content_type === priority || r.signal_type === priority
-    );
+  for (const kind of KIND_PRIORITY_ORDER) {
+    const match = results.find(r => classifySignal(r) === kind);
     if (match) return match;
   }
 
@@ -64,14 +62,16 @@ function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | nul
     : null;
 }
 
-/** Canonical signal kind used for the critical-save label + color. */
-type SignalKind =
-  | 'security'
-  | 'breaking'
-  | 'dependency'
-  | 'migration'
-  | 'tool'
-  | 'architecture';
+/**
+ * Canonical signal kind used for the critical-save label + color.
+ *
+ * Only kinds the backend can actually produce. `dependency_update`,
+ * `migration_opportunity`, and `architecture_insight` were never wired into the
+ * Rust `SignalType` enum (signals.rs) or the `ContentType` vocab, so branches
+ * for them could never fire — removed as dead code rather than left as a false
+ * promise (the same parallel-vocab drift that caused the security_advisory bug).
+ */
+type SignalKind = 'security' | 'breaking' | 'tool';
 
 /**
  * Classify the critical save into a canonical signal kind.
@@ -92,10 +92,7 @@ export function classifySignal(item: SourceRelevance): SignalKind | null {
   // 'security_advisory' is the content-vocab twin of the 'security_alert' signal.
   if (has('security_alert') || has('security_advisory')) return 'security';
   if (has('breaking_change')) return 'breaking';
-  if (has('dependency_update')) return 'dependency';
-  if (has('migration_opportunity')) return 'migration';
   if (has('tool_discovery')) return 'tool';
-  if (has('architecture_insight')) return 'architecture';
   return null;
 }
 
@@ -103,10 +100,7 @@ export function getSignalLabel(item: SourceRelevance): string | null {
   switch (classifySignal(item)) {
     case 'security': return 'Security advisory';
     case 'breaking': return 'Breaking change';
-    case 'dependency': return 'Dependency update';
-    case 'migration': return 'Migration opportunity';
     case 'tool': return 'Tool discovery';
-    case 'architecture': return 'Architecture insight';
     default: return null;
   }
 }
@@ -115,7 +109,6 @@ export function getSignalColor(item: SourceRelevance): string {
   switch (classifySignal(item)) {
     case 'security': return '#EF4444';
     case 'breaking': return 'var(--color-accent-action)';
-    case 'dependency': return '#3B82F6';
     default: return '#D4AF37';
   }
 }

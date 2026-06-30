@@ -12,19 +12,59 @@ import * as path from "node:path";
 import type { OsvEcosystem, ResolvedDependency } from "./types.js";
 import { targetActiveOnHost } from "./platform.js";
 
+// Alias -> OSV ecosystem. Mirrors the desktop app's canonical
+// `Ecosystem::parse` (src-tauri/src/ecosystem.rs) so both sides recognize the
+// SAME aliases — they previously drifted (the Rust side knew csharp/dart/php
+// while this map keyed C# as "dotnet" and omitted Dart entirely, mislabeling
+// those deps). Keep this in sync with that enum.
 const ECOSYSTEM_MAP: Record<string, OsvEcosystem> = {
   npm: "npm",
+  javascript: "npm",
+  typescript: "npm",
+  node: "npm",
+  js: "npm",
+  ts: "npm",
   rust: "crates.io",
+  cargo: "crates.io",
+  "crates.io": "crates.io",
+  crates: "crates.io",
   python: "PyPI",
+  pypi: "PyPI",
+  pip: "PyPI",
+  py: "PyPI",
   go: "Go",
+  golang: "Go",
   java: "Maven",
+  maven: "Maven",
+  kotlin: "Maven",
+  gradle: "Maven",
+  csharp: "NuGet",
+  "c#": "NuGet",
   dotnet: "NuGet",
-  ruby: "RubyGems",
+  nuget: "NuGet",
   php: "Packagist",
+  composer: "Packagist",
+  packagist: "Packagist",
+  ruby: "RubyGems",
+  rubygems: "RubyGems",
+  gem: "RubyGems",
+  dart: "Pub",
+  flutter: "Pub",
+  pub: "Pub",
 };
 
+/**
+ * Map a language/ecosystem alias to its OSV ecosystem id (case-insensitive).
+ *
+ * Falls back to "npm" ONLY for genuinely unrecognized input — a last resort, not
+ * a real default. OSV-unindexed languages (Swift, C/C++) and unknowns produce no
+ * OSV matches anyway (their package names don't collide with the npm namespace),
+ * so this never fabricates a vulnerability. Ecosystems that lack a version
+ * resolver here (NuGet/Maven/Packagist/RubyGems/Pub) still get the CORRECT label,
+ * so the moment a resolver is added the scan is right by construction.
+ */
 export function mapEcosystem(language: string): OsvEcosystem {
-  return ECOSYSTEM_MAP[language] || "npm";
+  return ECOSYSTEM_MAP[language.trim().toLowerCase()] || "npm";
 }
 
 export function resolveVersions(

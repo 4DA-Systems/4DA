@@ -17,15 +17,13 @@ use super::cve::{AffectedPackage, CveAdvisory};
 /// GitHub Advisory Database, NVD, and user lockfiles may use different names
 /// for the same ecosystem (e.g., "javascript" vs "npm" vs "typescript").
 pub(crate) fn normalize_ecosystem(eco: &str) -> &str {
-    match eco.to_lowercase().as_str() {
-        "javascript" | "typescript" | "npm" => "npm",
-        "rust" | "crates.io" => "crates.io",
-        "python" | "pip" | "pypi" => "pip",
-        "go" | "golang" => "go",
-        "ruby" | "rubygems" => "rubygems",
-        "java" | "maven" => "maven",
-        _ => eco,
-    }
+    // Alias recognition is centralized in `crate::ecosystem::Ecosystem`; the CVE
+    // matcher keeps its own (lowercase, "pip") output vocab via `cve_token`.
+    // Centralizing recognition closed a real gap — C#/PHP/Dart had NO arms here,
+    // so a "csharp" dep never normalized equal to a "NuGet"/"nuget" advisory and
+    // silently failed to match. Both sides run through this, so only internal
+    // consistency matters; unknown ecosystems pass through unchanged.
+    crate::ecosystem::Ecosystem::parse(eco).map_or(eco, |e| e.cve_token())
 }
 
 // ============================================================================

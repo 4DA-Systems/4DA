@@ -478,18 +478,9 @@ pub(crate) fn strict_manifest_mode() -> bool {
 /// (e.g. "rust", "javascript", "PyPI", "go") against a registry source's ecosystem key
 /// (e.g. "crates.io", "npm", "pypi", "go"). Returns `None` for unknown ecosystems.
 fn ecosystem_token(eco: &str) -> Option<&'static str> {
-    Some(match eco.trim().to_lowercase().as_str() {
-        "npm" | "javascript" | "typescript" | "node" | "js" | "ts" => "npm",
-        "crates.io" | "rust" | "cargo" | "crates" => "crates",
-        "pypi" | "python" | "pip" | "py" => "pypi",
-        "go" | "golang" => "go",
-        "maven" | "java" | "gradle" => "maven",
-        "nuget" | "csharp" | "c#" | "dotnet" => "nuget",
-        "rubygems" | "ruby" | "gem" => "rubygems",
-        "packagist" | "php" | "composer" => "packagist",
-        "pub" | "dart" | "flutter" => "pub",
-        _ => return None,
-    })
+    // Alias recognition is centralized in `crate::ecosystem::Ecosystem`; this
+    // registry-key comparison uses the lowercase `fetch_token` vocab.
+    crate::ecosystem::Ecosystem::parse(eco).map(|e| e.fetch_token())
 }
 
 /// Manifest-grounded package names for `ecosystem`, read directly from the dependency

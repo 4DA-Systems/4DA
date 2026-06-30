@@ -208,7 +208,7 @@ fn looks_like_version(token: &str) -> bool {
     saw_dot
 }
 
-fn looks_like_date(token: &str) -> bool {
+pub(super) fn looks_like_date(token: &str) -> bool {
     let dots = token.chars().filter(|&c| c == '.').count();
     if dots != 2 {
         return false;

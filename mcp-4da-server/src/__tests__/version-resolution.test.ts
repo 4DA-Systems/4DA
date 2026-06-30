@@ -17,11 +17,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import Database from "better-sqlite3";
 import { LiveCache } from "../live/cache.js";
-import { resolveAuditVersions, resolveVersions } from "../live/version-resolver.js";
+import { resolveAuditVersions, resolveVersions, mapEcosystem } from "../live/version-resolver.js";
 import { LiveIntelligence } from "../live/index.js";
 import { extractCvssScore, OsvScanner } from "../live/osv-scanner.js";
 import { RateLimiter } from "../live/rate-limiter.js";
-import type { ResolvedDependency } from "../live/types.js";
+import type { OsvEcosystem, ResolvedDependency } from "../live/types.js";
 
 let root: string;
 let rustDir: string;
@@ -154,6 +154,35 @@ describe("LiveIntelligence.initFromDependencyGroups", () => {
       { dir: rustDir, language: "rust", deps: ["tokio"], devDeps: [] },
     ]);
     expect(li.getResolvedDeps().filter((d) => d.name === "tokio")).toHaveLength(1);
+  });
+});
+
+describe("mapEcosystem — alias recognition (parity with the desktop Ecosystem enum)", () => {
+  it("maps every language/alias to the correct OSV ecosystem", () => {
+    const cases: Array<[string[], OsvEcosystem]> = [
+      [["npm", "javascript", "typescript", "node", "JS", " TS "], "npm"],
+      [["rust", "cargo", "crates.io", "crates"], "crates.io"],
+      [["python", "pypi", "pip", "py"], "PyPI"],
+      [["go", "golang"], "Go"],
+      [["java", "maven", "kotlin", "gradle"], "Maven"],
+      // Previously mislabeled: keyed C# as "dotnet" only, omitted Dart entirely.
+      [["csharp", "c#", "dotnet", "nuget"], "NuGet"],
+      [["php", "composer", "packagist"], "Packagist"],
+      [["ruby", "rubygems", "gem"], "RubyGems"],
+      [["dart", "flutter", "pub"], "Pub"],
+    ];
+    for (const [aliases, expected] of cases) {
+      for (const alias of aliases) {
+        expect(mapEcosystem(alias)).toBe(expected);
+      }
+    }
+  });
+
+  it("falls back to npm only for genuinely unknown languages (no false matches)", () => {
+    // OSV-unindexed / unknown → npm last-resort; names won't collide so no
+    // fabricated vuln results, just a harmless label.
+    expect(mapEcosystem("brainfuck")).toBe("npm");
+    expect(mapEcosystem("")).toBe("npm");
   });
 });
 
