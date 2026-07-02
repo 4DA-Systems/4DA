@@ -56,7 +56,9 @@ pub(crate) use dedup::{
     apply_domain_diversity, apply_source_topic_diversity, compute_serendipity_candidates,
     dedup_results, fuzzy_dedup_results, sort_results, topic_dedup_results,
 };
-pub(crate) use dependencies::{is_ambiguous_dep_name, match_dependencies, VersionDelta};
+pub(crate) use dependencies::{
+    is_ambiguous_dep_name, match_dependencies, VersionDelta, STRONG_GROUNDING_CONFIDENCE,
+};
 pub(crate) use explanation::{
     calculate_confidence, compute_temporal_freshness, generate_relevance_explanation,
 };

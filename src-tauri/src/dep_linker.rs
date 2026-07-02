@@ -15,9 +15,9 @@
 use rusqlite::params;
 use tracing::{debug, info};
 
-use crate::blind_spots::is_ambiguous_package_name;
 use crate::db::Database;
 use crate::error::Result;
+use crate::package_ambiguity::is_ambiguous_package_name;
 
 // ============================================================================
 // Public API
