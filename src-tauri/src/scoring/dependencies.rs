@@ -86,6 +86,12 @@ pub(crate) fn is_strongly_grounded_direct(deps: &[DepMatch]) -> bool {
 /// Common English words AND generic tech stems that collide with package names.
 /// These require nearby language-context words to match.
 ///
+/// Consulted (via `is_ambiguous_dep_name`) by TWO axes: dependency matching
+/// (language-context requirement, subterm filtering) and the keyword interest
+/// axis (`keywords::is_generic_interest_term` — a focused user's lone
+/// single-word interest on this list keeps its computed specificity weight
+/// instead of the forced 1.0). Additions here tune both.
+///
 /// The tech-stem entries (cert, auth, api, http, lib, util, sdk, ...) are the
 /// subterms produced by extract_search_terms when splitting multi-part package
 /// names like `x509-cert`, `json-web-token`, `auth-client`, `http-common`. On
@@ -274,6 +280,16 @@ const COMMON_ENGLISH_WORDS: &[&str] = &[
     "extra",
     "super",
     "auto",
+    // Business-domain words that ACE mints as topics from the user's own
+    // function/module names (handle_payment, render_frame, InvoiceService).
+    // As bare tokens they anchor nothing — a package actually named like
+    // this still matches via language context / full name.
+    "payment",
+    "payments",
+    "render",
+    "invoice",
+    "invoices",
+    "billing",
     // OS / platform proper nouns. These are also real package names or subterms
     // of platform crates (`windows`/`windows-sys`, `linux-*`, `android-*`), but
     // they appear constantly in titles as the OPERATING SYSTEM, not the package

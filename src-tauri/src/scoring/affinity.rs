@@ -114,41 +114,13 @@ pub(crate) fn compute_anti_penalty(topics: &[String], ace_ctx: &ACEContext) -> f
     total_penalty.min(scoring_config::ANTI_PENALTY_MAX)
 }
 
-/// Domain penalty for items with zero tech/topic overlap.
-/// If none of the item's extracted topics match ANY of: declared_tech, detected_tech, or active_topics,
-/// apply a strong penalty. No domain overlap = almost certainly noise.
-#[score_component(output_range = "0.0..=0.60")]
-pub(crate) fn compute_off_domain_penalty(
-    topics: &[String],
-    ace_ctx: &ACEContext,
-    declared_tech: &[String],
-) -> f32 {
-    if topics.is_empty()
-        || (declared_tech.is_empty()
-            && ace_ctx.detected_tech.is_empty()
-            && ace_ctx.active_topics.is_empty())
-    {
-        return 0.0;
-    }
-
-    let has_overlap = topics.iter().any(|topic| {
-        declared_tech.iter().any(|tech| topic_overlaps(topic, tech))
-            || ace_ctx
-                .detected_tech
-                .iter()
-                .any(|tech| topic_overlaps(topic, tech))
-            || ace_ctx
-                .active_topics
-                .iter()
-                .any(|at| topic_overlaps(topic, at))
-    });
-
-    if has_overlap {
-        0.0
-    } else {
-        scoring_config::OFF_DOMAIN_PENALTY
-    }
-}
+// NOTE: the former `compute_off_domain_penalty` (binary zero-overlap penalty
+// over declared_tech/detected_tech/active_topics) was deleted 2026-07-02:
+// production-dead since both live pipelines moved to the tiered
+// `domain_profile::compute_domain_relevance` penalty (v8), which already
+// handles ubiquitous-framework and ambiguous-term overlaps via ecosystem
+// corroboration. Doctrine rule 8: dead code is deleted. Git history
+// preserves it.
 
 /// Unified relevance scoring using multiplicative formula
 /// PASIFA: semantic_sim * affinity_multiplier * (1.0 - anti_penalty)
@@ -390,82 +362,6 @@ mod tests {
         assert!(
             a > 1.0,
             "strongest match (react +0.9) must win → boost, got {a}"
-        );
-    }
-
-    #[test]
-    fn test_off_domain_penalty_with_overlap() {
-        let ace_ctx = ACEContext {
-            detected_tech: vec!["rust".to_string()],
-            tech_weights: std::collections::HashMap::new(),
-            ..Default::default()
-        };
-        let declared = vec!["rust".to_string()];
-        let topics = vec!["rust".to_string(), "performance".to_string()];
-        assert_eq!(
-            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
-            0.0
-        );
-    }
-
-    #[test]
-    fn test_off_domain_penalty_no_overlap() {
-        let ace_ctx = ACEContext::default();
-        let declared = vec!["rust".to_string(), "react".to_string()];
-        let topics = vec!["windows".to_string(), "automation".to_string()];
-        assert_eq!(
-            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
-            scoring_config::OFF_DOMAIN_PENALTY
-        );
-    }
-
-    #[test]
-    fn test_off_domain_penalty_empty_context() {
-        let ace_ctx = ACEContext::default();
-        let declared: Vec<String> = vec![];
-        let topics = vec!["anything".to_string()];
-        assert_eq!(
-            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
-            0.0
-        );
-    }
-
-    #[test]
-    fn test_off_domain_penalty_active_topic_overlap() {
-        let ace_ctx = ACEContext {
-            active_topics: vec!["tauri".to_string()],
-            tech_weights: std::collections::HashMap::new(),
-            ..Default::default()
-        };
-        let declared: Vec<String> = vec![];
-        let topics = vec!["tauri".to_string(), "desktop".to_string()];
-        assert_eq!(
-            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
-            0.0
-        );
-    }
-
-    #[test]
-    fn test_off_domain_penalty_false_substring_blocked() {
-        // "frustrating" should NOT bypass off-domain penalty via "rust" substring
-        let ace_ctx = ACEContext::default();
-        let declared = vec!["rust".to_string()];
-        let topics = vec!["frustrating".to_string()];
-        assert_eq!(
-            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
-            scoring_config::OFF_DOMAIN_PENALTY, // No overlap — "frustrating" != "rust"
-        );
-    }
-
-    #[test]
-    fn test_off_domain_penalty_legitimate_overlap() {
-        // "rust-async" SHOULD match "rust" via word boundary
-        let ace_ctx = ACEContext::default();
-        let declared = vec!["rust".to_string()];
-        let topics = vec!["rust-async".to_string()];
-        assert_eq!(
-            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
-            0.0, // Has overlap via word part
         );
     }
 }

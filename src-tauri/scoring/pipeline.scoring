@@ -175,6 +175,10 @@ final_ceiling {
 # Security/breaking change fast-path floor
 critical_fastpath {
     score_floor: 0.50           # [0.40, 0.70]
+    # Aggregate dep-match strength gate — NECESSARY BUT NOT SUFFICIENT: the
+    # fast-path additionally requires at least one matched dep to pass the
+    # #174 canonical strong-grounding predicate (non-dev, confidence >= 0.40,
+    # non-ambiguous package name — dependencies::is_strong_grounding_match).
     dep_match_threshold: 0.25   # [0.15, 0.40]
     # A CVE confirmed against a DIRECT dependency is the flagship preemption case
     # — higher confidence than a generic match, so it floors higher (and clears
