@@ -62,7 +62,8 @@ pub(super) fn build_corroboration(
     //    non-dev hit is NOT enough; the classifier's Critical hard-gate trusts
     //    this flag, so it must mean the same "strongly grounded" as the
     //    evidence pool and the persisted link set (non-dev, confidence >= the
-    //    strong floor, non-ambiguous name).
+    //    strong floor, non-ambiguous name, and name-corroborated: the item
+    //    actually names the package).
     let dependency_match = dependencies::is_strongly_grounded(matched_deps);
 
     // 3. Signal chain phase — detect if topics appear across multiple days
@@ -405,9 +406,10 @@ mod tests {
     use crate::db::Database;
     use crate::test_utils::{insert_test_item, test_db};
 
-    /// Build a `DepMatch` for grounding tests. A non-dev match with confidence
-    /// >= `STRONG_GROUNDING_CONFIDENCE` (0.40) and a non-ambiguous name is
-    /// "strongly grounded"; flip `is_dev` or drop the confidence to break it.
+    /// Build a `DepMatch` for grounding tests. A non-dev, name-corroborated
+    /// match with confidence >= `STRONG_GROUNDING_CONFIDENCE` (0.40) and a
+    /// non-ambiguous name is "strongly grounded"; flip `is_dev`, drop the
+    /// confidence, or clear `corroborated` to break it.
     fn dep(name: &str, confidence: f32, is_dev: bool) -> DepMatch {
         DepMatch {
             package_name: name.to_string(),
@@ -417,6 +419,7 @@ mod tests {
             is_direct: true,
             version: None,
             ecosystem: "rust".to_string(),
+            corroborated: true,
         }
     }
 
@@ -639,6 +642,18 @@ mod tests {
         // No deps at all.
         let c3 = build_corroboration(&db, &["x".to_string()], &[]);
         assert!(!c3.dependency_match);
+    }
+
+    #[test]
+    fn corroboration_dependency_match_false_without_name_corroboration() {
+        let db = test_db();
+        // A confident non-dev match whose item never actually named the
+        // package (subterm/topic-overlap hit) is NOT a grounding edge — the
+        // 2026-07-02 phantom-critical class.
+        let mut d = dep("tokio", 0.95, false);
+        d.corroborated = false;
+        let c = build_corroboration(&db, &["x".to_string()], &[d]);
+        assert!(!c.dependency_match);
     }
 
     #[test]

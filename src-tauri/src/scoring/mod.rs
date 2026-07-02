@@ -113,7 +113,19 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // fast-path requires canonical strong grounding. Without the bump these logic
 // changes stay dark on the v9 corpus (same failure mode as v6/v9, documented
 // above).
-pub(crate) const PIPELINE_VERSION: i32 = 10;
+//
+// v11 (2026-07-03): text-match grounding requires NAME CORROBORATION — a dep
+// match grounds (Critical gate / strongly_grounded / fast-path) only when the
+// item actually names the package: a full-name token occurrence, with word-like
+// single-token names additionally needing software context or an adjacent
+// version literal (mirrors dep_linker's persistence proof grades). Kills the
+// residual 29 phantom criticals measured post-v9-drain, all minted by subterm
+// expansions ("anthropic" -> @anthropic-ai/sdk on company news, "router" ->
+// react-router-dom on a Zyxel headline, "updater" -> tauri-plugin-updater on an
+// AMD story) or alias overlaps ("sqlite3" -> better-sqlite3 on a sqlite-utils
+// release). The structured-advisory route (Affected-packages metadata) is an
+// independent proof and is unchanged.
+pub(crate) const PIPELINE_VERSION: i32 = 11;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
