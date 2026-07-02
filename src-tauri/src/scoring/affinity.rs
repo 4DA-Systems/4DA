@@ -117,6 +117,14 @@ pub(crate) fn compute_anti_penalty(topics: &[String], ace_ctx: &ACEContext) -> f
 /// Domain penalty for items with zero tech/topic overlap.
 /// If none of the item's extracted topics match ANY of: declared_tech, detected_tech, or active_topics,
 /// apply a strong penalty. No domain overlap = almost certainly noise.
+///
+/// Overlaps only count on SPECIFIC user-side terms (see
+/// [`is_weak_domain_anchor`]) so the penalty composes with the ubiquity and
+/// ambiguity guards instead of being zeroed by the same react/node overlap
+/// those guards already discounted. If the user's entire visible stack is
+/// ubiquitous/generic (nothing specific to anchor on), fall back to the
+/// unfiltered term set — domains cannot be distinguished for such a profile
+/// and penalizing everything would be worse.
 #[score_component(output_range = "0.0..=0.60")]
 pub(crate) fn compute_off_domain_penalty(
     topics: &[String],
@@ -131,17 +139,41 @@ pub(crate) fn compute_off_domain_penalty(
         return 0.0;
     }
 
-    let has_overlap = topics.iter().any(|topic| {
-        declared_tech.iter().any(|tech| topic_overlaps(topic, tech))
-            || ace_ctx
-                .detected_tech
+    /// True when a user-side term is too weak to anchor domain membership
+    /// on its own: ubiquitous frameworks (react/node/vite — present in
+    /// nearly every JS project) and generic/common-English tokens
+    /// (payment/render/event — ACE mints these from the user's own function
+    /// names). An overlap on such a term must not suppress the penalty,
+    /// otherwise "AI CAD tool built with React" rides its incidental react
+    /// overlap past the penalty compute_domain_relevance (v8) assigns it.
+    fn is_weak_domain_anchor(term: &str) -> bool {
+        let lower = term.to_lowercase();
+        crate::domain_profile::is_ubiquitous_framework(&lower)
+            || crate::scoring::is_ambiguous_dep_name(&lower)
+    }
+
+    let all_terms = || {
+        declared_tech
+            .iter()
+            .chain(ace_ctx.detected_tech.iter())
+            .chain(ace_ctx.active_topics.iter())
+    };
+    let specific_terms: Vec<&String> = all_terms()
+        .filter(|term| !is_weak_domain_anchor(term))
+        .collect();
+
+    let has_overlap = if specific_terms.is_empty() {
+        // Degenerate profile (all ubiquitous/generic): original behavior.
+        topics
+            .iter()
+            .any(|topic| all_terms().any(|term| topic_overlaps(topic, term)))
+    } else {
+        topics.iter().any(|topic| {
+            specific_terms
                 .iter()
-                .any(|tech| topic_overlaps(topic, tech))
-            || ace_ctx
-                .active_topics
-                .iter()
-                .any(|at| topic_overlaps(topic, at))
-    });
+                .any(|term| topic_overlaps(topic, term))
+        })
+    };
 
     if has_overlap {
         0.0
@@ -466,6 +498,70 @@ mod tests {
         assert_eq!(
             compute_off_domain_penalty(&topics, &ace_ctx, &declared),
             0.0, // Has overlap via word part
+        );
+    }
+
+    #[test]
+    fn test_off_domain_penalty_ubiquitous_overlap_does_not_suppress() {
+        // "AI CAD tool built with React" vs a react+tauri+rust user: the only
+        // overlap is on ubiquitous `react`, which the v8 domain-relevance fix
+        // already discounts — the off-domain penalty must compose, not be
+        // zeroed by the same overlap.
+        let ace_ctx = ACEContext::default();
+        let declared = vec!["react".to_string(), "tauri".to_string(), "rust".to_string()];
+        let topics = vec!["ai".to_string(), "cad".to_string(), "react".to_string()];
+        assert_eq!(
+            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
+            scoring_config::OFF_DOMAIN_PENALTY,
+            "ubiquitous-only overlap must not suppress the off-domain penalty"
+        );
+    }
+
+    #[test]
+    fn test_off_domain_penalty_specific_overlap_still_suppresses() {
+        // Same user, item genuinely about their stack: `tauri` is a specific
+        // anchor — no penalty.
+        let ace_ctx = ACEContext::default();
+        let declared = vec!["react".to_string(), "tauri".to_string(), "rust".to_string()];
+        let topics = vec!["tauri".to_string(), "ipc".to_string()];
+        assert_eq!(
+            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
+            0.0
+        );
+    }
+
+    #[test]
+    fn test_off_domain_penalty_generic_ace_token_does_not_suppress() {
+        // ACE minted "payment" / "render" as active topics from the user's
+        // own function names. Fintech news on an alien stack overlapping only
+        // those tokens must still be penalized.
+        let ace_ctx = ACEContext {
+            active_topics: vec!["payment".to_string(), "render".to_string()],
+            detected_tech: vec!["rust".to_string()],
+            tech_weights: std::collections::HashMap::new(),
+            ..Default::default()
+        };
+        let declared: Vec<String> = vec![];
+        let topics = vec!["payment".to_string(), "fintech".to_string()];
+        assert_eq!(
+            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
+            scoring_config::OFF_DOMAIN_PENALTY,
+            "generic ACE-minted token overlap must not suppress the penalty"
+        );
+    }
+
+    #[test]
+    fn test_off_domain_penalty_all_weak_profile_falls_back() {
+        // Degenerate profile: every visible term is ubiquitous. The filtered
+        // set is empty, so the original unfiltered behavior applies — a react
+        // item for a react-only user is NOT penalized.
+        let ace_ctx = ACEContext::default();
+        let declared = vec!["react".to_string(), "node".to_string()];
+        let topics = vec!["react".to_string(), "hooks".to_string()];
+        assert_eq!(
+            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
+            0.0,
+            "all-ubiquitous profile must fall back to unfiltered overlap"
         );
     }
 }
