@@ -370,6 +370,50 @@ fn advisory_affects_dependency(advisory_affected: &[(String, String)], dep: &Dep
     })
 }
 
+/// Security-applicability label + critical-alert verdict for a
+/// `security_alert` item, from two INDEPENDENT proof routes:
+///
+/// - **Structured advisory metadata**: the advisory's "Affected:" list names
+///   this dependency in the same ecosystem. The metadata IS the proof — the
+///   text-corroboration flag is deliberately not consulted, so tightening the
+///   text route can never weaken OSV/CVE-verified alerts.
+/// - **Text route** (no affected-package metadata): the match must satisfy the
+///   full canonical grounding predicate — base requirements plus name
+///   corroboration (the item actually names the package).
+///
+/// Deps below the strong floor (or dev-only) still yield "likely_affected"
+/// rather than "affected", exactly as before.
+fn security_applicability(
+    matched_deps: &[DepMatch],
+    advisory_ecosystems: &[(String, String)],
+) -> (Option<String>, bool) {
+    let has_strong_dep = matched_deps.iter().any(|d| {
+        if !dependencies::is_grounding_candidate(d) {
+            return false;
+        }
+        if advisory_ecosystems.is_empty() {
+            d.corroborated // can't verify metadata — require the text proof
+        } else {
+            advisory_affects_dependency(advisory_ecosystems, d)
+        }
+    });
+    let has_any_dep = !matched_deps.is_empty();
+    let all_transitive = matched_deps.iter().all(|d| !d.is_direct);
+
+    if has_strong_dep {
+        if all_transitive {
+            (Some("likely_affected".to_string()), false)
+        } else {
+            (Some("affected".to_string()), true)
+        }
+    } else if has_any_dep {
+        // Weak/dev-only/uncorroborated matches: plausible but unproven.
+        (Some("likely_affected".to_string()), false)
+    } else {
+        (Some("needs_verification".to_string()), false)
+    }
+}
+
 /// Dependency-match score for a CVE/OSV advisory after the strict survivor
 /// filter has run.
 ///
@@ -1925,7 +1969,8 @@ pub(crate) fn score_item(
     // ambiguous package name like `log`, or a couple of 0.25-confidence
     // topic overlaps) reached the floor and surfaced irrelevant items as
     // critical. The #174 canonical predicate (`is_strong_grounding_match`:
-    // non-dev, confidence >= 0.40, non-ambiguous package name) is the
+    // non-dev, confidence >= 0.40, non-ambiguous package name, and — since
+    // v11 — name-corroborated: the item actually names the package) is the
     // necessary grounding condition; the DSL threshold remains as the
     // aggregate-strength check. Advisories whose best match sits in the
     // 0.25-0.40 confidence band lose the fast-path floor but still score
@@ -2121,36 +2166,8 @@ pub(crate) fn score_item(
 
     // ── Security applicability + critical alert gate ────────────────────
     let (applicability, is_critical_alert) = if sig_type.as_deref() == Some("security_alert") {
-        // Metadata-verified strong dep: confidence >= 0.40, not dev, AND
-        // either the advisory has no affected-package metadata or the metadata
-        // names this dependency in the same ecosystem.
         let advisory_ecosystems = extract_advisory_ecosystems(input.content);
-        let has_strong_dep = raw.matched_deps.iter().any(|d| {
-            if !dependencies::is_strong_grounding_match(d) {
-                return false;
-            }
-            if advisory_ecosystems.is_empty() {
-                return true; // can't verify package metadata
-            }
-            advisory_affects_dependency(&advisory_ecosystems, d)
-        });
-        let has_any_dep = !raw.matched_deps.is_empty();
-        let all_dev = raw.matched_deps.iter().all(|d| d.is_dev);
-        let all_transitive = raw.matched_deps.iter().all(|d| !d.is_direct);
-
-        if has_strong_dep {
-            if all_transitive {
-                (Some("likely_affected".to_string()), false)
-            } else {
-                (Some("affected".to_string()), true)
-            }
-        } else if has_any_dep && !all_dev {
-            (Some("likely_affected".to_string()), false)
-        } else if all_dev && has_any_dep {
-            (Some("likely_affected".to_string()), false)
-        } else {
-            (Some("needs_verification".to_string()), false)
-        }
+        security_applicability(&raw.matched_deps, &advisory_ecosystems)
     } else {
         (None, false)
     };
@@ -2889,7 +2906,66 @@ mod tests {
             is_direct: true,
             version: None,
             ecosystem: ecosystem.to_string(),
+            corroborated: true,
         }
+    }
+
+    #[test]
+    fn security_applicability_metadata_route_is_independent_of_text_proof() {
+        // An OSV/CVE advisory whose Affected-packages metadata names the dep
+        // is proof by itself — even when the text-corroboration flag is false.
+        // Tightening the text route must never weaken the structured route.
+        let mut dep = test_dep("axios", "javascript");
+        dep.corroborated = false;
+        let metadata = vec![("axios".to_string(), "npm".to_string())];
+        let (applicability, critical) = security_applicability(&[dep], &metadata);
+        assert_eq!(applicability.as_deref(), Some("affected"));
+        assert!(critical, "metadata-verified advisory must stay critical");
+    }
+
+    #[test]
+    fn security_applicability_text_route_requires_corroboration() {
+        // No structured metadata: a confident match that never actually named
+        // the package (subterm/topic hit) is only "likely_affected".
+        let mut dep = test_dep("react-router-dom", "javascript");
+        dep.corroborated = false;
+        let (applicability, critical) = security_applicability(&[dep], &[]);
+        assert_eq!(applicability.as_deref(), Some("likely_affected"));
+        assert!(!critical, "uncorroborated text match must not be critical");
+
+        // With name corroboration the text route still proves "affected".
+        let dep = test_dep("react-router-dom", "javascript");
+        let (applicability, critical) = security_applicability(&[dep], &[]);
+        assert_eq!(applicability.as_deref(), Some("affected"));
+        assert!(critical);
+    }
+
+    #[test]
+    fn security_applicability_metadata_naming_other_package_is_not_proof() {
+        // Metadata exists but names a DIFFERENT package: not affected, even
+        // for a corroborated match — same-ecosystem noise stays demoted.
+        let dep = test_dep("react", "javascript");
+        let metadata = vec![("next".to_string(), "npm".to_string())];
+        let (applicability, critical) = security_applicability(&[dep], &metadata);
+        assert_eq!(applicability.as_deref(), Some("likely_affected"));
+        assert!(!critical);
+    }
+
+    #[test]
+    fn security_applicability_no_deps_needs_verification() {
+        let (applicability, critical) = security_applicability(&[], &[]);
+        assert_eq!(applicability.as_deref(), Some("needs_verification"));
+        assert!(!critical);
+    }
+
+    #[test]
+    fn security_applicability_transitive_only_is_likely_affected() {
+        let mut dep = test_dep("openssl-sys", "rust");
+        dep.is_direct = false;
+        let metadata = vec![("openssl-sys".to_string(), "crates.io".to_string())];
+        let (applicability, critical) = security_applicability(&[dep], &metadata);
+        assert_eq!(applicability.as_deref(), Some("likely_affected"));
+        assert!(!critical, "transitive-only edges never reach 'affected'");
     }
 
     #[test]
