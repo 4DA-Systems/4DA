@@ -71,6 +71,22 @@ impl Database {
     }
 
     /// Get all active (unresolved) alerts.
+    ///
+    /// GROUNDING NOTE (read-path guard deliberately omitted, 2026-07-02): every
+    /// write path into `dependency_alerts` is already gated to packages the user
+    /// actually has installed, so alerts need no read-side grounding filter:
+    /// - CVE scan (`monitoring_jobs::run_cve_scan`) cross-references advisories
+    ///   against `get_relevant_user_dependencies()` (direct, non-dev, real deps)
+    ///   with semver range matching before storing.
+    /// - Local audit (`local_audit::run_local_audits`) stores findings reported
+    ///   by `npm audit` / `cargo audit` against the user's actual lockfiles.
+    /// Do NOT add an `is_ambiguous_package_name` filter here: a real dependency
+    /// legitimately named like a common word (e.g. the `log` crate) has a REAL
+    /// alert that must surface. Do NOT add a JOIN against the current dependency
+    /// tables either: `resolve_patched_dependency_alerts` deliberately keeps
+    /// alerts whose package is absent from the current auditable set ("a scan
+    /// gap must never silently clear a real advisory") — a read-side existence
+    /// JOIN would silently hide exactly those alerts.
     pub fn get_active_alerts(&self) -> SqliteResult<Vec<DependencyAlert>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(

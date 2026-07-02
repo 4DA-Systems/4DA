@@ -44,6 +44,11 @@ pub(crate) fn build_deterministic_brief(
 }
 
 /// Render the ranked "top signals" list (pure — no feed/DB access).
+///
+/// `items` arrives pre-ordered by the caller's grounded-first slate
+/// (`digest_commands::order_briefing_slate`): dependency-grounded items first,
+/// then ungrounded, score DESC within each partition — so this top-10 cut
+/// keeps grounded items ahead of higher-scoring ungrounded ones by design.
 fn render_signals_section(
     items: &[DigestSourceItem],
     explanations: &HashMap<i64, String>,
