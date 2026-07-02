@@ -1734,29 +1734,35 @@ pub(crate) fn score_item(
     let lang_mismatch = !input.detected_lang.is_empty() && input.detected_lang != user_lang;
 
     // ── KNN context search (needed for Phase 1 and final output) ──────
-    let matches: Vec<RelevanceMatch> =
-        if ctx.cached_context_count > 0 && !input.embedding.is_empty() {
-            db.find_similar_contexts(input.embedding, 3)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|result| {
-                    let similarity = 1.0 / (1.0 + result.distance);
-                    let matched_text = if result.text.len() > 100 {
-                        let truncated: String = result.text.chars().take(100).collect();
-                        format!("{truncated}...")
-                    } else {
-                        result.text
-                    };
-                    RelevanceMatch {
-                        source_file: result.source_file,
-                        matched_text,
-                        similarity,
-                    }
-                })
-                .collect()
-        } else {
-            vec![]
-        };
+    // Zero-vector guard (mirrors V1 pipeline.rs): a zero embedding produces
+    // identical inverse-L2 KNN distances for every context row → uniform
+    // similarity → calibrate_knn lifts it above CONTEXT_THRESHOLD → a phantom
+    // confirmed context axis. Zero embeddings exist by design (OSV/CVE items
+    // are retained with a 768-dim zero blob when embedding providers are
+    // down), so require a REAL embedding, not merely a non-empty one.
+    let has_real_embedding = input.embedding.iter().any(|&v| v != 0.0);
+    let matches: Vec<RelevanceMatch> = if ctx.cached_context_count > 0 && has_real_embedding {
+        db.find_similar_contexts(input.embedding, 3)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|result| {
+                let similarity = 1.0 / (1.0 + result.distance);
+                let matched_text = if result.text.len() > 100 {
+                    let truncated: String = result.text.chars().take(100).collect();
+                    format!("{truncated}...")
+                } else {
+                    result.text
+                };
+                RelevanceMatch {
+                    source_file: result.source_file,
+                    matched_text,
+                    similarity,
+                }
+            })
+            .collect()
+    } else {
+        vec![]
+    };
 
     // ── Phase 1: Extract all raw signals ──────────────────────────────
     let raw = extract_signals(input, ctx, &matches);
@@ -1782,7 +1788,6 @@ pub(crate) fn score_item(
     let confirmed_signals = confirmation.confirmed_names();
 
     // ── Phase 4: Compute base relevance ───────────────────────────────
-    let has_real_embedding = input.embedding.iter().any(|&v| v != 0.0);
     let relevance_score = compute_relevance(&cal, ctx, has_real_embedding);
 
     // ── Phase 5: Quality composite ────────────────────────────────────
@@ -1914,23 +1919,34 @@ pub(crate) fn score_item(
     // dependencies ALWAYS surface, regardless of relevance score.
     // This prevents the gate from silently dropping critical alerts.
     //
-    // IMPORTANT: the dep match must be strong AND touch a non-dev dep.
-    // `dep_match_score > 0.0` is too loose — a single stray word-boundary
-    // hit (e.g. the word "hostname" in an unrelated CVE) would trigger the
-    // floor and surface CVEs that have nothing to do with the user's stack.
+    // IMPORTANT: the dep match must be strong AND strongly grounded.
+    // The aggregate threshold plus a bare non-dev check was too loose: a
+    // regex-classified "security" headline plus low-confidence hits (an
+    // ambiguous package name like `log`, or a couple of 0.25-confidence
+    // topic overlaps) reached the floor and surfaced irrelevant items as
+    // critical. The #174 canonical predicate (`is_strong_grounding_match`:
+    // non-dev, confidence >= 0.40, non-ambiguous package name) is the
+    // necessary grounding condition; the DSL threshold remains as the
+    // aggregate-strength check. Advisories whose best match sits in the
+    // 0.25-0.40 confidence band lose the fast-path floor but still score
+    // through the normal pipeline; the OSV/preemption surface
+    // (osv::matching — version-confirmed against structured metadata) is
+    // independent of this floor and unaffected.
     let is_security = content_type == crate::content_dna::ContentType::SecurityAdvisory;
     let is_breaking = content_type == crate::content_dna::ContentType::BreakingChange;
     let has_strong_dep_match = raw.dep_match_score
         >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD
-        && raw.matched_deps.iter().any(|d| !d.is_dev);
+        && dependencies::is_strongly_grounded(&raw.matched_deps);
     let critical_fast_path = (is_security || is_breaking) && has_strong_dep_match;
 
     // A CVE confirmed against the user's DIRECT (non-dev) dependency is the
     // flagship preemption case and the highest-confidence security signal — it
     // floors higher than a generic match so a pure-dep-signal advisory (weak
     // embedding, no topic overlap) still scores clearly relevant instead of
-    // sitting at the bare 0.50 floor.
-    let has_direct_dep = raw.matched_deps.iter().any(|d| d.is_direct && !d.is_dev);
+    // sitting at the bare 0.50 floor. The higher tier requires the direct dep
+    // itself to be the strongly grounded edge (canonical predicate), not just
+    // any direct dep riding alongside a grounded transitive match.
+    let has_direct_dep = dependencies::is_strongly_grounded_direct(&raw.matched_deps);
     let fast_path_floor = if has_direct_dep {
         scoring_config::CRITICAL_FASTPATH_DIRECT_DEP_FLOOR
     } else {
@@ -2464,6 +2480,223 @@ mod tests {
             empty_lang.top_score > 0.05,
             "Empty detected_lang must not be capped, got {}",
             empty_lang.top_score
+        );
+    }
+
+    // ========================================================================
+    // Zero-vector KNN guard — a zero embedding must not manufacture a
+    // confirmed context axis (gate count inflation, Fix A)
+    // ========================================================================
+
+    #[test]
+    fn v2_zero_embedding_yields_no_context_axis() {
+        let db = crate::test_utils::test_db();
+        // Store a real context chunk so KNN WOULD return rows if queried.
+        let stored = crate::test_utils::seed_embedding("context-chunk");
+        db.upsert_context("src/main.rs", "rust tauri ipc command handler", &stored)
+            .expect("store context chunk");
+
+        let ctx = crate::scoring::ScoringContext::builder()
+            .cached_context_count(1)
+            .build();
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        // Zero-vector embedding (OSV/CVE fallback when providers are down)
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let input = ScoringInput {
+            id: 1,
+            title: "Completely unrelated gardening newsletter",
+            url: Some("https://example.com/gardening"),
+            content: "tips for growing tomatoes in winter",
+            source_type: "rss",
+            embedding: &zero,
+            created_at: None,
+            detected_lang: "",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+        };
+        let result = score_item(&input, &ctx, &db, &options, None);
+
+        assert!(
+            result.matches.is_empty(),
+            "zero-vector embedding must not run KNN, got {} matches",
+            result.matches.len()
+        );
+        assert_eq!(
+            result.context_score, 0.0,
+            "zero-vector embedding must yield context_score 0.0"
+        );
+        let bd = result.score_breakdown.as_ref().expect("breakdown");
+        assert!(
+            !bd.confirmed_signals.contains(&"context".to_string()),
+            "zero-vector embedding must not confirm the context axis, got {:?}",
+            bd.confirmed_signals
+        );
+
+        // Control: a REAL embedding against the same DB does produce KNN
+        // matches — proving the fixture is valid and the guard (not an
+        // empty DB) is what suppressed the phantom axis above.
+        let real = crate::test_utils::seed_embedding("context-chunk");
+        let control_input = ScoringInput {
+            embedding: &real,
+            ..input
+        };
+        let control = score_item(&control_input, &ctx, &db, &options, None);
+        assert!(
+            !control.matches.is_empty(),
+            "real embedding against stored contexts must produce KNN matches"
+        );
+        assert!(
+            control.context_score > 0.0,
+            "identical real embedding must yield a positive context score"
+        );
+    }
+
+    // ========================================================================
+    // Critical fast-path requires strong grounding (Fix D)
+    // ========================================================================
+
+    /// Context with tracked dependencies (direct, non-dev) installed the
+    /// same way production populates ACE dependency intelligence.
+    fn fastpath_ctx(packages: &[(&str, &str)]) -> crate::scoring::ScoringContext {
+        let mut ace_ctx = ACEContext::default();
+        for (package, ecosystem) in packages {
+            let normalized = dependencies::normalize_package_name(package);
+            let info = dependencies::DepInfo {
+                package_name: normalized.clone(),
+                version: None,
+                is_dev: false,
+                is_direct: true,
+                search_terms: dependencies::extract_search_terms(package),
+                ecosystem: (*ecosystem).to_string(),
+            };
+            for term in &info.search_terms {
+                ace_ctx.dependency_names.insert(term.clone());
+            }
+            ace_ctx.dependency_names.insert(normalized.clone());
+            ace_ctx.dependency_info.insert(normalized, info);
+        }
+        crate::scoring::ScoringContext::builder()
+            .ace_ctx(ace_ctx)
+            .build()
+    }
+
+    fn fastpath_options() -> ScoringOptions {
+        ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        }
+    }
+
+    #[test]
+    fn v2_critical_fastpath_rejects_ambiguous_low_grounding_match() {
+        // Phantom case: a regex-classified security headline matching the
+        // user's `log` and `time` crates — ambiguous package names whose
+        // bare text hits cannot be trusted (#174 canonical denylist).
+        // Previously the aggregate dep_match_score cleared the 0.25
+        // threshold and the item was floored at 0.65 + forced relevant.
+        // It must NOT be.
+        let db = crate::test_utils::test_db();
+        let ctx = fastpath_ctx(&[("log", "rust"), ("time", "rust")]);
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let tags = vec!["log".to_string()];
+        let input = ScoringInput {
+            id: 1,
+            title: "Critical vulnerability in log and time crates allows remote code execution",
+            url: Some("https://example.com/advisory"),
+            content: "A vulnerability was reported affecting logging functionality in \
+                      several applications.",
+            source_type: "hackernews",
+            embedding: &zero,
+            created_at: None,
+            detected_lang: "",
+            source_tags: &tags,
+            tags_json: None,
+            feed_origin: None,
+        };
+        let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
+
+        // Sanity: the dep DID match with fast-path-level aggregate strength —
+        // this is exactly the configuration that previously inflated.
+        let bd = result.score_breakdown.as_ref().expect("breakdown");
+        assert!(
+            bd.matched_deps.iter().any(|d| d == "log"),
+            "fixture must produce a `log` dep match, got {:?}",
+            bd.matched_deps
+        );
+        assert!(
+            bd.dep_match_score >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD,
+            "fixture must clear the aggregate fast-path threshold (got {})",
+            bd.dep_match_score
+        );
+        assert!(
+            !bd.strongly_grounded,
+            "ambiguous `log` match must not be strongly grounded"
+        );
+
+        // The actual regression assertions: no floor, not relevant.
+        assert!(
+            result.top_score < scoring_config::CRITICAL_FASTPATH_SCORE_FLOOR,
+            "ambiguous low-grounding match must not receive the fast-path \
+             floor, got {}",
+            result.top_score
+        );
+        assert!(
+            !result.relevant,
+            "ambiguous low-grounding match must not be forced relevant \
+             (score={})",
+            result.top_score
+        );
+    }
+
+    #[test]
+    fn v2_critical_fastpath_keeps_direct_dep_floor_for_grounded_advisory() {
+        // Real case: an advisory naming the user's direct `axios` dependency
+        // in the title — full-name word-boundary hit, confidence >= 0.40,
+        // non-ambiguous name. Must keep the 0.65 direct-dep floor and the
+        // relevant=true override.
+        let db = crate::test_utils::test_db();
+        let ctx = fastpath_ctx(&[("axios", "javascript")]);
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let tags = vec!["axios".to_string()];
+        let input = ScoringInput {
+            id: 2,
+            title: "Critical vulnerability in axios package allows SSRF attacks",
+            url: Some("https://example.com/advisory"),
+            content: "A server-side request forgery flaw affects applications \
+                      making HTTP requests through the vulnerable client.",
+            source_type: "hackernews",
+            embedding: &zero,
+            created_at: None,
+            detected_lang: "",
+            source_tags: &tags,
+            tags_json: None,
+            feed_origin: None,
+        };
+        let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
+
+        let bd = result.score_breakdown.as_ref().expect("breakdown");
+        assert!(
+            bd.strongly_grounded,
+            "full-name direct-dep advisory must be strongly grounded \
+             (deps={:?}, dep_match_score={})",
+            bd.matched_deps, bd.dep_match_score
+        );
+        assert!(
+            result.top_score >= scoring_config::CRITICAL_FASTPATH_DIRECT_DEP_FLOOR - 1e-6,
+            "grounded direct-dep advisory must keep the {} floor, got {}",
+            scoring_config::CRITICAL_FASTPATH_DIRECT_DEP_FLOOR,
+            result.top_score
+        );
+        assert!(
+            result.relevant,
+            "grounded direct-dep advisory must remain relevant"
         );
     }
 

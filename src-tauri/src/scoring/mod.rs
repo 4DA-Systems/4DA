@@ -105,7 +105,13 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // v8 items — 65 of 77 live critical signals were phantom-grounded (measured 2026-07-02).
 // No scoring-logic change in this commit; the bump makes the drain re-stamp the corpus
 // with the merged logic.
-pub(crate) const PIPELINE_VERSION: i32 = 9;
+//
+// v10 (2026-07-02): gate count-inflation fixes — zero-vector KNN context guard,
+// word-boundary keyword matching + generic-interest specificity, critical
+// fast-path requires canonical strong grounding. Without the bump these logic
+// changes stay dark on the v9 corpus (same failure mode as v6/v9, documented
+// above).
+pub(crate) const PIPELINE_VERSION: i32 = 10;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
