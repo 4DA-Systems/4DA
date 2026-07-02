@@ -85,6 +85,31 @@ ignore = [
     # -----------------------------------------------------------------------
     { id = "RUSTSEC-2023-0071", reason = "enterprise-only, signature verification not decryption, no fix upstream" },
     { id = "RUSTSEC-2026-0097", reason = "rand unsound only with custom global allocator + rand::rng(), neither applies to 4DA" },
+
+    # -----------------------------------------------------------------------
+    # RUSTSEC-2026-0194 / RUSTSEC-2026-0195 — quick-xml <0.41 DoS
+    #
+    # 0194: quadratic run time checking start tags for duplicate attributes.
+    # 0195: unbounded namespace-declaration allocation in NsReader
+    #       (memory-exhaustion DoS, CVSS 7.5).
+    #
+    # TEMPORARY ignore — the fix (quick-xml 0.41.0, released 2026-06-29) is a
+    # breaking 0.x minor and NO consumer in our tree has a released version
+    # against >=0.41 yet:
+    #   - calamine (latest 0.35.0 -> quick-xml ^0.39)   [direct, xlsx extractor]
+    #   - docx-rs (latest 0.4.20 -> quick-xml ^0.36)    [direct, docx extractor]
+    #   - plist (latest 1.9.0 -> quick-xml ^0.39.2)     [transitive via tauri-utils]
+    #
+    # Risk assessment: both are CPU/memory-exhaustion DoS on attacker-supplied
+    # XML. 4DA's quick-xml surface is local user-selected .xlsx/.docx files and
+    # build-time plists — no network-facing XML parsing, no memory-safety impact.
+    #
+    # REVISIT: drop these ignores as soon as calamine / docx-rs / plist release
+    # against quick-xml >=0.41. Mirrored in .cargo/audit.toml.
+    # Monitoring: https://rustsec.org/advisories/RUSTSEC-2026-0195
+    # -----------------------------------------------------------------------
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml DoS; no upstream release on >=0.41 yet (calamine/docx-rs/plist); local-file-only XML surface" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml NsReader DoS; no upstream release on >=0.41 yet (calamine/docx-rs/plist); local-file-only XML surface" },
 ]
 
 # ============================================================================
