@@ -274,6 +274,17 @@ const COMMON_ENGLISH_WORDS: &[&str] = &[
     "extra",
     "super",
     "auto",
+    // Business-domain words that ACE mints as topics from the user's own
+    // function/module names (handle_payment, render_frame, InvoiceService).
+    // As bare tokens they anchor nothing: a "payment" overlap must not make
+    // fintech news on an alien stack look on-domain, and a package actually
+    // named like this still matches via language context / full name.
+    "payment",
+    "payments",
+    "render",
+    "invoice",
+    "invoices",
+    "billing",
     // OS / platform proper nouns. These are also real package names or subterms
     // of platform crates (`windows`/`windows-sys`, `linux-*`, `android-*`), but
     // they appear constantly in titles as the OPERATING SYSTEM, not the package

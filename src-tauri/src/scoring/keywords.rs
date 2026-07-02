@@ -41,10 +41,12 @@ pub(crate) fn interest_specificity_weight_for(
 /// Find the best-matching interest for an item and return its specificity weight.
 /// Used to attenuate keyword_score for broad interests.
 ///
-/// When the user has very few interests (1-2), ALL interests get full 1.0x
-/// weight — someone who only declares "AI" and "Rust" clearly means both.
-/// The broad-term discount only kicks in when there are 3+ interests, and
-/// at a gentler rate (0.60x for 3-5 interests) than the default (0.25x for 6+).
+/// When the user has very few interests (1-2), SPECIFIC interests get full
+/// 1.0x weight — someone who only declares "Tauri" and "Rust" clearly means
+/// both. GENERIC lone interests ("ai", "api") keep their computed specificity
+/// weight so the gate's broad-interest corroboration guard still applies.
+/// With 3+ interests the broad-term discount kicks in at a gentler rate
+/// (0.60x for 3-5 interests) than the default (0.25x for 6+).
 pub(crate) fn best_interest_specificity_weight(
     title: &str,
     content: &str,
@@ -84,38 +86,43 @@ pub(crate) fn best_interest_specificity_weight_for(
             if term.len() < 3 && !SHORT_TECH_KEYWORDS.contains(term) {
                 return false;
             }
-            // Fast path: direct match (word-boundary for short terms)
-            if term.len() <= 2 {
-                if has_word_boundary_match(&title_lower, term)
-                    || has_word_boundary_match(&text_lower, term)
-                {
-                    return true;
-                }
-            } else if title_lower.contains(term) || text_lower.contains(term) {
+            // Fast path: direct word-boundary match at every length. Raw
+            // `contains` for len >= 3 let "rust" hit "frustrating" and
+            // "react" hit "reaction" — a phantom keyword axis. Punctuation
+            // still bounds ("react-native", "node.js" both match "react"/
+            // "node").
+            if has_word_boundary_match(&title_lower, term)
+                || has_word_boundary_match(&text_lower, term)
+            {
                 return true;
             }
-            // Alias expansion
+            // Alias expansion — word-boundary at every length too: alias
+            // groups carry their own variants ("react"/"reactjs"/"react.js"),
+            // so substring matching only added false positives.
             if let Some(group) = aliases::get_aliases(term) {
                 if group.iter().any(|alias| {
-                    if alias.len() <= 2 || AMBIGUOUS_ALIASES.contains(alias) {
-                        has_word_boundary_match(&title_lower, alias)
-                            || has_word_boundary_match(&text_lower, alias)
-                    } else {
-                        title_lower.contains(alias) || text_lower.contains(alias)
-                    }
+                    has_word_boundary_match(&title_lower, alias)
+                        || has_word_boundary_match(&text_lower, alias)
                 }) {
                     return true;
                 }
             }
-            // Stemmed match
-            let term_stem = stemming::stem(term);
-            if term_stem.len() >= 3 {
-                let words_match = title_lower
-                    .split(|c: char| !c.is_alphanumeric())
-                    .chain(text_lower.split(|c: char| !c.is_alphanumeric()))
-                    .any(|w| w.len() >= 3 && stemming::stems_equiv(&stemming::stem(w), &term_stem));
-                if words_match {
-                    return true;
+            // Stemmed match — only for plain-English interests. Known tech
+            // names (anything with an alias group: react, rust, go, ...)
+            // match literally or via aliases only; English morphology is a
+            // different word ("reaction" is not React, "rusted" is not Rust).
+            if aliases::get_aliases(term).is_none() {
+                let term_stem = stemming::stem(term);
+                if term_stem.len() >= 3 {
+                    let words_match = title_lower
+                        .split(|c: char| !c.is_alphanumeric())
+                        .chain(text_lower.split(|c: char| !c.is_alphanumeric()))
+                        .any(|w| {
+                            w.len() >= 3 && stemming::stems_equiv(&stemming::stem(w), &term_stem)
+                        });
+                    if words_match {
+                        return true;
+                    }
                 }
             }
             false
@@ -123,7 +130,18 @@ pub(crate) fn best_interest_specificity_weight_for(
 
         if has_hit {
             let w = if focused_user {
-                1.0 // Full weight for focused users
+                // Focused users trust their few declared interests at full
+                // weight — but only when the interest is SPECIFIC. A lone
+                // GENERIC interest ("ai", "api", "open source") forced to
+                // 1.0 defeated the broad-interest corroboration guard at
+                // the confirmation gate (gate.rs only requires embedding
+                // corroboration below 0.50), so generic terms fall back to
+                // their computed specificity weight instead.
+                if is_generic_interest_term(&interest_lower, profile) {
+                    interest_specificity_weight_for(&interest.topic, profile)
+                } else {
+                    1.0
+                }
             } else if interests.len() <= 5 {
                 // 3-5 interests: softer discount (0.60x floor for broad terms)
                 let raw_w = interest_specificity_weight_for(&interest.topic, profile);
@@ -153,24 +171,31 @@ const SHORT_TECH_KEYWORDS: &[&str] = &[
     "vm", "k8", "tf", "gcp", "aws", "api", "cli", "css", "sql", "llm", "nlp", "cv",
 ];
 
-/// Alias terms that are common English words and need word-boundary matching
-/// to avoid false positives (e.g., "express delivery" matching Express.js interest).
-const AMBIGUOUS_ALIASES: &[&str] = &[
-    "next",
-    "solid",
-    "fly",
-    "echo",
-    "fiber",
-    "gin",
-    "spring",
-    "express",
-    "compose",
-    "helm",
-    "rest",
-    "elastic",
-    "container",
-    "phoenix",
-];
+/// A declared interest is "generic" when it is a known broad term (per the
+/// specificity classifier, profile-exempted) or a single common-English /
+/// ambiguous token ("ai", "api", "data"). Generic interests never earn the
+/// focused-user 1.0 specificity override: they keep their computed weight so
+/// the confirmation gate's broad-interest corroboration guard still applies
+/// and a bare keyword hit alone cannot confirm the interest axis.
+fn is_generic_interest_term(
+    interest_lower: &str,
+    profile: Option<&super::calibration::SpecificityProfile>,
+) -> bool {
+    let is_broad = BROAD_INTEREST_TERMS
+        .iter()
+        .any(|b| interest_lower == *b || interest_lower.contains(b))
+        && !profile.is_some_and(|p| p.exempts_broad(interest_lower));
+    if is_broad {
+        return true;
+    }
+    // A single-word interest that is a common English word / ambiguous
+    // dep-style token is generic; multi-word interests are specific.
+    let mut words = interest_lower.split_whitespace();
+    match (words.next(), words.next()) {
+        (Some(word), None) => super::is_ambiguous_dep_name(word),
+        _ => false,
+    }
+}
 
 /// Negation patterns that indicate a term is mentioned in a negative context.
 /// Returns true if the term appears near a negation phrase in the text.
@@ -320,18 +345,13 @@ pub(crate) fn compute_keyword_interest_score(
 
             // Determine match and effective search term for density/negation
             let (base_hit, search_term): (f32, Option<&str>) = {
-                // Direct match check (word-boundary for short terms)
-                let direct_title = if term.len() <= 2 {
-                    has_word_boundary_match(&title_lower, term)
-                } else {
-                    title_lower.contains(term)
-                };
+                // Direct word-boundary match at every term length. Raw
+                // `contains` for len >= 3 let "rust" hit "frustrating" and
+                // "react" hit "reaction" (phantom keyword axis); punctuation
+                // still bounds, so "react-dom" / "node.js" keep matching.
+                let direct_title = has_word_boundary_match(&title_lower, term);
                 let direct_content = if !direct_title {
-                    if term.len() <= 2 {
-                        has_word_boundary_match(&text_lower, term)
-                    } else {
-                        text_lower.contains(term)
-                    }
+                    has_word_boundary_match(&text_lower, term)
                 } else {
                     false
                 };
@@ -341,26 +361,18 @@ pub(crate) fn compute_keyword_interest_score(
                 } else if direct_content {
                     (0.55, Some(*term))
                 } else {
-                    // Alias expansion — find which alias actually matched
+                    // Alias expansion — find which alias actually matched.
+                    // Word-boundary at every length: alias groups carry their
+                    // own variants ("react"/"reactjs"/"react.js"), substring
+                    // matching only added false positives ("express" inside
+                    // "expression").
                     let alias_match: Option<(&str, bool)> =
                         aliases::get_aliases(term).and_then(|group| {
                             for alias in group.iter() {
-                                let needs_boundary =
-                                    alias.len() <= 2 || AMBIGUOUS_ALIASES.contains(alias);
-                                let in_title = if needs_boundary {
-                                    has_word_boundary_match(&title_lower, alias)
-                                } else {
-                                    title_lower.contains(alias)
-                                };
-                                if in_title {
+                                if has_word_boundary_match(&title_lower, alias) {
                                     return Some((*alias, true));
                                 }
-                                let in_content = if needs_boundary {
-                                    has_word_boundary_match(&text_lower, alias)
-                                } else {
-                                    text_lower.contains(alias)
-                                };
-                                if in_content {
+                                if has_word_boundary_match(&text_lower, alias) {
                                     return Some((*alias, false));
                                 }
                             }
@@ -369,6 +381,12 @@ pub(crate) fn compute_keyword_interest_score(
 
                     if let Some((matched_alias, in_title)) = alias_match {
                         (if in_title { 0.80 } else { 0.55 }, Some(matched_alias))
+                    } else if aliases::get_aliases(term).is_some() {
+                        // Known tech name (has an alias group) with no direct
+                        // or alias hit: do NOT fall through to stemming —
+                        // English morphology is a different word ("reaction"
+                        // is not React, "rusted" is not Rust).
+                        (0.0, None)
                     } else {
                         // Stemmed match (no effective term for density/negation)
                         let term_stem = stemming::stem(term);
@@ -405,7 +423,7 @@ pub(crate) fn compute_keyword_interest_score(
             if term_hit > 0.0 && term_hit < 0.80 && content_lower.len() >= 3 {
                 let effective = search_term.unwrap_or(term);
                 let end = content_lower.floor_char_boundary(content_lower.len().min(200));
-                if content_lower[..end].contains(effective) {
+                if has_word_boundary_match(&content_lower[..end], effective) {
                     term_hit = (term_hit + 0.10).min(0.80);
                 }
             }

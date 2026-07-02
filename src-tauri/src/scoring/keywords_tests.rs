@@ -67,7 +67,9 @@ fn test_broad_interest_specificity_penalty() {
         "Broad interest with 3-5 interests should return 0.60 floor"
     );
 
-    // 1-2 interests: focused user, all interests get 1.0x (trust them)
+    // 1-2 interests: focused user — but "Open Source" is GENERIC, so it
+    // falls back to its computed specificity (0.25) instead of the forced
+    // 1.0 that used to defeat the gate's broad-interest corroboration guard.
     let few_interests = vec![make("Open Source")];
     let specificity = best_interest_specificity_weight(
         "New open source project for data pipelines",
@@ -75,8 +77,17 @@ fn test_broad_interest_specificity_penalty() {
         &few_interests,
     );
     assert_eq!(
+        specificity, 0.25,
+        "Focused user with a GENERIC interest keeps the computed broad weight"
+    );
+
+    // 1-2 interests with a SPECIFIC single-word interest: full trust stands.
+    let focused_specific = vec![make("Tauri")];
+    let specificity =
+        best_interest_specificity_weight("Tauri 2.0 ships mobile support", "", &focused_specific);
+    assert_eq!(
         specificity, 1.00,
-        "Focused user (1-2 interests) should get 1.0 weight even for broad terms"
+        "Focused user with a SPECIFIC interest keeps full 1.0 weight"
     );
 
     // Alias-expanded match: "kubernetes" in interests, "k8s" in title
@@ -445,6 +456,121 @@ fn test_empty_content() {
         "Should match on title even with empty content, got {}",
         title_only
     );
+}
+
+// ============================================================================
+// Word-boundary matching + generic-term corroboration (gate count inflation)
+// ============================================================================
+
+fn single_interest(topic: &str) -> Vec<context_engine::Interest> {
+    vec![context_engine::Interest {
+        id: Some(1),
+        topic: topic.to_string(),
+        weight: 1.0,
+        source: context_engine::InterestSource::Explicit,
+        embedding: None,
+    }]
+}
+
+#[test]
+fn test_no_substring_false_positive_rust_frustrating() {
+    // "rust" must NOT match inside "frustrating"
+    let score = compute_keyword_interest_score(
+        "A frustrating week of debugging",
+        "the whole experience was frustrating",
+        &single_interest("rust"),
+    );
+    assert_eq!(score, 0.0, "'rust' must not match inside 'frustrating'");
+}
+
+#[test]
+fn test_no_substring_false_positive_react_reaction() {
+    // "react" must NOT match inside "reaction"...
+    let miss = compute_keyword_interest_score(
+        "Community reaction to the new CSS spec",
+        "the reaction was mixed across forums",
+        &single_interest("react"),
+    );
+    assert_eq!(miss, 0.0, "'react' must not match inside 'reaction'");
+
+    // ...but genuine word-bounded mentions still match,
+    let hit = compute_keyword_interest_score("React 19 released", "", &single_interest("react"));
+    assert!(hit > 0.0, "'react' must match 'React 19 released'");
+
+    // including punctuation-bounded compounds.
+    let compound = compute_keyword_interest_score(
+        "Debugging react-dom hydration errors",
+        "",
+        &single_interest("react"),
+    );
+    assert!(
+        compound > 0.0,
+        "'react' must match 'react-dom' (hyphen bound)"
+    );
+}
+
+#[test]
+fn test_specificity_weight_no_substring_false_positive() {
+    // 3 interests (non-focused): a substring-only pseudo-hit must find NO
+    // match, so no attenuation is applied (returns the neutral 1.0), instead
+    // of the old contains-based 0.60 broad-floor result.
+    let make = |topic: &str| context_engine::Interest {
+        id: Some(1),
+        topic: topic.to_string(),
+        weight: 1.0,
+        source: context_engine::InterestSource::Explicit,
+        embedding: None,
+    };
+    let interests = vec![make("rust"), make("typescript"), make("kubernetes")];
+    let w = best_interest_specificity_weight("A frustrating day at work", "", &interests);
+    assert_eq!(
+        w, 1.0,
+        "substring-only pseudo-hit must not register as an interest match"
+    );
+}
+
+#[test]
+fn test_focused_generic_interest_requires_corroboration_weight() {
+    // A focused user with the lone generic interest "ai": a bare title hit
+    // must yield sub-0.50 specificity so the confirmation gate demands
+    // embedding corroboration (gate.rs broad-interest guard).
+    let w = best_interest_specificity_weight(
+        "AI coding assistants compared",
+        "",
+        &single_interest("ai"),
+    );
+    assert!(
+        w < 0.50,
+        "focused generic 'ai' must fall below the 0.50 gate guard, got {w}"
+    );
+
+    // Same for "api".
+    let w_api = best_interest_specificity_weight(
+        "Designing a public API for your startup",
+        "",
+        &single_interest("api"),
+    );
+    assert!(
+        w_api < 0.50,
+        "focused generic 'api' must fall below the 0.50 gate guard, got {w_api}"
+    );
+}
+
+#[test]
+fn test_focused_specific_interest_keeps_full_weight() {
+    let w = best_interest_specificity_weight(
+        "Tauri 2.0 ships mobile support",
+        "",
+        &single_interest("tauri"),
+    );
+    assert_eq!(w, 1.0, "focused specific 'tauri' keeps full weight");
+
+    let w_rust = best_interest_specificity_weight(
+        "Rust 1.80 stabilizes async closures",
+        "",
+        &single_interest("rust"),
+    );
+    assert_eq!(w_rust, 1.0, "focused specific 'rust' keeps full weight");
 }
 
 #[test]
