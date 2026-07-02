@@ -1734,29 +1734,35 @@ pub(crate) fn score_item(
     let lang_mismatch = !input.detected_lang.is_empty() && input.detected_lang != user_lang;
 
     // ── KNN context search (needed for Phase 1 and final output) ──────
-    let matches: Vec<RelevanceMatch> =
-        if ctx.cached_context_count > 0 && !input.embedding.is_empty() {
-            db.find_similar_contexts(input.embedding, 3)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|result| {
-                    let similarity = 1.0 / (1.0 + result.distance);
-                    let matched_text = if result.text.len() > 100 {
-                        let truncated: String = result.text.chars().take(100).collect();
-                        format!("{truncated}...")
-                    } else {
-                        result.text
-                    };
-                    RelevanceMatch {
-                        source_file: result.source_file,
-                        matched_text,
-                        similarity,
-                    }
-                })
-                .collect()
-        } else {
-            vec![]
-        };
+    // Zero-vector guard (mirrors V1 pipeline.rs): a zero embedding produces
+    // identical inverse-L2 KNN distances for every context row → uniform
+    // similarity → calibrate_knn lifts it above CONTEXT_THRESHOLD → a phantom
+    // confirmed context axis. Zero embeddings exist by design (OSV/CVE items
+    // are retained with a 768-dim zero blob when embedding providers are
+    // down), so require a REAL embedding, not merely a non-empty one.
+    let has_real_embedding = input.embedding.iter().any(|&v| v != 0.0);
+    let matches: Vec<RelevanceMatch> = if ctx.cached_context_count > 0 && has_real_embedding {
+        db.find_similar_contexts(input.embedding, 3)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|result| {
+                let similarity = 1.0 / (1.0 + result.distance);
+                let matched_text = if result.text.len() > 100 {
+                    let truncated: String = result.text.chars().take(100).collect();
+                    format!("{truncated}...")
+                } else {
+                    result.text
+                };
+                RelevanceMatch {
+                    source_file: result.source_file,
+                    matched_text,
+                    similarity,
+                }
+            })
+            .collect()
+    } else {
+        vec![]
+    };
 
     // ── Phase 1: Extract all raw signals ──────────────────────────────
     let raw = extract_signals(input, ctx, &matches);
@@ -1782,7 +1788,6 @@ pub(crate) fn score_item(
     let confirmed_signals = confirmation.confirmed_names();
 
     // ── Phase 4: Compute base relevance ───────────────────────────────
-    let has_real_embedding = input.embedding.iter().any(|&v| v != 0.0);
     let relevance_score = compute_relevance(&cal, ctx, has_real_embedding);
 
     // ── Phase 5: Quality composite ────────────────────────────────────
@@ -2464,6 +2469,80 @@ mod tests {
             empty_lang.top_score > 0.05,
             "Empty detected_lang must not be capped, got {}",
             empty_lang.top_score
+        );
+    }
+
+    // ========================================================================
+    // Zero-vector KNN guard — a zero embedding must not manufacture a
+    // confirmed context axis (gate count inflation, Fix A)
+    // ========================================================================
+
+    #[test]
+    fn v2_zero_embedding_yields_no_context_axis() {
+        let db = crate::test_utils::test_db();
+        // Store a real context chunk so KNN WOULD return rows if queried.
+        let stored = crate::test_utils::seed_embedding("context-chunk");
+        db.upsert_context("src/main.rs", "rust tauri ipc command handler", &stored)
+            .expect("store context chunk");
+
+        let ctx = crate::scoring::ScoringContext::builder()
+            .cached_context_count(1)
+            .build();
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        // Zero-vector embedding (OSV/CVE fallback when providers are down)
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let input = ScoringInput {
+            id: 1,
+            title: "Completely unrelated gardening newsletter",
+            url: Some("https://example.com/gardening"),
+            content: "tips for growing tomatoes in winter",
+            source_type: "rss",
+            embedding: &zero,
+            created_at: None,
+            detected_lang: "",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+        };
+        let result = score_item(&input, &ctx, &db, &options, None);
+
+        assert!(
+            result.matches.is_empty(),
+            "zero-vector embedding must not run KNN, got {} matches",
+            result.matches.len()
+        );
+        assert_eq!(
+            result.context_score, 0.0,
+            "zero-vector embedding must yield context_score 0.0"
+        );
+        let bd = result.score_breakdown.as_ref().expect("breakdown");
+        assert!(
+            !bd.confirmed_signals.contains(&"context".to_string()),
+            "zero-vector embedding must not confirm the context axis, got {:?}",
+            bd.confirmed_signals
+        );
+
+        // Control: a REAL embedding against the same DB does produce KNN
+        // matches — proving the fixture is valid and the guard (not an
+        // empty DB) is what suppressed the phantom axis above.
+        let real = crate::test_utils::seed_embedding("context-chunk");
+        let control_input = ScoringInput {
+            embedding: &real,
+            ..input
+        };
+        let control = score_item(&control_input, &ctx, &db, &options, None);
+        assert!(
+            !control.matches.is_empty(),
+            "real embedding against stored contexts must produce KNN matches"
+        );
+        assert!(
+            control.context_score > 0.0,
+            "identical real embedding must yield a positive context score"
         );
     }
 
