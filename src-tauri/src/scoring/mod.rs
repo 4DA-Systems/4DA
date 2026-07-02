@@ -97,7 +97,15 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // off-domain item to domain_relevance 1.0 — it needs a corroborating on-stack
 // topic. Closes the leak where "Show HN: AI CAD tool built with React" scored
 // CORE/0.91 purely on a react dep match. See domain_profile::is_ubiquitous_framework.
-pub(crate) const PIPELINE_VERSION: i32 = 8;
+//
+// v9 (2026-07-02): activates the #174 canonical-grounding logic (is_strongly_grounded:
+// non-dev + confidence >= 0.40 + !is_ambiguous_package_name, plus the OS-proper-noun
+// ambiguity fix for windows/linux/android/macos/unix) on the existing corpus. #174
+// merged 2026-06-26 WITHOUT a version bump, so the stale-drain never re-scored the
+// v8 items — 65 of 77 live critical signals were phantom-grounded (measured 2026-07-02).
+// No scoring-logic change in this commit; the bump makes the drain re-stamp the corpus
+// with the merged logic.
+pub(crate) const PIPELINE_VERSION: i32 = 9;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
