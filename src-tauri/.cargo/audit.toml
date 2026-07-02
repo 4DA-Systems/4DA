@@ -11,4 +11,20 @@ ignore = [
     # Only compiled under `enterprise` feature for JWT RS256 verification (not decryption).
     # Full risk assessment in deny.toml. Monitoring: https://rustsec.org/advisories/RUSTSEC-2023-0071
     "RUSTSEC-2023-0071",
+
+    # quick-xml <0.41 (RUSTSEC-2026-0194 quadratic-runtime DoS on duplicate-attribute
+    # check; RUSTSEC-2026-0195 unbounded NsReader namespace allocation DoS).
+    # TEMPORARY — no upstream fix path exists yet: the fix (quick-xml 0.41.0, released
+    # 2026-06-29) is a breaking 0.x minor, and every consumer in our tree is still on
+    # older lines with no released version against >=0.41:
+    #   - calamine (latest 0.35.0 -> quick-xml ^0.39)
+    #   - docx-rs (latest 0.4.20 -> quick-xml ^0.36)
+    #   - plist (latest 1.9.0 -> quick-xml ^0.39.2), transitive via tauri-utils
+    # Risk assessment: both are CPU/memory-exhaustion DoS when parsing malicious XML.
+    # In 4DA, quick-xml only parses local user-selected .xlsx/.docx files (extractors)
+    # and build-time plists — no network-facing XML surface, no memory-safety impact.
+    # REVISIT: remove as soon as calamine / docx-rs / plist release on quick-xml >=0.41
+    # (check with: cargo audit after cargo update).
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
 ]
