@@ -65,13 +65,15 @@ fn discover_projects_recursive(
             return;
         }
 
-        // Skip known non-project paths (agent worktrees, git worktree metadata)
+        // Skip known non-project paths: git worktree metadata plus the
+        // canonical scan-time exclusions (the ENTIRE .claude/.codex agent
+        // trees — not just their worktrees — and tier-2 fixture/placeholder
+        // scaffolding). READMEs there are agent artifacts, not user context.
         {
             let path_str = dir.to_string_lossy();
-            if path_str.contains(".claude/worktrees/")
-                || path_str.contains(".claude\\worktrees\\")
-                || path_str.contains(".git/worktrees/")
+            if path_str.contains(".git/worktrees/")
                 || path_str.contains(".git\\worktrees\\")
+                || crate::project_inclusion::is_scan_excluded_dir(&path_str)
             {
                 return;
             }

@@ -125,6 +125,15 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // AMD story) or alias overlaps ("sqlite3" -> better-sqlite3 on a sqlite-utils
 // release). The structured-advisory route (Affected-packages metadata) is an
 // independent proof and is unchanged.
+//
+// NO bump for the 2026-07-04 canonical project-inclusion change: with the
+// CURRENT live corpus, project_dependencies (the only table scoring's
+// load_dependency_intelligence reads) carries no tier-1/2 rows (verified by
+// read-only probe — the June purge cleared .claude paths and the placeholder
+// pollution lives in user_dependencies/dependency_snapshots, which feed OSV
+// surfaces, not score math) and excluded_project_paths is empty, so scoring
+// inputs are byte-identical. If a user later excludes a project, scores
+// refresh through the normal rescan path — no corpus re-stamp required.
 pub(crate) const PIPELINE_VERSION: i32 = 11;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
