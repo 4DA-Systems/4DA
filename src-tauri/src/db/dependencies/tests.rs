@@ -394,9 +394,9 @@ fn test_transitive_does_not_downgrade_direct() {
     assert_eq!(tokio.version.as_deref(), Some("1.35.1"));
 }
 
-/// Validates the startup cleanup SQL queries that purge worktree rows,
-/// deduplicate by normalized name+path, and remove ephemeral temp paths
-/// from user_dependencies (app_setup.rs startup cleanup block).
+/// Validates the startup cleanup pipeline: the agent-infra purge + dedup
+/// (db::purge_agent_infra_dependencies) followed by the ephemeral temp-path
+/// purge SQL (app_setup.rs startup cleanup block).
 #[test]
 fn test_startup_user_dependency_cleanup() {
     let db = test_db();
@@ -458,31 +458,15 @@ fn test_startup_user_dependency_cleanup() {
         .expect("count before");
     assert_eq!(before, 8, "Expected 8 rows before cleanup");
 
-    // --- Query 1: purge worktree rows ---
-    let deleted_worktree = conn
-        .execute(
-            "DELETE FROM user_dependencies WHERE project_path LIKE '%worktrees%agent-%'",
-            [],
-        )
-        .expect("worktree purge");
-    assert_eq!(deleted_worktree, 3, "Should purge 3 worktree rows");
-
-    // --- Query 2: deduplicate by normalized name + path + ecosystem ---
-    let deleted_dedup = conn
-        .execute(
-            "DELETE FROM user_dependencies WHERE rowid NOT IN (
-                SELECT MAX(rowid) FROM user_dependencies
-                GROUP BY LOWER(REPLACE(package_name, '-', '_')), LOWER(project_path), LOWER(ecosystem)
-            )",
-            [],
-        )
-        .expect("dedup");
+    // --- Step 1+2: agent-infra purge + dedup (the app_setup self-heal call) ---
+    let counts = crate::db::purge_agent_infra_dependencies(&conn).expect("agent-infra purge");
+    assert_eq!(counts.user_dependencies, 3, "Should purge 3 worktree rows");
     assert_eq!(
-        deleted_dedup, 1,
+        counts.duplicates, 1,
         "Should deduplicate 1 casing/hyphen variant"
     );
 
-    // --- Query 3: purge temp paths ---
+    // --- Step 3: purge temp paths (separate app_setup block) ---
     let deleted_temp = conn
         .execute(
             "DELETE FROM user_dependencies WHERE project_path LIKE '%/tmp/%' OR project_path LIKE '%\\tmp\\%' OR project_path LIKE '%AppData%Local%Temp%'",
@@ -582,4 +566,211 @@ fn test_store_dependency_edges_skips_worktree_and_empty() {
         .get_dependency_edges("/projects/clean")
         .unwrap()
         .is_empty());
+}
+
+// ============================================================================
+// Agent-infrastructure exclusion + self-heal purge
+// (regression tests for the .claude/ fixture pollution that put phantom
+// Ruby/PHP CVEs on the Preemption Radar — nokogiri / symfony from
+// .claude/plans/ledger-fixtures/*)
+// ============================================================================
+
+/// Insert a user_dependencies row with raw SQL, bypassing the write-time guard
+/// (simulates rows written before the guard existed).
+fn raw_insert_user_dep(db: &crate::db::Database, project_path: &str, package: &str, eco: &str) {
+    let conn = db.conn.lock();
+    conn.execute(
+        "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
+         VALUES (?1, ?2, '1.0.0', ?3, 0, 1, datetime('now'), datetime('now'))",
+        rusqlite::params![project_path, package, eco],
+    )
+    .unwrap();
+}
+
+#[test]
+fn store_dependency_rejects_agent_infra_paths() {
+    let db = test_db();
+
+    // Fixture + worktree paths, both slash styles and case variants, all rejected.
+    let excluded = [
+        r"D:\4DA\.claude\plans\ledger-fixtures\ruby-rails-app",
+        "d:/4da/.claude/plans/ledger-fixtures/php-laravel-app",
+        r"D:\4DA\.CLAUDE\worktrees\ci-hardening\src-tauri",
+        "/home/u/repo/.claude/worktrees/agent-abc",
+        "/home/u/repo/.codex/worktrees/agent-xyz",
+        r"C:\repo\.codex\scratch",
+    ];
+    for path in excluded {
+        db.store_dependency(path, "nokogiri", Some("1.13.0"), "ruby", false, None)
+            .unwrap();
+        db.store_transitive_dependency(path, "rack", Some("2.2.0"), "ruby", false)
+            .unwrap();
+        assert!(
+            db.get_project_dependencies(path).unwrap().is_empty(),
+            "agent-infra path must not be stored: {path}"
+        );
+    }
+
+    // Real project paths are kept (including ones merely containing 'claude').
+    let kept = [r"D:\projects\my-real-app", "/home/u/projects/claude-client"];
+    for path in kept {
+        db.store_dependency(path, "serde", Some("1.0.0"), "rust", false, None)
+            .unwrap();
+        assert_eq!(
+            db.get_project_dependencies(path).unwrap().len(),
+            1,
+            "real project path must be stored: {path}"
+        );
+    }
+
+    // The auditable pool sees only the real projects.
+    let auditable = db.get_auditable_user_dependencies().unwrap();
+    assert_eq!(auditable.len(), 2);
+    assert!(auditable.iter().all(|d| d.package_name == "serde"));
+}
+
+#[test]
+fn snapshot_project_deps_rejects_agent_infra_paths() {
+    let db = test_db();
+    let deps = vec![crate::db::dep_snapshots::DepEntry {
+        name: "nokogiri".into(),
+        ecosystem: "ruby".into(),
+        version: None,
+        is_direct: true,
+        is_dev: false,
+        source: "manifest".into(),
+    }];
+
+    let n = db
+        .snapshot_project_deps(
+            r"D:\4DA\.claude\plans\ledger-fixtures\ruby-rails-app",
+            &deps,
+        )
+        .unwrap();
+    assert_eq!(n, 0, "fixture snapshot must be a no-op");
+
+    let n = db
+        .snapshot_project_deps("/projects/real-app", &deps)
+        .unwrap();
+    assert_eq!(n, 1, "real project snapshot must be stored");
+}
+
+#[test]
+fn purge_agent_infra_deletes_fixture_and_worktree_rows() {
+    let db = test_db();
+
+    // Legacy pollution written before the write-time guard, in both path styles.
+    raw_insert_user_dep(
+        &db,
+        r"D:\4DA\.claude\plans\ledger-fixtures\ruby-rails-app",
+        "nokogiri",
+        "ruby",
+    );
+    raw_insert_user_dep(
+        &db,
+        "d:/4da/.claude/plans/ledger-fixtures/php-laravel-app",
+        "symfony/http-foundation",
+        "php",
+    );
+    raw_insert_user_dep(
+        &db,
+        "d:/4da/.claude/worktrees/ci-hardening",
+        "serde",
+        "rust",
+    );
+    raw_insert_user_dep(&db, "/repo/.codex/worktrees/agent-x", "left-pad", "npm");
+    // Non-.claude agent worktree (covered by the legacy %worktrees%agent-% rule).
+    raw_insert_user_dep(&db, "/repo/other/worktrees/agent-y", "chalk", "npm");
+    // Real project survives.
+    raw_insert_user_dep(&db, "/projects/real-app", "tokio", "rust");
+
+    // Legacy snapshot pollution.
+    {
+        let conn = db.conn.lock();
+        conn.execute(
+            r"INSERT INTO dependency_snapshots (project_path, package_name, ecosystem, version, is_direct, is_dev, source, scanned_at)
+             VALUES ('D:\4DA\.claude\worktrees\agent-a1\src-tauri', 'serde', 'rust', '1.0.0', 1, 0, 'manifest', CURRENT_TIMESTAMP),
+                    ('/projects/real-app', 'tokio', 'rust', '1.35.0', 1, 0, 'manifest', CURRENT_TIMESTAMP)",
+            [],
+        )
+        .unwrap();
+    }
+
+    let counts = {
+        let conn = db.conn.lock();
+        crate::db::purge_agent_infra_dependencies(&conn).unwrap()
+    };
+    assert_eq!(
+        counts.user_dependencies, 5,
+        "all agent-infra user_dependencies purged"
+    );
+    assert_eq!(
+        counts.dependency_snapshots, 1,
+        "agent-infra snapshot purged"
+    );
+
+    let remaining = db.get_all_user_dependencies().unwrap();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].package_name, "tokio");
+
+    let snaps = db.get_current_deps("/projects/real-app").unwrap();
+    assert_eq!(snaps.len(), 1, "real-project snapshot survives");
+}
+
+#[test]
+fn purge_agent_infra_collapses_slash_variant_duplicates() {
+    let db = test_db();
+
+    // The duplicate-identity bug: the same dependency stored under the raw
+    // Windows path (pre-canonicalization, 2026-06-20) AND the canonical
+    // lowercase/forward-slash path (post-canonicalization, 2026-07-03).
+    // LOWER(project_path) alone does not collapse these — slash direction differs.
+    raw_insert_user_dep(&db, r"D:\4DA\cli", "commander", "npm");
+    raw_insert_user_dep(&db, "d:/4da/cli", "commander", "npm");
+    // Distinct projects must NOT be collapsed.
+    raw_insert_user_dep(&db, "/projects/app-a", "serde", "rust");
+    raw_insert_user_dep(&db, "/projects/app-b", "serde", "rust");
+
+    let counts = {
+        let conn = db.conn.lock();
+        crate::db::purge_agent_infra_dependencies(&conn).unwrap()
+    };
+    assert_eq!(counts.duplicates, 1, "slash-variant duplicate collapsed");
+
+    let remaining = db.get_all_user_dependencies().unwrap();
+    assert_eq!(remaining.len(), 3);
+    let commander: Vec<_> = remaining
+        .iter()
+        .filter(|d| d.package_name == "commander")
+        .collect();
+    assert_eq!(commander.len(), 1, "one commander row survives");
+    if cfg!(windows) {
+        assert_eq!(
+            commander[0].project_path, "d:/4da/cli",
+            "survivor sits on the canonical key"
+        );
+    }
+}
+
+#[test]
+fn purge_agent_infra_canonicalizes_residual_paths() {
+    let db = test_db();
+
+    // A backslash-only legacy row (no canonical twin): invisible to
+    // path-scoped readers that canonicalize their query path. The purge must
+    // rewrite it onto the canonical key.
+    raw_insert_user_dep(&db, r"D:\Projects\Legacy-App", "express", "npm");
+
+    let counts = {
+        let conn = db.conn.lock();
+        crate::db::purge_agent_infra_dependencies(&conn).unwrap()
+    };
+    assert_eq!(counts.canonicalized, 1, "residual path rewritten");
+
+    // Now findable via any path form.
+    let deps = db
+        .get_project_dependencies(r"D:\Projects\Legacy-App")
+        .unwrap();
+    assert_eq!(deps.len(), 1);
+    assert_eq!(deps[0].package_name, "express");
 }

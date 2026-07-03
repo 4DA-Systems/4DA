@@ -11,15 +11,119 @@ use crate::ace::scanner::DependencyEdge;
 use super::mappers::map_dependency_row;
 use super::types::{CrossProjectPackage, DependencyEdgeRow, StoredDependency};
 
-/// Mirror of the worktree/temp exclusion used by `get_auditable_*` queries.
-/// Edges from ephemeral worktrees and temp clones would duplicate the graph and
-/// inflate reachability, so we skip storing them at write time.
-fn is_excluded_project_path(project_path: &str) -> bool {
+/// Agent-infrastructure / temp path exclusion, applied at WRITE time to every
+/// dependency table and mirrored by the `get_auditable_*` read filters.
+///
+/// Matches the ACE scanner's `is_excluded_path` doctrine (ace/scanner.rs): the
+/// ENTIRE `.claude/` (and `.codex/`) tree is agent infrastructure — worktrees
+/// (ephemeral repo copies) AND scratch fixtures (e.g. the multi-ecosystem
+/// ledger fixtures under `.claude/plans/ledger-fixtures/` whose Gemfile.lock /
+/// composer.lock surfaced nokogiri + symfony as the user's stack, producing
+/// phantom Ruby/PHP CVE alerts on the Preemption Radar). None of it is a real
+/// user project. Case-insensitive, both slash styles (paths reach here in
+/// raw `D:\...` and canonicalized `d:/...` forms).
+pub(crate) fn is_excluded_project_path(project_path: &str) -> bool {
     let p = project_path.replace('\\', "/").to_lowercase();
-    p.contains("/.claude/worktrees/")
-        || p.contains("/.codex/worktrees/")
+    p.contains("/.claude/")
+        || p.ends_with("/.claude")
+        || p.contains("/.codex/")
+        || p.ends_with("/.codex")
         || p.contains("/tmp/")
         || (p.contains("appdata") && p.contains("local") && p.contains("temp"))
+}
+
+/// Counts from a [`purge_agent_infra_dependencies`] self-heal pass.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct AgentInfraPurge {
+    /// `.claude`/`.codex`/temp rows deleted from `user_dependencies`.
+    pub user_dependencies: usize,
+    /// `.claude`/`.codex`/temp rows deleted from `dependency_snapshots`.
+    pub dependency_snapshots: usize,
+    /// Duplicate-identity rows collapsed (slash-style/case path variants).
+    pub duplicates: usize,
+    /// Residual rows whose `project_path` was rewritten to the canonical form.
+    pub canonicalized: usize,
+}
+
+impl AgentInfraPurge {
+    pub fn total(&self) -> usize {
+        self.user_dependencies + self.dependency_snapshots + self.duplicates
+    }
+}
+
+/// Self-heal purge for dependency tables polluted by agent infrastructure.
+///
+/// Mirrors the `project_dependencies` startup purge precedent (app_setup):
+/// existing installs carry rows scanned before the write-time exclusion
+/// existed, so deleting at startup heals the live DB without manual surgery.
+///
+/// Three passes:
+/// 1. Delete `.claude/` + `.codex/` rows from `user_dependencies` and
+///    `dependency_snapshots` (SQLite `LIKE` is ASCII case-insensitive, so the
+///    two slash-style patterns cover all four case/slash variants).
+/// 2. Collapse duplicate identities: migration 67 canonicalized
+///    `project_dependencies` paths (lowercase, forward slashes) but never
+///    backfilled `user_dependencies`, so when write-time canonicalization
+///    landed, every re-scanned project gained a second row set
+///    (`D:\4DA\...` from before, `d:/4da/...` after). The previous dedup
+///    grouped by `LOWER(project_path)` only — casing, not slash direction —
+///    and missed them all. Keep the newest row per normalized identity.
+/// 3. Rewrite residual non-canonical paths to the canonical form (matches
+///    `canonicalize_project_path`; lowercasing is Windows-only). Safe after
+///    pass 2: each normalized identity now has exactly one row, so the
+///    UNIQUE(project_path, package_name, ecosystem) key cannot collide.
+pub fn purge_agent_infra_dependencies(
+    conn: &rusqlite::Connection,
+) -> SqliteResult<AgentInfraPurge> {
+    const INFRA_PREDICATE: &str = "project_path LIKE '%/.claude/%' \
+         OR project_path LIKE '%\\.claude\\%' \
+         OR project_path LIKE '%/.codex/%' \
+         OR project_path LIKE '%\\.codex\\%' \
+         OR project_path LIKE '%worktrees%agent-%'";
+
+    let user_dependencies = conn.execute(
+        &format!("DELETE FROM user_dependencies WHERE {INFRA_PREDICATE}"),
+        [],
+    )?;
+    let dependency_snapshots = conn.execute(
+        &format!("DELETE FROM dependency_snapshots WHERE {INFRA_PREDICATE}"),
+        [],
+    )?;
+
+    // Collapse slash-style/case duplicates (plus hyphen/underscore package
+    // variants, carried over from the previous startup dedup), keeping the
+    // most recent row.
+    let duplicates = conn.execute(
+        "DELETE FROM user_dependencies WHERE rowid NOT IN (
+            SELECT MAX(rowid) FROM user_dependencies
+            GROUP BY LOWER(REPLACE(package_name, '-', '_')),
+                     LOWER(REPLACE(project_path, '\\', '/')),
+                     LOWER(ecosystem)
+        )",
+        [],
+    )?;
+
+    // Rewrite survivors onto the canonical key so path-scoped readers (which
+    // canonicalize their query path) can see them again.
+    let canonical_expr = if cfg!(windows) {
+        "LOWER(REPLACE(project_path, '\\', '/'))"
+    } else {
+        "REPLACE(project_path, '\\', '/')"
+    };
+    let canonicalized = conn.execute(
+        &format!(
+            "UPDATE user_dependencies SET project_path = {canonical_expr}
+             WHERE project_path <> {canonical_expr}"
+        ),
+        [],
+    )?;
+
+    Ok(AgentInfraPurge {
+        user_dependencies,
+        dependency_snapshots,
+        duplicates,
+        canonicalized,
+    })
 }
 
 /// Canonicalize a project path for storage + the `ON CONFLICT` key. MUST match
@@ -49,6 +153,12 @@ impl Database {
         is_dev: bool,
         license: Option<&str>,
     ) -> SqliteResult<()> {
+        // Agent worktrees / scratch fixtures / temp clones are not the user's
+        // projects; storing them creates phantom CVE alerts (see
+        // is_excluded_project_path). Silent no-op, mirroring store_dependency_edges.
+        if is_excluded_project_path(project_path) {
+            return Ok(());
+        }
         let project_path = canonicalize_project_path(project_path);
         let conn = self.conn.lock();
         conn.execute(
@@ -77,6 +187,11 @@ impl Database {
         ecosystem: &str,
         is_dev: bool,
     ) -> SqliteResult<()> {
+        // Same agent-infra guard as store_dependency: the lockfile walk feeds
+        // this with raw scan-dir paths, including `.claude/` fixtures/worktrees.
+        if is_excluded_project_path(project_path) {
+            return Ok(());
+        }
         let project_path = canonicalize_project_path(project_path);
         let conn = self.conn.lock();
         conn.execute(
@@ -163,10 +278,10 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at, license
              FROM user_dependencies
-             WHERE project_path NOT LIKE '%/.claude/worktrees/%'
-               AND project_path NOT LIKE '%\\.claude\\worktrees\\%'
-               AND project_path NOT LIKE '%/.codex/worktrees/%'
-               AND project_path NOT LIKE '%\\.codex\\worktrees\\%'
+             WHERE project_path NOT LIKE '%/.claude/%'
+               AND project_path NOT LIKE '%\\.claude\\%'
+               AND project_path NOT LIKE '%/.codex/%'
+               AND project_path NOT LIKE '%\\.codex\\%'
                AND project_path NOT LIKE '%/tmp/%'
                AND project_path NOT LIKE '%\\tmp\\%'
                AND project_path NOT LIKE '%AppData%Local%Temp%'
@@ -195,8 +310,10 @@ impl Database {
             "SELECT id, project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at, license
              FROM user_dependencies
              WHERE is_dev = 0 AND is_direct = 1
-               AND project_path NOT LIKE '%/.claude/worktrees/%'
-               AND project_path NOT LIKE '%\\.claude\\worktrees\\%'
+               AND project_path NOT LIKE '%/.claude/%'
+               AND project_path NOT LIKE '%\\.claude\\%'
+               AND project_path NOT LIKE '%/.codex/%'
+               AND project_path NOT LIKE '%\\.codex\\%'
              ORDER BY ecosystem, package_name",
         )?;
 
@@ -286,10 +403,10 @@ impl Database {
         let sql = format!(
             "SELECT id, project_path, package_name, version, language, is_dev, {direct_col}, last_scanned
              FROM project_dependencies
-             WHERE project_path NOT LIKE '%/.claude/worktrees/%'
-               AND project_path NOT LIKE '%\\.claude\\worktrees\\%'
-               AND project_path NOT LIKE '%/.codex/worktrees/%'
-               AND project_path NOT LIKE '%\\.codex\\worktrees\\%'
+             WHERE project_path NOT LIKE '%/.claude/%'
+               AND project_path NOT LIKE '%\\.claude\\%'
+               AND project_path NOT LIKE '%/.codex/%'
+               AND project_path NOT LIKE '%\\.codex\\%'
                AND project_path NOT LIKE '%/tmp/%'
                AND project_path NOT LIKE '%\\tmp\\%'
                AND project_path NOT LIKE '%AppData%Local%Temp%'

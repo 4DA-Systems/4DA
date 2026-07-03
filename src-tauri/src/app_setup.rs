@@ -786,42 +786,31 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: sun_runs failed"); }
             }
 
-            // Purge stale worktree paths from user_dependencies.
-            // Same problem as project_dependencies: agent worktrees create ephemeral
-            // copies that get scanned then abandoned, polluting blind spots/preemption.
-            match conn.execute(
-                "DELETE FROM user_dependencies WHERE project_path LIKE '%worktrees%agent-%'",
-                [],
-            ) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: stale worktree user dependencies");
+            // Self-heal user_dependencies + dependency_snapshots: purge ALL
+            // .claude/ + .codex/ agent-infrastructure rows (worktrees AND
+            // scratch fixtures like .claude/plans/ledger-fixtures/*, which
+            // put phantom Ruby/PHP CVEs on the Preemption Radar), collapse
+            // slash-style/case duplicate identities left behind when
+            // write-time path canonicalization landed without a backfill,
+            // and rewrite survivors onto the canonical key. Same precedent
+            // as the project_dependencies purge above; details in
+            // db::dependencies::purge_agent_infra_dependencies.
+            match crate::db::purge_agent_infra_dependencies(&conn) {
+                Ok(counts) => {
+                    total_deleted += counts.total();
+                    if counts.total() > 0 || counts.canonicalized > 0 {
+                        info!(
+                            target: "4da::startup",
+                            user_deps = counts.user_dependencies,
+                            snapshots = counts.dependency_snapshots,
+                            duplicates = counts.duplicates,
+                            canonicalized = counts.canonicalized,
+                            "Startup cleanup: agent-infra dependency purge + dedup"
+                        );
                     }
                 }
                 Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: worktree user_deps failed");
-                }
-            }
-
-            // Deduplicate user_dependencies by normalized name + path, keeping most recent.
-            // Path casing differences (Documents vs documents) and hyphen/underscore variants
-            // (my-pkg vs my_pkg) cause the same logical dependency to appear multiple times.
-            match conn.execute(
-                "DELETE FROM user_dependencies WHERE rowid NOT IN (
-                    SELECT MAX(rowid) FROM user_dependencies
-                    GROUP BY LOWER(REPLACE(package_name, '-', '_')), LOWER(project_path), LOWER(ecosystem)
-                )",
-                [],
-            ) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: deduplicated user dependencies");
-                    }
-                }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: user_deps dedup failed");
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: agent-infra dependency purge failed");
                 }
             }
 
