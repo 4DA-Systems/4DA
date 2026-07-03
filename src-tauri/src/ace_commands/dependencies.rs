@@ -81,6 +81,12 @@ pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf])
                                     | "venv"
                                     | "vendor"
                                     | ".cargo"
+                                    // Agent infrastructure: worktrees + scratch
+                                    // fixtures (.claude/plans/ledger-fixtures/*)
+                                    // are not user projects. Mirrors the ACE
+                                    // scanner's is_excluded_path doctrine.
+                                    | ".claude"
+                                    | ".codex"
                             ) {
                                 dirs_to_visit.push((entry_path, depth + 1));
                             }
