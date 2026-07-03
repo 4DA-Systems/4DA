@@ -53,6 +53,12 @@ impl Database {
     /// re-scanning the same project replaces the previous snapshot row
     /// for each dependency.
     pub fn snapshot_project_deps(&self, project_path: &str, deps: &[DepEntry]) -> Result<usize> {
+        // Agent worktrees / scratch fixtures / temp clones are not user
+        // projects — same write-time guard as user_dependencies (this table
+        // held 822 stale agent-worktree rows before the guard existed).
+        if super::dependencies::is_excluded_project_path(project_path) {
+            return Ok(0);
+        }
         let conn = self.conn.lock();
         let tx = conn
             .unchecked_transaction()

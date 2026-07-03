@@ -10,4 +10,6 @@ mod queries;
 mod tests;
 pub mod types;
 
+pub(crate) use queries::is_excluded_project_path;
+pub use queries::{purge_agent_infra_dependencies, AgentInfraPurge};
 pub use types::{CrossProjectPackage, DependencyAlert, DependencyEdgeRow, StoredDependency};
