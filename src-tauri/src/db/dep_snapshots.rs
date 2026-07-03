@@ -59,6 +59,12 @@ impl Database {
         if super::dependencies::is_excluded_project_path(project_path) {
             return Ok(0);
         }
+        // Store on the canonical key (forward slashes; lowercase on Windows)
+        // so snapshot rows land on the SAME identity as user_dependencies /
+        // project_dependencies rows for the project, regardless of whether
+        // the caller passed a raw `D:\...` or canonical `d:/...` path.
+        let project_path = crate::project_inclusion::canonical_storage_path(project_path);
+        let project_path = project_path.as_str();
         let conn = self.conn.lock();
         let tx = conn
             .unchecked_transaction()
@@ -98,6 +104,9 @@ impl Database {
     /// Read the current (latest) dependencies for a project from the
     /// `current_dependencies` view.
     pub fn get_current_deps(&self, project_path: &str) -> Result<Vec<DepSnapshot>> {
+        // Canonicalize the query path to match the canonical storage key
+        // written by snapshot_project_deps.
+        let project_path = crate::project_inclusion::canonical_storage_path(project_path);
         let conn = self.read_conn();
         let mut stmt = conn
             .prepare(

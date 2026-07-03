@@ -907,27 +907,23 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
         Err(_) => return (HashSet::new(), HashMap::new()),
     };
 
-    // Honor the user's project allowlist: drop deps from projects the user
-    // excluded from their stack (test fixtures, scaffolding) so they don't
-    // pollute relevance grounding. Prefix-matched, case-insensitive — mirrors
-    // temporal's active-root normalization.
-    let excluded: Vec<String> = crate::get_settings_manager()
-        .lock()
-        .get_excluded_project_paths()
-        .iter()
-        .map(|p| p.to_lowercase())
+    // Canonical project-inclusion policy, defense in depth: the funnel above
+    // (temporal::get_all_dependencies) already enforces all three tiers —
+    // agent infra / temp, non-project scaffolding, and the user's "Your
+    // Stack" exclusions — but relevance grounding is the highest-stakes
+    // consumer, so re-check here. Slash-normalized prefix matching (the old
+    // hand-rolled filter compared raw backslash paths against stored
+    // forward-slash exclusions and could silently miss).
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
+    let all_deps: Vec<_> = all_deps
+        .into_iter()
+        .filter(|dep| {
+            !crate::project_inclusion::is_excluded_from_intelligence(
+                &dep.project_path,
+                &user_excluded,
+            )
+        })
         .collect();
-    let all_deps: Vec<_> = if excluded.is_empty() {
-        all_deps
-    } else {
-        all_deps
-            .into_iter()
-            .filter(|dep| {
-                let p = dep.project_path.to_lowercase();
-                !excluded.iter().any(|ex| p.starts_with(ex.as_str()))
-            })
-            .collect()
-    };
 
     let mut names = HashSet::new();
     let mut details = HashMap::new();

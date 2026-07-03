@@ -503,6 +503,14 @@ pub(crate) fn get_source_registry() -> &'static Mutex<SourceRegistry> {
 
 static SETTINGS_MANAGER: OnceCell<Mutex<SettingsManager>> = OnceCell::new();
 
+/// Non-initializing read of the global settings manager. `None` until
+/// [`get_settings_manager`] has run once (unit tests, very early startup).
+/// Use from library code that must never trigger the disk/keychain-touching
+/// lazy init as a side effect (e.g. `project_inclusion::user_excluded_paths`).
+pub(crate) fn try_get_settings_manager() -> Option<&'static Mutex<SettingsManager>> {
+    SETTINGS_MANAGER.get()
+}
+
 pub(crate) fn get_settings_manager() -> &'static Mutex<SettingsManager> {
     SETTINGS_MANAGER.get_or_init(|| {
         let db_path = get_db_path();

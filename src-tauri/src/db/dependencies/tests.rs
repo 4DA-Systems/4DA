@@ -421,17 +421,20 @@ fn test_startup_user_dependency_cleanup() {
         [],
     ).expect("insert worktree row 3");
 
-    // 2 casing duplicates of the same logical dep (query 2 keeps the latest rowid)
+    // 2 duplicates of the same logical dep: slash-style path variant plus a
+    // hyphen/underscore name variant in a fold-eligible ecosystem (rust).
+    // Same case on both rows so the collapse is platform-independent — case
+    // folding of the path is Windows-only (Linux paths are case-sensitive).
     conn.execute(
         "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
          VALUES ('D:\\Documents\\myapp', 'my-pkg', '1.0.0', 'rust', 0, 1, datetime('now'), datetime('now'))",
         [],
-    ).expect("insert casing dup 1");
+    ).expect("insert slash dup 1");
     conn.execute(
         "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
-         VALUES ('D:\\documents\\myapp', 'my_pkg', '2.0.0', 'rust', 0, 1, datetime('now'), datetime('now'))",
+         VALUES ('D:/Documents/myapp', 'my_pkg', '2.0.0', 'rust', 0, 1, datetime('now'), datetime('now'))",
         [],
-    ).expect("insert casing dup 2");
+    ).expect("insert slash dup 2");
 
     // 1 temp-path row (should be purged by query 3)
     conn.execute(
@@ -679,8 +682,13 @@ fn purge_agent_infra_deletes_fixture_and_worktree_rows() {
         "rust",
     );
     raw_insert_user_dep(&db, "/repo/.codex/worktrees/agent-x", "left-pad", "npm");
-    // Non-.claude agent worktree (covered by the legacy %worktrees%agent-% rule).
-    raw_insert_user_dep(&db, "/repo/other/worktrees/agent-y", "chalk", "npm");
+    // F1 regression: legitimate projects that the OLD substring pattern
+    // ('%worktrees%agent-%') deleted every startup — flip-flop churn, since
+    // the write guard did not mirror it and scans kept re-adding them. The
+    // pattern is gone (agent worktrees always live under .claude/.codex,
+    // already covered); these rows MUST survive.
+    raw_insert_user_dep(&db, "/home/u/worktrees/reagent-app", "chalk", "npm");
+    raw_insert_user_dep(&db, r"D:\worktrees\agent-ui", "vue", "npm");
     // Real project survives.
     raw_insert_user_dep(&db, "/projects/real-app", "tokio", "rust");
 
@@ -701,8 +709,8 @@ fn purge_agent_infra_deletes_fixture_and_worktree_rows() {
         crate::db::purge_agent_infra_dependencies(&conn).unwrap()
     };
     assert_eq!(
-        counts.user_dependencies, 5,
-        "all agent-infra user_dependencies purged"
+        counts.user_dependencies, 4,
+        "all .claude/.codex user_dependencies purged — and ONLY those"
     );
     assert_eq!(
         counts.dependency_snapshots, 1,
@@ -710,8 +718,17 @@ fn purge_agent_infra_deletes_fixture_and_worktree_rows() {
     );
 
     let remaining = db.get_all_user_dependencies().unwrap();
-    assert_eq!(remaining.len(), 1);
-    assert_eq!(remaining[0].package_name, "tokio");
+    let names: Vec<&str> = remaining.iter().map(|d| d.package_name.as_str()).collect();
+    assert_eq!(remaining.len(), 3);
+    assert!(names.contains(&"tokio"), "real project survives");
+    assert!(
+        names.contains(&"chalk"),
+        "legit /worktrees/reagent-app project survives (F1 regression)"
+    );
+    assert!(
+        names.contains(&"vue"),
+        "legit D:\\worktrees\\agent-ui project survives (F1 regression)"
+    );
 
     let snaps = db.get_current_deps("/projects/real-app").unwrap();
     assert_eq!(snaps.len(), 1, "real-project snapshot survives");

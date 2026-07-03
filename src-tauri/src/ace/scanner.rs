@@ -174,14 +174,16 @@ impl ProjectScanner {
         skip_dirs.insert("vendor".to_string());
         skip_dirs.insert(".cargo".to_string());
         skip_dirs.insert("pkg".to_string());
-        // Claude Code agent infrastructure — NOT a real user project. Holds
-        // plans, scratch fixtures (e.g. the multi-ecosystem ledger fixtures
-        // under .claude/plans/ledger-fixtures/), agent worktrees and scripts.
-        // Scanning it pollutes project_dependencies with languages/packages the
-        // user never uses, corrupting the "Affects You" grounding pool. The
-        // multi-segment .claude/... paths are also caught by is_excluded_path
-        // below so a scan rooted *inside* .claude is excluded too.
+        // Agent infrastructure (.claude = Claude Code, .codex = Codex) — NOT a
+        // real user project. Holds plans, scratch fixtures (e.g. the
+        // multi-ecosystem ledger fixtures under .claude/plans/ledger-fixtures/),
+        // agent worktrees and scripts. Scanning it pollutes project_dependencies
+        // with languages/packages the user never uses, corrupting the "Affects
+        // You" grounding pool. The multi-segment .claude/... paths are also
+        // caught by is_excluded_path below so a scan rooted *inside* an agent
+        // tree is excluded too.
         skip_dirs.insert(".claude".to_string());
+        skip_dirs.insert(".codex".to_string());
         // Sensitive directories — prevent scanning credentials, keys, secrets
         skip_dirs.insert(".ssh".to_string());
         skip_dirs.insert(".aws".to_string());
@@ -227,29 +229,27 @@ impl ProjectScanner {
     fn is_excluded_path(path: &Path) -> bool {
         let path_str = path.to_string_lossy();
 
-        // Patterns that indicate this is NOT a real user project directory.
-        // Both path separators are matched literally so the check is correct on
-        // every platform (and so backslash Windows paths are still excluded when
-        // tests run on a Linux CI runner, where '\\' is not a path separator).
-        //
-        // - .claude/  — the ENTIRE Claude Code agent-infrastructure tree: plans,
-        //   scratch fixtures (e.g. the multi-ecosystem ledger fixtures under
-        //   .claude/plans/ledger-fixtures/ that surfaced flutter/laravel/spring
-        //   as the user's stack), agent worktrees, scripts. None of it is a real
-        //   project; manifests here pollute the dependency / "Affects You" pool.
-        // - .git/worktrees/ — git's internal worktree metadata.
-        for pattern in &[
-            "/.claude/",
-            "\\.claude\\",
-            ".git/worktrees/",
-            ".git\\worktrees\\",
-        ] {
+        // .git/worktrees/ — git's internal worktree metadata. Both separators
+        // matched literally so the check is correct on every platform (and so
+        // backslash Windows paths are still excluded on a Linux CI runner,
+        // where '\\' is not a path separator).
+        for pattern in &[".git/worktrees/", ".git\\worktrees\\"] {
             if path_str.contains(pattern) {
                 return true;
             }
         }
 
-        false
+        // Canonical scan-time policy (project_inclusion):
+        // - .claude/ and .codex/ — the ENTIRE agent-infrastructure trees: plans,
+        //   scratch fixtures (e.g. the multi-ecosystem ledger fixtures under
+        //   .claude/plans/ledger-fixtures/ that surfaced flutter/laravel/spring
+        //   as the user's stack), agent worktrees, scripts. None of it is a real
+        //   project; manifests here pollute the dependency / "Affects You" pool.
+        // - Tier-2 non-project scaffolding — fixture-tree segments (fixtures/,
+        //   test-fixtures/, testdata/, ...) and -placeholder dirs (registry
+        //   squats). Waived in strict-manifest (ledger) mode, where fixture
+        //   stacks ARE the configured context.
+        crate::project_inclusion::is_scan_excluded_dir(&path_str)
     }
 
     /// Scan a directory for project manifests
@@ -3468,6 +3468,84 @@ BUNDLED WITH
         assert!(!ProjectScanner::is_excluded_path(Path::new(
             "/home/user/project/claude-client/src"
         )));
+    }
+
+    #[test]
+    fn test_excluded_path_codex_tree_symmetric_with_claude() {
+        assert!(ProjectScanner::is_excluded_path(Path::new(
+            "/home/user/project/.codex/scratch"
+        )));
+        assert!(ProjectScanner::is_excluded_path(Path::new(
+            r"D:\4DA\.codex\worktrees\x"
+        )));
+        // Name-substring must not match.
+        assert!(!ProjectScanner::is_excluded_path(Path::new(
+            "/home/user/my.codexplorer/src"
+        )));
+    }
+
+    #[test]
+    fn test_excluded_path_tier2_fixture_and_placeholder_segments() {
+        for p in [
+            "/home/user/repo/fixtures/fake-app",
+            "/home/user/repo/test-fixtures/rails-app",
+            r"D:\go\src\thing\testdata\module",
+            "/home/user/repo/__fixtures__/pkg",
+            r"D:\4DA\crates-placeholder",
+            "/home/user/dev/npm-placeholder/sub",
+        ] {
+            assert!(
+                ProjectScanner::is_excluded_path(Path::new(p)),
+                "expected tier-2 exclusion: {p}"
+            );
+        }
+        // Segment-based ONLY — name substrings are real projects.
+        for p in [
+            "/home/user/myfixtures-app/src",
+            "/home/user/testdata-gen/src",
+            "/home/user/placeholderify/src",
+        ] {
+            assert!(
+                !ProjectScanner::is_excluded_path(Path::new(p)),
+                "false positive tier-2 exclusion: {p}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_scan_skips_fixture_tree_manifests() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname = \"real-project\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        // A fixture stack OUTSIDE any .claude tree — the shape that registered
+        // csharp-service/flutter-app scaffolding as first-class projects.
+        let fixture_dir = dir.path().join("fixtures").join("flutter-app");
+        std::fs::create_dir_all(&fixture_dir).unwrap();
+        std::fs::write(
+            fixture_dir.join("pubspec.yaml"),
+            "name: flutter_app\ndependencies:\n  http: ^1.0.0\n",
+        )
+        .unwrap();
+        // A registry-squat placeholder dir.
+        let placeholder = dir.path().join("crates-placeholder");
+        std::fs::create_dir_all(&placeholder).unwrap();
+        std::fs::write(
+            placeholder.join("Cargo.toml"),
+            "[package]\nname = \"squat\"\nversion = \"0.0.1\"\n",
+        )
+        .unwrap();
+
+        let scanner = ProjectScanner::new();
+        let signals = scanner.scan_directory(dir.path()).unwrap();
+        assert_eq!(
+            signals.len(),
+            1,
+            "only the real project should be detected, not fixtures/placeholder"
+        );
+        assert_eq!(signals[0].manifest_type, ManifestType::CargoToml);
     }
 
     #[test]
