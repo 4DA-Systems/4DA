@@ -117,9 +117,10 @@ pub fn upsert_dependency_with_platform(
 ) -> Result<()> {
     // Canonical write guard (tiers 1+2): agent-infra / temp paths and
     // non-project scaffolding (fixture trees, -placeholder dirs) must never
-    // enter project_dependencies. Silent no-op, mirroring
-    // db::dependencies::store_dependency.
+    // enter project_dependencies. No-op, mirroring
+    // db::dependencies::store_dependency; tier-2 refusals log once per path.
     if crate::project_inclusion::is_hard_excluded(project_path) {
+        crate::project_inclusion::log_tier2_exclusion(project_path, "write");
         return Ok(());
     }
     let canonical_path = canonicalize_project_path(project_path);

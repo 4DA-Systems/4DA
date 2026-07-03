@@ -18,9 +18,10 @@
 //!    `__fixtures__`, `testdata` as exact path segments) and registry-squat
 //!    placeholders (a path segment ending in `-placeholder`). Segment-based
 //!    matching ONLY — `myfixtures-app` does not match. Hard-excluded, EXCEPT
-//!    in strict-manifest mode (`FOURDA_STRICT_MANIFEST=1`), where the receipts
-//!    ledger deliberately points `context_dirs` at fixture stacks
-//!    (`4da-ledger/fixtures/<stack>`) and those ARE the intended context.
+//!    when BOTH `FOURDA_STRICT_MANIFEST=1` AND `FOURDA_DATA_DIR` are set (the
+//!    receipts ledger sets both per fixture and deliberately points
+//!    `context_dirs` at fixture stacks — `4da-ledger/fixtures/<stack>`; a
+//!    strict flag leaked into a desktop shell can never waive tier 2 alone).
 //! 3. **User-excluded** ([`is_user_excluded`]) — the Settings → Intelligence
 //!    "Your Stack" toggle (`excluded_project_paths`). Tier-3 projects remain
 //!    DETECTED and listed in the UI (so the user can toggle them back), but
@@ -50,17 +51,26 @@ pub(crate) fn canonical_storage_path(path: &str) -> String {
     }
 }
 
+/// True when any path segment is exactly `.claude` or `.codex` — the agent
+/// infrastructure trees. Exact-segment matching (like tier 2), so a RELATIVE
+/// `.claude/plans/x` matches too (the old `contains("/.claude/")` form let
+/// leading-segment relative paths escape), while name lookalikes
+/// (`my.claude-app`, `claude-client`) never do.
+fn has_agent_infra_segment(path: &str) -> bool {
+    comparison_form(path)
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .any(|seg| seg == ".claude" || seg == ".codex")
+}
+
 /// Tier 1: agent-infrastructure / ephemeral paths. The ENTIRE `.claude/` and
 /// `.codex/` trees (worktrees, plans, scratch fixtures like
 /// `.claude/plans/ledger-fixtures/*`) plus temp directories. Case-insensitive,
 /// both slash styles (paths reach here in raw `D:\...` and canonicalized
-/// `d:/...` forms).
+/// `d:/...` forms), absolute or relative (exact-segment matching).
 pub(crate) fn is_agent_infra_path(path: &str) -> bool {
     let p = comparison_form(path);
-    p.contains("/.claude/")
-        || p.ends_with("/.claude")
-        || p.contains("/.codex/")
-        || p.ends_with("/.codex")
+    has_agent_infra_segment(path)
         || p.contains("/tmp/")
         || (p.contains("appdata") && p.contains("local") && p.contains("temp"))
 }
@@ -94,17 +104,40 @@ pub(crate) fn is_non_project_path(path: &str) -> bool {
     })
 }
 
-/// Tiers 1+2 combined — "may never be persisted as user context". Tier 2 is
-/// waived in strict-manifest mode (the receipts ledger scans fixture stacks
-/// on purpose; `FOURDA_STRICT_MANIFEST` is never set for desktop users).
-pub(crate) fn is_hard_excluded(path: &str) -> bool {
-    is_hard_excluded_with(path, crate::source_fetching::strict_manifest_mode())
+/// Is the tier-2 waiver active in THIS process? Requires BOTH strict-manifest
+/// mode (`FOURDA_STRICT_MANIFEST=1`) AND an isolated data dir
+/// (`FOURDA_DATA_DIR`) — the receipts ledger always sets both, per fixture. A
+/// `FOURDA_STRICT_MANIFEST` leaked into a desktop dev shell (default data
+/// dir) can therefore never waive tier-2 ingestion or disable the tier-2
+/// purge against the real 4da.db. Cached once, like `strict_manifest_mode`.
+pub(crate) fn tier2_waiver_active() -> bool {
+    static WAIVER: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *WAIVER.get_or_init(|| {
+        tier2_waiver_from(
+            crate::source_fetching::strict_manifest_mode(),
+            std::env::var("FOURDA_DATA_DIR").is_ok_and(|v| !v.trim().is_empty()),
+        )
+    })
 }
 
-/// Pure variant of [`is_hard_excluded`] for tests (the strict-mode flag is a
-/// process-wide `OnceLock` over an env var, which tests cannot toggle).
-pub(crate) fn is_hard_excluded_with(path: &str, strict_manifest_mode: bool) -> bool {
-    is_agent_infra_path(path) || (!strict_manifest_mode && is_non_project_path(path))
+/// Pure combinator behind [`tier2_waiver_active`] (testable — the env-backed
+/// flags are process-wide `OnceLock`s that tests cannot toggle).
+pub(crate) fn tier2_waiver_from(strict_manifest_mode: bool, isolated_data_dir: bool) -> bool {
+    strict_manifest_mode && isolated_data_dir
+}
+
+/// Tiers 1+2 combined — "may never be persisted as user context". Tier 2 is
+/// waived only when [`tier2_waiver_active`] (strict-manifest mode AND an
+/// isolated `FOURDA_DATA_DIR` — the receipts ledger scans fixture stacks on
+/// purpose; neither is ever set for desktop users).
+pub(crate) fn is_hard_excluded(path: &str) -> bool {
+    is_hard_excluded_with(path, tier2_waiver_active())
+}
+
+/// Pure variant of [`is_hard_excluded`] for tests (the waiver flag is
+/// env-backed and process-cached, which tests cannot toggle).
+pub(crate) fn is_hard_excluded_with(path: &str, tier2_waived: bool) -> bool {
+    is_agent_infra_path(path) || (!tier2_waived && is_non_project_path(path))
 }
 
 /// Scan-time exclusion for filesystem WALKS (ACE scanner, lockfile walk,
@@ -113,12 +146,44 @@ pub(crate) fn is_hard_excluded_with(path: &str, strict_manifest_mode: bool) -> b
 /// rooted in a temp directory — ephemeral temp paths are still blocked at the
 /// DB write guards before anything persists.
 pub(crate) fn is_scan_excluded_dir(path: &str) -> bool {
-    let p = comparison_form(path);
-    let agent_infra = p.contains("/.claude/")
-        || p.ends_with("/.claude")
-        || p.contains("/.codex/")
-        || p.ends_with("/.codex");
-    agent_infra || (!crate::source_fetching::strict_manifest_mode() && is_non_project_path(path))
+    if has_agent_infra_segment(path) {
+        return true;
+    }
+    if !tier2_waiver_active() && is_non_project_path(path) {
+        log_tier2_exclusion(path, "scan");
+        return true;
+    }
+    false
+}
+
+/// Tier-2 observability (accurate-first: a permanent silent exclusion is not
+/// acceptable). Logs ONCE per canonical path per process, at scan/write time
+/// only — tier-1 agent-infra rejections are expected machinery and are not
+/// logged. A greyed-out "excluded scaffolding" entry in the Your Stack UI is
+/// the planned follow-up surface.
+pub(crate) fn log_tier2_exclusion(path: &str, site: &str) {
+    use std::collections::HashSet;
+    use std::sync::{Mutex, OnceLock};
+    // Self-classifying: only genuine tier-2 rejections log (callers may pass
+    // any hard-excluded path; tier-1 agent infra stays silent by design).
+    if is_agent_infra_path(path) || !is_non_project_path(path) {
+        return;
+    }
+    static LOGGED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let canon = comparison_form(path);
+    let mutex = LOGGED.get_or_init(|| Mutex::new(HashSet::new()));
+    let newly = match mutex.lock() {
+        Ok(mut set) => set.insert(canon),
+        Err(_) => false, // poisoned — skip logging rather than panic
+    };
+    if newly {
+        tracing::info!(
+            target: "4da::project_inclusion",
+            path = %path,
+            site = %site,
+            "excluded from context: non-project scaffolding (fixture-tree segment or -placeholder dir) — never treated as a user project"
+        );
+    }
 }
 
 /// Tier 3: the user's "Your Stack" exclusion list. Normalized comparison
@@ -188,9 +253,24 @@ mod tests {
         for p in [
             "/home/u/claude-client/src",
             r"D:\projects\my.codexplorer",
+            "my.claude-tools/src", // relative lookalike — segment is "my.claude-tools"
             "/home/u/tmpfiles/app", // "tmpfiles" is not the "/tmp/" segment
         ] {
             assert!(!is_agent_infra_path(p), "false positive: {p}");
+        }
+    }
+
+    #[test]
+    fn tier1_relative_paths_match_by_segment() {
+        // The old contains("/.claude/") form let a RELATIVE leading segment
+        // escape; exact-segment matching closes it.
+        for p in [
+            ".claude/plans/ledger-fixtures/x",
+            r".claude\worktrees\agent-abc",
+            ".codex/scratch",
+            ".claude",
+        ] {
+            assert!(is_agent_infra_path(p), "relative tier-1 must match: {p}");
         }
     }
 
@@ -247,17 +327,34 @@ mod tests {
     // ── Hard exclusion (tiers 1+2 + strict-mode waiver) ─────────────────
 
     #[test]
-    fn hard_exclusion_combines_tiers_and_strict_mode_waives_tier2_only() {
+    fn hard_exclusion_combines_tiers_and_waiver_lifts_tier2_only() {
         // Normal (desktop) mode: both tiers hard-exclude.
         assert!(is_hard_excluded_with("/repo/fixtures/app", false));
         assert!(is_hard_excluded_with("/repo/.claude/plans/x", false));
-        // Strict-manifest (ledger) mode: tier 2 is waived — the ledger scans
+        // Waiver active (ledger): tier 2 is lifted — the ledger scans
         // 4da-ledger/fixtures/<stack> deliberately — but tier 1 still holds.
         assert!(!is_hard_excluded_with(
             "d:/runyourempire/4da-ledger/fixtures/csharp-service",
             true
         ));
         assert!(is_hard_excluded_with("/repo/.claude/plans/x", true));
+    }
+
+    #[test]
+    fn tier2_waiver_requires_strict_mode_and_isolated_data_dir() {
+        // The ledger always sets BOTH env vars. A FOURDA_STRICT_MANIFEST
+        // leaked into a desktop dev shell (default data dir) must never waive
+        // tier-2 ingestion or disable the tier-2 purge.
+        assert!(tier2_waiver_from(true, true), "ledger: both set -> waived");
+        assert!(
+            !tier2_waiver_from(true, false),
+            "leaked strict flag alone must NOT waive tier 2"
+        );
+        assert!(
+            !tier2_waiver_from(false, true),
+            "isolated data dir alone must NOT waive tier 2"
+        );
+        assert!(!tier2_waiver_from(false, false));
     }
 
     #[test]

@@ -20,11 +20,18 @@ use super::types::{CrossProjectPackage, DependencyEdgeRow, StoredDependency};
 /// whose Gemfile.lock / composer.lock surfaced nokogiri + symfony as the
 /// user's stack, producing phantom Ruby/PHP CVE alerts on the Preemption
 /// Radar — plus temp dirs); tier 2 is generic non-project scaffolding
-/// (fixture-tree segments, `-placeholder` dirs), waived in strict-manifest
-/// (ledger) mode. Case-insensitive, both slash styles (paths reach here in
-/// raw `D:\...` and canonicalized `d:/...` forms).
+/// (fixture-tree segments, `-placeholder` dirs), waived only in ledger runs
+/// (strict-manifest mode + isolated data dir). Case-insensitive, both slash
+/// styles (paths reach here in raw `D:\...` and canonicalized `d:/...`
+/// forms). Tier-2 rejections log once per path (accurate-first — a silent
+/// permanent exclusion is not acceptable); this fn is only called at write
+/// sites, so the log marks real ingestion refusals.
 pub(crate) fn is_excluded_project_path(project_path: &str) -> bool {
-    crate::project_inclusion::is_hard_excluded(project_path)
+    let excluded = crate::project_inclusion::is_hard_excluded(project_path);
+    if excluded {
+        crate::project_inclusion::log_tier2_exclusion(project_path, "write");
+    }
+    excluded
 }
 
 /// Counts from a [`purge_agent_infra_dependencies`] self-heal pass.
