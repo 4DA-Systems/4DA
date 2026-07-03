@@ -40,6 +40,11 @@ pub(super) fn store_direct_dependencies(db: &Database) {
 pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf]) {
     let scanner = crate::ace::scanner::ProjectScanner::new();
     let mut lockfile_count = 0u32;
+    // "Your Stack" exclusions (tier 3), fetched once per walk: lockfiles under
+    // a user-excluded project must not feed user_dependencies (the OSV / audit
+    // surface). Tiers 1+2 are handled by is_scan_excluded_dir below plus the
+    // DB write guards.
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
 
     for path in scan_paths {
         if !path.exists() || !path.is_dir() {
@@ -51,6 +56,14 @@ pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf])
                 continue;
             }
             let project_path = dir.to_string_lossy().to_string();
+            // Canonical inclusion policy: covers a walk ROOTED inside an
+            // excluded tree (the name-based skip list below only prunes
+            // descent) and tier-2/3 dirs whose names aren't in that list.
+            if crate::project_inclusion::is_scan_excluded_dir(&project_path)
+                || crate::project_inclusion::is_user_excluded(&project_path, &user_excluded)
+            {
+                continue;
+            }
 
             lockfile_count += process_cargo_lock(db, &scanner, &dir, &project_path);
             lockfile_count += process_package_lock(db, &scanner, &dir, &project_path);

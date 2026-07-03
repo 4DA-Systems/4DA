@@ -248,6 +248,13 @@ impl ACE {
         let mut active_topics: Vec<ActiveTopic> = Vec::new();
         let mut projects_found = 0;
 
+        // "Your Stack" exclusions (tier 3 of the canonical inclusion policy),
+        // fetched once per detection pass. Tier-3 projects stay DETECTED and
+        // listed (so the user can toggle them back on) but contribute nothing
+        // to intelligence: no detected_tech evidence, no active topics, no
+        // dependency snapshots.
+        let user_excluded = crate::project_inclusion::user_excluded_paths();
+
         for path in scan_paths {
             if !path.exists() {
                 continue;
@@ -256,6 +263,25 @@ impl ACE {
             match self.scanner.scan_directory(path) {
                 Ok(signals) => {
                     for signal in signals {
+                        let project_path = signal
+                            .manifest_path
+                            .parent()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_default();
+
+                        // Tiers 1+2 (agent infra / non-project scaffolding):
+                        // defense in depth — the scanner already refuses to
+                        // descend into these trees, but a signal that slips
+                        // through (e.g. a scan rooted inside one) must never
+                        // become context.
+                        if crate::project_inclusion::is_hard_excluded(&project_path) {
+                            continue;
+                        }
+                        let tier3_excluded = crate::project_inclusion::is_user_excluded(
+                            &project_path,
+                            &user_excluded,
+                        );
+
                         projects_found += 1;
 
                         // Confidence from evidence density × project activity.
@@ -279,44 +305,49 @@ impl ACE {
                         let confidence = base_confidence * signal.project_relevance;
 
                         if base_confidence >= 0.3 {
-                            for lang in &signal.languages {
-                                detected_tech.push(DetectedTech {
-                                    name: lang.clone(),
-                                    category: TechCategory::Language,
-                                    confidence,
-                                    source: DetectionSource::Manifest,
-                                    evidence: vec![format!(
-                                        "Found in {}",
-                                        signal.manifest_path.display()
-                                    )],
-                                });
-                            }
-
-                            for framework in &signal.frameworks {
-                                detected_tech.push(DetectedTech {
-                                    name: framework.clone(),
-                                    category: TechCategory::Framework,
-                                    confidence: confidence * 0.9,
-                                    source: DetectionSource::Manifest,
-                                    evidence: vec![format!(
-                                        "Dependency in {}",
-                                        signal.manifest_path.display()
-                                    )],
-                                });
-                            }
-
-                            for dep in &signal.dependencies {
-                                if is_notable_dependency(dep) {
+                            // Tier-3 (user-excluded) projects contribute NO
+                            // tech evidence — the "Your Stack" toggle means
+                            // "this is not my stack".
+                            if !tier3_excluded {
+                                for lang in &signal.languages {
                                     detected_tech.push(DetectedTech {
-                                        name: dep.clone(),
-                                        category: TechCategory::Library,
-                                        confidence: confidence * 0.7,
+                                        name: lang.clone(),
+                                        category: TechCategory::Language,
+                                        confidence,
+                                        source: DetectionSource::Manifest,
+                                        evidence: vec![format!(
+                                            "Found in {}",
+                                            signal.manifest_path.display()
+                                        )],
+                                    });
+                                }
+
+                                for framework in &signal.frameworks {
+                                    detected_tech.push(DetectedTech {
+                                        name: framework.clone(),
+                                        category: TechCategory::Framework,
+                                        confidence: confidence * 0.9,
                                         source: DetectionSource::Manifest,
                                         evidence: vec![format!(
                                             "Dependency in {}",
                                             signal.manifest_path.display()
                                         )],
                                     });
+                                }
+
+                                for dep in &signal.dependencies {
+                                    if is_notable_dependency(dep) {
+                                        detected_tech.push(DetectedTech {
+                                            name: dep.clone(),
+                                            category: TechCategory::Library,
+                                            confidence: confidence * 0.7,
+                                            source: DetectionSource::Manifest,
+                                            evidence: vec![format!(
+                                                "Dependency in {}",
+                                                signal.manifest_path.display()
+                                            )],
+                                        });
+                                    }
                                 }
                             }
 
@@ -344,11 +375,6 @@ impl ACE {
                             };
                             if relevance >= 0.15 || force_persist {
                                 if let Ok(conn) = crate::open_db_connection() {
-                                    let project_path = signal
-                                        .manifest_path
-                                        .parent()
-                                        .map(|p| p.to_string_lossy().to_string())
-                                        .unwrap_or_default();
                                     let manifest_type =
                                         format!("{:?}", signal.manifest_type).to_lowercase();
                                     let language = signal.manifest_type.language();
@@ -468,11 +494,19 @@ impl ACE {
                                         }
                                     }
 
-                                    // Snapshot deps for the dep_linker's UNION query
-                                    if let Ok(db) = crate::get_database() {
-                                        let ecosystem = signal.manifest_type.language().to_string();
-                                        let mut entries: Vec<crate::db::dep_snapshots::DepEntry> =
-                                            signal
+                                    // Snapshot deps for the dep_linker's UNION query.
+                                    // Skipped for tier-3 (user-excluded) projects:
+                                    // snapshots are grounding evidence, and the user
+                                    // said this is not their stack. (The project +
+                                    // project_dependencies rows above still persist
+                                    // so the Your Stack list can offer the toggle.)
+                                    if !tier3_excluded {
+                                        if let Ok(db) = crate::get_database() {
+                                            let ecosystem =
+                                                signal.manifest_type.language().to_string();
+                                            let mut entries: Vec<
+                                                crate::db::dep_snapshots::DepEntry,
+                                            > = signal
                                                 .dependencies
                                                 .iter()
                                                 .map(|d| crate::db::dep_snapshots::DepEntry {
@@ -484,34 +518,37 @@ impl ACE {
                                                     source: manifest_type.clone(),
                                                 })
                                                 .collect();
-                                        entries.extend(signal.dev_dependencies.iter().map(|d| {
-                                            crate::db::dep_snapshots::DepEntry {
-                                                name: d.clone(),
-                                                ecosystem: ecosystem.clone(),
-                                                version: None,
-                                                is_direct: true,
-                                                is_dev: true,
-                                                source: manifest_type.clone(),
+                                            entries.extend(signal.dev_dependencies.iter().map(
+                                                |d| crate::db::dep_snapshots::DepEntry {
+                                                    name: d.clone(),
+                                                    ecosystem: ecosystem.clone(),
+                                                    version: None,
+                                                    is_direct: true,
+                                                    is_dev: true,
+                                                    source: manifest_type.clone(),
+                                                },
+                                            ));
+                                            if let Err(e) =
+                                                db.snapshot_project_deps(&project_path, &entries)
+                                            {
+                                                tracing::debug!(target: "4da::ace", error = %e, "Failed to snapshot deps");
                                             }
-                                        }));
-                                        if let Err(e) =
-                                            db.snapshot_project_deps(&project_path, &entries)
-                                        {
-                                            tracing::debug!(target: "4da::ace", error = %e, "Failed to snapshot deps");
                                         }
                                     }
                                 }
                             }
 
-                            for lang in &signal.languages {
-                                active_topics.push(ActiveTopic {
-                                    topic: lang.clone(),
-                                    weight: 0.8,
-                                    confidence,
-                                    source: TopicSource::ProjectManifest,
-                                    last_seen: chrono::Utc::now().to_rfc3339(),
-                                    embedding: None,
-                                });
+                            if !tier3_excluded {
+                                for lang in &signal.languages {
+                                    active_topics.push(ActiveTopic {
+                                        topic: lang.clone(),
+                                        weight: 0.8,
+                                        confidence,
+                                        source: TopicSource::ProjectManifest,
+                                        last_seen: chrono::Utc::now().to_rfc3339(),
+                                        embedding: None,
+                                    });
+                                }
                             }
                         }
                     }

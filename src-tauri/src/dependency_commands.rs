@@ -281,18 +281,21 @@ pub async fn list_projects_with_stack_status() -> Result<serde_json::Value> {
         .filter_map(|r| r.ok())
         .collect();
 
-    let excluded: Vec<String> = crate::get_settings_manager()
-        .lock()
-        .get_excluded_project_paths()
-        .iter()
-        .map(|p| p.to_lowercase())
-        .collect();
+    let excluded = crate::project_inclusion::user_excluded_paths();
 
     let projects: Vec<serde_json::Value> = rows
         .into_iter()
+        // Hard-excluded rows (agent infra / fixture scaffolding, tiers 1+2)
+        // are purged at startup and blocked at write time; filter defensively
+        // so they can never appear as toggleable "projects" even on a
+        // not-yet-purged DB. Tier-3 projects DO stay listed — that toggle is
+        // the product mechanism for ambiguous dirs.
+        .filter(|(path, _)| !crate::project_inclusion::is_hard_excluded(path))
         .map(|(path, dep_count)| {
-            let pl = path.to_lowercase();
-            let included = !excluded.iter().any(|ex| pl.starts_with(ex.as_str()));
+            // Tier-3 check via the canonical predicate: slash-normalized,
+            // path-boundary prefix matching (the old lowercase starts_with
+            // missed `D:\...` vs `d:/...` storage variants).
+            let included = !crate::project_inclusion::is_user_excluded(&path, &excluded);
             let name = path
                 .rsplit(['/', '\\'])
                 .find(|s| !s.is_empty())
@@ -318,9 +321,11 @@ pub async fn set_project_in_stack(path: String, included: bool) -> Result<()> {
     let manager = crate::get_settings_manager();
     let mut guard = manager.lock();
     let mut excluded = guard.get_excluded_project_paths();
-    let pl = path.to_lowercase();
-    // Remove any existing entry for this path first (idempotent).
-    excluded.retain(|e| e.to_lowercase() != pl);
+    // Remove any existing entry for this path first (idempotent). Compare in
+    // the canonical form so a `D:\...` entry and a `d:/...` entry can never
+    // coexist for one project.
+    let canon = crate::project_inclusion::comparison_form(&path);
+    excluded.retain(|e| crate::project_inclusion::comparison_form(e) != canon);
     if !included {
         excluded.push(path);
     }

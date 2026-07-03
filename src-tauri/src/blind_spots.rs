@@ -536,6 +536,22 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
     })?;
 
     let mut result: Vec<DepCoverage> = rows.filter_map(|r| r.ok()).collect();
+
+    // Canonical project-inclusion policy: the blind-spot universe must not
+    // track deps that exist ONLY in agent infra / fixture scaffolding
+    // (tiers 1+2) or projects the user excluded via "Your Stack" (tier 3).
+    // A dep keeps its entry as long as at least one REAL included project
+    // carries it; only its excluded project references are dropped.
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
+    result.retain_mut(|cov| {
+        let had_projects = !cov.projects.is_empty();
+        cov.projects.retain(|p| {
+            !crate::project_inclusion::is_excluded_from_intelligence(p, &user_excluded)
+        });
+        // Drop the dep only when every carrying project was excluded.
+        !(had_projects && cov.projects.is_empty())
+    });
+
     result.sort_by(|a, b| {
         b.projects
             .len()
@@ -3616,7 +3632,19 @@ pub fn add_package_watch(
 
     let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
 
-    let path = project_path.unwrap_or_else(|| "user-watch".to_string());
+    // Canonical write guard + storage form: this is a production writer into
+    // user_dependencies with a frontend-supplied path. Agent-infra / temp /
+    // scaffolding paths must never enter (same policy as store_dependency),
+    // and the path must land on the canonical key (lowercase + forward
+    // slashes on Windows) or path-scoped readers cannot see the row.
+    let path = crate::project_inclusion::canonical_storage_path(
+        &project_path.unwrap_or_else(|| "user-watch".to_string()),
+    );
+    if crate::project_inclusion::is_hard_excluded(&path) {
+        return Err(format!(
+            "'{path}' is agent-infrastructure or test scaffolding — not tracked as part of your stack"
+        ));
+    }
 
     conn.execute(
         "INSERT INTO user_dependencies (project_path, package_name, ecosystem, is_direct, detected_at, last_seen_at)

@@ -341,8 +341,22 @@ fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRun
             language: row.get(2)?,
         })
     })?;
-    rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
+    let deps = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    // Canonical project-inclusion policy: the Preemption Radar's grounding
+    // set must not include deps from agent infra / scaffolding (tiers 1+2 —
+    // defense in depth over the write guards + startup purge) or from
+    // projects the user excluded via "Your Stack" (tier 3 — without this, a
+    // toggled-off project kept grounding CVEs against its deps forever).
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
+    Ok(deps
+        .into_iter()
+        .filter(|dep| {
+            !crate::project_inclusion::is_excluded_from_intelligence(
+                &dep.project_path,
+                &user_excluded,
+            )
+        })
+        .collect())
 }
 
 fn matched_direct_runtime_deps(

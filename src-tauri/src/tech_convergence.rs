@@ -229,7 +229,14 @@ pub fn get_tech_convergence() -> crate::error::Result<serde_json::Value> {
         ))
     })?;
 
+    // Canonical inclusion policy: agent infra / scaffolding (tiers 1+2) and
+    // "Your Stack"-excluded projects (tier 3) never feed convergence analysis.
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
+
     for (path, langs_json, frameworks_json) in rows.flatten() {
+        if crate::project_inclusion::is_excluded_from_intelligence(&path, &user_excluded) {
+            continue;
+        }
         let mut techs = Vec::new();
         if let Some(ref json) = langs_json {
             if let Ok(langs) = serde_json::from_str::<Vec<String>>(json) {
@@ -272,7 +279,13 @@ pub fn get_project_health_comparison() -> crate::error::Result<serde_json::Value
         ))
     })?;
 
+    // Same inclusion policy as get_tech_convergence.
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
+
     for (path, deps_json, langs_json) in rows.flatten() {
+        if crate::project_inclusion::is_excluded_from_intelligence(&path, &user_excluded) {
+            continue;
+        }
         let dep_count = deps_json
             .as_deref()
             .and_then(|j| serde_json::from_str::<Vec<String>>(j).ok())
@@ -305,8 +318,14 @@ pub fn get_cross_project_dependencies() -> crate::error::Result<serde_json::Valu
         ))
     })?;
 
+    // Same inclusion policy as get_tech_convergence.
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
+
     for row in rows {
         if let Ok((path, deps_json, langs_json)) = row {
+            if crate::project_inclusion::is_excluded_from_intelligence(&path, &user_excluded) {
+                continue;
+            }
             let mut deps = Vec::new();
             // Determine primary ecosystem from languages
             let ecosystem = langs_json
