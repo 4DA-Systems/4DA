@@ -115,6 +115,14 @@ pub fn upsert_dependency_with_platform(
     target_cfg: Option<&str>,
     platform_active: bool,
 ) -> Result<()> {
+    // Canonical write guard (tiers 1+2): agent-infra / temp paths and
+    // non-project scaffolding (fixture trees, -placeholder dirs) must never
+    // enter project_dependencies. No-op, mirroring
+    // db::dependencies::store_dependency; tier-2 refusals log once per path.
+    if crate::project_inclusion::is_hard_excluded(project_path) {
+        crate::project_inclusion::log_tier2_exclusion(project_path, "write");
+        return Ok(());
+    }
     let canonical_path = canonicalize_project_path(project_path);
     conn.execute(
         "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance, target_cfg, platform_active, last_scanned)
@@ -218,6 +226,16 @@ fn map_project_dependency_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proje
 /// Get all tracked dependencies, scoped to projects with recent git activity.
 /// Only includes deps from project trees that have commits in the last 60 days.
 /// Falls back to all deps if no git signals exist (first run).
+///
+/// This is the CENTRAL read funnel for dependency intelligence (scoring's
+/// `load_dependency_intelligence`, `store_direct_dependencies` →
+/// `user_dependencies`, registry monitoring sets, knowledge decay), so the
+/// canonical project-inclusion policy is enforced HERE: hard-excluded paths
+/// (tiers 1+2 — agent infra, temp, fixture/placeholder scaffolding) and the
+/// user's "Your Stack" exclusions (tier 3) never leave this function, even if
+/// stale rows exist in the table. Tier-3 rows deliberately REMAIN in
+/// `project_dependencies` (the Your Stack list reads the table directly so the
+/// user can toggle projects back on).
 pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDependency>> {
     // Get active repo roots from git_signals (repos with recent commits)
     let active_roots: Vec<String> = conn
@@ -248,6 +266,7 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
         )
         ?;
 
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
     let all_deps: Vec<ProjectDependency> = stmt
         .query_map([], map_project_dependency_row)?
         .filter_map(|r| match r {
@@ -257,16 +276,22 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
                 None
             }
         })
+        .filter(|dep| {
+            !crate::project_inclusion::is_excluded_from_intelligence(
+                &dep.project_path,
+                &user_excluded,
+            )
+        })
         .collect();
 
     // Filter to deps from active project trees only
     if active_roots.is_empty() {
-        // No git signals yet — return all deps (first run fallback)
+        // No git signals yet — return all included deps (first run fallback)
         return Ok(all_deps);
     }
 
     let filtered: Vec<ProjectDependency> = all_deps
-        .into_iter()
+        .iter()
         .filter(|dep| {
             // Normalize for case-insensitive comparison on Windows
             let dep_path = dep.project_path.to_lowercase();
@@ -275,26 +300,13 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
                 dep_path.starts_with(&root_lower) || root_lower.starts_with(&dep_path)
             })
         })
+        .cloned()
         .collect();
 
-    // If filtering eliminated everything, fall back to all deps
+    // If git-recency filtering eliminated everything, fall back to every
+    // included dep (still policy-filtered — never re-admit excluded rows).
     if filtered.is_empty() {
-        return Ok(conn
-            .prepare(
-                "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned
-                 FROM project_dependencies ORDER BY project_path, package_name",
-            )
-            ?
-            .query_map([], map_project_dependency_row)
-            ?
-            .filter_map(|r| match r {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    tracing::warn!("Row processing failed in temporal: {e}");
-                    None
-                }
-            })
-            .collect());
+        return Ok(all_deps);
     }
 
     Ok(filtered)

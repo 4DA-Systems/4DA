@@ -73,6 +73,11 @@ impl Default for WatcherConfig {
             ".vscode",
             "coverage",
             ".nyc_output",
+            // Agent infrastructure — file churn in .claude/.codex (plans,
+            // worktrees, scratch fixtures) is agent activity, not the user's
+            // work; letting it through minted active topics from agent edits.
+            ".claude",
+            ".codex",
             // Sensitive directories — credentials, keys, secrets
             ".ssh",
             ".aws",

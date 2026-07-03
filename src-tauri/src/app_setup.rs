@@ -814,6 +814,36 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 }
             }
 
+            // Self-heal the FULL project-inclusion policy (canonical predicate
+            // in project_inclusion): tier-1 agent-infra AND tier-2 non-project
+            // scaffolding (fixture trees, -placeholder dirs) across EVERY
+            // path-keyed intelligence table — including detected_projects,
+            // which the June 2026 pollution fix missed (five stale
+            // .claude/plans/ledger-fixtures/* rows kept surfacing in the
+            // "Your Stack" list) — plus detected_tech evidence hygiene.
+            // Strict-manifest (ledger) mode waives tier 2, so ledger data
+            // dirs keep their fixture stacks.
+            match crate::db::purge_non_project_intelligence(&conn) {
+                Ok(c) => {
+                    total_deleted += c.total();
+                    if c.total() > 0 || c.detected_tech_rewritten > 0 {
+                        info!(
+                            target: "4da::startup",
+                            detected_projects = c.detected_projects,
+                            project_deps = c.project_dependencies,
+                            user_deps = c.user_dependencies,
+                            snapshots = c.dependency_snapshots,
+                            tech_deleted = c.detected_tech_deleted,
+                            tech_rewritten = c.detected_tech_rewritten,
+                            "Startup cleanup: non-project intelligence purge"
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: non-project intelligence purge failed");
+                }
+            }
+
             // Purge user_dependencies with clearly ephemeral project paths (temp dirs).
             // Filesystem checks would block the async runtime, so we pattern-match instead.
             match conn.execute(

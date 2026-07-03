@@ -125,6 +125,23 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // AMD story) or alias overlaps ("sqlite3" -> better-sqlite3 on a sqlite-utils
 // release). The structured-advisory route (Affected-packages metadata) is an
 // independent proof and is unchanged.
+//
+// NO bump for the 2026-07-04 canonical project-inclusion change. Scoring's
+// project-context inputs are: (a) project_dependencies via
+// load_dependency_intelligence AND pipeline_v2's direct read, (b)
+// detected_tech via ace_context (tech stack -> synthesized interests). Both
+// were checked against the live corpus by read-only probe:
+// (a) project_dependencies carries no tier-1/2 rows (the June purge cleared
+//     .claude paths; the placeholder pollution lives in user_dependencies /
+//     dependency_snapshots, which feed OSV alert surfaces, not score math),
+// (b) detected_tech has only two rows with scaffolding evidence, both MIXED
+//     with real-project evidence — the startup purge only rewrites their
+//     evidence strings; the tech NAME set and confidences scoring consumes
+//     are unchanged (rows evidenced solely by scaffolding would be deleted,
+//     but none exist live).
+// With excluded_project_paths also empty, scoring inputs are byte-identical.
+// If a user later excludes a project, scores refresh through the normal
+// rescan path — no corpus re-stamp required.
 pub(crate) const PIPELINE_VERSION: i32 = 11;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1

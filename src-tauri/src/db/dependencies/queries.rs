@@ -11,25 +11,27 @@ use crate::ace::scanner::DependencyEdge;
 use super::mappers::map_dependency_row;
 use super::types::{CrossProjectPackage, DependencyEdgeRow, StoredDependency};
 
-/// Agent-infrastructure / temp path exclusion, applied at WRITE time to every
-/// dependency table and mirrored by the `get_auditable_*` read filters.
+/// Hard project exclusion, applied at WRITE time to every dependency table
+/// and mirrored by the `get_auditable_*` read filters.
 ///
-/// Matches the ACE scanner's `is_excluded_path` doctrine (ace/scanner.rs): the
-/// ENTIRE `.claude/` (and `.codex/`) tree is agent infrastructure — worktrees
-/// (ephemeral repo copies) AND scratch fixtures (e.g. the multi-ecosystem
-/// ledger fixtures under `.claude/plans/ledger-fixtures/` whose Gemfile.lock /
-/// composer.lock surfaced nokogiri + symfony as the user's stack, producing
-/// phantom Ruby/PHP CVE alerts on the Preemption Radar). None of it is a real
-/// user project. Case-insensitive, both slash styles (paths reach here in
-/// raw `D:\...` and canonicalized `d:/...` forms).
+/// Delegates to the canonical policy (`crate::project_inclusion`): tier 1 is
+/// agent infrastructure / ephemeral paths (the ENTIRE `.claude/` and `.codex/`
+/// trees — worktrees AND scratch fixtures like `.claude/plans/ledger-fixtures/`
+/// whose Gemfile.lock / composer.lock surfaced nokogiri + symfony as the
+/// user's stack, producing phantom Ruby/PHP CVE alerts on the Preemption
+/// Radar — plus temp dirs); tier 2 is generic non-project scaffolding
+/// (fixture-tree segments, `-placeholder` dirs), waived only in ledger runs
+/// (strict-manifest mode + isolated data dir). Case-insensitive, both slash
+/// styles (paths reach here in raw `D:\...` and canonicalized `d:/...`
+/// forms). Tier-2 rejections log once per path (accurate-first — a silent
+/// permanent exclusion is not acceptable); this fn is only called at write
+/// sites, so the log marks real ingestion refusals.
 pub(crate) fn is_excluded_project_path(project_path: &str) -> bool {
-    let p = project_path.replace('\\', "/").to_lowercase();
-    p.contains("/.claude/")
-        || p.ends_with("/.claude")
-        || p.contains("/.codex/")
-        || p.ends_with("/.codex")
-        || p.contains("/tmp/")
-        || (p.contains("appdata") && p.contains("local") && p.contains("temp"))
+    let excluded = crate::project_inclusion::is_hard_excluded(project_path);
+    if excluded {
+        crate::project_inclusion::log_tier2_exclusion(project_path, "write");
+    }
+    excluded
 }
 
 /// Counts from a [`purge_agent_infra_dependencies`] self-heal pass.
@@ -57,17 +59,27 @@ impl AgentInfraPurge {
 /// existing installs carry rows scanned before the write-time exclusion
 /// existed, so deleting at startup heals the live DB without manual surgery.
 ///
-/// Three passes:
+/// Three passes (single transaction — a startup crash mid-purge must not
+/// leave a half-deduped table):
 /// 1. Delete `.claude/` + `.codex/` rows from `user_dependencies` and
 ///    `dependency_snapshots` (SQLite `LIKE` is ASCII case-insensitive, so the
-///    two slash-style patterns cover all four case/slash variants).
+///    two slash-style patterns cover all four case/slash variants). The old
+///    `%worktrees%agent-%` pattern was DROPPED: as a substring match it
+///    deleted legitimate projects (`/home/u/worktrees/reagent-app`,
+///    `D:\worktrees\agent-ui`) every startup while scans re-added them
+///    (flip-flop churn) — and agent worktrees always live under
+///    `.claude/worktrees/`, already covered by the segment patterns.
 /// 2. Collapse duplicate identities: migration 67 canonicalized
 ///    `project_dependencies` paths (lowercase, forward slashes) but never
 ///    backfilled `user_dependencies`, so when write-time canonicalization
 ///    landed, every re-scanned project gained a second row set
-///    (`D:\4DA\...` from before, `d:/4da/...` after). The previous dedup
-///    grouped by `LOWER(project_path)` only — casing, not slash direction —
-///    and missed them all. Keep the newest row per normalized identity.
+///    (`D:\4DA\...` from before, `d:/4da/...` after). The group key MUST
+///    mirror `canonicalize_project_path`: lowercasing is Windows-only — on
+///    Linux `/home/u/App` and `/home/u/app` are genuinely distinct projects
+///    and must NOT collapse. The hyphen->underscore package-name fold is only
+///    valid for ecosystems that treat them as equivalent (crates.io, PyPI);
+///    npm's `left-pad` and `left_pad` are DIFFERENT packages, so the fold is
+///    restricted to rust/python ecosystem labels.
 /// 3. Rewrite residual non-canonical paths to the canonical form (matches
 ///    `canonicalize_project_path`; lowercasing is Windows-only). Safe after
 ///    pass 2: each normalized identity now has exactly one row, so the
@@ -78,45 +90,52 @@ pub fn purge_agent_infra_dependencies(
     const INFRA_PREDICATE: &str = "project_path LIKE '%/.claude/%' \
          OR project_path LIKE '%\\.claude\\%' \
          OR project_path LIKE '%/.codex/%' \
-         OR project_path LIKE '%\\.codex\\%' \
-         OR project_path LIKE '%worktrees%agent-%'";
+         OR project_path LIKE '%\\.codex\\%'";
 
-    let user_dependencies = conn.execute(
+    let tx = conn.unchecked_transaction()?;
+
+    let user_dependencies = tx.execute(
         &format!("DELETE FROM user_dependencies WHERE {INFRA_PREDICATE}"),
         [],
     )?;
-    let dependency_snapshots = conn.execute(
+    let dependency_snapshots = tx.execute(
         &format!("DELETE FROM dependency_snapshots WHERE {INFRA_PREDICATE}"),
         [],
     )?;
 
-    // Collapse slash-style/case duplicates (plus hyphen/underscore package
-    // variants, carried over from the previous startup dedup), keeping the
-    // most recent row.
-    let duplicates = conn.execute(
-        "DELETE FROM user_dependencies WHERE rowid NOT IN (
-            SELECT MAX(rowid) FROM user_dependencies
-            GROUP BY LOWER(REPLACE(package_name, '-', '_')),
-                     LOWER(REPLACE(project_path, '\\', '/')),
-                     LOWER(ecosystem)
-        )",
+    // Collapse slash-style (and on Windows, case) duplicates, keeping the
+    // most recent row. Group key mirrors canonicalize_project_path exactly.
+    let path_key = if cfg!(windows) {
+        "LOWER(REPLACE(project_path, '\\', '/'))"
+    } else {
+        "REPLACE(project_path, '\\', '/')"
+    };
+    // Hyphen/underscore are interchangeable on crates.io and PyPI only.
+    const NAME_KEY: &str = "CASE WHEN LOWER(ecosystem) IN \
+            ('rust', 'cargo', 'crates.io', 'python', 'pypi', 'pip') \
+         THEN LOWER(REPLACE(package_name, '-', '_')) \
+         ELSE LOWER(package_name) END";
+    let duplicates = tx.execute(
+        &format!(
+            "DELETE FROM user_dependencies WHERE rowid NOT IN (
+                SELECT MAX(rowid) FROM user_dependencies
+                GROUP BY {NAME_KEY}, {path_key}, LOWER(ecosystem)
+            )"
+        ),
         [],
     )?;
 
     // Rewrite survivors onto the canonical key so path-scoped readers (which
     // canonicalize their query path) can see them again.
-    let canonical_expr = if cfg!(windows) {
-        "LOWER(REPLACE(project_path, '\\', '/'))"
-    } else {
-        "REPLACE(project_path, '\\', '/')"
-    };
-    let canonicalized = conn.execute(
+    let canonicalized = tx.execute(
         &format!(
-            "UPDATE user_dependencies SET project_path = {canonical_expr}
-             WHERE project_path <> {canonical_expr}"
+            "UPDATE user_dependencies SET project_path = {path_key}
+             WHERE project_path <> {path_key}"
         ),
         [],
     )?;
+
+    tx.commit()?;
 
     Ok(AgentInfraPurge {
         user_dependencies,
@@ -124,6 +143,150 @@ pub fn purge_agent_infra_dependencies(
         duplicates,
         canonicalized,
     })
+}
+
+/// Counts from a [`purge_non_project_intelligence`] self-heal pass.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NonProjectPurge {
+    /// Hard-excluded rows deleted from `detected_projects`.
+    pub detected_projects: usize,
+    /// Hard-excluded rows deleted from `project_dependencies`.
+    pub project_dependencies: usize,
+    /// Hard-excluded rows deleted from `user_dependencies` (tier-2 sweep; the
+    /// tier-1 SQL pass in [`purge_agent_infra_dependencies`] runs first).
+    pub user_dependencies: usize,
+    /// Hard-excluded rows deleted from `dependency_snapshots`.
+    pub dependency_snapshots: usize,
+    /// `detected_tech` rows deleted because EVERY evidence entry referenced a
+    /// hard-excluded path.
+    pub detected_tech_deleted: usize,
+    /// `detected_tech` rows whose evidence was rewritten to drop entries
+    /// referencing hard-excluded paths (real-project evidence kept).
+    pub detected_tech_rewritten: usize,
+}
+
+impl NonProjectPurge {
+    pub fn total(&self) -> usize {
+        self.detected_projects
+            + self.project_dependencies
+            + self.user_dependencies
+            + self.dependency_snapshots
+            + self.detected_tech_deleted
+    }
+}
+
+/// True when `table` exists in the connected database. The ACE tables
+/// (`detected_projects`, `detected_tech`) are created by the ACE migration,
+/// which may not have run yet on a brand-new install when startup cleanup
+/// fires — skip gracefully instead of erroring.
+fn table_exists(conn: &rusqlite::Connection, table: &str) -> bool {
+    conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        params![table],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|n| n > 0)
+    .unwrap_or(false)
+}
+
+/// Delete all rows of `table` whose `path_col` is hard-excluded (tiers 1+2 of
+/// the canonical project-inclusion policy). Predicate evaluated in Rust so the
+/// SQL can never drift from `project_inclusion` — the June 2026 pollution fix
+/// purged `project_dependencies` but missed `detected_projects` precisely
+/// because each purge hand-rolled its own SQL patterns.
+fn purge_hard_excluded_rows(
+    conn: &rusqlite::Connection,
+    table: &str,
+    path_col: &str,
+) -> SqliteResult<usize> {
+    if !table_exists(conn, table) {
+        return Ok(0);
+    }
+    let paths: Vec<String> = conn
+        .prepare(&format!("SELECT DISTINCT {path_col} FROM {table}"))?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .filter_map(std::result::Result::ok)
+        .collect();
+    let mut deleted = 0usize;
+    for path in paths
+        .iter()
+        .filter(|p| crate::project_inclusion::is_hard_excluded(p))
+    {
+        deleted += conn.execute(
+            &format!("DELETE FROM {table} WHERE {path_col} = ?1"),
+            params![path],
+        )?;
+    }
+    Ok(deleted)
+}
+
+/// Self-heal purge for EVERY intelligence table that keys rows by project
+/// path, against the canonical hard-exclusion policy (tiers 1+2:
+/// agent infra / temp + non-project scaffolding; strict-manifest mode waives
+/// tier 2 so the receipts ledger's fixture stacks survive in ledger data
+/// dirs). Extends the #212 precedent to `detected_projects` — which the June
+/// 2026 pollution fix never covered, leaving five `.claude/plans/
+/// ledger-fixtures/*` rows surfacing in the "Your Stack" list — plus
+/// `project_dependencies`, the tier-2 sweep of `user_dependencies` /
+/// `dependency_snapshots`, and `detected_tech` evidence hygiene. Idempotent;
+/// single transaction.
+pub fn purge_non_project_intelligence(
+    conn: &rusqlite::Connection,
+) -> SqliteResult<NonProjectPurge> {
+    let tx = conn.unchecked_transaction()?;
+    let mut counts = NonProjectPurge {
+        detected_projects: purge_hard_excluded_rows(&tx, "detected_projects", "path")?,
+        project_dependencies: purge_hard_excluded_rows(
+            &tx,
+            "project_dependencies",
+            "project_path",
+        )?,
+        user_dependencies: purge_hard_excluded_rows(&tx, "user_dependencies", "project_path")?,
+        dependency_snapshots: purge_hard_excluded_rows(
+            &tx,
+            "dependency_snapshots",
+            "project_path",
+        )?,
+        ..Default::default()
+    };
+
+    // detected_tech accumulates manifest-path evidence strings ("Found in
+    // <path>"; "; "-joined). Drop entries that reference hard-excluded paths;
+    // delete the row outright when nothing legitimate remains (its tech was
+    // only ever evidenced by scaffolding).
+    if table_exists(&tx, "detected_tech") {
+        let rows: Vec<(i64, String)> = tx
+            .prepare("SELECT id, evidence FROM detected_tech WHERE evidence IS NOT NULL")?
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })?
+            .filter_map(std::result::Result::ok)
+            .collect();
+        for (id, evidence) in rows {
+            let parts: Vec<&str> = evidence.split("; ").collect();
+            let kept: Vec<&str> = parts
+                .iter()
+                .filter(|e| !crate::project_inclusion::is_hard_excluded(e))
+                .copied()
+                .collect();
+            if kept.len() == parts.len() {
+                continue;
+            }
+            if kept.is_empty() {
+                tx.execute("DELETE FROM detected_tech WHERE id = ?1", params![id])?;
+                counts.detected_tech_deleted += 1;
+            } else {
+                tx.execute(
+                    "UPDATE detected_tech SET evidence = ?1 WHERE id = ?2",
+                    params![kept.join("; "), id],
+                )?;
+                counts.detected_tech_rewritten += 1;
+            }
+        }
+    }
+
+    tx.commit()?;
+    Ok(counts)
 }
 
 /// Canonicalize a project path for storage + the `ON CONFLICT` key. MUST match
@@ -135,11 +298,25 @@ pub fn purge_agent_infra_dependencies(
 /// row on the raw path — across every ecosystem. Pure string normalization (no fs
 /// access), so it is deterministic on synthetic/test paths.
 fn canonicalize_project_path(project_path: &str) -> String {
-    if cfg!(windows) {
-        project_path.replace('\\', "/").to_lowercase()
-    } else {
-        project_path.replace('\\', "/")
-    }
+    crate::project_inclusion::canonical_storage_path(project_path)
+}
+
+/// Post-query filter applying the FULL canonical inclusion policy (tiers
+/// 1+2 hard exclusion + tier-3 "Your Stack" user exclusions) to dependency
+/// rows headed for intelligence surfaces (OSV matching/sync/cache, local
+/// audit, dependency health). The SQL `NOT LIKE` clauses in the queries only
+/// cover tier-1 patterns; this closes tier 2 and tier 3 — including stale
+/// rows written before the write-time guards existed.
+fn retain_included(deps: Vec<StoredDependency>) -> Vec<StoredDependency> {
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
+    deps.into_iter()
+        .filter(|d| {
+            !crate::project_inclusion::is_excluded_from_intelligence(
+                &d.project_path,
+                &user_excluded,
+            )
+        })
+        .collect()
 }
 
 impl Database {
@@ -289,15 +466,16 @@ impl Database {
         )?;
 
         let rows = stmt.query_map([], map_dependency_row)?;
-        Ok(rows
-            .filter_map(|r| match r {
+        Ok(retain_included(
+            rows.filter_map(|r| match r {
                 Ok(v) => Some(v),
                 Err(e) => {
                     tracing::warn!("Row processing failed in auditable dependencies: {e}");
                     None
                 }
             })
-            .collect())
+            .collect(),
+        ))
     }
 
     /// Get user dependencies filtered to relevant runtime deps only.
@@ -318,15 +496,16 @@ impl Database {
         )?;
 
         let rows = stmt.query_map([], map_dependency_row)?;
-        Ok(rows
-            .filter_map(|r| match r {
+        Ok(retain_included(
+            rows.filter_map(|r| match r {
                 Ok(v) => Some(v),
                 Err(e) => {
                     tracing::warn!("Row processing failed in dependencies: {e}");
                     None
                 }
             })
-            .collect())
+            .collect(),
+        ))
     }
 
     /// Get all ACE-scanned dependencies from `project_dependencies`.
@@ -430,15 +609,16 @@ impl Database {
             })
         })?;
 
-        Ok(rows
-            .filter_map(|r| match r {
+        Ok(retain_included(
+            rows.filter_map(|r| match r {
                 Ok(v) => Some(v),
                 Err(e) => {
                     tracing::warn!("Row processing failed in auditable scanned dependencies: {e}");
                     None
                 }
             })
-            .collect())
+            .collect(),
+        ))
     }
 
     /// Get ACE-scanned dependencies filtered to relevant runtime deps only.
@@ -505,15 +685,16 @@ impl Database {
             })
         })?;
 
-        Ok(rows
-            .filter_map(|r| match r {
+        Ok(retain_included(
+            rows.filter_map(|r| match r {
                 Ok(v) => Some(v),
                 Err(e) => {
                     tracing::warn!("Row processing failed in relevant scanned dependencies: {e}");
                     None
                 }
             })
-            .collect())
+            .collect(),
+        ))
     }
 
     /// Get packages that appear in multiple projects (cross-project insight).

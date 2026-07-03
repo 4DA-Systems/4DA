@@ -309,20 +309,37 @@ struct UnlinkedItem {
 /// Load all distinct dependency package names (lowercased, direct, non-dev)
 /// from both the ACE-populated project_dependencies table and the
 /// dependency_snapshots table (if populated).
+///
+/// Canonical project-inclusion policy: item↔dependency links are grounding
+/// evidence, so a package qualifies only via at least one project that is
+/// neither agent infra / scaffolding (tiers 1+2 — defense in depth over the
+/// write guards + startup purge) nor excluded by the user's "Your Stack"
+/// toggle (tier 3 — without this, a toggled-off project kept minting links,
+/// and through them Preemption/Blind-Spots grounding, forever).
 fn load_dependency_names(conn: &rusqlite::Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
-        "SELECT DISTINCT LOWER(package_name) FROM (
-             SELECT package_name FROM project_dependencies
+        "SELECT LOWER(package_name), project_path FROM (
+             SELECT package_name, project_path FROM project_dependencies
              WHERE is_dev = 0 AND is_direct = 1 AND project_relevance >= 0.15
              UNION
-             SELECT package_name FROM dependency_snapshots
+             SELECT package_name, project_path FROM dependency_snapshots
              WHERE is_dev = 0 AND is_direct = 1
          )",
     )?;
-    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
+    let mut seen = std::collections::HashSet::new();
     let mut names = Vec::new();
-    for name in rows {
-        names.push(name?);
+    for row in rows {
+        let (name, project_path) = row?;
+        if crate::project_inclusion::is_excluded_from_intelligence(&project_path, &user_excluded) {
+            continue;
+        }
+        if seen.insert(name.clone()) {
+            names.push(name);
+        }
     }
     Ok(names)
 }

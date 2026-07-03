@@ -309,6 +309,7 @@ mod probes_corpus;
 mod probes_engine;
 mod project_health;
 mod project_health_dimensions;
+pub(crate) mod project_inclusion;
 mod prompt_safety;
 pub mod provenance;
 pub mod query;
