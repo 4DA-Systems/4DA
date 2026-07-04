@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
 use super::ace_context::ACEContext;
-use super::utils::{has_word_boundary_match, topic_overlaps};
+use super::utils::{has_word_boundary_match, topic_grounds};
 
 /// Metadata for a tracked dependency from user's project manifests
 #[derive(Debug, Clone)]
@@ -367,17 +368,78 @@ pub(crate) fn normalize_package_name(name: &str) -> String {
         .replace('/', "-")
 }
 
+/// Short tech keywords that are legitimate despite being short. Shared by the
+/// dep-side ambiguity gate (`is_ambiguous_dep_name`) and the topic-side
+/// genericness gate (`is_generic_topic_token`).
+const SHORT_TECH: &[&str] = &["vue", "svelte", "htmx", "bun", "deno", "vite", "esbuild"];
+
+/// Hot-loop lookup sets built once from the const slices above/below (the
+/// slices stay the source of truth). `is_generic_topic_token` runs inside
+/// per-item scoring loops (`topic_grounds` consults it per fragment pair), so
+/// linear scans over the ~200-entry word list add up.
+static SHORT_TECH_SET: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| SHORT_TECH.iter().copied().collect());
+static COMMON_ENGLISH_WORDS_SET: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| COMMON_ENGLISH_WORDS.iter().copied().collect());
+static GENERIC_TOPIC_TOKENS_SET: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| GENERIC_TOPIC_TOKENS.iter().copied().collect());
+
 /// Check if a term is a common English word (prone to false positives)
 pub(crate) fn is_ambiguous_dep_name(term: &str) -> bool {
-    // Short tech keywords that are legitimate despite being short
-    const SHORT_TECH: &[&str] = &["vue", "svelte", "htmx", "bun", "deno", "vite", "esbuild"];
-    if SHORT_TECH.contains(&term) {
+    if SHORT_TECH_SET.contains(term) {
         return false;
     }
     if term.len() <= 3 {
         return true; // Very short = always ambiguous unless in SHORT_TECH
     }
-    COMMON_ENGLISH_WORDS.contains(&term)
+    COMMON_ENGLISH_WORDS_SET.contains(term)
+}
+
+/// Tech-generic tokens that are NOT plausible package-name subterms (so they
+/// don't belong on COMMON_ENGLISH_WORDS, which also gates dep matching) but as
+/// bare TOPICS match nearly everything: every backend post mentions "rest",
+/// every commit touching tests mints "testing". Consulted ONLY by
+/// `is_generic_topic_token` — dependency-matching behavior is unchanged.
+const GENERIC_TOPIC_TOKENS: &[&str] = &[
+    "rest",
+    "async",
+    "sync",
+    "backend",
+    "frontend",
+    "database",
+    "migration",
+    "webhook",
+    "websocket",
+    "testing",
+    "security",
+    "performance",
+];
+
+/// Can this topic token, on its own, corroborate an interest/topic match?
+/// Topic-side sibling of `is_ambiguous_dep_name` (same COMMON_ENGLISH_WORDS
+/// denylist, same SHORT_TECH allowlist) plus the tech-generic topic tokens
+/// above — but WITHOUT the dep side's "len <= 3 is always ambiguous" blanket:
+/// a 3-char tech token that isn't on the word lists ("k8s", "css", "aws",
+/// "sql") is a legitimate topic and may ground. 1-2 char tokens stay generic
+/// ("ai"/"ml" fashion tokens match everything) unless they are known language
+/// names (go/r/ts/py/...). Generic tokens can never ground a scoring axis
+/// (v12); they also don't survive the startup active_topics prune and are no
+/// longer minted by the ACE extractors. Expects a lowercased token.
+pub(crate) fn is_generic_topic_token(t: &str) -> bool {
+    // Known short language names are legitimate topics despite being 1-2
+    // chars ("go" the language, not "go" the verb).
+    if super::utils::SHORT_LANGUAGE_NAMES.contains(&t) {
+        return false;
+    }
+    // Same curated short-tech allowlist the dep ambiguity gate trusts.
+    if SHORT_TECH_SET.contains(t) {
+        return false;
+    }
+    // 1-2 char tokens ("ai", "ml", "ui", "ci") anchor nothing on their own.
+    if t.len() <= 2 {
+        return true;
+    }
+    COMMON_ENGLISH_WORDS_SET.contains(t) || GENERIC_TOPIC_TOKENS_SET.contains(t)
 }
 
 /// Infrastructure dependencies are ubiquitous ecosystem tools that don't indicate
@@ -1010,8 +1072,9 @@ pub(crate) fn match_dependencies(
                 }
             }
 
-            // Topic overlap (from extract_topics)
-            if topics.iter().any(|t| topic_overlaps(t, term)) {
+            // Topic grounding (from extract_topics) — strict: a generic shared
+            // fragment ("http" ~ "tower-http") cannot corroborate (v12)
+            if topics.iter().any(|t| topic_grounds(t, term)) {
                 confidence += 0.25;
             }
         }
@@ -1106,6 +1169,35 @@ pub(crate) fn match_dependencies(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_is_generic_topic_token_no_short_blanket() {
+        // 3-char tech tokens that aren't English words are specific (F0):
+        // the dep-side "len <= 3" blanket must NOT leak into the topic side.
+        for specific in ["k8s", "css", "aws", "sql", "gcp", "php"] {
+            assert!(!is_generic_topic_token(specific), "{specific} is specific");
+        }
+        // Short language names are curated exceptions.
+        for lang in ["go", "r", "c", "d", "ts", "js", "py"] {
+            assert!(!is_generic_topic_token(lang), "{lang} is a language name");
+        }
+        // SHORT_TECH allowlist is honored.
+        assert!(!is_generic_topic_token("bun"));
+        assert!(!is_generic_topic_token("vue"));
+        // 1-2 char fashion/noise tokens stay generic.
+        for noise in ["ai", "ml", "ui", "ci", "cd", "db", "x"] {
+            assert!(is_generic_topic_token(noise), "{noise} is generic");
+        }
+        // Word-list entries stay generic regardless of length.
+        for word in ["api", "http", "rest", "testing", "database", "auth"] {
+            assert!(is_generic_topic_token(word), "{word} is generic");
+        }
+        // Dep-side semantics unchanged: "aws"/"k8s" remain ambiguous AS DEP
+        // NAMES (len <= 3 blanket stays for dependency matching).
+        assert!(is_ambiguous_dep_name("aws"));
+        assert!(is_ambiguous_dep_name("k8s"));
+        assert!(!is_ambiguous_dep_name("vue"));
+    }
 
     #[test]
     fn test_normalize_package_name_scoped() {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use super::ace_context::ACEContext;
-use super::utils::topic_overlaps;
+use super::utils::topic_grounds;
 use crate::scoring_config;
 use fourda_macros::confirmation_gate;
 
@@ -71,12 +71,14 @@ pub(crate) fn count_confirmed_signals(
             || keyword_score >= scoring_config::KEYWORD_THRESHOLD
     };
     // ACE confirmed: require semantic boost OR active topic match (NOT broad detected_tech).
-    // Uses word-boundary-aware matching to prevent "frustrating"->"rust" false positives.
+    // Uses strict topic grounding (v12): a generic shared fragment — item topic
+    // "http" against active topic "tower-http" — can never confirm this axis.
     // Stack pain point match also contributes to ACE axis (content about your stack's problems).
+    let ace_via_active_topics = topics
+        .iter()
+        .any(|t| ace_ctx.active_topics.iter().any(|at| topic_grounds(t, at)));
     let ace_confirmed = semantic_boost >= scoring_config::SEMANTIC_THRESHOLD
-        || topics
-            .iter()
-            .any(|t| ace_ctx.active_topics.iter().any(|at| topic_overlaps(t, at)))
+        || ace_via_active_topics
         || stack_pain_match;
     let learned_confirmed = feedback_boost > scoring_config::FEEDBACK_THRESHOLD
         || affinity_mult >= scoring_config::AFFINITY_THRESHOLD;
@@ -86,9 +88,6 @@ pub(crate) fn count_confirmed_signals(
     // ACE active_topics (from scanning the user's actual project files) ARE genuinely
     // independent evidence — the user declared an interest AND their code confirms it.
     // Only dedup when the overlap is purely keyword-level with no project-level backing.
-    let ace_via_active_topics = topics
-        .iter()
-        .any(|t| ace_ctx.active_topics.iter().any(|at| topic_overlaps(t, at)));
     let ace_independent = ace_confirmed
         && (semantic_boost >= scoring_config::SEMANTIC_THRESHOLD
             || stack_pain_match
@@ -219,6 +218,37 @@ mod tests {
         assert_eq!(conf.count, 1);
         assert!(!conf.context_confirmed);
         assert!(conf.interest_confirmed);
+    }
+
+    #[test]
+    fn test_ace_axis_generic_fragment_cannot_confirm() {
+        // v12: an item whose ONLY ACE overlap is a generic shared fragment
+        // (topic "http" vs active topic "tower-http") must NOT confirm the
+        // ACE axis — that was the phantom-CORE disease.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("tower-http".to_string());
+        let topics = vec!["http".to_string()];
+        let conf = count_confirmed_signals(
+            0.10, 0.10, 0.10, 0.01, // all other axes below threshold
+            &ace_ctx, &topics, 0.0, 1.0, 0.0, false, 1.0,
+        );
+        assert!(
+            !conf.ace_confirmed,
+            "generic fragment 'http' ~ 'tower-http' must not confirm ACE axis"
+        );
+        assert_eq!(conf.count, 0);
+
+        // A specific topic overlap still confirms.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("tauri".to_string());
+        let topics = vec!["tauri".to_string()];
+        let conf = count_confirmed_signals(
+            0.10, 0.10, 0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0, false, 1.0,
+        );
+        assert!(
+            conf.ace_confirmed,
+            "specific topic 'tauri' must still confirm ACE axis"
+        );
     }
 
     #[test]

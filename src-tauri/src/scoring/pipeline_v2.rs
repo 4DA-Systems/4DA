@@ -1227,7 +1227,7 @@ fn compute_boosts(
         let matching_work_topics = raw
             .topics
             .iter()
-            .filter(|t| ctx.work_topics.iter().any(|wt| topic_overlaps(t, wt)))
+            .filter(|t| ctx.work_topics.iter().any(|wt| topic_grounds(t, wt)))
             .count();
         match matching_work_topics {
             0 => 0.0,
@@ -1263,7 +1263,7 @@ fn compute_boosts(
                     .intelligence
                     .skill_gaps
                     .iter()
-                    .find(|g| topic_overlaps(t, &g.dependency))
+                    .find(|g| topic_grounds(t, &g.dependency))
                 {
                     if !matched_skill_gaps.contains(&g.dependency) {
                         matched_skill_gaps.push(g.dependency.clone());
@@ -1414,6 +1414,7 @@ fn apply_final_adjustments(
     content_type: &crate::content_dna::ContentType,
     sophistication_raw: f32,
     community_signal: f32,
+    strongly_grounded: bool,
 ) -> f32 {
     let meaningful_words = title.split_whitespace().filter(|w| w.len() >= 2).count();
     let score = if meaningful_words < 3 {
@@ -1431,23 +1432,33 @@ fn apply_final_adjustments(
         content_type,
         sophistication_raw,
         community_signal,
+        strongly_grounded,
     )
 }
 
-/// Hard ceiling for commodity content types with low sophistication.
+/// Hard ceiling for commodity content types.
 ///
-/// Exemptions (any bypasses the ceiling):
+/// Standard exemptions (Tutorial/HelpRequest/Question/ShowAndTell — any bypasses):
 /// - CVE/GHSA pattern in title
 /// - Version conflict language with version number
 /// - Content type overridden to SecurityAdvisory or BreakingChange (already excluded)
 /// - Sophistication >= 0.35 (has advanced terms, version specificity, or abstract framing)
 /// - High community validation (community_signal >= high_threshold)
+///
+/// AcademicPaper gets a STRICTER bypass set: dense academic prose trips the
+/// sophistication heuristic on virtually every paper, and arXiv/PwC metadata
+/// carries no crowd validation comparable to HN/SO scores — so neither of
+/// those may lift the ceiling. Only evidence tied to the user's actual stack
+/// does: strong dependency grounding (`strongly_grounded`, the same
+/// `dependencies::is_strongly_grounded` predicate the gate uses) or a
+/// security/version pattern in the title.
 fn apply_commodity_ceiling(
     score: f32,
     title: &str,
     content_type: &crate::content_dna::ContentType,
     sophistication_raw: f32,
     community_signal: f32,
+    strongly_grounded: bool,
 ) -> f32 {
     use crate::content_dna::ContentType;
 
@@ -1469,20 +1480,35 @@ fn apply_commodity_ceiling(
         ContentType::Tutorial => scoring_config::COMMODITY_CEILING_TUTORIAL,
         ContentType::HelpRequest => scoring_config::COMMODITY_CEILING_HELP_REQUEST,
         ContentType::Question => scoring_config::COMMODITY_CEILING_QUESTION,
+        // Self-promo without traction is commodity; a Show-HN with real
+        // community validation earns its slot via the standard bypasses.
+        ContentType::ShowAndTell => scoring_config::COMMODITY_CEILING_SHOW_AND_TELL,
+        ContentType::AcademicPaper => scoring_config::COMMODITY_CEILING_ACADEMIC,
         _ => return score,
     };
 
-    // High community validation bypasses ceiling — the crowd validated this content
-    if community_signal >= scoring_config::COMMUNITY_SIGNAL_HIGH_THRESHOLD {
-        return score;
+    if matches!(content_type, ContentType::AcademicPaper) {
+        // Papers: sophistication and community-signal bypasses deliberately
+        // withheld (see fn doc). Strong dependency grounding is the only
+        // class-specific exemption; security/version patterns are checked
+        // below with the shared exemption.
+        if strongly_grounded {
+            return score;
+        }
+    } else {
+        // High community validation bypasses ceiling — the crowd validated this content
+        if community_signal >= scoring_config::COMMUNITY_SIGNAL_HIGH_THRESHOLD {
+            return score;
+        }
+
+        // Sophistication above threshold = not commodity
+        if sophistication_raw >= 0.35 {
+            return score;
+        }
     }
 
-    // Sophistication above threshold = not commodity
-    if sophistication_raw >= 0.35 {
-        return score;
-    }
-
-    // Security/version exemptions
+    // Security/version exemptions (all classes — a paper documenting a CVE or
+    // a Show-HN about a breaking migration is actionable regardless of class)
     if has_security_pattern(&title_lower) || has_version_conflict(&title_lower) {
         return score;
     }
@@ -1931,6 +1957,9 @@ pub(crate) fn score_item(
         &content_type,
         sophistication_raw,
         community_signal,
+        // Same grounding evidence the gate consumes — lets a dep-grounded
+        // academic paper bypass its commodity ceiling.
+        dependencies::is_strongly_grounded(&raw.matched_deps),
     );
 
     // ── Score offset normalization ────────────────────────────────────
@@ -2137,6 +2166,15 @@ pub(crate) fn score_item(
         (None, None)
     };
 
+    // Window title resolved in-memory (open_windows is already loaded) so the
+    // decision-relevant necessity reason can name the decision it claims relevance to.
+    let matched_window_label = matched_window_id.and_then(|wid| {
+        ctx.open_windows
+            .iter()
+            .find(|w| w.id == wid)
+            .map(|w| w.title.clone())
+    });
+
     let necessity_inputs = necessity::NecessityInputs {
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names.clone(),
@@ -2148,6 +2186,7 @@ pub(crate) fn score_item(
         skill_gap_boost,
         matched_skill_gaps: matched_skill_gaps.clone(),
         window_boost,
+        matched_window_label,
         age_hours,
         content_type: Some(content_type.slug().to_string()),
         contradiction_boost,
@@ -3165,5 +3204,187 @@ mod tests {
             "Extreme negative should hit floor"
         );
         assert!(mult >= 0.5, "Multiplier should be 1 + clamp_min = {}", mult);
+    }
+
+    // ========================================================================
+    // Commodity ceiling: AcademicPaper + ShowAndTell arms (Wave 7)
+    //
+    // AcademicPaper bypass matrix — ONLY strong dep grounding or a
+    // security/version pattern lifts the ceiling. Sophistication and
+    // community-signal bypasses are deliberately withheld: dense academic
+    // prose trips the sophistication heuristic on virtually every paper.
+    // ShowAndTell keeps the STANDARD bypasses (traction earns the slot).
+    // ========================================================================
+
+    const PAPER_TITLE: &str = "Scaling Transformer Inference via Speculative Decoding Cascades";
+    const SHOW_TITLE: &str = "Show HN: I built a terminal music player in Rust";
+
+    #[test]
+    fn ceiling_caps_ungrounded_academic_paper() {
+        let capped = apply_commodity_ceiling(
+            0.90,
+            PAPER_TITLE,
+            &crate::content_dna::ContentType::AcademicPaper,
+            0.0,
+            0.0,
+            false,
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_ACADEMIC,
+            "ungrounded paper must be capped at the academic ceiling"
+        );
+    }
+
+    #[test]
+    fn ceiling_bypassed_by_dep_grounded_academic_paper() {
+        let score = apply_commodity_ceiling(
+            0.90,
+            PAPER_TITLE,
+            &crate::content_dna::ContentType::AcademicPaper,
+            0.0,
+            0.0,
+            true, // strongly grounded in the user's dependencies
+        );
+        assert_eq!(
+            score, 0.90,
+            "dep-grounded paper must bypass the academic ceiling"
+        );
+    }
+
+    #[test]
+    fn sophistication_does_not_bypass_academic_ceiling() {
+        // The critical asymmetry vs Tutorial: academic prose is inherently
+        // "sophisticated" — a 0.9 sophistication paper stays capped.
+        let capped = apply_commodity_ceiling(
+            0.90,
+            PAPER_TITLE,
+            &crate::content_dna::ContentType::AcademicPaper,
+            0.9,
+            0.0,
+            false,
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_ACADEMIC,
+            "sophistication must NOT lift the academic ceiling"
+        );
+    }
+
+    #[test]
+    fn community_signal_does_not_bypass_academic_ceiling() {
+        let capped = apply_commodity_ceiling(
+            0.90,
+            PAPER_TITLE,
+            &crate::content_dna::ContentType::AcademicPaper,
+            0.0,
+            1.0,
+            false,
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_ACADEMIC,
+            "community signal must NOT lift the academic ceiling"
+        );
+    }
+
+    #[test]
+    fn security_pattern_bypasses_academic_ceiling() {
+        // A paper documenting a concrete vulnerability is actionable.
+        let score = apply_commodity_ceiling(
+            0.90,
+            "CVE-2026-12345: Prompt Injection in Retrieval-Augmented Pipelines",
+            &crate::content_dna::ContentType::AcademicPaper,
+            0.0,
+            0.0,
+            false,
+        );
+        assert_eq!(
+            score, 0.90,
+            "security-pattern paper must bypass the academic ceiling"
+        );
+    }
+
+    #[test]
+    fn ceiling_caps_show_and_tell_without_traction() {
+        let capped = apply_commodity_ceiling(
+            0.85,
+            SHOW_TITLE,
+            &crate::content_dna::ContentType::ShowAndTell,
+            0.0,
+            0.0,
+            false,
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_SHOW_AND_TELL,
+            "traction-less self-promo must be capped"
+        );
+    }
+
+    #[test]
+    fn high_community_signal_bypasses_show_and_tell_ceiling() {
+        let score = apply_commodity_ceiling(
+            0.85,
+            SHOW_TITLE,
+            &crate::content_dna::ContentType::ShowAndTell,
+            0.0,
+            scoring_config::COMMUNITY_SIGNAL_HIGH_THRESHOLD,
+            false,
+        );
+        assert_eq!(
+            score, 0.85,
+            "a Show HN with real community traction earns its slot"
+        );
+    }
+
+    #[test]
+    fn sophistication_bypasses_show_and_tell_ceiling() {
+        // Standard bypass set applies to ShowAndTell (unlike AcademicPaper).
+        let score = apply_commodity_ceiling(
+            0.85,
+            SHOW_TITLE,
+            &crate::content_dna::ContentType::ShowAndTell,
+            0.5,
+            0.0,
+            false,
+        );
+        assert_eq!(
+            score, 0.85,
+            "sophisticated show-and-tell must keep the standard bypass"
+        );
+    }
+
+    #[test]
+    fn dep_grounding_alone_does_not_bypass_show_and_tell_ceiling() {
+        // strongly_grounded is an AcademicPaper-only exemption — for
+        // ShowAndTell the crowd/sophistication/security bypasses govern.
+        let capped = apply_commodity_ceiling(
+            0.85,
+            SHOW_TITLE,
+            &crate::content_dna::ContentType::ShowAndTell,
+            0.0,
+            0.0,
+            true,
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_SHOW_AND_TELL,
+            "dep grounding is not a ShowAndTell bypass"
+        );
+    }
+
+    #[test]
+    fn ceiling_ignores_non_commodity_types() {
+        // DeepDive (earned, not manifest-defaulted) passes through untouched.
+        let score = apply_commodity_ceiling(
+            0.90,
+            "Understanding memory allocators in Rust",
+            &crate::content_dna::ContentType::DeepDive,
+            0.0,
+            0.0,
+            false,
+        );
+        assert_eq!(score, 0.90, "non-commodity types must pass through");
     }
 }

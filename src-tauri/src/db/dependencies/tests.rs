@@ -740,10 +740,17 @@ fn purge_agent_infra_collapses_slash_variant_duplicates() {
 
     // The duplicate-identity bug: the same dependency stored under the raw
     // Windows path (pre-canonicalization, 2026-06-20) AND the canonical
-    // lowercase/forward-slash path (post-canonicalization, 2026-07-03).
+    // forward-slash path (post-canonicalization, 2026-07-03).
     // LOWER(project_path) alone does not collapse these — slash direction differs.
+    // The purge's dedup key is case-insensitive ONLY on Windows hosts (case is
+    // significant on Linux filesystems), so the case-variant twin is a
+    // Windows-only fixture — on other hosts it would be a distinct project.
     raw_insert_user_dep(&db, r"D:\4DA\cli", "commander", "npm");
-    raw_insert_user_dep(&db, "d:/4da/cli", "commander", "npm");
+    if cfg!(windows) {
+        raw_insert_user_dep(&db, "d:/4da/cli", "commander", "npm");
+    } else {
+        raw_insert_user_dep(&db, "D:/4DA/cli", "commander", "npm");
+    }
     // Distinct projects must NOT be collapsed.
     raw_insert_user_dep(&db, "/projects/app-a", "serde", "rust");
     raw_insert_user_dep(&db, "/projects/app-b", "serde", "rust");
@@ -761,12 +768,15 @@ fn purge_agent_infra_collapses_slash_variant_duplicates() {
         .filter(|d| d.package_name == "commander")
         .collect();
     assert_eq!(commander.len(), 1, "one commander row survives");
-    if cfg!(windows) {
-        assert_eq!(
-            commander[0].project_path, "d:/4da/cli",
-            "survivor sits on the canonical key"
-        );
-    }
+    let expected_key = if cfg!(windows) {
+        "d:/4da/cli"
+    } else {
+        "D:/4DA/cli"
+    };
+    assert_eq!(
+        commander[0].project_path, expected_key,
+        "survivor sits on the canonical key"
+    );
 }
 
 #[test]

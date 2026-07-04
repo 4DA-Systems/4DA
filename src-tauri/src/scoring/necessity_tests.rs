@@ -15,6 +15,7 @@ fn default_inputs() -> NecessityInputs {
         skill_gap_boost: 0.0,
         matched_skill_gaps: vec![],
         window_boost: 0.0,
+        matched_window_label: None,
         age_hours: 0.0,
         content_type: None,
         contradiction_boost: 0.0,
@@ -162,6 +163,7 @@ fn test_blind_spot_boost() {
 fn test_decision_relevant() {
     let inputs = NecessityInputs {
         window_boost: 0.18,
+        matched_window_label: Some("Choose message queue".to_string()),
         ..default_inputs()
     };
     let result = compute_necessity(&inputs);
@@ -171,6 +173,84 @@ fn test_decision_relevant() {
         result.score
     );
     assert_eq!(result.category, NecessityCategory::DecisionRelevant);
+    assert_eq!(
+        result.reason, "Relevant to open decision: Choose message queue",
+        "reason must name the matched decision window"
+    );
+}
+
+#[test]
+fn test_decision_relevant_dep_fallback_when_no_label() {
+    // No window label reachable, but a dependency overlap connected the item to the
+    // window — the reason names that evidence instead of a canned claim.
+    let inputs = NecessityInputs {
+        window_boost: 0.18,
+        dep_match_score: 0.4,
+        matched_deps: vec!["axum".to_string()],
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert_eq!(result.category, NecessityCategory::DecisionRelevant);
+    assert_eq!(
+        result.reason,
+        "Touches axum while a related decision is open"
+    );
+}
+
+#[test]
+fn test_decision_relevant_skill_gap_fallback_when_no_label_or_deps() {
+    let inputs = NecessityInputs {
+        window_boost: 0.18,
+        skill_gap_boost: 0.15,
+        matched_skill_gaps: vec!["kubernetes".to_string()],
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert_eq!(
+        result.category,
+        NecessityCategory::DecisionRelevant,
+        "decision path still takes precedence over blind spot"
+    );
+    assert_eq!(
+        result.reason,
+        "Covers kubernetes while a related decision is open"
+    );
+}
+
+#[test]
+fn test_decision_relevant_without_nameable_evidence_stays_silent() {
+    // Window boost with NO label, deps, or skill gaps: the old constant headline
+    // "Relevant to an active architectural decision" was unfalsifiable — the path
+    // now abstains rather than emit a claim the breakdown can't support.
+    let inputs = NecessityInputs {
+        window_boost: 0.18,
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert_eq!(result.category, NecessityCategory::None);
+    assert!(
+        result.score < 0.01,
+        "label-less window match with no evidence must not emit necessity, got {}",
+        result.score
+    );
+    assert!(result.reason.is_empty());
+}
+
+#[test]
+fn test_decision_relevant_blank_label_falls_through() {
+    // A whitespace-only label must not produce "Relevant to open decision: ".
+    let inputs = NecessityInputs {
+        window_boost: 0.18,
+        matched_window_label: Some("   ".to_string()),
+        dep_match_score: 0.4,
+        matched_deps: vec!["tokio".to_string()],
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert_eq!(
+        result.reason,
+        "Touches tokio while a related decision is open"
+    );
 }
 
 #[test]
