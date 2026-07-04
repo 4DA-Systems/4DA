@@ -548,13 +548,15 @@ mod tests {
         let conn = conn.lock();
 
         // Deleted: legacy commit-* rows + generic tokens per the canonical
-        // predicate. Kept: specific tech, compound pattern topics, short
-        // language names.
+        // predicate. Kept: specific tech (including 3-char tokens like "aws"
+        // — the dep-side len<=3 blanket does not apply to topics), compound
+        // pattern topics, short language names.
         for topic in [
             "commit-feat",
             "http",
             "rest",
             "api",
+            "ui", // 1-2 char noise stays generic
             // Class-name fragments aren't on the generic lists — they stop
             // being minted (Wave 7) but existing rows survive the prune.
             "validationerror",
@@ -562,6 +564,8 @@ mod tests {
             "react-native",
             "error_handling",
             "go",
+            "ts",
+            "aws",
         ] {
             conn.execute(
                 "INSERT INTO active_topics (topic, source) VALUES (?1, 'file_content')",
@@ -571,7 +575,7 @@ mod tests {
         }
 
         let deleted = purge_generic_active_topics(&conn).unwrap();
-        assert_eq!(deleted, 4, "commit-feat + http + rest + api");
+        assert_eq!(deleted, 5, "commit-feat + http + rest + api + ui");
 
         let remaining: Vec<String> = conn
             .prepare("SELECT topic FROM active_topics ORDER BY topic")
@@ -583,10 +587,12 @@ mod tests {
         assert_eq!(
             remaining,
             vec![
+                "aws",
                 "error_handling",
                 "go",
                 "react-native",
                 "tauri",
+                "ts",
                 "validationerror"
             ]
         );

@@ -3,8 +3,10 @@ use super::aliases;
 use super::dependencies::is_generic_topic_token;
 
 /// Known 1-2 char programming language names that should match despite being short.
-/// Without this allowlist, "go", "r", "c", "d" are invisible to topic matching.
-pub(crate) const SHORT_LANGUAGE_NAMES: &[&str] = &["go", "r", "c", "d"];
+/// Without this allowlist, "go", "r", "ts", "py" are invisible to topic matching.
+/// Deliberately curated: 2-char FASHION tokens ("ai", "ml") are NOT here — they
+/// match everything and ground nothing (`is_generic_topic_token`).
+pub(crate) const SHORT_LANGUAGE_NAMES: &[&str] = &["go", "r", "c", "d", "ts", "js", "py"];
 
 /// Strict topic corroboration for grounding-sensitive scoring paths.
 ///
@@ -34,10 +36,18 @@ pub(crate) fn topic_grounds(a: &str, b: &str) -> bool {
         return !is_generic_topic_token(&a_lower);
     }
 
-    // Alias database (covers go↔golang, ts↔typescript, next↔next.js):
-    // curated groups are trusted — legit short/generic-looking names ground
-    // here without opening the fragment path.
-    if aliases::are_aliases(&a_lower, &b_lower) {
+    // Alias database (covers go↔golang, ts↔typescript, k8s↔kubernetes):
+    // curated groups let legit short names ground without opening the
+    // fragment path — but curation is NOT a genericness waiver. Groups like
+    // ["rest","restful","rest-api"] and ["api","application-programming-
+    // interface"] would otherwise re-open exactly the generic grounding the
+    // exact-match gate above closes, so an alias hit grounds only when BOTH
+    // sides are specific. Generic alias pairs fall through to the fragment
+    // path, which applies the same gate per fragment.
+    if aliases::are_aliases(&a_lower, &b_lower)
+        && !is_generic_topic_token(&a_lower)
+        && !is_generic_topic_token(&b_lower)
+    {
         return true;
     }
 
@@ -105,7 +115,11 @@ mod tests {
         assert!(topic_grounds("rust", "rust-lang"));
         assert!(topic_grounds("react", "react-native"));
         assert!(topic_grounds("tokio", "tokio-util"));
-        assert!(topic_grounds("next.js", "next")); // via alias group
+        // "next" is on COMMON_ENGLISH_WORDS — even its curated alias group
+        // cannot ground it (F5: alias hits require both sides specific).
+        // Users declare "nextjs"/"next.js", which ground fine.
+        assert!(!topic_grounds("next.js", "next"));
+        assert!(topic_grounds("nextjs", "next.js")); // via alias group
     }
 
     #[test]
@@ -173,11 +187,49 @@ mod tests {
         assert!(topic_grounds("docker", "containerization"));
         assert!(topic_grounds("react", "reactjs"));
         assert!(topic_grounds("graphql", "gql"));
-        assert!(topic_grounds("machine-learning", "ml"));
+        // "ml" is a 2-char fashion token, not a language name — its alias
+        // group cannot rescue it (F5).
+        assert!(!topic_grounds("machine-learning", "ml"));
 
         // Non-aliases should still be rejected
         assert!(!topic_grounds("rust", "python"));
         assert!(!topic_grounds("docker", "kubernetes"));
+    }
+
+    #[test]
+    fn test_topic_grounds_alias_bypass_closed_for_generic_sides() {
+        // F5: curated alias groups contain generic tokens ("rest"/"restful"/
+        // "rest-api", "api"/"application-programming-interface"). An alias
+        // hit must not re-open the generic grounding the exact-match gate
+        // closes.
+        assert!(!topic_grounds("rest", "restful"));
+        assert!(!topic_grounds("restful", "rest"));
+        assert!(!topic_grounds("rest", "rest-api"));
+        assert!(!topic_grounds("api", "application-programming-interface"));
+        // Specific alias pairs still ground.
+        assert!(topic_grounds("k8s", "kubernetes"));
+        assert!(topic_grounds("kubernetes", "k8s"));
+    }
+
+    #[test]
+    fn test_topic_grounds_short_tech_exact_matches() {
+        // F0: is_generic_topic_token no longer inherits the dep-side
+        // "len <= 3 is ambiguous" blanket — 3-char tech tokens that aren't
+        // English words are specific and exact matches ground.
+        assert!(topic_grounds("k8s", "k8s"));
+        assert!(topic_grounds("css", "css"));
+        assert!(topic_grounds("aws", "aws"));
+        assert!(topic_grounds("sql", "sql"));
+        // 2-char language names ground (curated allowlist)...
+        assert!(topic_grounds("ts", "ts"));
+        assert!(topic_grounds("js", "js"));
+        assert!(topic_grounds("py", "py"));
+        assert!(topic_grounds("go", "go"));
+        // ...but 2-char fashion tokens do not.
+        assert!(!topic_grounds("ai", "ai"));
+        assert!(!topic_grounds("ml", "ml"));
+        // And longer specific names keep grounding.
+        assert!(topic_grounds("rust", "rust"));
     }
 
     #[test]
@@ -186,7 +238,7 @@ mod tests {
         // declared_tech/detected_tech are NOT guaranteed lowercase.
         assert!(topic_grounds("rust", "Rust-Lang"));
         assert!(topic_grounds("react", "React-Native"));
-        assert!(topic_grounds("next", "Next.js")); // via alias group
+        assert!(topic_grounds("NEXTJS", "Next.js")); // via alias group
         assert!(topic_grounds("RUST", "rust-async"));
         // Still must reject genuine non-overlaps regardless of case.
         assert!(!topic_grounds("frustrating", "Rust"));

@@ -607,7 +607,13 @@ fn extract_generic_topics(content: &str, topics: &mut HashSet<String>) {
     ];
 
     let content_lower = content.to_lowercase();
+    // Generic tokens ("rest", "websocket") are never minted — they can't
+    // ground scoring and the startup purge (same predicate) would delete
+    // them again (mint/purge churn loop).
     for keyword in keywords {
+        if crate::scoring::is_generic_topic_token(keyword) {
+            continue;
+        }
         if crate::scoring::has_word_boundary_match(&content_lower, keyword) {
             topics.insert(keyword.to_string());
         }
@@ -987,9 +993,10 @@ from sqlalchemy.orm import Session
         assert!(!topics.contains(&"rest".to_string()));
         assert!(!topics.contains(&"aws".to_string()));
 
-        // Genuine whole-word mentions still mint
+        // Genuine whole-word mentions of SPECIFIC tech still mint; generic
+        // tokens ("rest") are never minted at all (F1 — mint/purge churn).
         let topics = extract_topics_from_content("deploy REST api on aws with docker", "txt");
-        assert!(topics.contains(&"rest".to_string()));
+        assert!(!topics.contains(&"rest".to_string()));
         assert!(topics.contains(&"aws".to_string()));
         assert!(topics.contains(&"docker".to_string()));
     }

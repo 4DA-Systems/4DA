@@ -28,9 +28,10 @@ use tracing::debug;
 
 use crate::SourceRelevance;
 
-/// Opening fence of the machine trailer. The language tag makes the block
-/// unambiguous — briefing prose legitimately contains other fenced blocks.
-pub(crate) const REJECTS_FENCE_OPEN: &str = "```rejects";
+/// Info-string tag of the machine trailer's fenced block. The tag makes the
+/// block unambiguous — briefing prose legitimately contains other fenced
+/// blocks.
+const REJECTS_FENCE_TAG: &str = "rejects";
 
 /// Reasons are short slugs ("self-promotional", "no stack relevance").
 /// Anything longer is truncated at a char boundary before storage.
@@ -44,42 +45,189 @@ pub(crate) struct TrailerReject {
     pub reason: String,
 }
 
-/// Extract and strip the machine trailer from an LLM briefing response.
-///
-/// Returns `(stripped_markdown, parsed_rejects)`. The block is stripped from
-/// the returned markdown whenever the opening fence is present — even when
-/// the JSON inside is malformed — because the raw trailer must never reach a
-/// render or persistence path. Malformed or missing JSON yields zero rejects.
-pub(crate) fn extract_rejects_trailer(content: &str) -> (String, Vec<TrailerReject>) {
-    let Some(open) = content.rfind(REJECTS_FENCE_OPEN) else {
-        debug!(target: "4da::briefing", "no rejects trailer in briefing response — recording nothing");
-        return (content.to_string(), Vec::new());
-    };
-    let body_start = open + REJECTS_FENCE_OPEN.len();
-    let after_open = &content[body_start..];
-    // Closing fence: the next ``` after the opening tag. An unterminated
-    // block runs to the end of the response (still stripped — never shown).
-    let (json_body, block_end) = match after_open.find("```") {
-        Some(close) => (&after_open[..close], body_start + close + 3),
-        None => (after_open, content.len()),
-    };
+/// If `line` opens or closes a fenced block (3+ backticks at column 0),
+/// returns the trimmed info string ("" for a bare opening/closing fence).
+fn fence_info(line: &str) -> Option<&str> {
+    let line = line.strip_suffix('\r').unwrap_or(line);
+    let ticks = line.bytes().take_while(|&b| b == b'`').count();
+    if ticks < 3 {
+        return None;
+    }
+    let info = line[ticks..].trim();
+    // Backticks in the info string mean inline code, not a fence.
+    if info.contains('`') {
+        return None;
+    }
+    Some(info)
+}
 
-    let mut stripped = String::with_capacity(content.len());
-    stripped.push_str(content[..open].trim_end());
-    let tail = content[block_end..].trim();
-    if !tail.is_empty() {
-        stripped.push_str("\n\n");
-        stripped.push_str(tail);
+/// Parse `body` as the expected trailer shape: a JSON array of objects each
+/// carrying `idx` + `reason`. Anything else returns None.
+fn parse_trailer_shape(body: &str) -> Option<Vec<TrailerReject>> {
+    serde_json::from_str::<Vec<TrailerReject>>(body.trim()).ok()
+}
+
+/// Detect an UNTAGGED trailer at the very end of `s`: a trailing fenced block
+/// (info string empty or `json`) or a trailing bare JSON array, but ONLY when
+/// its body provably parses to the reject shape with at least one entry —
+/// legit trailing content is never stripped on a guess. Returns
+/// `(prefix_without_trailer, trailer_body)`.
+fn split_trailing_untagged_trailer(s: &str) -> Option<(String, String)> {
+    let trimmed = s.trim_end();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut line_starts: Vec<usize> = vec![0];
+    for (i, b) in trimmed.bytes().enumerate() {
+        if b == b'\n' {
+            line_starts.push(i + 1);
+        }
+    }
+    let lines: Vec<&str> = trimmed.split('\n').collect();
+
+    // Case A: trailing fenced block. Walk back from the closing fence to the
+    // nearest fence line — if it is tagged as anything but ""/"json", the
+    // block is ordinary content and stays.
+    if lines.len() >= 2 && fence_info(lines[lines.len() - 1]) == Some("") {
+        for open_idx in (0..lines.len() - 1).rev() {
+            let Some(info) = fence_info(lines[open_idx]) else {
+                continue;
+            };
+            if !(info.is_empty() || info.eq_ignore_ascii_case("json")) {
+                return None;
+            }
+            let body = lines[open_idx + 1..lines.len() - 1].join("\n");
+            match parse_trailer_shape(&body) {
+                Some(r) if !r.is_empty() => {
+                    let prefix = trimmed[..line_starts[open_idx]].trim_end().to_string();
+                    return Some((prefix, body));
+                }
+                _ => return None,
+            }
+        }
+        return None;
     }
 
-    let rejects = match serde_json::from_str::<Vec<TrailerReject>>(json_body.trim()) {
-        Ok(r) => r,
-        Err(e) => {
-            debug!(target: "4da::briefing", error = %e, "malformed rejects trailer JSON — recording nothing");
-            Vec::new()
+    // Case B: trailing bare JSON array (the model dropped the fence
+    // entirely). The array must start at a line head and run to EOF.
+    if trimmed.ends_with(']') {
+        for (idx, line) in lines.iter().enumerate().rev() {
+            if !line.trim_start().starts_with('[') {
+                continue;
+            }
+            let body = &trimmed[line_starts[idx]..];
+            if parse_trailer_shape(body).is_some_and(|r| !r.is_empty()) {
+                let mut prefix = trimmed[..line_starts[idx]].trim_end().to_string();
+                // Consume a dangling unterminated fence opener left directly
+                // above the array ("```json\n[...]" with no close).
+                let last_line_start = prefix.rfind('\n').map_or(0, |p| p + 1);
+                if fence_info(&prefix[last_line_start..])
+                    .is_some_and(|i| i.is_empty() || i.eq_ignore_ascii_case("json"))
+                {
+                    prefix = prefix[..last_line_start].trim_end().to_string();
+                }
+                return Some((prefix, body.to_string()));
+            }
         }
+    }
+    None
+}
+
+/// Extract and strip the machine trailer from an LLM briefing response.
+///
+/// Returns `(stripped_markdown, parsed_rejects)`.
+///
+/// Stripping (the raw trailer must never reach a render or persistence path):
+/// - EVERY `rejects`-tagged fenced block is stripped, wherever it sits —
+///   models sometimes emit the trailer twice or mid-response. Fence matching
+///   is tolerant: 3+ backticks, optional spaces, case-insensitive tag
+///   ("``` rejects", "````REJECTS"). An unterminated final block runs to EOF.
+///   Malformed tagged blocks are stripped but contribute no verdicts.
+/// - When NO tagged block exists, a fence-degraded trailer is still accepted:
+///   a TRAILING ```/```json block or trailing bare JSON array, if and only if
+///   its body parses to the expected reject shape. Anything else at the end
+///   stays untouched.
+///
+/// Recording: the LAST candidate whose JSON fully parses to the expected
+/// shape wins. Missing/malformed candidates yield zero rejects.
+pub(crate) fn extract_rejects_trailer(content: &str) -> (String, Vec<TrailerReject>) {
+    // Pass 1: strip every rejects-tagged fenced block.
+    let mut segments: Vec<Vec<&str>> = vec![Vec::new()];
+    let mut tagged_bodies: Vec<String> = Vec::new();
+    let mut block_body: Vec<&str> = Vec::new();
+    let mut in_rejects = false;
+    for line in content.split('\n') {
+        if in_rejects {
+            if fence_info(line) == Some("") {
+                in_rejects = false;
+                tagged_bodies.push(block_body.join("\n"));
+                block_body.clear();
+                segments.push(Vec::new());
+            } else {
+                block_body.push(line);
+            }
+        } else if fence_info(line).is_some_and(|info| info.eq_ignore_ascii_case(REJECTS_FENCE_TAG))
+        {
+            in_rejects = true;
+        } else {
+            segments
+                .last_mut()
+                .expect("segments never empty")
+                .push(line);
+        }
+    }
+    if in_rejects {
+        // Unterminated final block: stripped to EOF, still a candidate.
+        tagged_bodies.push(block_body.join("\n"));
+        segments.push(Vec::new());
+    }
+
+    // Reassemble kept prose; block boundaries collapse to one blank line.
+    let mut remaining = if tagged_bodies.is_empty() {
+        content.to_string()
+    } else {
+        let mut out = String::with_capacity(content.len());
+        for seg in &segments {
+            let text = seg.join("\n");
+            let text = text.trim();
+            if text.is_empty() {
+                continue;
+            }
+            if !out.is_empty() {
+                out.push_str("\n\n");
+            }
+            out.push_str(text);
+        }
+        out
     };
-    (stripped, rejects)
+
+    // Pass 2: only when the model dropped the tag entirely do we consider an
+    // untagged trailing trailer — if a tagged block exists, a trailing
+    // ```json block is ordinary content and must survive.
+    let mut untagged_body: Option<String> = None;
+    if tagged_bodies.is_empty() {
+        if let Some((prefix, body)) = split_trailing_untagged_trailer(&remaining) {
+            untagged_body = Some(body);
+            remaining = prefix;
+        }
+    }
+
+    if tagged_bodies.is_empty() && untagged_body.is_none() {
+        debug!(target: "4da::briefing", "no rejects trailer in briefing response — recording nothing");
+        return (remaining, Vec::new());
+    }
+
+    // Record from the LAST candidate that fully parses to the expected shape.
+    let rejects = tagged_bodies
+        .iter()
+        .rev()
+        .find_map(|body| parse_trailer_shape(body))
+        .or_else(|| untagged_body.as_deref().and_then(parse_trailer_shape))
+        .unwrap_or_else(|| {
+            debug!(target: "4da::briefing", "malformed rejects trailer JSON — recording nothing");
+            Vec::new()
+        });
+    (remaining, rejects)
 }
 
 /// Map 1-based trailer indices onto the narrated slate's item ids.
@@ -142,29 +290,43 @@ pub(crate) fn record_rejections(
     }
 }
 
-/// Demote (never delete) feed results the Brief rejected.
+/// Demote (never delete) feed results the Brief rejected, and expire stale
+/// demotions whose verdict has aged out.
 ///
 /// Sets `excluded = true` + `excluded_by = "brief:{reason}"` so the canonical
 /// `sort_results` pushes them to the bottom of the feed. Scores are NOT
 /// modified and nothing is removed. Dep-grounded items are immune: an item
 /// with a verified dependency edge into the user's actual stack
 /// (`ScoreBreakdown.strongly_grounded`) must never be suppressed by a
-/// narration verdict. Returns the number of items demoted.
+/// narration verdict.
+///
+/// Conversely, an entry still carrying a `brief:*` exclusion whose item is
+/// NOT in the current recent-rejections window is CLEARED — a week-old
+/// verdict must not suppress an item forever. Only `brief:*` exclusions ever
+/// expire this way; user/anti-topic exclusions are never touched. Returns
+/// the number of items demoted.
 pub(crate) fn apply_brief_rejection_demotions(
     results: &mut [SourceRelevance],
     rejections: &HashMap<i64, String>,
 ) -> usize {
-    if rejections.is_empty() {
-        return 0;
-    }
     let mut demoted = 0usize;
     for r in results.iter_mut() {
+        let Some(reason) = rejections.get(&(r.id as i64)) else {
+            // No current verdict: expire a stale brief:* demotion left from
+            // an earlier run. Never touch other exclusion kinds.
+            if r.excluded
+                && r.excluded_by
+                    .as_deref()
+                    .is_some_and(|e| e.starts_with("brief:"))
+            {
+                r.excluded = false;
+                r.excluded_by = None;
+            }
+            continue;
+        };
         if r.excluded {
             continue;
         }
-        let Some(reason) = rejections.get(&(r.id as i64)) else {
-            continue;
-        };
         let dep_grounded = r
             .score_breakdown
             .as_ref()
@@ -259,6 +421,135 @@ mod tests {
             "non-trailer fences must survive"
         );
         assert!(stripped.contains("fn main() {}"));
+        assert!(!stripped.contains("```rejects"));
+    }
+
+    #[test]
+    fn duplicate_rejects_blocks_all_stripped_last_used() {
+        let content = "Intro.\n\n```rejects\n[{\"idx\": 1, \"reason\": \"first\"}]\n```\n\n\
+                       Middle prose.\n\n```rejects\n[{\"idx\": 2, \"reason\": \"second\"}]\n```";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert_eq!(rejects.len(), 1, "last block wins");
+        assert_eq!(rejects[0].idx, 2);
+        assert_eq!(rejects[0].reason, "second");
+        assert_eq!(stripped, "Intro.\n\nMiddle prose.", "BOTH blocks stripped");
+    }
+
+    #[test]
+    fn last_malformed_block_falls_back_to_earlier_valid_one() {
+        let content = "Prose.\n\n```rejects\n[{\"idx\": 1, \"reason\": \"valid\"}]\n```\n\n\
+                       ```rejects\n[{oops\n```";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert_eq!(rejects.len(), 1, "last VALID candidate is used");
+        assert_eq!(rejects[0].idx, 1);
+        assert_eq!(stripped, "Prose.", "malformed block still stripped");
+    }
+
+    #[test]
+    fn spaced_and_case_insensitive_fences_are_recognized() {
+        let content = "Prose.\n\n``` rejects\n[{\"idx\": 1, \"reason\": \"spam\"}]\n```";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert_eq!(rejects.len(), 1);
+        assert_eq!(stripped, "Prose.");
+
+        let content = "Prose.\n\n````REJECTS\n[{\"idx\": 2, \"reason\": \"noise\"}]\n````";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert_eq!(rejects.len(), 1);
+        assert_eq!(rejects[0].idx, 2);
+        assert_eq!(stripped, "Prose.");
+    }
+
+    #[test]
+    fn untagged_json_trailer_with_reject_shape_is_stripped_and_used() {
+        // Fence degradation: the model tagged the trailer ```json instead of
+        // ```rejects — the shape proves it is the trailer.
+        let content = "Prose.\n\n```json\n[{\"idx\": 2, \"reason\": \"self-promo\"}]\n```";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert_eq!(rejects.len(), 1);
+        assert_eq!(rejects[0].idx, 2);
+        assert_eq!(stripped, "Prose.");
+
+        // Bare ``` fence works too.
+        let content = "Prose.\n\n```\n[{\"idx\": 1, \"reason\": \"spam\"}]\n```";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert_eq!(rejects.len(), 1);
+        assert_eq!(stripped, "Prose.");
+    }
+
+    #[test]
+    fn untagged_trailing_block_with_other_shape_stays_untouched() {
+        // NOT the reject shape — legit content must never be stripped.
+        let content = "Prose.\n\n```json\n{\"summary\": \"stats\"}\n```";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert!(rejects.is_empty());
+        assert_eq!(stripped, content);
+
+        let content = "Prose.\n\n```json\n[1, 2, 3]\n```";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert!(rejects.is_empty());
+        assert_eq!(stripped, content);
+
+        // Other info strings are ordinary code blocks.
+        let content = "Prose.\n\n```rust\nlet x = [1];\n```";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert!(rejects.is_empty());
+        assert_eq!(stripped, content);
+    }
+
+    #[test]
+    fn prose_after_untagged_block_means_not_a_trailer() {
+        let content = "Prose.\n\n```json\n[{\"idx\": 1, \"reason\": \"x\"}]\n```\nMore prose.";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert!(
+            rejects.is_empty(),
+            "a non-trailing block is never a trailer"
+        );
+        assert_eq!(stripped, content);
+    }
+
+    #[test]
+    fn bare_trailing_json_array_with_reject_shape_is_stripped_and_used() {
+        let content = "Prose.\n\n[{\"idx\": 3, \"reason\": \"noise\"}]";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert_eq!(rejects.len(), 1);
+        assert_eq!(rejects[0].idx, 3);
+        assert_eq!(stripped, "Prose.");
+
+        // Multi-line array, and a dangling unterminated fence opener above
+        // it is consumed too.
+        let content =
+            "Prose.\n\n```json\n[\n  {\"idx\": 1, \"reason\": \"spam\"},\n  {\"idx\": 2, \"reason\": \"noise\"}\n]";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert_eq!(rejects.len(), 2);
+        assert_eq!(stripped, "Prose.");
+    }
+
+    #[test]
+    fn bare_trailing_bracket_content_with_other_shape_stays() {
+        // Ends with ']' but is prose / wrong shape — untouched.
+        let content = "Scores were [1, 2, 3]";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert!(rejects.is_empty());
+        assert_eq!(stripped, content);
+
+        let content = "Prose.\n\n[\"a\", \"b\"]";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert!(rejects.is_empty());
+        assert_eq!(stripped, content);
+    }
+
+    #[test]
+    fn tagged_trailer_disables_untagged_scan() {
+        // With an explicit ```rejects trailer present, an earlier ```json
+        // block is ordinary content — it must survive, and the tagged
+        // verdicts win.
+        let content = "Prose.\n\n```json\n[{\"idx\": 9, \"reason\": \"example\"}]\n```\n\n\
+                       ```rejects\n[{\"idx\": 1, \"reason\": \"spam\"}]\n```";
+        let (stripped, rejects) = extract_rejects_trailer(content);
+        assert_eq!(rejects.len(), 1);
+        assert_eq!(rejects[0].idx, 1);
+        assert!(stripped.contains("```json"), "legit json block survives");
+        assert!(stripped.contains("example"));
         assert!(!stripped.contains("```rejects"));
     }
 
@@ -395,6 +686,49 @@ mod tests {
         let demoted = apply_brief_rejection_demotions(&mut results, &rejections);
         assert_eq!(demoted, 0);
         assert_eq!(results[0].excluded_by.as_deref(), Some("anti-topic:crypto"));
+    }
+
+    #[test]
+    fn stale_brief_demotion_expires_when_verdict_ages_out() {
+        // Day-9 scenario: the item was demoted by a Brief verdict that has
+        // since fallen out of the recent-rejections window — the demotion
+        // must be cleared, not persist forever.
+        let mut results = vec![make_result(1, 0.9, false)];
+        results[0].excluded = true;
+        results[0].excluded_by = Some("brief:self-promotional".to_string());
+        let rejections: HashMap<i64, String> = HashMap::new();
+        let demoted = apply_brief_rejection_demotions(&mut results, &rejections);
+        assert_eq!(demoted, 0);
+        assert!(!results[0].excluded, "aged-out brief demotion must clear");
+        assert!(results[0].excluded_by.is_none());
+    }
+
+    #[test]
+    fn non_brief_exclusions_are_never_expired() {
+        let mut results = vec![make_result(1, 0.9, false)];
+        results[0].excluded = true;
+        results[0].excluded_by = Some("user-exclusion:crypto".to_string());
+        let rejections: HashMap<i64, String> = HashMap::new();
+        apply_brief_rejection_demotions(&mut results, &rejections);
+        assert!(results[0].excluded, "only brief:* exclusions may expire");
+        assert_eq!(
+            results[0].excluded_by.as_deref(),
+            Some("user-exclusion:crypto")
+        );
+    }
+
+    #[test]
+    fn current_brief_demotion_is_kept() {
+        // Verdict still inside the window: the existing demotion stands
+        // (idempotent — not re-counted as a new demotion).
+        let mut results = vec![make_result(1, 0.9, false)];
+        results[0].excluded = true;
+        results[0].excluded_by = Some("brief:spam".to_string());
+        let rejections: HashMap<i64, String> = [(1i64, "spam".to_string())].into_iter().collect();
+        let demoted = apply_brief_rejection_demotions(&mut results, &rejections);
+        assert_eq!(demoted, 0);
+        assert!(results[0].excluded);
+        assert_eq!(results[0].excluded_by.as_deref(), Some("brief:spam"));
     }
 
     #[test]
