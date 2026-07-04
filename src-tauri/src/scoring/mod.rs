@@ -159,7 +159,17 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // dependency grounding or security/version evidence (sophistication and
 // community-signal bypasses withheld — academic prose trips both). ShowAndTell
 // keeps the standard bypasses so traction-validated self-promo still surfaces.
-pub(crate) const PIPELINE_VERSION: i32 = 12;
+//
+// v13 (2026-07-05): decision-window matching corroborated. compute_match_score
+// used raw substring `contains` for all three signals, so a window whose
+// dependency was an ambiguous import-scraped name ("http") matched every item
+// containing a URL (+0.6 > the 0.10 necessity threshold) — stamping
+// "Relevant to open decision" on unrelated items the moment v12's honest
+// labels exposed it. Now: dep signal uses package_ambiguity::dep_grounded_match
+// (the same matcher window minting uses), topic signal requires a non-generic
+// topic on a word boundary, title-keyword signal picks the first non-generic
+// significant word and matches on a word boundary.
+pub(crate) const PIPELINE_VERSION: i32 = 13;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
