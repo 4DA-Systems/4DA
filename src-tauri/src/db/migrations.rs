@@ -600,7 +600,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 85;
+        const TARGET_VERSION: i64 = 86;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3020,6 +3020,34 @@ impl Database {
                 )?;
             }
 
+            // Phase 86: brief_rejections — structured "Filtered Out" verdicts
+            // parsed from the narrated Brief's machine trailer. The scoring
+            // analyzer reads the last 7 days of these to demote feed items the
+            // Brief already rejected ("yesterday's noise becomes tomorrow's
+            // signal"). Internal plumbing, not a UI intelligence type.
+            if current_version < 86 {
+                Self::run_versioned_migration(
+                    &conn,
+                    85,
+                    86,
+                    "Phase 86: brief_rejections table (Brief verdicts feed demotion)",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS brief_rejections (
+                                 id INTEGER PRIMARY KEY,
+                                 briefing_id INTEGER,
+                                 source_item_id INTEGER NOT NULL,
+                                 reason TEXT NOT NULL,
+                                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                             );
+                             CREATE INDEX IF NOT EXISTS idx_brief_rejections_item
+                                 ON brief_rejections (source_item_id);",
+                        )?;
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -3779,6 +3807,8 @@ mod tests {
             "preemption_wins",
             // Phase 61: Per-feed health
             "feed_health",
+            // Phase 86: Brief rejection verdicts
+            "brief_rejections",
         ];
         for table in &expected {
             assert!(

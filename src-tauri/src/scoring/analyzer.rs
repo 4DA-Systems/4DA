@@ -27,6 +27,28 @@ use crate::scoring;
 use crate::{get_analysis_state, get_database, monitoring, SourceRelevance};
 
 // ============================================================================
+// Brief rejection demotion
+// ============================================================================
+
+/// Feed lookback for Brief rejection verdicts: a verdict older than a week is
+/// stale context, not a standing judgment.
+const BRIEF_REJECTION_LOOKBACK_DAYS: u32 = 7;
+
+/// Load the Brief's rejection verdicts from the last 7 days. Errors degrade
+/// to an empty map — a failed read must never block or distort scoring.
+fn load_recent_brief_rejections(
+    db: &crate::db::Database,
+) -> std::collections::HashMap<i64, String> {
+    match db.get_recent_brief_rejections(BRIEF_REJECTION_LOOKBACK_DAYS) {
+        Ok(map) => map,
+        Err(e) => {
+            tracing::debug!(target: "4da::scoring", error = %e, "Brief rejections unavailable — no demotions applied");
+            std::collections::HashMap::new()
+        }
+    }
+}
+
+// ============================================================================
 // Full Scoring Pipeline
 // ============================================================================
 
@@ -285,6 +307,19 @@ pub(crate) async fn score_items_full(
     }
     crate::diagnostics::log_rss("scoring:after_llm_rerank");
 
+    // Feed consumes the Brief's verdicts: items the narrated Brief rejected
+    // in the last 7 days are demoted (excluded, not deleted) so the canonical
+    // sort pushes them to the bottom — "yesterday's noise becomes tomorrow's
+    // signal". Dep-grounded items are immune (see apply_brief_rejection_demotions).
+    {
+        let rejections = load_recent_brief_rejections(db);
+        let demoted =
+            crate::brief_rejections::apply_brief_rejection_demotions(&mut results, &rejections);
+        if demoted > 0 {
+            info!(target: "4da::analysis", demoted, "Demoted feed items rejected by the Brief");
+        }
+    }
+
     // Final top-end de-saturation on the PERSISTED score. The cross-encoder
     // (and LLM reconciler) overwrite `top_score` AFTER score_item, so its
     // soft-ceiling no longer governs the stored value — top matches land near
@@ -449,6 +484,20 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
     }
 
     crate::cross_encoder_rerank::apply_cross_encoder_reranking(&mut new_results, &scoring_ctx);
+
+    // Demote items the Brief rejected in the last 7 days (dep-grounded items
+    // are immune) BEFORE the canonical sort pushes excluded items down. The
+    // map is kept for the merge below so previously-scored items in the
+    // analysis state pick up new verdicts too.
+    let brief_rejections = load_recent_brief_rejections(&db);
+    let demoted = crate::brief_rejections::apply_brief_rejection_demotions(
+        &mut new_results,
+        &brief_rejections,
+    );
+    if demoted > 0 {
+        info!(target: "4da::monitor", demoted, "Demoted feed items rejected by the Brief");
+    }
+
     scoring::finalize_scores(&mut new_results);
     scoring::sort_results(&mut new_results);
 
@@ -520,6 +569,10 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
                 new_results.iter().map(|r| r.id).collect();
             existing.retain(|r| !existing_ids.contains(&r.id));
             existing.extend(new_results.clone());
+            // Items scored in earlier runs may have been rejected by a Brief
+            // generated since — apply the same verdicts to the merged set
+            // (idempotent: already-excluded items are skipped).
+            crate::brief_rejections::apply_brief_rejection_demotions(existing, &brief_rejections);
             scoring::sort_results(existing);
             guard.near_misses = crate::types::extract_near_misses(existing);
         } else {
