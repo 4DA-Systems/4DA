@@ -464,11 +464,20 @@ GROUNDING (these prevent false-attribution — violating them produces dangerous
 - Cite vulnerability identifiers (CVE/GHSA) only as they appear verbatim in the items. Do not pair an advisory with a project the item does not connect it to.
 - The user's own tooling is not an attack surface. Their commit commands, slash-commands, scripts, and automations are not HTTP/security operations — never tell the user a CVE or exploit threatens them unless an item explicitly names that tool. Also do not use these internal command names (e.g. commit-feat, commit-refactor) as labels for the user's work — say "feature work" or "refactoring" in plain language instead.
 - Do not describe the system as degraded, blacked-out, or backlogged unless that state is given to you in the context. Absence of recent file-edit activity means the user simply hasn't been coding — it does NOT mean monitoring is down or the briefing is unreliable.
-- Refer to items by their title or subject, never by an index number — the index is an internal ordering, not something the user sees.
+- Refer to items by their title or subject, never by an index number — the index is an internal ordering, not something the user sees. Each source_item's `index` attribute exists ONLY for the machine trailer below; never mention an index in prose.
 - Match urgency to evidence: reserve "act now" / "regenerate credentials immediately" for items carrying a critical-severity or exploited-in-the-wild signal tied to a dependency the user actually has.
 - SECURITY comes ONLY from the "CONFIRMED SECURITY" section of the user message (if present). Those entries are OSV-verified against the user's installed versions and already name the exact affected project — treat them as the sole source of truth for what is vulnerable. A CVE/advisory that appears in the day's items but NOT in CONFIRMED SECURITY does not affect the user — mention it, if at all, as general awareness, never as a personal action item. If CONFIRMED SECURITY is absent or empty, there are no confirmed vulnerabilities — do not invent one.
 - Continuity context ("Yesterday's briefing summary", "This week's summary", developing-story signals) is THEMATIC HISTORY ONLY. Never carry a security claim, CVE, credential-rotation directive, or "blackout/degraded" statement forward from it. Re-confirm every security item against CONFIRMED SECURITY; if it is not there, it is resolved or never applied — drop it.
-- NEVER write meta-commentary about the briefing system itself: its data freshness, file/signal tracking status, monitoring health, queued or backlogged item counts, "context blackout / degraded", or how its own precision will change over time. The briefing is about the user's projects and the wider world — never about its own data pipeline. If prior-summary or continuity context contains such statements, they are stale artifacts; ignore them completely and do not echo them."#,
+- NEVER write meta-commentary about the briefing system itself: its data freshness, file/signal tracking status, monitoring health, queued or backlogged item counts, "context blackout / degraded", or how its own precision will change over time. The briefing is about the user's projects and the wider world — never about its own data pipeline. If prior-summary or continuity context contains such statements, they are stale artifacts; ignore them completely and do not echo them.
+
+MACHINE TRAILER (required — parsed by software and stripped before the user sees the briefing):
+End your response with exactly one fenced block listing the items you filtered out (the ones you did NOT feature — self-promotional, off-stack, listicle, etc.):
+```rejects
+[{{"idx": 3, "reason": "self-promotional"}}, {{"idx": 7, "reason": "no stack relevance"}}]
+```
+- "idx" is the item's `index` attribute from its <source_item> tag; "reason" is a short slug or phrase.
+- Output `[]` inside the block if you filtered nothing.
+- The block must be the LAST thing in your response. Never reference it, or any idx, in the briefing prose."#,
         defense = UNTRUSTED_CONTENT_DEFENSE_CLAUSE
     );
 
@@ -622,18 +631,37 @@ GROUNDING (these prevent false-attribution — violating them produces dangerous
                 trigger = trigger,
                 "AI briefing generated"
             );
-            *crate::digest_config::LATEST_BRIEFING.lock() = Some(response.content.clone());
+            // Extract + strip the machine trailer FIRST: every downstream
+            // consumer (live JSON render, LATEST_BRIEFING, save_briefing,
+            // daily seal) must only ever see the stripped markdown.
+            let (content, rejects) =
+                crate::brief_rejections::extract_rejects_trailer(&response.content);
+            *crate::digest_config::LATEST_BRIEFING.lock() = Some(content.clone());
 
             if let Ok(db) = get_database() {
                 let total_tokens = response.input_tokens + response.output_tokens;
-                if let Err(e) = db.save_briefing(
-                    &response.content,
+                match db.save_briefing(
+                    &content,
                     Some(&llm_settings.model),
                     items.len(),
                     Some(total_tokens),
                     Some(elapsed.as_millis() as u64),
                 ) {
-                    error!(target: "4da::briefing", error = %e, "Failed to persist briefing");
+                    Ok(briefing_id) => {
+                        // Join trailer indices back to the narrated slate's real
+                        // item ids (same take(20) cut the prompt used). Malformed
+                        // or out-of-range trailers record nothing.
+                        let slate_ids: Vec<i64> = items.iter().take(20).map(|i| i.id).collect();
+                        crate::brief_rejections::record_rejections(
+                            &db,
+                            briefing_id,
+                            &rejects,
+                            &slate_ids,
+                        );
+                    }
+                    Err(e) => {
+                        error!(target: "4da::briefing", error = %e, "Failed to persist briefing");
+                    }
                 }
             }
 
@@ -651,7 +679,7 @@ GROUNDING (these prevent false-attribution — violating them produces dangerous
                 crate::briefing_seals::create_daily_seal(
                     &conn,
                     &today,
-                    &response.content,
+                    &content,
                     items.len() as i64,
                     &top_topics,
                 );
@@ -659,7 +687,7 @@ GROUNDING (these prevent false-attribution — violating them produces dangerous
 
             Ok(serde_json::json!({
                 "success": true,
-                "briefing": response.content,
+                "briefing": content,
                 "item_count": items.len(),
                 "model": llm_settings.model,
                 "tokens_used": response.input_tokens + response.output_tokens,

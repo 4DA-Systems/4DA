@@ -14,6 +14,7 @@ const CONTENT_TYPES: Record<string, ContentTypeMeta> = {
   breaking_change: { label: 'Breaking', colorClass: 'bg-amber-500/20 text-amber-400' },
   release_notes: { label: 'Release', colorClass: 'bg-teal-500/20 text-teal-400' },
   deep_dive: { label: 'Deep Dive', colorClass: 'bg-indigo-500/20 text-indigo-400' },
+  academic_paper: { label: 'Paper', colorClass: 'bg-purple-500/20 text-purple-400' },
   tutorial: { label: 'Tutorial', colorClass: 'bg-sky-500/20 text-sky-400' },
   show_and_tell: { label: 'Show', colorClass: 'bg-gray-400/20 text-gray-400' },
   question: { label: 'Question', colorClass: 'bg-yellow-500/20 text-yellow-400' },
