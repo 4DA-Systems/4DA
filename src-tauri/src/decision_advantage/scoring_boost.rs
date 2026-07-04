@@ -89,6 +89,13 @@ pub(crate) fn compute_decision_window_boost(
 // ============================================================================
 
 /// Compute how strongly an item matches a specific window (0.0 - 1.0+).
+///
+/// Every signal uses corroborated matching (v13). The raw `contains` era let
+/// a window whose dependency was an ambiguous name ("http", minted from an
+/// import-scraped builtin) match every item carrying a URL: +0.6 cleared the
+/// 0.10 necessity threshold, stamping "Relevant to open decision" on
+/// unrelated items — the exact phantom class Wave 7 removed from the
+/// interest axis, resurfacing through this side door.
 fn compute_match_score(
     window: &DecisionWindow,
     title_lower: &str,
@@ -98,38 +105,50 @@ fn compute_match_score(
 ) -> f32 {
     let mut score = 0.0_f32;
 
-    // Signal 1: dependency name overlap (+0.6)
+    // Signal 1: dependency overlap (+0.6). Pipeline dep matches are already
+    // corroborated — exact name equality is enough. Raw text falls back to
+    // the same grounded matcher window MINTING uses (word-boundary; ambiguous
+    // names additionally need a title hit + ecosystem context).
     if let Some(ref dep) = window.dependency {
         let dep_lower = dep.to_lowercase();
         let dep_in_names = matched_dep_names
             .iter()
             .any(|d| d.to_lowercase() == dep_lower);
-        let dep_in_title = title_lower.contains(&dep_lower);
-        let dep_in_content = content_lower.contains(&dep_lower);
 
-        if dep_in_names || dep_in_title || dep_in_content {
+        if dep_in_names
+            || crate::package_ambiguity::dep_grounded_match(title_lower, content_lower, &dep_lower)
+        {
             score += 0.6;
         }
     }
 
-    // Signal 2: topic overlap with window title (+0.3)
+    // Signal 2: topic overlap with window title (+0.3). Generic tokens
+    // ("http", "api", "security") appear in almost every window title and
+    // prove nothing; specific topics must hit a whole word, not a substring.
     let window_title_lower = window.title.to_lowercase();
     for topic in topics {
-        if window_title_lower.contains(&topic.to_lowercase()) {
+        let topic_lower = topic.to_lowercase();
+        if !crate::scoring::is_generic_topic_token(&topic_lower)
+            && crate::scoring::has_word_boundary_match(&window_title_lower, &topic_lower)
+        {
             score += 0.3;
             break; // only count once
         }
     }
 
     // Signal 3: title keyword match (+0.1)
-    // Use the first significant word from the window title (skip prefixes like "Security:")
+    // First significant, NON-GENERIC word from the window title (skip
+    // prefixes like "Security:" and filler like "http"/"update").
     let significant_word = window
         .title
         .split_whitespace()
-        .find(|w| w.len() > 3 && !w.ends_with(':'))
+        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
+        .find(|w| w.len() > 3 && !crate::scoring::is_generic_topic_token(w.to_lowercase().as_str()))
         .unwrap_or("");
 
-    if !significant_word.is_empty() && title_lower.contains(&significant_word.to_lowercase()) {
+    if !significant_word.is_empty()
+        && crate::scoring::has_word_boundary_match(title_lower, &significant_word.to_lowercase())
+    {
         score += 0.1;
     }
 
@@ -235,6 +254,74 @@ mod tests {
         // Should match the security window (higher boost factor)
         assert_eq!(id, Some(2), "should match the security_patch window");
         assert!(boost > 0.0);
+    }
+
+    #[test]
+    fn test_ambiguous_dep_window_does_not_match_urls() {
+        // Live 2026-07-05 defect: a "Security: http" window (dependency
+        // "http", import-scraped builtin) substring-matched every item
+        // containing a URL, stamping "Relevant to open decision" on a
+        // gambling-scam post. Ambiguous deps need a title hit + ecosystem
+        // context, and "http" inside "https://..." is not a word boundary.
+        let mut w = make_window(7, "security_patch", Some("http"));
+        w.title = "Security: http \u{2014} CVE-2026-47729 Squid Proxy Bug".to_string();
+        let windows = vec![w];
+
+        let (boost, id) = compute_decision_window_boost(
+            &windows,
+            "Branded Gambling Campaigns: How Scammers Exploit Trust",
+            "Read more at https://example.com/scam-report about the campaign",
+            &["scam".to_string()],
+            &[],
+        );
+
+        assert!(
+            (boost - 0.0).abs() < f32::EPSILON,
+            "URL content must not match an ambiguous-dep window, got {boost}"
+        );
+        assert!(id.is_none());
+    }
+
+    #[test]
+    fn test_ambiguous_dep_window_matches_with_real_context() {
+        // The same "http" window DOES match an item that names http as a
+        // package in the title with ecosystem context — same rule as minting.
+        let mut w = make_window(8, "security_patch", Some("http"));
+        w.title = "Security: http \u{2014} CVE-2026-47729".to_string();
+        let windows = vec![w];
+
+        let (boost, id) = compute_decision_window_boost(
+            &windows,
+            "http crate 1.3.2 security release",
+            "The Rust http crate patches CVE-2026-47729; upgrade via cargo",
+            &[],
+            &[],
+        );
+
+        assert!(boost > 0.0, "corroborated ambiguous dep should match");
+        assert_eq!(id, Some(8));
+    }
+
+    #[test]
+    fn test_generic_topic_does_not_match_window_title() {
+        // Item topic "security"/"http" appears in virtually every security
+        // window title — generic tokens must not earn the +0.3.
+        let mut w = make_window(9, "security_patch", Some("lodash"));
+        w.title = "Security: lodash \u{2014} prototype pollution advisory".to_string();
+        let windows = vec![w];
+
+        let (boost, _) = compute_decision_window_boost(
+            &windows,
+            "Weekly security roundup",
+            "General security news about unrelated packages",
+            &["security".to_string()],
+            &[],
+        );
+
+        assert!(
+            (boost - 0.0).abs() < f32::EPSILON,
+            "generic topic must not match window title, got {boost}"
+        );
     }
 
     #[test]
