@@ -153,6 +153,12 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // fragment overlap counts only when the shared fragment is specific. Kills
 // the class where user dep `tower-http` confirmed item topic `http` and an
 // arXiv "HTTP REST API" paper ranked #1 CORE.
+// Also in v12 (same wave): commodity ceiling extended to AcademicPaper and
+// ShowAndTell. New ContentType::AcademicPaper (arXiv/PwC manifests, neutral
+// 1.0 instead of DeepDive 1.15); papers bypass the ceiling ONLY via strong
+// dependency grounding or security/version evidence (sophistication and
+// community-signal bypasses withheld — academic prose trips both). ShowAndTell
+// keeps the standard bypasses so traction-validated self-promo still surfaces.
 pub(crate) const PIPELINE_VERSION: i32 = 12;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1

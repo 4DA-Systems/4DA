@@ -18,6 +18,12 @@ pub enum ContentType {
     ReleaseNotes,
     BreakingChange,
     DeepDive,
+    /// Academic paper (arXiv, Papers with Code). Neutral 1.0 multiplier —
+    /// not a penalty, just no unearned DeepDive boost. Dense academic prose
+    /// trips the sophistication heuristic on virtually every paper, so this
+    /// class gets its own commodity-ceiling arm with a stricter bypass set
+    /// (see pipeline_v2::apply_commodity_ceiling).
+    AcademicPaper,
     CuratedDigest,
     ExpertAnalysis,
     PlatformUpdate,
@@ -42,6 +48,7 @@ impl ContentType {
             "release_notes" => Some(Self::ReleaseNotes),
             "breaking_change" => Some(Self::BreakingChange),
             "deep_dive" => Some(Self::DeepDive),
+            "academic_paper" => Some(Self::AcademicPaper),
             "curated_digest" => Some(Self::CuratedDigest),
             "expert_analysis" => Some(Self::ExpertAnalysis),
             "platform_update" => Some(Self::PlatformUpdate),
@@ -62,6 +69,7 @@ impl ContentType {
             ContentType::ReleaseNotes => "release_notes",
             ContentType::BreakingChange => "breaking_change",
             ContentType::DeepDive => "deep_dive",
+            ContentType::AcademicPaper => "academic_paper",
             ContentType::CuratedDigest => "curated_digest",
             ContentType::ExpertAnalysis => "expert_analysis",
             ContentType::PlatformUpdate => "platform_update",
@@ -87,6 +95,7 @@ impl ContentType {
             ContentType::ExpertAnalysis => 1.12,
             ContentType::PlatformUpdate => 1.08,
             ContentType::ShowAndTell => 0.85,
+            ContentType::AcademicPaper => 1.00,
             ContentType::Discussion => 1.00,
             ContentType::Tutorial => 0.80,
             ContentType::Question => 0.65,
@@ -364,6 +373,43 @@ mod tests {
         );
         assert_eq!(ct, ContentType::Clickbait);
         assert_eq!(mult, 0.25);
+    }
+
+    // ========================================================================
+    // Academic paper classification — manifest-driven (arXiv, Papers with Code)
+    // ========================================================================
+
+    #[test]
+    fn test_arxiv_classified_as_academic_paper() {
+        // arXiv items must classify as AcademicPaper at neutral 1.0 — no
+        // unearned DeepDive 1.15 boost for off-stack papers.
+        let (ct, mult) = classify_content_for_source(
+            "Attention Is All You Need: Revisiting Transformer Scaling Laws",
+            "abstract text...",
+            "arxiv",
+        );
+        assert_eq!(ct, ContentType::AcademicPaper);
+        assert_eq!(mult, 1.0);
+    }
+
+    #[test]
+    fn test_papers_with_code_classified_as_academic_paper() {
+        let (ct, mult) = classify_content_for_source(
+            "Efficient Fine-Tuning of Large Language Models with LoRA Variants",
+            "abstract text...",
+            "papers_with_code",
+        );
+        assert_eq!(ct, ContentType::AcademicPaper);
+        assert_eq!(mult, 1.0);
+    }
+
+    #[test]
+    fn test_academic_paper_slug_roundtrip() {
+        assert_eq!(ContentType::AcademicPaper.slug(), "academic_paper");
+        assert_eq!(
+            ContentType::from_slug("academic_paper"),
+            Some(ContentType::AcademicPaper)
+        );
     }
 
     #[test]
