@@ -460,6 +460,45 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
     Ok(())
 }
 
+/// One-shot startup self-heal (mirrors the Wave-5 agent-infra dependency
+/// purge): delete active_topics rows that can never ground scoring — generic
+/// tokens per the canonical predicate (`scoring::is_generic_topic_token`) —
+/// plus legacy `commit-*` rows whose emitter was removed but which the
+/// upsert-only persistence kept alive. Returns rows deleted. Heals existing
+/// installs; the Wave-7 extraction fixes stop new pollution at the source.
+pub fn purge_generic_active_topics(conn: &Connection) -> Result<usize> {
+    let mut deleted = conn
+        .execute("DELETE FROM active_topics WHERE topic LIKE 'commit-%'", [])
+        .context("purge legacy commit-* active_topics")?;
+
+    // The genericness predicate lives in Rust (COMMON_ENGLISH_WORDS + topic
+    // additions), not SQL — select, filter, then delete by id.
+    let generic_ids: Vec<i64> = {
+        let mut stmt = conn
+            .prepare("SELECT id, topic FROM active_topics")
+            .context("select active_topics for generic prune")?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .context("read active_topics")?;
+        rows.flatten()
+            .filter(|(_, topic)| crate::scoring::is_generic_topic_token(&topic.to_lowercase()))
+            .map(|(id, _)| id)
+            .collect()
+    };
+
+    for chunk in generic_ids.chunks(500) {
+        let placeholders = vec!["?"; chunk.len()].join(",");
+        let sql = format!("DELETE FROM active_topics WHERE id IN ({placeholders})");
+        deleted += conn
+            .execute(&sql, rusqlite::params_from_iter(chunk.iter()))
+            .context("delete generic active_topics")?;
+    }
+
+    Ok(deleted)
+}
+
 // ═══════════════════════════════════════════════════════════════
 // REMOVED UNUSED FUNCTIONS (cleanup 2026-01-21):
 // - mark_path_scanned
@@ -499,5 +538,63 @@ mod tests {
         assert!(tables.contains(&"detected_projects".to_string()));
         assert!(tables.contains(&"detected_tech".to_string()));
         assert!(tables.contains(&"active_topics".to_string()));
+    }
+
+    #[test]
+    fn test_purge_generic_active_topics() {
+        crate::register_sqlite_vec_extension();
+        let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        migrate(&conn).unwrap();
+        let conn = conn.lock();
+
+        // Deleted: legacy commit-* rows + generic tokens per the canonical
+        // predicate. Kept: specific tech (including 3-char tokens like "aws"
+        // — the dep-side len<=3 blanket does not apply to topics), compound
+        // pattern topics, short language names.
+        for topic in [
+            "commit-feat",
+            "http",
+            "rest",
+            "api",
+            "ui", // 1-2 char noise stays generic
+            // Class-name fragments aren't on the generic lists — they stop
+            // being minted (Wave 7) but existing rows survive the prune.
+            "validationerror",
+            "tauri",
+            "react-native",
+            "error_handling",
+            "go",
+            "ts",
+            "aws",
+        ] {
+            conn.execute(
+                "INSERT INTO active_topics (topic, source) VALUES (?1, 'file_content')",
+                [topic],
+            )
+            .unwrap();
+        }
+
+        let deleted = purge_generic_active_topics(&conn).unwrap();
+        assert_eq!(deleted, 5, "commit-feat + http + rest + api + ui");
+
+        let remaining: Vec<String> = conn
+            .prepare("SELECT topic FROM active_topics ORDER BY topic")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .flatten()
+            .collect();
+        assert_eq!(
+            remaining,
+            vec![
+                "aws",
+                "error_handling",
+                "go",
+                "react-native",
+                "tauri",
+                "ts",
+                "validationerror"
+            ]
+        );
     }
 }

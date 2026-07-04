@@ -4,6 +4,7 @@
 //! Uses sqlite-vec for vector similarity search at scale.
 //! Designed to handle hundreds of thousands of sources.
 
+mod brief_rejections;
 mod cache;
 mod channels;
 #[cfg(test)]

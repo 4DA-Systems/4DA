@@ -1516,6 +1516,7 @@ async fn blind_spots_no_template_explanations() {
         "Borderline-relevant",
         "worth a glance",
         "Affects X in Y",
+        "Relevant to an active architectural decision",
     ];
 
     for item in items {

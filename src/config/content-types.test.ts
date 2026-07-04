@@ -35,10 +35,10 @@ describe('getContentTypeBadge', () => {
     expect(getContentTypeBadge('unknown_type')).toBeNull();
   });
 
-  it('returns badges for all 8 non-discussion types', () => {
+  it('returns badges for all 9 non-discussion types', () => {
     const types = [
       'security_advisory', 'breaking_change', 'release_notes', 'deep_dive',
-      'tutorial', 'show_and_tell', 'question', 'hiring',
+      'academic_paper', 'tutorial', 'show_and_tell', 'question', 'hiring',
     ];
     for (const t of types) {
       const badge = getContentTypeBadge(t);

@@ -275,6 +275,14 @@ commodity_ceiling {
     # hard-capped regardless of content type or dependency match — a clickbait
     # title that name-drops a dep must not ride the dep boost into the brief.
     clickbait:    0.30    # [0.15, 0.40]
+    # Academic papers (arXiv/PwC). Dense academic prose is inherently
+    # "sophisticated", so this class ignores the sophistication bypass —
+    # only strong dependency grounding or security/version evidence lifts it
+    # (see pipeline_v2::apply_commodity_ceiling).
+    academic:     0.30    # [0.15, 0.45]
+    # Self-promotional announcements ("Show HN", "I built…"). Standard
+    # bypasses apply — real community traction earns the slot.
+    show_and_tell: 0.32   # [0.15, 0.45]
 }
 
 # Community quality signal thresholds - extracted from source metadata

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use super::ace_context::ACEContext;
-use super::utils::topic_overlaps;
+use super::utils::topic_grounds;
 use crate::scoring_config;
 use fourda_macros::score_component;
 
@@ -26,13 +26,14 @@ pub(crate) fn compute_affinity_multiplier(topics: &[String], ace_ctx: &ACEContex
 
         // Partial matches: collect ALL word-boundary overlaps and pick the
         // strongest-magnitude one deterministically (ties broken by the
-        // lexicographically smallest key). Using `topic_overlaps` instead of raw
-        // `contains` stops java→javascript / go→google leakage (bug I); the
+        // lexicographically smallest key). Using `topic_grounds` instead of raw
+        // `contains` stops java→javascript / go→google leakage (bug I) and
+        // generic-fragment leakage ("http" ~ "tower-http", v12); the
         // deterministic pick stops HashMap iteration order from flipping the
         // multiplier when a topic overlaps >=2 affinity keys (bug H).
         let mut best: Option<(&str, f32, f32)> = None;
         for (aff_topic, &(affinity, confidence)) in &ace_ctx.topic_affinities {
-            if topic_overlaps(topic, aff_topic) {
+            if topic_grounds(topic, aff_topic) {
                 let magnitude = (affinity * confidence).abs();
                 let better = match best {
                     None => true,
@@ -92,13 +93,14 @@ pub(crate) fn compute_anti_penalty(topics: &[String], ace_ctx: &ACEContext) -> f
 
     let mut total_penalty: f32 = 0.0;
 
-    // Both topics and anti_topics are already lowercase. Use word-boundary overlap
-    // (not raw `contains`) so an anti-topic `go` doesn't penalize `google`/`argo`
-    // and `java` doesn't demote `javascript` (bug I). anti_topics is a Vec, so the
+    // Both topics and anti_topics are already lowercase. Use strict grounding
+    // (not raw `contains`) so an anti-topic `go` doesn't penalize `google`/`argo`,
+    // `java` doesn't demote `javascript` (bug I), and a generic fragment can't
+    // trigger the penalty (v12). anti_topics is a Vec, so the
     // break-on-first-match is already order-stable.
     for topic in topics {
         for anti_topic in &ace_ctx.anti_topics {
-            if topic_overlaps(topic, anti_topic) {
+            if topic_grounds(topic, anti_topic) {
                 let confidence = ace_ctx
                     .anti_topic_confidence
                     .get(anti_topic)

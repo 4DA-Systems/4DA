@@ -97,8 +97,10 @@ impl Source for PapersWithCodeSource {
     fn manifest(&self) -> super::SourceManifest {
         super::SourceManifest {
             category: super::SourceCategory::Research,
-            default_content_type: "deep_dive",
-            default_multiplier: 1.15,
+            // academic_paper at neutral 1.0 — papers must earn their rank via
+            // grounding, not ride a blanket DeepDive 1.15 boost (Wave 7).
+            default_content_type: "academic_paper",
+            default_multiplier: 1.0,
             label: "PwC",
             color_hint: "indigo",
             min_title_words: 3,

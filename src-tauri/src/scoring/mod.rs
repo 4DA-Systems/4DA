@@ -57,7 +57,8 @@ pub(crate) use dedup::{
     dedup_results, fuzzy_dedup_results, sort_results, topic_dedup_results,
 };
 pub(crate) use dependencies::{
-    is_ambiguous_dep_name, match_dependencies, VersionDelta, STRONG_GROUNDING_CONFIDENCE,
+    is_ambiguous_dep_name, is_generic_topic_token, match_dependencies, VersionDelta,
+    STRONG_GROUNDING_CONFIDENCE,
 };
 pub(crate) use explanation::{
     calculate_confidence, compute_temporal_freshness, generate_relevance_explanation,
@@ -142,7 +143,23 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // With excluded_project_paths also empty, scoring inputs are byte-identical.
 // If a user later excludes a project, scores refresh through the normal
 // rescan path — no corpus re-stamp required.
-pub(crate) const PIPELINE_VERSION: i32 = 11;
+//
+// v12 (2026-07-04): interest/topic corroboration — fragment matches can no
+// longer confirm axes (Wave 7). `topic_overlaps` (any shared >=3-char
+// fragment) is replaced by strict `topic_grounds` at every scoring call site
+// (ACE confirmation axis, skill-gap boost, affinity/anti-penalty, intent
+// boost, keyword ACE boost, dependency topic-overlap): generic tokens
+// (COMMON_ENGLISH_WORDS + tech-generic topic tokens) can never ground, and a
+// fragment overlap counts only when the shared fragment is specific. Kills
+// the class where user dep `tower-http` confirmed item topic `http` and an
+// arXiv "HTTP REST API" paper ranked #1 CORE.
+// Also in v12 (same wave): commodity ceiling extended to AcademicPaper and
+// ShowAndTell. New ContentType::AcademicPaper (arXiv/PwC manifests, neutral
+// 1.0 instead of DeepDive 1.15); papers bypass the ceiling ONLY via strong
+// dependency grounding or security/version evidence (sophistication and
+// community-signal bypasses withheld — academic prose trips both). ShowAndTell
+// keeps the standard bypasses so traction-validated self-promo still surfaces.
+pub(crate) const PIPELINE_VERSION: i32 = 12;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
@@ -162,7 +179,7 @@ pub(crate) fn score_item(
 pub(crate) use semantic::{
     compute_semantic_ace_boost, compute_taste_embedding, get_topic_embeddings,
 };
-pub(crate) use utils::{has_word_boundary_match, topic_overlaps};
+pub(crate) use utils::{has_word_boundary_match, topic_grounds};
 
 use std::collections::HashMap;
 

@@ -583,7 +583,8 @@ fn extract_go_topics(content: &str, topics: &mut HashSet<String>) {
 }
 
 fn extract_generic_topics(content: &str, topics: &mut HashSet<String>) {
-    // Look for common tech keywords
+    // Look for common tech keywords. Word-boundary matched — raw substring
+    // `contains` minted `rest` from "restore" and `aws` from "flaws" (Wave 7).
     let keywords = [
         "docker",
         "kubernetes",
@@ -606,8 +607,14 @@ fn extract_generic_topics(content: &str, topics: &mut HashSet<String>) {
     ];
 
     let content_lower = content.to_lowercase();
+    // Generic tokens ("rest", "websocket") are never minted — they can't
+    // ground scoring and the startup purge (same predicate) would delete
+    // them again (mint/purge churn loop).
     for keyword in keywords {
-        if content_lower.contains(keyword) {
+        if crate::scoring::is_generic_topic_token(keyword) {
+            continue;
+        }
+        if crate::scoring::has_word_boundary_match(&content_lower, keyword) {
             topics.insert(keyword.to_string());
         }
     }
@@ -625,7 +632,8 @@ pub fn extract_rich_topics(content: &str, file_ext: &str) -> Vec<(String, f32)> 
     match file_ext {
         "rs" => extract_rich_rust(content, &mut topics),
         "ts" | "tsx" | "js" | "jsx" => extract_rich_js(content, &mut topics),
-        "py" => extract_rich_python(content, &mut topics),
+        // Python had only class-name/def-fragment minting — removed in Wave 7
+        // (no pattern-level compounds to keep), so no rich extractor remains.
         _ => {}
     }
 
@@ -644,54 +652,14 @@ pub fn extract_rich_topics(content: &str, file_ext: &str) -> Vec<(String, f32)> 
 }
 
 fn extract_rich_rust(content: &str, topics: &mut Vec<(String, f32)>) {
+    // Pattern-level compound topics ONLY. Function-name fragments and impl
+    // type names are NOT topics: they minted class fragments
+    // ("validationerror") and English words ("restore" → "rest") that then
+    // fragment-matched unrelated content (Wave 7). Bare `http` for
+    // reqwest/hyper/axum usage is gone for the same reason — the crate names
+    // themselves already surface via extract_rust_topics imports.
     for line in content.lines() {
         let trimmed = line.trim();
-
-        // fn signatures → extract function purpose from name
-        if (trimmed.starts_with("pub fn ")
-            || trimmed.starts_with("pub async fn ")
-            || trimmed.starts_with("fn ")
-            || trimmed.starts_with("async fn "))
-            && !trimmed.starts_with("fn main")
-        {
-            let cleaned = trimmed.replace("pub ", "").replace("async ", "");
-            let name = cleaned
-                .strip_prefix("fn ")
-                .unwrap_or("")
-                .split('(')
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            if name.len() >= 4 {
-                // Split snake_case into semantic tokens
-                for part in name.split('_') {
-                    if part.len() >= 3
-                        && !["get", "set", "new", "the", "for", "mut", "ref"].contains(&part)
-                    {
-                        topics.push((part.to_string(), 0.5));
-                    }
-                }
-            }
-        }
-
-        // impl blocks → trait/type being implemented
-        if trimmed.starts_with("impl ") {
-            let rest = trimmed.strip_prefix("impl ").unwrap_or("");
-            let type_name = if rest.contains(" for ") {
-                rest.split(" for ")
-                    .nth(1)
-                    .and_then(|s| s.split_whitespace().next())
-            } else {
-                rest.split_whitespace().next()
-            };
-            if let Some(name) = type_name {
-                let clean = name.trim_matches(&['<', '>', '{'][..]);
-                if clean.len() >= 3 {
-                    topics.push((clean.to_lowercase(), 0.65));
-                }
-            }
-        }
 
         // Error handling patterns
         if trimmed.contains("anyhow::") || trimmed.contains("thiserror") {
@@ -712,54 +680,13 @@ fn extract_rich_rust(content: &str, topics: &mut Vec<(String, f32)>) {
     if content.contains("rusqlite") || content.contains("diesel") || content.contains("sqlx") {
         topics.push(("database".to_string(), 0.7));
     }
-    if content.contains("reqwest") || content.contains("hyper") || content.contains("axum") {
-        topics.push(("http".to_string(), 0.65));
-    }
 }
 
 fn extract_rich_js(content: &str, topics: &mut Vec<(String, f32)>) {
+    // Pattern-level compound topics ONLY — exported-name camelCase fragments
+    // are no longer minted as topics (Wave 7; see extract_rich_rust).
     for line in content.lines() {
         let trimmed = line.trim();
-
-        // Export function/const names → API surface
-        if trimmed.starts_with("export function ")
-            || trimmed.starts_with("export const ")
-            || trimmed.starts_with("export async function ")
-        {
-            let cleaned = trimmed
-                .replace("export ", "")
-                .replace("async ", "")
-                .replace("function ", "")
-                .replace("const ", "");
-            let name = cleaned
-                .split(&['(', ':', ' ', '='][..])
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            if name.len() >= 4 {
-                // Split camelCase
-                let mut parts = Vec::new();
-                let mut current = String::new();
-                for ch in name.chars() {
-                    if ch.is_uppercase() && !current.is_empty() {
-                        parts.push(current.to_lowercase());
-                        current = String::new();
-                    }
-                    current.push(ch);
-                }
-                if !current.is_empty() {
-                    parts.push(current.to_lowercase());
-                }
-                for part in parts {
-                    if part.len() >= 3
-                        && !["get", "set", "use", "the", "for"].contains(&part.as_str())
-                    {
-                        topics.push((part, 0.5));
-                    }
-                }
-            }
-        }
 
         // React hooks
         if trimmed.contains("useState") {
@@ -779,44 +706,6 @@ fn extract_rich_js(content: &str, topics: &mut Vec<(String, f32)>) {
     }
     if content.contains("tailwind") || content.contains("className=") {
         topics.push(("styling".to_string(), 0.45));
-    }
-}
-
-fn extract_rich_python(content: &str, topics: &mut Vec<(String, f32)>) {
-    for line in content.lines() {
-        let trimmed = line.trim();
-
-        // class/def definitions
-        if trimmed.starts_with("class ") {
-            let name = trimmed
-                .strip_prefix("class ")
-                .unwrap_or("")
-                .split(&['(', ':'][..])
-                .next()
-                .unwrap_or("")
-                .trim();
-            if name.len() >= 3 {
-                topics.push((name.to_lowercase(), 0.6));
-            }
-        }
-        if trimmed.starts_with("def ") || trimmed.starts_with("async def ") {
-            let name = trimmed
-                .replace("async ", "")
-                .strip_prefix("def ")
-                .unwrap_or("")
-                .split('(')
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            if name.len() >= 4 && !name.starts_with('_') {
-                for part in name.split('_') {
-                    if part.len() >= 3 {
-                        topics.push((part.to_string(), 0.5));
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -1095,6 +984,91 @@ from sqlalchemy.orm import Session
         assert!(topics.contains(&"numpy".to_string()));
         assert!(topics.contains(&"flask".to_string()));
         assert!(topics.contains(&"sqlalchemy".to_string()));
+    }
+
+    #[test]
+    fn test_extract_generic_topics_word_boundary() {
+        // "restore" must no longer mint `rest`, "flaws" must not mint `aws` (Wave 7)
+        let topics = extract_topics_from_content("restore the backup after finding flaws", "txt");
+        assert!(!topics.contains(&"rest".to_string()));
+        assert!(!topics.contains(&"aws".to_string()));
+
+        // Genuine whole-word mentions of SPECIFIC tech still mint; generic
+        // tokens ("rest") are never minted at all (F1 — mint/purge churn).
+        let topics = extract_topics_from_content("deploy REST api on aws with docker", "txt");
+        assert!(!topics.contains(&"rest".to_string()));
+        assert!(topics.contains(&"aws".to_string()));
+        assert!(topics.contains(&"docker".to_string()));
+    }
+
+    #[test]
+    fn test_extract_rich_topics_no_name_fragments() {
+        // Wave 7: fn-name fragments and impl type names are NOT topics
+        let content = r#"
+impl ValidationError {
+    pub fn restore_payment_handler(&self) -> anyhow::Result<()> {
+        self.inner.await
+    }
+}
+"#;
+        let topics = extract_rich_topics(content, "rs");
+        let names: Vec<&str> = topics.iter().map(|(t, _)| t.as_str()).collect();
+        assert!(
+            !names.contains(&"validationerror"),
+            "impl type names must not be topics"
+        );
+        assert!(
+            !names.contains(&"restore"),
+            "fn-name fragments must not be topics"
+        );
+        assert!(
+            !names.contains(&"payment"),
+            "fn-name fragments must not be topics"
+        );
+        assert!(
+            !names.contains(&"handler"),
+            "fn-name fragments must not be topics"
+        );
+        // Pattern-level compounds survive
+        assert!(names.contains(&"error_handling"));
+        assert!(names.contains(&"async_runtime"));
+    }
+
+    #[test]
+    fn test_extract_rich_rust_no_blanket_http() {
+        // Wave 7: reqwest/hyper/axum usage no longer mints a bare `http` topic
+        let content = "use axum::Router;\nlet client = reqwest::Client::new();";
+        let topics = extract_rich_topics(content, "rs");
+        assert!(!topics.iter().any(|(t, _)| t == "http"));
+    }
+
+    #[test]
+    fn test_extract_rich_js_no_export_fragments() {
+        let content = "export function fetchUserPayments() { return fetch('/api'); }";
+        let topics = extract_rich_topics(content, "ts");
+        let names: Vec<&str> = topics.iter().map(|(t, _)| t.as_str()).collect();
+        assert!(
+            !names.contains(&"fetch"),
+            "export-name fragments must not be topics"
+        );
+        assert!(
+            !names.contains(&"user"),
+            "export-name fragments must not be topics"
+        );
+        assert!(
+            !names.contains(&"payments"),
+            "export-name fragments must not be topics"
+        );
+        // Pattern-level compound survives
+        assert!(names.contains(&"api_calls"));
+    }
+
+    #[test]
+    fn test_extract_rich_python_mints_nothing() {
+        // Python rich extraction was fragment-only — removed entirely in Wave 7
+        let content = "class PaymentProcessor:\n    def restore_backup(self):\n        pass\n";
+        let topics = extract_rich_topics(content, "py");
+        assert!(topics.is_empty());
     }
 
     #[test]

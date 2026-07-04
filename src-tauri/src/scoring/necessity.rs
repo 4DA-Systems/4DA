@@ -42,6 +42,9 @@ pub(crate) struct NecessityInputs {
     pub matched_skill_gaps: Vec<String>,
     /// Decision window boost (active decision affected)
     pub window_boost: f32,
+    /// Human-readable title of the matched decision window, so the decision-relevant
+    /// reason can name the decision it claims relevance to
+    pub matched_window_label: Option<String>,
     /// Hours since content was published
     pub age_hours: f64,
     /// Content type classification
@@ -434,6 +437,12 @@ fn try_contradiction_path(
 }
 
 /// Decision-relevant path — content affects an active architectural decision.
+///
+/// Only fires when it can name what it matched: the open decision's title, or the
+/// dependency / skill-gap overlap that connected the item to the window. A bare
+/// window boost with no nameable evidence returns None instead of the old constant
+/// "Relevant to an active architectural decision" — an unfalsifiable claim the
+/// breakdown cannot support ("never show intelligence the system can't stand behind").
 fn try_decision_relevant_path(
     inputs: &NecessityInputs,
 ) -> Option<(f32, String, NecessityCategory, Urgency)> {
@@ -441,10 +450,31 @@ fn try_decision_relevant_path(
         return None;
     }
 
+    let reason = if let Some(label) = inputs
+        .matched_window_label
+        .as_deref()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+    {
+        format!("Relevant to open decision: {label}")
+    } else if !inputs.matched_deps.is_empty() {
+        format!(
+            "Touches {} while a related decision is open",
+            inputs.matched_deps.join(", ")
+        )
+    } else if !inputs.matched_skill_gaps.is_empty() {
+        format!(
+            "Covers {} while a related decision is open",
+            inputs.matched_skill_gaps.join(", ")
+        )
+    } else {
+        return None;
+    };
+
     let score = 0.50 + inputs.window_boost;
     Some((
         score,
-        "Relevant to an active architectural decision".to_string(),
+        reason,
         NecessityCategory::DecisionRelevant,
         Urgency::Awareness,
     ))
