@@ -340,7 +340,7 @@ pub(crate) fn score_item(
     } else {
         let matching_work_topics = topics
             .iter()
-            .filter(|t| ctx.work_topics.iter().any(|wt| topic_overlaps(t, wt)))
+            .filter(|t| ctx.work_topics.iter().any(|wt| topic_grounds(t, wt)))
             .count();
         match matching_work_topics {
             0 => 0.0,
@@ -405,7 +405,7 @@ pub(crate) fn score_item(
                     .intelligence
                     .skill_gaps
                     .iter()
-                    .find(|g| topic_overlaps(t, &g.dependency))
+                    .find(|g| topic_grounds(t, &g.dependency))
                 {
                     if !matched_skill_gaps.contains(&g.dependency) {
                         matched_skill_gaps.push(g.dependency.clone());

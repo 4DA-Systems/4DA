@@ -14,6 +14,21 @@ fn topic_word_match(item_topic: &str, active_topic: &str) -> bool {
             .any(|seg| seg == active_topic)
 }
 
+/// Dedup in place, first occurrence wins. Hit lists collect one entry per matching
+/// item topic, so the same tech can appear twice ("react" + "react-dom" both hit
+/// declared "react"), which previously rendered as "Uses react, react (your stack)".
+fn dedup_preserve_order(hits: &mut Vec<&str>) {
+    let mut seen: Vec<&str> = Vec::with_capacity(hits.len());
+    hits.retain(|h| {
+        if seen.contains(h) {
+            false
+        } else {
+            seen.push(h);
+            true
+        }
+    });
+}
+
 /// Generate a human-readable explanation for why an item was considered relevant.
 /// Produces specific, actionable text naming the exact technologies/topics that matched.
 /// Combines up to 2 primary reasons for multi-signal trust, plus optional annotations.
@@ -35,7 +50,7 @@ pub(crate) fn generate_relevance_explanation(
 
     // 1. Declared tech stack matches (highest priority — user's explicit stack)
     //    Enriched with version info from dependency_info when available.
-    let declared_hits: Vec<&str> = item_topics
+    let mut declared_hits: Vec<&str> = item_topics
         .iter()
         .filter_map(|t| {
             declared_tech
@@ -47,6 +62,7 @@ pub(crate) fn generate_relevance_explanation(
                 .map(std::string::String::as_str)
         })
         .collect();
+    dedup_preserve_order(&mut declared_hits);
     if !declared_hits.is_empty() {
         let names: Vec<String> = declared_hits
             .iter()
@@ -69,7 +85,7 @@ pub(crate) fn generate_relevance_explanation(
     }
 
     // 1b. Detected-only tech matches (weaker signal — from auto-scan, not user's explicit stack)
-    let detected_only_hits: Vec<&str> = item_topics
+    let mut detected_only_hits: Vec<&str> = item_topics
         .iter()
         .filter_map(|t| {
             ace_ctx
@@ -80,6 +96,7 @@ pub(crate) fn generate_relevance_explanation(
         })
         .filter(|t| !used_topics.contains(t))
         .collect();
+    dedup_preserve_order(&mut detected_only_hits);
     if !detected_only_hits.is_empty() {
         let names: Vec<String> = detected_only_hits
             .iter()
@@ -118,7 +135,7 @@ pub(crate) fn generate_relevance_explanation(
     // require a word-boundary match (not an arbitrary infix like "macos" -> "os"), so
     // the reasoning only cites credible active topics — faithful to the same quality bar
     // synthesize_ace_interests applies before an active topic can influence the score.
-    let topic_hits: Vec<&str> = item_topics
+    let mut topic_hits: Vec<&str> = item_topics
         .iter()
         .filter_map(|t| {
             ace_ctx
@@ -129,6 +146,7 @@ pub(crate) fn generate_relevance_explanation(
         })
         .filter(|t| !used_topics.contains(t))
         .collect();
+    dedup_preserve_order(&mut topic_hits);
     if !topic_hits.is_empty() && parts.len() < 2 {
         let names: Vec<&str> = topic_hits.iter().copied().take(2).collect();
         for &n in &names {
@@ -137,17 +155,17 @@ pub(crate) fn generate_relevance_explanation(
         parts.push(format!("Related to {} (active project)", names.join(", ")));
     }
 
-    // 3. Declared interest matches — add as second reason if we only have one
+    // 3. Declared interest matches — add as second reason if we only have one.
+    // Word-boundary match only: the full interest token must occur as a whole
+    // delimited segment of the item topic. Raw substring matching claimed
+    // "Matches interest: tower-http" on any item whose topic was merely "http".
     if interest_score > 0.15 && parts.len() < 2 {
-        let interest_hits: Vec<&str> = item_topics
+        let mut interest_hits: Vec<&str> = item_topics
             .iter()
             .filter_map(|t| {
                 interests
                     .iter()
-                    .find(|i| {
-                        let il = i.topic.to_lowercase();
-                        *t == il || t.contains(il.as_str()) || il.contains(t.as_str())
-                    })
+                    .find(|i| topic_word_match(t, &i.topic.to_lowercase()))
                     .map(|i| i.topic.as_str())
             })
             .filter(|t| {
@@ -155,6 +173,7 @@ pub(crate) fn generate_relevance_explanation(
                 !used_topics.iter().any(|u| *u == tl)
             })
             .collect();
+        dedup_preserve_order(&mut interest_hits);
         if !interest_hits.is_empty() {
             let names: Vec<&str> = interest_hits.iter().copied().take(2).collect();
             parts.push(format!("Matches interest: {}", names.join(", ")));
@@ -807,6 +826,105 @@ mod tests {
             explanation.contains("active project"),
             "Should also have active project match: {}",
             explanation
+        );
+    }
+
+    #[test]
+    fn test_generate_explanation_dedups_declared_tech() {
+        // Item topics "react" and "react-dom" both hit declared "react" — the
+        // explanation must name it once, not "Uses react, react (your stack)".
+        let ace_ctx = ACEContext::default();
+        let explanation = generate_relevance_explanation(
+            "React 19 and React DOM",
+            0.2,
+            0.1,
+            &[],
+            &ace_ctx,
+            &["react".to_string(), "react-dom".to_string()],
+            &[],
+            &["react".to_string()],
+            &[],
+            0,
+        );
+        assert_eq!(
+            explanation, "Uses react (your stack)",
+            "duplicate declared-tech hits must be deduped: {explanation}"
+        );
+    }
+
+    fn interest(topic: &str) -> context_engine::Interest {
+        context_engine::Interest {
+            id: None,
+            topic: topic.to_string(),
+            weight: 1.0,
+            embedding: None,
+            source: Default::default(),
+        }
+    }
+
+    #[test]
+    fn test_interest_fragment_does_not_claim_match() {
+        // Item topic "http" must NOT produce "Matches interest: tower-http" — the
+        // full interest token has to occur in the item topic at a word boundary.
+        let ace_ctx = ACEContext::default();
+        let explanation = generate_relevance_explanation(
+            "Generic HTTP roundup",
+            0.1,
+            0.3,
+            &[],
+            &ace_ctx,
+            &["http".to_string()],
+            &[interest("tower-http")],
+            &[],
+            &[],
+            0,
+        );
+        assert!(
+            !explanation.contains("tower-http"),
+            "fragment 'http' must not claim interest 'tower-http': {explanation}"
+        );
+    }
+
+    #[test]
+    fn test_interest_exact_match_still_claims() {
+        let ace_ctx = ACEContext::default();
+        let explanation = generate_relevance_explanation(
+            "tower-http middleware deep dive",
+            0.1,
+            0.3,
+            &[],
+            &ace_ctx,
+            &["tower-http".to_string()],
+            &[interest("tower-http")],
+            &[],
+            &[],
+            0,
+        );
+        assert!(
+            explanation.contains("Matches interest: tower-http"),
+            "exact interest match must still be cited: {explanation}"
+        );
+    }
+
+    #[test]
+    fn test_interest_segment_match_still_claims() {
+        // Interest occurring as a whole delimited segment of the topic still counts.
+        let ace_ctx = ACEContext::default();
+        let explanation = generate_relevance_explanation(
+            "React Native release",
+            0.1,
+            0.3,
+            &[],
+            &ace_ctx,
+            &["react-native".to_string()],
+            &[interest("react")],
+            &[],
+            &[],
+            0,
+        );
+        assert!(
+            explanation.contains("Matches interest: react"),
+            "whole-segment interest match must still be cited: {explanation}"
         );
     }
 

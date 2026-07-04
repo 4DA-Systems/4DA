@@ -2,7 +2,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::ace_context::ACEContext;
-use super::utils::{has_word_boundary_match, topic_overlaps};
+use super::utils::{has_word_boundary_match, topic_grounds};
 
 /// Metadata for a tracked dependency from user's project manifests
 #[derive(Debug, Clone)]
@@ -378,6 +378,40 @@ pub(crate) fn is_ambiguous_dep_name(term: &str) -> bool {
         return true; // Very short = always ambiguous unless in SHORT_TECH
     }
     COMMON_ENGLISH_WORDS.contains(&term)
+}
+
+/// Tech-generic tokens that are NOT plausible package-name subterms (so they
+/// don't belong on COMMON_ENGLISH_WORDS, which also gates dep matching) but as
+/// bare TOPICS match nearly everything: every backend post mentions "rest",
+/// every commit touching tests mints "testing". Consulted ONLY by
+/// `is_generic_topic_token` — dependency-matching behavior is unchanged.
+const GENERIC_TOPIC_TOKENS: &[&str] = &[
+    "rest",
+    "async",
+    "sync",
+    "backend",
+    "frontend",
+    "database",
+    "migration",
+    "webhook",
+    "websocket",
+    "testing",
+    "security",
+    "performance",
+];
+
+/// Can this topic token, on its own, corroborate an interest/topic match?
+/// Topic-side mirror of `is_ambiguous_dep_name` (same COMMON_ENGLISH_WORDS
+/// denylist, same SHORT_TECH allowlist) plus the tech-generic topic tokens
+/// above. Generic tokens can never ground a scoring axis (v12); they also
+/// don't survive the startup active_topics prune. Expects a lowercased token.
+pub(crate) fn is_generic_topic_token(t: &str) -> bool {
+    // Known short language names are legitimate topics despite failing the
+    // <=3-char ambiguity gate ("go" the language, not "go" the verb).
+    if super::utils::SHORT_LANGUAGE_NAMES.contains(&t) {
+        return false;
+    }
+    is_ambiguous_dep_name(t) || GENERIC_TOPIC_TOKENS.contains(&t)
 }
 
 /// Infrastructure dependencies are ubiquitous ecosystem tools that don't indicate
@@ -1010,8 +1044,9 @@ pub(crate) fn match_dependencies(
                 }
             }
 
-            // Topic overlap (from extract_topics)
-            if topics.iter().any(|t| topic_overlaps(t, term)) {
+            // Topic grounding (from extract_topics) — strict: a generic shared
+            // fragment ("http" ~ "tower-http") cannot corroborate (v12)
+            if topics.iter().any(|t| topic_grounds(t, term)) {
                 confidence += 0.25;
             }
         }

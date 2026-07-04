@@ -7,7 +7,7 @@ use super::super::ace_context::ACEContext;
 use crate::scoring_config;
 use fourda_macros::score_component;
 
-use super::super::utils::topic_overlaps;
+use super::super::utils::topic_grounds;
 
 /// Compute semantic ACE boost using embeddings
 /// PASIFA: Uses vector similarity instead of keyword matching when embeddings available
@@ -83,20 +83,21 @@ pub(crate) fn compute_semantic_ace_boost(
 }
 
 /// Keyword-based ACE boost fallback when embeddings unavailable
-/// Both topics (from extract_topics) and ace_ctx fields are already lowercase
+/// Both topics (from extract_topics) and ace_ctx fields are already lowercase.
+/// Strict grounding (v12): generic fragments can't earn the boost.
 #[score_component(output_range = "0.0..=0.3")]
 pub(crate) fn compute_keyword_ace_boost(topics: &[String], ace_ctx: &ACEContext) -> f32 {
     let mut boost: f32 = 0.0;
     for topic in topics {
         for active in &ace_ctx.active_topics {
-            if topic_overlaps(topic, active) {
+            if topic_grounds(topic, active) {
                 boost += scoring_config::ACE_ACTIVE_TOPIC_BOOST
                     * ace_ctx.topic_confidence.get(active).copied().unwrap_or(0.5);
                 break;
             }
         }
         for tech in &ace_ctx.detected_tech {
-            if topic_overlaps(topic, tech) {
+            if topic_grounds(topic, tech) {
                 boost += scoring_config::ACE_DETECTED_TECH_BOOST;
                 break;
             }

@@ -861,6 +861,25 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 }
             }
 
+            // Self-heal active_topics: delete generic tokens (canonical predicate
+            // scoring::is_generic_topic_token — "http", "rest", "api", class-name
+            // fragments <=3 chars) plus legacy 'commit-*' rows. These rows fed the
+            // grounding-sensitive axes phantom corroboration before v12's strict
+            // topic_grounds; post-v12 they can't ground, but pruning them heals
+            // existing installs (live DB carried 3,600+ polluted rows) and keeps
+            // display surfaces honest. Same precedent as the Wave-5 purges above.
+            match crate::ace::db::purge_generic_active_topics(&conn) {
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: generic + legacy commit-* active_topics");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: active_topics generic prune failed");
+                }
+            }
+
             // ── Append-only telemetry / audit / learning tables ──────────────
             // These accumulate one row per scoring cycle / AI artifact / trust
             // event and previously had NO retention (unbounded growth). Windows

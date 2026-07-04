@@ -480,8 +480,10 @@ fn extract_topics_from_commit_message(message: &str) -> Vec<String> {
         "webhook",
     ];
 
+    // Word-boundary matched — raw substring `contains` minted `rest` from
+    // "restore" and `auth` from "authentication" (Wave 7).
     for keyword in tech_keywords {
-        if message_lower.contains(keyword) {
+        if crate::scoring::has_word_boundary_match(&message_lower, keyword) {
             topics.insert(keyword.to_string());
         }
     }
@@ -520,13 +522,19 @@ mod tests {
         let topics = extract_topics_from_commit_message("feat: add authentication API");
         // commit-type prefixes are NOT topics (commit metadata, not interests)
         assert!(!topics.contains(&"commit-feat".to_string()));
-        assert!(topics.contains(&"auth".to_string()));
+        // Word-boundary (Wave 7): "authentication" no longer also mints "auth"
+        assert!(topics.contains(&"authentication".to_string()));
+        assert!(!topics.contains(&"auth".to_string()));
         assert!(topics.contains(&"api".to_string()));
 
         let topics = extract_topics_from_commit_message("fix: resolve database migration issue");
         assert!(!topics.contains(&"commit-fix".to_string()));
         assert!(topics.contains(&"database".to_string()));
         assert!(topics.contains(&"migration".to_string()));
+
+        // Word-boundary (Wave 7): "restore" must not mint "rest"
+        let topics = extract_topics_from_commit_message("chore: restore backup config");
+        assert!(!topics.contains(&"rest".to_string()));
     }
 
     #[test]

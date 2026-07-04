@@ -1227,7 +1227,7 @@ fn compute_boosts(
         let matching_work_topics = raw
             .topics
             .iter()
-            .filter(|t| ctx.work_topics.iter().any(|wt| topic_overlaps(t, wt)))
+            .filter(|t| ctx.work_topics.iter().any(|wt| topic_grounds(t, wt)))
             .count();
         match matching_work_topics {
             0 => 0.0,
@@ -1263,7 +1263,7 @@ fn compute_boosts(
                     .intelligence
                     .skill_gaps
                     .iter()
-                    .find(|g| topic_overlaps(t, &g.dependency))
+                    .find(|g| topic_grounds(t, &g.dependency))
                 {
                     if !matched_skill_gaps.contains(&g.dependency) {
                         matched_skill_gaps.push(g.dependency.clone());
@@ -2137,6 +2137,15 @@ pub(crate) fn score_item(
         (None, None)
     };
 
+    // Window title resolved in-memory (open_windows is already loaded) so the
+    // decision-relevant necessity reason can name the decision it claims relevance to.
+    let matched_window_label = matched_window_id.and_then(|wid| {
+        ctx.open_windows
+            .iter()
+            .find(|w| w.id == wid)
+            .map(|w| w.title.clone())
+    });
+
     let necessity_inputs = necessity::NecessityInputs {
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names.clone(),
@@ -2148,6 +2157,7 @@ pub(crate) fn score_item(
         skill_gap_boost,
         matched_skill_gaps: matched_skill_gaps.clone(),
         window_boost,
+        matched_window_label,
         age_hours,
         content_type: Some(content_type.slug().to_string()),
         contradiction_boost,
