@@ -53,6 +53,11 @@ pub struct ProjectDependency {
     pub is_direct: bool,
     pub language: String,
     pub last_scanned: String,
+    /// Provenance: HOW this row was discovered — 'manifest' (declared in a
+    /// manifest file), 'import_scrape' (inferred from source import lines),
+    /// 'lockfile', or 'unknown' (legacy rows written before migration 87).
+    /// The builtin-module self-heal purge keys on this.
+    pub detected_from: String,
 }
 
 // ============================================================================
@@ -70,6 +75,11 @@ pub struct ProjectDependency {
 /// `project_relevance` is a 0.0..1.0 score from ACE path/git analysis.
 /// Example/demo/test directories get low scores (0.1x). The column defaults
 /// to 1.0 in the schema, so existing rows and callers passing 1.0 are unaffected.
+///
+/// `detected_from` is the provenance label ('manifest' | 'import_scrape' |
+/// 'lockfile'); each write is authoritative about how THIS observation was
+/// made, so the conflict path assigns it.
+#[allow(clippy::too_many_arguments)]
 pub fn upsert_dependency(
     conn: &rusqlite::Connection,
     project_path: &str,
@@ -80,6 +90,7 @@ pub fn upsert_dependency(
     is_direct: bool,
     language: &str,
     project_relevance: f32,
+    detected_from: &str,
 ) -> Result<()> {
     upsert_dependency_with_platform(
         conn,
@@ -93,6 +104,7 @@ pub fn upsert_dependency(
         project_relevance,
         None,
         true,
+        detected_from,
     )
 }
 
@@ -114,6 +126,7 @@ pub fn upsert_dependency_with_platform(
     project_relevance: f32,
     target_cfg: Option<&str>,
     platform_active: bool,
+    detected_from: &str,
 ) -> Result<()> {
     // Canonical write guard (tiers 1+2): agent-infra / temp paths and
     // non-project scaffolding (fixture trees, -placeholder dirs) must never
@@ -125,17 +138,49 @@ pub fn upsert_dependency_with_platform(
     }
     let canonical_path = canonicalize_project_path(project_path);
     conn.execute(
-        "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance, target_cfg, platform_active, last_scanned)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'))
+        "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance, target_cfg, platform_active, detected_from, last_scanned)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, datetime('now'))
          ON CONFLICT(project_path, package_name)
-         DO UPDATE SET version = ?4, is_dev = ?5, is_direct = MAX(project_dependencies.is_direct, ?6), project_relevance = ?8, target_cfg = ?9, platform_active = ?10, last_scanned = datetime('now')",
-        params![canonical_path, manifest_type, package_name, version, is_dev as i32, is_direct as i32, language, project_relevance, target_cfg, platform_active as i32],
+         DO UPDATE SET version = ?4, is_dev = ?5, is_direct = MAX(project_dependencies.is_direct, ?6), project_relevance = ?8, target_cfg = ?9, platform_active = ?10, detected_from = ?11, last_scanned = datetime('now')",
+        params![canonical_path, manifest_type, package_name, version, is_dev as i32, is_direct as i32, language, project_relevance, target_cfg, platform_active as i32, detected_from],
     )
     .context("Failed to upsert dependency")?;
     Ok(())
 }
 
-/// Remove direct dependencies for a (project, language) that were NOT present in
+/// Upsert a dependency the MANIFEST ITSELF declares as transitive (go.mod
+/// `// indirect`). Unlike [`upsert_dependency`], the conflict path ASSIGNS
+/// `is_direct = 0` instead of MAX-upgrading: the manifest is authoritative
+/// about the directness of its own modules, so a module that moved from the
+/// direct set to `// indirect` is downgraded on the next scan (the MAX guard
+/// exists to stop LOCKFILE writes demoting manifest rows, which doesn't apply
+/// here — lockfile transitives go to `user_dependencies`, not this table).
+pub fn upsert_manifest_indirect_dependency(
+    conn: &rusqlite::Connection,
+    project_path: &str,
+    manifest_type: &str,
+    package_name: &str,
+    language: &str,
+    project_relevance: f32,
+) -> Result<()> {
+    // Same canonical write guard as upsert_dependency_with_platform.
+    if crate::project_inclusion::is_hard_excluded(project_path) {
+        crate::project_inclusion::log_tier2_exclusion(project_path, "write");
+        return Ok(());
+    }
+    let canonical_path = canonicalize_project_path(project_path);
+    conn.execute(
+        "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance, detected_from, last_scanned)
+         VALUES (?1, ?2, ?3, NULL, 0, 0, ?4, ?5, 'manifest', datetime('now'))
+         ON CONFLICT(project_path, package_name)
+         DO UPDATE SET is_direct = 0, project_relevance = ?5, detected_from = 'manifest', last_scanned = datetime('now')",
+        params![canonical_path, manifest_type, package_name, language, project_relevance],
+    )
+    .context("Failed to upsert manifest-indirect dependency")?;
+    Ok(())
+}
+
+/// Remove dependencies for a (project, language) that were NOT present in
 /// the latest manifest scan.
 ///
 /// Called right after the freshly-parsed manifest deps are upserted, so any dep
@@ -144,8 +189,11 @@ pub fn upsert_dependency_with_platform(
 /// Stale rows otherwise surface as bogus "unmonitored" blind spots (e.g. an
 /// internal workspace crate the user removed weeks ago).
 ///
-/// Scoped to `is_direct = 1`: direct rows are the only ones written from manifest
-/// scans, so transitive rows from other code paths are never touched here.
+/// Covers BOTH direct and indirect rows: every `project_dependencies` row is
+/// written by the manifest scan (lockfile transitives go to
+/// `user_dependencies`), and `current_names` includes the manifest's indirect
+/// set — so an `// indirect` module removed from go.mod is pruned too (it was
+/// previously immortal: the old `is_direct = 1` scope never saw it).
 /// No-op when `current_names` is empty, so a parse that yields nothing (parse
 /// failure, or a genuinely dep-less manifest) cannot wipe a project's deps.
 ///
@@ -163,7 +211,7 @@ pub fn prune_removed_dependencies(
     let placeholders = vec!["?"; current_names.len()].join(", ");
     let sql = format!(
         "DELETE FROM project_dependencies
-         WHERE project_path = ? AND language = ? AND is_direct = 1
+         WHERE project_path = ? AND language = ?
            AND package_name NOT IN ({placeholders})"
     );
     // Bind params in positional order: project_path, language, then keep-list.
@@ -185,7 +233,7 @@ pub fn get_project_dependencies(
     let canonical = canonicalize_project_path(project_path);
     let mut stmt = conn
         .prepare(
-            "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned
+            "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned, detected_from
              FROM project_dependencies
              WHERE project_path = ?1
              ORDER BY package_name",
@@ -208,7 +256,8 @@ pub fn get_project_dependencies(
 
 /// Map a row from the project_dependencies table to a `ProjectDependency`.
 /// Column order must be: id, project_path, manifest_type, package_name,
-///                        version, is_dev, is_direct, language, last_scanned.
+///                        version, is_dev, is_direct, language, last_scanned,
+///                        detected_from.
 fn map_project_dependency_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectDependency> {
     Ok(ProjectDependency {
         id: row.get(0)?,
@@ -220,6 +269,9 @@ fn map_project_dependency_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proje
         is_direct: row.get::<_, i32>(6).unwrap_or(1) != 0,
         language: row.get(7)?,
         last_scanned: row.get(8)?,
+        detected_from: row
+            .get::<_, String>(9)
+            .unwrap_or_else(|_| "unknown".to_string()),
     })
 }
 
@@ -260,7 +312,7 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned
+            "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned, detected_from
              FROM project_dependencies
              ORDER BY project_path, package_name",
         )
@@ -487,6 +539,7 @@ mod tests {
                 project_relevance REAL DEFAULT 1.0,
                 target_cfg TEXT,
                 platform_active INTEGER DEFAULT 1,
+                detected_from TEXT NOT NULL DEFAULT 'unknown',
                 UNIQUE(project_path, package_name)
             );",
         )
@@ -495,53 +548,35 @@ mod tests {
     }
 
     #[test]
-    fn prune_removes_dropped_direct_deps_only() {
+    fn prune_removes_dropped_deps_direct_and_indirect() {
         let conn = setup_deps_db();
         let proj = "D:/proj/app";
         // Two current direct deps + one stale (removed) direct dep.
-        upsert_dependency(
-            &conn,
-            proj,
-            "cargotoml",
-            "serde",
-            None,
-            false,
-            true,
-            "rust",
-            1.0,
-        )
-        .unwrap();
-        upsert_dependency(
-            &conn,
-            proj,
-            "cargotoml",
-            "tokio",
-            None,
-            false,
-            true,
-            "rust",
-            1.0,
-        )
-        .unwrap();
-        upsert_dependency(
-            &conn,
-            proj,
-            "cargotoml",
-            "removed_crate",
-            None,
-            false,
-            true,
-            "rust",
-            1.0,
-        )
-        .unwrap();
-        // A transitive dep (is_direct = 0) must NOT be pruned.
-        conn.execute(
-            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, language, is_direct)
-             VALUES (?1, 'cargotoml', 'transitive_dep', 'rust', 0)",
-            params![canonicalize_project_path(proj)],
-        )
-        .unwrap();
+        for (name, keep) in [("serde", true), ("tokio", true), ("removed_crate", false)] {
+            let _ = keep;
+            upsert_dependency(
+                &conn,
+                proj,
+                "cargotoml",
+                name,
+                None,
+                false,
+                true,
+                "rust",
+                1.0,
+                "manifest",
+            )
+            .unwrap();
+        }
+        // A manifest-indirect dep still IN the manifest (kept via
+        // current_names) and one REMOVED from the manifest. Every
+        // project_dependencies row is manifest-sourced, so indirect rows
+        // absent from the latest scan are pruned too — the old
+        // `is_direct = 1` scope left them immortal.
+        upsert_manifest_indirect_dependency(&conn, proj, "gomod", "kept_indirect", "rust", 1.0)
+            .unwrap();
+        upsert_manifest_indirect_dependency(&conn, proj, "gomod", "removed_indirect", "rust", 1.0)
+            .unwrap();
         // A different-language direct dep must NOT be pruned by a rust scan.
         conn.execute(
             "INSERT INTO project_dependencies (project_path, manifest_type, package_name, language, is_direct)
@@ -550,9 +585,16 @@ mod tests {
         )
         .unwrap();
 
-        let current = vec!["serde".to_string(), "tokio".to_string()];
+        let current = vec![
+            "serde".to_string(),
+            "tokio".to_string(),
+            "kept_indirect".to_string(),
+        ];
         let removed = prune_removed_dependencies(&conn, proj, "rust", &current).unwrap();
-        assert_eq!(removed, 1, "only the dropped direct rust dep is removed");
+        assert_eq!(
+            removed, 2,
+            "dropped direct dep AND dropped indirect dep are removed"
+        );
 
         let names: Vec<String> = conn
             .prepare("SELECT package_name FROM project_dependencies ORDER BY package_name")
@@ -565,8 +607,12 @@ mod tests {
         assert!(names.contains(&"tokio".to_string()));
         assert!(!names.contains(&"removed_crate".to_string()));
         assert!(
-            names.contains(&"transitive_dep".to_string()),
-            "transitive dep must survive"
+            names.contains(&"kept_indirect".to_string()),
+            "indirect dep still in the manifest must survive"
+        );
+        assert!(
+            !names.contains(&"removed_indirect".to_string()),
+            "indirect dep removed from the manifest must be pruned"
         );
         assert!(
             names.contains(&"react".to_string()),
@@ -588,6 +634,7 @@ mod tests {
             true,
             "rust",
             1.0,
+            "manifest",
         )
         .unwrap();
         // An empty keep-list must NOT wipe deps (guards against a parse failure

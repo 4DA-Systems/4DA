@@ -13,6 +13,7 @@
 //! ACE always hits its mark.
 
 pub mod behavior;
+pub(crate) mod builtin_modules;
 pub mod context;
 pub mod db;
 pub mod embedding;
@@ -404,6 +405,15 @@ impl ACE {
                                     }
 
                                     for dep in &signal.dependencies {
+                                        // Provenance: declared in the manifest, or
+                                        // merely INFERRED from source import lines?
+                                        // The builtin self-heal purge keys on this.
+                                        let detected_from =
+                                            if signal.import_scraped_dependencies.contains(dep) {
+                                                "import_scrape"
+                                            } else {
+                                                "manifest"
+                                            };
                                         if let Err(e) = crate::temporal::upsert_dependency(
                                             &conn,
                                             &project_path,
@@ -414,6 +424,7 @@ impl ACE {
                                             true, // direct: from manifest [dependencies]
                                             language,
                                             relevance,
+                                            detected_from,
                                         ) {
                                             tracing::warn!(target: "4da::ace", error = %e, dep = %dep, "Failed to upsert dependency");
                                         }
@@ -429,8 +440,27 @@ impl ACE {
                                             true, // direct: from manifest [dev-dependencies]
                                             language,
                                             relevance,
+                                            "manifest",
                                         ) {
                                             tracing::warn!(target: "4da::ace", error = %e, dep = %dep, "Failed to upsert dev dependency");
+                                        }
+                                    }
+                                    // Manifest-declared transitives (go.mod
+                                    // `// indirect`): persist with is_direct=0
+                                    // — they matter for advisory matching but
+                                    // are NOT the user's direct stack.
+                                    for dep in &signal.indirect_dependencies {
+                                        if let Err(e) =
+                                            crate::temporal::upsert_manifest_indirect_dependency(
+                                                &conn,
+                                                &project_path,
+                                                &manifest_type,
+                                                dep,
+                                                language,
+                                                relevance,
+                                            )
+                                        {
+                                            tracing::warn!(target: "4da::ace", error = %e, dep = %dep, "Failed to upsert indirect dependency");
                                         }
                                     }
 
@@ -460,6 +490,7 @@ impl ACE {
                                                 relevance,
                                                 Some(target_cfg),
                                                 active,
+                                                "manifest",
                                             )
                                         {
                                             tracing::warn!(target: "4da::ace", error = %e, dep = %dep, "Failed to upsert target dependency");
@@ -474,6 +505,7 @@ impl ACE {
                                         .dependencies
                                         .iter()
                                         .chain(signal.dev_dependencies.iter())
+                                        .chain(signal.indirect_dependencies.iter())
                                         .chain(
                                             signal.target_dependencies.iter().map(|(name, _)| name),
                                         )
@@ -528,6 +560,18 @@ impl ACE {
                                                     source: manifest_type.clone(),
                                                 },
                                             ));
+                                            entries.extend(
+                                                signal.indirect_dependencies.iter().map(|d| {
+                                                    crate::db::dep_snapshots::DepEntry {
+                                                        name: d.clone(),
+                                                        ecosystem: ecosystem.clone(),
+                                                        version: None,
+                                                        is_direct: false,
+                                                        is_dev: false,
+                                                        source: manifest_type.clone(),
+                                                    }
+                                                }),
+                                            );
                                             if let Err(e) =
                                                 db.snapshot_project_deps(&project_path, &entries)
                                             {
