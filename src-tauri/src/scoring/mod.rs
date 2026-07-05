@@ -18,6 +18,7 @@ mod context;
 mod dedup;
 mod dependencies;
 mod explanation;
+mod explanation_chain;
 mod gate;
 mod keywords;
 pub(crate) mod necessity;

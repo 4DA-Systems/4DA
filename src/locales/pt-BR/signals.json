@@ -15,12 +15,12 @@
   "action.securityReview": "Revise as implicações de segurança: {{title}}",
   "action.breakingMigration": "Verifique o caminho de migração — mudança importante no {{tech}}",
   "action.breakingReview": "Revise a mudança importante: {{title}}",
-  "action.toolEvaluateStack": "Avalie para seu fluxo de trabalho {{tech}}: {{title}}",
-  "action.toolEvaluate": "Avalie a nova ferramenta: {{title}}",
   "action.trendStack": "Tendência emergente: {{tech}} ganhando tração — {{title}}",
   "action.trendGeneral": "Tendência emergente: {{title}}",
   "action.learnStack": "Aprender — recurso {{tech}}: {{title}}",
   "action.learnGeneral": "Recurso de aprendizado: {{title}}",
   "action.intelStack": "Movimento competitivo no espaço {{tech}}: {{title}}",
-  "action.intelGeneral": "{{type}}: {{title}}"
+  "action.intelGeneral": "{{type}}: {{title}}",
+  "action.toolEvaluateGrounded": "New tool in your orbit — connects to your {{tech}} stack",
+  "action.toolEvaluateUngrounded": "New tool spotted — no confirmed link to your stack"
 }

@@ -15,12 +15,12 @@
   "action.securityReview": "보안 영향 검토: {{title}}",
   "action.breakingMigration": "마이그레이션 경로 확인 — {{tech}} 주요 변경",
   "action.breakingReview": "주요 변경 사항 검토: {{title}}",
-  "action.toolEvaluateStack": "{{tech}} 워크플로에 맞게 평가: {{title}}",
-  "action.toolEvaluate": "새 도구 평가: {{title}}",
   "action.trendStack": "새로운 트렌드: {{tech}} 주목받는 중 — {{title}}",
   "action.trendGeneral": "새로운 트렌드: {{title}}",
   "action.learnStack": "학습 — {{tech}} 리소스: {{title}}",
   "action.learnGeneral": "학습 리소스: {{title}}",
   "action.intelStack": "{{tech}} 분야 경쟁 동향: {{title}}",
-  "action.intelGeneral": "{{type}}: {{title}}"
+  "action.intelGeneral": "{{type}}: {{title}}",
+  "action.toolEvaluateGrounded": "New tool in your orbit — connects to your {{tech}} stack",
+  "action.toolEvaluateUngrounded": "New tool spotted — no confirmed link to your stack"
 }

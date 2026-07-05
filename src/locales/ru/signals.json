@@ -15,12 +15,12 @@
   "action.securityReview": "Проверьте последствия для безопасности: {{title}}",
   "action.breakingMigration": "Проверьте путь миграции — критическое изменение {{tech}}",
   "action.breakingReview": "Проверьте критическое изменение: {{title}}",
-  "action.toolEvaluateStack": "Оцените для вашего рабочего процесса {{tech}}: {{title}}",
-  "action.toolEvaluate": "Оцените новый инструмент: {{title}}",
   "action.trendStack": "Новый тренд: {{tech}} набирает обороты — {{title}}",
   "action.trendGeneral": "Новый тренд: {{title}}",
   "action.learnStack": "Обучение — ресурс по {{tech}}: {{title}}",
   "action.learnGeneral": "Учебный ресурс: {{title}}",
   "action.intelStack": "Конкурентное движение в сфере {{tech}}: {{title}}",
-  "action.intelGeneral": "{{type}}: {{title}}"
+  "action.intelGeneral": "{{type}}: {{title}}",
+  "action.toolEvaluateGrounded": "New tool in your orbit — connects to your {{tech}} stack",
+  "action.toolEvaluateUngrounded": "New tool spotted — no confirmed link to your stack"
 }

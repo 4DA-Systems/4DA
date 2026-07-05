@@ -15,12 +15,12 @@
   "action.securityReview": "مراجعة التأثيرات الأمنية: {{title}}",
   "action.breakingMigration": "تحقق من مسار الترحيل — تغيير جذري في {{tech}}",
   "action.breakingReview": "مراجعة التغيير الجذري: {{title}}",
-  "action.toolEvaluateStack": "تقييم لسير عمل {{tech}} الخاص بك: {{title}}",
-  "action.toolEvaluate": "تقييم أداة جديدة: {{title}}",
   "action.trendStack": "اتجاه ناشئ: {{tech}} يكتسب زخماً — {{title}}",
   "action.trendGeneral": "اتجاه ناشئ: {{title}}",
   "action.learnStack": "تعلّم — مورد {{tech}}: {{title}}",
   "action.learnGeneral": "مورد تعليمي: {{title}}",
   "action.intelStack": "حركة تنافسية في مجال {{tech}}: {{title}}",
-  "action.intelGeneral": "{{type}}: {{title}}"
+  "action.intelGeneral": "{{type}}: {{title}}",
+  "action.toolEvaluateGrounded": "New tool in your orbit — connects to your {{tech}} stack",
+  "action.toolEvaluateUngrounded": "New tool spotted — no confirmed link to your stack"
 }

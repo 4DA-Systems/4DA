@@ -544,7 +544,6 @@ pub(crate) fn score_item(
             &ctx.interests,
             &ctx.declared_tech,
             &matched_skill_gaps,
-            signal_count,
         ))
     } else {
         None
@@ -631,6 +630,7 @@ pub(crate) fn score_item(
         dependency_path: None,
         affected_project_count: None,
         negative_stack_prior: 1.0,
+        explanation_factors: Vec::new(), // V1 pipeline: chain built by V2 only
     };
 
     // Optional signal classification — four gates (all general, tech-stack-agnostic):

@@ -325,7 +325,7 @@ describe('SignalsPanel', () => {
       />,
     );
 
-    expect(screen.getByText('signals.triggers')).toBeInTheDocument();
+    expect(screen.getByText('signals.showTriggers')).toBeInTheDocument();
   });
 
   it('shows similar items count when signal has similar items', () => {

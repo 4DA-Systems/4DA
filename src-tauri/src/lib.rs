@@ -96,8 +96,8 @@ mod types;
 
 // Re-exports from types (preserves `use crate::TypeName` interface)
 pub use types::{
-    AnalysisState, AnalysisStatus, ContextFile, ContextSettings, EnhancedRelevance, LLMJudgment,
-    RelevanceMatch, ScoreBreakdown, SourceRelevance,
+    AnalysisState, AnalysisStatus, ContextFile, ContextSettings, EnhancedRelevance,
+    ExplanationFactor, FactorKind, LLMJudgment, RelevanceMatch, ScoreBreakdown, SourceRelevance,
 };
 pub(crate) use types::{GenericSourceItem, ANALYSIS_TIMEOUT_SECS};
 

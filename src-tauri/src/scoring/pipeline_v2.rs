@@ -1678,10 +1678,12 @@ fn classify_signals(
                 let has_strong_dep = dependencies::is_strongly_grounded(matched_deps);
                 if c.signal_type == signals::SignalType::SecurityAlert && has_strong_dep {
                     c.priority = signals::SignalPriority::Critical;
-                    // Use the highest-confidence match for the alert name
+                    // Name the highest-confidence GROUNDED match — the action
+                    // line is evidence, so it must never name an alias/subterm
+                    // hit the item doesn't actually mention.
                     let best_dep = matched_deps
                         .iter()
-                        .filter(|d| !d.is_dev)
+                        .filter(|d| dependencies::is_strong_grounding_match(d))
                         .max_by(|a, b| {
                             a.confidence
                                 .partial_cmp(&b.confidence)
@@ -1700,7 +1702,11 @@ fn classify_signals(
                 {
                     c.priority = signals::SignalPriority::Alert;
                 }
-                for dep in matched_deps.iter().take(2) {
+                // Trigger chips are rendered as "why flagged" evidence — only
+                // corroborated matches may mint them (an uncorroborated alias
+                // hit would put "dep:tauri-apps-plugin-opener" on an article
+                // that never mentions Tauri).
+                for dep in matched_deps.iter().filter(|d| d.corroborated).take(2) {
                     c.triggers.push(format!("dep:{}", dep.package_name));
                 }
             }
@@ -2067,24 +2073,6 @@ pub(crate) fn score_item(
             && (signal_count >= min_signals
                 || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE));
 
-    // ── Explanation ───────────────────────────────────────────────────
-    let explanation = if relevant || combined_score >= 0.3 {
-        Some(generate_relevance_explanation(
-            input.title,
-            cal.context_score,
-            cal.interest_score,
-            &matches,
-            &ctx.ace_ctx,
-            &raw.topics,
-            &ctx.interests,
-            &ctx.declared_tech,
-            &matched_skill_gaps,
-            signal_count,
-        ))
-    } else {
-        None
-    };
-
     // ── Confidence ────────────────────────────────────────────────────
     let confidence = calculate_confidence(
         cal.context_score,
@@ -2112,9 +2100,10 @@ pub(crate) fn score_item(
         confidence_by_signal.insert("dependency".to_string(), raw.dep_match_score);
     }
 
-    // ── Matched dependency names ──────────────────────────────────────
-    let matched_dep_names: Vec<String> = raw
-        .matched_deps
+    // ── Display-worthy dependency evidence ────────────────────────────
+    let advisory_ecosystems = extract_advisory_ecosystems(input.content);
+    let display_deps = display_worthy_deps(&raw.matched_deps, &advisory_ecosystems);
+    let matched_dep_names: Vec<String> = display_deps
         .iter()
         .map(|d| d.package_name.clone())
         .collect();
@@ -2186,7 +2175,7 @@ pub(crate) fn score_item(
         skill_gap_boost,
         matched_skill_gaps: matched_skill_gaps.clone(),
         window_boost,
-        matched_window_label,
+        matched_window_label: matched_window_label.clone(),
         age_hours,
         content_type: Some(content_type.slug().to_string()),
         contradiction_boost,
@@ -2205,7 +2194,6 @@ pub(crate) fn score_item(
 
     // ── Security applicability + critical alert gate ────────────────────
     let (applicability, is_critical_alert) = if sig_type.as_deref() == Some("security_alert") {
-        let advisory_ecosystems = extract_advisory_ecosystems(input.content);
         security_applicability(&raw.matched_deps, &advisory_ecosystems)
     } else {
         (None, false)
@@ -2228,25 +2216,63 @@ pub(crate) fn score_item(
     } else {
         None
     };
-    let dep_path = if !raw.matched_deps.is_empty() {
-        let dep = &raw.matched_deps[0];
-        Some(if dep.is_dev {
+    // Version/path evidence comes from the strongest DISPLAY dep — showing the
+    // installed version of an uncorroborated alias hit was quietly dishonest.
+    let dep_path = display_deps.first().map(|dep| {
+        if dep.is_dev {
             "dev-only".to_string()
         } else if !dep.is_direct {
             "transitive".to_string()
         } else {
             "direct".to_string()
-        })
-    } else {
-        None
-    };
-    let installed_version = raw.matched_deps.first().and_then(|d| d.version.clone());
+        }
+    });
+    let installed_version = display_deps.first().and_then(|d| d.version.clone());
     let is_version_affected = check_version_affected(
         installed_version.as_deref(),
         affected_versions.as_deref(),
         fixed_version.as_deref(),
     );
     let sec_affected_project_count = count_affected_projects(db, &matched_dep_names) as u32;
+
+    // ── Explanation evidence chain ────────────────────────────────────
+    // Built from the SAME values the pipeline scored with; the subtitle is
+    // rendered from the chain so every surface reads one explanation source.
+    let is_security_necessity =
+        necessity_result.category == necessity::NecessityCategory::SecurityVulnerability;
+    let explanation_factors =
+        explanation_chain::build_explanation_chain(&explanation_chain::ChainInputs {
+            title: input.title,
+            item_topics: &raw.topics,
+            ace_ctx: &ctx.ace_ctx,
+            interests: &ctx.interests,
+            declared_tech: &ctx.declared_tech,
+            matches: &matches,
+            display_deps: &display_deps,
+            dep_match_score: raw.dep_match_score,
+            context_score: cal.context_score,
+            interest_score: cal.interest_score,
+            keyword_score: cal.keyword_score,
+            ace_boost: cal.semantic_boost,
+            feedback_boost: raw.feedback_boost,
+            affinity_mult: raw.affinity_mult,
+            window_boost,
+            matched_window_label: matched_window_label.as_deref(),
+            skill_gap_boost,
+            matched_skill_gaps: &matched_skill_gaps,
+            is_security: is_security_necessity,
+            necessity_score: necessity_result.score,
+            advisory_id: advisory_id.as_deref(),
+            cvss_score,
+            cvss_severity: cvss_severity.as_deref(),
+            fixed_version: fixed_version.as_deref(),
+            installed_version: installed_version.as_deref(),
+        });
+    let explanation = if relevant || combined_score >= 0.3 {
+        explanation_chain::render_subtitle(&explanation_factors)
+    } else {
+        None
+    };
 
     // ── Score breakdown ───────────────────────────────────────────────
     let score_breakdown = ScoreBreakdown {
@@ -2322,6 +2348,7 @@ pub(crate) fn score_item(
         dependency_path: dep_path.clone(),
         affected_project_count: Some(sec_affected_project_count),
         negative_stack_prior,
+        explanation_factors,
     };
 
     // ── STREETS revenue engine mapping ────────────────────────────────
@@ -2377,6 +2404,31 @@ pub(crate) fn score_item(
     }
 }
 
+/// The ONLY dependency list the UI (and every downstream reason string) sees:
+/// matches the item demonstrably names (`corroborated`), or matches the
+/// advisory's own affected-package metadata confirms. The raw match list
+/// additionally carries subterm/alias-expansion hits ("opener" →
+/// tauri-apps-plugin-opener) that are legitimate weak SCORING signals but are
+/// NOT evidence — rendering them produced "matches: vercel,
+/// tauri-apps-plugin-opener, ..." on articles that never mention Tauri.
+/// Ordered by confidence descending so the strongest evidence leads.
+fn display_worthy_deps(
+    matched: &[DepMatch],
+    advisory_ecosystems: &[(String, String)],
+) -> Vec<DepMatch> {
+    let mut display: Vec<DepMatch> = matched
+        .iter()
+        .filter(|d| d.corroborated || advisory_affects_dependency(advisory_ecosystems, d))
+        .cloned()
+        .collect();
+    display.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    display
+}
+
 /// Count how many distinct projects use any of the matched dependencies.
 /// Returns 0 if no deps matched or the DB query fails (graceful degradation).
 fn count_affected_projects(db: &Database, matched_deps: &[String]) -> usize {
@@ -2411,6 +2463,75 @@ fn count_affected_projects(db: &Database, matched_deps: &[String]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ========================================================================
+    // display_worthy_deps — the corroborated-evidence gate for the UI
+    // ========================================================================
+
+    fn disp_dep(name: &str, confidence: f32, corroborated: bool) -> DepMatch {
+        DepMatch {
+            package_name: name.to_string(),
+            confidence,
+            version_delta: dependencies::VersionDelta::Unknown,
+            is_dev: false,
+            is_direct: true,
+            version: None,
+            ecosystem: "npm".to_string(),
+            corroborated,
+        }
+    }
+
+    #[test]
+    fn uncorroborated_deps_never_surface_for_display() {
+        // The Coolify-card class: subterm/alias expansions populate the raw
+        // match list but the item never names those packages. They must not
+        // reach matched_deps-for-display.
+        let raw = vec![
+            disp_dep("vercel", 0.6, true),
+            disp_dep("tauri-apps-plugin-opener", 0.35, false),
+            disp_dep("tauri-apps-plugin-updater", 0.35, false),
+        ];
+        let display = display_worthy_deps(&raw, &[]);
+        let names: Vec<&str> = display.iter().map(|d| d.package_name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["vercel"],
+            "only the corroborated match may be displayed"
+        );
+    }
+
+    #[test]
+    fn display_deps_ordered_by_confidence_descending() {
+        let raw = vec![
+            disp_dep("low", 0.45, true),
+            disp_dep("high", 0.95, true),
+            disp_dep("mid", 0.70, true),
+        ];
+        let display = display_worthy_deps(&raw, &[]);
+        let names: Vec<&str> = display.iter().map(|d| d.package_name.as_str()).collect();
+        assert_eq!(names, vec!["high", "mid", "low"]);
+    }
+
+    #[test]
+    fn advisory_metadata_confirms_uncorroborated_dep_for_display() {
+        // The structured-advisory route is an independent proof: an OSV/CVE
+        // whose Affected-list names the package confirms it even when the
+        // prose text-corroboration failed.
+        let raw = vec![disp_dep("quinn-proto", 0.5, false)];
+        let advisory = vec![("quinn-proto".to_string(), "npm".to_string())];
+        let display = display_worthy_deps(&raw, &advisory);
+        assert_eq!(display.len(), 1);
+        assert_eq!(display[0].package_name, "quinn-proto");
+    }
+
+    #[test]
+    fn no_evidence_yields_empty_display_list() {
+        let raw = vec![disp_dep("react", 0.9, false)];
+        assert!(
+            display_worthy_deps(&raw, &[]).is_empty(),
+            "high confidence without corroboration is still not display evidence"
+        );
+    }
 
     // ========================================================================
     // Language gate (ported from V1 - pipeline.rs lang_mismatch cap)
@@ -2678,18 +2799,23 @@ mod tests {
         };
         let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
 
-        // Sanity: the dep DID match with fast-path-level aggregate strength —
-        // this is exactly the configuration that previously inflated.
+        // Sanity: the raw dep matching DID reach fast-path-level aggregate
+        // strength — this is exactly the configuration that previously
+        // inflated. (Since Wave 8, `matched_deps` carries only display-worthy
+        // corroborated evidence, so the ambiguous `log` hit is correctly
+        // ABSENT from it — asserted below — while its raw scoring effect is
+        // still visible through dep_match_score.)
         let bd = result.score_breakdown.as_ref().expect("breakdown");
-        assert!(
-            bd.matched_deps.iter().any(|d| d == "log"),
-            "fixture must produce a `log` dep match, got {:?}",
-            bd.matched_deps
-        );
         assert!(
             bd.dep_match_score >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD,
             "fixture must clear the aggregate fast-path threshold (got {})",
             bd.dep_match_score
+        );
+        assert!(
+            !bd.matched_deps.iter().any(|d| d == "log"),
+            "an ambiguous uncorroborated `log` hit must not surface as display \
+             evidence, got {:?}",
+            bd.matched_deps
         );
         assert!(
             !bd.strongly_grounded,

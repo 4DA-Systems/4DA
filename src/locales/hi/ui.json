@@ -1346,7 +1346,6 @@
   "missed.freeSubtext": "पूर्ण विश्लेषण अनलॉक करें — देखें कि क्या छिपा हुआ था और यह क्यों मायने रखता है।",
   "missed.freeTeaser": "4DA ने {{rejected}} आइटम फ़िल्टर करके {{relevant}} प्रासंगिक सिग्नल खोजे।",
   "missed.noiseRejected": "शोर अस्वीकृत",
-  "missed.persuasion": "4DA के बिना, यह {{count}} अन्य आइटमों में दबा रह जाता।",
   "missed.scanned": "{{count}} आइटम स्कैन किए गए",
   "missed.signalSurfaced": "सिग्नल पहचाना गया",
   "missed.timeSaved": "समय बचाया गया",
@@ -1897,8 +1896,6 @@
   "result.signalSecurity": "सुरक्षा अलर्ट",
   "result.signalTool": "टूल की खोज",
   "result.signalTrend": "उभरता ट्रेंड",
-  "result.signalsConfirmed": "{{count}} संकेत पुष्ट",
-  "result.signalsConfirmed_other": "{{count}} संकेत पुष्ट",
   "results.affects": "प्रभावित",
   "results.affinityBoost": "{{topic}} में आपकी रुचि के कारण बूस्ट किया गया",
   "results.aiSummary": "AI सारांश",
@@ -2618,8 +2615,6 @@
   "signals.similar_one": "{{count}} संबंधित आइटम",
   "signals.similar_other": "{{count}} संबंधित आइटम",
   "signals.title": "प्रमुख सिग्नल",
-  "signals.triggers_one": "{{count}} कारण",
-  "signals.triggers_other": "{{count}} कारण",
   "sources.customCount": "{{count}} कस्टम",
   "sources.github.added": "GitHub भाषा जोड़ी गई",
   "sources.github.label": "GitHub भाषाएँ",
@@ -3119,5 +3114,10 @@
   "settings.stack.empty": "No projects with dependencies detected yet.",
   "settings.stack.summary": "{{included}} of {{total}} projects counted toward your stack",
   "settings.stack.deps": "{{count}} deps",
-  "settings.stack.applyNote": "Changes apply on the next analysis run."
+  "settings.stack.applyNote": "Changes apply on the next analysis run.",
+  "missed.grounded": "Ranked from {{total}} items scanned today — {{rejected}} filtered out by your stack signals.",
+  "signals.showTriggers": "Why flagged",
+  "result.moreFactors": "+{{count}} more",
+  "results.evidenceChain": "Why this surfaced",
+  "results.evidenceOnlyTopic": "Topic similarity only — no dependency link"
 }

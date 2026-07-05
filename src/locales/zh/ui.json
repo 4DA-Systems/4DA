@@ -1888,8 +1888,6 @@
   "signals.clear": "清除筛选",
   "signals.noMatch": "没有信号匹配当前筛选条件。",
   "signals.hideTriggers": "隐藏原因",
-  "signals.triggers_one": "{{count}} 个原因",
-  "signals.triggers_other": "{{count}} 个原因",
   "signals.match": "{{score}}% 匹配",
   "signals.similar_one": "{{count}} 个相关项目",
   "signals.similar_other": "{{count}} 个相关项目",
@@ -2155,7 +2153,6 @@
   "missed.filtered": "已过滤",
   "missed.freeTeaser": "4DA 过滤了 {{rejected}} 个项目，为您筛选出 {{relevant}} 个相关信号。",
   "missed.freeSubtext": "解锁完整分析 — 查看哪些内容被隐藏以及为什么重要。",
-  "missed.persuasion": "没有 4DA，这条内容会被埋没在其他 {{count}} 个条目中。",
   "profile.loadFailed": "无法加载您的开发者资料。",
   "profile.copyProfile": "复制资料",
   "profile.exportJson": "导出 JSON",
@@ -2399,8 +2396,6 @@
   "feedback.milestone100": "100个信号——活跃用户前5%",
   "feedback.milestone500": "500个信号——深度校准完成",
   "feedback.gettingSharper": "您的信息流持续精进",
-  "result.signalsConfirmed": "{{count}}个信号已确认",
-  "result.signalsConfirmed_other": "{{count}}个信号已确认",
   "result.fallbackContext": "与项目上下文高度匹配",
   "result.fallbackInterests": "匹配已声明的兴趣",
   "result.fallbackRecentWork": "与近期工作相关",
@@ -3052,5 +3047,10 @@
   "settings.stack.empty": "No projects with dependencies detected yet.",
   "settings.stack.summary": "{{included}} of {{total}} projects counted toward your stack",
   "settings.stack.deps": "{{count}} deps",
-  "settings.stack.applyNote": "Changes apply on the next analysis run."
+  "settings.stack.applyNote": "Changes apply on the next analysis run.",
+  "missed.grounded": "Ranked from {{total}} items scanned today — {{rejected}} filtered out by your stack signals.",
+  "signals.showTriggers": "Why flagged",
+  "result.moreFactors": "+{{count}} more",
+  "results.evidenceChain": "Why this surfaced",
+  "results.evidenceOnlyTopic": "Topic similarity only — no dependency link"
 }

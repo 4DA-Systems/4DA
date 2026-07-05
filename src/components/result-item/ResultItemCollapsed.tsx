@@ -40,11 +40,33 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
   const expandedReason = !item.explanation ? fallbackReason : '';
   const relevance = getRelevancePresentation(item.top_score);
   const scoreTooltip = useMemo(() => {
+    const factors = item.score_breakdown?.explanation_factors;
+    if (factors?.length) {
+      // Tooltip shows the full chain: named display + its concrete evidence.
+      return factors.map(f => `${f.display} — ${f.evidence}`).join('\n');
+    }
     const keys = getScoreFactorKeys(item);
     if (keys.length === 0) return undefined;
     return keys.map(k => t(k)).join('\n');
   }, [item, t]);
-  const chipKeys = useMemo(() => getScoreChipKeys(item), [item]);
+  // Rendering contract: this dense list row surfaces evidence AS chips, so the
+  // STRONGEST factor must lead as the first chip (chain is trust-ordered, so
+  // factor[0] is the highest-trust evidence — "Names your dependency axios",
+  // "Security advisory affects your dependency X"). The full prose + evidence
+  // is in the score tooltip and the expanded EvidenceChain. "+N more" appears
+  // ONLY as a suffix to named factor chips — never a bare count. Legacy generic
+  // chips remain solely for chain-less items.
+  const factorChips = useMemo(() => {
+    const factors = item.score_breakdown?.explanation_factors;
+    if (!factors?.length) return null;
+    const chips = factors.slice(0, 3).map(f => f.display);
+    const remaining = factors.length - 3;
+    return { chips, remaining: remaining > 0 ? remaining : 0 };
+  }, [item.score_breakdown?.explanation_factors]);
+  const chipKeys = useMemo(
+    () => (factorChips ? [] : getScoreChipKeys(item)),
+    [factorChips, item],
+  );
 
   const recordTitleClick = useCallback(() => {
     const topics = extractTechTopics(item.title);
@@ -76,8 +98,23 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
           {t(relevance.labelKey)}
         </button>
 
-        {/* Reason chips: top 1-2 scoring factors */}
-        {chipKeys.length > 0 && chipKeys.map(k => (
+        {/* Reason chips: named evidence factors 2..4 from the explanation chain */}
+        {factorChips && factorChips.chips.map(display => (
+          <span
+            key={display}
+            className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-text-primary/[0.04] text-text-muted border border-border/40 max-w-[180px] truncate"
+            title={display}
+          >
+            {display}
+          </span>
+        ))}
+        {factorChips && factorChips.remaining > 0 && (
+          <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded text-text-muted/70">
+            {t('result.moreFactors', { count: factorChips.remaining })}
+          </span>
+        )}
+        {/* Legacy generic chips — chain-less items only */}
+        {!factorChips && chipKeys.length > 0 && chipKeys.map(k => (
           <span
             key={k}
             className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-text-primary/[0.04] text-text-muted border border-border/40"
