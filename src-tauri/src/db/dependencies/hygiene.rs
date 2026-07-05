@@ -284,7 +284,7 @@ pub struct BuiltinImportPurge {
     /// Builtin-module rows deleted from `dependency_snapshots`.
     pub dependency_snapshots: usize,
     /// Open decision windows closed because their dependency was a builtin
-    /// with no surviving versioned dependency row.
+    /// with no surviving dependency row of the same name.
     pub windows_closed: usize,
 }
 
@@ -294,24 +294,63 @@ impl BuiltinImportPurge {
     }
 }
 
-/// The ecosystem labels that participate in the builtin purge. Rust/go/etc.
-/// rows are NEVER candidates — `http`/`url` in `ecosystem='rust'` are real
-/// crates.
-const BUILTIN_PURGE_ECOSYSTEMS: &str =
+/// True when `column` exists on `table` (which must exist).
+fn column_exists(conn: &rusqlite::Connection, table: &str, column: &str) -> bool {
+    conn.query_row(
+        &format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"),
+        params![column],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|n| n > 0)
+    .unwrap_or(false)
+}
+
+/// The ecosystem labels whose PROVENANCE-KEYED builtin purge arm applies
+/// (js/py builtin registries are name-based and unambiguous). Rust rows are
+/// NEVER candidates — `http`/`url` in `ecosystem='rust'` are real crates.
+const IMPORT_SCRAPE_PURGE_ECOSYSTEMS: &str =
     "('javascript', 'js', 'npm', 'node', 'python', 'py', 'pypi', 'pip')";
 
-/// Delete import-scraped builtin-module rows from one dependency table.
-/// The pollution signature is exactly: `version IS NULL AND is_direct = 1`
-/// (import scrape can never resolve a version, and always writes direct) in a
-/// javascript/python ecosystem row whose name is a language builtin. The
-/// builtin predicate is evaluated in Rust against the canonical registry
-/// (`ace::builtin_modules`) so SQL can never drift from it.
+/// Ecosystems the LEGACY (provenance-unknown) heuristic arm sweeps: js/py
+/// plus go — pre-fix go import scrape stored stdlib packages by last path
+/// segment ("http" from net/http, "json" from encoding/json).
+const LEGACY_PURGE_ECOSYSTEMS: &str =
+    "('javascript', 'js', 'npm', 'node', 'python', 'py', 'pypi', 'pip', 'go', 'golang')";
+
+/// Legacy-arm builtin predicate: js/py via the canonical registries; go via
+/// the curated stdlib last-segment list (full go module paths never match).
+fn is_legacy_builtin_row(ecosystem: &str, name: &str) -> bool {
+    match ecosystem.to_lowercase().as_str() {
+        "go" | "golang" => crate::ace::builtin_modules::is_go_stdlib_name(&name.to_lowercase()),
+        _ => crate::ace::builtin_modules::is_builtin_for_ecosystem(ecosystem, name),
+    }
+}
+
+/// Delete builtin-module rows from one dependency table. Two arms:
 ///
-/// What this deliberately KEEPS:
-/// - versioned rows: npm polyfill packages (`buffer@5.7.1`, `events@3.3.0`,
+/// **Arm A — provenance-keyed** (`detected_from = 'import_scrape'`): the
+/// scanner itself labeled the row as inferred from source import lines, so a
+/// builtin name here is pollution by definition, versioned or not. Rows
+/// labeled 'manifest' are IMMUNE — a user CAN declare the npm `buffer`
+/// polyfill in package.json, and its row may legitimately carry
+/// `version = NULL` (no lockfile). js/py ecosystems only: post-fix go scrape
+/// filters stdlib by full import path before persisting, so surviving go
+/// 'import_scrape' rows are legitimate modules.
+///
+/// **Arm B — legacy heuristic** (`detected_from = 'unknown'`, i.e. rows
+/// written before migration 87; also every `dependency_snapshots` row — that
+/// table has no provenance column): builtin name + `version IS NULL` +
+/// `is_direct = 1`, over js/py/go. One-shot best-effort by design: a
+/// manifest-declared builtin-shadow row that predates provenance is purged
+/// ONCE here, then re-added by the next scan with provenance='manifest' and
+/// permanently immune — churn happens at most once, then stable.
+///
+/// What both arms deliberately KEEP:
+/// - versioned legacy rows: npm polyfills (`buffer@5.7.1`, `events@3.3.0`,
 ///   `string_decoder@1.3.0`) come from lockfiles WITH versions;
-/// - `is_direct = 0` rows: lockfile transitives, even unversioned;
-/// - every non-js/py ecosystem: the Rust `http`/`url` CRATES survive.
+/// - `is_direct = 0` legacy rows: lockfile transitives, even unversioned;
+/// - every rust row: the `http`/`url`/`base64` CRATES survive;
+/// - full-path go module rows (`github.com/...` always contains a dot).
 fn purge_builtin_rows(
     conn: &rusqlite::Connection,
     table: &str,
@@ -320,46 +359,80 @@ fn purge_builtin_rows(
     if !table_exists(conn, table) {
         return Ok(0);
     }
-    let rows: Vec<(i64, String, String)> = conn
-        .prepare(&format!(
-            "SELECT rowid, package_name, {ecosystem_col} FROM {table}
-             WHERE version IS NULL AND is_direct = 1
-               AND LOWER({ecosystem_col}) IN {BUILTIN_PURGE_ECOSYSTEMS}"
-        ))?
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })?
-        .filter_map(std::result::Result::ok)
-        .collect();
-
+    let has_provenance = column_exists(conn, table, "detected_from");
     let mut deleted = 0usize;
-    for (rowid, name, ecosystem) in rows {
-        if crate::ace::builtin_modules::is_builtin_for_ecosystem(&ecosystem, &name) {
-            deleted += conn.execute(
-                &format!("DELETE FROM {table} WHERE rowid = ?1"),
-                params![rowid],
-            )?;
-        }
+
+    let mut delete_matching =
+        |sql: String, predicate: &dyn Fn(&str, &str) -> bool| -> SqliteResult<()> {
+            let rows: Vec<(i64, String, String)> = conn
+                .prepare(&sql)?
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })?
+                .filter_map(std::result::Result::ok)
+                .collect();
+            for (rowid, name, ecosystem) in rows {
+                if predicate(&ecosystem, &name) {
+                    deleted += conn.execute(
+                        &format!("DELETE FROM {table} WHERE rowid = ?1"),
+                        params![rowid],
+                    )?;
+                }
+            }
+            Ok(())
+        };
+
+    // Arm A: provenance-keyed.
+    if has_provenance {
+        delete_matching(
+            format!(
+                "SELECT rowid, package_name, {ecosystem_col} FROM {table}
+                 WHERE detected_from = 'import_scrape'
+                   AND LOWER({ecosystem_col}) IN {IMPORT_SCRAPE_PURGE_ECOSYSTEMS}"
+            ),
+            &crate::ace::builtin_modules::is_builtin_for_ecosystem,
+        )?;
     }
+
+    // Arm B: legacy heuristic, restricted to provenance-unknown rows when the
+    // column exists (tables without it are all-legacy by definition).
+    let legacy_filter = if has_provenance {
+        "AND detected_from = 'unknown'"
+    } else {
+        ""
+    };
+    delete_matching(
+        format!(
+            "SELECT rowid, package_name, {ecosystem_col} FROM {table}
+             WHERE version IS NULL AND is_direct = 1 {legacy_filter}
+               AND LOWER({ecosystem_col}) IN {LEGACY_PURGE_ECOSYSTEMS}"
+        ),
+        &is_legacy_builtin_row,
+    )?;
+
     Ok(deleted)
 }
 
 /// Self-heal purge for import-scraped BUILTIN modules persisted as user
 /// dependencies (Node builtins `fs`/`path`/`http`/..., Python stdlib
-/// `os`/`json`/...). The scanner no longer persists these (see
-/// `ace::builtin_modules`), but existing installs carry rows written before
-/// the fix — one of which ("http" from an import scrape) minted a phantom
+/// `os`/`json`/..., go stdlib last segments). The scanner no longer persists
+/// these (see `ace::builtin_modules`) and now labels every row's provenance
+/// (`detected_from`), but existing installs carry rows written before the
+/// fix — one of which ("http" from an import scrape) minted a phantom
 /// "Security: http" decision window. Sweeps `user_dependencies`,
 /// `project_dependencies` (which would otherwise re-seed `user_dependencies`
-/// on the next sync), and `dependency_snapshots`; then closes open decision
-/// windows whose `dependency` is a builtin name with no surviving VERSIONED
-/// `user_dependencies` row of the same name (a window on "http" backed by the
-/// real Rust `http` crate at 1.4.x stays open). Idempotent; single
-/// transaction. Mirrors the #212/#214 startup self-heal precedent.
+/// on the next sync), and `dependency_snapshots` (see [`purge_builtin_rows`]
+/// for the two-arm provenance/legacy semantics); then closes open decision
+/// windows whose `dependency` is a builtin name with NO surviving
+/// `user_dependencies` row of the same name — any surviving row protects the
+/// window, versioned or not (the rust `url` crate can legitimately sit at
+/// `version = NULL` after a manifest-only scan, and its window must not be
+/// invalidated). Idempotent; single transaction. Mirrors the #212/#214
+/// startup self-heal precedent.
 pub fn purge_builtin_import_dependencies(
     conn: &rusqlite::Connection,
 ) -> SqliteResult<BuiltinImportPurge> {
@@ -388,13 +461,19 @@ pub fn purge_builtin_import_dependencies(
         for (id, dep) in open {
             let name = dep.to_lowercase();
             let is_builtin = crate::ace::builtin_modules::is_node_builtin(&name)
-                || crate::ace::builtin_modules::is_python_stdlib(&name);
+                || crate::ace::builtin_modules::is_python_stdlib(&name)
+                || crate::ace::builtin_modules::is_go_stdlib_name(&name);
             if !is_builtin {
                 continue;
             }
+            // Survivor = ANY same-name dependency row still present after
+            // this purge's deletions, regardless of version or ecosystem.
+            // The purge keeps real-but-unversioned rows (e.g. the rust
+            // http/url crates from a manifest-only scan), and a window
+            // backed by a row the purge KEPT must never be invalidated.
             let survivors: i64 = tx.query_row(
                 "SELECT COUNT(*) FROM user_dependencies
-                 WHERE LOWER(package_name) = ?1 AND version IS NOT NULL",
+                 WHERE LOWER(package_name) = ?1",
                 params![name],
                 |row| row.get(0),
             )?;
@@ -439,9 +518,18 @@ impl OrphanedProjectPurge {
 /// - relative / empty paths: never missing (nothing sane to probe);
 /// - UNC / network shares: never missing (an offline share is not a deleted
 ///   project, and probing a dead share can block for the SMB timeout);
-/// - a path whose volume ROOT is also gone (unplugged external drive): never
-///   missing — the project may come back with the drive.
+/// - only a POSITIVE `ErrorKind::NotFound` counts as missing —
+///   permission-denied or any other IO error means "can't tell", not "gone"
+///   (`Path::exists()` folds every error into `false`, which pruned
+///   live-but-unreadable projects);
+/// - the volume root must POSITIVELY resolve (`metadata` Ok): an unplugged
+///   external drive or a disconnected MAPPED network letter (`Z:\`) makes
+///   the root probe error out — keep everything under it. A dead mapped
+///   drive can still block for the SMB timeout, which is why the caller
+///   runs this on a blocking thread (`spawn_blocking`), never on the async
+///   runtime.
 pub fn project_path_missing_on_disk(path: &str) -> bool {
+    use std::io::ErrorKind;
     let trimmed = path.trim();
     if trimmed.is_empty() || trimmed.starts_with("\\\\") || trimmed.starts_with("//") {
         return false;
@@ -450,15 +538,15 @@ pub fn project_path_missing_on_disk(path: &str) -> bool {
     if !p.is_absolute() {
         return false;
     }
-    if p.exists() {
-        return false;
+    match std::fs::metadata(p) {
+        Ok(_) => return false,
+        Err(e) if e.kind() != ErrorKind::NotFound => return false,
+        Err(_) => {}
     }
-    if let Some(root) = p.ancestors().last() {
-        if !root.as_os_str().is_empty() && !root.exists() {
-            return false;
-        }
+    match p.ancestors().last() {
+        Some(root) if !root.as_os_str().is_empty() => std::fs::metadata(root).is_ok(),
+        _ => false,
     }
-    true
 }
 
 /// Reconcile dependency tables against the filesystem: `prune_removed_dependencies`

@@ -120,6 +120,13 @@ pub struct ProjectSignal {
     /// advisory matching).
     #[serde(default)]
     pub indirect_dependencies: Vec<String>,
+    /// The subset of `dependencies` that came from the SOURCE-IMPORT scrape
+    /// rather than the manifest itself (the merge in `check_manifests` only
+    /// adds names not already declared, so the sets are disjoint). Persisted
+    /// with provenance `detected_from = 'import_scrape'` so the builtin
+    /// self-heal purge can tell inferred rows from declared ones.
+    #[serde(default)]
+    pub import_scraped_dependencies: Vec<String>,
     /// Platform-gated DIRECT deps from `[target.'cfg(...)'.dependencies]`:
     /// (package name, target spec e.g. "cfg(windows)"). Used to flag advisories
     /// that aren't relevant on the user's build platform.
@@ -431,7 +438,9 @@ impl ProjectScanner {
                 }
             }
 
-            // Merge unique import deps into ALL signals from this directory
+            // Merge unique import deps into ALL signals from this directory,
+            // recording them as import-scraped so persistence can label their
+            // provenance (detected_from = 'import_scrape').
             if !import_deps.is_empty() {
                 for signal in &mut signals[signals_start..] {
                     for dep in &import_deps {
@@ -439,6 +448,7 @@ impl ProjectScanner {
                             && !signal.dev_dependencies.contains(dep)
                         {
                             signal.dependencies.push(dep.clone());
+                            signal.import_scraped_dependencies.push(dep.clone());
                         }
                     }
                 }
@@ -464,6 +474,7 @@ impl ProjectScanner {
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: chrono::Utc::now().to_rfc3339(),
             project_license: None,
@@ -1938,9 +1949,13 @@ fn pep508_package_name(spec: &str) -> Option<String> {
 /// user's runtime stack.
 pub(crate) fn parse_pyproject_dependencies(content: &str) -> Vec<String> {
     let mut deps: Vec<String> = Vec::new();
-    let mut push = |name: String| {
-        if !deps.contains(&name) {
-            deps.push(name);
+    let mut push = |name: &str| {
+        let name = name.trim().trim_matches(|c| c == '"' || c == '\'');
+        if !name.is_empty()
+            && !name.eq_ignore_ascii_case("python")
+            && !deps.iter().any(|d| d == name)
+        {
+            deps.push(name.to_string());
         }
     };
 
@@ -1954,18 +1969,32 @@ pub(crate) fn parse_pyproject_dependencies(content: &str) -> Vec<String> {
     let mut in_project_deps_array = false;
 
     for raw_line in content.lines() {
-        let line = raw_line.trim();
-        if line.is_empty() || line.starts_with('#') {
+        // Strip TOML comments FIRST (a '#' outside string literals): a
+        // commented-out spec inside the dependencies array must not mint a
+        // phantom dep, and a ']' inside a comment must not close the array.
+        let line = strip_toml_comment(raw_line).trim();
+        if line.is_empty() {
             continue;
         }
 
-        // Section headers reset all sub-state.
-        if line.starts_with('[') {
-            in_project_deps_array = false;
-            section = match line {
-                "[project]" => Section::Project,
-                "[tool.poetry.dependencies]" => Section::PoetryDeps,
-                _ => Section::Other,
+        // Section headers reset all sub-state. Only recognized OUTSIDE a
+        // multi-line array (a legal TOML array continuation never starts a
+        // header). Trailing comments/whitespace are already stripped.
+        if !in_project_deps_array && line.starts_with('[') && line.ends_with(']') {
+            let header = line[1..line.len() - 1].trim();
+            section = match header {
+                "project" => Section::Project,
+                "tool.poetry.dependencies" => Section::PoetryDeps,
+                _ => {
+                    // Poetry subtable form for deps with extras/markers:
+                    // [tool.poetry.dependencies.django] (possibly quoted:
+                    // [tool.poetry.dependencies."zope.interface"]) DECLARES
+                    // dep NAME; its body is version/extras keys, not deps.
+                    if let Some(name) = header.strip_prefix("tool.poetry.dependencies.") {
+                        push(name);
+                    }
+                    Section::Other
+                }
             };
             continue;
         }
@@ -1975,7 +2004,7 @@ pub(crate) fn parse_pyproject_dependencies(content: &str) -> Vec<String> {
                 if in_project_deps_array {
                     for spec in extract_quoted_strings(line) {
                         if let Some(name) = pep508_package_name(&spec) {
-                            push(name);
+                            push(&name);
                         }
                     }
                     // A ']' inside a quoted spec ("uvicorn[standard]>=0.29")
@@ -1990,7 +2019,7 @@ pub(crate) fn parse_pyproject_dependencies(content: &str) -> Vec<String> {
                         if after_eq.starts_with('[') {
                             for spec in extract_quoted_strings(after_eq) {
                                 if let Some(name) = pep508_package_name(&spec) {
-                                    push(name);
+                                    push(&name);
                                 }
                             }
                             in_project_deps_array = !closes_toml_array(after_eq);
@@ -2001,10 +2030,7 @@ pub(crate) fn parse_pyproject_dependencies(content: &str) -> Vec<String> {
             Section::PoetryDeps => {
                 // `pkg = "^1.0"` or `pkg = { version = "...", ... }`
                 if let Some((key, _value)) = line.split_once('=') {
-                    let name = key.trim().trim_matches('"');
-                    if !name.is_empty() && !name.eq_ignore_ascii_case("python") {
-                        push(name.to_string());
-                    }
+                    push(key);
                 }
             }
             Section::Other => {}
@@ -2014,28 +2040,55 @@ pub(crate) fn parse_pyproject_dependencies(content: &str) -> Vec<String> {
     deps
 }
 
-/// True when a `]` appears on the line OUTSIDE double-quoted strings — i.e.
-/// the line actually closes a TOML array (a `]` inside a spec like
-/// `"uvicorn[standard]>=0.29"` does not count).
+/// Slice `line` up to the first '#' that sits OUTSIDE a TOML string literal
+/// (both `"basic"` and `'literal'` quoting). Escaped quotes inside basic
+/// strings are not modeled — PEP 508 specs don't contain them, and this is a
+/// dependency-name extractor, not a TOML validator.
+fn strip_toml_comment(line: &str) -> &str {
+    let mut in_double = false;
+    let mut in_single = false;
+    for (i, c) in line.char_indices() {
+        match c {
+            '"' if !in_single => in_double = !in_double,
+            '\'' if !in_double => in_single = !in_single,
+            '#' if !in_double && !in_single => return &line[..i],
+            _ => {}
+        }
+    }
+    line
+}
+
+/// True when a `]` appears on the line OUTSIDE string literals — i.e. the
+/// line actually closes a TOML array (a `]` inside a spec like
+/// `"uvicorn[standard]>=0.29"` or `'pydantic[email]'` does not count).
 fn closes_toml_array(line: &str) -> bool {
-    let mut in_quote = false;
+    let mut in_double = false;
+    let mut in_single = false;
     for c in line.chars() {
         match c {
-            '"' => in_quote = !in_quote,
-            ']' if !in_quote => return true,
+            '"' if !in_single => in_double = !in_double,
+            '\'' if !in_double => in_single = !in_single,
+            ']' if !in_double && !in_single => return true,
             _ => {}
         }
     }
     false
 }
 
-/// All double-quoted string literals on a line (used for TOML array entries).
+/// All string literals on a line — TOML allows both `"basic"` and
+/// `'literal'` quoting for array entries; each is matched to its own closing
+/// quote (used for the dependencies array entries).
 fn extract_quoted_strings(line: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = line;
-    while let Some(start) = rest.find('"') {
+    while let Some(start) = rest.find(['"', '\'']) {
+        let quote = if rest[start..].starts_with('"') {
+            '"'
+        } else {
+            '\''
+        };
         let after = &rest[start + 1..];
-        match after.find('"') {
+        match after.find(quote) {
             Some(end) => {
                 out.push(after[..end].to_string());
                 rest = &after[end + 1..];
@@ -2530,6 +2583,7 @@ libc = "0.2"
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -2583,6 +2637,7 @@ pretty_assertions = "1.0"
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -2642,6 +2697,7 @@ tokio = { version = "1", features = ["full"] }
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -2708,6 +2764,7 @@ tokio = { version = "1", features = ["full"] }
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -2751,6 +2808,7 @@ tokio = { version = "1", features = ["full"] }
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -2777,6 +2835,7 @@ tokio = { version = "1", features = ["full"] }
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -2916,6 +2975,108 @@ dependencies = ["requests>=2.31", "httpx"]
         scanner.parse_pyproject_toml(content, &mut signal);
         assert!(signal.dependencies.contains(&"requests".to_string()));
         assert!(signal.dependencies.contains(&"httpx".to_string()));
+    }
+
+    /// Finding [6]: inline TOML comments inside the dependencies array must
+    /// neither mint phantom deps nor prematurely close the array via a ']'
+    /// inside the comment text.
+    #[test]
+    fn test_parse_pyproject_inline_comments_in_deps_array() {
+        let content = r#"
+[project]
+name = "commented"
+dependencies = [   # runtime deps ["core"]
+    "fastapi>=0.111",  # was "flask" before the rewrite
+    # "celery>=5.0",   commented-out spec must NOT mint a dep
+    "uvicorn",         # ends with bracket-ish text ]
+    "pydantic",
+]
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::PyprojectToml, "python");
+        scanner.parse_pyproject_toml(content, &mut signal);
+        for dep in ["fastapi", "uvicorn", "pydantic"] {
+            assert!(
+                signal.dependencies.contains(&dep.to_string()),
+                "declared dep parsed despite comments: {dep}"
+            );
+        }
+        for phantom in ["flask", "celery", "core"] {
+            assert!(
+                !signal.dependencies.contains(&phantom.to_string()),
+                "comment text must not mint a dep: {phantom}"
+            );
+        }
+    }
+
+    /// Finding [8]: TOML single-quoted literal strings are legal array
+    /// entries and must parse like double-quoted ones.
+    #[test]
+    fn test_parse_pyproject_single_quoted_literals() {
+        let content = "
+[project]
+name = 'tiny'
+dependencies = [
+    'requests>=2.31',
+    'pydantic[email]>=2.0',
+    \"httpx\",
+]
+";
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::PyprojectToml, "python");
+        scanner.parse_pyproject_toml(content, &mut signal);
+        assert!(signal.dependencies.contains(&"requests".to_string()));
+        assert!(
+            signal.dependencies.contains(&"pydantic".to_string()),
+            "']' inside a single-quoted extras spec must not close the array"
+        );
+        assert!(signal.dependencies.contains(&"httpx".to_string()));
+    }
+
+    /// Finding [7]: Poetry subtable form ([tool.poetry.dependencies.NAME])
+    /// declares NAME; headers with trailing comments/whitespace still match.
+    #[test]
+    fn test_parse_pyproject_poetry_subtable_and_header_comments() {
+        let content = r#"
+[tool.poetry]
+name = "acme"
+
+[tool.poetry.dependencies]   # runtime deps
+python = "^3.11"
+requests = "^2.31"
+
+[tool.poetry.dependencies.django]   # extras/markers form
+version = "^5.0"
+extras = ["argon2"]
+
+[tool.poetry.dependencies."zope.interface"]
+version = "^6.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::PyprojectToml, "python");
+        scanner.parse_pyproject_toml(content, &mut signal);
+        assert!(signal.dependencies.contains(&"requests".to_string()));
+        assert!(
+            signal.dependencies.contains(&"django".to_string()),
+            "subtable-form dep declared"
+        );
+        assert!(
+            signal.dependencies.contains(&"zope.interface".to_string()),
+            "quoted subtable-form dep declared"
+        );
+        assert!(
+            !signal.dependencies.contains(&"version".to_string())
+                && !signal.dependencies.contains(&"extras".to_string()),
+            "subtable BODY keys are not deps"
+        );
+        assert!(
+            !signal.dependencies.contains(&"pytest".to_string()),
+            "dev group still excluded"
+        );
+        assert!(signal.frameworks.contains(&"django".to_string()));
     }
 
     #[test]
@@ -3233,6 +3394,7 @@ axum = "0.7"
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,

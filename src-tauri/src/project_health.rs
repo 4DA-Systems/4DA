@@ -159,6 +159,7 @@ mod tests {
                 last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
                 target_cfg TEXT,
                 platform_active INTEGER DEFAULT 1,
+                detected_from TEXT NOT NULL DEFAULT 'unknown',
                 UNIQUE(project_path, package_name)
             );
             CREATE INDEX IF NOT EXISTS idx_deps_package ON project_dependencies(package_name);
@@ -207,6 +208,7 @@ mod tests {
             true,
             "rust",
             1.0,
+            "manifest",
         )
         .unwrap();
         upsert_dependency(
@@ -219,6 +221,7 @@ mod tests {
             true,
             "rust",
             1.0,
+            "manifest",
         )
         .unwrap();
 
@@ -249,6 +252,7 @@ mod tests {
             true,
             "rust",
             1.0,
+            "manifest",
         )
         .unwrap();
         upsert_dependency(
@@ -261,6 +265,7 @@ mod tests {
             true,
             "rust",
             1.0,
+            "manifest",
         )
         .unwrap();
 

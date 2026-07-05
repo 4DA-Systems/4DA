@@ -405,6 +405,15 @@ impl ACE {
                                     }
 
                                     for dep in &signal.dependencies {
+                                        // Provenance: declared in the manifest, or
+                                        // merely INFERRED from source import lines?
+                                        // The builtin self-heal purge keys on this.
+                                        let detected_from =
+                                            if signal.import_scraped_dependencies.contains(dep) {
+                                                "import_scrape"
+                                            } else {
+                                                "manifest"
+                                            };
                                         if let Err(e) = crate::temporal::upsert_dependency(
                                             &conn,
                                             &project_path,
@@ -415,6 +424,7 @@ impl ACE {
                                             true, // direct: from manifest [dependencies]
                                             language,
                                             relevance,
+                                            detected_from,
                                         ) {
                                             tracing::warn!(target: "4da::ace", error = %e, dep = %dep, "Failed to upsert dependency");
                                         }
@@ -430,6 +440,7 @@ impl ACE {
                                             true, // direct: from manifest [dev-dependencies]
                                             language,
                                             relevance,
+                                            "manifest",
                                         ) {
                                             tracing::warn!(target: "4da::ace", error = %e, dep = %dep, "Failed to upsert dev dependency");
                                         }
@@ -479,6 +490,7 @@ impl ACE {
                                                 relevance,
                                                 Some(target_cfg),
                                                 active,
+                                                "manifest",
                                             )
                                         {
                                             tracing::warn!(target: "4da::ace", error = %e, dep = %dep, "Failed to upsert target dependency");

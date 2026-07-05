@@ -179,9 +179,15 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // ace::builtin_modules + startup purge of existing rows + stale-window close),
 // marks go.mod `// indirect` modules is_direct=0, parses pyproject
 // dependencies section-aware instead of whole-file substring, and prunes deps
-// of deleted/moved projects after each full scan. The bump re-stamps the
-// corpus so items scored against the polluted dep set re-score against the
-// clean one (same failure mode as v6/v9: merged-but-dark without a bump).
+// of deleted/moved projects after each full scan. Adversarial-review
+// hardening (same wave): migration 87 adds a `detected_from` provenance
+// column ('manifest' | 'lockfile' | 'import_scrape' | legacy 'unknown') to
+// user_dependencies + project_dependencies — the purge deletes import_scrape
+// builtins by provenance, keeps manifest-declared builtin-shadow packages
+// (npm `buffer` polyfill), and treats provenance-unknown rows with the
+// one-shot version-NULL heuristic (js/py/go). The bump re-stamps the corpus
+// so items scored against the polluted dep set re-score against the clean
+// one (same failure mode as v6/v9: merged-but-dark without a bump).
 pub(crate) const PIPELINE_VERSION: i32 = 14;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1

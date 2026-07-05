@@ -235,10 +235,12 @@ static PYTHON_STDLIB_SET: LazyLock<HashSet<&'static str>> =
 /// purpose for bare names (npm names are lowercase; builtins are too), but the
 /// purge path lowercases before calling, which is a no-op for these names.
 pub(crate) fn is_node_builtin(specifier: &str) -> bool {
-    if let Some(rest) = specifier.strip_prefix("node:") {
-        // `node:` guarantees a builtin; check the stripped name too so callers
-        // that pass "node:fs" and callers that pass "fs" agree.
-        return !rest.is_empty() || specifier == "node:";
+    if specifier.strip_prefix("node:").is_some() {
+        // The node: namespace is builtin-only by definition (npm package
+        // names cannot contain ':'), so ANY node:-prefixed specifier is a
+        // builtin — including prefix-only ones like node:test / node:sqlite
+        // that have no bare form and are deliberately absent from the list.
+        return true;
     }
     NODE_BUILTIN_SET.contains(specifier)
 }
@@ -254,6 +256,32 @@ pub(crate) fn is_python_stdlib(module: &str) -> bool {
 /// a domain (`github.com/...`, `golang.org/...`).
 pub(crate) fn is_go_stdlib_import(import_path: &str) -> bool {
     !import_path.split('/').next().unwrap_or("").contains('.')
+}
+
+/// Go stdlib LAST-SEGMENT names, for the LEGACY (provenance-unknown) purge
+/// arm only. Pre-fix go import-scraped rows were stored by last path segment
+/// (`net/http` -> "http", `encoding/json` -> "json"), so the full-path
+/// [`is_go_stdlib_import`] rule cannot classify them — and applying its
+/// no-dot heuristic to bare names would purge every legitimate go module row
+/// ("gin", "cobra"). This curated list carries the same documented one-shot
+/// churn tradeoff as the rest of the legacy arm: a real module whose last
+/// segment collides (github.com/pkg/errors -> "errors") is purged once, then
+/// re-scraped with provenance='import_scrape' and immune thereafter.
+const GO_STDLIB_LAST_SEGMENTS: &[&str] = &[
+    "bufio", "bytes", "context", "crypto", "embed", "encoding", "errors", "flag", "fmt", "http",
+    "io", "json", "log", "math", "net", "os", "path", "filepath", "reflect", "regexp", "runtime",
+    "sort", "strconv", "strings", "sync", "syscall", "testing", "time", "unicode", "unsafe", "url",
+    "xml",
+];
+
+static GO_STDLIB_LAST_SEGMENT_SET: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| GO_STDLIB_LAST_SEGMENTS.iter().copied().collect());
+
+/// True when a bare (last-segment) go dependency NAME is a stdlib package.
+/// Full module paths (containing '/') never match — `github.com/x/errors`
+/// stored as a full path is a real module row.
+pub(crate) fn is_go_stdlib_name(name: &str) -> bool {
+    !name.contains('/') && GO_STDLIB_LAST_SEGMENT_SET.contains(name)
 }
 
 /// The canonical purge predicate: is `package_name` (already lowercased by the
@@ -320,6 +348,17 @@ mod tests {
             "k8s.io/api",
         ] {
             assert!(!is_go_stdlib_import(p), "module import: {p}");
+        }
+    }
+
+    #[test]
+    fn go_stdlib_last_segment_names_for_legacy_purge() {
+        for n in ["fmt", "http", "json", "os", "errors", "strings"] {
+            assert!(is_go_stdlib_name(n), "stdlib last segment: {n}");
+        }
+        // Real modules and full paths never match.
+        for n in ["gin", "cobra", "github.com/pkg/errors", "golang.org/x/text"] {
+            assert!(!is_go_stdlib_name(n), "must not match: {n}");
         }
     }
 

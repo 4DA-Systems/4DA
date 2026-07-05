@@ -65,7 +65,14 @@ fn retain_included(deps: Vec<StoredDependency>) -> Vec<StoredDependency> {
 }
 
 impl Database {
-    /// Store (upsert) a dependency discovered by ACE scanner.
+    /// Store (upsert) a dependency confirmed by a LOCKFILE walk (a direct dep
+    /// whose resolved version the lockfile provides). Kept name for history;
+    /// the manifest-scan sync uses [`Self::store_manifest_dependency`].
+    ///
+    /// Provenance: inserts as 'lockfile'; on conflict only UPGRADES a legacy
+    /// 'unknown' to 'lockfile' — a 'manifest'/'import_scrape' label from the
+    /// scan sync is more specific about declaration and must not be
+    /// overwritten by a version update.
     pub fn store_dependency(
         &self,
         project_path: &str,
@@ -84,15 +91,66 @@ impl Database {
         let project_path = canonicalize_project_path(project_path);
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, license, detected_at, last_seen_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, datetime('now'), datetime('now'))
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, license, detected_from, detected_at, last_seen_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, 'lockfile', datetime('now'), datetime('now'))
              ON CONFLICT(project_path, package_name, ecosystem)
              DO UPDATE SET
                 version = COALESCE(?3, user_dependencies.version),
                 is_dev = ?5,
                 license = COALESCE(?6, user_dependencies.license),
+                detected_from = CASE WHEN user_dependencies.detected_from = 'unknown'
+                                     THEN 'lockfile' ELSE user_dependencies.detected_from END,
                 last_seen_at = datetime('now')",
             params![project_path, package_name, version, ecosystem, is_dev as i32, license],
+        )?;
+        Ok(())
+    }
+
+    /// Store (upsert) a dependency observed by the MANIFEST scan sync
+    /// (`store_direct_dependencies` copying `project_dependencies` rows).
+    ///
+    /// The manifest scan is AUTHORITATIVE for `is_direct` in BOTH directions:
+    /// a module that moved to go.mod's `// indirect` set is downgraded here
+    /// (the old sync routed indirect rows through
+    /// [`Self::store_transitive_dependency`], whose conflict path preserves
+    /// `is_direct`, so pre-fix rows stored direct could never heal).
+    /// `detected_from` is propagated from the `project_dependencies` row
+    /// ('manifest' | 'import_scrape' | legacy 'unknown').
+    #[allow(clippy::too_many_arguments)]
+    pub fn store_manifest_dependency(
+        &self,
+        project_path: &str,
+        package_name: &str,
+        version: Option<&str>,
+        ecosystem: &str,
+        is_dev: bool,
+        is_direct: bool,
+        detected_from: &str,
+    ) -> SqliteResult<()> {
+        if is_excluded_project_path(project_path) {
+            return Ok(());
+        }
+        let project_path = canonicalize_project_path(project_path);
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_from, detected_at, last_seen_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'), datetime('now'))
+             ON CONFLICT(project_path, package_name, ecosystem)
+             DO UPDATE SET
+                version = COALESCE(?3, user_dependencies.version),
+                is_dev = ?5,
+                is_direct = ?6,
+                detected_from = ?7,
+                last_seen_at = datetime('now')",
+            params![
+                project_path,
+                package_name,
+                version,
+                ecosystem,
+                is_dev as i32,
+                is_direct as i32,
+                detected_from
+            ],
         )?;
         Ok(())
     }
@@ -101,6 +159,8 @@ impl Database {
     /// Sets `is_direct = 0` for new entries. On conflict, preserves existing
     /// `is_direct` value (so direct deps from manifests are not downgraded).
     /// Lockfile version is preferred (it's the actual resolved/installed version).
+    /// Provenance mirrors [`Self::store_dependency`]: insert as 'lockfile',
+    /// upgrade only legacy 'unknown' on conflict.
     pub fn store_transitive_dependency(
         &self,
         project_path: &str,
@@ -117,12 +177,14 @@ impl Database {
         let project_path = canonicalize_project_path(project_path);
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 0, datetime('now'), datetime('now'))
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_from, detected_at, last_seen_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0, 'lockfile', datetime('now'), datetime('now'))
              ON CONFLICT(project_path, package_name, ecosystem)
              DO UPDATE SET
                 version = COALESCE(?3, user_dependencies.version),
                 is_dev = MIN(user_dependencies.is_dev, ?5),
+                detected_from = CASE WHEN user_dependencies.detected_from = 'unknown'
+                                     THEN 'lockfile' ELSE user_dependencies.detected_from END,
                 last_seen_at = datetime('now')",
             params![project_path, package_name, version, ecosystem, is_dev as i32],
         )?;
