@@ -318,6 +318,7 @@ mod tests {
             is_direct: true,
             language: "rust".to_string(),
             last_scanned: "2026-02-28T00:00:00".to_string(),
+            detected_from: "manifest".to_string(),
         }
     }
 
