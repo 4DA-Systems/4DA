@@ -1892,8 +1892,6 @@
   "signals.clear": "Filter zurücksetzen",
   "signals.noMatch": "Keine Signale entsprechen den aktiven Filtern.",
   "signals.hideTriggers": "Gründe ausblenden",
-  "signals.triggers_one": "{{count}} Grund",
-  "signals.triggers_other": "{{count}} Gründe",
   "signals.match": "{{score}}% Übereinstimmung",
   "signals.similar_one": "{{count}} verwandter Eintrag",
   "signals.similar_other": "{{count}} verwandte Einträge",
@@ -2178,7 +2176,6 @@
   "missed.filtered": "gefiltert",
   "missed.freeTeaser": "4DA hat {{rejected}} Einträge gefiltert, um {{relevant}} relevante Signale für dich zu finden.",
   "missed.freeSubtext": "Vollständige Analyse freischalten — sieh genau, was verborgen blieb und warum es wichtig ist.",
-  "missed.persuasion": "Ohne 4DA wäre dies unter {{count}} anderen Einträgen untergegangen.",
   "profile.loadFailed": "Ihr Entwicklerprofil konnte nicht geladen werden.",
   "profile.copyProfile": "Profil kopieren",
   "profile.exportJson": "JSON exportieren",
@@ -2422,8 +2419,6 @@
   "feedback.milestone100": "100 Signale — Top 5% der aktiven Nutzer",
   "feedback.milestone500": "500 Signale — tiefgreifend kalibriert",
   "feedback.gettingSharper": "Ihr Feed wird immer präziser",
-  "result.signalsConfirmed": "{{count}} Signal bestätigt",
-  "result.signalsConfirmed_other": "{{count}} Signale bestätigt",
   "result.fallbackContext": "Starke Projektkontext-Übereinstimmung",
   "result.fallbackInterests": "Entspricht deklarierten Interessen",
   "result.fallbackRecentWork": "Aktiv in Ihrer aktuellen Arbeit",
@@ -3183,5 +3178,10 @@
   "settings.stack.empty": "No projects with dependencies detected yet.",
   "settings.stack.summary": "{{included}} of {{total}} projects counted toward your stack",
   "settings.stack.deps": "{{count}} deps",
-  "settings.stack.applyNote": "Changes apply on the next analysis run."
+  "settings.stack.applyNote": "Changes apply on the next analysis run.",
+  "missed.grounded": "Ranked from {{total}} items scanned today — {{rejected}} filtered out by your stack signals.",
+  "signals.showTriggers": "Why flagged",
+  "result.moreFactors": "+{{count}} more",
+  "results.evidenceChain": "Why this surfaced",
+  "results.evidenceOnlyTopic": "Topic similarity only — no dependency link"
 }

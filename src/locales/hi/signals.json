@@ -15,12 +15,12 @@
   "action.securityReview": "सुरक्षा प्रभावों की समीक्षा करें: {{title}}",
   "action.breakingMigration": "माइग्रेशन पथ जांचें — {{tech}} में महत्वपूर्ण बदलाव",
   "action.breakingReview": "महत्वपूर्ण बदलाव की समीक्षा करें: {{title}}",
-  "action.toolEvaluateStack": "अपने {{tech}} वर्कफ़्लो के लिए मूल्यांकन करें: {{title}}",
-  "action.toolEvaluate": "नए टूल का मूल्यांकन करें: {{title}}",
   "action.trendStack": "उभरता रुझान: {{tech}} लोकप्रिय हो रहा है — {{title}}",
   "action.trendGeneral": "उभरता रुझान: {{title}}",
   "action.learnStack": "सीखें — {{tech}} संसाधन: {{title}}",
   "action.learnGeneral": "शैक्षिक संसाधन: {{title}}",
   "action.intelStack": "{{tech}} क्षेत्र में प्रतिस्पर्धी गतिविधि: {{title}}",
-  "action.intelGeneral": "{{type}}: {{title}}"
+  "action.intelGeneral": "{{type}}: {{title}}",
+  "action.toolEvaluateGrounded": "New tool in your orbit — connects to your {{tech}} stack",
+  "action.toolEvaluateUngrounded": "New tool spotted — no confirmed link to your stack"
 }

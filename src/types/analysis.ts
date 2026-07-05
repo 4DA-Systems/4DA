@@ -44,6 +44,34 @@ export interface SourceRelevance {
   primary_topic?: string;
 }
 
+/** Evidence category of an ExplanationFactor. Mirrors src-tauri/src/types.rs#FactorKind. */
+export type FactorKind =
+  | 'DependencyMatch'
+  | 'SecurityAdvisory'
+  | 'ContextMatch'
+  | 'InterestMatch'
+  | 'TopicMatch'
+  | 'DecisionWindow'
+  | 'SkillGap'
+  | 'LearnedPreference'
+  | 'CommunitySignal';
+
+/**
+ * One link in an item's explanation evidence chain.
+ * Mirrors src-tauri/src/types.rs#ExplanationFactor → ts-rs bindings/ExplanationFactor.ts.
+ * Invariants (backend-enforced): evidence is never empty; the chain is ordered
+ * by weight_share descending; display never contains bare counts.
+ */
+export interface ExplanationFactor {
+  kind: FactorKind;
+  /** Short human-readable line, e.g. "Names your dependency axios". */
+  display: string;
+  /** Concrete evidence backing the display line. */
+  evidence: string;
+  /** Share of the total explained contribution (0.0-1.0). */
+  weight_share: number;
+}
+
 export interface ScoreBreakdown {
   context_score: number;
   interest_score: number;
@@ -134,6 +162,11 @@ export interface ScoreBreakdown {
   dependency_path?: string;
   /** Number of user's projects affected */
   affected_project_count?: number;
+  /**
+   * Ranked evidence chain (strongest first) — the single explanation source.
+   * Subtitle = factors[0].display, chips = factors[1..4], expanded view = full chain.
+   */
+  explanation_factors?: ExplanationFactor[];
 }
 
 /** Why pipeline and advisor(s) disagreed. Always a UI signal, never a score override. */

@@ -15,12 +15,12 @@
   "action.securityReview": "Güvenlik etkilerini inceleyin: {{title}}",
   "action.breakingMigration": "Geçiş yolunu kontrol edin — {{tech}} önemli değişiklik",
   "action.breakingReview": "Önemli değişikliği inceleyin: {{title}}",
-  "action.toolEvaluateStack": "{{tech}} iş akışınız için değerlendirin: {{title}}",
-  "action.toolEvaluate": "Yeni aracı değerlendirin: {{title}}",
   "action.trendStack": "Gelişen trend: {{tech}} ivme kazanıyor — {{title}}",
   "action.trendGeneral": "Gelişen trend: {{title}}",
   "action.learnStack": "Öğren — {{tech}} kaynağı: {{title}}",
   "action.learnGeneral": "Öğrenme kaynağı: {{title}}",
   "action.intelStack": "{{tech}} alanında rekabet hamlesi: {{title}}",
-  "action.intelGeneral": "{{type}}: {{title}}"
+  "action.intelGeneral": "{{type}}: {{title}}",
+  "action.toolEvaluateGrounded": "New tool in your orbit — connects to your {{tech}} stack",
+  "action.toolEvaluateUngrounded": "New tool spotted — no confirmed link to your stack"
 }

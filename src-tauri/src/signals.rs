@@ -737,16 +737,19 @@ impl SignalClassifier {
                 &lang,
                 &[("title", &short_title)],
             ),
+            // Tool discovery must reference EVIDENCE, never restate the title
+            // (the old "Evaluate new tool: {title}" was a template prefix
+            // duplicating the headline directly above it). Grounded: name the
+            // declared tech that connects the tool to the user's stack.
+            // Ungrounded: disclose honestly that no stack link is confirmed.
             (SignalType::ToolDiscovery, Some(tech)) => crate::i18n::t(
-                "signals:action.toolEvaluateStack",
+                "signals:action.toolEvaluateGrounded",
                 &lang,
-                &[("title", &short_title), ("tech", tech)],
+                &[("tech", tech)],
             ),
-            (SignalType::ToolDiscovery, None) => crate::i18n::t(
-                "signals:action.toolEvaluate",
-                &lang,
-                &[("title", &short_title)],
-            ),
+            (SignalType::ToolDiscovery, None) => {
+                crate::i18n::t("signals:action.toolEvaluateUngrounded", &lang, &[])
+            }
             (SignalType::TechTrend, Some(tech)) => crate::i18n::t(
                 "signals:action.trendStack",
                 &lang,
@@ -1095,18 +1098,13 @@ mod tests {
 
         if let Some(c) = result {
             let lang = crate::i18n::get_user_language();
-            let short_title: String =
-                "Show HN: A new Python testing framework - blazing fast alternative to pytest"
-                    .chars()
-                    .take(60)
-                    .collect();
 
-            // Action text must NOT use the "toolEvaluateStack" template with python,
+            // Action text must NOT use the grounded template with python,
             // since python is only detected, not declared.
             let personalized_python = crate::i18n::t(
-                "signals:action.toolEvaluateStack",
+                "signals:action.toolEvaluateGrounded",
                 &lang,
-                &[("tech", "python"), ("title", &short_title)],
+                &[("tech", "python")],
             );
             assert_ne!(
                 c.action, personalized_python,
@@ -1114,15 +1112,18 @@ mod tests {
                 c.action
             );
 
-            // Should get the generic "toolEvaluate" form (no tech parameter)
-            let expected_generic = crate::i18n::t(
-                "signals:action.toolEvaluate",
-                &lang,
-                &[("title", &short_title)],
-            );
+            // Should get the ungrounded honest-disclosure form (no tech, and
+            // crucially NOT a restatement of the item title).
+            let expected_generic =
+                crate::i18n::t("signals:action.toolEvaluateUngrounded", &lang, &[]);
             assert_eq!(
                 c.action, expected_generic,
-                "Should use generic action text (toolEvaluate), got: {}",
+                "Should use ungrounded disclosure action text, got: {}",
+                c.action
+            );
+            assert!(
+                !c.action.contains("Show HN: A new Python testing framework"),
+                "Action text must not restate the item title: {}",
                 c.action
             );
         }

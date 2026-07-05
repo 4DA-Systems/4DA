@@ -15,12 +15,12 @@
   "action.securityReview": "审查安全影响：{{title}}",
   "action.breakingMigration": "检查迁移路径 — {{tech}} 破坏性变更",
   "action.breakingReview": "审查破坏性变更：{{title}}",
-  "action.toolEvaluateStack": "评估对您 {{tech}} 工作流的价值：{{title}}",
-  "action.toolEvaluate": "评估新工具：{{title}}",
   "action.trendStack": "新兴趋势：{{tech}} 正在获得关注 — {{title}}",
   "action.trendGeneral": "新兴趋势：{{title}}",
   "action.learnStack": "学习 — {{tech}} 资源：{{title}}",
   "action.learnGeneral": "学习资源：{{title}}",
   "action.intelStack": "{{tech}} 领域的竞争动态：{{title}}",
-  "action.intelGeneral": "{{type}}：{{title}}"
+  "action.intelGeneral": "{{type}}：{{title}}",
+  "action.toolEvaluateGrounded": "New tool in your orbit — connects to your {{tech}} stack",
+  "action.toolEvaluateUngrounded": "New tool spotted — no confirmed link to your stack"
 }
