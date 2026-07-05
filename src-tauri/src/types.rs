@@ -47,6 +47,49 @@ pub struct RelevanceMatch {
     pub similarity: f32,
 }
 
+/// The evidence category an [`ExplanationFactor`] belongs to.
+///
+/// Ordered roughly by trust: a dependency/advisory edge is machine-verifiable
+/// against the user's lockfiles; topic similarity is the weakest tier and must
+/// self-disclose when it is the ONLY evidence (see the honesty-tail rule in
+/// `scoring::explanation_chain`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub enum FactorKind {
+    DependencyMatch,
+    SecurityAdvisory,
+    ContextMatch,
+    InterestMatch,
+    TopicMatch,
+    DecisionWindow,
+    SkillGap,
+    LearnedPreference,
+    CommunitySignal,
+}
+
+/// One link in an item's explanation evidence chain.
+///
+/// INVARIANTS (enforced by `scoring::explanation_chain` tests):
+/// - `evidence` is never empty — a factor that cannot name concrete evidence
+///   (the package, the advisory id, the project, the interest term, the
+///   decision-window title) is not emitted at all.
+/// - The chain is ordered by `weight_share` descending, and `weight_share`
+///   is monotone with the factor's actual score contribution.
+/// - `display` never contains bare counts ("N signals confirmed", "N reasons").
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub struct ExplanationFactor {
+    pub kind: FactorKind,
+    /// Short human-readable line, e.g. "Names your dependency axios".
+    pub display: String,
+    /// The concrete evidence backing the display line, e.g.
+    /// "axios (direct, installed v1.6.2) — named in the item text".
+    pub evidence: String,
+    /// This factor's share of the total explained contribution (0.0-1.0,
+    /// shares sum to <= 1.0 across the chain).
+    pub weight_share: f32,
+}
+
 /// Detailed breakdown of score components
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "bindings/")]
@@ -205,6 +248,13 @@ pub struct ScoreBreakdown {
     /// off-stack content.
     #[serde(default = "default_quality_mult")]
     pub negative_stack_prior: f32,
+    /// Ranked evidence chain explaining WHY this item surfaced, ordered by
+    /// actual score contribution (strongest first). The single explanation
+    /// source: the card subtitle is `explanation_factors[0].display`, chips
+    /// are factors 2..4, and the expanded view renders the full chain.
+    /// Every factor names concrete evidence — see [`ExplanationFactor`].
+    #[serde(default)]
+    pub explanation_factors: Vec<ExplanationFactor>,
 }
 
 /// Describes why pipeline and advisor(s) disagreed about an item.

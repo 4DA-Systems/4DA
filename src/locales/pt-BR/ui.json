@@ -1349,7 +1349,6 @@
   "missed.freeSubtext": "Desbloqueie a análise completa — veja exatamente o que ficou oculto e por que importa.",
   "missed.freeTeaser": "O 4DA filtrou {{rejected}} itens para encontrar {{relevant}} sinais relevantes para você.",
   "missed.noiseRejected": "ruído rejeitado",
-  "missed.persuasion": "Sem o 4DA, isso teria ficado enterrado entre outros {{count}} itens.",
   "missed.scanned": "{{count}} itens analisados",
   "missed.signalSurfaced": "sinal destacado",
   "missed.timeSaved": "tempo economizado",
@@ -1917,8 +1916,6 @@
   "result.signalSecurity": "Alerta de segurança",
   "result.signalTool": "Descoberta de ferramenta",
   "result.signalTrend": "Tendência emergente",
-  "result.signalsConfirmed": "{{count}} sinal confirmado",
-  "result.signalsConfirmed_other": "{{count}} sinais confirmados",
   "results": {
     "stackBadge": "Stack"
   },
@@ -2647,8 +2644,6 @@
   "signals.similar_one": "{{count}} item relacionado",
   "signals.similar_other": "{{count}} itens relacionados",
   "signals.title": "Sinais-chave",
-  "signals.triggers_one": "{{count}} motivo",
-  "signals.triggers_other": "{{count}} motivos",
   "sources.customCount": "{{count}} personalizadas",
   "sources.github.added": "Linguagem do GitHub adicionada",
   "sources.github.label": "Linguagens do GitHub",
@@ -3148,5 +3143,10 @@
   "settings.stack.empty": "No projects with dependencies detected yet.",
   "settings.stack.summary": "{{included}} of {{total}} projects counted toward your stack",
   "settings.stack.deps": "{{count}} deps",
-  "settings.stack.applyNote": "Changes apply on the next analysis run."
+  "settings.stack.applyNote": "Changes apply on the next analysis run.",
+  "missed.grounded": "Ranked from {{total}} items scanned today — {{rejected}} filtered out by your stack signals.",
+  "signals.showTriggers": "Why flagged",
+  "result.moreFactors": "+{{count}} more",
+  "results.evidenceChain": "Why this surfaced",
+  "results.evidenceOnlyTopic": "Topic similarity only — no dependency link"
 }

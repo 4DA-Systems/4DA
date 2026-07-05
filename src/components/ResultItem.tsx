@@ -12,12 +12,18 @@ import { ResultItemExpanded } from './result-item/ResultItemExpanded';
 import { ScoreBreakdownDrawer } from './result-item/ScoreBreakdownDrawer';
 
 function generateFallbackReason(item: SourceRelevance, t: TFunction): string {
-  const parts: string[] = [];
   const b = item.score_breakdown;
+  // Evidence chain is the canonical explanation source — the fallback below
+  // only exists for chain-less items (pre-chain data / excluded items).
+  // Bare counts ("N signals confirmed") are banned: a count is not evidence.
+  if (b?.explanation_factors?.length) {
+    return b.explanation_factors
+      .slice(0, 2)
+      .map(f => f.display)
+      .join(' · ');
+  }
+  const parts: string[] = [];
   if (b) {
-    if (b.signal_count != null && b.signal_count >= 2) {
-      parts.push(t('result.signalsConfirmed', { count: b.signal_count }));
-    }
     if (b.context_score > 0.3) parts.push(t('result.fallbackContext'));
     if (b.interest_score > 0.3) parts.push(t('result.fallbackInterests'));
     if (b.ace_boost > 0.1) parts.push(t('result.fallbackRecentWork'));

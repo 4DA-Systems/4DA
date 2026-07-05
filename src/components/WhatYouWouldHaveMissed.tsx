@@ -285,10 +285,14 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
           </div>
         )}
 
-        {/* The persuasion line */}
+        {/* Grounded summary — only claims the numbers the pipeline actually
+            computed (items scanned, items filtered). The old counterfactual
+            ("would have been buried in N other items") asserted an alternate
+            reality the system cannot verify. */}
         <p className="text-[11px] text-text-muted text-center">
-          {t('missed.persuasion', {
-            count: rejected,
+          {t('missed.grounded', {
+            total: totalScanned,
+            rejected,
           })}
         </p>
       </div>

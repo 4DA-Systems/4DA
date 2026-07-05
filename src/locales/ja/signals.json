@@ -15,12 +15,12 @@
   "action.securityReview": "セキュリティへの影響を確認: {{title}}",
   "action.breakingMigration": "移行パスを確認 — {{tech}} の破壊的変更",
   "action.breakingReview": "破壊的変更を確認: {{title}}",
-  "action.toolEvaluateStack": "{{tech}} ワークフローでの評価: {{title}}",
-  "action.toolEvaluate": "新しいツールを評価: {{title}}",
   "action.trendStack": "新興トレンド: {{tech}} が注目を集めています — {{title}}",
   "action.trendGeneral": "新興トレンド: {{title}}",
   "action.learnStack": "学習 — {{tech}} リソース: {{title}}",
   "action.learnGeneral": "学習リソース: {{title}}",
   "action.intelStack": "{{tech}} 分野での競合動向: {{title}}",
-  "action.intelGeneral": "{{type}}: {{title}}"
+  "action.intelGeneral": "{{type}}: {{title}}",
+  "action.toolEvaluateGrounded": "New tool in your orbit — connects to your {{tech}} stack",
+  "action.toolEvaluateUngrounded": "New tool spotted — no confirmed link to your stack"
 }

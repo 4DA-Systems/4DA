@@ -33,6 +33,12 @@ fn dedup_preserve_order(hits: &mut Vec<&str>) {
 /// Generate a human-readable explanation for why an item was considered relevant.
 /// Produces specific, actionable text naming the exact technologies/topics that matched.
 /// Combines up to 2 primary reasons for multi-signal trust, plus optional annotations.
+///
+/// V1-pipeline legacy path. The V2 pipeline derives its explanation from the
+/// ranked evidence chain instead (`explanation_chain::build_explanation_chain`
+/// + `render_subtitle`) so the subtitle, chips, and expanded view all read one
+/// source. Bare-count annotations ("N signals confirmed") are banned on every
+/// path — a count is not evidence.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn generate_relevance_explanation(
     _title: &str,
@@ -44,7 +50,6 @@ pub(crate) fn generate_relevance_explanation(
     interests: &[context_engine::Interest],
     declared_tech: &[String],
     matched_skill_gaps: &[String],
-    confirmation_count: u8,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     let mut used_topics: Vec<&str> = Vec::new();
@@ -233,11 +238,6 @@ pub(crate) fn generate_relevance_explanation(
         } else if !parts.is_empty() {
             parts.push("has unread updates".to_string());
         }
-    }
-
-    // 7. Signal count annotation — builds trust in high-confidence scores
-    if confirmation_count >= 3 && !parts.is_empty() {
-        parts.push(format!("{confirmation_count} signals confirmed"));
     }
 
     parts.join(" · ")
