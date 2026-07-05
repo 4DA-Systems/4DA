@@ -844,6 +844,33 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 }
             }
 
+            // Self-heal import-scraped BUILTIN modules (Node fs/path/http/...,
+            // Python os/json/...) persisted as version-less direct deps before
+            // the scanner learned to skip them. One of these ("http") minted a
+            // phantom "Security: http" decision window. Versioned rows (npm
+            // polyfills like buffer@5.7.1), lockfile transitives, and every
+            // non-js/py ecosystem (the Rust http/url CRATES) are untouched;
+            // stale builtin decision windows with no surviving versioned dep
+            // are closed. Same precedent as the Wave-5/6 purges above.
+            match crate::db::purge_builtin_import_dependencies(&conn) {
+                Ok(c) => {
+                    total_deleted += c.total();
+                    if c.total() > 0 || c.windows_closed > 0 {
+                        info!(
+                            target: "4da::startup",
+                            user_deps = c.user_dependencies,
+                            project_deps = c.project_dependencies,
+                            snapshots = c.dependency_snapshots,
+                            windows_closed = c.windows_closed,
+                            "Startup cleanup: import-scraped builtin-module purge"
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: builtin-module purge failed");
+                }
+            }
+
             // Purge user_dependencies with clearly ephemeral project paths (temp dirs).
             // Filesystem checks would block the async runtime, so we pattern-match instead.
             match conn.execute(

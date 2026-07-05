@@ -114,6 +114,19 @@ pub struct ProjectSignal {
     pub frameworks: Vec<String>,
     pub dependencies: Vec<String>,
     pub dev_dependencies: Vec<String>,
+    /// Transitive deps the manifest itself marks as indirect (go.mod
+    /// `// indirect`). Persisted with `is_direct = 0` so they never surface
+    /// as the user's direct stack, and never dropped (they still matter for
+    /// advisory matching).
+    #[serde(default)]
+    pub indirect_dependencies: Vec<String>,
+    /// The subset of `dependencies` that came from the SOURCE-IMPORT scrape
+    /// rather than the manifest itself (the merge in `check_manifests` only
+    /// adds names not already declared, so the sets are disjoint). Persisted
+    /// with provenance `detected_from = 'import_scrape'` so the builtin
+    /// self-heal purge can tell inferred rows from declared ones.
+    #[serde(default)]
+    pub import_scraped_dependencies: Vec<String>,
     /// Platform-gated DIRECT deps from `[target.'cfg(...)'.dependencies]`:
     /// (package name, target spec e.g. "cfg(windows)"). Used to flag advisories
     /// that aren't relevant on the user's build platform.
@@ -425,7 +438,9 @@ impl ProjectScanner {
                 }
             }
 
-            // Merge unique import deps into ALL signals from this directory
+            // Merge unique import deps into ALL signals from this directory,
+            // recording them as import-scraped so persistence can label their
+            // provenance (detected_from = 'import_scrape').
             if !import_deps.is_empty() {
                 for signal in &mut signals[signals_start..] {
                     for dep in &import_deps {
@@ -433,6 +448,7 @@ impl ProjectScanner {
                             && !signal.dev_dependencies.contains(dep)
                         {
                             signal.dependencies.push(dep.clone());
+                            signal.import_scraped_dependencies.push(dep.clone());
                         }
                     }
                 }
@@ -457,6 +473,8 @@ impl ProjectScanner {
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: chrono::Utc::now().to_rfc3339(),
             project_license: None,
@@ -659,7 +677,18 @@ impl ProjectScanner {
             signal.project_name = Some(name);
         }
 
-        // Look for common frameworks
+        // Parse declared dependencies from the two canonical sections
+        // ([project] dependencies array, [tool.poetry.dependencies] table).
+        // The old detection did a raw substring `contains` over the WHOLE
+        // file, so "django" in a project description/comment/URL minted a
+        // phantom django dependency + framework.
+        for dep in parse_pyproject_dependencies(content) {
+            if !signal.dependencies.contains(&dep) {
+                signal.dependencies.push(dep);
+            }
+        }
+
+        // Framework detection from PARSED dependency names only.
         // Only actual web frameworks — ML libraries, ORMs, and task queues
         // are detected via is_notable_dependency() in ace/context.rs
         let python_frameworks = [
@@ -667,14 +696,13 @@ impl ProjectScanner {
             ("flask", "flask"),
             ("fastapi", "fastapi"),
         ];
-
-        let content_lower = content.to_lowercase();
         for (pattern, framework) in python_frameworks {
-            if content_lower.contains(pattern)
-                && !signal.frameworks.contains(&framework.to_string())
-            {
+            let declared = signal
+                .dependencies
+                .iter()
+                .any(|d| d.to_lowercase() == pattern);
+            if declared && !signal.frameworks.contains(&framework.to_string()) {
                 signal.frameworks.push(framework.to_string());
-                signal.dependencies.push(pattern.to_string());
             }
         }
     }
@@ -727,7 +755,10 @@ impl ProjectScanner {
             }
         }
 
-        // Extract require dependencies
+        // Extract require dependencies (block form and single-line form).
+        // Modules marked `// indirect` are TRANSITIVE — go.mod is explicit
+        // about this — and must persist with is_direct = 0, not masquerade
+        // as the user's direct stack.
         let mut in_require = false;
         for line in content.lines() {
             let trimmed = line.trim();
@@ -740,8 +771,27 @@ impl ProjectScanner {
                 continue;
             }
 
-            if in_require && !trimmed.is_empty() {
-                if let Some(dep_path) = trimmed.split_whitespace().next() {
+            // Single-line form: `require example.com/mod v1.2.3 [// indirect]`
+            let dep_line = if in_require {
+                Some(trimmed)
+            } else {
+                trimmed
+                    .strip_prefix("require ")
+                    .filter(|rest| !rest.trim_start().starts_with('('))
+            };
+
+            if let Some(dep_line) = dep_line {
+                if dep_line.is_empty() || dep_line.starts_with("//") {
+                    continue;
+                }
+                if let Some(dep_path) = dep_line.split_whitespace().next() {
+                    let indirect = dep_line.contains("// indirect");
+                    if indirect {
+                        signal.indirect_dependencies.push(dep_path.to_string());
+                        // Indirect modules are not evidence the user works IN
+                        // that framework — no framework detection for them.
+                        continue;
+                    }
                     signal.dependencies.push(dep_path.to_string());
 
                     // Detect Go frameworks
@@ -1870,6 +1920,185 @@ fn extract_toml_value(content: &str, key: &str) -> Option<String> {
     None
 }
 
+/// Strip a PEP 508 requirement spec down to its package name:
+/// `"requests[security]>=2.31,<3 ; python_version >= '3.8'"` -> `requests`.
+fn pep508_package_name(spec: &str) -> Option<String> {
+    let name = spec
+        .split(&['=', '>', '<', '~', '!', '[', ';', '@', ' '][..])
+        .next()
+        .unwrap_or("")
+        .trim();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
+    }
+}
+
+/// Extract declared dependency names from pyproject.toml — SECTION-AWARE, not
+/// whole-file substring matching. A minimal line-based parser (no toml crate
+/// in the dependency tree) covering the two canonical declaration styles:
+///
+/// - PEP 621: the `dependencies = [ "pkg>=1", ... ]` array inside `[project]`
+///   (single-line or multi-line arrays).
+/// - Poetry: `pkg = "^1.0"` / `pkg = { version = "..." }` entries inside
+///   `[tool.poetry.dependencies]` (the `python` interpreter pin is skipped).
+///
+/// `[project.optional-dependencies]` extras and Poetry dev/group tables are
+/// deliberately NOT collected — optional extras and dev tooling are not the
+/// user's runtime stack.
+pub(crate) fn parse_pyproject_dependencies(content: &str) -> Vec<String> {
+    let mut deps: Vec<String> = Vec::new();
+    let mut push = |name: &str| {
+        let name = name.trim().trim_matches(|c| c == '"' || c == '\'');
+        if !name.is_empty()
+            && !name.eq_ignore_ascii_case("python")
+            && !deps.iter().any(|d| d == name)
+        {
+            deps.push(name.to_string());
+        }
+    };
+
+    #[derive(PartialEq)]
+    enum Section {
+        Other,
+        Project,
+        PoetryDeps,
+    }
+    let mut section = Section::Other;
+    let mut in_project_deps_array = false;
+
+    for raw_line in content.lines() {
+        // Strip TOML comments FIRST (a '#' outside string literals): a
+        // commented-out spec inside the dependencies array must not mint a
+        // phantom dep, and a ']' inside a comment must not close the array.
+        let line = strip_toml_comment(raw_line).trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        // Section headers reset all sub-state. Only recognized OUTSIDE a
+        // multi-line array (a legal TOML array continuation never starts a
+        // header). Trailing comments/whitespace are already stripped.
+        if !in_project_deps_array && line.starts_with('[') && line.ends_with(']') {
+            let header = line[1..line.len() - 1].trim();
+            section = match header {
+                "project" => Section::Project,
+                "tool.poetry.dependencies" => Section::PoetryDeps,
+                _ => {
+                    // Poetry subtable form for deps with extras/markers:
+                    // [tool.poetry.dependencies.django] (possibly quoted:
+                    // [tool.poetry.dependencies."zope.interface"]) DECLARES
+                    // dep NAME; its body is version/extras keys, not deps.
+                    if let Some(name) = header.strip_prefix("tool.poetry.dependencies.") {
+                        push(name);
+                    }
+                    Section::Other
+                }
+            };
+            continue;
+        }
+
+        match section {
+            Section::Project => {
+                if in_project_deps_array {
+                    for spec in extract_quoted_strings(line) {
+                        if let Some(name) = pep508_package_name(&spec) {
+                            push(&name);
+                        }
+                    }
+                    // A ']' inside a quoted spec ("uvicorn[standard]>=0.29")
+                    // must not close the array — check outside quotes only.
+                    if closes_toml_array(line) {
+                        in_project_deps_array = false;
+                    }
+                } else if let Some(rest) = line.strip_prefix("dependencies") {
+                    let rest = rest.trim_start();
+                    if let Some(after_eq) = rest.strip_prefix('=') {
+                        let after_eq = after_eq.trim_start();
+                        if after_eq.starts_with('[') {
+                            for spec in extract_quoted_strings(after_eq) {
+                                if let Some(name) = pep508_package_name(&spec) {
+                                    push(&name);
+                                }
+                            }
+                            in_project_deps_array = !closes_toml_array(after_eq);
+                        }
+                    }
+                }
+            }
+            Section::PoetryDeps => {
+                // `pkg = "^1.0"` or `pkg = { version = "...", ... }`
+                if let Some((key, _value)) = line.split_once('=') {
+                    push(key);
+                }
+            }
+            Section::Other => {}
+        }
+    }
+
+    deps
+}
+
+/// Slice `line` up to the first '#' that sits OUTSIDE a TOML string literal
+/// (both `"basic"` and `'literal'` quoting). Escaped quotes inside basic
+/// strings are not modeled — PEP 508 specs don't contain them, and this is a
+/// dependency-name extractor, not a TOML validator.
+fn strip_toml_comment(line: &str) -> &str {
+    let mut in_double = false;
+    let mut in_single = false;
+    for (i, c) in line.char_indices() {
+        match c {
+            '"' if !in_single => in_double = !in_double,
+            '\'' if !in_double => in_single = !in_single,
+            '#' if !in_double && !in_single => return &line[..i],
+            _ => {}
+        }
+    }
+    line
+}
+
+/// True when a `]` appears on the line OUTSIDE string literals — i.e. the
+/// line actually closes a TOML array (a `]` inside a spec like
+/// `"uvicorn[standard]>=0.29"` or `'pydantic[email]'` does not count).
+fn closes_toml_array(line: &str) -> bool {
+    let mut in_double = false;
+    let mut in_single = false;
+    for c in line.chars() {
+        match c {
+            '"' if !in_single => in_double = !in_double,
+            '\'' if !in_double => in_single = !in_single,
+            ']' if !in_double && !in_single => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// All string literals on a line — TOML allows both `"basic"` and
+/// `'literal'` quoting for array entries; each is matched to its own closing
+/// quote (used for the dependencies array entries).
+fn extract_quoted_strings(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = line;
+    while let Some(start) = rest.find(['"', '\'']) {
+        let quote = if rest[start..].starts_with('"') {
+            '"'
+        } else {
+            '\''
+        };
+        let after = &rest[start + 1..];
+        match after.find(quote) {
+            Some(end) => {
+                out.push(after[..end].to_string());
+                rest = &after[end + 1..];
+            }
+            None => break,
+        }
+    }
+    out
+}
+
 /// True if a Cargo.toml dependency value declares a LOCAL source — an inline
 /// table containing a `path` or `git` key (e.g. `{ path = "..." }` or
 /// `{ git = "...", branch = "..." }`). Such deps resolve to the user's own
@@ -1975,14 +2204,28 @@ pub(crate) fn extract_imports_from_source(path: &Path) -> Vec<String> {
                 if let Some(rest) = trimmed.strip_prefix("use ") {
                     if let Some(crate_name) = rest.split("::").next() {
                         let name = crate_name.trim_end_matches(';').trim();
-                        // Skip std, self, super, crate
-                        if !matches!(name, "std" | "self" | "super" | "crate" | "") {
+                        // Skip std-distribution crates and path keywords
+                        if !matches!(
+                            name,
+                            "std"
+                                | "core"
+                                | "alloc"
+                                | "proc_macro"
+                                | "self"
+                                | "super"
+                                | "crate"
+                                | ""
+                        ) {
                             imports.insert(name.to_string());
                         }
                     }
                 }
             }
-            // TypeScript/JavaScript: import ... from 'pkg', import 'pkg'
+            // TypeScript/JavaScript: import ... from 'pkg', import 'pkg'.
+            // Node builtins (fs, path, http, ... and ANY node:-prefixed
+            // specifier) are language runtime, not dependencies — persisting
+            // them minted phantom version-less rows and a bogus
+            // "Security: http" decision window (see ace::builtin_modules).
             "ts" | "tsx" | "js" | "jsx" if trimmed.starts_with("import ") => {
                 // import { x } from 'pkg' or import x from 'pkg'
                 if let Some(from_part) = trimmed.split(" from ").nth(1) {
@@ -1996,7 +2239,9 @@ pub(crate) fn extract_imports_from_source(path: &Path) -> Vec<String> {
                         } else {
                             pkg.split('/').next().unwrap_or(pkg).to_string()
                         };
-                        imports.insert(name);
+                        if !super::builtin_modules::is_node_builtin(&name) {
+                            imports.insert(name);
+                        }
                     }
                 }
                 // import 'pkg' (side-effect import)
@@ -2010,17 +2255,20 @@ pub(crate) fn extract_imports_from_source(path: &Path) -> Vec<String> {
                             } else {
                                 pkg.split('/').next().unwrap_or(pkg).to_string()
                             };
-                            imports.insert(name);
+                            if !super::builtin_modules::is_node_builtin(&name) {
+                                imports.insert(name);
+                            }
                         }
                     }
                 }
             }
-            // Python: from pkg import ..., import pkg
+            // Python: from pkg import ..., import pkg. Stdlib modules (os,
+            // sys, json, ...) are not packages — skip them.
             "py" => {
                 if let Some(rest) = trimmed.strip_prefix("from ") {
                     if let Some(pkg) = rest.split_whitespace().next() {
                         let top = pkg.split('.').next().unwrap_or(pkg);
-                        if !top.is_empty() {
+                        if !top.is_empty() && !super::builtin_modules::is_python_stdlib(top) {
                             imports.insert(top.to_string());
                         }
                     }
@@ -2028,22 +2276,26 @@ pub(crate) fn extract_imports_from_source(path: &Path) -> Vec<String> {
                     for part in rest.split(',') {
                         let pkg = part.split_whitespace().next().unwrap_or("");
                         let top = pkg.split('.').next().unwrap_or(pkg);
-                        if !top.is_empty() {
+                        if !top.is_empty() && !super::builtin_modules::is_python_stdlib(top) {
                             imports.insert(top.to_string());
                         }
                     }
                 }
             }
-            // Go: import "pkg"
+            // Go: import "pkg". Stdlib imports (fmt, os, net/http — first
+            // path segment has no dot) are skipped: "net/http" would persist
+            // as a phantom dependency named "http".
             "go" if (trimmed.starts_with("import ") || trimmed.starts_with('"')) => {
                 if let Some(start) = trimmed.find('"') {
                     let rest = &trimmed[start + 1..];
                     if let Some(end) = rest.find('"') {
                         let pkg = &rest[..end];
-                        // Extract last path segment as package name
-                        if let Some(name) = pkg.rsplit('/').next() {
-                            if !name.is_empty() {
-                                imports.insert(name.to_string());
+                        if !super::builtin_modules::is_go_stdlib_import(pkg) {
+                            // Extract last path segment as package name
+                            if let Some(name) = pkg.rsplit('/').next() {
+                                if !name.is_empty() {
+                                    imports.insert(name.to_string());
+                                }
                             }
                         }
                     }
@@ -2330,6 +2582,8 @@ libc = "0.2"
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -2382,6 +2636,8 @@ pretty_assertions = "1.0"
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -2440,6 +2696,8 @@ tokio = { version = "1", features = ["full"] }
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -2505,6 +2763,8 @@ tokio = { version = "1", features = ["full"] }
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -2547,6 +2807,8 @@ tokio = { version = "1", features = ["full"] }
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -2572,11 +2834,249 @@ tokio = { version = "1", features = ["full"] }
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
             project_relevance: 1.0,
         }
+    }
+
+    #[test]
+    fn test_parse_go_mod_marks_indirect_modules() {
+        let content = r"
+module example.com/svc
+
+go 1.22
+
+require (
+	github.com/gin-gonic/gin v1.10.0
+	golang.org/x/text v0.14.0 // indirect
+	github.com/ugorji/go/codec v1.2.12 // indirect
+)
+
+require github.com/spf13/cobra v1.8.0
+require golang.org/x/sys v0.20.0 // indirect
+";
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::GoMod, "go");
+        scanner.parse_go_mod(content, &mut signal);
+
+        assert_eq!(signal.project_name, Some("example.com/svc".to_string()));
+        // Direct modules (block + single-line forms).
+        assert!(signal
+            .dependencies
+            .contains(&"github.com/gin-gonic/gin".to_string()));
+        assert!(signal
+            .dependencies
+            .contains(&"github.com/spf13/cobra".to_string()));
+        // `// indirect` modules are captured separately, never as direct.
+        for indirect in [
+            "golang.org/x/text",
+            "github.com/ugorji/go/codec",
+            "golang.org/x/sys",
+        ] {
+            assert!(
+                signal.indirect_dependencies.contains(&indirect.to_string()),
+                "indirect module captured: {indirect}"
+            );
+            assert!(
+                !signal.dependencies.contains(&indirect.to_string()),
+                "indirect module must not be direct: {indirect}"
+            );
+        }
+        // Framework detection from DIRECT modules only.
+        assert!(signal.frameworks.contains(&"gin".to_string()));
+        assert!(signal.frameworks.contains(&"cobra".to_string()));
+    }
+
+    #[test]
+    fn test_parse_pyproject_pep621_dependencies_section_aware() {
+        // "django" appears in prose (description + a URL) but is NOT declared
+        // — the old whole-file substring detection minted it as a dependency.
+        let content = r#"
+[project]
+name = "acme-api"
+description = "Not a django project, honest — we migrated away from django."
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "pydantic ~= 2.7",
+]
+
+[project.urls]
+homepage = "https://acme.dev/why-we-left-django"
+
+[tool.other]
+flask = "this is not a dependency table"
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::PyprojectToml, "python");
+        scanner.parse_pyproject_toml(content, &mut signal);
+
+        assert_eq!(signal.project_name, Some("acme-api".to_string()));
+        assert!(signal.dependencies.contains(&"fastapi".to_string()));
+        assert!(signal.dependencies.contains(&"uvicorn".to_string()));
+        assert!(signal.dependencies.contains(&"pydantic".to_string()));
+        assert!(
+            !signal.dependencies.contains(&"django".to_string()),
+            "prose/URL mentions must not mint dependencies"
+        );
+        assert!(
+            !signal.dependencies.contains(&"flask".to_string()),
+            "non-dependency tables must not mint dependencies"
+        );
+        assert!(signal.frameworks.contains(&"fastapi".to_string()));
+        assert!(!signal.frameworks.contains(&"django".to_string()));
+        assert!(!signal.frameworks.contains(&"flask".to_string()));
+    }
+
+    #[test]
+    fn test_parse_pyproject_poetry_dependencies() {
+        let content = r#"
+[tool.poetry]
+name = "acme-worker"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+django = "^5.0"
+celery = { version = "^5.4", extras = ["redis"] }
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::PyprojectToml, "python");
+        scanner.parse_pyproject_toml(content, &mut signal);
+
+        assert!(signal.dependencies.contains(&"django".to_string()));
+        assert!(signal.dependencies.contains(&"celery".to_string()));
+        assert!(
+            !signal.dependencies.contains(&"python".to_string()),
+            "interpreter pin is not a dependency"
+        );
+        assert!(
+            !signal.dependencies.contains(&"pytest".to_string()),
+            "dev-group tooling not collected as runtime deps"
+        );
+        assert!(signal.frameworks.contains(&"django".to_string()));
+    }
+
+    #[test]
+    fn test_parse_pyproject_single_line_dependencies_array() {
+        let content = r#"
+[project]
+name = "tiny"
+dependencies = ["requests>=2.31", "httpx"]
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::PyprojectToml, "python");
+        scanner.parse_pyproject_toml(content, &mut signal);
+        assert!(signal.dependencies.contains(&"requests".to_string()));
+        assert!(signal.dependencies.contains(&"httpx".to_string()));
+    }
+
+    /// Finding [6]: inline TOML comments inside the dependencies array must
+    /// neither mint phantom deps nor prematurely close the array via a ']'
+    /// inside the comment text.
+    #[test]
+    fn test_parse_pyproject_inline_comments_in_deps_array() {
+        let content = r#"
+[project]
+name = "commented"
+dependencies = [   # runtime deps ["core"]
+    "fastapi>=0.111",  # was "flask" before the rewrite
+    # "celery>=5.0",   commented-out spec must NOT mint a dep
+    "uvicorn",         # ends with bracket-ish text ]
+    "pydantic",
+]
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::PyprojectToml, "python");
+        scanner.parse_pyproject_toml(content, &mut signal);
+        for dep in ["fastapi", "uvicorn", "pydantic"] {
+            assert!(
+                signal.dependencies.contains(&dep.to_string()),
+                "declared dep parsed despite comments: {dep}"
+            );
+        }
+        for phantom in ["flask", "celery", "core"] {
+            assert!(
+                !signal.dependencies.contains(&phantom.to_string()),
+                "comment text must not mint a dep: {phantom}"
+            );
+        }
+    }
+
+    /// Finding [8]: TOML single-quoted literal strings are legal array
+    /// entries and must parse like double-quoted ones.
+    #[test]
+    fn test_parse_pyproject_single_quoted_literals() {
+        let content = "
+[project]
+name = 'tiny'
+dependencies = [
+    'requests>=2.31',
+    'pydantic[email]>=2.0',
+    \"httpx\",
+]
+";
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::PyprojectToml, "python");
+        scanner.parse_pyproject_toml(content, &mut signal);
+        assert!(signal.dependencies.contains(&"requests".to_string()));
+        assert!(
+            signal.dependencies.contains(&"pydantic".to_string()),
+            "']' inside a single-quoted extras spec must not close the array"
+        );
+        assert!(signal.dependencies.contains(&"httpx".to_string()));
+    }
+
+    /// Finding [7]: Poetry subtable form ([tool.poetry.dependencies.NAME])
+    /// declares NAME; headers with trailing comments/whitespace still match.
+    #[test]
+    fn test_parse_pyproject_poetry_subtable_and_header_comments() {
+        let content = r#"
+[tool.poetry]
+name = "acme"
+
+[tool.poetry.dependencies]   # runtime deps
+python = "^3.11"
+requests = "^2.31"
+
+[tool.poetry.dependencies.django]   # extras/markers form
+version = "^5.0"
+extras = ["argon2"]
+
+[tool.poetry.dependencies."zope.interface"]
+version = "^6.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::PyprojectToml, "python");
+        scanner.parse_pyproject_toml(content, &mut signal);
+        assert!(signal.dependencies.contains(&"requests".to_string()));
+        assert!(
+            signal.dependencies.contains(&"django".to_string()),
+            "subtable-form dep declared"
+        );
+        assert!(
+            signal.dependencies.contains(&"zope.interface".to_string()),
+            "quoted subtable-form dep declared"
+        );
+        assert!(
+            !signal.dependencies.contains(&"version".to_string())
+                && !signal.dependencies.contains(&"extras".to_string()),
+            "subtable BODY keys are not deps"
+        );
+        assert!(
+            !signal.dependencies.contains(&"pytest".to_string()),
+            "dev group still excluded"
+        );
+        assert!(signal.frameworks.contains(&"django".to_string()));
     }
 
     #[test]
@@ -2774,8 +3274,66 @@ dev_dependencies:
         imports.sort();
         assert!(imports.contains(&"flask".to_string()));
         assert!(imports.contains(&"numpy".to_string()));
-        assert!(imports.contains(&"os".to_string()));
         assert!(imports.contains(&"pandas".to_string()));
+        // Stdlib modules are language runtime, not dependencies.
+        assert!(!imports.contains(&"os".to_string()));
+        assert!(!imports.contains(&"sys".to_string()));
+    }
+
+    #[test]
+    fn test_extract_imports_skips_node_builtins() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("server.ts");
+        std::fs::write(
+            &file,
+            concat!(
+                "import fs from 'fs';\n",
+                "import { createServer } from 'http';\n",
+                "import path from 'node:path';\n",
+                "import 'node:crypto';\n",
+                "import { promises } from 'fs/promises';\n",
+                "import express from 'express';\n",
+                "import { z } from '@scope/zod-like';\n",
+            ),
+        )
+        .unwrap();
+        let mut imports = extract_imports_from_source(&file);
+        imports.sort();
+        assert_eq!(
+            imports,
+            vec!["@scope/zod-like".to_string(), "express".to_string()],
+            "builtins (bare, node:-prefixed, and the fs/promises subpath) are skipped"
+        );
+    }
+
+    #[test]
+    fn test_extract_imports_skips_go_stdlib() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("main.go");
+        std::fs::write(
+            &file,
+            "package main\nimport (\n\t\"fmt\"\n\t\"net/http\"\n\t\"encoding/json\"\n\t\"github.com/gin-gonic/gin\"\n)\n",
+        )
+        .unwrap();
+        let imports = extract_imports_from_source(&file);
+        assert_eq!(
+            imports,
+            vec!["gin".to_string()],
+            "stdlib (fmt, net/http, encoding/json) skipped; module import kept"
+        );
+    }
+
+    #[test]
+    fn test_extract_imports_rust_skips_std_dist_crates() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("lib.rs");
+        std::fs::write(
+            &file,
+            "use core::fmt;\nuse alloc::vec::Vec;\nuse serde::Serialize;\n",
+        )
+        .unwrap();
+        let imports = extract_imports_from_source(&file);
+        assert_eq!(imports, vec!["serde".to_string()]);
     }
 
     #[test]
@@ -2835,6 +3393,8 @@ axum = "0.7"
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,

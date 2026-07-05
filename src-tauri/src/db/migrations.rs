@@ -600,7 +600,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 86;
+        const TARGET_VERSION: i64 = 87;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3043,6 +3043,43 @@ impl Database {
                              CREATE INDEX IF NOT EXISTS idx_brief_rejections_item
                                  ON brief_rejections (source_item_id);",
                         )?;
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 87: dependency provenance. `detected_from` records HOW a
+            // dependency row was discovered — 'manifest' (declared in a
+            // manifest file), 'lockfile' (resolved from a lockfile walk), or
+            // 'import_scrape' (inferred from source-file import lines).
+            // Existing rows default to 'unknown'. The builtin-module self-heal
+            // purge keys on this: provenance='import_scrape' rows with builtin
+            // names are pollution by definition; 'manifest' rows are immune
+            // (a user CAN declare the npm 'buffer' polyfill); 'unknown' legacy
+            // rows fall back to the one-shot heuristic (builtin name +
+            // version IS NULL + is_direct=1).
+            if current_version < 87 {
+                Self::run_versioned_migration(
+                    &conn,
+                    86,
+                    87,
+                    "Phase 87: detected_from provenance on dependency tables",
+                    |c| {
+                        for table in ["user_dependencies", "project_dependencies"] {
+                            let has_column: bool = c
+                                .query_row(
+                                    &format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name='detected_from'"),
+                                    [],
+                                    |row| row.get::<_, i64>(0).map(|count| count > 0),
+                                )
+                                .unwrap_or(false);
+                            if !has_column {
+                                c.execute_batch(&format!(
+                                    "ALTER TABLE {table} ADD COLUMN detected_from TEXT NOT NULL DEFAULT 'unknown';",
+                                ))?;
+                                info!(target: "4da::db", "Added detected_from column to {table}");
+                            }
+                        }
                         Ok(())
                     },
                 )?;

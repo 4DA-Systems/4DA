@@ -168,6 +168,45 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         super::dependencies::store_lockfile_dependencies(db, &scan_paths);
     }
 
+    // Phase 1a-reconcile: prune dependency rows of projects DELETED or MOVED
+    // on disk. prune_removed_dependencies only fires for manifests that are
+    // re-scanned, so a deleted project's manifest never scans again and its
+    // deps persisted forever, grounding alerts for projects that don't exist.
+    // Disk probes run fs::metadata against every stored project path — a
+    // disconnected MAPPED network drive (Z:\) can block for the full SMB
+    // timeout — so the whole reconcile runs on a blocking thread, never on
+    // the async runtime.
+    let reconcile = tauri::async_runtime::spawn_blocking(
+        || -> std::result::Result<crate::db::OrphanedProjectPurge, String> {
+            let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
+            crate::db::prune_orphaned_project_dependencies(
+                &conn,
+                &crate::db::project_path_missing_on_disk,
+            )
+            .map_err(|e| e.to_string())
+        },
+    )
+    .await;
+    match reconcile {
+        Ok(Ok(c)) if c.orphaned_paths > 0 => {
+            info!(
+                target: "4da::ace",
+                orphaned_paths = c.orphaned_paths,
+                user_deps = c.user_dependencies,
+                project_deps = c.project_dependencies,
+                snapshots = c.dependency_snapshots,
+                "Pruned dependencies of deleted/moved projects"
+            );
+        }
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            warn!(target: "4da::ace", error = %e, "Orphaned-project dependency prune failed");
+        }
+        Err(e) => {
+            warn!(target: "4da::ace", error = %e, "Orphaned-project dependency prune task failed");
+        }
+    }
+
     // Phase 1b: Learning trajectory detection
     let mut learning_topics: Vec<String> = Vec::new();
     for path in &scan_paths {
