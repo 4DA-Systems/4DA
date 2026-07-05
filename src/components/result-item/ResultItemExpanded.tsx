@@ -6,6 +6,7 @@ import { formatScore, getScoreColor } from '../../utils/score';
 import { useAppStore } from '../../store';
 import { ArticleReader } from '../ArticleReader';
 import { ScoreAutopsy } from '../ScoreAutopsy';
+import { EvidenceChain } from './EvidenceChain';
 import { FeedbackButtons } from './FeedbackButtons';
 import { SecurityTriageButtons } from './SecurityTriageButtons';
 
@@ -195,8 +196,13 @@ export function ResultItemExpanded({
         </div>
       )}
 
-      {/* Why This Matters - Full Display */}
-      <WhyThisMatters explanation={item.explanation} />
+      {/* Evidence chain — the full ranked "why", same source as the subtitle/chips */}
+      {item.score_breakdown?.explanation_factors?.length ? (
+        <EvidenceChain factors={item.score_breakdown.explanation_factors} />
+      ) : (
+        /* Chain-less items (legacy data): keep the one-line explanation */
+        <WhyThisMatters explanation={item.explanation} />
+      )}
 
       {/* Feedback / Triage Buttons */}
       {item.score_breakdown?.necessity_category === 'security_vulnerability' ? (

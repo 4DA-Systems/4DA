@@ -263,6 +263,7 @@ mod tests {
             dependency_path: None,
             affected_project_count: None,
             negative_stack_prior: 1.0,
+            explanation_factors: vec![],
         }
     }
 

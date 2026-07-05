@@ -1888,8 +1888,6 @@
   "signals.clear": "フィルターをクリア",
   "signals.noMatch": "アクティブなフィルターに一致するシグナルはありません。",
   "signals.hideTriggers": "理由を非表示",
-  "signals.triggers_one": "{{count}}件の理由",
-  "signals.triggers_other": "{{count}}件の理由",
   "signals.match": "{{score}}% 一致",
   "signals.similar_one": "{{count}}件の関連項目",
   "signals.similar_other": "{{count}}件の関連項目",
@@ -2155,7 +2153,6 @@
   "missed.filtered": "フィルタリング済み",
   "missed.freeTeaser": "4DAが{{rejected}}件をフィルタリングし、あなたに関連する{{relevant}}件のシグナルを抽出しました。",
   "missed.freeSubtext": "完全な分析をアンロック — 何が埋もれていたか、なぜ重要かを確認できます。",
-  "missed.persuasion": "4DAがなければ、これは他の {{count}} 件のアイテムに埋もれていたでしょう。",
   "profile.loadFailed": "開発者プロフィールの読み込みに失敗しました。",
   "profile.copyProfile": "プロファイルをコピー",
   "profile.exportJson": "JSONをエクスポート",
@@ -2399,8 +2396,6 @@
   "feedback.milestone100": "100シグナル — アクティブユーザーの上位5%",
   "feedback.milestone500": "500シグナル — 深く調整済み",
   "feedback.gettingSharper": "フィードがさらに精度を増しています",
-  "result.signalsConfirmed": "{{count}}シグナル確認済み",
-  "result.signalsConfirmed_other": "{{count}}シグナル確認済み",
   "result.fallbackContext": "プロジェクトコンテキストと強く一致",
   "result.fallbackInterests": "宣言された関心事項と一致",
   "result.fallbackRecentWork": "最近の作業に関連",
@@ -3082,5 +3077,10 @@
   "settings.stack.empty": "No projects with dependencies detected yet.",
   "settings.stack.summary": "{{included}} of {{total}} projects counted toward your stack",
   "settings.stack.deps": "{{count}} deps",
-  "settings.stack.applyNote": "Changes apply on the next analysis run."
+  "settings.stack.applyNote": "Changes apply on the next analysis run.",
+  "missed.grounded": "Ranked from {{total}} items scanned today — {{rejected}} filtered out by your stack signals.",
+  "signals.showTriggers": "Why flagged",
+  "result.moreFactors": "+{{count}} more",
+  "results.evidenceChain": "Why this surfaced",
+  "results.evidenceOnlyTopic": "Topic similarity only — no dependency link"
 }

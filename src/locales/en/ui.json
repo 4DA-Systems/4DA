@@ -1915,8 +1915,6 @@
   "signals.clear": "Clear filters",
   "signals.noMatch": "No signals match the active filters.",
   "signals.hideTriggers": "Hide reasons",
-  "signals.triggers_one": "{{count}} reason",
-  "signals.triggers_other": "{{count}} reasons",
   "signals.match": "{{score}}% match",
   "signals.similar_one": "{{count}} related item",
   "signals.similar_other": "{{count}} related items",
@@ -2201,7 +2199,6 @@
   "missed.filtered": "filtered",
   "missed.freeTeaser": "4DA filtered {{rejected}} items to surface {{relevant}} signals that matter to you.",
   "missed.freeSubtext": "Unlock full analytics — see exactly what was buried and why it matters.",
-  "missed.persuasion": "Without 4DA, this would have been buried in {{count}} other items.",
   "profile.loadFailed": "Failed to load your developer profile.",
   "profile.copyProfile": "Copy Profile",
   "profile.exportJson": "Export JSON",
@@ -2445,8 +2442,6 @@
   "feedback.milestone100": "100 signals — top 5% of active users",
   "feedback.milestone500": "500 signals — deeply calibrated",
   "feedback.gettingSharper": "Your feed keeps getting sharper",
-  "result.signalsConfirmed": "{{count}} signal confirmed",
-  "result.signalsConfirmed_other": "{{count}} signals confirmed",
   "result.fallbackContext": "Strong project context match",
   "result.fallbackInterests": "Matches declared interests",
   "result.fallbackRecentWork": "Active in your recent work",
@@ -2865,5 +2860,10 @@
   "evidence.learnedPositive": "Topics you engage with",
   "evidence.learnedNegative": "Topics you consistently skip",
   "calibration.onboarding.gradeStartingPoint": "This is your starting score — it climbs as 4DA learns what you care about.",
-  "license.trialBadge": "Signal trial"
+  "license.trialBadge": "Signal trial",
+  "missed.grounded": "Ranked from {{total}} items scanned today — {{rejected}} filtered out by your stack signals.",
+  "signals.showTriggers": "Why flagged",
+  "result.moreFactors": "+{{count}} more",
+  "results.evidenceChain": "Why this surfaced",
+  "results.evidenceOnlyTopic": "Topic similarity only — no dependency link"
 }

@@ -205,7 +205,6 @@ fn test_generate_explanation_declared_tech() {
         &[],
         &["Rust".to_string()],
         &[],
-        0,
     );
     assert!(
         explanation.contains("your stack"),
@@ -227,7 +226,6 @@ fn test_generate_explanation_skill_gap_annotation() {
         &[],
         &[],
         &["tokio".to_string()],
-        0,
     );
     assert!(
         explanation.contains("Closes skill gap: tokio"),
@@ -253,7 +251,6 @@ fn test_generate_explanation_skill_gap_with_stack() {
         &[],
         &["Rust".to_string()],
         &["tokio".to_string()],
-        0,
     );
     assert!(
         explanation.contains("your stack"),
@@ -296,7 +293,6 @@ fn test_generate_explanation_declared_tech_with_version() {
         &[],
         &["React".to_string()],
         &[],
-        0,
     );
     assert!(
         explanation.contains("v18.3.1"),
@@ -326,7 +322,6 @@ fn test_generate_explanation_skill_gap_dedup_with_stack() {
         &[],
         &["React".to_string()],
         &["react".to_string()],
-        0,
     );
     assert!(
         !explanation.contains("Closes skill gap: react"),
@@ -353,7 +348,6 @@ fn test_generate_explanation_empty_when_no_signals() {
         &[],
         &[],
         &[],
-        0,
     );
     assert!(
         explanation.is_empty(),
@@ -363,7 +357,9 @@ fn test_generate_explanation_empty_when_no_signals() {
 }
 
 #[test]
-fn test_generate_explanation_signal_count_shown_at_3_plus() {
+fn test_generate_explanation_never_shows_bare_counts() {
+    // Wave 8 doctrine: a count is not evidence. The "N signals confirmed"
+    // annotation is deleted on every path — explanations name what matched.
     let ace_ctx = ACEContext {
         detected_tech: vec!["rust".to_string()],
         ..Default::default()
@@ -378,36 +374,15 @@ fn test_generate_explanation_signal_count_shown_at_3_plus() {
         &[],
         &["Rust".to_string()],
         &[],
-        3,
-    );
-    assert!(
-        explanation.contains("3 signals confirmed"),
-        "Should show signal count at 3+: {}",
-        explanation
-    );
-}
-
-#[test]
-fn test_generate_explanation_signal_count_hidden_at_2() {
-    let ace_ctx = ACEContext {
-        detected_tech: vec!["rust".to_string()],
-        ..Default::default()
-    };
-    let explanation = generate_relevance_explanation(
-        "Rust Performance",
-        0.2,
-        0.2,
-        &[],
-        &ace_ctx,
-        &["rust".to_string()],
-        &[],
-        &["Rust".to_string()],
-        &[],
-        2,
     );
     assert!(
         !explanation.contains("signals confirmed"),
-        "Should NOT show signal count at 2: {}",
+        "Bare count annotations are banned: {}",
+        explanation
+    );
+    assert!(
+        explanation.contains("your stack"),
+        "Named evidence must remain: {}",
         explanation
     );
 }
@@ -426,7 +401,6 @@ fn test_generate_explanation_multi_reason() {
         &[],
         &["Rust".to_string()],
         &[],
-        0,
     );
     assert!(
         explanation.contains("your stack"),
@@ -455,7 +429,6 @@ fn test_generate_explanation_dedups_declared_tech() {
         &[],
         &["react".to_string()],
         &[],
-        0,
     );
     assert_eq!(
         explanation, "Uses react (your stack)",
@@ -488,7 +461,6 @@ fn test_interest_fragment_does_not_claim_match() {
         &[interest("tower-http")],
         &[],
         &[],
-        0,
     );
     assert!(
         !explanation.contains("tower-http"),
@@ -509,7 +481,6 @@ fn test_interest_exact_match_still_claims() {
         &[interest("tower-http")],
         &[],
         &[],
-        0,
     );
     assert!(
         explanation.contains("Matches interest: tower-http"),
@@ -531,7 +502,6 @@ fn test_interest_segment_match_still_claims() {
         &[interest("react")],
         &[],
         &[],
-        0,
     );
     assert!(
         explanation.contains("Matches interest: react"),
@@ -557,7 +527,6 @@ fn test_interest_alias_match_is_cited() {
         &[interest("react")],
         &[],
         &[],
-        0,
     );
     assert!(
         explanation.contains("Matches interest: react"),
@@ -592,7 +561,6 @@ fn test_active_topic_reasoning_filters_noise() {
         &[],
         &[],
         &[],
-        0,
     );
     assert!(
         !explanation.contains("os (active project)") && !explanation.contains(", os "),

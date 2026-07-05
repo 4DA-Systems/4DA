@@ -220,8 +220,9 @@ pub(super) fn classify_item_signal(
                 {
                     c.priority = signals::SignalPriority::Alert;
                 }
-                // Add dep:package_name triggers
-                for dep in matched_deps.iter().take(2) {
+                // Add dep:package_name triggers — corroborated matches only;
+                // trigger chips are user-facing evidence, not scoring signals.
+                for dep in matched_deps.iter().filter(|d| d.corroborated).take(2) {
                     c.triggers.push(format!("dep:{}", dep.package_name));
                 }
             }

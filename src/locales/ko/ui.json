@@ -1283,7 +1283,6 @@
   "missed.freeSubtext": "전체 분석 잠금 해제 — 무엇이 묻혀 있었는지, 왜 중요한지 정확히 확인하세요.",
   "missed.freeTeaser": "4DA가 {{rejected}}개 항목을 필터링하여 당신에게 중요한 {{relevant}}개의 신호를 찾았습니다.",
   "missed.noiseRejected": "노이즈 제거",
-  "missed.persuasion": "4DA가 없었다면, 이것은 다른 {{count}}개 항목에 묻혔을 것입니다.",
   "missed.scanned": "{{count}}개 항목 스캔",
   "missed.signalSurfaced": "시그널 감지",
   "missed.timeSaved": "절약된 시간",
@@ -1841,8 +1840,6 @@
   "result.signalSecurity": "보안 알림",
   "result.signalTool": "도구 발견",
   "result.signalTrend": "떠오르는 트렌드",
-  "result.signalsConfirmed": "{{count}}개 시그널 확인됨",
-  "result.signalsConfirmed_other": "{{count}}개 시그널 확인됨",
   "results.affects": "영향",
   "results.affinityBoost": "{{topic}}에 대한 관심으로 부스트됨",
   "results.aiSummary": "AI 요약",
@@ -2572,8 +2569,6 @@
   "signals.similar_one": "{{count}}개 관련 항목",
   "signals.similar_other": "{{count}}개 관련 항목",
   "signals.title": "주요 시그널",
-  "signals.triggers_one": "{{count}}개 이유",
-  "signals.triggers_other": "{{count}}개 이유",
   "sources.customCount": "{{count}}개 커스텀",
   "sources.github.added": "GitHub 언어 추가됨",
   "sources.github.label": "GitHub 언어",
@@ -3079,5 +3074,10 @@
   "settings.stack.empty": "No projects with dependencies detected yet.",
   "settings.stack.summary": "{{included}} of {{total}} projects counted toward your stack",
   "settings.stack.deps": "{{count}} deps",
-  "settings.stack.applyNote": "Changes apply on the next analysis run."
+  "settings.stack.applyNote": "Changes apply on the next analysis run.",
+  "missed.grounded": "Ranked from {{total}} items scanned today — {{rejected}} filtered out by your stack signals.",
+  "signals.showTriggers": "Why flagged",
+  "result.moreFactors": "+{{count}} more",
+  "results.evidenceChain": "Why this surfaced",
+  "results.evidenceOnlyTopic": "Topic similarity only — no dependency link"
 }

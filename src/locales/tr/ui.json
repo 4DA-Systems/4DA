@@ -1327,7 +1327,6 @@
   "missed.freeSubtext": "Tam analitiği açın — neyin gizli kaldığını ve neden önemli olduğunu görün.",
   "missed.freeTeaser": "4DA, sizin için önemli {{relevant}} sinyali bulmak üzere {{rejected}} öğeyi filtreledi.",
   "missed.noiseRejected": "gürültü reddedildi",
-  "missed.persuasion": "4DA olmadan bu, diğer {{count}} öğe arasında gömülü olurdu.",
   "missed.scanned": "{{count}} öğe tarandı",
   "missed.signalSurfaced": "sinyal tespit edildi",
   "missed.timeSaved": "kazanılan zaman",
@@ -1886,8 +1885,6 @@
   "result.signalSecurity": "Güvenlik uyarısı",
   "result.signalTool": "Araç keşfi",
   "result.signalTrend": "Yükselen trend",
-  "result.signalsConfirmed": "{{count}} sinyal onaylandı",
-  "result.signalsConfirmed_other": "{{count}} sinyal onaylandı",
   "results": {
     "signal": {
       "tech_trend": "Trend"
@@ -2619,8 +2616,6 @@
   "signals.similar_one": "{{count}} ilişkili öğe",
   "signals.similar_other": "{{count}} ilişkili öğe",
   "signals.title": "Temel Sinyaller",
-  "signals.triggers_one": "{{count}} neden",
-  "signals.triggers_other": "{{count}} neden",
   "sources.customCount": "{{count}} özel",
   "sources.github.added": "GitHub dili eklendi",
   "sources.github.label": "GitHub Dilleri",
@@ -3111,5 +3106,10 @@
   "settings.stack.empty": "No projects with dependencies detected yet.",
   "settings.stack.summary": "{{included}} of {{total}} projects counted toward your stack",
   "settings.stack.deps": "{{count}} deps",
-  "settings.stack.applyNote": "Changes apply on the next analysis run."
+  "settings.stack.applyNote": "Changes apply on the next analysis run.",
+  "missed.grounded": "Ranked from {{total}} items scanned today — {{rejected}} filtered out by your stack signals.",
+  "signals.showTriggers": "Why flagged",
+  "result.moreFactors": "+{{count}} more",
+  "results.evidenceChain": "Why this surfaced",
+  "results.evidenceOnlyTopic": "Topic similarity only — no dependency link"
 }

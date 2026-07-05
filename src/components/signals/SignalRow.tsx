@@ -90,10 +90,10 @@ export const SignalRow = ({ signal }: { signal: SignalItem }) => {
               <button
                 onClick={() => setShowTriggers(!showTriggers)}
                 aria-expanded={showTriggers}
-                aria-label={showTriggers ? t('signals.hideTriggers') : t('signals.triggers', { count: signal.signal_triggers.length })}
+                aria-label={showTriggers ? t('signals.hideTriggers') : t('signals.showTriggers')}
                 className="text-[10px] text-text-muted hover:text-text-secondary transition-colors ms-auto"
               >
-                {showTriggers ? t('signals.hideTriggers') : t('signals.triggers', { count: signal.signal_triggers.length })}
+                {showTriggers ? t('signals.hideTriggers') : t('signals.showTriggers')}
               </button>
             )}
           </div>
