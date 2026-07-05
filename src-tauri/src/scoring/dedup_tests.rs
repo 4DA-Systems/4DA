@@ -135,6 +135,58 @@ fn test_sort_by_score_descending() {
     }
 }
 
+fn make_grounded_item(title: &str, score: f32) -> SourceRelevance {
+    let mut item = make_item(title, None, score);
+    let json = serde_json::json!({
+        "context_score": 0.0,
+        "interest_score": 0.0,
+        "ace_boost": 0.0,
+        "affinity_mult": 1.0,
+        "anti_penalty": 0.0,
+        "confidence_by_signal": {},
+        "strongly_grounded": true,
+    });
+    item.score_breakdown = Some(serde_json::from_value(json).expect("breakdown"));
+    item
+}
+
+#[test]
+fn test_sort_grounded_tier_outranks_ungrounded_score() {
+    // Phase-4 binding rule: a grounded on-stack release must sit above
+    // higher-scoring ungrounded noise (the bevy-react-macros@0.90 class).
+    let mut items = vec![
+        make_item("Ungrounded crate-name collision", None, 0.90),
+        make_grounded_item("Grounded on-stack release", 0.84),
+        make_item("Ungrounded listicle", None, 0.88),
+        make_grounded_item("Grounded advisory", 0.95),
+    ];
+
+    sort_results(&mut items);
+
+    assert_eq!(items[0].title, "Grounded advisory");
+    assert_eq!(items[1].title, "Grounded on-stack release");
+    assert_eq!(items[2].title, "Ungrounded crate-name collision");
+    assert_eq!(items[3].title, "Ungrounded listicle");
+}
+
+#[test]
+fn test_sort_excluded_grounded_still_sinks() {
+    // Exclusion (user or brief verdict) outranks the grounding tier.
+    let mut items = vec![
+        {
+            let mut item = make_grounded_item("Excluded grounded", 0.99);
+            item.excluded = true;
+            item
+        },
+        make_item("Ungrounded but included", None, 0.4),
+    ];
+
+    sort_results(&mut items);
+
+    assert_eq!(items[0].title, "Ungrounded but included");
+    assert!(items[1].excluded);
+}
+
 #[test]
 fn test_empty_input_returns_empty() {
     let mut empty: Vec<SourceRelevance> = vec![];

@@ -3,19 +3,48 @@ use tracing::info;
 
 use crate::{extract_topics, scoring_config, SourceRelevance};
 
-/// Sort results: excluded items last, then by score descending
+/// Sort results: excluded items last, grounded tier first, then by score
+/// descending within each tier.
+///
+/// Grounded-first is the plan's Phase-4 rule made binding at selection: the
+/// measured truth (2026-06-21, re-confirmed 2026-07-05) is that scores cannot
+/// separate signal from noise at the top — a machine-verifiable edge to the
+/// user's stack (`ScoreBreakdown::strongly_grounded`, the same canonical
+/// predicate the gate, pools, and Brief slate use) is the only axis a content
+/// author can't fabricate. Ungrounded items still surface (deprioritized, the
+/// pools UI dims them) — they just can't occupy the top slots ahead of
+/// grounded evidence, which is what kept crate-name-collision noise
+/// (`bevy-react-macros` at 0.90) above real on-stack releases.
 pub(crate) fn sort_results(results: &mut [SourceRelevance]) {
     results.sort_by(|a, b| {
-        if a.excluded && !b.excluded {
-            return std::cmp::Ordering::Greater;
+        if a.excluded != b.excluded {
+            return if a.excluded {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Less
+            };
         }
-        if !a.excluded && b.excluded {
-            return std::cmp::Ordering::Less;
+        let a_grounded = is_strongly_grounded_result(a);
+        let b_grounded = is_strongly_grounded_result(b);
+        if a_grounded != b_grounded {
+            return if a_grounded {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Greater
+            };
         }
         b.top_score
             .partial_cmp(&a.top_score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+}
+
+/// Canonical grounding verdict for a scored result: the breakdown's
+/// `strongly_grounded` flag, false when no breakdown was persisted.
+fn is_strongly_grounded_result(item: &SourceRelevance) -> bool {
+    item.score_breakdown
+        .as_ref()
+        .is_some_and(|b| b.strongly_grounded)
 }
 
 /// Deduplicate scored results by URL and normalized title.
