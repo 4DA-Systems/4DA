@@ -135,6 +135,38 @@ pub fn upsert_dependency_with_platform(
     Ok(())
 }
 
+/// Upsert a dependency the MANIFEST ITSELF declares as transitive (go.mod
+/// `// indirect`). Unlike [`upsert_dependency`], the conflict path ASSIGNS
+/// `is_direct = 0` instead of MAX-upgrading: the manifest is authoritative
+/// about the directness of its own modules, so a module that moved from the
+/// direct set to `// indirect` is downgraded on the next scan (the MAX guard
+/// exists to stop LOCKFILE writes demoting manifest rows, which doesn't apply
+/// here — lockfile transitives go to `user_dependencies`, not this table).
+pub fn upsert_manifest_indirect_dependency(
+    conn: &rusqlite::Connection,
+    project_path: &str,
+    manifest_type: &str,
+    package_name: &str,
+    language: &str,
+    project_relevance: f32,
+) -> Result<()> {
+    // Same canonical write guard as upsert_dependency_with_platform.
+    if crate::project_inclusion::is_hard_excluded(project_path) {
+        crate::project_inclusion::log_tier2_exclusion(project_path, "write");
+        return Ok(());
+    }
+    let canonical_path = canonicalize_project_path(project_path);
+    conn.execute(
+        "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance, last_scanned)
+         VALUES (?1, ?2, ?3, NULL, 0, 0, ?4, ?5, datetime('now'))
+         ON CONFLICT(project_path, package_name)
+         DO UPDATE SET is_direct = 0, project_relevance = ?5, last_scanned = datetime('now')",
+        params![canonical_path, manifest_type, package_name, language, project_relevance],
+    )
+    .context("Failed to upsert manifest-indirect dependency")?;
+    Ok(())
+}
+
 /// Remove direct dependencies for a (project, language) that were NOT present in
 /// the latest manifest scan.
 ///

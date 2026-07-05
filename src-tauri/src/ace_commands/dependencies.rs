@@ -16,15 +16,28 @@ pub(super) fn store_direct_dependencies(db: &Database) {
                 if let Ok(deps) = crate::temporal::get_all_dependencies(&conn) {
                     for dep in &deps {
                         let ecosystem = &dep.language;
-                        db.store_dependency(
-                            &dep.project_path,
-                            &dep.package_name,
-                            dep.version.as_deref(),
-                            ecosystem,
-                            dep.is_dev,
-                            None, // license extracted during manifest parsing
-                        )
-                        .ok();
+                        if dep.is_direct {
+                            db.store_dependency(
+                                &dep.project_path,
+                                &dep.package_name,
+                                dep.version.as_deref(),
+                                ecosystem,
+                                dep.is_dev,
+                                None, // license extracted during manifest parsing
+                            )
+                            .ok();
+                        } else {
+                            // Manifest-declared transitives (go.mod `// indirect`)
+                            // must not be promoted to is_direct=1 by the sync.
+                            db.store_transitive_dependency(
+                                &dep.project_path,
+                                &dep.package_name,
+                                dep.version.as_deref(),
+                                ecosystem,
+                                dep.is_dev,
+                            )
+                            .ok();
+                        }
                     }
                     if !deps.is_empty() {
                         info!(target: "4da::ace", count = deps.len(), "Stored dependencies in user_dependencies table");
@@ -141,6 +154,7 @@ fn process_cargo_lock(
                 frameworks: Vec::new(),
                 dependencies: Vec::new(),
                 dev_dependencies: Vec::new(),
+                indirect_dependencies: Vec::new(),
                 target_dependencies: Vec::new(),
                 detected_at: String::new(),
                 project_license: None,
@@ -561,6 +575,7 @@ fn read_package_json_deps(
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -589,6 +604,7 @@ fn read_pyproject_deps(
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -614,6 +630,7 @@ fn read_go_mod_deps(scanner: &crate::ace::scanner::ProjectScanner, dir: &PathBuf
             frameworks: Vec::new(),
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,

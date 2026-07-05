@@ -5,6 +5,9 @@
 
 mod alerts;
 #[cfg(test)]
+mod builtin_purge_tests;
+mod hygiene;
+#[cfg(test)]
 mod inclusion_tests;
 pub(crate) mod mappers;
 mod queries;
@@ -12,9 +15,11 @@ mod queries;
 mod tests;
 pub mod types;
 
-pub(crate) use queries::is_excluded_project_path;
-pub use queries::{
-    purge_agent_infra_dependencies, purge_non_project_intelligence, AgentInfraPurge,
-    NonProjectPurge,
+pub use hygiene::{
+    project_path_missing_on_disk, prune_orphaned_project_dependencies,
+    purge_agent_infra_dependencies, purge_builtin_import_dependencies,
+    purge_non_project_intelligence, AgentInfraPurge, BuiltinImportPurge, NonProjectPurge,
+    OrphanedProjectPurge,
 };
+pub(crate) use queries::is_excluded_project_path;
 pub use types::{CrossProjectPackage, DependencyAlert, DependencyEdgeRow, StoredDependency};

@@ -168,6 +168,32 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         super::dependencies::store_lockfile_dependencies(db, &scan_paths);
     }
 
+    // Phase 1a-reconcile: prune dependency rows of projects DELETED or MOVED
+    // on disk. prune_removed_dependencies only fires for manifests that are
+    // re-scanned, so a deleted project's manifest never scans again and its
+    // deps persisted forever, grounding alerts for projects that don't exist.
+    if let Ok(conn) = crate::open_db_connection() {
+        match crate::db::prune_orphaned_project_dependencies(
+            &conn,
+            &crate::db::project_path_missing_on_disk,
+        ) {
+            Ok(c) if c.orphaned_paths > 0 => {
+                info!(
+                    target: "4da::ace",
+                    orphaned_paths = c.orphaned_paths,
+                    user_deps = c.user_dependencies,
+                    project_deps = c.project_dependencies,
+                    snapshots = c.dependency_snapshots,
+                    "Pruned dependencies of deleted/moved projects"
+                );
+            }
+            Ok(_) => {}
+            Err(e) => {
+                warn!(target: "4da::ace", error = %e, "Orphaned-project dependency prune failed");
+            }
+        }
+    }
+
     // Phase 1b: Learning trajectory detection
     let mut learning_topics: Vec<String> = Vec::new();
     for path in &scan_paths {

@@ -169,7 +169,20 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // (the same matcher window minting uses), topic signal requires a non-generic
 // topic on a word boundary, title-keyword signal picks the first non-generic
 // significant word and matches on a word boundary.
-pub(crate) const PIPELINE_VERSION: i32 = 13;
+//
+// v14 (2026-07-05): import-scraped builtin modules no longer persisted as user
+// dependencies + purge — dep inputs to scoring changed (Wave 8a). The import
+// scraper wrote Node builtins (fs, path, http, ...) and Python stdlib modules
+// as version-less direct deps; those rows fed dependency grounding and minted
+// the phantom "Security: http" decision-window class v13 had to defang at
+// match time. This wave kills them at the SOURCE (scanner skip via
+// ace::builtin_modules + startup purge of existing rows + stale-window close),
+// marks go.mod `// indirect` modules is_direct=0, parses pyproject
+// dependencies section-aware instead of whole-file substring, and prunes deps
+// of deleted/moved projects after each full scan. The bump re-stamps the
+// corpus so items scored against the polluted dep set re-score against the
+// clean one (same failure mode as v6/v9: merged-but-dark without a bump).
+pub(crate) const PIPELINE_VERSION: i32 = 14;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
