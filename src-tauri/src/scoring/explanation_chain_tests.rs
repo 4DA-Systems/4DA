@@ -300,11 +300,12 @@ fn rendered_explanation_contains_actual_evidence_token() {
 }
 
 // ============================================================================
-// Invariant: ordering is monotone with contribution
+// Invariant: ordering leads with the strongest evidence (trust tier first,
+// then axis magnitude within a tier)
 // ============================================================================
 
 #[test]
-fn chain_ordered_by_weight_share_descending() {
+fn chain_ordered_by_trust_then_magnitude() {
     for fixture in corpus() {
         let chain = fixture.build();
         // The honesty tail (weight 0, appended last) is exempt by design.
@@ -313,13 +314,22 @@ fn chain_ordered_by_weight_share_descending() {
             .filter(|f| !f.display.starts_with(TAIL))
             .collect();
         for pair in real.windows(2) {
+            let (ra, rb) = (
+                super::trust_rank(pair[0].kind),
+                super::trust_rank(pair[1].kind),
+            );
+            // Primary: trust tier non-decreasing. Secondary (same tier): weight
+            // share non-increasing.
+            let ok = ra < rb || (ra == rb && pair[0].weight_share >= pair[1].weight_share);
             assert!(
-                pair[0].weight_share >= pair[1].weight_share,
-                "chain out of order for '{}': {} ({}) before {} ({})",
+                ok,
+                "chain out of order for '{}': {} (tier {}, {}) before {} (tier {}, {})",
                 fixture.title,
                 pair[0].display,
+                ra,
                 pair[0].weight_share,
                 pair[1].display,
+                rb,
                 pair[1].weight_share
             );
         }
@@ -327,30 +337,64 @@ fn chain_ordered_by_weight_share_descending() {
 }
 
 #[test]
-fn stronger_contribution_ranks_first() {
-    // Dependency evidence (0.9) must outrank a weak interest signal (0.2)...
+fn trust_tier_leads_regardless_of_raw_magnitude() {
+    // A corroborated dependency match (hard, machine-verifiable grounding) must
+    // lead a numerically-stronger interest/keyword signal — raw axis scores are
+    // not comparable and the product thesis is "grounding beats keywords".
     let mut f = Fixture::default();
     f.display_deps = vec![dep("tokio", 0.9, true, None)];
     f.dep_match_score = 0.9;
     f.item_topics = vec!["rust".to_string()];
     f.interests = vec![interest("rust")];
     f.interest_score = 0.2;
-    let chain = f.build();
-    assert_eq!(chain[0].kind, crate::FactorKind::DependencyMatch);
+    assert_eq!(f.build()[0].kind, crate::FactorKind::DependencyMatch);
 
-    // ...and the ordering flips when the contributions flip.
+    // Even when the interest signal is far stronger in raw magnitude, the
+    // dependency still leads: trust tier is the primary key.
     let mut f = Fixture::default();
     f.display_deps = vec![dep("tokio", 0.2, true, None)];
-    f.dep_match_score = 0.1;
+    f.dep_match_score = 0.2;
     f.item_topics = vec!["rust".to_string()];
     f.interests = vec![interest("rust")];
     f.interest_score = 0.9;
-    let chain = f.build();
     assert_eq!(
-        chain[0].kind,
-        crate::FactorKind::InterestMatch,
-        "when interest dominates the contribution it must lead the chain"
+        f.build()[0].kind,
+        crate::FactorKind::DependencyMatch,
+        "hard dependency grounding must lead soft interest overlap regardless of raw magnitude"
     );
+}
+
+#[test]
+fn magnitude_orders_within_a_tier() {
+    // Two ContextMatch-tier signals with different magnitudes: declared-tech
+    // (rides keyword_score) and project-KNN (rides context_score). Within the
+    // tier the stronger one must lead.
+    let mut f = Fixture::default();
+    f.declared_tech = vec!["rust".to_string()];
+    f.item_topics = vec!["rust".to_string()];
+    f.keyword_score = 0.8; // declared-tech ContextMatch weight
+    f.context_score = 0.45; // project-KNN ContextMatch weight (weaker)
+    f.matches = vec![RelevanceMatch {
+        source_file: "src/main.rs".to_string(),
+        matched_text: "async fn spawn worker pool".to_string(),
+        similarity: 0.45,
+    }];
+    let chain = f.build();
+    let ctx: Vec<_> = chain
+        .iter()
+        .filter(|c| c.kind == crate::FactorKind::ContextMatch)
+        .collect();
+    assert!(
+        ctx.len() >= 2,
+        "fixture should produce two ContextMatch factors, got {}",
+        ctx.len()
+    );
+    for pair in ctx.windows(2) {
+        assert!(
+            pair[0].weight_share >= pair[1].weight_share,
+            "same-tier factors must order by magnitude"
+        );
+    }
 }
 
 #[test]

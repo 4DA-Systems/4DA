@@ -49,14 +49,18 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
     if (keys.length === 0) return undefined;
     return keys.map(k => t(k)).join('\n');
   }, [item, t]);
-  // Rendering contract: subtitle = top factor (shown via explanation), chips =
-  // factors 2..4. "+N more" appears ONLY as a suffix to named factor chips —
-  // never a bare count. Legacy generic chips remain solely for chain-less items.
+  // Rendering contract: this dense list row surfaces evidence AS chips, so the
+  // STRONGEST factor must lead as the first chip (chain is trust-ordered, so
+  // factor[0] is the highest-trust evidence — "Names your dependency axios",
+  // "Security advisory affects your dependency X"). The full prose + evidence
+  // is in the score tooltip and the expanded EvidenceChain. "+N more" appears
+  // ONLY as a suffix to named factor chips — never a bare count. Legacy generic
+  // chips remain solely for chain-less items.
   const factorChips = useMemo(() => {
     const factors = item.score_breakdown?.explanation_factors;
     if (!factors?.length) return null;
-    const chips = factors.slice(1, 4).map(f => f.display);
-    const remaining = factors.length - 4;
+    const chips = factors.slice(0, 3).map(f => f.display);
+    const remaining = factors.length - 3;
     return { chips, remaining: remaining > 0 ? remaining : 0 };
   }, [item.score_breakdown?.explanation_factors]);
   const chipKeys = useMemo(

@@ -92,25 +92,36 @@ function renderCollapsed(item: SourceRelevance, isExpanded = false) {
 }
 
 describe('collapsed rendering contract', () => {
-  it('renders factors 2..4 as named chips', () => {
+  it('renders the top 3 factors as named chips (strongest evidence leads)', () => {
     renderCollapsed(makeItem());
+    expect(screen.getByText('Names your dependency axios')).toBeInTheDocument();
     expect(screen.getByText('Uses react (your stack)')).toBeInTheDocument();
     expect(screen.getByText('Matches interest: webassembly')).toBeInTheDocument();
-    expect(screen.getByText('Overlaps your recent work: sqlite')).toBeInTheDocument();
   });
 
-  it('does not render the top factor as a chip (it is the subtitle channel)', () => {
+  it('renders the top factor as the FIRST chip (not hidden until expand)', () => {
+    const { container } = renderCollapsed(makeItem());
+    const text = container.textContent ?? '';
+    // factor[0] must appear, and lead the other chips.
+    expect(screen.getByText('Names your dependency axios')).toBeInTheDocument();
+    expect(text.indexOf('Names your dependency axios')).toBeLessThan(
+      text.indexOf('Uses react (your stack)'),
+    );
+  });
+
+  it('overflows factors beyond the top 3 into the "+N more" suffix', () => {
     renderCollapsed(makeItem());
-    expect(screen.queryByText('Names your dependency axios')).not.toBeInTheDocument();
+    // CHAIN has 5 factors; 3 lead as chips, 2 overflow.
+    expect(screen.queryByText('Overlaps your recent work: sqlite')).not.toBeInTheDocument();
+    const more = screen.getByText('+2 more');
+    expect(more).toBeInTheDocument();
   });
 
   it('renders "+N more" only as a suffix after named chips', () => {
     const { container } = renderCollapsed(makeItem());
-    const more = screen.getByText('+1 more');
-    expect(more).toBeInTheDocument();
-    // The named chips must precede the +N suffix in the DOM.
     const text = container.textContent ?? '';
-    expect(text.indexOf('Uses react (your stack)')).toBeLessThan(text.indexOf('+1 more'));
+    // The named chips must precede the +N suffix in the DOM.
+    expect(text.indexOf('Names your dependency axios')).toBeLessThan(text.indexOf('+2 more'));
   });
 
   it('never renders bare count strings', () => {
@@ -119,7 +130,7 @@ describe('collapsed rendering contract', () => {
     expect(container.textContent).not.toContain('signalsConfirmed');
   });
 
-  it('omits "+N more" when the chain has 4 or fewer factors', () => {
+  it('omits "+N more" when the chain has 3 or fewer factors', () => {
     const item = makeItem();
     item.score_breakdown!.explanation_factors = CHAIN.slice(0, 3);
     const { container } = renderCollapsed(item);

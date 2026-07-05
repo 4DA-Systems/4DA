@@ -8,10 +8,16 @@
 //! 1. **Every factor names concrete evidence.** A factor that cannot name the
 //!    package / advisory id / project / interest term / decision-window title
 //!    is NOT emitted. No templates, no bare counts.
-//! 2. **Ordering is monotone with score contribution.** Each factor's weight
-//!    is the pipeline term it corresponds to (dep_match_score, context_score,
-//!    window_boost, ...); the chain is sorted by that weight descending and
-//!    `weight_share` is each factor's share of the explained total.
+//! 2. **Ordering leads with the strongest evidence.** The chain is sorted by
+//!    evidence trust tier first (machine-verifiable grounding — security /
+//!    dependency / your-own-context — leads soft topical/interest overlap),
+//!    then by axis magnitude within a tier. Raw axis scores are NOT comparable
+//!    across axes (each contributes to the final score through a different
+//!    downstream coefficient), so a bare cross-axis magnitude sort would rank a
+//!    strong keyword hit above a corroborated dependency match — the opposite
+//!    of the product thesis (grounding beats keywords). `weight_share` is each
+//!    factor's share of the total axis magnitude (the bar shows relative
+//!    signal strength; the order shows trust).
 //! 3. **Dependency evidence is corroborated-only.** The caller passes only
 //!    display-worthy matches (name-corroborated text matches, or matches the
 //!    advisory's own affected-package metadata confirms) — the raw alias
@@ -88,6 +94,26 @@ fn dedup_preserve_order(hits: &mut Vec<&str>) {
     });
 }
 
+/// Evidence trust tier — lower ranks lead the chain. Ordered by how
+/// machine-verifiable / grounding-strong the evidence is: a CVE on your
+/// dependency is the highest-stakes, most-verifiable claim; a bare topical
+/// overlap is the weakest. This is the primary sort key so hard grounding can
+/// never be visually outranked by soft interest/topic overlap regardless of
+/// raw (non-comparable) axis magnitudes.
+fn trust_rank(kind: FactorKind) -> u8 {
+    match kind {
+        FactorKind::SecurityAdvisory => 0,
+        FactorKind::DependencyMatch => 1,
+        FactorKind::ContextMatch => 2,
+        FactorKind::DecisionWindow => 3,
+        FactorKind::SkillGap => 4,
+        FactorKind::InterestMatch => 5,
+        FactorKind::LearnedPreference => 6,
+        FactorKind::TopicMatch => 7,
+        FactorKind::CommunitySignal => 8,
+    }
+}
+
 fn provenance(d: &DepMatch) -> &'static str {
     if d.is_dev {
         "dev-only"
@@ -142,7 +168,7 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
         if !evidence_parts.is_empty() || named_dep.is_some() {
             let display = match named_dep {
                 Some(dep) => format!("Security advisory affects your dependency {dep}"),
-                None => match inp.advisory_id {
+                None => match inp.advisory_id.map(str::trim).filter(|s| !s.is_empty()) {
                     Some(id) => format!("Security advisory {id}"),
                     None => String::new(),
                 },
@@ -441,11 +467,16 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
     }
 
     // ── Rank + normalize ──────────────────────────────────────────────────
-    // Stable sort: equal weights keep emission order (trust-tier order).
+    // Trust tier is the PRIMARY key (hard grounding leads); axis magnitude
+    // breaks ties within a tier. Raw axis scores are not comparable across
+    // axes, so magnitude alone would let a strong keyword hit outrank a
+    // corroborated dependency — see invariant #2.
     factors.sort_by(|a, b| {
-        b.weight
-            .partial_cmp(&a.weight)
-            .unwrap_or(std::cmp::Ordering::Equal)
+        trust_rank(a.kind).cmp(&trust_rank(b.kind)).then_with(|| {
+            b.weight
+                .partial_cmp(&a.weight)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     });
     let total: f32 = factors.iter().map(|f| f.weight.max(0.0)).sum();
     let mut chain: Vec<ExplanationFactor> = factors
