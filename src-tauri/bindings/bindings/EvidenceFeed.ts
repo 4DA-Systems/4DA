@@ -23,21 +23,21 @@ score: number | null,
  * Blind Spots). Lets the UI show "5 issues across 47 tracked deps"
  * instead of the misleading "5 tracked deps".
  */
-total_tracked: number | null, 
+total_tracked?: number | null, 
 /**
  * Count of items hidden as weak/title-heuristic matches.
  * Lets the UI say "27 weak matches hidden" so the denominator is transparent.
  */
-weak_match_count: number | null, 
+weak_match_count?: number | null, 
 /**
  * Optional source freshness summary for lens surfaces whose correctness
  * depends on recent source ingestion/checks.
  */
-data_freshness: DataFreshness | null, 
+data_freshness?: DataFreshness | null, 
 /**
  * Entitlement scope this feed was materialized for. `None` for lenses
  * that do not tier-split their output (e.g. Blind Spots, which gates
  * at the command boundary instead). Preemption sets this so the UI
  * can render the free OSV floor honestly.
  */
-tier_scope: TierScope | null, };
+tier_scope?: TierScope | null, };
