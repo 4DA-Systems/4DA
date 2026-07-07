@@ -29,6 +29,7 @@ mod tests {
             base_url: None,
             openai_api_key: FAKE_OPENAI_EMBED_KEY.to_string(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         s.x_api_key = SensitiveString::new(FAKE_X_BEARER.to_string());
         s.license = LicenseConfig {
@@ -428,6 +429,7 @@ mod tests {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
         let cost = client.estimate_cost_cents(10_000, 1_000);

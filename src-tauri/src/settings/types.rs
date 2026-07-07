@@ -97,6 +97,14 @@ pub struct LLMProvider {
     /// "nomic-embed-text-v2-moe" recommended for multilingual content.
     #[serde(default = "default_embedding_model")]
     pub embedding_model: String,
+    /// Explicit opt-in for CLOUD embeddings (INV-004). When false (the default),
+    /// embedding NEVER leaves the machine — even if a cloud LLM key is set the
+    /// embedding path collapses to local (Ollama -> fastembed -> zero-vector).
+    /// Only when the user deliberately flips this on does content get embedded
+    /// via `api.openai.com`. Setting an LLM key must not silently exfiltrate
+    /// local file / project / context content as an embedding side-effect.
+    #[serde(default)]
+    pub allow_cloud_embeddings: bool,
 }
 
 fn default_embedding_model() -> String {
@@ -126,6 +134,7 @@ impl std::fmt::Debug for LLMProvider {
                 },
             )
             .field("embedding_model", &self.embedding_model)
+            .field("allow_cloud_embeddings", &self.allow_cloud_embeddings)
             .finish()
     }
 }
@@ -146,6 +155,7 @@ impl Default for LLMProvider {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: default_embedding_model(),
+            allow_cloud_embeddings: false,
         }
     }
 }
