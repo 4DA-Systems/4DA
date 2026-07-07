@@ -8395,9 +8395,9 @@ dependencies = [
 
 [[package]]
 name = "victauri-test"
-version = "0.8.4"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72d73f606204bcc2095d3f676bf76279a57aef88c117ea63ab17927c210ca7ce"
+checksum = "08dc2e3f9ef837ce8ba3f7e1871aaad188b502f689c156120991f22bdc8cd913"
 dependencies = [
  "base64 0.22.1",
  "png 0.17.16",
