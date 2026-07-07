@@ -83,11 +83,38 @@ fn get_llm_client() -> Option<crate::llm::LLMClient> {
     Some(crate::llm::LLMClient::new(provider))
 }
 
+/// Whether the personalization prose upgrade must be skipped to honor the user's
+/// cloud content-level choice. Pure, so the privacy rule is unit-testable.
+///
+/// `build_insight_prompt` serializes the user's FULL derived profile (hardware,
+/// stack, progress) into the prompt. A user who set `llm_content_level =
+/// "titles_only"` has asked to minimize what leaves the machine, so this
+/// content-heavy background upgrade must not run — it is not "titles".
+fn skip_prose_for_content_level(content_level: &str) -> bool {
+    content_level == "titles_only"
+}
+
+/// Read the effective content-level gate from settings (non-blocking).
+fn prose_gated_by_privacy() -> bool {
+    crate::get_settings_manager()
+        .try_lock()
+        .map(|s| skip_prose_for_content_level(&s.get().privacy.llm_content_level))
+        .unwrap_or(false)
+}
+
 pub async fn generate_insight_prose(
     card: &SovereignInsightCard,
     ctx: &PersonalizationContext,
     session_type: &str,
 ) -> Option<InsightContent> {
+    // Privacy gate (INV-004 family): when the user restricted cloud egress to
+    // titles only, skip this profile-heavy prose upgrade entirely and keep the
+    // local no-LLM card, rather than shipping their derived profile to the cloud
+    // as a background side-effect. Checked BEFORE the client so no network or
+    // prompt build happens. See antibody 2026-07-07-content-agnostic-egress-inv004.
+    if prose_gated_by_privacy() {
+        return None;
+    }
     let client = get_llm_client()?;
     let system_prompt = build_insight_prompt(card, ctx, session_type);
 
@@ -120,6 +147,28 @@ pub async fn generate_insight_prose(
         Err(e) => {
             warn!(target: "4da::personalize", error = %e, "LLM insight generation failed");
             None
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn titles_only_skips_cloud_prose() {
+        // The whole point: a "titles_only" user must not have their full
+        // derived profile shipped to the cloud for a prose upgrade.
+        assert!(skip_prose_for_content_level("titles_only"));
+    }
+
+    #[test]
+    fn other_content_levels_allow_prose() {
+        for level in ["full", "titles_and_summary", "", "unknown"] {
+            assert!(
+                !skip_prose_for_content_level(level),
+                "content_level {level:?} should NOT gate the prose upgrade"
+            );
         }
     }
 }
