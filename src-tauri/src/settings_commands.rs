@@ -174,8 +174,12 @@ pub async fn set_llm_provider(
         _ => guard.get().llm.openai_api_key.clone(),
     };
 
-    // Preserve the existing embedding model setting when updating LLM provider
+    // Preserve settings the provider form does not carry: the embedding model
+    // and — critically — the cloud-embedding opt-in (INV-004). If we let
+    // `allow_cloud_embeddings` fall back to its `false` default here, every LLM
+    // provider save would silently revoke a user's deliberate cloud opt-in.
     let existing_embedding_model = guard.get().llm.embedding_model.clone();
+    let existing_allow_cloud_embeddings = guard.get().llm.allow_cloud_embeddings;
     let llm_provider = LLMProvider {
         provider,
         api_key: effective_api_key,
@@ -183,6 +187,7 @@ pub async fn set_llm_provider(
         base_url,
         openai_api_key: effective_openai_key,
         embedding_model: existing_embedding_model,
+        allow_cloud_embeddings: existing_allow_cloud_embeddings,
     };
 
     guard.set_llm_provider(llm_provider)?;

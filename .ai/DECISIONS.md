@@ -319,6 +319,18 @@
 - **Status:** Final
 - **Code:** `src-tauri/src/settings/license/gating.rs:38` — "Developer DNA un-gated (AD-026): free tier viral sharing of DNA cards".
 
+### AD-027: Cloud Embedding Requires Explicit Opt-In — Local-Only by Default (INV-004)
+- **Decision:** Embedding never leaves the machine unless the user explicitly opts in via `llm.allow_cloud_embeddings` (default `false`). `embed_texts` routes through a single pure decision point, `resolve_embedding_route`, which can only return a cloud route when the opt-in is set. Setting a cloud *LLM* key no longer, as a side-effect, sends embeddings — including local file / project / context content — to `api.openai.com`.
+- **Rationale:** `embed_texts` was content-agnostic: with `provider=openai` (or `anthropic` + an OpenAI key) it embedded ALL callers' text via OpenAI, and its callers include the ACE project scanner, README indexing, and context ingestion — i.e. the user's local files. A user who picked a cloud provider for *chat* silently shipped their indexed local content to OpenAI (retained 30 days per OpenAI policy). That is a direct violation of Principle #1 / INV-004 ("raw data never leaves the machine without explicit consent"). Default-off is the only posture consistent with a privacy-first, local-first product. `fastembed-local` is a default feature, so gated-off users embed locally (ONNX, zero network) with no loss of capability.
+- **Considered:**
+  - Keep content-agnostic routing, document the behaviour: Rejected — a documented silent exfiltration is still a silent exfiltration; violates the founding promise.
+  - Tag each call site as local vs shareable and only gate "local" content: Rejected — brittle, easy to regress, and the honest default for a local-first app is that *nothing* leaves without consent.
+  - Remove cloud embeddings entirely: Rejected — some users legitimately want OpenAI embeddings; the fix is consent, not removal.
+- **Migration:** A one-shot `app_meta`-guarded reconciliation (`embedding_privacy_gate_v1`) re-embeds exactly the previously-cloud cohort into the local vector space on first launch after upgrade; existing local users store a byte-identical identity and are untouched. The persisted embedding identity now carries a `(cloud)` marker only on the cloud route, so a later opt-in/opt-out re-embeds honestly.
+- **Date:** 2026-07-07
+- **Status:** Final
+- **Code:** `src-tauri/src/embeddings.rs` (`resolve_embedding_route`, `EmbeddingRoute`); `src-tauri/src/settings/types.rs` (`LLMProvider::allow_cloud_embeddings`); `src-tauri/src/reembed.rs` (`effective_embedding_identity`, `check_embedding_privacy_gate_migration`); `src-tauri/src/app_setup.rs` (startup wiring). Opt-in is config-only for now (`data/settings.json`); a settings-UI toggle is a deliberate follow-up.
+
 ---
 
 ## Rejected Alternatives (Reference)

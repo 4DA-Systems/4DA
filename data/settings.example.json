@@ -5,7 +5,8 @@
     "model": "",
     "base_url": "http://localhost:11434",
     "openai_api_key": "",
-    "embedding_model": "nomic-embed-text"
+    "embedding_model": "nomic-embed-text",
+    "allow_cloud_embeddings": false
   },
   "rerank": {
     "enabled": true,
