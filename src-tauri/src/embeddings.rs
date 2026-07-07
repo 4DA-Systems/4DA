@@ -109,6 +109,75 @@ async fn try_fastembed_fallback(texts: &[String]) -> Option<Vec<Vec<f32>>> {
     }
 }
 
+/// The resolved embedding execution path for a given settings snapshot.
+///
+/// This is the SINGLE place where the cloud-vs-local decision is made, so the
+/// privacy gate (INV-004) is enforced in exactly one location and can be
+/// unit-tested without any network access.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EmbeddingRoute {
+    /// Cloud: OpenAI embeddings API (`api.openai.com`). Content LEAVES the
+    /// machine — only reachable when the user has explicitly opted in.
+    OpenAi,
+    /// Explicit Ollama provider — uses the configured `base_url`.
+    Ollama,
+    /// Anthropic provider WITHOUT a cloud embed key: local fallback chain
+    /// (configured base_url Ollama -> default Ollama -> fastembed -> zero).
+    AnthropicLocal,
+    /// Default local path: zero-config Ollama -> fastembed -> zero-vector.
+    LocalDefault,
+}
+
+impl EmbeddingRoute {
+    /// True only for routes that transmit content off the machine.
+    pub(crate) fn is_cloud(self) -> bool {
+        matches!(self, EmbeddingRoute::OpenAi)
+    }
+}
+
+/// Pure provider-selection logic — no I/O, no secrets, fully unit-testable.
+///
+/// Privacy gate (INV-004): when `allow_cloud == false` this function can NEVER
+/// return [`EmbeddingRoute::OpenAi`]; the openai and anthropic+openai-key cases
+/// collapse to the local path. When `allow_cloud == true` it reproduces the
+/// legacy content-agnostic routing exactly.
+///
+/// - `has_llm_api_key`    — `llm.api_key` is non-empty (the openai provider key)
+/// - `has_openai_embed_key` — `llm.openai_api_key` is non-empty (dedicated embed key)
+pub(crate) fn resolve_embedding_route(
+    provider: &str,
+    has_llm_api_key: bool,
+    has_openai_embed_key: bool,
+    allow_cloud: bool,
+) -> EmbeddingRoute {
+    match provider {
+        // OpenAI provider with a key: cloud only when opted in; otherwise local.
+        "openai" if has_llm_api_key => {
+            if allow_cloud {
+                EmbeddingRoute::OpenAi
+            } else {
+                EmbeddingRoute::LocalDefault
+            }
+        }
+        // OpenAI provider without a key never had a cloud path anyway.
+        "openai" => EmbeddingRoute::LocalDefault,
+        "ollama" => EmbeddingRoute::Ollama,
+        "anthropic" => {
+            if allow_cloud && has_openai_embed_key {
+                EmbeddingRoute::OpenAi
+            } else if has_openai_embed_key || has_llm_api_key {
+                // Gate off (or no dedicated key): stay on the anthropic-local
+                // fallback chain rather than exfiltrating to OpenAI.
+                EmbeddingRoute::AnthropicLocal
+            } else {
+                // Both keys empty — legacy code treated this as "none".
+                EmbeddingRoute::LocalDefault
+            }
+        }
+        _ => EmbeddingRoute::LocalDefault,
+    }
+}
+
 /// Produce zero-vector placeholders and report embedding capability as degraded.
 fn zero_vector_fallback(count: usize) -> Vec<Vec<f32>> {
     crate::capabilities::report_degraded(
@@ -151,37 +220,34 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
         guard.get().llm.clone()
     };
 
-    // Fast-path: if a cloud provider is configured but has no API key, skip it entirely
-    // and fall through to the zero-config Ollama/zero-vector path. This avoids wasting
-    // ~4-13 seconds on deterministic retry failures during cold start with no keys.
-    let effective_provider = match llm_settings.provider.as_str() {
-        "openai" if llm_settings.api_key.is_empty() => {
-            tracing::debug!(
-                target: "4da::embeddings",
-                "OpenAI provider configured but no API key — falling through to zero-config path"
-            );
-            "none"
-        }
-        "anthropic"
-            if llm_settings.openai_api_key.is_empty() && llm_settings.api_key.is_empty() =>
-        {
-            tracing::debug!(
-                target: "4da::embeddings",
-                "Anthropic provider configured but no embedding key — falling through to zero-config path"
-            );
-            "none"
-        }
-        other => other,
-    };
+    // Privacy gate (INV-004): resolve the execution path in ONE place. When the
+    // user has not explicitly opted into cloud embeddings, this can never select
+    // a cloud route — setting an LLM key must not silently exfiltrate local
+    // file / project / context content to api.openai.com as an embedding
+    // side-effect. See `resolve_embedding_route`.
+    let route = resolve_embedding_route(
+        llm_settings.provider.as_str(),
+        !llm_settings.api_key.is_empty(),
+        !llm_settings.openai_api_key.is_empty(),
+        llm_settings.allow_cloud_embeddings,
+    );
 
-    let result = match effective_provider {
-        "openai" => {
+    let result = match route {
+        EmbeddingRoute::OpenAi => {
+            // The gate has already confirmed opt-in. Pick the key the same way
+            // the legacy router did: the openai provider uses `api_key`, every
+            // other provider (anthropic) uses the dedicated `openai_api_key`.
+            let api_key = if llm_settings.provider == "openai" {
+                llm_settings.api_key.clone()
+            } else {
+                llm_settings.openai_api_key.clone()
+            };
             tracing::info!(
                 target: "4da::embeddings",
                 count = texts.len(),
-                "Embedding via OpenAI — content sent to api.openai.com (retained 30 days per OpenAI policy)"
+                provider = %llm_settings.provider,
+                "Embedding via OpenAI (user opted in) — content sent to api.openai.com (retained 30 days per OpenAI policy)"
             );
-            let api_key = llm_settings.api_key.clone();
             let texts = texts.to_vec();
             retry_with_backoff("embed_openai", 2, || {
                 let key = api_key.clone();
@@ -196,7 +262,7 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
                     .collect()
             })
         }
-        "ollama" => {
+        EmbeddingRoute::Ollama => {
             let base_url = llm_settings.base_url.clone();
             let texts = texts.to_vec();
             retry_with_backoff("embed_ollama", 2, || {
@@ -207,29 +273,9 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
             .await
             .map(validate_embeddings)
         }
-        "anthropic" => {
-            // Anthropic doesn't have embeddings API - use dedicated OpenAI key or fallback to Ollama
-            if !llm_settings.openai_api_key.is_empty() {
-                tracing::info!(
-                    target: "4da::embeddings",
-                    count = texts.len(),
-                    "Anthropic provider — embedding via OpenAI fallback (content sent to api.openai.com)"
-                );
-                let api_key = llm_settings.openai_api_key.clone();
-                let texts = texts.to_vec();
-                return retry_with_backoff("embed_openai_anthropic_fallback", 2, || {
-                    let key = api_key.clone();
-                    let t = texts.clone();
-                    async move { embed_texts_openai(&t, &key).await }
-                })
-                .await
-                .map(|vecs| {
-                    validate_embeddings(vecs)
-                        .into_iter()
-                        .map(truncate_and_normalize)
-                        .collect()
-                });
-            }
+        EmbeddingRoute::AnthropicLocal => {
+            // Anthropic has no embeddings API and the cloud gate is closed (or no
+            // dedicated key): fall back to local Ollama -> fastembed -> zero.
             // Try Ollama as fallback
             if let Some(base_url) = &llm_settings.base_url {
                 if !base_url.is_empty() {
@@ -265,8 +311,9 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
                 }
             }
         }
-        // "none" or unknown provider: try Ollama → fastembed (in-process) → zero vectors
-        _ => {
+        // Default local path (none / unknown / gated-off cloud):
+        // try Ollama → fastembed (in-process) → zero vectors.
+        EmbeddingRoute::LocalDefault => {
             let texts = texts.to_vec();
             if let Ok(result) = retry_with_backoff("embed_ollama_zeroconfig", 1, || {
                 let t = texts.clone();
@@ -358,6 +405,89 @@ fn truncate_and_normalize(mut embedding: Vec<f32>) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ========================================================================
+    // resolve_embedding_route — INV-004 privacy gate proof
+    //
+    // The invariant: with `allow_cloud == false` the route can NEVER be cloud,
+    // regardless of provider or which keys are present. Setting an LLM key must
+    // not silently exfiltrate local content to api.openai.com as a side-effect.
+    // ========================================================================
+
+    #[test]
+    fn gate_off_openai_with_key_stays_local() {
+        // The exact pre-gate leak: provider=openai + api key => was OpenAi.
+        let route = resolve_embedding_route("openai", true, false, false);
+        assert_eq!(route, EmbeddingRoute::LocalDefault);
+        assert!(!route.is_cloud(), "gate off must never route to cloud");
+    }
+
+    #[test]
+    fn gate_off_anthropic_with_openai_key_stays_local() {
+        // The second leak path: anthropic + dedicated openai embed key.
+        let route = resolve_embedding_route("anthropic", false, true, false);
+        assert_eq!(route, EmbeddingRoute::AnthropicLocal);
+        assert!(!route.is_cloud(), "gate off must never route to cloud");
+    }
+
+    #[test]
+    fn gate_off_is_never_cloud_for_any_key_combination() {
+        for &provider in &["openai", "anthropic", "ollama", "", "unknown"] {
+            for &has_llm_key in &[false, true] {
+                for &has_embed_key in &[false, true] {
+                    let route =
+                        resolve_embedding_route(provider, has_llm_key, has_embed_key, false);
+                    assert!(
+                        !route.is_cloud(),
+                        "INV-004 breach: provider={provider} llm_key={has_llm_key} embed_key={has_embed_key} routed to cloud with gate OFF"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn gate_on_reproduces_legacy_cloud_routing() {
+        // openai + key + opt-in => cloud (legacy behaviour, now consented).
+        assert_eq!(
+            resolve_embedding_route("openai", true, false, true),
+            EmbeddingRoute::OpenAi
+        );
+        // anthropic + dedicated openai key + opt-in => cloud fallback.
+        assert_eq!(
+            resolve_embedding_route("anthropic", false, true, true),
+            EmbeddingRoute::OpenAi
+        );
+    }
+
+    #[test]
+    fn openai_without_key_never_cloud_even_when_opted_in() {
+        // No key means no cloud path ever existed — stays local regardless.
+        assert_eq!(
+            resolve_embedding_route("openai", false, false, true),
+            EmbeddingRoute::LocalDefault
+        );
+    }
+
+    #[test]
+    fn explicit_ollama_and_empty_provider_route_local() {
+        assert_eq!(
+            resolve_embedding_route("ollama", false, false, true),
+            EmbeddingRoute::Ollama
+        );
+        assert_eq!(
+            resolve_embedding_route("", false, false, true),
+            EmbeddingRoute::LocalDefault
+        );
+    }
+
+    #[test]
+    fn anthropic_with_no_keys_routes_local_default() {
+        assert_eq!(
+            resolve_embedding_route("anthropic", false, false, true),
+            EmbeddingRoute::LocalDefault
+        );
+    }
 
     // ========================================================================
     // truncate_and_normalize tests

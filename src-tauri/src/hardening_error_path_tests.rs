@@ -122,6 +122,7 @@ mod tests {
                 base_url: None,
                 openai_api_key: String::new(),
                 embedding_model: String::new(),
+                allow_cloud_embeddings: false,
             };
             let client = LLMClient::new(provider);
             // is_configured returns false for unknown providers
@@ -141,6 +142,7 @@ mod tests {
                 base_url: None,
                 openai_api_key: String::new(),
                 embedding_model: String::new(),
+                allow_cloud_embeddings: false,
             };
             let client = LLMClient::new(provider);
             assert!(
@@ -159,6 +161,7 @@ mod tests {
                 base_url: None,
                 openai_api_key: String::new(),
                 embedding_model: String::new(),
+                allow_cloud_embeddings: false,
             };
             let client = LLMClient::new(provider);
             assert!(
@@ -254,6 +257,7 @@ mod tests {
                     base_url: None,
                     openai_api_key: String::new(),
                     embedding_model: String::new(),
+                    allow_cloud_embeddings: false,
                 };
                 let client = LLMClient::new(provider);
                 let cost = client.estimate_cost_cents(0, 0);

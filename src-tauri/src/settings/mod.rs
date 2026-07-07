@@ -480,6 +480,7 @@ mod tests {
             base_url: Some("https://custom.openai.com".to_string()),
             openai_api_key: "sk-embed".to_string(),
             embedding_model: "nomic-embed-text-v2-moe".to_string(),
+            allow_cloud_embeddings: false,
         };
         let json = serde_json::to_string(&provider).expect("serialize");
         let deserialized: LLMProvider = serde_json::from_str(&json).expect("deserialize");
