@@ -21,7 +21,7 @@ provider: string, model: string,
  * client-side. Optional for backward compat with stored signals
  * that predate Phase 7c.
  */
-identity_hash: string | null, 
+identity_hash?: string | null, 
 /**
  * Task this signal pertains to: "judge", "rerank", "summarize", etc.
  */
