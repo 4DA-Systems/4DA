@@ -527,6 +527,24 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 crate::reembed::reembed_all_items().await;
             });
         }
+
+        // INV-004 one-shot: users who were silently on cloud embeddings under the
+        // old content-agnostic router are now local-by-default. Reconcile their
+        // corpus into the local vector space exactly once. Skip if the model-change
+        // path above already scheduled a re-embed (its in-progress guard also makes
+        // a double call harmless, but this keeps startup logs honest).
+        if !needs_reembed {
+            let gate_reembed = {
+                let conn = db.conn.lock();
+                crate::reembed::check_embedding_privacy_gate_migration(&conn)
+            };
+            if gate_reembed {
+                info!(target: "4da::startup", "INV-004 privacy gate — launching one-time re-embed to the local vector space");
+                tauri::async_runtime::spawn(async {
+                    crate::reembed::reembed_all_items().await;
+                });
+            }
+        }
     }
 
     // Sovereign Cold Boot — hydrate persisted scheduler timestamps BEFORE the

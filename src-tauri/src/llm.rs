@@ -1055,6 +1055,7 @@ mod tests {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
 
@@ -1075,6 +1076,7 @@ mod tests {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
 
@@ -1095,6 +1097,7 @@ mod tests {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
         assert!(
@@ -1112,6 +1115,7 @@ mod tests {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
         assert!(
@@ -1129,6 +1133,7 @@ mod tests {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
         assert!(
@@ -1146,6 +1151,7 @@ mod tests {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
         assert!(
@@ -1163,6 +1169,7 @@ mod tests {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
         assert!(
@@ -1184,6 +1191,7 @@ mod tests {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
         let cost = client.estimate_cost_cents(100_000, 10_000);
@@ -1199,6 +1207,7 @@ mod tests {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
         let cost = client.estimate_cost_cents(0, 0);
@@ -1214,6 +1223,7 @@ mod tests {
             base_url: None,
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
         // gpt-4o-mini is the cheapest OpenAI model
@@ -1291,6 +1301,7 @@ mod tests {
             base_url: Some("https://api.mistral.ai/v1".to_string()),
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
         assert!(
@@ -1308,6 +1319,7 @@ mod tests {
             base_url: Some("https://api.mistral.ai/v1".to_string()),
             openai_api_key: String::new(),
             embedding_model: String::new(),
+            allow_cloud_embeddings: false,
         };
         let client = LLMClient::new(provider);
         assert!(

@@ -36,11 +36,100 @@ pub(crate) fn get_embedding_model() -> String {
     }
 }
 
+/// Whether the current settings would route embeddings through a CLOUD provider
+/// (content leaves the machine). Mirrors [`crate::embeddings::resolve_embedding_route`]'s
+/// cloud test without touching the async embed path — used only to keep the
+/// persisted embedding identity honest about cloud-vs-local.
+pub(crate) fn embeddings_route_is_cloud() -> bool {
+    let manager = crate::get_settings_manager();
+    let guard = manager.lock();
+    let llm = &guard.get().llm;
+    crate::embeddings::resolve_embedding_route(
+        llm.provider.as_str(),
+        !llm.api_key.is_empty(),
+        !llm.openai_api_key.is_empty(),
+        llm.allow_cloud_embeddings,
+    )
+    .is_cloud()
+}
+
+/// The effective embedding identity used to detect when re-embedding is needed.
+///
+/// This is the model name plus a ` (cloud)` suffix when — and only when — the
+/// resolved route sends content to a cloud provider. For the overwhelming common
+/// case (local embeddings) the identity is exactly the bare model name, so this
+/// is byte-identical to the value existing local installs already stored: no
+/// spurious global re-embed on upgrade. It only differs (and thus triggers a
+/// re-embed) when a user flips cloud embeddings on or off, which genuinely moves
+/// the corpus between vector spaces.
+pub(crate) fn effective_embedding_identity() -> String {
+    let model = get_embedding_model();
+    if embeddings_route_is_cloud() {
+        format!("{model} (cloud)")
+    } else {
+        model
+    }
+}
+
+/// One-shot reconciliation for the INV-004 cloud-embedding gate (v1).
+///
+/// Before the gate, any user with a cloud LLM key silently received CLOUD
+/// embeddings for ALL content — including local files. After the gate the
+/// default is local-only, so that cohort's stored vectors (cloud space) no
+/// longer match freshly-embedded queries (local space). This fires exactly once
+/// — keyed by an `app_meta` marker — and returns `true` when a one-time full
+/// re-embed is needed to move the corpus into the now-active local vector space.
+///
+/// A user who has explicitly opted into cloud (`allow_cloud_embeddings == true`)
+/// keeps the cloud route and needs no reconciliation; a user who never had a
+/// cloud route is unaffected; a fresh install just records the marker (its
+/// corpus is empty or already local, so `reembed_all_items` is a no-op).
+pub(crate) fn check_embedding_privacy_gate_migration(conn: &rusqlite::Connection) -> bool {
+    const MARKER: &str = "embedding_privacy_gate_v1";
+    let already_done: String = conn
+        .query_row(
+            "SELECT value FROM app_meta WHERE key = ?1",
+            rusqlite::params![MARKER],
+            |row| row.get(0),
+        )
+        .unwrap_or_default();
+    if !already_done.is_empty() {
+        return false;
+    }
+    // Record the marker first so this can never fire twice, even across a crash.
+    let _ = conn.execute(
+        "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?1, 'done')",
+        rusqlite::params![MARKER],
+    );
+
+    // Would the OLD (pre-gate) rules have routed this user to the cloud, and have
+    // they opted in under the new rules?
+    let (was_cloud_eligible, opted_in) = {
+        let manager = crate::get_settings_manager();
+        let guard = manager.lock();
+        let llm = &guard.get().llm;
+        let old_cloud = (llm.provider == "openai" && !llm.api_key.is_empty())
+            || (llm.provider == "anthropic" && !llm.openai_api_key.is_empty());
+        (old_cloud, llm.allow_cloud_embeddings)
+    };
+
+    // Only the previously-cloud, now-gated-to-local cohort needs reconciling.
+    if was_cloud_eligible && !opted_in {
+        tracing::info!(
+            target: "4da::embeddings",
+            "INV-004 gate: user was on cloud embeddings under old rules and is now local by default — scheduling a one-time re-embed to reconcile the vector space"
+        );
+        return true;
+    }
+    false
+}
+
 /// Check if the embedding model has changed since last run.
-/// Uses the `app_meta` table to persist the last-used model name.
-/// Returns `true` if re-embedding is needed (model changed).
+/// Uses the `app_meta` table to persist the last-used embedding identity
+/// (model name, plus a cloud marker when the route is cloud — see
+/// [`effective_embedding_identity`]). Returns `true` if re-embedding is needed.
 pub(crate) fn check_embedding_model_changed(conn: &rusqlite::Connection) -> bool {
-    let current = get_embedding_model();
+    let current = effective_embedding_identity();
 
     let stored: String = conn
         .query_row(
