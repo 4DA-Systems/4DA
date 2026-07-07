@@ -110,6 +110,49 @@ ignore = [
     # -----------------------------------------------------------------------
     { id = "RUSTSEC-2026-0194", reason = "quick-xml DoS; no upstream release on >=0.41 yet (calamine/docx-rs/plist); local-file-only XML surface" },
     { id = "RUSTSEC-2026-0195", reason = "quick-xml NsReader DoS; no upstream release on >=0.41 yet (calamine/docx-rs/plist); local-file-only XML surface" },
+
+    # -----------------------------------------------------------------------
+    # gtk-rs GTK3 bindings unmaintained + glib unsound — Linux-ONLY, pulled by
+    # the Tauri v2 Linux webview stack (webkit2gtk -> gtk). Compile to nothing on
+    # Windows/macOS; 4DA calls none directly (glib::VariantStrIter unused). Fix =
+    # Tauri's GTK4 migration (upstream). Extends the existing atk-0.18 ignore.
+    # -----------------------------------------------------------------------
+    { id = "RUSTSEC-2024-0411", reason = "gdkwayland-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
+    { id = "RUSTSEC-2024-0412", reason = "gdk: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
+    { id = "RUSTSEC-2024-0414", reason = "gdkx11-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
+    { id = "RUSTSEC-2024-0415", reason = "gtk: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
+    { id = "RUSTSEC-2024-0416", reason = "atk-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
+    { id = "RUSTSEC-2024-0417", reason = "gdkx11: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
+    { id = "RUSTSEC-2024-0418", reason = "gdk-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
+    { id = "RUSTSEC-2024-0419", reason = "gtk3-macros: gtk-rs GTK3 unmaintained; build-time only, Linux Tauri stack" },
+    { id = "RUSTSEC-2024-0420", reason = "gtk-sys: gtk-rs GTK3 unmaintained; Linux-only Tauri webview dep, no GTK4 path upstream yet" },
+    { id = "RUSTSEC-2024-0429", reason = "glib unsound VariantStrIter; Linux Tauri stack, iterator never used by 4DA" },
+
+    # -----------------------------------------------------------------------
+    # unic-* Unicode crates unmaintained — BUILD-TIME transitive only
+    # (unic-ucd-* <- urlpattern <- tauri-utils <- tauri-build). Not in the
+    # shipped runtime; pure Unicode table lookups; no vulnerability, only a
+    # maintenance flag. No maintained drop-in yet.
+    # -----------------------------------------------------------------------
+    { id = "RUSTSEC-2025-0075", reason = "unic-char-range unmaintained; build-time transitive via tauri-build, no runtime surface" },
+    { id = "RUSTSEC-2025-0080", reason = "unic-common unmaintained; build-time transitive via tauri-build, no runtime surface" },
+    { id = "RUSTSEC-2025-0081", reason = "unic-char-property unmaintained; build-time transitive via tauri-build, no runtime surface" },
+    { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version unmaintained; build-time transitive via tauri-build, no runtime surface" },
+    { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident unmaintained; build-time transitive via tauri-build, no runtime surface" },
+
+    # -----------------------------------------------------------------------
+    # proc-macro build-time unmaintained — compile-time expansion only, zero
+    # runtime/attack surface in the shipped app.
+    # -----------------------------------------------------------------------
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error unmaintained; compile-time proc-macro only, no runtime surface" },
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained; compile-time proc-macro only, no runtime surface" },
+    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 unmaintained; compile-time proc-macro only, no runtime surface" },
+
+    # -----------------------------------------------------------------------
+    # ttf-parser unmaintained — transitive font parser; only surface is local
+    # font/glyph handling (render/OCR), no network input; maintenance flag only.
+    # -----------------------------------------------------------------------
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser unmaintained; local font/glyph parsing only, no network input" },
 ]
 
 # ============================================================================
