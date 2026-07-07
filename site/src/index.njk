@@ -967,6 +967,52 @@ permalink: "/index.html"
       .trust-grid { grid-template-columns: 1fr 1fr; }
       .footer-inner { flex-direction: column; text-align: center; }
     }
+
+    /* ===== Conversion: two-ways-to-start, get-started steps, contextual doc links ===== */
+    .hero-start {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+      max-width: 720px; margin: 0 auto 22px; text-align: left;
+    }
+    .start-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .start-card-label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+    .start-cmd {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px 9px 12px;
+    }
+    .start-cmd code { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text); white-space: nowrap; overflow-x: auto; }
+    .copy-btn {
+      appearance: none; cursor: pointer; flex-shrink: 0;
+      background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-secondary);
+      font-size: 11px; font-weight: 500; padding: 5px 10px; border-radius: 6px;
+      transition: color .15s, border-color .15s; font-family: 'JetBrains Mono', monospace;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+    .copy-btn.copied { color: #22C55E; border-color: #22C55E; }
+    .start-card .btn-primary { width: 100%; justify-content: center; }
+    .start-card-sub { font-size: 12px; color: var(--text-muted); margin-top: auto; }
+    .start-card-link { font-size: 12px; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+
+    .getstarted { padding-top: 64px; }
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px; text-align: left; }
+    .step-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+    .step-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent); margin-bottom: 12px; letter-spacing: .05em; }
+    .step-card h4 { font-size: 15px; margin-bottom: 6px; }
+    .step-card p { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.55; }
+    .step-card p code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--bg); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; color: var(--text); }
+    .step-card a { font-size: 12px; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+
+    .doc-inline-link { display: inline-block; font-size: 13px; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+    .mcp-code { position: relative; }
+    .mcp-code .copy-btn { position: absolute; top: 12px; right: 12px; z-index: 2; }
+
+    @media (max-width: 640px) {
+      .hero-start { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+    }
   </style>
 {% endblock %}
 
@@ -999,16 +1045,57 @@ permalink: "/index.html"
       <p>4DA reads the internet for developers &mdash; privately, locally &mdash; and gets sharper every day.</p>
       <p style="font-size:15px; color:var(--text-muted); max-width:560px; margin:8px auto 16px;">Your codebase decides what's relevant. Everything else is rejected. It learns from how you engage with what it shows you &mdash; yesterday's noise becomes tomorrow's signal.</p>
       <p style="font-size:14px; color:var(--text-muted); max-width:520px; margin:0 auto 48px;">Hacker News, GitHub, Reddit, YouTube, arXiv, Stack Overflow, Lobsters, Bluesky, and 12+ more &mdash; scored on 5 axes against your actual stack. 2+ signals required to pass.</p>
-      <div class="hero-buttons">
-        <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" id="hero-download">Download for Free</a>
-        <a href="https://www.npmjs.com/package/@4da/mcp-server" class="btn btn-secondary"><span class="mono">npx</span> MCP Server</a>
+      <div class="hero-start">
+        <div class="start-card">
+          <div class="start-card-label">In Claude Code, Cursor, or Windsurf?</div>
+          <div class="start-cmd">
+            <code>npx @4da/mcp-server</code>
+            <button type="button" class="copy-btn" data-copy="npx @4da/mcp-server" aria-label="Copy install command">Copy</button>
+          </div>
+          <div class="start-card-sub">Zero install. No keys, no account. Live vulnerability &amp; dependency intel in your agent.</div>
+          <a href="/docs/mcp/" class="start-card-link">MCP setup &rarr;</a>
+        </div>
+        <div class="start-card">
+          <div class="start-card-label">Want the desktop app?</div>
+          <a href="/download/" class="btn btn-primary" id="hero-download">Download for Free</a>
+          <div class="start-card-sub">Windows &middot; macOS &middot; Linux &middot; ~15MB &middot; auto-updates</div>
+          <a href="/docs/install/" class="start-card-link">Install guide &rarr;</a>
+        </div>
       </div>
-      <div style="margin-top: 32px; font-size: 13px; color: var(--text-muted); letter-spacing: 0.02em;">Runs locally &middot; Zero telemetry &middot; BYOK &middot; Works offline with Ollama</div>
+      <div style="margin-top: 28px; font-size: 13px; color: var(--text-muted); letter-spacing: 0.02em;">Runs locally &middot; Zero telemetry &middot; BYOK &middot; Works offline with Ollama</div>
       <div style="margin-top:48px; max-width:720px; margin-left:auto; margin-right:auto;">
         <img src="screenshots/01-brief.png" alt="4DA Brief tab showing today's top picks and signal stream" style="width:100%; border-radius:12px; border:1px solid var(--border); box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
       </div>
     </div>
   </header>
+
+  <!-- Get started in 60 seconds -->
+  <section class="getstarted reveal">
+    <div class="container">
+      <div class="section-label">Get started in about 60 seconds</div>
+      <h2>Three steps to your first signal</h2>
+      <div class="steps">
+        <div class="step-card">
+          <div class="step-num">01</div>
+          <h4>Install</h4>
+          <p>Run <code>npx @4da/mcp-server</code>, or download the app for your OS. No account and no API key to start.</p>
+          <a href="/docs/install/">Install guide &rarr;</a>
+        </div>
+        <div class="step-card">
+          <div class="step-num">02</div>
+          <h4>Point it at your code</h4>
+          <p>4DA scans your manifests and Git history locally to learn your stack. Nothing leaves your machine.</p>
+          <a href="/docs/quickstart/">Quickstart &rarr;</a>
+        </div>
+        <div class="step-card">
+          <div class="step-num">03</div>
+          <h4>Read your Brief</h4>
+          <p>Run an analysis and open the Brief tab &mdash; today&rsquo;s top picks, scored against your stack. Save what&rsquo;s useful; it sharpens.</p>
+          <a href="/docs/how-it-works/">How scoring works &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- Visual break -->
   <div class="visual-break" aria-hidden="true">
@@ -1141,7 +1228,7 @@ permalink: "/index.html"
             <li>CLI binary</li>
             <li>Unlimited use</li>
           </ul>
-          <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:24px;" id="pricing-download-free">Download Free</a>
+          <a href="/download/" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:24px;" id="pricing-download-free">Download Free</a>
         </div>
         <div class="pricing-card recommended">
           <h3>Signal</h3>
@@ -1230,6 +1317,9 @@ permalink: "/index.html"
       <div class="pipeline-result">
         An item needs <strong>2+ independent signals</strong> to pass the confirmation gate. Everything else is rejected.
       </div>
+      <div style="text-align:center; margin-top:18px;">
+        <a class="doc-inline-link" href="/docs/scoring/">See exactly how the 5 axes score &rarr;</a>
+      </div>
 
       <!-- Feature cards -->
       <div class="features-grid" style="margin-top: 48px;">
@@ -1268,6 +1358,7 @@ permalink: "/index.html"
         <div class="mcp-text">
           <p>4DA ships an MCP server with 14 intelligence tools. Install it with one command and your AI assistant draws from your scored, filtered intelligence feed -- not generic internet search results.</p>
           <p style="font-size: 14px; color: var(--text-muted);">Works with Claude Code, Cursor, and any MCP-compatible host. Apache-2.0 licensed. Always free.</p>
+          <a class="doc-inline-link" href="/docs/mcp/">Full MCP setup &amp; the 14 tools &rarr;</a>
           <ul class="mcp-queries">
             <li>"Scan my dependencies for vulnerabilities"</li>
             <li>"What should I know before I start this task?"</li>
@@ -1276,6 +1367,7 @@ permalink: "/index.html"
           </ul>
         </div>
         <div class="mcp-code">
+          <button type="button" class="copy-btn" data-copy="npx @4da/mcp-server" aria-label="Copy install command">Copy</button>
 <pre><span class="comment">// Install -- one command</span>
 npx <span class="string">@4da/mcp-server</span>
 
@@ -1296,6 +1388,7 @@ npx <span class="string">@4da/mcp-server</span>
         <div class="section-label">Trust</div>
         <h2 style="margin-bottom: 20px;">Built for developers who read the source</h2>
         <p class="subtitle">No trust-us claims. Verify everything yourself.</p>
+        <p style="margin-top:-8px; margin-bottom:8px;"><a class="doc-inline-link" href="/docs/privacy/">Read every outbound connection 4DA makes &rarr;</a></p>
         <div class="trust-grid">
           <div class="trust-card">
             <h3>Free means free</h3>
@@ -1373,7 +1466,7 @@ npx <span class="string">@4da/mcp-server</span>
     <div class="container">
       <h2>Stop reading everything.<br>Start knowing what matters.</h2>
       <p>Your codebase already knows what's relevant. Let it decide.</p>
-      <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" id="final-download">Download 4DA -- Free</a>
+      <a href="/download/" class="btn btn-primary" id="final-download">Download 4DA -- Free</a>
       <div class="trust-line">No account &middot; No credit card &middot; No telemetry &middot; ~15MB download</div>
 
       <!-- STREETS compact callout -->
@@ -1572,6 +1665,23 @@ npx <span class="string">@4da/mcp-server</span>
       [heroBtn, finalBtn].forEach(function(btn) {
         if (btn) btn.addEventListener('click', function() {
           if (typeof posthog !== 'undefined') posthog.capture('download_clicked', { platform: platform, button: btn.id });
+        });
+      });
+    })();
+
+    // Copy-to-clipboard for command snippets
+    (function() {
+      document.querySelectorAll('.copy-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var text = btn.getAttribute('data-copy') || '';
+          if (!navigator.clipboard) return;
+          navigator.clipboard.writeText(text).then(function() {
+            var orig = btn.textContent;
+            btn.textContent = 'Copied';
+            btn.classList.add('copied');
+            if (typeof posthog !== 'undefined') posthog.capture('npx_copied', { text: text });
+            setTimeout(function() { btn.textContent = orig; btn.classList.remove('copied'); }, 1600);
+          }).catch(function() {});
         });
       });
     })();

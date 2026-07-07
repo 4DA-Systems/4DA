@@ -1,0 +1,193 @@
+---
+title: "Download 4DA — Windows, macOS, Linux"
+description: "Download 4DA free for your platform. ~15MB, auto-updates, no account. Or run the MCP server with one command."
+permalink: "/download/"
+---
+{% extends "base.njk" %}
+
+{% block head %}
+  <link rel="canonical" href="https://4da.ai/download">
+  <meta property="og:title" content="Download 4DA — free for Windows, macOS, Linux">
+  <meta property="og:description" content="~15MB, auto-updates, no account. Or run the MCP server with one command.">
+  <meta property="og:url" content="https://4da.ai/download">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0A0A0A; --bg-card: #141414; --bg-hover: #1A1A1A;
+      --text: #FFFFFF; --text-secondary: #A0A0A0; --text-muted: #666666;
+      --accent: #F97316; --border: #2A2A2A; --radius: 12px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+    .container { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+    .dl-nav { height: 56px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+    .dl-nav .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; color: var(--text); }
+    .dl-nav .brand .dot { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; font-weight: 600; }
+    .dl-nav .links { display: flex; gap: 22px; }
+    .dl-nav .links a { color: var(--text-muted); font-size: 14px; }
+    .dl-nav .links a:hover { color: var(--text); }
+
+    .dl-hero { text-align: center; padding: 64px 0 8px; }
+    .dl-hero .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
+    .dl-hero h1 { font-size: 40px; font-weight: 600; letter-spacing: -.02em; margin: 12px 0 10px; }
+    .dl-hero p { color: var(--text-secondary); max-width: 52ch; margin: 0 auto; }
+
+    .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 40px 0 12px; }
+    .dl-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; display: flex; flex-direction: column; gap: 10px; position: relative; }
+    .dl-card.recommended { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .dl-badge { position: absolute; top: -10px; left: 20px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 3px 8px; border-radius: 5px; display: none; }
+    .dl-card.recommended .dl-badge { display: inline-block; }
+    .dl-os { font-size: 17px; font-weight: 600; }
+    .dl-meta { font-size: 12.5px; color: var(--text-muted); flex: 1; }
+    .dl-btn { display: inline-block; text-align: center; background: var(--text); color: var(--bg); font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 8px; transition: opacity .2s; }
+    .dl-btn:hover { opacity: .9; }
+    .dl-note-inline { font-size: 11.5px; color: var(--text-muted); }
+
+    .dl-alt { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin: 24px 0; }
+    .dl-alt-text { font-size: 14px; color: var(--text-secondary); }
+    .dl-cmd { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 8px 8px 12px; }
+    .dl-cmd code { font-size: 13px; color: var(--text); }
+    .copy-btn { appearance: none; cursor: pointer; background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; font-weight: 500; padding: 5px 10px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; transition: color .15s, border-color .15s; }
+    .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+    .copy-btn.copied { color: #22C55E; border-color: #22C55E; }
+
+    .dl-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 32px 0; }
+    .dl-notes .note { border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+    .dl-notes h3 { font-size: 14px; margin-bottom: 6px; }
+    .dl-notes p { font-size: 13px; color: var(--text-secondary); }
+    .dl-notes code { font-size: 12px; background: var(--bg-card); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; }
+
+    .dl-next { border-top: 1px solid var(--border); margin-top: 8px; padding: 40px 0 80px; }
+    .dl-next .section-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+    .dl-next h2 { font-size: 22px; font-weight: 600; margin: 10px 0 20px; }
+    .dl-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .dl-step { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+    .dl-step .n { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent); margin-bottom: 10px; }
+    .dl-step h4 { font-size: 15px; margin-bottom: 6px; }
+    .dl-step p { font-size: 13px; color: var(--text-secondary); }
+    .dl-step a { font-size: 12px; font-family: 'JetBrains Mono', monospace; }
+
+    @media (max-width: 720px) {
+      .dl-grid, .dl-notes, .dl-steps { grid-template-columns: 1fr; }
+      .dl-hero h1 { font-size: 32px; }
+    }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <div class="container">
+    <nav class="dl-nav">
+      <a href="/" class="brand"><span class="dot">4</span> 4DA</a>
+      <div class="links"><a href="/">Home</a><a href="/docs/">Docs</a><a href="https://github.com/runyourempire/4DA">GitHub</a></div>
+    </nav>
+  </div>
+
+  <div class="container">
+    <header class="dl-hero">
+      <div class="eyebrow">Free forever &middot; No account &middot; ~15MB</div>
+      <h1>Download 4DA</h1>
+      <p>Pre-built binaries with auto-updates. The local embedding model ships inside the installer, so it works fully offline on first run.</p>
+    </header>
+
+    <div class="dl-grid">
+      <div class="dl-card" data-os="win">
+        <span class="dl-badge">Recommended for you</span>
+        <div class="dl-os">Windows</div>
+        <div class="dl-meta">Windows 10 (1803+) or 11. <code>.exe</code> installer (NSIS), auto-updates.</div>
+        <a class="dl-btn" data-dl="win" href="https://github.com/runyourempire/4DA/releases/latest">Get the .exe</a>
+        <div class="dl-note-inline">First launch shows SmartScreen &mdash; see below.</div>
+      </div>
+      <div class="dl-card" data-os="mac">
+        <span class="dl-badge">Recommended for you</span>
+        <div class="dl-os">macOS</div>
+        <div class="dl-meta">macOS 10.15+. <code>.dmg</code> for Apple Silicon &amp; Intel, auto-updates.</div>
+        <a class="dl-btn" data-dl="mac" href="https://github.com/runyourempire/4DA/releases/latest">Get the .dmg</a>
+        <div class="dl-note-inline">Universal build &mdash; one file for both chips.</div>
+      </div>
+      <div class="dl-card" data-os="linux">
+        <span class="dl-badge">Recommended for you</span>
+        <div class="dl-os">Linux</div>
+        <div class="dl-meta">Ubuntu 22.04+ (WebKitGTK 4.1). <code>.AppImage</code> or <code>.deb</code>.</div>
+        <a class="dl-btn" data-dl="linux" href="https://github.com/runyourempire/4DA/releases/latest">Get AppImage / .deb</a>
+        <div class="dl-note-inline">AppImage runs anywhere; .deb for apt-based distros.</div>
+      </div>
+    </div>
+    <p style="text-align:center; font-size:13px; color:var(--text-muted);">Every release includes <code>SHASUMS256.txt</code> and per-file <code>.sha256</code> sidecars. <a href="/docs/install/">Install guide &amp; requirements &rarr;</a></p>
+
+    <div class="dl-alt">
+      <div class="dl-alt-text"><strong>Live in your terminal?</strong> Skip the app &mdash; run the MCP server in Claude Code, Cursor, or Windsurf.</div>
+      <div class="dl-cmd">
+        <code>npx @4da/mcp-server</code>
+        <button type="button" class="copy-btn" data-copy="npx @4da/mcp-server" aria-label="Copy command">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-notes">
+      <div class="note">
+        <h3>Windows SmartScreen</h3>
+        <p>On first launch, SmartScreen prompts because 4DA is a new app still building reputation &mdash; not a warning about the binary. Click <strong>More info &rarr; Run anyway</strong>.</p>
+      </div>
+      <div class="note">
+        <h3>Verify your download</h3>
+        <p>Match your file against its <code>.sha256</code> sidecar before running it. Source-available under FSL-1.1-Apache-2.0 &mdash; you can also <a href="https://github.com/runyourempire/4DA">build from source</a>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <section class="dl-next">
+      <div class="section-label">After you install</div>
+      <h2>Your first signal, in three steps</h2>
+      <div class="dl-steps">
+        <div class="dl-step">
+          <div class="n">01</div>
+          <h4>Point it at your code</h4>
+          <p>Add your project folders. 4DA scans manifests and Git history locally to learn your stack.</p>
+        </div>
+        <div class="dl-step">
+          <div class="n">02</div>
+          <h4>Run an analysis</h4>
+          <p>4DA fetches from 20+ sources and scores everything against your context. Keys are optional.</p>
+        </div>
+        <div class="dl-step">
+          <div class="n">03</div>
+          <h4>Read your Brief</h4>
+          <p>Open the Brief tab for today&rsquo;s top picks. Save what&rsquo;s useful &mdash; it sharpens. <a href="/docs/quickstart/">Quickstart &rarr;</a></p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function() {
+      var ua = navigator.userAgent.toLowerCase();
+      var os = null;
+      if (ua.indexOf('win') !== -1) os = 'win';
+      else if (ua.indexOf('mac') !== -1) os = 'mac';
+      else if (ua.indexOf('linux') !== -1 || ua.indexOf('android') !== -1) os = 'linux';
+      if (os) {
+        var card = document.querySelector('.dl-card[data-os="' + os + '"]');
+        if (card) { card.classList.add('recommended'); card.parentNode.insertBefore(card, card.parentNode.firstChild); }
+      }
+      document.querySelectorAll('[data-dl]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          if (typeof posthog !== 'undefined') posthog.capture('download_clicked', { platform: btn.getAttribute('data-dl'), source: 'download_page' });
+        });
+      });
+      document.querySelectorAll('.copy-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          if (!navigator.clipboard) return;
+          navigator.clipboard.writeText(btn.getAttribute('data-copy') || '').then(function() {
+            var orig = btn.textContent; btn.textContent = 'Copied'; btn.classList.add('copied');
+            if (typeof posthog !== 'undefined') posthog.capture('npx_copied', { source: 'download_page' });
+            setTimeout(function() { btn.textContent = orig; btn.classList.remove('copied'); }, 1600);
+          }).catch(function() {});
+        });
+      });
+    })();
+  </script>
+{% endblock %}
