@@ -21,19 +21,19 @@ source_classified: boolean,
 /**
  * Installed version of the affected package (from project_dependencies).
  */
-installed_version: string | null, 
+installed_version?: string | null, 
 /**
  * Fixed version to update to (from OSV advisory).
  */
-fixed_version: string | null, 
+fixed_version?: string | null, 
 /**
  * Whether this is a direct dependency (true) or transitive (false).
  */
-is_direct: boolean | null, 
+is_direct?: boolean | null, 
 /**
  * Whether this is a dev-only dependency.
  */
-is_dev: boolean | null, 
+is_dev?: boolean | null, 
 /**
  * True when the affected package is inactive on the host platform in every
  * tracked project/target (Phase 2b/2c). Such advisories are de-prioritised

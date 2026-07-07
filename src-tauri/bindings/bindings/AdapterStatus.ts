@@ -12,4 +12,4 @@ status: string,
 /**
  * When this adapter last successfully fetched data (ISO 8601 string or null)
  */
-last_checked: string | null, };
+last_checked?: string | null, };
