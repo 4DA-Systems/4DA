@@ -58,29 +58,32 @@ fn extract_advisory_id(title: &str) -> Option<String> {
 fn extract_cvss_from_content(content: &str) -> (Option<f32>, Option<String>) {
     for line in content.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("Severity:") {
-            // The score follows the severity-type label (e.g. "CVSS_V3:"), and that label
-            // itself contains a digit ("V3"). Parse only the value AFTER the final colon so
-            // the version digit is never mistaken for the score: "Severity: CVSS_V3: 9.8"
-            // must yield 9.8, not 3.0. Producer format: osv_types::vuln_to_source_item emits
-            // `format!("{severity_type}: {score}")`, so the score always follows the last colon.
-            let after_label = trimmed.rsplit_once(':').map(|(_, v)| v).unwrap_or(trimmed);
-            let nums: Vec<f32> = after_label
-                .split(|c: char| !c.is_ascii_digit() && c != '.')
-                .filter_map(|s| s.parse::<f32>().ok())
-                .filter(|&v| v <= 10.0 && v > 0.0)
-                .collect();
-            if let Some(&score) = nums.first() {
-                let severity = if score >= 9.0 {
-                    "critical"
-                } else if score >= 7.0 {
-                    "high"
-                } else if score >= 4.0 {
-                    "medium"
-                } else {
-                    "low"
-                };
-                return (Some(score), Some(severity.to_string()));
+        if let Some(rest) = trimmed.strip_prefix("Severity:") {
+            // Producer format: osv_types::vuln_to_source_item emits `format!("{severity_type}: {score}")`,
+            // e.g. "CVSS_V3: 9.8" OR "CVSS_V3: CVSS:3.1/AV:N/…/A:H" (OSV usually stores the VECTOR). The
+            // severity-TYPE label has no internal colon, so splitting on the FIRST colon isolates the score
+            // (bare number or full vector) — and, crucially, keeps the "V3" version digit in the discarded
+            // TYPE half so it can never be mistaken for the score. `parse_cvss_score` then handles both a
+            // bare number and a vector (computing the base score per the CVSS v3.1 spec).
+            let score_str = rest
+                .trim()
+                .split_once(':')
+                .map(|(_, v)| v.trim())
+                .unwrap_or_else(|| rest.trim());
+            if let Some(score) = super::cvss::parse_cvss_score(score_str) {
+                if score > 0.0 && score <= 10.0 {
+                    let score = score as f32;
+                    let severity = if score >= 9.0 {
+                        "critical"
+                    } else if score >= 7.0 {
+                        "high"
+                    } else if score >= 4.0 {
+                        "medium"
+                    } else {
+                        "low"
+                    };
+                    return (Some(score), Some(severity.to_string()));
+                }
             }
         }
     }
@@ -2915,6 +2918,20 @@ mod tests {
         let (score4, sev4) = extract_cvss_from_content("Severity: HIGH");
         assert_eq!(score4, None);
         assert_eq!(sev4, None);
+
+        // VECTOR-format score (the OSV default per the schema): compute the base score, don't drop it.
+        // A 9.8 critical encoded as a vector must NOT read as NONE (the pre-fix behavior for the
+        // dominant real input — see §183 audit).
+        let (v1, s1) = extract_cvss_from_content(
+            "Severity: CVSS_V3: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        );
+        assert_eq!(v1, Some(9.8), "vector 9.8 must compute, not drop to NONE");
+        assert_eq!(s1.as_deref(), Some("critical"));
+        let (v2, s2) = extract_cvss_from_content(
+            "Severity: CVSS_V3: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+        );
+        assert_eq!(v2, Some(7.5));
+        assert_eq!(s2.as_deref(), Some("high"));
     }
 
     #[test]

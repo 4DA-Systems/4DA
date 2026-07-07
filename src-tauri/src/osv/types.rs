@@ -191,7 +191,9 @@ impl Vulnerability {
                 .or_else(|| s.first())
         });
         let sev_type = sev.map(|s| s.severity_type.clone());
-        let score = sev.and_then(|s| s.score.parse::<f64>().ok());
+        // OSV usually stores the CVSS VECTOR in `score` (not a bare number); compute the base score
+        // per the CVSS v3.1 spec so severity isn't silently dropped for the common case.
+        let score = sev.and_then(|s| crate::scoring::cvss::parse_cvss_score(&s.score));
         (sev_type, score)
     }
 
