@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useEffect, useState, useCallback, memo, useMemo } from 'react';
+import { useEffect, useState, useCallback, memo, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
@@ -23,6 +23,52 @@ import { translateError } from '../utils/error-messages';
 type SettingsTab = 'general' | 'intelligence' | 'sources' | 'projects' | 'team' | 'about';
 
 const BASE_TAB_IDS: SettingsTab[] = ['general', 'intelligence', 'sources', 'projects', 'about'];
+
+// Side-rail grouping — mirrors ctx.rs's grouped side menu, adapted to 4DA's
+// six (growing) settings sections. Order within a group is preserved from TAB_IDS.
+const TAB_GROUP_MEMBERS: Record<'configuration' | 'account', SettingsTab[]> = {
+  configuration: ['general', 'intelligence', 'sources', 'projects'],
+  account: ['team', 'about'],
+};
+
+const TAB_ICONS: Record<SettingsTab, ReactNode> = {
+  general: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h6M14 18h6" strokeLinecap="round" />
+      <circle cx="16" cy="6" r="2" /><circle cx="8" cy="12" r="2" /><circle cx="12" cy="18" r="2" />
+    </svg>
+  ),
+  intelligence: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <path d="M12 3a6 6 0 0 0-4 10.5V16a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.5A6 6 0 0 0 12 3Z" strokeLinejoin="round" />
+      <path d="M9.5 21h5" strokeLinecap="round" />
+    </svg>
+  ),
+  sources: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
+      <circle cx="7" cy="6" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="14" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="18" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+  projects: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <path d="M3 7a2 2 0 0 1 2-2h3.5l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" strokeLinejoin="round" />
+    </svg>
+  ),
+  team: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <circle cx="9" cy="8" r="3" /><path d="M15.5 5.5a3 3 0 0 1 0 5" strokeLinecap="round" />
+      <path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 14a5.5 5.5 0 0 1 4.5 5" strokeLinecap="round" />
+    </svg>
+  ),
+  about: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.5h.01" strokeLinecap="round" />
+    </svg>
+  ),
+};
 
 // ============================================================================
 // Props
@@ -52,6 +98,15 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
     }
     return BASE_TAB_IDS;
   }, [isTeamOrEnterprise]);
+
+  // Group the (possibly Team-augmented) tab list for the side rail, dropping
+  // any empty group so the header never renders above nothing.
+  const TAB_GROUPS = useMemo(() => {
+    const present = new Set(TAB_IDS);
+    return (['configuration', 'account'] as const)
+      .map(key => ({ key, ids: TAB_GROUP_MEMBERS[key].filter(id => present.has(id)) }))
+      .filter(g => g.ids.length > 0);
+  }, [TAB_IDS]);
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [initialized, setInitialized] = useState<Set<SettingsTab>>(new Set(['general']));
@@ -161,32 +216,61 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   };
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
-      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-2xl max-h-[calc(100vh-4rem)] overflow-y-auto shadow-2xl">
-        {/* Sticky Header + Tab Bar */}
-        <div className="sticky top-0 bg-bg-secondary z-10">
-          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
-                {/* eslint-disable-next-line i18next/no-literal-string */}
-                <span aria-hidden="true">&#x2699;&#xfe0f;</span>
-              </div>
-              <h2 id="settings-modal-title" className="text-lg font-medium text-text-primary">{t('settings.title')}</h2>
+      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-4xl max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden shadow-2xl">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
+              {/* eslint-disable-next-line i18next/no-literal-string */}
+              <span aria-hidden="true">&#x2699;&#xfe0f;</span>
             </div>
-            <button onClick={onClose} aria-label={t('settings.closeSettings')} className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-text-primary hover:bg-border flex items-center justify-center transition-all">
-              &times;
-            </button>
+            <h2 id="settings-modal-title" className="text-lg font-medium text-text-primary">{t('settings.title')}</h2>
           </div>
-          <div className="px-6 flex gap-1 border-b border-border" role="tablist" aria-label={t('settings.navigation')}>
-            {TAB_IDS.map(tabId => (
-              <button key={tabId} id={`tab-${tabId}`} role="tab" aria-selected={activeTab === tabId} aria-controls={`tabpanel-${tabId}`} onClick={() => handleTabChange(tabId)}
-                className={`px-4 py-3 text-sm transition-all relative ${activeTab === tabId ? 'text-orange-400 font-medium' : 'text-text-muted hover:text-text-secondary'}`}>
-                {t(`settings.tabs.${tabId}`)}
-                {activeTab === tabId && <span className="absolute bottom-0 start-0 end-0 h-0.5 bg-orange-500" />}
-              </button>
-            ))}
-          </div>
+          <button onClick={onClose} aria-label={t('settings.closeSettings')} className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-text-primary hover:bg-border flex items-center justify-center transition-all">
+            &times;
+          </button>
         </div>
 
+        {/* Body: side rail + scrollable content column */}
+        <div className="flex flex-1 min-h-0">
+          {/* Side rail — grouped vertical navigation */}
+          <nav
+            className="w-52 flex-shrink-0 overflow-y-auto border-e border-border bg-bg-primary/40 py-3 px-2"
+            aria-label={t('settings.navigation')}
+          >
+            {TAB_GROUPS.map(group => (
+              <div key={group.key} className="mb-2 last:mb-0">
+                <div id={`settings-group-${group.key}`} className="px-2.5 pt-2 pb-1 text-[10px] font-medium uppercase tracking-wider text-text-muted select-none">
+                  {t(`settings.groups.${group.key}`)}
+                </div>
+                {/* One tablist per group keeps the ARIA valid (tablist children must be tabs)
+                    while the visible header stays outside it, labelling the group. */}
+                <div role="tablist" aria-orientation="vertical" aria-labelledby={`settings-group-${group.key}`}>
+                  {group.ids.map(tabId => {
+                    const isActive = activeTab === tabId;
+                    return (
+                      <button
+                        key={tabId} id={`tab-${tabId}`} role="tab" aria-selected={isActive} aria-controls={`tabpanel-${tabId}`}
+                        onClick={() => handleTabChange(tabId)}
+                        className={`group relative w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all ${
+                          isActive ? 'bg-orange-500/10 text-text-primary font-medium' : 'text-text-muted hover:text-text-secondary hover:bg-bg-tertiary'
+                        }`}
+                      >
+                        {isActive && <span className="absolute start-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-orange-500" aria-hidden="true" />}
+                        <span className={isActive ? 'text-orange-400' : 'text-text-muted group-hover:text-text-secondary'} aria-hidden="true">
+                          {TAB_ICONS[tabId]}
+                        </span>
+                        <span>{t(`settings.tabs.${tabId}`)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+
+          {/* Content column */}
+          <div className="flex-1 min-w-0 overflow-y-auto">
         {/* Status Strip */}
         {settingsStatus && (
           <div role={settingsStatus.includes('Error') || settingsStatus.includes('failed') ? 'alert' : 'status'} className={`mx-6 mt-4 text-sm p-3 rounded-lg border ${settingsStatus.includes('Error') || settingsStatus.includes('failed') ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-green-500/10 text-green-400 border-green-500/30'}`}>
@@ -271,6 +355,8 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
             {/* eslint-enable i18next/no-literal-string */}
           </div>
         </div>
+          </div>{/* content column */}
+        </div>{/* body: rail + content */}
       </div>
 
       {showTeamInviteDialog && <TeamInviteDialog onClose={() => setShowTeamInviteDialog(false)} />}
