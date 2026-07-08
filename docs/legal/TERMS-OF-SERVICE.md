@@ -87,10 +87,11 @@ We may introduce additional subscription tiers (such as Team or Enterprise) in t
 
 ### 4.1 Signal Tier Pricing
 
-- **Monthly:** $12 USD per month
-- **Annual:** $99 USD per year
+- **Monthly:** A$12 per month
+- **Annual:** A$99 per year
+- **Lifetime:** A$249 one-time
 
-Prices are in US Dollars and are exclusive of any applicable taxes. We will display applicable taxes at checkout where required by law. We reserve the right to change pricing with at least 30 days' notice. Price changes will not affect your current billing period.
+Prices are in Australian Dollars (AUD) and are exclusive of any applicable taxes. We will display applicable taxes at checkout where required by law. We reserve the right to change pricing with at least 30 days' notice. Price changes will not affect your current billing period.
 
 ### 4.2 Payment Processing
 
