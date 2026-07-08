@@ -1,0 +1,73 @@
+---
+title: "Size Chart — 4DA Merch"
+description: "Measurements for 4DA tees, hoodies, and crewnecks. Unisex fit, S through 5XL. Laid-flat measurements in inches and cm."
+permalink: "/pages/size-chart.html"
+canonical: "https://4da.ai/pages/size-chart"
+---
+{% extends "store-page.njk" %}
+
+{% block content %}
+  <div class="page-label">4DA Merch</div>
+  <h1>Size Chart</h1>
+  <p class="page-intro">Every piece is a <strong>unisex classic fit</strong> on premium Gildan blanks. Measurements are taken laid flat, so width is half the chest circumference. Sizing runs S through 5XL.</p>
+
+  <div class="note">
+    <strong>How to measure:</strong> Lay a t-shirt you already own flat and measure it. <strong>Width</strong> is armpit-to-armpit across the chest. <strong>Length</strong> is the highest point of the shoulder straight down to the hem. Match those numbers to the tables below. Between sizes? Size up for a relaxed fit. Tolerance is approximately &plusmn;1 inch (2.5 cm).
+  </div>
+
+  <div class="unit-toggle" role="group" aria-label="Units">
+    <button class="unit-btn active" data-unit="in">Inches</button>
+    <button class="unit-btn" data-unit="cm">Centimeters</button>
+  </div>
+
+  <h2>Tees</h2>
+  <p>Gildan 5000 heavyweight tee &middot; 5.3 oz &middot; 100% preshrunk cotton.</p>
+  <div class="table-scroll">
+    <table data-unit-table>
+      <thead><tr><th>Size</th><th>Width</th><th>Length</th></tr></thead>
+      <tbody>
+        <tr><td>S</td><td data-in="18" data-cm="45.7">18</td><td data-in="28" data-cm="71.1">28</td></tr>
+        <tr><td>M</td><td data-in="20" data-cm="50.8">20</td><td data-in="29" data-cm="73.7">29</td></tr>
+        <tr><td>L</td><td data-in="22" data-cm="55.9">22</td><td data-in="30" data-cm="76.2">30</td></tr>
+        <tr><td>XL</td><td data-in="24" data-cm="61.0">24</td><td data-in="31" data-cm="78.7">31</td></tr>
+        <tr><td>2XL</td><td data-in="26" data-cm="66.0">26</td><td data-in="32" data-cm="81.3">32</td></tr>
+        <tr><td>3XL</td><td data-in="28" data-cm="71.1">28</td><td data-in="33" data-cm="83.8">33</td></tr>
+        <tr><td>4XL</td><td data-in="30" data-cm="76.2">30</td><td data-in="34" data-cm="86.4">34</td></tr>
+        <tr><td>5XL</td><td data-in="32" data-cm="81.3">32</td><td data-in="34" data-cm="86.4">34</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Hoodies &amp; Crewnecks</h2>
+  <p>Gildan 18500 hoodie &amp; Gildan 18000 crewneck &middot; 8.0 oz Heavy Blend &middot; 50% cotton, 50% polyester. Both share the same body measurements.</p>
+  <div class="table-scroll">
+    <table data-unit-table>
+      <thead><tr><th>Size</th><th>Width</th><th>Length</th></tr></thead>
+      <tbody>
+        <tr><td>S</td><td data-in="20" data-cm="50.8">20</td><td data-in="27" data-cm="68.6">27</td></tr>
+        <tr><td>M</td><td data-in="22" data-cm="55.9">22</td><td data-in="28" data-cm="71.1">28</td></tr>
+        <tr><td>L</td><td data-in="24" data-cm="61.0">24</td><td data-in="29" data-cm="73.7">29</td></tr>
+        <tr><td>XL</td><td data-in="26" data-cm="66.0">26</td><td data-in="30" data-cm="76.2">30</td></tr>
+        <tr><td>2XL</td><td data-in="28" data-cm="71.1">28</td><td data-in="31" data-cm="78.7">31</td></tr>
+        <tr><td>3XL</td><td data-in="30" data-cm="76.2">30</td><td data-in="32" data-cm="81.3">32</td></tr>
+        <tr><td>4XL</td><td data-in="32" data-cm="81.3">32</td><td data-in="33" data-cm="83.8">33</td></tr>
+        <tr><td>5XL</td><td data-in="34" data-cm="86.4">34</td><td data-in="34" data-cm="86.4">34</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="font-size:13px;color:var(--text-muted);">All measurements are manufacturer specifications for the blank garments, laid flat. Print placement does not affect fit. Still unsure? <a href="/contact">Ask us</a> before you order — we're happy to help you dial it in.</p>
+
+  <script>
+    (function() {
+      var btns = document.querySelectorAll('.unit-btn');
+      function setUnit(unit) {
+        document.querySelectorAll('[data-unit-table] td[data-in]').forEach(function(td) {
+          td.textContent = td.getAttribute('data-' + unit);
+        });
+        btns.forEach(function(b) { b.classList.toggle('active', b.dataset.unit === unit); });
+      }
+      btns.forEach(function(b) { b.addEventListener('click', function() { setUnit(b.dataset.unit); }); });
+    })();
+  </script>
+{% endblock %}

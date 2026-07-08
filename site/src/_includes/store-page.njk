@@ -1,0 +1,99 @@
+{% extends "base.njk" %}
+
+{% block head %}
+  {% if canonical %}<link rel="canonical" href="{{ canonical }}">{% endif %}
+  <meta property="og:title" content="{{ title }}">
+  <meta property="og:description" content="{{ description }}">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ title }}">
+  <meta name="twitter:description" content="{{ description }}">
+  <meta name="twitter:image" content="https://4da.ai/og-image.png">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0A0A0A; --bg-card: #141414; --text: #FFFFFF;
+      --text-secondary: #A0A0A0; --text-muted: #666666;
+      --accent: #D4AF37; --border: #2A2A2A; --radius: 12px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+    a { color: var(--accent); text-decoration: none; transition: opacity 0.2s; }
+    a:hover { opacity: 0.8; }
+
+    .nav { height: 56px; border-bottom: 1px solid var(--border); background: rgba(10,10,10,0.95); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 100; }
+    .nav-inner { max-width: 820px; margin: 0 auto; padding: 0 24px; height: 100%; display: flex; align-items: center; justify-content: space-between; }
+    .nav-brand { font-weight: 600; font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .nav-brand img { width: 24px; height: 24px; border-radius: 50%; opacity: 0.8; }
+    .nav-brand span { color: var(--text-muted); font-weight: 400; font-size: 13px; }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { color: var(--text-muted); font-size: 14px; }
+    .nav-links a:hover { color: var(--text); opacity: 1; }
+
+    .page { max-width: 820px; margin: 0 auto; padding: 56px 24px 80px; }
+    .page-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+    .page h1 { font-size: clamp(30px, 5vw, 40px); font-weight: 600; letter-spacing: -0.02em; margin-bottom: 12px; }
+    .page-intro { font-size: 16px; color: var(--text-secondary); margin-bottom: 40px; max-width: 620px; }
+    .page h2 { font-size: 22px; font-weight: 600; margin: 44px 0 16px; padding-top: 24px; border-top: 1px solid #1F1F1F; letter-spacing: -0.01em; }
+    .page h2:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+    .page h3 { font-size: 16px; font-weight: 600; margin: 28px 0 10px; color: #E6E6E6; }
+    .page p { margin-bottom: 16px; color: #C4C4C4; font-size: 15px; }
+    .page ul, .page ol { margin: 0 0 16px 22px; }
+    .page li { margin-bottom: 8px; color: #C4C4C4; font-size: 15px; }
+    .page strong { color: var(--text); }
+
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 28px; font-size: 14px; font-family: 'JetBrains Mono', monospace; }
+    caption { text-align: left; font-family: 'Inter', sans-serif; font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
+    th, td { padding: 10px 14px; border: 1px solid var(--border); text-align: center; }
+    th { background: var(--bg-card); font-weight: 600; color: var(--text); }
+    td { color: #C4C4C4; }
+    td:first-child, th:first-child { text-align: left; color: var(--accent); }
+    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    .note { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin: 0 0 32px; font-size: 14px; color: var(--text-secondary); }
+    .note strong { color: var(--accent); }
+    .unit-toggle { display: inline-flex; gap: 4px; margin-bottom: 20px; }
+    .unit-btn { font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 6px 16px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+    .unit-btn:hover { border-color: var(--text-muted); color: var(--text); }
+    .unit-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(212,175,55,0.08); }
+
+    .page-footer { padding: 32px 0; border-top: 1px solid var(--border); }
+    .page-footer .inner { max-width: 820px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; font-size: 14px; }
+    .page-footer a { color: var(--text-muted); }
+    .page-footer a:hover { color: var(--text); }
+
+    @media (max-width: 600px) {
+      .page { padding: 40px 16px 60px; }
+      table { font-size: 12px; }
+      th, td { padding: 7px 9px; }
+    }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand"><img src="/hero-sun.jpg" alt="4DA">4DA <span>Merch</span></a>
+      <div class="nav-links">
+        <a href="/merch">Shop</a>
+        <a href="/">Home</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="page-footer">
+    <div class="inner">
+      <a href="/merch">Shop</a>
+      <a href="/pages/size-chart">Size Chart</a>
+      <a href="/pages/faq">FAQ</a>
+      <a href="/pages/care-instructions">Care</a>
+      <a href="/contact">Support</a>
+    </div>
+  </footer>
+{% endblock %}
