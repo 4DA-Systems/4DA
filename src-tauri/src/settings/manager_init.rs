@@ -79,36 +79,57 @@ impl SettingsManager {
         // the disk it reports "settings.json is invalid JSON" forever
         // while the app runs fine — a pure blame-magnet. Heal the file on
         // disk immediately so disk matches memory and health reads clean.
+        //
+        // Resilient load: a single missing / renamed / retyped field in a large
+        // config must NEVER discard the whole file. That all-or-nothing parse is
+        // exactly how paid users silently lost their license tier every time a
+        // new build added a settings field their settings.json didn't have — the
+        // parse failed, the config reset to defaults (tier "free"), and the good
+        // file was healed over. Every config struct now carries #[serde(default)]
+        // so additive schema changes parse cleanly; parse_settings_preserving is
+        // the field-by-field backstop for the rarer removed/retyped field.
         let mut healed_from_corruption = false;
         let mut settings = if settings_path.exists() {
-            let load_result = fs::read_to_string(&settings_path)
-                .ok()
-                .and_then(|content| serde_json::from_str::<Settings>(&content).ok());
-
-            match load_result {
-                Some(s) => s,
-                None => {
-                    healed_from_corruption = true;
-                    // Primary settings corrupted or unreadable — try backup
-                    let bak_path = settings_path.with_extension("json.bak");
-                    let bak_result = if bak_path.exists() {
-                        fs::read_to_string(&bak_path)
-                            .ok()
-                            .and_then(|content| serde_json::from_str::<Settings>(&content).ok())
-                    } else {
-                        None
-                    };
-
-                    match bak_result {
-                        Some(restored) => {
-                            warn!(target: "4da::settings", "settings.json corrupted — restored from backup");
-                            restored
-                        }
-                        None => {
-                            warn!(target: "4da::settings", "settings.json corrupted and no valid backup — using defaults");
-                            Settings::default()
+            match fs::read_to_string(&settings_path) {
+                Ok(content) => match serde_json::from_str::<Settings>(&content) {
+                    Ok(s) => s,
+                    Err(strict_err) => {
+                        healed_from_corruption = true;
+                        // Preserve the exact bytes we could not parse so nothing
+                        // is ever destroyed and the failure stays diagnosable.
+                        snapshot_unparseable_settings(&settings_path, &content);
+                        // Recover field-by-field: keep every value that still
+                        // deserializes (critically, the `license` block) and
+                        // reset only the offending field(s) to their default.
+                        match parse_settings_preserving(&content) {
+                            Some(recovered) => {
+                                warn!(target: "4da::settings", error = %strict_err, "settings.json did not match current schema — recovered field-by-field (license and every valid field preserved)");
+                                recovered
+                            }
+                            None => {
+                                // Not even valid JSON — fall back to the .bak,
+                                // run through the same preserving recovery.
+                                let bak_path = settings_path.with_extension("json.bak");
+                                match fs::read_to_string(&bak_path)
+                                    .ok()
+                                    .and_then(|c| parse_settings_preserving(&c))
+                                {
+                                    Some(restored) => {
+                                        warn!(target: "4da::settings", "settings.json unparseable — restored from backup");
+                                        restored
+                                    }
+                                    None => {
+                                        warn!(target: "4da::settings", "settings.json unparseable and no valid backup — using defaults");
+                                        Settings::default()
+                                    }
+                                }
+                            }
                         }
                     }
+                },
+                Err(e) => {
+                    warn!(target: "4da::settings", error = %e, "Failed to read settings.json — using defaults");
+                    Settings::default()
                 }
             }
         } else {
@@ -284,6 +305,42 @@ impl SettingsManager {
             }
         }
 
+        // --- License self-heal: re-derive tier from the signed key ---
+        // Universal backstop for the recurring "Signal dropped to Free" bug.
+        // If a cryptographically valid license key survives ANYWHERE — in the
+        // settings we just loaded, in the keychain we just hydrated, or in the
+        // durable license_backup.json — restore the paid tier it proves, even if
+        // the tier field itself was lost (e.g. a settings.json schema-drift reset
+        // wiped the license block). This closes the long-standing asymmetry where
+        // startup validation could only DOWNGRADE a paid tier with no key, but
+        // nothing re-DERIVED the correct tier from a key that was still present.
+        // Security: only a VERIFIED key grants a paid tier — a hand-edited tier
+        // string still cannot (validate_license_on_startup downgrades that).
+        if crate::settings::reconcile_license_from_proof(&mut settings.license, data_dir) {
+            info!(
+                target: "4da::license",
+                tier = %settings.license.tier,
+                "License tier self-healed from signed key at startup"
+            );
+            if let Some(parent) = settings_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if let Ok(json) = serde_json::to_string_pretty(&settings) {
+                let tmp_path = settings_path.with_extension("json.tmp");
+                if fs::write(&tmp_path, &json).is_ok() {
+                    let _ = atomic_replace(&tmp_path, &settings_path);
+                }
+            }
+            // Keep all three license stores in agreement — write the backup into
+            // the same data_dir we loaded from (not the global get_db_path).
+            crate::settings::save_license_backup_to(
+                data_dir,
+                &settings.license.license_key,
+                &settings.license.tier,
+                settings.license.activated_at.as_deref().unwrap_or(""),
+            );
+        }
+
         // --- Reverse trial: auto-start the 14-day Signal trial on first launch ---
         // Every brand-new install experiences the full product (Preemption, Blind
         // Spots, Signal Chains, …) for 14 days, then converts or drops to Free.
@@ -378,6 +435,67 @@ impl SettingsManager {
     }
 }
 
+/// Parse `settings.json` without ever discarding the whole config because a
+/// single field is missing, newly-removed, or type-changed by a different build.
+///
+/// The strict parse is the fast path (done by the caller). This recovery path is
+/// only reached when that fails on a file that is still valid JSON: it starts
+/// from `Settings::default()` and greedily re-applies each top-level field that
+/// keeps the struct deserializable, so every good field — above all the
+/// `license` block — survives, and only the offending field(s) fall back to
+/// their default. Returns `None` only when the content is not a JSON object at
+/// all (the caller then tries the `.bak`, then defaults).
+///
+/// Granularity note: recovery is per top-level field. Per-field
+/// `#[serde(default)]` fills *missing* sub-fields, but a wrong-TYPED sub-field
+/// inside a nested object still fails that object and drops the whole sub-struct
+/// to its default. The license is the one block we cannot lose that way, so it
+/// gets a second line of defence: even if its block is dropped here, the caller
+/// then runs [`reconcile_license_from_proof`], which restores tier + key from the
+/// separate `license_backup.json` / keychain / validation cache.
+fn parse_settings_preserving(content: &str) -> Option<Settings> {
+    let parsed: serde_json::Value = serde_json::from_str(content).ok()?;
+    let parsed_obj = parsed.as_object()?;
+
+    // Accumulator starts as the serialized defaults (always deserializable).
+    let mut acc = serde_json::to_value(Settings::default()).ok()?;
+    let acc_obj = acc.as_object_mut()?;
+
+    for (key, value) in parsed_obj {
+        let mut trial = acc_obj.clone();
+        trial.insert(key.clone(), value.clone());
+        if serde_json::from_value::<Settings>(serde_json::Value::Object(trial.clone())).is_ok() {
+            *acc_obj = trial;
+        } else {
+            warn!(
+                target: "4da::settings",
+                field = %key,
+                "Dropping unparseable settings field during recovery (all other fields, incl. license, preserved)"
+            );
+        }
+    }
+
+    serde_json::from_value(acc).ok()
+}
+
+/// Snapshot the exact bytes of a `settings.json` we could not parse, before any
+/// heal overwrites it — so a paid user's data is never silently destroyed and
+/// the schema mismatch stays diagnosable after the fact. Best-effort; a single
+/// `.corrupt` snapshot is kept (overwritten each time) to avoid clutter.
+fn snapshot_unparseable_settings(settings_path: &std::path::Path, content: &str) {
+    let snap = settings_path.with_extension("json.corrupt");
+    match fs::write(&snap, content) {
+        Ok(()) => warn!(
+            target: "4da::settings",
+            snapshot = %snap.display(),
+            "Snapshotted unparseable settings.json before recovery"
+        ),
+        Err(e) => {
+            warn!(target: "4da::settings", error = %e, "Failed to snapshot unparseable settings.json")
+        }
+    }
+}
+
 /// Migrate a retired LLM provider value to a usable state.
 ///
 /// The built-in local LLM (provider `"builtin"`) was removed; any value persisted by a
@@ -391,6 +509,104 @@ fn migrate_retired_llm_provider(settings: &mut Settings) -> bool {
         true
     } else {
         false
+    }
+}
+
+#[cfg(test)]
+mod settings_durability_tests {
+    use super::*;
+
+    fn signal_settings() -> Settings {
+        let mut s = Settings::default();
+        s.license.tier = "signal".to_string();
+        s.license.license_key = "TESTKEY-DUMMY".to_string();
+        s.license.activated_at = Some("2026-04-22T00:00:00Z".to_string());
+        s
+    }
+
+    /// The exact regression behind ~20 "Signal dropped to Free" incidents: a
+    /// settings.json that fails a strict schema parse (here a sibling field with
+    /// the wrong type) must NEVER discard a paid license. Before the fix the
+    /// whole file reset to defaults (tier "free") and healed over the good file.
+    #[test]
+    fn preserving_parse_keeps_license_when_sibling_field_is_bad() {
+        let mut v = serde_json::to_value(signal_settings()).unwrap();
+        // Poison an unrelated field's TYPE so strict parse fails.
+        v.as_object_mut().unwrap().insert(
+            "embedding_threshold".to_string(),
+            serde_json::json!("not-a-number"),
+        );
+        let content = serde_json::to_string_pretty(&v).unwrap();
+
+        // Precondition: the crafted file really does fail strict parse.
+        assert!(
+            serde_json::from_str::<Settings>(&content).is_err(),
+            "test precondition: crafted settings must fail strict parse"
+        );
+
+        let recovered =
+            parse_settings_preserving(&content).expect("recovery should succeed on valid JSON");
+        assert_eq!(
+            recovered.license.tier, "signal",
+            "license tier must survive"
+        );
+        assert_eq!(recovered.license.license_key, "TESTKEY-DUMMY");
+        // Only the poisoned field falls back to its default.
+        assert_eq!(recovered.embedding_threshold, 0.50);
+    }
+
+    #[test]
+    fn preserving_parse_returns_none_for_non_json() {
+        assert!(parse_settings_preserving("this is not json {{{").is_none());
+    }
+
+    /// With container `#[serde(default)]`, a missing or unknown field — the
+    /// dominant cause of the drops (a new build adds a field the file lacks) —
+    /// no longer fails the strict parse at all.
+    #[test]
+    fn additive_or_missing_field_no_longer_breaks_strict_parse() {
+        let json =
+            r#"{ "license": { "tier": "signal", "license_key": "K" }, "some_future_field": 123 }"#;
+        let s: Settings =
+            serde_json::from_str(json).expect("unknown + missing fields must parse cleanly");
+        assert_eq!(s.license.tier, "signal");
+        assert_eq!(s.license.license_key, "K");
+    }
+
+    /// Full load path through `SettingsManager::new`: a schema-breaking
+    /// settings.json still yields the paid tier, and the healed on-disk file
+    /// parses strictly afterward.
+    #[test]
+    fn full_load_recovers_paid_tier_from_broken_settings() {
+        let tmp = std::env::temp_dir().join("4da_test_license_durability");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let mut v = serde_json::to_value(signal_settings()).unwrap();
+        v.as_object_mut()
+            .unwrap()
+            .insert("embedding_threshold".to_string(), serde_json::json!("nope"));
+        std::fs::write(
+            tmp.join("settings.json"),
+            serde_json::to_string_pretty(&v).unwrap(),
+        )
+        .unwrap();
+
+        let manager = SettingsManager::new_without_keychain(&tmp);
+        assert_eq!(
+            manager.get().license.tier,
+            "signal",
+            "signal must survive a schema-breaking settings.json"
+        );
+        assert_eq!(manager.get().license.license_key, "TESTKEY-DUMMY");
+
+        // The healed file on disk must now strict-parse and still be signal.
+        let healed: Settings =
+            serde_json::from_str(&std::fs::read_to_string(tmp.join("settings.json")).unwrap())
+                .expect("healed settings.json must strict-parse");
+        assert_eq!(healed.license.tier, "signal");
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
 
