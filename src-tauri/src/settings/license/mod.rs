@@ -18,7 +18,10 @@ pub use keygen::{
     save_license_backup, validate_license_key_keygen, validate_license_key_keygen_fresh,
     KeygenValidationCache, KeygenValidationResult,
 };
-pub use revalidation::{get_last_validated_at, take_downgrade_flag, validate_license_on_startup};
+pub use revalidation::{
+    get_last_validated_at, reconcile_license_from_proof, take_downgrade_flag,
+    validate_license_on_startup,
+};
 pub use verify::{verify_license_key, LicensePayload};
 
 // Rate limiting is pub from here

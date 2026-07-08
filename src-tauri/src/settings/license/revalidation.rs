@@ -185,6 +185,89 @@ pub fn validate_license_on_startup() {
     LAST_LICENSE_CHECK.store(now, Ordering::Relaxed);
 }
 
+/// Normalize a license tier string, folding legacy names into the current set.
+fn normalize_tier(tier: &str) -> String {
+    match tier {
+        "signal" | "team" | "enterprise" => tier.to_string(),
+        // Legacy: "pro", "community", "cohort" all map to "signal".
+        "pro" | "community" | "cohort" => "signal".to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// Re-derive the license tier from cryptographic proof, healing a tier that was
+/// lost (e.g. a settings.json schema-drift reset wiped the license block).
+///
+/// This is the universal backstop for the recurring "Signal dropped to Free"
+/// bug. Recovery order:
+///
+/// 1. If `license.license_key` is a valid self-signed `4DA-` key, trust the tier
+///    embedded in its verified payload — the same proof `activate_license`
+///    requires. If the key is present and the tier already matches, no-op.
+/// 2. Otherwise, if the current tier is not paid, fall back to the durable
+///    `license_backup.json`: restore key + tier + `activated_at` from it when it
+///    holds a verifiable `4DA-` key (or a trusted Keygen-format key that was
+///    validated at activation time).
+///
+/// Only ever *raises* to a paid tier when a valid key proves it — it never
+/// grants paid access from a bare tier string, so a hand-edited `settings.json`
+/// still can't unlock Signal (that path stays governed by the downgrade check in
+/// [`validate_license_on_startup`]). Returns `true` if it changed `license`.
+pub fn reconcile_license_from_proof(license: &mut LicenseConfig) -> bool {
+    use super::gating::is_paid_tier;
+    use super::keygen::load_license_backup;
+    use super::verify::verify_license_key;
+
+    // 1. In-memory / settings key is the primary proof.
+    if license.license_key.starts_with("4DA-") {
+        if let Ok(payload) = verify_license_key(&license.license_key) {
+            let effective = normalize_tier(&payload.tier);
+            if is_paid_tier(&effective) && license.tier != effective {
+                license.tier = effective;
+                if license.activated_at.is_none() {
+                    license.activated_at = Some(payload.issued_at);
+                }
+                license.trial_started_at = None;
+                return true;
+            }
+            // Key present and tier already correct — nothing to heal.
+            return false;
+        }
+        // Key present but does not verify: leave the downgrade path in
+        // validate_license_on_startup to handle a genuinely invalid key.
+    }
+
+    // 2. No usable in-memory key and the tier is not paid: consult the backup.
+    if !is_paid_tier(&license.tier) {
+        if let Some(backup) = load_license_backup() {
+            if backup.license_key.is_empty() {
+                return false;
+            }
+            let restore_tier = if backup.license_key.starts_with("4DA-") {
+                // Self-signed: must verify before we trust its tier.
+                verify_license_key(&backup.license_key)
+                    .ok()
+                    .map(|p| normalize_tier(&p.tier))
+            } else {
+                // Keygen-format backup: validated at activation, trusted here
+                // (matches has_license_key_available's treatment of Keygen keys).
+                Some(normalize_tier(&backup.tier))
+            };
+            if let Some(tier) = restore_tier {
+                if is_paid_tier(&tier) {
+                    license.license_key = backup.license_key;
+                    license.tier = tier;
+                    license.activated_at = Some(backup.activated_at);
+                    license.trial_started_at = None;
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
 /// Check and clear the tier-downgraded flag. Returns true once per downgrade event.
 /// Called by `get_license_tier` to include a one-shot notification in the response.
 pub fn take_downgrade_flag() -> bool {
@@ -195,4 +278,48 @@ pub fn take_downgrade_flag() -> bool {
 /// Returns None if no cache exists or the cache is unreadable.
 pub fn get_last_validated_at() -> Option<String> {
     super::keygen::load_validation_cache().map(|c| c.validated_at)
+}
+
+#[cfg(test)]
+mod reconcile_tests {
+    use super::*;
+
+    fn lic(tier: &str, key: &str) -> LicenseConfig {
+        LicenseConfig {
+            tier: tier.to_string(),
+            license_key: key.to_string(),
+            activated_at: None,
+            trial_started_at: None,
+            dev_unlock_all: false,
+        }
+    }
+
+    #[test]
+    fn normalize_folds_legacy_names_to_signal() {
+        assert_eq!(normalize_tier("pro"), "signal");
+        assert_eq!(normalize_tier("community"), "signal");
+        assert_eq!(normalize_tier("cohort"), "signal");
+        assert_eq!(normalize_tier("signal"), "signal");
+        assert_eq!(normalize_tier("team"), "team");
+        assert_eq!(normalize_tier("free"), "free");
+    }
+
+    #[test]
+    fn reconcile_is_noop_when_already_paid_with_keygen_key() {
+        // Keygen-format key + already-paid tier: step 1 skipped (not a 4DA- key),
+        // step 2 skipped (tier is paid), no backup read. No change.
+        let mut l = lic("signal", "BE3529-KEYGEN");
+        assert!(!reconcile_license_from_proof(&mut l));
+        assert_eq!(l.tier, "signal");
+    }
+
+    #[test]
+    fn reconcile_does_not_touch_paid_tier_with_unverifiable_4da_key() {
+        // An invalid-signature 4DA- key must not let this function downgrade a
+        // paid tier — that stays the job of validate_license_on_startup. verify
+        // fails, and step 2 is skipped because the tier is already paid.
+        let mut l = lic("signal", "4DA-invalidpayload.invalidsig");
+        assert!(!reconcile_license_from_proof(&mut l));
+        assert_eq!(l.tier, "signal");
+    }
 }

@@ -162,6 +162,7 @@ impl Default for LLMProvider {
 
 /// Cost tracking for LLM usage
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct UsageStats {
     /// Total tokens used today
     pub tokens_today: u64,
@@ -189,6 +190,7 @@ impl Default for UsageStats {
 
 /// Re-ranking configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct RerankConfig {
     /// Whether LLM re-ranking is enabled
     pub enabled: bool,
@@ -235,6 +237,7 @@ impl Default for RerankConfig {
 
 /// Monitoring configuration (persisted)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct MonitoringConfig {
     /// Whether continuous monitoring is enabled
     pub enabled: bool,
@@ -299,6 +302,7 @@ impl Default for MonitoringConfig {
 
 /// Predictive context switching configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PredictiveConfig {
     pub enabled: bool,
     pub prefetch_window_minutes: u32,
@@ -315,6 +319,7 @@ impl Default for PredictiveConfig {
 
 /// Serendipity engine configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SerendipityConfig {
     pub enabled: bool,
     pub budget_percent: u8,
@@ -341,6 +346,7 @@ impl Default for SerendipityConfig {
 /// docs/strategy/INTELLIGENCE-MESH.md). Percentages need not sum to 100
 /// strictly; the remainder is absorbed by the comfort bucket.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FeedCompositionConfig {
     pub enabled: bool,
     pub top_n: u32,
@@ -363,6 +369,7 @@ impl Default for FeedCompositionConfig {
 
 /// Audio briefing configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AudioBriefingConfig {
     pub enabled: bool,
     pub tts_model: String,
@@ -381,6 +388,7 @@ impl Default for AudioBriefingConfig {
 
 /// Project health radar configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct HealthRadarConfig {
     pub enabled: bool,
     pub check_interval_hours: u32,
@@ -397,6 +405,7 @@ impl Default for HealthRadarConfig {
 
 /// Attention tracking configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AttentionConfig {
     pub enabled: bool,
 }
@@ -407,14 +416,25 @@ impl Default for AttentionConfig {
     }
 }
 
+fn default_license_tier() -> String {
+    "free".to_string()
+}
+
 /// License tier configuration
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LicenseConfig {
+    // NOTE: this struct implements Drop (zeroizes license_key), so a container
+    // #[serde(default)] is illegal (E0509 — cannot move fields out of a Drop
+    // type). Every field carries its own #[serde(default)] instead, so a partial
+    // or older license block never fails to deserialize and the license survives.
     /// Tier: "free", "signal", "team", or "enterprise" (legacy "pro" also accepted)
+    #[serde(default = "default_license_tier")]
     pub tier: String,
     /// License key (empty for free tier)
+    #[serde(default)]
     pub license_key: String,
     /// ISO timestamp when license was activated
+    #[serde(default)]
     pub activated_at: Option<String>,
     /// ISO timestamp when the free trial started (set on first launch)
     #[serde(default)]
@@ -465,6 +485,7 @@ impl Default for LicenseConfig {
 
 /// Per-source circuit breaker / resilience configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SourceResilienceConfig {
     /// Maximum consecutive failures before the circuit breaker opens
     #[serde(default = "default_max_failures")]
@@ -493,6 +514,7 @@ impl Default for SourceResilienceConfig {
 
 /// Per-source rate budget configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct RateBudgetConfig {
     /// Maximum requests allowed per minute for this source
     pub requests_per_minute: u32,
@@ -637,6 +659,7 @@ impl Default for TranslationConfig {
 
 /// Locale configuration for regional content
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct LocaleConfig {
     /// ISO 3166-1 alpha-2 country code (e.g., "US", "GB", "DE")
     pub country: String,
@@ -658,6 +681,7 @@ impl Default for LocaleConfig {
 
 /// LLM rate-limiting configuration (daily token + cost caps)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct LlmLimitsConfig {
     /// Daily token limit for LLM calls (0 = unlimited)
     pub daily_token_limit: u64,
@@ -676,6 +700,7 @@ impl Default for LlmLimitsConfig {
 
 /// Network privacy settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct NetworkConfig {
     /// Proxy URL (e.g., "socks5://127.0.0.1:9050" for Tor, "http://proxy:8080")
     #[serde(default)]
@@ -690,6 +715,7 @@ impl Default for NetworkConfig {
 
 /// Privacy settings for controlling data sent to cloud providers
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PrivacyConfig {
     /// What content level to send to cloud LLM providers.
     /// "full" = title + 2000 chars content (default)
@@ -733,6 +759,7 @@ impl Default for PrivacyConfig {
 
 /// Main settings structure
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Settings {
     /// LLM provider configuration
     pub llm: LLMProvider,
