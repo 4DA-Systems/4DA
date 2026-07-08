@@ -71,8 +71,8 @@ Every outbound connection, in one table:
 | 17 | `api.keygen.sh` | License activation + every 6 hrs | License key only | Keygen account ID | `src-tauri/src/settings/license.rs` |
 | 18 | `github.com/.../latest.json` | Auto (periodic) | GET version check | None | `src-tauri/tauri.conf.json` (Tauri updater) |
 | 19 | Team Relay server | User-enabled | E2E encrypted blobs | Team key | `src-tauri/src/team_sync_commands.rs` |
-| 20 | Webhook endpoints | Enterprise events | HMAC-signed payloads | HMAC-SHA256 | `src-tauri/src/webhooks.rs` |
-| 21 | OIDC/JWKS endpoints | Enterprise SSO | Public key fetch | None | `src-tauri/src/sso_crypto.rs` |
+| 20 | Webhook endpoints | Team/org events | HMAC-signed payloads | HMAC-SHA256 | `src-tauri/src/webhooks.rs` |
+| 21 | OIDC/JWKS endpoints | Team/org SSO | Public key fetch | None | `src-tauri/src/sso_crypto.rs` |
 | 22 | User-specified domains | Toolkit HTTP proxy | User-crafted request | User-specified | `src-tauri/src/toolkit_http.rs` |
 
 **Total distinct connection types: 22**
@@ -127,7 +127,7 @@ All content sources are user-configurable. Each can be enabled or disabled in th
 - **Data sent:** License key only
 - **Data NOT sent:** Name, email, device ID, usage data, or any personal information
 - **Frequency:** At activation, then re-validated every 6 hours
-- **Offline support:** Results cached locally for 7 days. Offline Ed25519 verification also available.
+- **Offline support:** Results cached locally for 90 days. Offline Ed25519 verification also available.
 - **Source:** `src-tauri/src/settings/license.rs` (around line 587)
 
 ### Auto-Updates (Row 18)
@@ -139,9 +139,9 @@ The Tauri updater checks for new application versions by fetching a JSON manifes
 - **Security:** Updates are signed with Minisign. The public key (ID: `19AF42B1B6971703`) is embedded in `src-tauri/tauri.conf.json` (line 48). The updater rejects any payload that fails signature verification.
 - **Configuration:** `src-tauri/tauri.conf.json`, lines 44-49
 
-### Team Sync (Row 19) -- Enterprise Only
+### Team Sync (Row 19) -- Team/Org Deployments (Opt-In)
 
-Only active when the user explicitly enables team sync.
+A team/organisation capability that ships dormant in the app; not part of the Free or Signal product. Only active when the user explicitly enables team sync.
 
 - **Encryption:** XChaCha20Poly1305 with X25519 key exchange and HKDF key derivation
 - **Architecture:** Zero-knowledge relay. The server handles only encrypted blobs and cannot read, decrypt, or inspect any content.
@@ -149,9 +149,9 @@ Only active when the user explicitly enables team sync.
 - **Source:** `src-tauri/src/team_sync_commands.rs` (around lines 435-644)
 - **HTTP client:** Dedicated `TEAM_CLIENT` with 15-second timeout
 
-### Webhooks (Row 20) -- Enterprise Only
+### Webhooks (Row 20) -- Team/Org Deployments (Opt-In)
 
-Webhooks fire only for enterprise team events and only to endpoints the administrator configures.
+Webhooks fire only for team/org events and only to endpoints the administrator configures.
 
 - **Authentication:** HMAC-SHA256 signature in `X-4DA-Signature-256` header
 - **Retry strategy:** Exponential backoff (1m, 5m, 30m, 2h, 12h)
@@ -159,9 +159,9 @@ Webhooks fire only for enterprise team events and only to endpoints the administ
 - **Timeout:** 10 seconds
 - **Source:** `src-tauri/src/webhooks.rs` (around line 370)
 
-### SSO/OIDC (Row 21) -- Enterprise Only
+### SSO/OIDC (Row 21) -- Team/Org Deployments (Opt-In)
 
-Only active when enterprise SSO is configured.
+Only active when team/org SSO is configured.
 
 - **Endpoints:** OIDC discovery (`{issuer}/.well-known/openid-configuration`) and JWKS
 - **Data sent:** Public key fetch only. No user credentials transmitted through 4DA.

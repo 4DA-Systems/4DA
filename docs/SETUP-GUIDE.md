@@ -310,13 +310,12 @@ Go to the **Calibrate** tab to review and tune scoring accuracy. Rate items as r
 
 ## License Activation
 
-4DA has three tiers:
+4DA has two tiers:
 
 | Tier | Price | Features |
 |------|-------|----------|
 | **Free** | $0 | All sources, scoring, learning, AI briefings, natural language search (BYOK) |
-| **Signal** | Paid | Everything in Free + Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Semantic Shifts, Project Health |
-| **Team** | Paid | Everything in Signal + team features |
+| **Signal** | $12/mo or $99/yr | Everything in Free + Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Semantic Shifts, Project Health |
 
 ### Activating a License Key
 

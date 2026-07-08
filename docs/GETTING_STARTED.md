@@ -87,7 +87,7 @@ Tell 4DA where your projects and work files are:
 - Git commit history
 - Recent file modifications
 
-### 3. Set Your Interests
+### 4. Set Your Interests
 
 Help 4DA understand what you care about:
 
@@ -95,7 +95,7 @@ Help 4DA understand what you care about:
 2. Add topics you want to see more of (e.g., "Rust", "machine learning", "distributed systems")
 3. Add exclusions for topics you never want (e.g., "crypto", "web3")
 
-### 4. Configure Sources
+### 5. Configure Sources
 
 Choose which external sources to monitor:
 

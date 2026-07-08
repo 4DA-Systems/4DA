@@ -957,5 +957,5 @@ fn decay_affinities() {
 **End of Technical Architecture Document**
 
 *For implementation details, see source code at src-tauri/src/*
-*For API documentation, see docs/API.md*
-*For user guide, see docs/USER_GUIDE.md*
+*For API documentation, see docs/API_REFERENCE.md*
+*For user guide, see docs/GETTING_STARTED.md*

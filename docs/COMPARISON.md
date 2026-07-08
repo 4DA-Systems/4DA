@@ -301,4 +301,3 @@ This combination is difficult to replicate quickly, giving 4DA a 12-18 month hea
 ---
 
 *For more details on 4DA's architecture, see docs/ARCHITECTURE-DETAILED.md*
-*For roadmap and feature plans, see README-MARKETING.md*

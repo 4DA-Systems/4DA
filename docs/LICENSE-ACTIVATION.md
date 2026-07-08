@@ -1,20 +1,19 @@
 # License Activation Guide
 
-This guide covers how to activate a 4DA Signal or Team license. If you are using the free tier, no license key is required.
+This guide covers how to activate a 4DA Signal license. If you are using the free tier, no license key is required.
 
 ## Tiers Overview
 
 | Tier | Key Required | Includes |
 |------|-------------|----------|
-| **Free** | No | All core features, AI briefings, STREETS playbook (all 7 modules), relevance scoring, multi-source analysis, ACE context engine |
-| **Signal** | Yes | Everything in Free + Developer DNA, Signal Chains, Knowledge Gaps, Semantic Shifts, Natural Language Search, Score Autopsy, Project Health, Standing Queries, Attention Report, Decision Signals |
-| **Team** | Yes | Everything in Signal + team-scoped context sharing, centralized configuration |
+| **Free** | No | All 20+ content sources, the full 5-axis scoring engine, AI daily briefings + weekly digest (BYOK), the multi-signal confirmation gate, ACE auto context discovery, behavior learning, Natural Language Search (BYOK), the MCP server (14 tools), and the CLI. No expiration. |
+| **Signal** | Yes | Everything in Free + the Signal tab (Key Signals + analytics), Score Autopsy, Developer DNA, Signal Chains, Knowledge Gaps, Semantic Shifts, Attention Analytics, Standing Queries, and Project Health |
 
-The free tier is fully functional and includes AI briefings. Signal and Team unlock the intelligence analysis layer for users who want compound insights from their content.
+The free tier is a complete product — it is fully functional, never expires, and includes AI briefings. Signal unlocks the compound-intelligence analysis layer for developers who want the system to surface deeper patterns from their content.
 
 ## Getting Your License Key
 
-1. Go to [4da.ai/signal](https://4da.ai/signal) and select a Signal or Team plan.
+1. Go to [4da.ai/signal](https://4da.ai/signal) and subscribe to the Signal plan ($12/month or $99/year).
 2. Complete the purchase. You will receive a license key via email.
 3. Your key is in the format:
 
@@ -29,7 +28,7 @@ The free tier is fully functional and includes AI briefings. Signal and Team unl
 1. **Open Settings** -- press `,` (comma) or click the gear icon in the top navigation.
 2. **Navigate to the License section** on the General tab.
 3. **Paste your license key** into the input field. Copy-paste is recommended to avoid typos.
-4. **Click Activate**. The app will validate your key using Ed25519 license validation.
+4. **Click Activate**. The app validates your key online, then verifies it locally with Ed25519.
 5. **Confirmation**: On success, the tier indicator changes to **Signal** (displayed in gold) with the message "All Signal features unlocked."
 
 The key is persisted in your local settings. You will not need to re-enter it after restarting the app.
@@ -38,20 +37,20 @@ The key is persisted in your local settings. You will not need to re-enter it af
 
 After activation, confirm the following:
 
-- **Settings > General**: The License section displays your active tier as "Signal" or "Team."
-- **Feature availability**: Signal-only features (Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Natural Language Search) are accessible without restriction.
-- **Status bar**: The app may display a tier badge in the UI confirming your active plan.
+- **Settings > General**: The License section displays your active tier as "Signal."
+- **Header bar**: A gold **SIGNAL** badge appears (it reads **SIGNAL TRIAL** during the trial and gray **FREE** otherwise).
+- **Feature availability**: Signal-only features (Blind Spots, Knowledge Gaps, Semantic Shifts, Attention Analytics, Standing Queries, Project Health) are accessible without restriction.
 
 If any of these do not reflect your expected tier, see Troubleshooting below.
 
 ## Trial
 
-4DA offers a **14-day free trial** of Signal features. No license key is needed to start the trial.
+4DA includes a **14-day free trial** of Signal features. No license key is needed to start the trial.
 
-- The trial activates automatically when you first launch the app.
+- The trial starts automatically the first time you launch the app.
 - All Signal features are available during the trial period.
 - When the trial expires, the app reverts to the free tier. Your data and settings are preserved.
-- You can upgrade to a paid license at any time during or after the trial.
+- You can subscribe to Signal at any time during or after the trial.
 
 ## Troubleshooting
 
@@ -63,8 +62,8 @@ If any of these do not reflect your expected tier, see Troubleshooting below.
 
 ### Network error during activation
 
-- License validation requires an internet connection. Check that you are online.
-- If you are behind a corporate proxy or firewall, ensure outbound HTTPS requests for Ed25519 license validation are not blocked.
+- Online validation requires an internet connection. Check that you are online.
+- If you are behind a corporate proxy or firewall, ensure outbound HTTPS requests to the license server are not blocked.
 - Wait a moment and try again. Transient network failures resolve on retry.
 
 ### "Key already activated" or device limit reached
@@ -89,7 +88,7 @@ If any of these do not reflect your expected tier, see Troubleshooting below.
 
 ### Does 4DA work offline after activation?
 
-Yes. License validation is cached locally for 24 hours. You can use Signal features offline during that window. The next time you are online, validation refreshes automatically in the background. If you remain offline for more than 24 hours, the app may prompt for revalidation when connectivity returns.
+Yes. Once validated, your license is cached locally so Signal features keep working offline. When you are online, the app quietly re-checks validity in the background. You would need to be offline for an extended period (well beyond normal use) before the app prompts for revalidation when connectivity returns.
 
 ### Can I move my license to a different machine?
 
@@ -99,13 +98,9 @@ Yes. Deactivate the license on your current machine (Settings > General > Licens
 
 Reinstalling clears local settings. Re-enter your license key after installation. The key itself remains valid.
 
-### Is the STREETS playbook included in the free tier?
+### Is the STREETS playbook inside the app?
 
-Yes. All 7 STREETS modules are available to every user, regardless of tier. No license key is needed for the playbook.
-
-### How do I upgrade from Signal to Team?
-
-Purchase a Team license at [4da.ai](https://4da.ai). Enter the new Team key in Settings. The previous Signal key will be replaced.
+No. The STREETS playbook — 7 modules on turning developer skills into independent income — is published free on the open web at [4da.ai/streets](https://4da.ai/streets). It is not a tab inside the app; 4DA stays focused on intelligence (Brief, Preemption, Blind Spots, Signal). No license key is needed to read it.
 
 ### How do I cancel or get a refund?
 
@@ -113,4 +108,4 @@ Contact support@4da.ai with your purchase details. Refer to the refund policy on
 
 ### Where is my license key stored?
 
-Locally in `data/settings.json` on your machine. It is never transmitted to 4DA servers beyond the initial Ed25519 license validation call. See the [Privacy Features](./FEATURES.md#privacy-features) documentation.
+Locally in `data/settings.json` on your machine. It is only sent to the license server for the initial online activation and periodic revalidation; it is never used to transmit your content. See the [Privacy Features](./FEATURES.md#privacy-features) documentation.

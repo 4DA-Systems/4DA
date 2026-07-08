@@ -157,7 +157,7 @@ This is the question that separates local-first software from everything else.
 
 **The build remains reproducible.** Pinned dependencies (`Cargo.lock`, `pnpm-lock.yaml`) ensure that the exact versions used to build a release can be restored. The build does not depend on 4DA Systems infrastructure.
 
-**The one exception:** Signal tier license validation uses Keygen (api.keygen.sh). If Keygen becomes unreachable, the offline validation cache (7-day window) continues to authorize the application. If both Keygen and the cache expire, Signal tier features degrade to free tier. The free tier has zero external dependencies and is completely unaffected.
+**The one exception:** Signal tier license validation uses Keygen (api.keygen.sh). If Keygen becomes unreachable, the offline validation cache (90-day window) continues to authorize the application. If both Keygen and the cache expire, Signal tier features degrade to free tier. The free tier has zero external dependencies and is completely unaffected.
 
 ---
 
@@ -232,7 +232,7 @@ Signal tier license validation contacts `api.keygen.sh`. This is the only 4DA fe
 
 **Mitigations:**
 - Only Signal tier is affected. The free tier makes zero external calls for license validation.
-- Offline validation caches the result for 7 days, providing resilience against outages.
+- Offline validation caches the result for 90 days, providing resilience against outages.
 - If validation fails after the cache expires, the application degrades gracefully to free tier -- it does not stop working.
 
 ---
