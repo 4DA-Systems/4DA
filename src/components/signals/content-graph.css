@@ -1,0 +1,54 @@
+/* SPDX-License-Identifier: FSL-1.1-Apache-2.0 */
+
+/*
+ * React Flow ships a light-on-light theme for its chrome. On 4DA's dark
+ * canvas the zoom Controls render as blank WHITE boxes with invisible
+ * (white-on-white) icons — the "broken white rectangles" in the Signal
+ * graph. These rules re-skin the Controls and MiniMap to the app's design
+ * tokens so the icons are visible in both light and dark themes.
+ *
+ * Loaded after '@xyflow/react/dist/style.css' (imported by ContentGraphView),
+ * so equal-specificity rules win on source order — no !important needed.
+ */
+
+.react-flow__controls {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+.react-flow__controls-button {
+  width: 26px;
+  height: 26px;
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--color-bg-tertiary);
+}
+
+/* The stock icon fill is white; make it a visible token color instead. */
+.react-flow__controls-button svg {
+  fill: var(--color-text-secondary);
+  max-width: 14px;
+  max-height: 14px;
+}
+
+.react-flow__controls-button:hover svg {
+  fill: var(--color-text-primary);
+}
+
+.react-flow__controls-button:disabled svg {
+  fill: var(--color-text-muted);
+}
+
+/* MiniMap: round the corners to match the panel surface set inline. */
+.react-flow__minimap {
+  border-radius: 8px;
+}
