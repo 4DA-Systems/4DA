@@ -151,6 +151,38 @@ permalink: "/contact.html"
       text-decoration: none;
     }
     .footer-links a:hover { color: #FFFFFF; }
+    .msg-card {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-radius: 12px;
+      padding: 32px;
+      margin-bottom: 32px;
+    }
+    .msg-card h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+    .msg-card p {
+      font-size: 14px;
+      color: #A0A0A0;
+      margin-bottom: 20px;
+    }
+    .msg-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #FFFFFF;
+      color: #0A0A0A;
+      font-weight: 600;
+      font-size: 15px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+    .msg-btn:hover { opacity: 0.85; }
     @media (max-width: 600px) {
       .contact-row {
         flex-direction: column;
@@ -175,6 +207,12 @@ permalink: "/contact.html"
   <main class="legal-container">
     <h1>Contact</h1>
     <p class="subtitle">4DA Systems Pty Ltd</p>
+
+    <div class="msg-card">
+      <h2>Send us a message</h2>
+      <p>Questions about 4DA, licensing, a bug, a feature idea, or a merch order? Send us a message and we'll get back to you by email &mdash; no mail app required.</p>
+      <a class="msg-btn" href="https://shop.4da.ai/pages/contact" target="_blank" rel="noopener">Open the contact form &rarr;</a>
+    </div>
 
     <div class="contact-card">
       <h2>Company Details</h2>
