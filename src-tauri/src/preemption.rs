@@ -647,11 +647,15 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 fix = fix_str,
             );
 
-            let action_label = if let Some(ref fix) = best_fix {
-                format!(
-                    "Update {} from {} to >= {}",
-                    first.package_name, &version_str, fix
-                )
+            // 4DA is read-only local intelligence: it surfaces the advisory and
+            // the fix version (shown in the version_context chip and explanation),
+            // it does NOT run the update. The primary action opens the
+            // authoritative advisory so the user can verify impact and then act in
+            // their own tooling. Never label it "Update <pkg> to >= <fix>": that
+            // promised an action 4DA does not (and should not) perform, and the
+            // button only ever opened the source link. Keep the label honest.
+            let action_label = if advisory_count == 1 {
+                "View advisory".to_string()
             } else {
                 format!(
                     "Review {} advisories for {}",
