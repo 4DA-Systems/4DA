@@ -7,6 +7,11 @@
 include!("scoring_dsl.rs");
 
 fn main() {
+    // The `models` bundle resource (tauri.conf.json) is gitignored (ONNX models are populated at
+    // deploy). Ensure the dir exists so a FRESH CLONE / hermetic checkout / CI can compile — tauri
+    // fails the build if a declared resource path is missing. An empty dir satisfies the check.
+    std::fs::create_dir_all("models").ok();
+
     tauri_build::build();
 
     // Compile scoring DSL → scoring_config.rs

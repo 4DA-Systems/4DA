@@ -15,6 +15,7 @@ mod calibration;
 pub(crate) mod calibration_monitor;
 mod composition;
 mod context;
+pub(crate) mod cvss;
 mod dedup;
 mod dependencies;
 mod explanation;
