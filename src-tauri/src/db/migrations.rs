@@ -600,7 +600,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 87;
+        const TARGET_VERSION: i64 = 88;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3079,6 +3079,40 @@ impl Database {
                                 ))?;
                                 info!(target: "4da::db", "Added detected_from column to {table}");
                             }
+                        }
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 88: state_signature on briefing_item_history. Lets the brief
+            // detect whether a persistent Critical/High advisory is UNCHANGED
+            // (same package/versions/advisories/projects/severity) across days, so
+            // it collapses to a compact "still open" line instead of re-screaming
+            // the same full card every morning. Nullable — legacy rows keep NULL
+            // and simply don't match a signature, which is the desired behavior
+            // (a clean baseline on first run after the upgrade).
+            if current_version < 88 {
+                Self::run_versioned_migration(
+                    &conn,
+                    87,
+                    88,
+                    "Phase 88: state_signature on briefing_item_history",
+                    |c| {
+                        let has_column: bool = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM pragma_table_info('briefing_item_history') WHERE name='state_signature'",
+                                [],
+                                |row| row.get::<_, i64>(0).map(|count| count > 0),
+                            )
+                            .unwrap_or(false);
+                        if !has_column {
+                            c.execute_batch(
+                                "ALTER TABLE briefing_item_history ADD COLUMN state_signature TEXT;
+                                 CREATE INDEX IF NOT EXISTS idx_briefing_history_signature
+                                     ON briefing_item_history(source_type, state_signature, briefing_date);",
+                            )?;
+                            info!(target: "4da::db", "Added state_signature column to briefing_item_history");
                         }
                         Ok(())
                     },
