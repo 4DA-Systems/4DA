@@ -377,6 +377,23 @@ pub struct BriefingPreemptionAlert {
     /// (installed, fix) pair rather than only the first merged package's.
     #[serde(default)]
     pub merged_package_versions: Vec<MergedPackageVersion>,
+    /// How many prior distinct briefing-days have shown this alert in its CURRENT
+    /// state (0 = brand new, or the state just changed). Drives "still open,
+    /// unchanged" collapsing so a Critical/High advisory the user hasn't patched
+    /// stops consuming a hero card every morning — without ever being silenced.
+    #[serde(default)]
+    pub times_shown: u32,
+    /// True when this Critical/High advisory has been shown UNCHANGED across
+    /// enough prior briefings that it should render as a compact "still open"
+    /// line rather than a full card. It is never dropped: an unfixed live vuln
+    /// stays visible, it just stops re-screaming once the user has clearly seen
+    /// it and nothing about it has changed.
+    #[serde(default)]
+    pub persistent_unchanged: bool,
+    /// Date (YYYY-MM-DD) this alert's current state was first surfaced. Lets the
+    /// UI say "open since 23 May" instead of implying it is new.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_seen_date: Option<String>,
 }
 
 impl BriefingPreemptionAlert {
@@ -410,6 +427,11 @@ impl BriefingPreemptionAlert {
             suggested_actions,
             scope: None,
             merged_package_versions: Vec::new(),
+            // Persistence metadata is populated later by
+            // `classify_preemption_persistence`; a freshly-built alert is unshown.
+            times_shown: 0,
+            persistent_unchanged: false,
+            first_seen_date: None,
         }
     }
 }
@@ -799,7 +821,10 @@ pub(crate) fn build_enriched_briefing(
                 // that share an advisory — one CVE hitting several of your packages
                 // (e.g. GHSA-w24r-5266-9c3c on @clerk/clerk-react AND @clerk/shared)
                 // should be ONE row listing both packages, not two near-identical
-                // rows eating two of the five slots — then cut to five.
+                // rows. Keep up to 12 here (not 5): persistence classification runs
+                // next and collapses long-unchanged advisories into a compact strip,
+                // so the fresh/changed ones — which should win the ~5 card slots —
+                // must not be capped out of the pool before that split happens.
                 let critical = feed
                     .alerts
                     .iter()
@@ -814,7 +839,7 @@ pub(crate) fn build_enriched_briefing(
                     .collect();
                 dedupe_alerts_by_advisory(pool)
                     .into_iter()
-                    .take(5)
+                    .take(12)
                     .collect()
             }
             Err(_) => Vec::new(),
@@ -892,15 +917,33 @@ pub(crate) fn build_enriched_briefing(
         (novel, ongoing)
     };
 
-    let preemption_alerts = if skip_novelty {
-        preemption_alerts
-    } else {
-        let (novel_alerts, stale_alert_topics) =
-            apply_preemption_novelty_filter(preemption_alerts, &today);
-        ongoing_topics.extend(stale_alert_topics);
-        ongoing_topics.sort();
-        ongoing_topics.dedup();
-        novel_alerts
+    // Persistence classification ALWAYS runs (both the scheduled brief and the
+    // manual/window trigger) so a long-unchanged advisory collapses to a compact
+    // "still open" line on every surface. Only the scheduled path records history
+    // (`record = !skip_novelty`) — a manual test trigger must not advance the
+    // persistence counter. Low-severity stale topics only feed the footer on the
+    // scheduled path; the window doesn't render them.
+    let preemption_alerts: Vec<BriefingPreemptionAlert> = {
+        let (classified, suppressed_topics) =
+            classify_preemption_persistence(preemption_alerts, &today, !skip_novelty);
+        if !skip_novelty {
+            ongoing_topics.extend(suppressed_topics);
+            ongoing_topics.sort();
+            ongoing_topics.dedup();
+        }
+        // Split fresh/changed advisories (full cards) from long-unchanged ones
+        // (compact strip). Fresh advisories lead and take the ~5 card slots; the
+        // unchanged ones are always kept but flagged, so the frontend renders
+        // them as one collapsed line rather than re-screaming detailed cards. An
+        // unfixed live vuln is thus never hidden — only de-emphasized.
+        let (fresh, persisting): (Vec<_>, Vec<_>) = classified
+            .into_iter()
+            .partition(|a| !a.persistent_unchanged);
+        fresh
+            .into_iter()
+            .take(5)
+            .chain(persisting.into_iter().take(8))
+            .collect()
     };
 
     // Abstention: when novelty filtering removed all items AND all preemption
@@ -1949,28 +1992,106 @@ fn record_briefing_items(conn: &rusqlite::Connection, items: &[BriefingItem], da
 // Preemption Alert Novelty Filter
 // ============================================================================
 
-/// Filter preemption alerts through the same novelty window as regular items.
-///
-/// Preemption alerts (vulnerability advisories) are persistent — the same GHSA
-/// alerts appear every day until the dependency is updated. Without novelty
-/// filtering, the briefing shows identical preemption cards every morning.
-///
-/// Returns (novel_alerts, stale_topic_names). Novel alerts are shown in the
-/// PREEMPTION section; stale topics are surfaced in the "Still tracking:" footer.
-/// True for advisories that must re-surface every morning until the user fixes
-/// them, regardless of the 14-day novelty window. The preemption feed is
-/// recomputed from the user's *installed* dependency versions each cycle, so an
-/// alert's presence means the vulnerability is STILL live — an unfixed
-/// Critical/High advisory silenced by novelty is a silent exposure, the exact
-/// opposite of what the brief is for. Lower-severity advisories still obey
+/// Number of prior distinct briefing-days an unchanged Critical/High advisory may
+/// lead the brief as a full card before it collapses into the compact "still open
+/// (unchanged)" line. The advisory is NEVER hidden — this only decides card vs.
+/// one-liner. Kept small so the user gets a couple of clear card mornings, then
+/// quiet-but-visible until something about the vulnerability actually changes.
+const PREEMPTION_PERSISTENCE_THRESHOLD: u32 = 2;
+
+/// Critical/High advisories are recomputed from the user's *installed* dependency
+/// versions every cycle, so their presence means the vulnerability is STILL live.
+/// Novelty must never fully silence one — an unfixed high-severity vuln dropped
+/// from the brief is a silent exposure, the exact opposite of what the brief is
+/// for. They are instead *collapsed* once shown unchanged (see
+/// `classify_preemption_persistence`). Lower-severity advisories still obey plain
 /// novelty so the brief doesn't nag about low-stakes items.
 fn is_persistent_security_alert(alert: &BriefingPreemptionAlert) -> bool {
     matches!(alert.urgency.as_str(), "critical" | "high")
 }
 
-fn apply_preemption_novelty_filter(
+/// Stable signature of an alert's actionable STATE — what the user would have to
+/// ACT on. Two briefings with the same signature describe the same unchanged
+/// situation; a changed signature (a fix version appearing, a new advisory id, a
+/// newly affected project, a severity bump) is a genuine development that must
+/// re-surface as a full card. Deliberately EXCLUDES the title: some advisory
+/// titles embed a fluctuating vulnerability count ("axios: 23 known
+/// vulnerabilities" -> "24 ...") that changes without the user's own state
+/// changing, which would otherwise defeat the whole mechanism.
+fn alert_state_signature(alert: &BriefingPreemptionAlert) -> String {
+    let mut advisories = alert.advisory_ids.clone();
+    advisories.sort();
+    advisories.dedup();
+    let mut projects = alert.affected_projects.clone();
+    projects.sort();
+    projects.dedup();
+    format!(
+        "{}|{}|{}|{}|{}|{}",
+        alert.package_name.as_deref().unwrap_or(""),
+        alert.installed_version.as_deref().unwrap_or(""),
+        alert.fixed_version.as_deref().unwrap_or(""),
+        advisories.join(","),
+        projects.join(","),
+        alert.urgency,
+    )
+}
+
+/// What a single alert's persistence count means for how it's surfaced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PersistenceOutcome {
+    /// Show as a full card (fresh, changed, or not yet shown enough to collapse).
+    Card,
+    /// Keep, but collapse into the compact "still open (unchanged)" strip.
+    Collapsed,
+    /// Low-severity and already seen unchanged: drop to a "still tracking" topic.
+    Suppressed,
+}
+
+/// Pure decision extracted from `classify_preemption_persistence` so the policy
+/// is unit-testable without a database. A live Critical/High advisory is never
+/// suppressed — only collapsed once it has been shown unchanged for enough prior
+/// days. Lower-severity advisories are suppressed once seen at all.
+fn persistence_outcome(prior_days: u32, is_persistent: bool) -> PersistenceOutcome {
+    if is_persistent {
+        if prior_days >= PREEMPTION_PERSISTENCE_THRESHOLD {
+            PersistenceOutcome::Collapsed
+        } else {
+            PersistenceOutcome::Card
+        }
+    } else if prior_days >= 1 {
+        PersistenceOutcome::Suppressed
+    } else {
+        PersistenceOutcome::Card
+    }
+}
+
+/// Classify preemption alerts by how long they have persisted UNCHANGED, so the
+/// brief stops re-presenting the same unpatched advisories as fresh cards every
+/// morning while never silencing a live vulnerability.
+///
+/// For each alert we count the prior distinct briefing-days that recorded the
+/// SAME state signature (see `alert_state_signature`). From that:
+///   - `times_shown`          = that count
+///   - `first_seen_date`      = the earliest such day (or today, if new/changed)
+///   - `persistent_unchanged` = Critical/High AND shown on >= THRESHOLD prior days
+///     with no state change. These render as a compact "still open" line, not a
+///     full card, but are ALWAYS kept (an unfixed live vuln is never dropped).
+///
+/// Lower-severity alerts keep the old behavior: once seen inside the novelty
+/// window they are suppressed to a "still tracking" topic (returned as the second
+/// tuple element) so the brief doesn't nag about low-stakes items.
+///
+/// When `record` is true (the scheduled brief) each KEPT alert's (title,
+/// signature, today) is written to history so the persistence count advances one
+/// per day. When false (the manual/window trigger) classification is read-only —
+/// the window still collapses long-unchanged alerts, but a test trigger doesn't
+/// pollute the novelty history.
+///
+/// Returns (kept_alerts_annotated, suppressed_low_severity_topics).
+fn classify_preemption_persistence(
     alerts: Vec<BriefingPreemptionAlert>,
     today: &str,
+    record: bool,
 ) -> (Vec<BriefingPreemptionAlert>, Vec<String>) {
     if alerts.is_empty() {
         return (vec![], vec![]);
@@ -1981,66 +2102,104 @@ fn apply_preemption_novelty_filter(
         Err(_) => return (alerts, vec![]),
     };
 
-    let recent_titles: std::collections::HashSet<String> = {
-        let mut stmt = match conn.prepare(
-            "SELECT LOWER(item_title) FROM briefing_item_history
-             WHERE briefing_date >= date(?1, '-14 days') AND source_type = 'preemption'",
-        ) {
-            Ok(s) => s,
-            Err(_) => return (alerts, vec![]),
-        };
+    classify_preemption_persistence_with_conn(&conn, alerts, today, record)
+}
 
-        stmt.query_map(rusqlite::params![today], |row| row.get::<_, String>(0))
-            .ok()
-            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
-            .unwrap_or_default()
-    };
+/// DB-parameterized core of `classify_preemption_persistence`, split out so the
+/// history-counting SQL and the collapse/reset behavior are unit-testable against
+/// a temporary connection (the wrapper just supplies the app's global DB).
+fn classify_preemption_persistence_with_conn(
+    conn: &rusqlite::Connection,
+    alerts: Vec<BriefingPreemptionAlert>,
+    today: &str,
+    record: bool,
+) -> (Vec<BriefingPreemptionAlert>, Vec<String>) {
+    let mut kept = Vec::new();
+    let mut suppressed_topics = Vec::new();
+    let mut to_record: Vec<(String, String)> = Vec::new(); // (title, signature)
 
-    if recent_titles.is_empty() {
-        record_preemption_history(&conn, &alerts, today);
-        return (alerts, vec![]);
-    }
+    for mut alert in alerts {
+        let sig = alert_state_signature(&alert);
 
-    let mut novel = Vec::new();
-    let mut stale_topics = Vec::new();
+        // Prior distinct briefing-days that recorded this EXACT state, and the
+        // earliest such day. Bounded to a 60-day window so an advisory the user
+        // finally patches — and which later regresses — starts a fresh count
+        // rather than inheriting an ancient one. Matches on the persisted state
+        // signature; legacy rows (NULL signature, pre-migration) simply don't
+        // match, so a just-deployed build treats everything as new for one cycle
+        // (an honest clean baseline) and then begins accumulating.
+        let (prior_days, first_seen): (u32, Option<String>) = conn
+            .query_row(
+                "SELECT COUNT(DISTINCT briefing_date), MIN(briefing_date)
+                 FROM briefing_item_history
+                 WHERE source_type = 'preemption'
+                   AND state_signature = ?1
+                   AND briefing_date < ?2
+                   AND briefing_date >= date(?2, '-60 days')",
+                rusqlite::params![sig, today],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?.max(0) as u32,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                },
+            )
+            .unwrap_or((0, None));
 
-    for alert in alerts {
-        // Unfixed Critical/High advisories persist every morning — novelty must
-        // never silence a live high-severity vulnerability on an installed dep.
-        if !is_persistent_security_alert(&alert)
-            && recent_titles.contains(&alert.title.to_lowercase())
-        {
-            let topic = alert
-                .package_name
-                .clone()
-                .unwrap_or_else(|| extract_topic_from_title(&alert.title));
-            if !topic.is_empty() {
-                stale_topics.push(topic);
+        alert.times_shown = prior_days;
+        alert.first_seen_date = Some(first_seen.unwrap_or_else(|| today.to_string()));
+
+        match persistence_outcome(prior_days, is_persistent_security_alert(&alert)) {
+            PersistenceOutcome::Collapsed => {
+                // Live high-severity vuln, seen unchanged enough times: keep it
+                // (never dropped) but flag it for the compact "still open" strip.
+                alert.persistent_unchanged = true;
+                to_record.push((alert.title.clone(), sig));
+                kept.push(alert);
             }
-        } else {
-            novel.push(alert);
+            PersistenceOutcome::Card => {
+                // Fresh, changed, or not yet shown enough to collapse: full card.
+                to_record.push((alert.title.clone(), sig));
+                kept.push(alert);
+            }
+            PersistenceOutcome::Suppressed => {
+                // Low-severity, already seen recently unchanged: drop to a topic.
+                let topic = alert
+                    .package_name
+                    .clone()
+                    .unwrap_or_else(|| extract_topic_from_title(&alert.title));
+                if !topic.is_empty() {
+                    suppressed_topics.push(topic);
+                }
+            }
         }
     }
 
-    stale_topics.sort();
-    stale_topics.dedup();
+    suppressed_topics.sort();
+    suppressed_topics.dedup();
 
-    record_preemption_history(&conn, &novel, today);
+    if record {
+        record_preemption_history(conn, &to_record, today);
+    }
 
-    (novel, stale_topics)
+    (kept, suppressed_topics)
 }
 
+/// Record kept preemption alerts in history — one row per (title, signature) for
+/// today. The persisted `state_signature` is what future runs match on to detect
+/// whether the situation is unchanged (see `classify_preemption_persistence`).
 fn record_preemption_history(
     conn: &rusqlite::Connection,
-    alerts: &[BriefingPreemptionAlert],
+    entries: &[(String, String)],
     date: &str,
 ) {
-    for alert in alerts {
+    for (title, signature) in entries {
         if let Err(e) = conn.execute(
-            "INSERT INTO briefing_item_history (item_title, source_type, briefing_date) VALUES (?1, ?2, ?3)",
-            rusqlite::params![alert.title, "preemption", date],
+            "INSERT INTO briefing_item_history (item_title, source_type, briefing_date, state_signature)
+             VALUES (?1, 'preemption', ?2, ?3)",
+            rusqlite::params![title, date, signature],
         ) {
-            tracing::warn!(target: "4da::monitor", error = %e, title = %alert.title, "Failed to record preemption history");
+            tracing::warn!(target: "4da::monitor", error = %e, title = %title, "Failed to record preemption history");
         }
     }
 }
@@ -2418,10 +2577,18 @@ async fn synthesize_morning_briefing_once(
     let preemption_text = if briefing.preemption_alerts.is_empty() {
         String::new()
     } else {
+        // Fresh/changed advisories get the detailed, "lead with these" treatment.
+        // Long-unchanged ones (persistent_unchanged) are folded into ONE line the
+        // model is told NOT to re-explain — re-narrating the same unpatched
+        // advisories in full every morning is exactly what made the brief feel
+        // identical day after day.
+        let mut ordered: Vec<&BriefingPreemptionAlert> = briefing
+            .preemption_alerts
+            .iter()
+            .filter(|a| !a.persistent_unchanged)
+            .collect();
         // Order so primary-app issues lead, then side projects, then dev-only:
         // "what's important right now" weights the app you ship above side work.
-        let mut ordered: Vec<&BriefingPreemptionAlert> =
-            briefing.preemption_alerts.iter().collect();
         ordered.sort_by_key(|a| match a.scope.as_deref() {
             Some("primary") => 0u8,
             Some("dev") => 2,
@@ -2477,9 +2644,32 @@ async fn synthesize_morning_briefing_once(
             })
             .collect::<Vec<_>>()
             .join("\n");
-        format!(
-            "\nSECURITY ALERTS in your dependencies (HIGHEST priority -- lead with these):\n{p}\n"
-        )
+
+        let persisting: Vec<&BriefingPreemptionAlert> = briefing
+            .preemption_alerts
+            .iter()
+            .filter(|a| a.persistent_unchanged)
+            .collect();
+
+        let mut out = String::new();
+        if !p.is_empty() {
+            out.push_str(&format!(
+                "\nSECURITY ALERTS in your dependencies (HIGHEST priority -- lead with these):\n{p}\n"
+            ));
+        }
+        if !persisting.is_empty() {
+            let names: Vec<String> = persisting
+                .iter()
+                .map(|a| a.package_name.clone().unwrap_or_else(|| a.title.clone()))
+                .collect();
+            out.push_str(&format!(
+                "\nSTILL OPEN, UNCHANGED since an earlier brief ({} advisor{} the user has already seen and not yet patched): {}. Do NOT re-explain these or spend the brief on them -- at most ONE short clause noting they remain open. Put the synthesis's energy on anything genuinely new above.\n",
+                persisting.len(),
+                if persisting.len() == 1 { "y" } else { "ies" },
+                names.join(", "),
+            ));
+        }
+        out
     };
 
     let system_prompt = r#"You are an intelligence analyst writing a morning brief for a developer's desktop widget.
@@ -3772,6 +3962,9 @@ mod tests {
             suggested_actions: vec![],
             scope: None,
             merged_package_versions: Vec::new(),
+            times_shown: 0,
+            persistent_unchanged: false,
+            first_seen_date: None,
         }
     }
 
@@ -3789,6 +3982,200 @@ mod tests {
             "HMAC comparison not constant-time",
         ));
         assert!(b.has_meaningful_content());
+    }
+
+    #[test]
+    fn persistence_outcome_never_suppresses_live_high_severity() {
+        // Critical/High: shown a few times -> full card; once past the threshold
+        // it collapses, but it is NEVER suppressed (an unfixed live vuln stays
+        // visible). This is the safety property that motivated the whole change.
+        assert_eq!(persistence_outcome(0, true), PersistenceOutcome::Card);
+        assert_eq!(persistence_outcome(1, true), PersistenceOutcome::Card);
+        assert_eq!(
+            persistence_outcome(PREEMPTION_PERSISTENCE_THRESHOLD, true),
+            PersistenceOutcome::Collapsed
+        );
+        assert_eq!(persistence_outcome(50, true), PersistenceOutcome::Collapsed);
+        // Low severity obeys plain novelty: new -> card, seen before -> suppressed.
+        assert_eq!(persistence_outcome(0, false), PersistenceOutcome::Card);
+        assert_eq!(
+            persistence_outcome(1, false),
+            PersistenceOutcome::Suppressed
+        );
+        assert_eq!(
+            persistence_outcome(9, false),
+            PersistenceOutcome::Suppressed
+        );
+    }
+
+    #[test]
+    fn state_signature_ignores_fluctuating_title_but_tracks_real_changes() {
+        let mut a = make_test_preemption_alert(
+            "axios@1.12.2: 23 known vulnerabilities",
+            "high",
+            "many CVEs",
+        );
+        a.package_name = Some("axios".into());
+        a.installed_version = Some("1.12.2".into());
+        a.fixed_version = Some("1.16.0".into());
+        a.advisory_ids = vec!["GHSA-hfxv-24rg-xrqf".into()];
+        a.affected_projects = vec!["kairos-mvp/backend".into()];
+        let base = alert_state_signature(&a);
+
+        // Same real state, but the title's embedded vuln count fluctuated
+        // (23 -> 24). The signature MUST NOT change — this is exactly the bug
+        // that let the same advisory re-surface as "new" every morning.
+        let mut count_changed = a.clone();
+        count_changed.title = "axios@1.12.2: 24 known vulnerabilities".into();
+        assert_eq!(alert_state_signature(&count_changed), base);
+
+        // Advisory-id ordering must not matter (set semantics).
+        let mut reordered = a.clone();
+        reordered.advisory_ids = vec!["GHSA-hfxv-24rg-xrqf".into(), "GHSA-hfxv-24rg-xrqf".into()];
+        assert_eq!(alert_state_signature(&reordered), base);
+
+        // A genuine development — a fix version appearing — MUST change it.
+        let mut fixed = a.clone();
+        fixed.fixed_version = Some("1.16.1".into());
+        assert_ne!(alert_state_signature(&fixed), base);
+
+        // A newly affected project is a real change.
+        let mut new_project = a.clone();
+        new_project.affected_projects.push("navcal".into());
+        assert_ne!(alert_state_signature(&new_project), base);
+
+        // A severity bump is a real change.
+        let mut escalated = a.clone();
+        escalated.urgency = "critical".into();
+        assert_ne!(alert_state_signature(&escalated), base);
+    }
+
+    /// In-memory history table matching the production schema (post-migration 88).
+    fn history_conn() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE briefing_item_history (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 item_title TEXT NOT NULL,
+                 source_type TEXT NOT NULL,
+                 briefing_date TEXT NOT NULL,
+                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                 state_signature TEXT
+             );",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn axios_high_alert() -> BriefingPreemptionAlert {
+        let mut a = make_test_preemption_alert(
+            "axios@1.12.2: 23 known vulnerabilities",
+            "high",
+            "many CVEs",
+        );
+        a.package_name = Some("axios".into());
+        a.installed_version = Some("1.12.2".into());
+        a.fixed_version = Some("1.16.0".into());
+        a.advisory_ids = vec!["GHSA-hfxv-24rg-xrqf".into()];
+        a.affected_projects = vec!["kairos-mvp/backend".into()];
+        a
+    }
+
+    #[test]
+    fn classify_collapses_high_severity_after_threshold_unchanged_days() {
+        let conn = history_conn();
+        let a = axios_high_alert();
+        let sig = alert_state_signature(&a);
+        // Seed two prior distinct briefing-days with the SAME state signature.
+        for d in ["2026-07-06", "2026-07-07"] {
+            conn.execute(
+                "INSERT INTO briefing_item_history (item_title, source_type, briefing_date, state_signature)
+                 VALUES (?1, 'preemption', ?2, ?3)",
+                rusqlite::params![a.title, d, sig],
+            )
+            .unwrap();
+        }
+        let (kept, suppressed) =
+            classify_preemption_persistence_with_conn(&conn, vec![a.clone()], "2026-07-08", false);
+        assert_eq!(kept.len(), 1, "a live HIGH vuln is never dropped");
+        assert!(suppressed.is_empty());
+        assert!(
+            kept[0].persistent_unchanged,
+            "2 prior unchanged days (>= threshold {PREEMPTION_PERSISTENCE_THRESHOLD}) must collapse"
+        );
+        assert_eq!(kept[0].times_shown, 2);
+        assert_eq!(kept[0].first_seen_date.as_deref(), Some("2026-07-06"));
+    }
+
+    #[test]
+    fn classify_resets_to_full_card_when_state_changes() {
+        let conn = history_conn();
+        let a = axios_high_alert();
+        let sig = alert_state_signature(&a);
+        for d in ["2026-07-06", "2026-07-07"] {
+            conn.execute(
+                "INSERT INTO briefing_item_history (item_title, source_type, briefing_date, state_signature)
+                 VALUES (?1, 'preemption', ?2, ?3)",
+                rusqlite::params![a.title, d, sig],
+            )
+            .unwrap();
+        }
+        // A fix version becomes available -> genuine development -> new signature.
+        let mut changed = a.clone();
+        changed.fixed_version = Some("1.16.1".into());
+        let (kept, _) =
+            classify_preemption_persistence_with_conn(&conn, vec![changed], "2026-07-08", false);
+        assert!(
+            !kept[0].persistent_unchanged,
+            "a changed state must re-surface as a full card, not a collapsed line"
+        );
+        assert_eq!(kept[0].times_shown, 0, "the new state has no prior history");
+    }
+
+    #[test]
+    fn classify_records_signature_only_when_asked() {
+        let conn = history_conn();
+        let a = axios_high_alert();
+        // record = false (manual/window trigger): must not write history.
+        classify_preemption_persistence_with_conn(&conn, vec![a.clone()], "2026-07-08", false);
+        let n0: i64 = conn
+            .query_row("SELECT COUNT(*) FROM briefing_item_history", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(n0, 0, "read-only classification must not pollute history");
+        // record = true (scheduled brief): writes exactly one row with the signature.
+        classify_preemption_persistence_with_conn(&conn, vec![a.clone()], "2026-07-08", true);
+        let sig = alert_state_signature(&a);
+        let n1: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM briefing_item_history WHERE state_signature = ?1",
+                rusqlite::params![sig],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n1, 1);
+    }
+
+    #[test]
+    fn classify_suppresses_repeat_low_severity_to_topic() {
+        let conn = history_conn();
+        let mut low = make_test_preemption_alert("some medium advisory", "medium", "x");
+        low.package_name = Some("left-pad".into());
+        let sig = alert_state_signature(&low);
+        conn.execute(
+            "INSERT INTO briefing_item_history (item_title, source_type, briefing_date, state_signature)
+             VALUES (?1, 'preemption', '2026-07-07', ?2)",
+            rusqlite::params![low.title, sig],
+        )
+        .unwrap();
+        let (kept, suppressed) =
+            classify_preemption_persistence_with_conn(&conn, vec![low], "2026-07-08", false);
+        assert!(
+            kept.is_empty(),
+            "seen-before low severity is suppressed, not shown"
+        );
+        assert_eq!(suppressed, vec!["left-pad".to_string()]);
     }
 
     #[test]
@@ -4312,6 +4699,9 @@ mod tests {
             suggested_actions: vec!["Update lodash to >= 4.17.21".into()],
             scope: None,
             merged_package_versions: Vec::new(),
+            times_shown: 0,
+            persistent_unchanged: false,
+            first_seen_date: None,
         };
 
         let json = serde_json::to_value(&alert).expect("serialize");
