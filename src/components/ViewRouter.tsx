@@ -70,8 +70,10 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
           <BlindSpotsView />
         </ViewErrorBoundary>
       ) : (
-        <ViewErrorBoundary viewName="Signal">
-          <div role="tabpanel" id="view-panel-results" aria-labelledby="tab-results">
+        <div role="tabpanel" id="view-panel-results" aria-labelledby="tab-results">
+          {/* The toggle lives OUTSIDE the error boundary so it stays clickable
+              even if one of the two views throws — the user can always switch
+              back instead of being stranded on an error screen. */}
           <div className="flex justify-end px-4 pt-3 pb-1">
             <div className="inline-flex rounded-lg border border-border bg-bg-secondary p-0.5">
               <button
@@ -98,27 +100,30 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
               </button>
             </div>
           </div>
-          {signalViewMode === 'graph' ? (
-            <Suspense fallback={<div className="flex items-center justify-center py-20 text-text-secondary text-sm">{t('action.loading')}</div>}>
-              <ContentGraphView />
-            </Suspense>
-          ) : (
-            <>
-              {analysisComplete && (
-                <Suspense fallback={null}>
-                  <WhatYouWouldHaveMissed />
-                  <SignalsPanel results={relevanceResults} />
-                  <KnowledgeGapsPanel />
-                </Suspense>
-              )}
-              <ResultsView
-                newItemIds={newItemIds}
-                focusedIndex={focusedIndex}
-              />
-            </>
-          )}
-          </div>
-        </ViewErrorBoundary>
+          {/* resetKey={signalViewMode}: switching List/Graph clears any captured
+              error so a crash in one view never blocks the other. */}
+          <ViewErrorBoundary viewName="Signal" resetKey={signalViewMode}>
+            {signalViewMode === 'graph' ? (
+              <Suspense fallback={<div className="flex items-center justify-center py-20 text-text-secondary text-sm">{t('action.loading')}</div>}>
+                <ContentGraphView />
+              </Suspense>
+            ) : (
+              <>
+                {analysisComplete && (
+                  <Suspense fallback={null}>
+                    <WhatYouWouldHaveMissed />
+                    <SignalsPanel results={relevanceResults} />
+                    <KnowledgeGapsPanel />
+                  </Suspense>
+                )}
+                <ResultsView
+                  newItemIds={newItemIds}
+                  focusedIndex={focusedIndex}
+                />
+              </>
+            )}
+          </ViewErrorBoundary>
+        </div>
       )}
     </Suspense>
     </>

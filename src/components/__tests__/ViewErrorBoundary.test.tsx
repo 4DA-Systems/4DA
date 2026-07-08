@@ -124,6 +124,65 @@ describe('ViewErrorBoundary', () => {
     expect(screen.queryByText(/reload/i)).not.toBeInTheDocument();
   });
 
+  // Regression: a crash in one view used to leave the single boundary instance
+  // (reused across the tab-switch ternary) stuck in its error state, so the user
+  // could not navigate to any other tab without a full app refresh.
+  it('auto-clears the error when viewName changes (navigating to another tab)', () => {
+    const { rerender } = render(
+      <ViewErrorBoundary viewName="Signal">
+        <ThrowingChild />
+      </ViewErrorBoundary>,
+    );
+    expect(screen.getByText('Signal failed to load')).toBeInTheDocument();
+
+    // Simulate switching to a different tab: same boundary slot, new viewName,
+    // healthy children. The boundary must recover on its own — no Retry click.
+    rerender(
+      <ViewErrorBoundary viewName="Briefing">
+        <div>Briefing content</div>
+      </ViewErrorBoundary>,
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Briefing content')).toBeInTheDocument();
+  });
+
+  // Regression: crashing the Graph view used to block the List view behind the
+  // same boundary. Bumping resetKey (the List/Graph toggle) must recover.
+  it('auto-clears the error when resetKey changes (toggling Signal List/Graph)', () => {
+    const { rerender } = render(
+      <ViewErrorBoundary viewName="Signal" resetKey="graph">
+        <ThrowingChild />
+      </ViewErrorBoundary>,
+    );
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    rerender(
+      <ViewErrorBoundary viewName="Signal" resetKey="list">
+        <div>List content</div>
+      </ViewErrorBoundary>,
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('List content')).toBeInTheDocument();
+  });
+
+  it('keeps showing the error while viewName and resetKey are unchanged', () => {
+    const { rerender } = render(
+      <ViewErrorBoundary viewName="Signal" resetKey="graph">
+        <ThrowingChild />
+      </ViewErrorBoundary>,
+    );
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    // A re-render with the SAME identity (still the crashed Graph view) must not
+    // spuriously clear — otherwise it would loop: clear -> re-throw -> clear.
+    rerender(
+      <ViewErrorBoundary viewName="Signal" resetKey="graph">
+        <ThrowingChild />
+      </ViewErrorBoundary>,
+    );
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
   it('logs error via console.error in componentDidCatch', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 

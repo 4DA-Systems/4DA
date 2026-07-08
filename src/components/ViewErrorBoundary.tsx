@@ -7,20 +7,45 @@ interface ViewErrorBoundaryProps {
   viewName: string;
   children: ReactNode;
   onReset?: () => void;
+  /**
+   * When this value changes, the boundary clears any captured error and
+   * re-renders its children. Use it to recover automatically when the thing
+   * being rendered changes (e.g. the Signal List/Graph toggle) without the
+   * user having to hit Retry.
+   */
+  resetKey?: string | number;
 }
 
 interface ViewErrorBoundaryState {
   hasError: boolean;
+  // Tracked so a change in the mounted view (or resetKey) auto-clears a prior
+  // error. Without this, the single boundary instance that React reuses across
+  // the tab-switch ternary stays stuck in its error state — the user clicks
+  // another tab and still sees "failed to load", unable to navigate away.
+  lastViewName: string;
+  lastResetKey: string | number | undefined;
 }
 
 export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErrorBoundaryState> {
   constructor(props: ViewErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, lastViewName: props.viewName, lastResetKey: props.resetKey };
   }
 
-  static getDerivedStateFromError(): ViewErrorBoundaryState {
+  static getDerivedStateFromError(): Partial<ViewErrorBoundaryState> {
     return { hasError: true };
+  }
+
+  static getDerivedStateFromProps(
+    props: ViewErrorBoundaryProps,
+    state: ViewErrorBoundaryState,
+  ): Partial<ViewErrorBoundaryState> | null {
+    // A different view mounted here, or the caller bumped resetKey — drop the
+    // stale error so navigation and view toggles always recover on their own.
+    if (props.viewName !== state.lastViewName || props.resetKey !== state.lastResetKey) {
+      return { hasError: false, lastViewName: props.viewName, lastResetKey: props.resetKey };
+    }
+    return null;
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
