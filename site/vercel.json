@@ -2,17 +2,65 @@
   "buildCommand": "npx @11ty/eleventy",
   "outputDirectory": "_site",
   "rewrites": [
-    { "source": "/streets", "destination": "/streets.html" },
-    { "source": "/merch", "destination": "/merch.html" },
-    { "source": "/privacy", "destination": "/privacy.html" },
-    { "source": "/terms", "destination": "/terms.html" },
-    { "source": "/signal", "destination": "/signal.html" },
-    { "source": "/signal/success", "destination": "/signal/success.html" },
-    { "source": "/api/signal/:path*", "destination": "/api/signal/:path*" },
-    { "source": "/api/streets/:path*", "destination": "/api/streets/:path*" },
-    { "source": "/api/notify", "destination": "/api/notify" },
-    { "source": "/framework", "destination": "/framework.html" },
-    { "source": "/contact", "destination": "/contact.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/streets",
+      "destination": "/streets.html"
+    },
+    {
+      "source": "/merch",
+      "destination": "/merch.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/signal",
+      "destination": "/signal.html"
+    },
+    {
+      "source": "/signal/success",
+      "destination": "/signal/success.html"
+    },
+    {
+      "source": "/api/signal/:path*",
+      "destination": "/api/signal/:path*"
+    },
+    {
+      "source": "/api/streets/:path*",
+      "destination": "/api/streets/:path*"
+    },
+    {
+      "source": "/api/notify",
+      "destination": "/api/notify"
+    },
+    {
+      "source": "/framework",
+      "destination": "/framework.html"
+    },
+    {
+      "source": "/contact",
+      "destination": "/contact.html"
+    },
+    {
+      "source": "/pages/size-chart",
+      "destination": "/pages/size-chart.html"
+    },
+    {
+      "source": "/pages/faq",
+      "destination": "/pages/faq.html"
+    },
+    {
+      "source": "/pages/care-instructions",
+      "destination": "/pages/care-instructions.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
