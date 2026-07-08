@@ -180,6 +180,9 @@ permalink: "/merch.html"
       .featured { grid-template-columns: 1fr; padding: 24px; gap: 24px; }
       .product-grid, .skeleton-grid { grid-template-columns: 1fr; }
       .footer-inner { flex-direction: column; text-align: center; }
+      .footer-inner > * { min-width: 0; max-width: 100%; }
+      .footer-links { flex-wrap: wrap; justify-content: center; gap: 12px 20px; }
+      .footer-brand { align-items: center !important; }
       .nav-hamburger { display: block; }
       .nav-links { display: none; position: absolute; top: 56px; left: 0; right: 0; flex-direction: column; background: rgba(10,10,10,0.98); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 16px 24px; gap: 12px; }
       .nav-links.nav-open { display: flex; }
@@ -574,6 +577,8 @@ permalink: "/merch.html"
       return card;
     }
 
+    function sizeLabel(v) { return v.title.split(' / ').pop().trim().toUpperCase(); }
+
     function buildSizesHtml(variants) {
       var html = '<div class="size-selector">';
       variants.forEach(function(v, j) {
@@ -581,6 +586,18 @@ permalink: "/merch.html"
         html += '<button class="size-btn' + (j === 0 ? ' selected' : '') + '" data-variant-id="' + v.id + '"' + (v.availableForSale ? '' : ' disabled') + '>' + label + '</button>';
       });
       return html + '</div>';
+    }
+
+    // Deterministic default variant: prefer M > L > S by exact size label,
+    // then any available, then the first. Matches on the parsed size label so
+    // a color name like "Maroon" can never be mistaken for size "M".
+    function pickDefaultVariant(variants) {
+      var pref = ['M', 'L', 'S'];
+      for (var i = 0; i < pref.length; i++) {
+        var match = variants.find(function(v) { return sizeLabel(v) === pref[i] && v.availableForSale; });
+        if (match) return match;
+      }
+      return variants.find(function(v) { return v.availableForSale; }) || variants[0];
     }
 
     function setupSizeButtons(card) {
@@ -672,8 +689,7 @@ permalink: "/merch.html"
       document.getElementById('featured-buy').addEventListener('click', function() {
         var btn = document.getElementById('featured-buy');
         var c = group.colors[fState.colorIdx];
-        // Pick M if available, else first
-        var variant = c.variants.find(function(v) { return v.title.indexOf('M') !== -1 && v.title.indexOf('XL') === -1 && v.availableForSale; }) || c.variants[0];
+        var variant = pickDefaultVariant(c.variants);
         if (window.posthog) posthog.capture('merch_buy_clicked', { product: c.product.title, variant: variant.title, source: 'featured' });
         btn.textContent = '...';
         btn.classList.add('loading');
