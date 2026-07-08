@@ -263,10 +263,60 @@ function buildChainsHtml(chains) {
   return html;
 }
 
-function buildPreemptionHtml(alerts) {
-  var html = '';
+// Format a YYYY-MM-DD date as a short "23 May" label. Falls back to the raw
+// string if it doesn't parse, so a malformed date never blanks the line.
+function formatShortDate(iso) {
+  if (!iso || typeof iso !== 'string') { return ''; }
+  var m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) { return iso; }
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var mi = parseInt(m[2], 10) - 1;
+  if (mi < 0 || mi > 11) { return iso; }
+  return parseInt(m[3], 10) + ' ' + months[mi];
+}
+
+// A live Critical/High advisory the user has already seen unchanged for several
+// briefings. Never a full card (that repetition is what made the brief feel
+// identical every morning) — but never hidden either: an unfixed vuln stays
+// visible as one compact "still open" line until something about it changes.
+function buildPersistentStrip(alerts) {
+  if (!alerts.length) { return ''; }
+  var names = [];
+  var earliest = null;
   for (var i = 0; i < alerts.length; i++) {
-    var alert = alerts[i];
+    var a = alerts[i];
+    var name = a.package_name || a.title || 'advisory';
+    names.push(escapeHtml(truncate(name, 28)));
+    if (a.first_seen_date && (!earliest || a.first_seen_date < earliest)) {
+      earliest = a.first_seen_date;
+    }
+  }
+  var since = earliest ? ' since ' + escapeHtml(formatShortDate(earliest)) : '';
+  var label = alerts.length + ' known advisor' + (alerts.length === 1 ? 'y' : 'ies')
+    + ' still open, unchanged' + since;
+  return '<div class="preemption-persistent">'
+    + '<span class="preemption-persistent-label">' + label + '</span>'
+    + '<span class="preemption-persistent-pkgs">' + names.join(' &middot; ') + '</span>'
+    + '</div>';
+}
+
+function buildPreemptionHtml(alerts) {
+  // Fresh/changed advisories render as full cards; long-unchanged ones collapse
+  // into a single strip below them so a vuln the user hasn't patched stops
+  // re-screaming a detailed card every morning without ever disappearing.
+  var fresh = [];
+  var persisting = [];
+  for (var i = 0; i < alerts.length; i++) {
+    if (alerts[i] && alerts[i].persistent_unchanged) {
+      persisting.push(alerts[i]);
+    } else {
+      fresh.push(alerts[i]);
+    }
+  }
+
+  var html = '';
+  for (var j = 0; j < fresh.length; j++) {
+    var alert = fresh[j];
     var title = escapeHtml(truncate(alert.title, 70));
     var scope = alert.scope || 'external';
     var explanation = escapeHtml(truncate(alert.explanation, 160));
@@ -287,6 +337,8 @@ function buildPreemptionHtml(alerts) {
       + (explanation ? '<div class="preemption-explanation">' + explanation + '</div>' : '')
       + '</div>';
   }
+
+  html += buildPersistentStrip(persisting);
   return html;
 }
 
