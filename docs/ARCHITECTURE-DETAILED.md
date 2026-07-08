@@ -127,7 +127,7 @@ src/
 **Purpose**: Core logic, database operations, LLM integration, source fetching.
 
 **Key Features**:
-- **82+ Tauri commands**: Full IPC surface for frontend
+- **390+ Tauri commands**: Full IPC surface for frontend
 - **Async/await**: Non-blocking I/O with Tokio
 - **Error handling**: `thiserror` for structured errors
 - **Logging**: `tracing` with structured logging
@@ -337,50 +337,30 @@ CREATE TABLE ace_topics (
 
 ## Relevance Scoring Algorithm
 
-### PASIFA Formula (Privacy Aware Semantic Intelligence 4 File Analysis)
+### PASIFA V2: 5-Axis Scoring with Confirmation Gate
 
-```rust
-// Step 1: Context Similarity (KNN Search)
-let context_score = sqlite_vec_knn_search(item_embedding, context_embeddings, k=5)
-    .average_distance();
+Each item is scored independently on five axes:
 
-// Step 2: Interest Score (Keyword Matching)
-let interest_score = interests
-    .iter()
-    .filter(|i| item_text.contains(&i.topic.to_lowercase()))
-    .map(|i| i.weight)
-    .sum::<f32>()
-    .min(1.0);
+| Axis | Signal | Source |
+|------|--------|--------|
+| **Context** | KNN semantic similarity against indexed codebase chunks | sqlite-vec |
+| **Interest** | Cosine similarity against your declared interest embeddings | embeddings |
+| **ACE** | Semantic + keyword overlap with the auto-detected tech stack | ACE scanner |
+| **Dependency** | Package/dependency names extracted from the item text | text parse |
+| **Learned** | Affinity multiplier from feedback history | behavior store |
 
-// Step 3: Base Score (Weighted Average)
-let base_score = (context_score * 0.5) + (interest_score * 0.5);
+The **confirmation gate** then counts how many axes confirm the item and applies a multiplier and score ceiling accordingly. A single axis is capped low; agreement across multiple axes lifts both the multiplier and the ceiling:
 
-// Step 4: ACE Boost (Detected Tech Overlap)
-let ace_boost = detected_tech
-    .iter()
-    .filter(|t| item_text.contains(&t.to_lowercase()))
-    .map(|t| ace_topics.get(t).map_or(0.0, |at| at.confidence * 0.1))
-    .sum::<f32>()
-    .min(0.3);  // Cap at 0.3
+| Confirming axes | Multiplier | Ceiling |
+|-----------------|-----------|---------|
+| 0 | 0.25 | 0.20 |
+| 1 | 0.45 | 0.28 |
+| 2 | 1.00 | 0.65 |
+| 3 | 1.10 | 0.85 |
+| 4 | 1.20 | 1.00 |
+| 5 | 1.25 | 1.00 |
 
-// Step 5: Affinity Multiplier (Learned Behavior)
-let affinity_mult = 1.0 + topic_affinities
-    .iter()
-    .filter(|(topic, _)| item_text.contains(&topic.to_lowercase()))
-    .map(|(_, (affinity, confidence))| affinity * confidence * 0.3)
-    .sum::<f32>();
-
-// Step 6: Anti-Topic Penalty
-let anti_penalty = anti_topics
-    .iter()
-    .filter(|at| item_text.contains(&at.topic.to_lowercase()))
-    .map(|at| 1.0 - (at.confidence * 0.5))
-    .product::<f32>();
-
-// Step 7: Final Score
-let combined_score = base_score + ace_boost;
-let final_score = (combined_score * affinity_mult * anti_penalty).clamp(0.0, 1.0);
-```
+An item needs **2+ confirming axes** to surface meaningfully — this corroboration requirement is what drives the measured ~92% rejection rate on noise. Every scored item records which axes matched, so the score is fully explainable. Zero-vector (no-embedding) fallback and per-axis degradation behavior are documented in [SCORING-DEGRADATION-PROFILE.md](./SCORING-DEGRADATION-PROFILE.md).
 
 ### Confidence Calculation
 

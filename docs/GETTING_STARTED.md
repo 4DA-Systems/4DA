@@ -118,16 +118,15 @@ Enable/disable sources in Settings > Sources.
 
 ## Understanding Relevance Scores
 
-Items are scored 0.0 to 1.0 based on:
+Items are scored 0.0 to 1.0 across five independent axes:
 
-- **Semantic Similarity**: How closely the content matches your interests
-- **Topic Affinity**: Learned preferences from your interactions
-- **Anti-Topic Penalty**: Reduces score for topics you've rejected
+- **Context**: How closely the content matches your codebase
+- **Interest**: Match against the topics you've declared
+- **ACE**: Overlap with your auto-detected tech stack
+- **Dependency**: Packages and dependencies named in the content
+- **Learned**: Preferences learned from your clicks, saves, and dismissals
 
-The formula:
-```
-score = base_score * affinity_multiplier * (1.0 - anti_penalty)
-```
+An item must be confirmed by **two or more axes** before it can score high — a single weak signal is capped low. This confirmation gate is what filters out noise and generic content. Every item shows exactly which axes it matched and why.
 
 ## Next Steps
 

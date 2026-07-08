@@ -6,8 +6,8 @@ This guide covers how to activate a 4DA Signal license. If you are using the fre
 
 | Tier | Key Required | Includes |
 |------|-------------|----------|
-| **Free** | No | All 20+ content sources, the full 5-axis scoring engine, AI daily briefings + weekly digest (BYOK), the multi-signal confirmation gate, ACE auto context discovery, behavior learning, Natural Language Search (BYOK), the MCP server (14 tools), and the CLI. No expiration. |
-| **Signal** | Yes | Everything in Free + the Signal tab (Key Signals + analytics), Score Autopsy, Developer DNA, Signal Chains, Knowledge Gaps, Semantic Shifts, Attention Analytics, Standing Queries, and Project Health |
+| **Free** | No | All 20+ content sources, the full 5-axis scoring engine, AI daily briefings + weekly digest (BYOK), the multi-signal confirmation gate, ACE auto context discovery, behavior learning, Natural Language Search (BYOK), Developer DNA cards, the MCP server (14 tools), and the CLI. No expiration. |
+| **Signal** | Yes | Everything in Free + the Signal tab (Key Signals + analytics), Score Autopsy, Signal Chains, Knowledge Gaps, Semantic Shifts, Attention Analytics, Standing Queries, and Project Health |
 
 The free tier is a complete product — it is fully functional, never expires, and includes AI briefings. Signal unlocks the compound-intelligence analysis layer for developers who want the system to surface deeper patterns from their content.
 

@@ -72,7 +72,7 @@ The MCP server works standalone — no desktop app required. 14 tools for vulner
 | PASIFA scoring | Full engine | Full engine |
 | AI briefings | Included | Included |
 | MCP tools | All 14 | All 14 |
-| Developer DNA | — | Included |
+| Developer DNA | Included | Included |
 | Signal Chains | — | Included |
 | Knowledge Gaps | — | Included |
 | Score Autopsy | — | Included |

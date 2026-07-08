@@ -29,6 +29,7 @@ ACE detects projects by recognizing manifest files:
 | Cargo.toml | Rust |
 | package.json | Node.js/JavaScript |
 | pyproject.toml | Python |
+| requirements.txt | Python |
 | go.mod | Go |
 | pom.xml | Java (Maven) |
 | build.gradle | Java/Kotlin (Gradle) |
@@ -36,8 +37,7 @@ ACE detects projects by recognizing manifest files:
 | composer.json | PHP |
 | pubspec.yaml | Dart/Flutter |
 | CMakeLists.txt | C/C++ |
-| Makefile | Various |
-| Dockerfile | Docker |
+| *.csproj | C#/.NET |
 
 #### File Watching
 
@@ -90,16 +90,15 @@ Your feedback directly influences which topics score higher and which get filter
 
 ### Relevance Scoring
 
-The unified scoring formula:
+4DA uses **PASIFA V2**, a 5-axis scoring model with a confirmation gate. Each item is scored across up to five independent axes:
 
-```
-combined_score = base_score * affinity_multiplier * (1.0 - anti_penalty)
-```
+- **Context** -- semantic (KNN) similarity to your codebase
+- **Interest** -- match against the topics you've declared
+- **ACE** -- overlap with your auto-detected tech stack
+- **Dependency** -- package/dependency names found in the content
+- **Learned** -- affinity from your feedback history (clicks, saves, dismissals)
 
-Where:
-- `base_score` = Semantic similarity to your interests
-- `affinity_multiplier` = 1.0 + (avg_affinity * 0.7), clamped [0.3, 1.7]
-- `anti_penalty` = Sum of anti-topic matches, capped at 0.7
+The **confirmation gate** requires corroboration across axes: an item needs at least two independent axes to agree before it can score high. The more axes confirm, the higher the multiplier and score ceiling; an item backed by a single weak signal is capped low. This is what keeps generic, off-topic, or noisy content out of your feed. See the [Scoring Degradation Profile](./SCORING-DEGRADATION-PROFILE.md) for the full confirmation-gate table.
 
 ### KNN Search
 
@@ -198,7 +197,7 @@ System notifications for:
 
 ### Tauri Commands
 
-82+ commands exposed for:
+390+ commands exposed for:
 
 - Analysis operations
 - Context management
