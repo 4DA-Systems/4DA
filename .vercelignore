@@ -1,17 +1,20 @@
-# Vercel CLI deploy ignores — only site/ matters
-# (rootDirectory=site handles Git-triggered deploys)
-src-tauri/
+# Vercel CLI deploy ignores — only site/ matters for a root-context deploy.
+# (rootDirectory=site handles Git-triggered deploys, which don't use this file.)
+# IMPORTANT: anchor dir patterns with a leading `/` so they match ONLY the
+# repo-root copies. An unanchored `docs/` also matched site/src/docs/ and
+# silently dropped the /docs pages from CLI-from-root deploys (same for scripts/).
+/src-tauri/
 /src/
-public/
-data/
-dist/
+/public/
+/data/
+/dist/
+/.claude/
+/.ai/
+/mcp-*/
+/docs/
+/scripts/
 node_modules/
 target/
-.claude/
-.ai/
-mcp-*/
-docs/
-scripts/
 *.db
 *.exe
 .tsbuildinfo
