@@ -420,6 +420,8 @@
   "settings.tabs.projects": "Projects",
   "settings.tabs.team": "Team",
   "settings.tabs.about": "About",
+  "settings.groups.configuration": "Configuration",
+  "settings.groups.account": "Account",
   "settings.testConnection": "Test Connection",
   "settings.display.showAllViews": "Show all views",
   "settings.display.showAllViewsDescription": "Display all navigation tabs regardless of usage",
