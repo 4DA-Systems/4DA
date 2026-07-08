@@ -213,9 +213,17 @@ fn normalize_tier(tier: &str) -> String {
 /// grants paid access from a bare tier string, so a hand-edited `settings.json`
 /// still can't unlock Signal (that path stays governed by the downgrade check in
 /// [`validate_license_on_startup`]). Returns `true` if it changed `license`.
-pub fn reconcile_license_from_proof(license: &mut LicenseConfig) -> bool {
+///
+/// `data_dir` is the directory being loaded — the backup is read from there, not
+/// from the global `get_db_path()`, so this stays hermetic under test (a temp
+/// `data_dir` never sees the dev machine's real `license_backup.json`) and never
+/// depends on global path-init ordering.
+pub fn reconcile_license_from_proof(
+    license: &mut LicenseConfig,
+    data_dir: &std::path::Path,
+) -> bool {
     use super::gating::is_paid_tier;
-    use super::keygen::load_license_backup;
+    use super::keygen::load_license_backup_from;
     use super::verify::verify_license_key;
 
     // 1. In-memory / settings key is the primary proof.
@@ -239,7 +247,7 @@ pub fn reconcile_license_from_proof(license: &mut LicenseConfig) -> bool {
 
     // 2. No usable in-memory key and the tier is not paid: consult the backup.
     if !is_paid_tier(&license.tier) {
-        if let Some(backup) = load_license_backup() {
+        if let Some(backup) = load_license_backup_from(data_dir) {
             if backup.license_key.is_empty() {
                 return false;
             }
@@ -304,13 +312,24 @@ mod reconcile_tests {
         assert_eq!(normalize_tier("free"), "free");
     }
 
+    /// A data dir guaranteed to contain no license_backup.json — keeps the
+    /// no-backup paths hermetic regardless of the machine's real license files.
+    fn empty_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("4da_reconcile_{tag}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
     #[test]
     fn reconcile_is_noop_when_already_paid_with_keygen_key() {
         // Keygen-format key + already-paid tier: step 1 skipped (not a 4DA- key),
         // step 2 skipped (tier is paid), no backup read. No change.
+        let dir = empty_dir("noop");
         let mut l = lic("signal", "BE3529-KEYGEN");
-        assert!(!reconcile_license_from_proof(&mut l));
+        assert!(!reconcile_license_from_proof(&mut l, &dir));
         assert_eq!(l.tier, "signal");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -318,8 +337,53 @@ mod reconcile_tests {
         // An invalid-signature 4DA- key must not let this function downgrade a
         // paid tier — that stays the job of validate_license_on_startup. verify
         // fails, and step 2 is skipped because the tier is already paid.
+        let dir = empty_dir("invalid4da");
         let mut l = lic("signal", "4DA-invalidpayload.invalidsig");
-        assert!(!reconcile_license_from_proof(&mut l));
+        assert!(!reconcile_license_from_proof(&mut l, &dir));
         assert_eq!(l.tier, "signal");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reconcile_stays_free_when_no_key_and_no_backup() {
+        // The common free user: no key, no backup file. Must NOT be flipped to a
+        // paid tier. (This is the case that a global-path backup read would have
+        // broken by picking up the dev machine's real signal backup.)
+        let dir = empty_dir("free");
+        let mut l = lic("free", "");
+        assert!(!reconcile_license_from_proof(&mut l, &dir));
+        assert_eq!(l.tier, "free");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reconcile_restores_paid_tier_from_keygen_backup_when_settings_lost_it() {
+        // Settings block lost (tier free, no key) but a durable Keygen-format
+        // backup survives: restore key + tier from it. Fully hermetic — the
+        // backup is written into and read from the same temp data_dir.
+        let dir = empty_dir("restore_keygen");
+        super::super::keygen::save_license_backup_to(
+            &dir,
+            "BE3529-741BAF-DEADBEEF",
+            "signal",
+            "2026-04-22T00:00:00Z",
+        );
+        let mut l = lic("free", "");
+        assert!(reconcile_license_from_proof(&mut l, &dir));
+        assert_eq!(l.tier, "signal");
+        assert_eq!(l.license_key, "BE3529-741BAF-DEADBEEF");
+        assert_eq!(l.activated_at.as_deref(), Some("2026-04-22T00:00:00Z"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reconcile_ignores_free_tier_backup() {
+        // A backup that itself records a free tier must never grant paid access.
+        let dir = empty_dir("free_backup");
+        super::super::keygen::save_license_backup_to(&dir, "SOME-KEY", "free", "");
+        let mut l = lic("free", "");
+        assert!(!reconcile_license_from_proof(&mut l, &dir));
+        assert_eq!(l.tier, "free");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

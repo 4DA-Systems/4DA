@@ -146,15 +146,33 @@ pub(crate) struct LicenseBackup {
     backup_created_at: String,
 }
 
-fn backup_path() -> std::path::PathBuf {
-    let db_path = crate::state::get_db_path();
-    db_path
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("data"))
-        .join("license_backup.json")
+/// Backup file location for a given data directory.
+fn backup_path_in(data_dir: &std::path::Path) -> std::path::PathBuf {
+    data_dir.join("license_backup.json")
 }
 
-pub fn save_license_backup(key: &str, tier: &str, activated_at: &str) {
+/// Global backup path, derived from the runtime DB path. Used by callers that
+/// run after startup (activation, runtime re-validation) where `get_db_path()`
+/// is authoritative. Construction-time callers must use the `*_in`/`*_from`
+/// variants with the explicit `data_dir` instead — `get_db_path()` is a global
+/// and would read a different directory than the one being loaded, breaking
+/// test hermeticity.
+fn backup_path() -> std::path::PathBuf {
+    let db_path = crate::state::get_db_path();
+    backup_path_in(
+        db_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("data")),
+    )
+}
+
+/// Save a license backup into an explicit data directory.
+pub fn save_license_backup_to(
+    data_dir: &std::path::Path,
+    key: &str,
+    tier: &str,
+    activated_at: &str,
+) {
     if key.is_empty() {
         return;
     }
@@ -164,7 +182,7 @@ pub fn save_license_backup(key: &str, tier: &str, activated_at: &str) {
         activated_at: activated_at.to_string(),
         backup_created_at: chrono::Utc::now().to_rfc3339(),
     };
-    let path = backup_path();
+    let path = backup_path_in(data_dir);
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -183,6 +201,35 @@ pub fn save_license_backup(key: &str, tier: &str, activated_at: &str) {
         }
         Err(e) => {
             warn!(target: "4da::license", error = %e, "Failed to serialize license backup");
+        }
+    }
+}
+
+pub fn save_license_backup(key: &str, tier: &str, activated_at: &str) {
+    let db_path = crate::state::get_db_path();
+    let data_dir = db_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("data"));
+    save_license_backup_to(data_dir, key, tier, activated_at);
+}
+
+/// Load a license backup from an explicit data directory.
+pub(crate) fn load_license_backup_from(data_dir: &std::path::Path) -> Option<LicenseBackup> {
+    let path = backup_path_in(data_dir);
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                warn!(target: "4da::license", error = %e, "Failed to read license backup");
+            }
+            return None;
+        }
+    };
+    match serde_json::from_str(&content) {
+        Ok(backup) => Some(backup),
+        Err(e) => {
+            warn!(target: "4da::license", error = %e, "Failed to parse license backup");
+            None
         }
     }
 }

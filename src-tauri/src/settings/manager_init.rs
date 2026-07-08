@@ -316,7 +316,7 @@ impl SettingsManager {
         // nothing re-DERIVED the correct tier from a key that was still present.
         // Security: only a VERIFIED key grants a paid tier — a hand-edited tier
         // string still cannot (validate_license_on_startup downgrades that).
-        if crate::settings::reconcile_license_from_proof(&mut settings.license) {
+        if crate::settings::reconcile_license_from_proof(&mut settings.license, data_dir) {
             info!(
                 target: "4da::license",
                 tier = %settings.license.tier,
@@ -331,8 +331,10 @@ impl SettingsManager {
                     let _ = atomic_replace(&tmp_path, &settings_path);
                 }
             }
-            // Keep all three license stores in agreement.
-            crate::settings::save_license_backup(
+            // Keep all three license stores in agreement — write the backup into
+            // the same data_dir we loaded from (not the global get_db_path).
+            crate::settings::save_license_backup_to(
+                data_dir,
                 &settings.license.license_key,
                 &settings.license.tier,
                 settings.license.activated_at.as_deref().unwrap_or(""),
