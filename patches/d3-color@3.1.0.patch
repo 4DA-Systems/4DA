@@ -1,0 +1,26 @@
+diff --git a/src/define.js b/src/define.js
+index 2bba2d3a4fdf3cdee152aacc711366f91c1d5747..30219e4a550b8bfe82fd0597e2a154afb48be9e4 100644
+--- a/src/define.js
++++ b/src/define.js
+@@ -1,6 +1,20 @@
+ export default function(constructor, factory, prototype) {
+   constructor.prototype = factory.prototype = prototype;
+-  prototype.constructor = constructor;
++  // Use defineProperty instead of `prototype.constructor = constructor`.
++  // A plain assignment is a *write* to an inherited property, so when the host
++  // freezes Object.prototype (e.g. Tauri's `freezePrototype` hardening, which
++  // makes Object.prototype.constructor non-writable) strict-mode ESM throws
++  // "Cannot assign to read only property 'constructor'" at module init. Defining
++  // an own property on this fresh (non-frozen) object always succeeds and keeps
++  // the `new this.constructor()` behaviour d3-color's copy() relies on.
++  // enumerable:true mirrors the property a plain assignment would have created,
++  // so downstream behaviour is byte-for-byte identical apart from not throwing.
++  Object.defineProperty(prototype, "constructor", {
++    value: constructor,
++    writable: true,
++    configurable: true,
++    enumerable: true,
++  });
+ }
+ 
+ export function extend(parent, definition) {
