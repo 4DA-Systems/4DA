@@ -120,7 +120,7 @@ If you purchase a Signal subscription, the App validates your license key using 
 
 - Sends your **license key** to Keygen's validation API
 - Does **not** send your name, email address, device identifiers, or any other personal data
-- Occurs at activation and periodically thereafter (cached for 24 hours to minimise network calls)
+- Occurs at activation and periodically thereafter (cached for 90 days to minimise network calls)
 - Results are cached locally to allow offline usage between validations
 
 The App also supports **offline license verification** using Ed25519 digital signatures embedded in the license key itself. This verification requires no network access whatsoever.

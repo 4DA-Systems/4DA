@@ -53,26 +53,30 @@ The Free tier includes:
 
 - Full PASIFA scoring engine (algorithmic content scoring and filtering)
 - All content sources (Hacker News, Reddit, RSS, GitHub, and others as added)
+- The full PASIFA scoring engine (5-axis, with the multi-signal confirmation gate)
 - Keyword matching and local embedding-based semantic matching
-- Feedback-driven score personalisation
+- Natural language search (runs on your own API key)
+- AI-powered daily briefings and weekly digest (run on your own API key or local Ollama)
+- Feedback-driven score personalisation and behaviour learning
 - Local Ollama integration for embeddings
-- The complete STREETS playbook (all 7 modules)
+- Developer DNA profile and shareable card exports
+- The MCP server (14 tools) and CLI binary
+- The complete STREETS playbook (all 7 modules), published free on the web at [4da.ai/streets](https://4da.ai/streets)
 
 The Free tier is provided at no cost and may be used indefinitely. We reserve the right to modify Free tier features with reasonable notice, but we will not retroactively remove core scoring functionality from existing Free tier users without a compelling reason.
 
 ### 3.2 Signal Tier
 
-The Signal tier includes everything in the Free tier, plus:
+The Signal tier includes everything in the Free tier, plus the intelligence analysis layer:
 
-- LLM-powered content re-ranking and analysis
-- Natural language search across all content
-- AI-powered daily briefings and intelligence summaries
-- Weekly digest emails (where an email address is provided)
-- Standing queries (persistent, automated searches)
-- Channels (curated content streams)
-- Semantic analysis and trend detection
-- Developer DNA profiling
-- Audio briefings
+- Signal Chains (cross-source narrative linking)
+- Knowledge Gaps (dependency-vs-engagement gap detection)
+- Semantic Shifts (per-topic trend detection)
+- Project Health (dependency monitoring)
+- Score Autopsy (full 5-axis score breakdown)
+- Standing Queries (persistent, automated searches)
+- Attention Report (attention-vs-work analytics)
+- Decision Signals (decision-point content surfacing)
 - Additional Signal features as released
 
 ### 3.3 Additional Tiers
@@ -98,7 +102,7 @@ Your subscription begins on the date of your first payment and renews automatica
 
 ### 4.3 License Validation
 
-Signal tier users receive a license key validated through Keygen. Your license key is personal to you and must not be shared, redistributed, or used on more devices than your subscription permits. License validation sends only your license key and a machine fingerprint (a hardware-derived hash) to the Keygen API -- no personal data, device fingerprints beyond this hash, or other identifying information is transmitted.
+Signal tier users receive a license key validated through Keygen. Your license key is personal to you and must not be shared, redistributed, or used on more devices than your subscription permits. License validation sends only your license key to the Keygen API -- no personal data, device fingerprints, or other identifying information is transmitted.
 
 ### 4.4 Cancellation
 
@@ -113,7 +117,7 @@ You may cancel your Signal subscription at any time. Upon cancellation:
 
 If your subscription lapses due to cancellation, non-payment, or expiry:
 
-- All Signal tier features (LLM re-ranking, natural language search, AI briefings, standing queries, channels, and other Signal capabilities) will become unavailable
+- All Signal tier features (Signal Chains, Knowledge Gaps, Semantic Shifts, Project Health, Score Autopsy, Standing Queries, Attention Report, Decision Signals) will become unavailable
 - Your local data, including all previously scored and saved content, remains on your device and is not deleted
 - Free tier functionality continues to operate as normal
 - You may re-subscribe at any time to restore Signal features
@@ -160,7 +164,7 @@ The 4DA source code is released under the **Functional Source License, Version 1
 
 - You may view, fork, modify, and redistribute the source code for any purpose that does not constitute a Competing Use
 - **Competing Use is prohibited.** You may **not** use the source code, in whole or in part, to provide a product or service that competes with the 4DA application or any other product or service provided by 4DA Systems, as defined in the FSL. This restriction applies during the Change Date period specified in the license.
-- After **two (2) years** from the date of each release, the code for that release automatically converts to the **Apache License 2.0**, granting full open-source freedoms
+- After **three (3) years** from the date of each release, the code for that release automatically converts to the **Apache License 2.0**, granting full open-source freedoms
 - The full FSL license text is included with the source code and governs your use of the source code
 
 If there is any conflict between these Terms and the FSL-1.1-Apache-2.0 license regarding use of the source code, the FSL license governs.
