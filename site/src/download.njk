@@ -106,7 +106,7 @@ permalink: "/download/"
         <span class="dl-badge">Recommended for you</span>
         <div class="dl-os">Windows</div>
         <div class="dl-meta">Windows 10 (1803+) or 11. <code>.exe</code> installer (NSIS), auto-updates.</div>
-        <a class="dl-btn" data-dl="win" href="{{ release.files.win.url }}">Download <span class="sz">{{ release.files.win.size }}</span></a>
+        <a class="dl-btn" data-dl="win" href="/download/{{ release.files.win.slug }}/">Download <span class="sz">{{ release.files.win.size }}</span></a>
         <div class="dl-note-inline">First launch shows SmartScreen &mdash; see below.</div>
       </div>
       <div class="dl-card" data-os="mac">
@@ -114,8 +114,8 @@ permalink: "/download/"
         <div class="dl-os">macOS</div>
         <div class="dl-meta">macOS 10.15+. Universal <code>.dmg</code>, auto-updates. Pick your chip:</div>
         <div class="dl-btn-row">
-          <a class="dl-btn" data-dl="mac-arm" href="{{ release.files.macArm.url }}">Apple Silicon</a>
-          <a class="dl-btn" data-dl="mac-intel" href="{{ release.files.macIntel.url }}">Intel</a>
+          <a class="dl-btn" data-dl="mac-arm" href="/download/{{ release.files.macArm.slug }}/">Apple Silicon</a>
+          <a class="dl-btn" data-dl="mac-intel" href="/download/{{ release.files.macIntel.slug }}/">Intel</a>
         </div>
         <div class="dl-note-inline">On Apple Silicon? Choose Apple Silicon. Pre-2020 Macs: Intel.</div>
       </div>
@@ -123,10 +123,10 @@ permalink: "/download/"
         <span class="dl-badge">Recommended for you</span>
         <div class="dl-os">Linux</div>
         <div class="dl-meta">Ubuntu 22.04+ (WebKitGTK 4.1). AppImage runs anywhere.</div>
-        <a class="dl-btn" data-dl="linux-appimage" href="{{ release.files.linuxAppImage.url }}">Download AppImage <span class="sz">{{ release.files.linuxAppImage.size }}</span></a>
+        <a class="dl-btn" data-dl="linux" href="/download/{{ release.files.linuxAppImage.slug }}/">Download AppImage <span class="sz">{{ release.files.linuxAppImage.size }}</span></a>
         <div class="dl-alt-links">
-          <a data-dl="linux-deb" href="{{ release.files.linuxDeb.url }}">.deb</a>
-          <a data-dl="linux-rpm" href="{{ release.files.linuxRpm.url }}">.rpm</a>
+          <a data-dl="linux-deb" href="/download/{{ release.files.linuxDeb.slug }}/">.deb</a>
+          <a data-dl="linux-rpm" href="/download/{{ release.files.linuxRpm.slug }}/">.rpm</a>
         </div>
       </div>
     </div>
