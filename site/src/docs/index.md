@@ -35,4 +35,4 @@ The MCP server and the desktop app read from the same local database. Start with
 - **[The scoring engine](/docs/how-it-works/)** — how an item earns its place
 - **[Privacy & BYOK](/docs/privacy/)** — why local-first means you don't have to trust us
 
-> **All signal. No feed.** 4DA is source-available under [FSL-1.1-Apache-2.0](https://github.com/runyourempire/4DA) and converts to Apache 2.0 three years after each release.
+> **All signal. No feed.** 4DA is source-available under [FSL-1.1-Apache-2.0](https://github.com/4DA-Systems/4DA) and converts to Apache 2.0 three years after each release.

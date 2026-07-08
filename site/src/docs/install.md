@@ -15,9 +15,9 @@ Pre-built binaries — no Rust toolchain required.
 
 | Platform | Download | Auto-updates |
 |---|---|:---:|
-| **Windows** | [`.exe` installer](https://github.com/runyourempire/4DA/releases/latest) | Yes |
-| **macOS** | [`.dmg` (Apple Silicon & Intel)](https://github.com/runyourempire/4DA/releases/latest) | Yes |
-| **Linux** | [`.AppImage` / `.deb`](https://github.com/runyourempire/4DA/releases/latest) | Yes |
+| **Windows** | [`.exe` installer](https://github.com/4DA-Systems/4DA/releases/latest) | Yes |
+| **macOS** | [`.dmg` (Apple Silicon & Intel)](https://github.com/4DA-Systems/4DA/releases/latest) | Yes |
+| **Linux** | [`.AppImage` / `.deb`](https://github.com/4DA-Systems/4DA/releases/latest) | Yes |
 
 Every release publishes `SHASUMS256.txt` and per-file `.sha256` sidecars so you can verify the binary before you run it. The updater checks GitHub Releases once per session and validates signatures with minisign.
 
@@ -44,12 +44,12 @@ No API keys. No accounts. No desktop app required. See **[MCP server & agents](/
 | GPU | not needed | not needed | optional (faster) |
 | Disk | ~500 MB | ~500 MB | + 5–9 GB per model |
 
-Supported: Windows 10 (1803+) / 11, macOS 10.15+, Ubuntu 22.04+ (WebKitGTK 4.1). One installer is ~110 MB; the local embedding model ships inside it and works fully offline on first run.
+Supported: Windows 10 (1803+) / 11, macOS 10.15+, Ubuntu 22.04+ (WebKitGTK 4.1). Installers are ~30 MB on Windows and macOS; the Linux AppImage is ~112 MB because it bundles its own runtime. The local embedding model ships inside the installer and works fully offline on first run.
 
 ## Build from source
 
 ```bash
-git clone https://github.com/runyourempire/4DA.git
+git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA
 pnpm install
 pnpm tauri dev   # First build: 5–15 min. Dev server: localhost:4444.

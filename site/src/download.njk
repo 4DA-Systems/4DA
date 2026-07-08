@@ -1,6 +1,6 @@
 ---
 title: "Download 4DA — Windows, macOS, Linux"
-description: "Download 4DA free for your platform. ~15MB, auto-updates, no account. Or run the MCP server with one command."
+description: "Download 4DA free for your platform — direct installers, no account. Or run the MCP server with one command."
 permalink: "/download/"
 ---
 {% extends "base.njk" %}
@@ -8,7 +8,7 @@ permalink: "/download/"
 {% block head %}
   <link rel="canonical" href="https://4da.ai/download">
   <meta property="og:title" content="Download 4DA — free for Windows, macOS, Linux">
-  <meta property="og:description" content="~15MB, auto-updates, no account. Or run the MCP server with one command.">
+  <meta property="og:description" content="Direct installers, auto-updates, no account. Or run the MCP server with one command.">
   <meta property="og:url" content="https://4da.ai/download">
   <meta property="og:image" content="https://4da.ai/og-image.png">
   <style>
@@ -36,16 +36,24 @@ permalink: "/download/"
     .dl-hero h1 { font-size: 40px; font-weight: 600; letter-spacing: -.02em; margin: 12px 0 10px; }
     .dl-hero p { color: var(--text-secondary); max-width: 52ch; margin: 0 auto; }
 
-    .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 40px 0 12px; }
+    .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 40px 0 12px; align-items: start; }
     .dl-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; display: flex; flex-direction: column; gap: 10px; position: relative; }
     .dl-card.recommended { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
     .dl-badge { position: absolute; top: -10px; left: 20px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 3px 8px; border-radius: 5px; display: none; }
     .dl-card.recommended .dl-badge { display: inline-block; }
     .dl-os { font-size: 17px; font-weight: 600; }
     .dl-meta { font-size: 12.5px; color: var(--text-muted); flex: 1; }
-    .dl-btn { display: inline-block; text-align: center; background: var(--text); color: var(--bg); font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 8px; transition: opacity .2s; }
+    .dl-btn { display: block; text-align: center; background: var(--text); color: var(--bg); font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 8px; transition: opacity .2s; }
     .dl-btn:hover { opacity: .9; }
+    .dl-btn .sz { font-weight: 400; color: rgba(10,10,10,.6); font-size: 12px; }
+    .dl-btn-row { display: flex; gap: 8px; }
+    .dl-btn-row .dl-btn { flex: 1; font-size: 13px; padding: 9px 8px; }
+    .dl-alt-links { display: flex; gap: 14px; font-size: 12px; font-family: 'JetBrains Mono', monospace; }
+    .dl-alt-links a { color: var(--text-secondary); }
+    .dl-alt-links a:hover { color: var(--accent); }
     .dl-note-inline { font-size: 11.5px; color: var(--text-muted); }
+
+    .dl-allfiles { text-align: center; font-size: 13px; color: var(--text-muted); margin-top: 4px; }
 
     .dl-alt { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin: 24px 0; }
     .dl-alt-text { font-size: 14px; color: var(--text-secondary); }
@@ -82,15 +90,15 @@ permalink: "/download/"
   <div class="container">
     <nav class="dl-nav">
       <a href="/" class="brand"><span class="dot">4</span> 4DA</a>
-      <div class="links"><a href="/">Home</a><a href="/docs/">Docs</a><a href="https://github.com/runyourempire/4DA">GitHub</a></div>
+      <div class="links"><a href="/">Home</a><a href="/docs/">Docs</a><a href="{{ release.repoUrl }}">GitHub</a></div>
     </nav>
   </div>
 
   <div class="container">
     <header class="dl-hero">
-      <div class="eyebrow">Free forever &middot; No account &middot; ~15MB</div>
+      <div class="eyebrow">Free forever &middot; No account &middot; Auto-updates &middot; v{{ release.version }}</div>
       <h1>Download 4DA</h1>
-      <p>Pre-built binaries with auto-updates. The local embedding model ships inside the installer, so it works fully offline on first run.</p>
+      <p>One click gets you the installer for your platform. The local embedding model ships inside it, so 4DA works fully offline on first run.</p>
     </header>
 
     <div class="dl-grid">
@@ -98,25 +106,31 @@ permalink: "/download/"
         <span class="dl-badge">Recommended for you</span>
         <div class="dl-os">Windows</div>
         <div class="dl-meta">Windows 10 (1803+) or 11. <code>.exe</code> installer (NSIS), auto-updates.</div>
-        <a class="dl-btn" data-dl="win" href="https://github.com/runyourempire/4DA/releases/latest">Get the .exe</a>
+        <a class="dl-btn" data-dl="win" href="{{ release.files.win.url }}">Download <span class="sz">{{ release.files.win.size }}</span></a>
         <div class="dl-note-inline">First launch shows SmartScreen &mdash; see below.</div>
       </div>
       <div class="dl-card" data-os="mac">
         <span class="dl-badge">Recommended for you</span>
         <div class="dl-os">macOS</div>
-        <div class="dl-meta">macOS 10.15+. <code>.dmg</code> for Apple Silicon &amp; Intel, auto-updates.</div>
-        <a class="dl-btn" data-dl="mac" href="https://github.com/runyourempire/4DA/releases/latest">Get the .dmg</a>
-        <div class="dl-note-inline">Universal build &mdash; one file for both chips.</div>
+        <div class="dl-meta">macOS 10.15+. Universal <code>.dmg</code>, auto-updates. Pick your chip:</div>
+        <div class="dl-btn-row">
+          <a class="dl-btn" data-dl="mac-arm" href="{{ release.files.macArm.url }}">Apple Silicon</a>
+          <a class="dl-btn" data-dl="mac-intel" href="{{ release.files.macIntel.url }}">Intel</a>
+        </div>
+        <div class="dl-note-inline">On Apple Silicon? Choose Apple Silicon. Pre-2020 Macs: Intel.</div>
       </div>
       <div class="dl-card" data-os="linux">
         <span class="dl-badge">Recommended for you</span>
         <div class="dl-os">Linux</div>
-        <div class="dl-meta">Ubuntu 22.04+ (WebKitGTK 4.1). <code>.AppImage</code> or <code>.deb</code>.</div>
-        <a class="dl-btn" data-dl="linux" href="https://github.com/runyourempire/4DA/releases/latest">Get AppImage / .deb</a>
-        <div class="dl-note-inline">AppImage runs anywhere; .deb for apt-based distros.</div>
+        <div class="dl-meta">Ubuntu 22.04+ (WebKitGTK 4.1). AppImage runs anywhere.</div>
+        <a class="dl-btn" data-dl="linux-appimage" href="{{ release.files.linuxAppImage.url }}">Download AppImage <span class="sz">{{ release.files.linuxAppImage.size }}</span></a>
+        <div class="dl-alt-links">
+          <a data-dl="linux-deb" href="{{ release.files.linuxDeb.url }}">.deb</a>
+          <a data-dl="linux-rpm" href="{{ release.files.linuxRpm.url }}">.rpm</a>
+        </div>
       </div>
     </div>
-    <p style="text-align:center; font-size:13px; color:var(--text-muted);">Every release includes <code>SHASUMS256.txt</code> and per-file <code>.sha256</code> sidecars. <a href="/docs/install/">Install guide &amp; requirements &rarr;</a></p>
+    <p class="dl-allfiles">Prefer to verify first? <a href="{{ release.releaseUrl }}">All files, checksums &amp; CLI binaries on GitHub &rarr;</a></p>
 
     <div class="dl-alt">
       <div class="dl-alt-text"><strong>Live in your terminal?</strong> Skip the app &mdash; run the MCP server in Claude Code, Cursor, or Windsurf.</div>
@@ -133,7 +147,7 @@ permalink: "/download/"
       </div>
       <div class="note">
         <h3>Verify your download</h3>
-        <p>Match your file against its <code>.sha256</code> sidecar before running it. Source-available under FSL-1.1-Apache-2.0 &mdash; you can also <a href="https://github.com/runyourempire/4DA">build from source</a>.</p>
+        <p>Every release ships <code>SHASUMS256.txt</code> and per-file <code>.sha256</code> sidecars. Source-available under FSL-1.1-Apache-2.0 &mdash; you can also <a href="{{ release.repoUrl }}">build from source</a>.</p>
       </div>
     </div>
   </div>
@@ -175,7 +189,7 @@ permalink: "/download/"
       }
       document.querySelectorAll('[data-dl]').forEach(function(btn) {
         btn.addEventListener('click', function() {
-          if (typeof posthog !== 'undefined') posthog.capture('download_clicked', { platform: btn.getAttribute('data-dl'), source: 'download_page' });
+          if (typeof posthog !== 'undefined') posthog.capture('download_clicked', { asset: btn.getAttribute('data-dl'), source: 'download_page' });
         });
       });
       document.querySelectorAll('.copy-btn').forEach(function(btn) {

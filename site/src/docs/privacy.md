@@ -38,6 +38,6 @@ AI features are opt-in and run on compute you own:
 
 Because 4DA is source-available, the outbound behavior above is verifiable in code. The repository ships several trust documents — a network-transparency map of every connection with source references, a plain-language privacy summary, a security-audit guide to the trust-critical paths, and instructions to build from source and verify the binary yourself.
 
-Read them in the [repository](https://github.com/runyourempire/4DA). Local-first means you don't have to trust us — you can check.
+Read them in the [repository](https://github.com/4DA-Systems/4DA). Local-first means you don't have to trust us — you can check.
 
 Next: **[MCP server & agents](/docs/mcp/)**.
