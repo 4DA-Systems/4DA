@@ -299,7 +299,7 @@ permalink: "/merch.html"
           <a href="/pages/care-instructions">Care</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
-          <a href="#" onclick="$crisp.push(['do', 'chat:open']); return false;">Support</a>
+          <a href="/contact">Support</a>
           <a href="https://x.com/runyourempire" aria-label="Twitter/X" title="X / Twitter">X</a>
         </div>
       </div>
@@ -556,14 +556,18 @@ permalink: "/merch.html"
         var btn = card.querySelector('.product-buy');
         var sel = card.querySelector('.size-btn.selected');
         if (!sel) return;
-        posthog.capture('merch_buy_clicked', { product: product.title, variant: sel.textContent });
+        var activeProduct = group.colors[state.colorIdx].product;
+        if (window.posthog) posthog.capture('merch_buy_clicked', { product: activeProduct.title, variant: sel.textContent });
         btn.textContent = '...';
         btn.classList.add('loading');
         createCart(sel.dataset.variantId).then(function(url) {
+          if (!url) throw new Error('No checkout URL');
           window.location.href = url;
-        }).catch(function() {
-          btn.textContent = 'Buy Now';
+        }).catch(function(err) {
+          console.error('Checkout error:', err);
+          btn.textContent = 'Try again';
           btn.classList.remove('loading');
+          setTimeout(function() { btn.textContent = 'Buy Now'; }, 2500);
         });
       });
 
@@ -670,11 +674,18 @@ permalink: "/merch.html"
         var c = group.colors[fState.colorIdx];
         // Pick M if available, else first
         var variant = c.variants.find(function(v) { return v.title.indexOf('M') !== -1 && v.title.indexOf('XL') === -1 && v.availableForSale; }) || c.variants[0];
+        if (window.posthog) posthog.capture('merch_buy_clicked', { product: c.product.title, variant: variant.title, source: 'featured' });
         btn.textContent = '...';
         btn.classList.add('loading');
         createCart(variant.id).then(function(url) {
+          if (!url) throw new Error('No checkout URL');
           window.location.href = url;
-        }).catch(function() { btn.textContent = 'Buy Now'; btn.classList.remove('loading'); });
+        }).catch(function(err) {
+          console.error('Checkout error:', err);
+          btn.textContent = 'Try again';
+          btn.classList.remove('loading');
+          setTimeout(function() { btn.textContent = 'Buy Now'; }, 2500);
+        });
       });
     }
 
