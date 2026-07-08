@@ -1,0 +1,40 @@
+---
+pagination:
+  data: release.list
+  size: 1
+  alias: dl
+permalink: "/download/{{ dl.slug }}/"
+eleventyExcludeFromCollections: true
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="0; url={{ dl.url }}">
+  <meta name="robots" content="noindex">
+  <title>Downloading 4DA for {{ dl.os }}…</title>
+  <link rel="canonical" href="https://4da.ai/download/">
+  <style>
+    body { background:#0A0A0A; color:#fff; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; text-align:center; }
+    .box { max-width:440px; padding:24px; }
+    .dot { width:44px; height:44px; border-radius:50%; background:#F97316; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:20px; margin:0 auto 20px; }
+    h1 { font-size:20px; font-weight:600; margin:0 0 10px; }
+    p { color:#A0A0A0; font-size:14px; line-height:1.6; margin:0 0 8px; }
+    a { color:#F97316; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    .sub { margin-top:22px; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="dot">4</div>
+    <h1>Downloading 4DA for {{ dl.os }}…</h1>
+    <p>Your download should start automatically.<br><a href="{{ dl.url }}">Click here if it doesn't start.</a></p>
+    <p class="sub"><a href="/download/">← All downloads &amp; other platforms</a></p>
+  </div>
+  <script>
+    window.location.replace({{ dl.url | dump | safe }});
+  </script>
+</body>
+</html>

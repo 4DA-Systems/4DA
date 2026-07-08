@@ -1,0 +1,204 @@
+{% extends "base.njk" %}
+
+{% block head %}
+  <link rel="canonical" href="https://4da.ai{{ page.url }}">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="{{ title }}">
+  {% if description %}<meta property="og:description" content="{{ description }}">{% endif %}
+  <meta property="og:url" content="https://4da.ai{{ page.url }}">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0A0A0A; --bg-card: #141414; --bg-hover: #1A1A1A;
+      --text: #FFFFFF; --text-secondary: #A0A0A0; --text-muted: #666666;
+      --accent: #F97316; --border: #2A2A2A; --radius: 12px;
+      --topbar-h: 56px; --sidebar-w: 248px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* ---- Top bar ---- */
+    .docs-topbar {
+      position: sticky; top: 0; z-index: 50; height: var(--topbar-h);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; background: rgba(10,10,10,0.92);
+      backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
+    }
+    .docs-topbar-left { display: flex; align-items: center; gap: 14px; }
+    .docs-brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 15px; color: var(--text); }
+    .docs-brand .dot { width: 22px; height: 22px; border-radius: 50%; background: var(--accent);
+      display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; font-weight: 600; }
+    .docs-brand .tag { color: var(--text-muted); font-weight: 400; font-size: 13px; }
+    .docs-topbar-links { display: flex; align-items: center; gap: 22px; }
+    .docs-topbar-links a { color: var(--text-muted); font-size: 14px; transition: color .2s; }
+    .docs-topbar-links a:hover { color: var(--text); }
+    .docs-cta {
+      background: var(--text); color: var(--bg) !important; padding: 7px 15px;
+      border-radius: 6px; font-size: 13px; font-weight: 500; transition: opacity .2s;
+    }
+    .docs-cta:hover { opacity: .9; }
+    .docs-menu-btn {
+      display: none; appearance: none; background: var(--bg-card);
+      border: 1px solid var(--border); color: var(--text); width: 36px; height: 36px;
+      border-radius: 8px; cursor: pointer; align-items: center; justify-content: center;
+    }
+
+    /* ---- Shell ---- */
+    .docs-shell {
+      max-width: 1180px; margin: 0 auto;
+      display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+      gap: 40px; padding: 0 24px;
+    }
+
+    /* ---- Sidebar ---- */
+    .docs-sidebar {
+      position: sticky; top: var(--topbar-h);
+      align-self: start; height: calc(100vh - var(--topbar-h));
+      overflow-y: auto; padding: 28px 8px 40px 0;
+      border-right: 1px solid var(--border);
+    }
+    .docs-group { margin-bottom: 22px; }
+    .docs-group-title {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--text-muted); padding: 0 12px 8px;
+    }
+    .docs-link {
+      display: block; position: relative; padding: 7px 12px; margin: 1px 0;
+      color: var(--text-secondary); font-size: 14px; border-radius: 7px;
+      transition: background .15s, color .15s;
+    }
+    .docs-link:hover { background: var(--bg-hover); color: var(--text); }
+    .docs-link.active { background: rgba(249,115,22,0.10); color: var(--text); font-weight: 500; }
+    .docs-link.active::before {
+      content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2.5px;
+      border-radius: 2px; background: var(--accent);
+    }
+
+    /* ---- Content ---- */
+    .docs-content { padding: 40px 0 96px; min-width: 0; }
+    .docs-prose { max-width: 760px; }
+    .docs-eyebrow {
+      font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+    }
+    .docs-prose h1 { font-size: 34px; font-weight: 600; letter-spacing: -.02em; line-height: 1.15; text-wrap: balance; margin-bottom: 16px; }
+    .docs-prose h2 { font-size: 22px; font-weight: 600; letter-spacing: -.01em; margin: 44px 0 14px; padding-top: 8px; border-top: 1px solid var(--border); }
+    .docs-prose h2:first-of-type { border-top: none; padding-top: 0; }
+    .docs-prose h3 { font-size: 17px; font-weight: 600; margin: 30px 0 10px; }
+    .docs-prose p { color: var(--text-secondary); margin-bottom: 16px; }
+    .docs-prose ul, .docs-prose ol { color: var(--text-secondary); margin: 0 0 16px; padding-left: 22px; }
+    .docs-prose li { margin-bottom: 7px; }
+    .docs-prose li::marker { color: var(--text-muted); }
+    .docs-prose strong { color: var(--text); font-weight: 600; }
+    .docs-prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: rgba(249,115,22,.4); }
+    .docs-prose a:hover { text-decoration-color: var(--accent); }
+    .docs-prose code {
+      font-family: 'JetBrains Mono', monospace; font-size: .88em;
+      background: var(--bg-card); border: 1px solid var(--border);
+      padding: 1px 6px; border-radius: 5px; color: #E6C08A;
+    }
+    .docs-prose pre {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px 18px; overflow-x: auto; margin: 0 0 18px; line-height: 1.55;
+    }
+    .docs-prose pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 13.5px; }
+    .docs-prose blockquote {
+      border-left: 3px solid var(--accent); background: rgba(249,115,22,.05);
+      padding: 12px 18px; margin: 0 0 18px; border-radius: 0 8px 8px 0; color: var(--text-secondary);
+    }
+    .docs-prose blockquote p:last-child { margin-bottom: 0; }
+    .docs-prose hr { border: none; border-top: 1px solid var(--border); margin: 36px 0; }
+    /* Markdown emits bare <table>; make it scroll on narrow screens instead of
+       pushing the page sideways (display:block + max-content is the no-JS fix). */
+    .docs-prose table {
+      display: block; width: max-content; max-width: 100%; overflow-x: auto;
+      border-collapse: collapse; font-size: 14px; margin: 0 0 20px;
+    }
+    .docs-prose th, .docs-prose td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .docs-prose th { color: var(--text); font-weight: 600; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+    .docs-prose td { color: var(--text-secondary); }
+    .docs-prose td code { white-space: nowrap; }
+
+    /* ---- Mobile drawer ---- */
+    .docs-scrim { display: none; position: fixed; inset: var(--topbar-h) 0 0; background: rgba(0,0,0,.6); z-index: 40; }
+    @media (max-width: 900px) {
+      .docs-topbar-links .hide-sm { display: none; }
+      .docs-menu-btn { display: flex; }
+      .docs-shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
+      .docs-sidebar {
+        position: fixed; top: var(--topbar-h); left: 0; z-index: 45;
+        width: 280px; max-width: 84vw; height: calc(100vh - var(--topbar-h));
+        background: var(--bg); border-right: 1px solid var(--border);
+        padding: 20px 12px 40px; transform: translateX(-100%);
+        transition: transform .22s ease;
+      }
+      body.docs-nav-open .docs-sidebar { transform: translateX(0); }
+      body.docs-nav-open .docs-scrim { display: block; }
+      .docs-content { padding: 28px 0 72px; }
+      .docs-prose h1 { font-size: 28px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .docs-sidebar { transition: none; } html { scroll-behavior: auto; } }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <header class="docs-topbar">
+    <div class="docs-topbar-left">
+      <button class="docs-menu-btn" id="docs-menu-btn" aria-label="Open navigation" aria-expanded="false" aria-controls="docs-sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <a href="/" class="docs-brand"><span class="dot">4</span> 4DA <span class="tag">docs</span></a>
+    </div>
+    <nav class="docs-topbar-links" aria-label="Site">
+      <a href="/" class="hide-sm">Home</a>
+      <a href="https://github.com/4DA-Systems/4DA" class="hide-sm">GitHub</a>
+      <a href="/download/" class="docs-cta">Download</a>
+    </nav>
+  </header>
+
+  <div class="docs-shell">
+    <div class="docs-scrim" id="docs-scrim" aria-hidden="true"></div>
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <nav aria-label="Documentation">
+        {% for section in docs.sections %}
+          <div class="docs-group">
+            <div class="docs-group-title">{{ section.title }}</div>
+            {% for item in section.items %}
+              <a href="{{ item.url }}" class="docs-link{% if item.url == page.url %} active{% endif %}"{% if item.url == page.url %} aria-current="page"{% endif %}>{{ item.label }}</a>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </nav>
+    </aside>
+
+    <main class="docs-content">
+      <article class="docs-prose">
+        {% if eyebrow %}<div class="docs-eyebrow">{{ eyebrow }}</div>{% endif %}
+        {{ content | safe }}
+      </article>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      var btn = document.getElementById('docs-menu-btn');
+      var scrim = document.getElementById('docs-scrim');
+      function close() { document.body.classList.remove('docs-nav-open'); btn.setAttribute('aria-expanded', 'false'); }
+      function toggle() {
+        var open = document.body.classList.toggle('docs-nav-open');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+      if (btn) { btn.addEventListener('click', toggle); }
+      if (scrim) { scrim.addEventListener('click', close); }
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
+    })();
+  </script>
+{% endblock %}
