@@ -362,6 +362,36 @@ html, body {
   -webkit-box-orient: vertical;
 }
 
+/* Persistent-but-unchanged advisories: a live vuln the user has already seen
+   and not yet patched. Deliberately quiet — muted, no red card — so it stays
+   visible without re-screaming a full alert every morning. */
+.preemption-persistent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
+}
+
+.preemption-persistent-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.preemption-persistent-pkgs {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ====================== Escalating Chains ====================== */
 
 .chain-row {
