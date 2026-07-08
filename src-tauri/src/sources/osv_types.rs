@@ -206,11 +206,11 @@ pub(super) fn vuln_to_source_item(vuln: &OsvVulnerability) -> SourceItem {
         metadata["modified"] = serde_json::json!(modified);
     }
 
-    // Extract CVSS numeric score if available
+    // Extract CVSS numeric score if available. OSV usually stores the CVSS VECTOR in `score`, so
+    // compute the base score per the CVSS v3.1 spec (bare numbers still parse directly).
     if let Some(severities) = &vuln.severity {
         if let Some(cvss) = severities.iter().find(|s| s.severity_type == "CVSS_V3") {
-            // CVSS vector strings contain the score; try parsing a bare number first
-            if let Ok(score) = cvss.score.parse::<f64>() {
+            if let Some(score) = crate::scoring::cvss::parse_cvss_score(&cvss.score) {
                 metadata["cvss_score"] = serde_json::json!(score);
             }
         }
