@@ -201,29 +201,35 @@ fn normalize_tier(tier: &str) -> String {
 /// This is the universal backstop for the recurring "Signal dropped to Free"
 /// bug. Recovery order:
 ///
-/// 1. If `license.license_key` is a valid self-signed `4DA-` key, trust the tier
+/// 1. If `license.license_key` is a valid self-signed `4DA-` key, adopt the tier
 ///    embedded in its verified payload — the same proof `activate_license`
 ///    requires. If the key is present and the tier already matches, no-op.
 /// 2. Otherwise, if the current tier is not paid, fall back to the durable
-///    `license_backup.json`: restore key + tier + `activated_at` from it when it
-///    holds a verifiable `4DA-` key (or a trusted Keygen-format key that was
-///    validated at activation time).
+///    `license_backup.json`:
+///    - a `4DA-` key is restored only when its ed25519 signature verifies;
+///    - a Keygen-format key (no local signature) is restored only when a fresh,
+///      key-matching, paid `license_cache.json` entry proves it was validated
+///      online recently — the tier comes from that cache, never from the
+///      hand-writable `backup.tier`.
 ///
-/// Only ever *raises* to a paid tier when a valid key proves it — it never
-/// grants paid access from a bare tier string, so a hand-edited `settings.json`
-/// still can't unlock Signal (that path stays governed by the downgrade check in
-/// [`validate_license_on_startup`]). Returns `true` if it changed `license`.
+/// A paid tier is therefore granted only from a verified signature or a proven
+/// online validation — never from a bare tier string in `settings.json` or a
+/// fabricated backup file. The tier adopted is the one the proof establishes: if
+/// a valid key proves a *lower* paid tier than an inflated settings value, this
+/// corrects downward. Genuinely keyless/invalid paid claims are left to the
+/// downgrade check in [`validate_license_on_startup`]. Returns `true` if it
+/// changed `license`.
 ///
-/// `data_dir` is the directory being loaded — the backup is read from there, not
-/// from the global `get_db_path()`, so this stays hermetic under test (a temp
-/// `data_dir` never sees the dev machine's real `license_backup.json`) and never
+/// `data_dir` is the directory being loaded — the backup and cache are read from
+/// there, not from the global `get_db_path()`, so this stays hermetic under test
+/// (a temp `data_dir` never sees the dev machine's real license files) and never
 /// depends on global path-init ordering.
 pub fn reconcile_license_from_proof(
     license: &mut LicenseConfig,
     data_dir: &std::path::Path,
 ) -> bool {
     use super::gating::is_paid_tier;
-    use super::keygen::load_license_backup_from;
+    use super::keygen::{is_cache_valid, load_license_backup_from, load_validation_cache_from};
     use super::verify::verify_license_key;
 
     // 1. In-memory / settings key is the primary proof.
@@ -252,14 +258,24 @@ pub fn reconcile_license_from_proof(
                 return false;
             }
             let restore_tier = if backup.license_key.starts_with("4DA-") {
-                // Self-signed: must verify before we trust its tier.
+                // Self-signed: the ed25519 signature (and embedded expiry) must
+                // verify before we trust the tier in its payload.
                 verify_license_key(&backup.license_key)
                     .ok()
                     .map(|p| normalize_tier(&p.tier))
             } else {
-                // Keygen-format backup: validated at activation, trusted here
-                // (matches has_license_key_available's treatment of Keygen keys).
-                Some(normalize_tier(&backup.tier))
+                // Keygen-format key carries no local signature, so its proof of
+                // paid status is a fresh successful online validation recorded in
+                // license_cache.json — NOT the hand-writable backup.tier. Restore
+                // only when the cache matches this key, is unexpired, and is paid;
+                // a fabricated backup file alone can never forge a paid tier.
+                load_validation_cache_from(data_dir).and_then(|cache| {
+                    if is_cache_valid(&cache, &backup.license_key) && is_paid_tier(&cache.tier) {
+                        Some(normalize_tier(&cache.tier))
+                    } else {
+                        None
+                    }
+                })
             };
             if let Some(tier) = restore_tier {
                 if is_paid_tier(&tier) {
@@ -356,31 +372,83 @@ mod reconcile_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn reconcile_restores_paid_tier_from_keygen_backup_when_settings_lost_it() {
-        // Settings block lost (tier free, no key) but a durable Keygen-format
-        // backup survives: restore key + tier from it. Fully hermetic — the
-        // backup is written into and read from the same temp data_dir.
-        let dir = empty_dir("restore_keygen");
-        super::super::keygen::save_license_backup_to(
-            &dir,
-            "BE3529-741BAF-DEADBEEF",
-            "signal",
-            "2026-04-22T00:00:00Z",
+    /// Write a fresh, key-matching, paid validation cache into `dir` — the proof
+    /// a Keygen-format key needs before its backup can restore a paid tier.
+    fn write_fresh_paid_cache(dir: &std::path::Path, key: &str, tier: &str) {
+        use super::super::keygen::{hash_key, save_validation_cache_to, KeygenValidationCache};
+        save_validation_cache_to(
+            dir,
+            &KeygenValidationCache {
+                validated_at: chrono::Utc::now().to_rfc3339(),
+                tier: tier.to_string(),
+                key_hash: hash_key(key),
+            },
         );
+    }
+
+    #[test]
+    fn reconcile_restores_keygen_tier_only_with_fresh_matching_cache() {
+        // Settings lost the license, but a durable Keygen backup AND a fresh
+        // matching online-validation cache both survive → restore, adopting the
+        // cache's proven tier. Fully hermetic (temp data_dir).
+        let dir = empty_dir("restore_keygen_ok");
+        let key = "BE3529-741BAF-DEADBEEF";
+        super::super::keygen::save_license_backup_to(&dir, key, "signal", "2026-04-22T00:00:00Z");
+        write_fresh_paid_cache(&dir, key, "signal");
         let mut l = lic("free", "");
         assert!(reconcile_license_from_proof(&mut l, &dir));
         assert_eq!(l.tier, "signal");
-        assert_eq!(l.license_key, "BE3529-741BAF-DEADBEEF");
+        assert_eq!(l.license_key, key);
         assert_eq!(l.activated_at.as_deref(), Some("2026-04-22T00:00:00Z"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
+    fn reconcile_rejects_forged_keygen_backup_without_validation_cache() {
+        // SECURITY (finding S1): a fabricated license_backup.json with a
+        // Keygen-format key and tier "signal" but NO matching validation cache
+        // must NOT unlock paid — a hand-written file is not proof.
+        let dir = empty_dir("forged_keygen");
+        super::super::keygen::save_license_backup_to(
+            &dir,
+            "FORGED-KEYGEN-KEY",
+            "signal",
+            "2026-01-01T00:00:00Z",
+        );
+        let mut l = lic("free", "");
+        assert!(
+            !reconcile_license_from_proof(&mut l, &dir),
+            "a forged backup with no validation cache must not grant paid access"
+        );
+        assert_eq!(l.tier, "free");
+        assert_eq!(l.license_key, "");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reconcile_rejects_keygen_backup_with_cache_for_a_different_key() {
+        // A valid paid cache for a DIFFERENT key must not vouch for this backup.
+        let dir = empty_dir("mismatch_keygen");
+        super::super::keygen::save_license_backup_to(
+            &dir,
+            "BACKUP-KEY-A",
+            "signal",
+            "2026-01-01T00:00:00Z",
+        );
+        write_fresh_paid_cache(&dir, "DIFFERENT-KEY-B", "signal");
+        let mut l = lic("free", "");
+        assert!(!reconcile_license_from_proof(&mut l, &dir));
+        assert_eq!(l.tier, "free");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn reconcile_ignores_free_tier_backup() {
-        // A backup that itself records a free tier must never grant paid access.
+        // A backup that itself records a free tier must never grant paid access,
+        // even with a (free) cache present.
         let dir = empty_dir("free_backup");
         super::super::keygen::save_license_backup_to(&dir, "SOME-KEY", "free", "");
+        write_fresh_paid_cache(&dir, "SOME-KEY", "free");
         let mut l = lic("free", "");
         assert!(!reconcile_license_from_proof(&mut l, &dir));
         assert_eq!(l.tier, "free");

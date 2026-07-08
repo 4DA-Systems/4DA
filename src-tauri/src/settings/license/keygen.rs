@@ -46,23 +46,19 @@ pub struct KeygenValidationResult {
 // Cache Path + Hashing
 // ============================================================================
 
-/// Get the path to the license validation cache file.
-/// Uses the runtime data directory (same location as settings.json and 4da.db)
-/// so it works in both dev and production builds.
+/// Validation cache file location for a given data directory.
 ///
-/// NOTE: Derives path from `get_db_path()` rather than the SettingsManager to
-/// avoid a deadlock — this function is called from paths that already hold the
-/// settings lock (validate_license_on_startup, maybe_revalidate_license).
-fn cache_path() -> std::path::PathBuf {
-    let db_path = crate::state::get_db_path();
-    db_path
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("data"))
-        .join("license_cache.json")
+/// NOTE: post-startup callers derive `data_dir` from `get_db_path().parent()`
+/// rather than the SettingsManager to avoid a deadlock — those paths already
+/// hold the settings lock (validate_license_on_startup, maybe_revalidate_license).
+/// Construction-time callers pass the explicit `data_dir` for hermeticity — see
+/// the backup helpers below.
+fn cache_path_in(data_dir: &std::path::Path) -> std::path::PathBuf {
+    data_dir.join("license_cache.json")
 }
 
 /// SHA-256 hash a license key to a hex string (for cache comparison).
-fn hash_key(key: &str) -> String {
+pub(crate) fn hash_key(key: &str) -> String {
     use sha2::Digest;
     let mut hasher = sha2::Sha256::new();
     hasher.update(key.as_bytes());
@@ -73,9 +69,11 @@ fn hash_key(key: &str) -> String {
 // Cache I/O
 // ============================================================================
 
-/// Load the validation cache from disk. Returns `None` if missing or unparseable.
-pub(crate) fn load_validation_cache() -> Option<KeygenValidationCache> {
-    let path = cache_path();
+/// Load the validation cache from an explicit data directory.
+pub(crate) fn load_validation_cache_from(
+    data_dir: &std::path::Path,
+) -> Option<KeygenValidationCache> {
+    let path = cache_path_in(data_dir);
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(e) => {
@@ -94,9 +92,19 @@ pub(crate) fn load_validation_cache() -> Option<KeygenValidationCache> {
     }
 }
 
-/// Persist the validation cache to disk.
-fn save_validation_cache(cache: &KeygenValidationCache) {
-    let path = cache_path();
+/// Load the validation cache from disk. Returns `None` if missing or unparseable.
+pub(crate) fn load_validation_cache() -> Option<KeygenValidationCache> {
+    let db_path = crate::state::get_db_path();
+    load_validation_cache_from(
+        db_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("data")),
+    )
+}
+
+/// Persist the validation cache into an explicit data directory.
+pub(crate) fn save_validation_cache_to(data_dir: &std::path::Path, cache: &KeygenValidationCache) {
+    let path = cache_path_in(data_dir);
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -117,6 +125,17 @@ fn save_validation_cache(cache: &KeygenValidationCache) {
             warn!(target: "4da::license", error = %e, "Failed to serialize license cache");
         }
     }
+}
+
+/// Persist the validation cache to disk.
+fn save_validation_cache(cache: &KeygenValidationCache) {
+    let db_path = crate::state::get_db_path();
+    save_validation_cache_to(
+        db_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("data")),
+        cache,
+    );
 }
 
 /// Check if the cached validation is still fresh (< VALIDATION_CACHE_HOURS old)

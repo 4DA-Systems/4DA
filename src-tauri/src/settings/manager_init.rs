@@ -445,6 +445,14 @@ impl SettingsManager {
 /// `license` block — survives, and only the offending field(s) fall back to
 /// their default. Returns `None` only when the content is not a JSON object at
 /// all (the caller then tries the `.bak`, then defaults).
+///
+/// Granularity note: recovery is per top-level field. Per-field
+/// `#[serde(default)]` fills *missing* sub-fields, but a wrong-TYPED sub-field
+/// inside a nested object still fails that object and drops the whole sub-struct
+/// to its default. The license is the one block we cannot lose that way, so it
+/// gets a second line of defence: even if its block is dropped here, the caller
+/// then runs [`reconcile_license_from_proof`], which restores tier + key from the
+/// separate `license_backup.json` / keychain / validation cache.
 fn parse_settings_preserving(content: &str) -> Option<Settings> {
     let parsed: serde_json::Value = serde_json::from_str(content).ok()?;
     let parsed_obj = parsed.as_object()?;
