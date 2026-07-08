@@ -44,6 +44,8 @@ Curated corpus   ──► │                                 │
 
 ## Tab rationalization — 12 → 5
 
+> **Superseded (2026-06-12):** The nav shipped as **four** tabs — **Brief · Preemption · Blind Spots · Signal** — not the five below. "Evidence" and "Results" were collapsed into **Signal**; the **Playbook** sidebar entry was retired (STREETS is now published web-only at 4da.ai/streets, per `.claude/rules/intelligence-doctrine.md` rule 2). The historical 12→5 plan is retained below for context.
+
 Main nav:
 - **Briefing** (today's signal)
 - **Preemption** (forward-looking alerts)

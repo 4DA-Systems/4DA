@@ -538,7 +538,7 @@ License validation calls the Keygen API (`api.keygen.sh`) to verify license keys
 **What is NOT sent:** No machine fingerprint, no usage data, no user identity, no telemetry.
 
 **Rate limiting:** Maximum 5 activation attempts per minute (line 29).
-**Caching:** Successful validations are cached for 168 hours (7 days) to support offline operation (line 26).
+**Caching:** Successful validations are cached for 90 days to support offline operation (line 26).
 **Re-validation:** Every 6 hours to prevent `settings.json` manipulation (line 76).
 
 **Verification:**

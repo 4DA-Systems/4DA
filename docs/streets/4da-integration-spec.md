@@ -3,8 +3,10 @@
 **Author:** Lead Dev
 **Date:** 2026-02-18
 **Revised:** 2026-04-28
-**Status:** Design Draft
+**Status:** SUPERSEDED (2026-06-12) — historical design draft
 **Purpose:** Define how STREETS connects to 4DA at the product level — not just marketing, but actual features.
+
+> **Superseded:** The in-app STREETS/Playbook surface described here was never shipped and the concept was retired on 2026-06-12. STREETS is published **web-only** at [4da.ai/streets](https://4da.ai/streets); the app stays focused on intelligence (Brief · Preemption · Blind Spots · Signal). Treat the in-app tabs/panels below as historical design exploration, not the current product.
 
 ---
 

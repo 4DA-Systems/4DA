@@ -100,7 +100,7 @@ pnpm run tauri dev
   |   Compiles 300+ Rust modules across 800+ crates
   |   Links SQLite + sqlite-vec (vector similarity search)
   |   Links Ollama client (local embedding generation)
-  |   Links 11 source adapters (HN, Reddit, RSS, GitHub, arXiv...)
+  |   Links 20+ source adapters (HN, Reddit, RSS, GitHub, arXiv...)
   |   Links PASIFA scoring engine (8-phase pipeline)
   |   Links ACE context scanner (project discovery)
   |   Links content integrity verification system
@@ -109,7 +109,7 @@ pnpm run tauri dev
   +-- PHASE 4: Ignition (Tauri, ~500ms)
       Opens native webview pointed at localhost:4444
       Initializes SQLite database (data/4da.db)
-      Registers 324 IPC commands across the Rust/TS boundary
+      Registers 390+ IPC commands across the Rust/TS boundary
       Runs content integrity self-healing (auto-corrects dirty data)
       Starts background source polling
       Boots Signal Terminal
@@ -117,7 +117,7 @@ pnpm run tauri dev
       Developer sees: a window. Content appearing. Relevance emerging.
 ```
 
-Four words. Four phases. Two compilers. Two runtimes. 324 typed IPC commands. One application. No 4DA server in the path.
+Four words. Four phases. Two compilers. Two runtimes. 390+ typed IPC commands. One application. No 4DA server in the path.
 
 ---
 

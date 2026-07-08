@@ -399,7 +399,6 @@ A new silent failure at that point would need to escape all five layers simultan
 
 - `.claude/wisdom/antibodies/2026-04-12-silent-cli-failures.md` — Bug 1 + Bug 2 (the external CLI instances)
 - `.claude/wisdom/antibodies/2026-04-12-ghost-ipc-and-idempotency-amnesia.md` — Bug 3 + Bug 4 (ghost IPC + hook idempotency)
-- `docs/strategy/PRELAUNCH-HARDENING.md` — related pre-launch risk mitigations
 - `.ai/FAILURE_MODES.md` — should be updated with a "Silent Failure Family" section cross-referencing this document (follow-up action item)
 - `scripts/validate-commands.cjs` — existing Layer 2 IPC validator
 - `scripts/validate-boundary-calls.cjs` — NEW Layer 2 CLI validator (this commit)

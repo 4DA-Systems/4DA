@@ -666,7 +666,6 @@ Receipts + disagreement flags + advisor selection could bloat the settings surfa
 - `.ai/INVARIANTS.md` — system-level invariants (update when Phase 3 ships)
 - `docs/strategy/TEAM-RELAY-ARCHITECTURE.md` — relay sync scope (Phase 6 decision point)
 - `docs/strategy/SILENT-FAILURE-DEFENSE.md` — boundary-call discipline (enforces Layer 2)
-- `docs/strategy/ONBOARDING-LOAD-TIME.md` — first-launch plan (Phase 2 independent)
 - `D:\crucible` — sibling product, post-launch shared-substrate opportunity
 
 ---

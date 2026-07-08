@@ -875,7 +875,7 @@ Now we're talking. $2,000/month means your streams are generating real, repeatab
 - **Virtual assistant for non-technical tasks: $500-800/month.** This is the highest-ROI hire you can make at this stage. An offshore VA (Philippines, Latin America) for 10-15 hours/month handles: email triage, invoice follow-ups, scheduling, data entry, social media posting, basic customer support first-pass. You save 10-15 hours/month. At your effective rate, those hours are worth $500-3,000/month.
 - **Professional email and billing infrastructure:** Migrate from "send invoices manually" to automated billing (Stripe Billing, Lemon Squeezy). Cost: $0-50/month. Time saved: 3-5 hours/month.
 - **A paid design template for your products:** $49-199 one-time. First impressions matter. A professional landing page converts 2-3x better than a hacked-together one.
-- **All 7 STREETS modules are free inside 4DA.** If you haven't worked through the full playbook yet, now is the time. At $2,000/month, you've proven you can execute. The remaining modules accelerate what's working.
+- **All 7 STREETS modules are free at [4da.ai/streets](https://4da.ai/streets).** If you haven't worked through the full playbook yet, now is the time. At $2,000/month, you've proven you can execute. The remaining modules accelerate what's working.
 
 **Your pocket: $800-1,000/month**
 

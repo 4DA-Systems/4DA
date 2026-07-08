@@ -41,7 +41,7 @@ Draft in the PR description or in a short file under `.claude/plans/` (gitignore
 1. User-visible changes (new features, UX fixes).
 2. Security / privacy changes (this is a privacy-first product — always surface these).
 3. Upgrade notes (anything that changes on-disk state, settings shape, keychain use).
-4. Known limitations for this release — pull from `docs/launch/HONEST-ASSESSMENT-*.md`.
+4. Known limitations for this release — pull from `docs/private/launch/HONEST-ASSESSMENT-*.md`.
 
 Keep it under 400 words. Paste into the GitHub Release body at step 6.
 
@@ -137,9 +137,9 @@ If any of these fail, consider a silent re-cut — yanking a release is worse th
 
 ## Related
 
-- `docs/launch/DISTRIBUTION-CHECKLIST.md` — the multi-channel distribution plan.
-- `docs/LAUNCH-ACTIONS.md` — human-only GitHub/npm/registrar tasks.
-- `docs/launch/HONEST-ASSESSMENT-*.md` — current pre-launch state & known limitations.
+- `docs/private/launch/DISTRIBUTION-CHECKLIST.md` — the multi-channel distribution plan.
+- `docs/private/LAUNCH-ACTIONS.md` — human-only GitHub/npm/registrar tasks.
+- `docs/private/launch/HONEST-ASSESSMENT-*.md` — current pre-launch state & known limitations.
 - `.ai/FAILURE_MODES.md` — known fragile areas; read before investigating a weird release-time regression.
 - `scripts/release.sh` — the automated gate invoked at step 1.
 - `scripts/verify-installer.cjs` — the smoke test invoked at step 2.
