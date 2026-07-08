@@ -315,7 +315,7 @@ Go to the **Calibrate** tab to review and tune scoring accuracy. Rate items as r
 | Tier | Price | Features |
 |------|-------|----------|
 | **Free** | $0 | All sources, scoring, learning, AI briefings, natural language search (BYOK), Developer DNA cards |
-| **Signal** | $12/mo or $99/yr | Everything in Free + Signal Chains, Knowledge Gaps, Score Autopsy, Semantic Shifts, Project Health |
+| **Signal** | $12/mo, $99/yr, or $249 lifetime | Everything in Free + Signal Chains, Knowledge Gaps, Score Autopsy, Semantic Shifts, Project Health |
 
 ### Activating a License Key
 

@@ -13,7 +13,7 @@ The free tier is a complete product — it is fully functional, never expires, a
 
 ## Getting Your License Key
 
-1. Go to [4da.ai/signal](https://4da.ai/signal) and subscribe to the Signal plan ($12/month or $99/year).
+1. Go to [4da.ai/signal](https://4da.ai/signal) and subscribe to Signal ($12/month, $99/year, or a one-time $249 Lifetime license).
 2. Complete the purchase. You will receive a license key via email.
 3. Your key is in the format:
 
