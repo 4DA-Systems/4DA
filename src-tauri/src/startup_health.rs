@@ -229,6 +229,29 @@ pub(crate) fn check_settings(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
             });
         }
     }
+
+    // Surface a past schema-drift recovery so it is never silent. When a build
+    // adds/removes/retypes a settings field, SettingsManager can no longer parse
+    // the old settings.json; instead of discarding it (the bug that silently
+    // dropped the paid tier ~20 times), it now rebuilds the config field-by-field
+    // and heals a valid file back to disk — which means by the time this check
+    // runs the JSON is clean again and nothing above fires. The heal preserves the
+    // original bytes at settings.json.corrupt; if that snapshot is present, tell
+    // the operator the recovery happened, that their settings and license were
+    // preserved, and where the evidence is. It re-surfaces every startup until the
+    // snapshot is deleted, so a recurrence can't hide.
+    let corrupt_snapshot = data_dir.join("settings.json.corrupt");
+    if corrupt_snapshot.exists() {
+        issues.push(HealthIssue {
+            component: "settings",
+            severity: HealthSeverity::Warning,
+            message: format!(
+                "Recovered settings.json after a schema mismatch — your settings and license were preserved. \
+                 The unreadable original was saved to {}. Safe to delete once reviewed.",
+                corrupt_snapshot.display()
+            ),
+        });
+    }
 }
 
 /// Check 3: If an LLM provider is configured, verify the API key is non-empty.
