@@ -105,6 +105,46 @@ fn test_check_settings_valid() {
 }
 
 #[test]
+fn test_check_settings_surfaces_recovery_snapshot() {
+    // A healed (valid) settings.json plus a settings.json.corrupt snapshot means
+    // a schema-drift recovery happened this session — it must NOT be silent.
+    let tmp = std::env::temp_dir().join("4da_health_test_settings_recovered");
+    let _ = fs::remove_dir_all(&tmp);
+    let _ = fs::create_dir_all(&tmp);
+    fs::write(
+        tmp.join("settings.json"),
+        r#"{"llm": {"provider": "none"}}"#,
+    )
+    .expect("write healed json");
+    fs::write(
+        tmp.join("settings.json.corrupt"),
+        "{ old schema-drifted file",
+    )
+    .expect("write corrupt snapshot");
+
+    let mut issues = Vec::new();
+    check_settings(&tmp, &mut issues);
+
+    assert_eq!(
+        issues.len(),
+        1,
+        "recovery snapshot must surface exactly one issue"
+    );
+    assert_eq!(issues[0].severity, HealthSeverity::Warning);
+    assert!(
+        issues[0].message.contains("Recovered settings.json"),
+        "message should announce the recovery, got: {}",
+        issues[0].message
+    );
+    assert!(
+        issues[0].message.contains("license were preserved"),
+        "message should reassure that the license survived"
+    );
+
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+#[test]
 fn test_check_embedding_no_settings() {
     let tmp = std::env::temp_dir().join("4da_health_test_embed_none");
     let _ = fs::create_dir_all(&tmp);

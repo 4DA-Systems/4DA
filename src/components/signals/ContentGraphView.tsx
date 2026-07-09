@@ -251,7 +251,14 @@ export default function ContentGraphView() {
   if (isEmpty) return <EmptyState />;
 
   return (
-    <div className="h-full min-h-[500px]" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+    // Flex column with a DEFINITE height. React Flow's root is `height:100%`,
+    // which resolves to 0 against a parent that only sets `min-height` — so the
+    // canvas must live in a flex child (`flex-1 min-h-0`) inside a container with
+    // a real height, or the whole graph renders invisibly (React Flow error #004).
+    <div
+      className="flex flex-col"
+      style={{ height: 'calc(100vh - 190px)', minHeight: 500, backgroundColor: 'var(--color-bg-primary)' }}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -270,6 +277,7 @@ export default function ContentGraphView() {
         nodesDraggable
         nodesConnectable={false}
         elementsSelectable
+        style={{ flex: '1 1 0%', minHeight: 0 }}
       >
         {/* React Flow paints these via SVG presentation attributes, which
             cannot resolve var() — resolve concrete values per theme here */}
