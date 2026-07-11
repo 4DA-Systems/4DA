@@ -2053,10 +2053,16 @@ fn sig_versions(sig: &str) -> (Option<&str>, Option<&str>) {
 /// fresh signature history to accumulate from a clean baseline.
 fn normalized_advisory_key(title: &str) -> String {
     let mut s = title.trim().to_lowercase();
-    // Cut a trailing "... N known vulnerabilities" (the drifting count).
+    // Cut a trailing "... N known vulnerabilities" (the drifting count). Strip
+    // ONLY the count and the single colon that introduces it — NOT arbitrary
+    // trailing digits, which would eat the package version's own digits
+    // ("axios@1.12.2: 16 ..." must fold to "axios@1.12.2", not "axios@1.12.").
     if let Some(pos) = s.find(" known vulnerabilities") {
-        let head = s[..pos].trim_end_matches(|c: char| c.is_ascii_digit() || c == ':' || c == ' ');
-        s = head.to_string();
+        let head = s[..pos].trim_end(); // "axios@1.12.2: 16"
+        let head = head.trim_end_matches(|c: char| c.is_ascii_digit()); // "axios@1.12.2: "
+        let head = head.trim_end(); // "axios@1.12.2:"
+        let head = head.strip_suffix(':').unwrap_or(head); // "axios@1.12.2"
+        s = head.trim_end().to_string();
     }
     // "next@3 affected installed versions" -> "next@3"
     s = s.replace(" affected installed versions", "");
