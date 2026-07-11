@@ -2164,8 +2164,7 @@ fn classify_preemption_persistence_with_conn(
         dates: std::collections::BTreeSet<String>,
         recent_sig: Option<(String, String)>, // (date, signature)
     }
-    let mut prior: std::collections::HashMap<String, PriorStats> =
-        std::collections::HashMap::new();
+    let mut prior: std::collections::HashMap<String, PriorStats> = std::collections::HashMap::new();
     if let Ok(mut stmt) = conn.prepare(
         "SELECT briefing_date, item_title, state_signature
          FROM briefing_item_history
