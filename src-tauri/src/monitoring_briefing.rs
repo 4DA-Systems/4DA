@@ -2010,30 +2010,65 @@ fn is_persistent_security_alert(alert: &BriefingPreemptionAlert) -> bool {
     matches!(alert.urgency.as_str(), "critical" | "high")
 }
 
-/// Stable signature of an alert's actionable STATE — what the user would have to
-/// ACT on. Two briefings with the same signature describe the same unchanged
-/// situation; a changed signature (a fix version appearing, a new advisory id, a
-/// newly affected project, a severity bump) is a genuine development that must
-/// re-surface as a full card. Deliberately EXCLUDES the title: some advisory
-/// titles embed a fluctuating vulnerability count ("axios: 23 known
-/// vulnerabilities" -> "24 ...") that changes without the user's own state
-/// changing, which would otherwise defeat the whole mechanism.
+/// Stable signature of an alert's actionable STATE — the thing the user would
+/// actually DO: upgrade `package` from `installed` to `fixed`. A change here (a
+/// fix version appearing, the user upgrading, a severity bump) is a genuine
+/// development that re-surfaces the alert as a full card. Deliberately EXCLUDES
+/// the title's fluctuating vuln count AND the advisory-id set / affected-project
+/// list — both drift as OSV rescans (axios' CVE list grows week to week) WITHOUT
+/// the user's required action changing, which would otherwise reset the collapse
+/// on exactly the noisiest multi-CVE advisories. Format shares its first three
+/// `package|installed|fixed` fields with the older signature layout so
+/// `sig_versions` can compare across the format change.
 fn alert_state_signature(alert: &BriefingPreemptionAlert) -> String {
-    let mut advisories = alert.advisory_ids.clone();
-    advisories.sort();
-    advisories.dedup();
-    let mut projects = alert.affected_projects.clone();
-    projects.sort();
-    projects.dedup();
     format!(
-        "{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}",
         alert.package_name.as_deref().unwrap_or(""),
         alert.installed_version.as_deref().unwrap_or(""),
         alert.fixed_version.as_deref().unwrap_or(""),
-        advisories.join(","),
-        projects.join(","),
         alert.urgency,
     )
+}
+
+/// Extract `(installed, fixed)` versions from a stored signature. Both the
+/// current and the older signature layouts begin with `package|installed|fixed`,
+/// so change-detection survives the format change (an old-format row and a new
+/// row for the same unchanged advisory compare equal on versions).
+fn sig_versions(sig: &str) -> (Option<&str>, Option<&str>) {
+    let mut it = sig.split('|');
+    let _pkg = it.next();
+    let installed = it.next().filter(|s| !s.is_empty());
+    let fixed = it.next().filter(|s| !s.is_empty());
+    (installed, fixed)
+}
+
+/// Normalize an advisory title to a stable identity for "have I shown this
+/// before" counting, stripping the volatile vulnerability-COUNT tail that drifts
+/// as OSV adds/removes advisories — "axios@1.12.2: 23 known vulnerabilities" and
+/// "axios@1.12.2: 24 known vulnerabilities" are the same advisory situation.
+/// Prose titles with no count (e.g. "jsonwebtoken has Type Confusion...") pass
+/// through unchanged. Crucially this matches BOTH legacy history rows (recorded
+/// before signatures existed, by title only) AND new rows, so an advisory the
+/// user has already seen for days collapses immediately instead of waiting for a
+/// fresh signature history to accumulate from a clean baseline.
+fn normalized_advisory_key(title: &str) -> String {
+    let mut s = title.trim().to_lowercase();
+    // Cut a trailing "... N known vulnerabilities" (the drifting count). Strip
+    // ONLY the count and the single colon that introduces it — NOT arbitrary
+    // trailing digits, which would eat the package version's own digits
+    // ("axios@1.12.2: 16 ..." must fold to "axios@1.12.2", not "axios@1.12.").
+    if let Some(pos) = s.find(" known vulnerabilities") {
+        let head = s[..pos].trim_end(); // "axios@1.12.2: 16"
+        let head = head.trim_end_matches(|c: char| c.is_ascii_digit()); // "axios@1.12.2: "
+        let head = head.trim_end(); // "axios@1.12.2:"
+        let head = head.strip_suffix(':').unwrap_or(head); // "axios@1.12.2"
+        s = head.trim_end().to_string();
+    }
+    // "next@3 affected installed versions" -> "next@3"
+    s = s.replace(" affected installed versions", "");
+    s.trim()
+        .trim_end_matches(|c: char| matches!(c, ',' | ':' | ' '))
+        .to_string()
 }
 
 /// What a single alert's persistence count means for how it's surfaced.
@@ -2069,13 +2104,16 @@ fn persistence_outcome(prior_days: u32, is_persistent: bool) -> PersistenceOutco
 /// brief stops re-presenting the same unpatched advisories as fresh cards every
 /// morning while never silencing a live vulnerability.
 ///
-/// For each alert we count the prior distinct briefing-days that recorded the
-/// SAME state signature (see `alert_state_signature`). From that:
-///   - `times_shown`          = that count
-///   - `first_seen_date`      = the earliest such day (or today, if new/changed)
+/// For each alert we count the prior distinct briefing-days it appeared on,
+/// matched by NORMALIZED TITLE (see `normalized_advisory_key`) so the count
+/// includes legacy rows that predate signatures. From that:
+///   - `times_shown`          = that exposure count
+///   - `first_seen_date`      = the earliest such day (or today, if new)
 ///   - `persistent_unchanged` = Critical/High AND shown on >= THRESHOLD prior days
-///     with no state change. These render as a compact "still open" line, not a
-///     full card, but are ALWAYS kept (an unfixed live vuln is never dropped).
+///     with no change to the actionable state (installed/fixed version). These
+///     render as a compact "still open" line, not a full card, but are ALWAYS
+///     kept (an unfixed live vuln is never dropped). A version change re-surfaces
+///     it as a full card.
 ///
 /// Lower-severity alerts keep the old behavior: once seen inside the novelty
 /// window they are suppressed to a "still tracking" topic (returned as the second
@@ -2118,38 +2156,74 @@ fn classify_preemption_persistence_with_conn(
     let mut suppressed_topics = Vec::new();
     let mut to_record: Vec<(String, String)> = Vec::new(); // (title, signature)
 
+    // Load prior preemption history once (60-day window, strictly before today).
+    // Exposure is counted by NORMALIZED TITLE so the count includes legacy rows
+    // recorded before signatures existed — that is what lets a long-seen advisory
+    // collapse immediately instead of waiting ~2 days for a fresh signature
+    // history to build from a clean baseline. We also remember the most-recent
+    // recorded signature per key so a genuine change in the actionable state
+    // (installed/fixed version) re-surfaces the advisory as a full card. The
+    // 60-day bound means an advisory the user patches and that later regresses
+    // starts a fresh count rather than inheriting an ancient one.
+    #[derive(Default)]
+    struct PriorStats {
+        dates: std::collections::BTreeSet<String>,
+        recent_sig: Option<(String, String)>, // (date, signature)
+    }
+    let mut prior: std::collections::HashMap<String, PriorStats> = std::collections::HashMap::new();
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT briefing_date, item_title, state_signature
+         FROM briefing_item_history
+         WHERE source_type = 'preemption'
+           AND briefing_date < ?1
+           AND briefing_date >= date(?1, '-60 days')",
+    ) {
+        if let Ok(rows) = stmt.query_map(rusqlite::params![today], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        }) {
+            for (date, title, row_sig) in rows.flatten() {
+                let stats = prior.entry(normalized_advisory_key(&title)).or_default();
+                stats.dates.insert(date.clone());
+                if let Some(row_sig) = row_sig {
+                    let newer = stats
+                        .recent_sig
+                        .as_ref()
+                        .map(|(d, _)| &date > d)
+                        .unwrap_or(true);
+                    if newer {
+                        stats.recent_sig = Some((date, row_sig));
+                    }
+                }
+            }
+        }
+    }
+
     for mut alert in alerts {
+        let key = normalized_advisory_key(&alert.title);
         let sig = alert_state_signature(&alert);
+        let stats = prior.get(&key);
 
-        // Prior distinct briefing-days that recorded this EXACT state, and the
-        // earliest such day. Bounded to a 60-day window so an advisory the user
-        // finally patches — and which later regresses — starts a fresh count
-        // rather than inheriting an ancient one. Matches on the persisted state
-        // signature; legacy rows (NULL signature, pre-migration) simply don't
-        // match, so a just-deployed build treats everything as new for one cycle
-        // (an honest clean baseline) and then begins accumulating.
-        let (prior_days, first_seen): (u32, Option<String>) = conn
-            .query_row(
-                "SELECT COUNT(DISTINCT briefing_date), MIN(briefing_date)
-                 FROM briefing_item_history
-                 WHERE source_type = 'preemption'
-                   AND state_signature = ?1
-                   AND briefing_date < ?2
-                   AND briefing_date >= date(?2, '-60 days')",
-                rusqlite::params![sig, today],
-                |row| {
-                    Ok((
-                        row.get::<_, i64>(0)?.max(0) as u32,
-                        row.get::<_, Option<String>>(1)?,
-                    ))
-                },
-            )
-            .unwrap_or((0, None));
+        let exposure_days = stats.map(|s| s.dates.len() as u32).unwrap_or(0);
+        let first_seen = stats.and_then(|s| s.dates.iter().next().cloned());
+        // A genuine change in the actionable state (the installed/fixed versions)
+        // resets the collapse so the new development re-surfaces as a full card.
+        // Compared version-wise so it survives the signature format change.
+        let changed = stats
+            .and_then(|s| s.recent_sig.as_ref())
+            .map(|(_, prev)| sig_versions(prev) != sig_versions(&sig))
+            .unwrap_or(false);
 
-        alert.times_shown = prior_days;
+        alert.times_shown = exposure_days;
         alert.first_seen_date = Some(first_seen.unwrap_or_else(|| today.to_string()));
 
-        match persistence_outcome(prior_days, is_persistent_security_alert(&alert)) {
+        // If the state changed, treat as freshly-surfaced for the collapse decision.
+        let effective_prior = if changed { 0 } else { exposure_days };
+
+        match persistence_outcome(effective_prior, is_persistent_security_alert(&alert)) {
             PersistenceOutcome::Collapsed => {
                 // Live high-severity vuln, seen unchanged enough times: keep it
                 // (never dropped) but flag it for the compact "still open" strip.
@@ -4009,7 +4083,7 @@ mod tests {
     }
 
     #[test]
-    fn state_signature_ignores_fluctuating_title_but_tracks_real_changes() {
+    fn state_signature_tracks_action_not_drifting_metadata() {
         let mut a = make_test_preemption_alert(
             "axios@1.12.2: 23 known vulnerabilities",
             "high",
@@ -4022,32 +4096,71 @@ mod tests {
         a.affected_projects = vec!["kairos-mvp/backend".into()];
         let base = alert_state_signature(&a);
 
-        // Same real state, but the title's embedded vuln count fluctuated
-        // (23 -> 24). The signature MUST NOT change — this is exactly the bug
-        // that let the same advisory re-surface as "new" every morning.
+        // The signature is the ACTION: upgrade axios 1.12.2 -> 1.16.0. Things that
+        // drift as OSV rescans but do NOT change that action must NOT change it:
+
+        // Title's embedded vuln count fluctuated (23 -> 24) — must not change.
         let mut count_changed = a.clone();
         count_changed.title = "axios@1.12.2: 24 known vulnerabilities".into();
         assert_eq!(alert_state_signature(&count_changed), base);
 
-        // Advisory-id ordering must not matter (set semantics).
-        let mut reordered = a.clone();
-        reordered.advisory_ids = vec!["GHSA-hfxv-24rg-xrqf".into(), "GHSA-hfxv-24rg-xrqf".into()];
-        assert_eq!(alert_state_signature(&reordered), base);
+        // The advisory-id SET grew (a new CVE for the same package) — must not
+        // change: the required action is still the same version upgrade. This is
+        // the fix for multi-CVE advisories (axios/next/hono) that used to reset
+        // the collapse every time their CVE count drifted.
+        let mut more_cves = a.clone();
+        more_cves.advisory_ids = vec![
+            "GHSA-hfxv-24rg-xrqf".into(),
+            "CVE-2026-44487".into(),
+            "CVE-2026-44488".into(),
+        ];
+        assert_eq!(alert_state_signature(&more_cves), base);
 
-        // A genuine development — a fix version appearing — MUST change it.
-        let mut fixed = a.clone();
-        fixed.fixed_version = Some("1.16.1".into());
-        assert_ne!(alert_state_signature(&fixed), base);
-
-        // A newly affected project is a real change.
+        // A newly affected side project appeared — must not change the action.
         let mut new_project = a.clone();
         new_project.affected_projects.push("navcal".into());
-        assert_ne!(alert_state_signature(&new_project), base);
+        assert_eq!(alert_state_signature(&new_project), base);
 
-        // A severity bump is a real change.
+        // Genuine developments that DO change the required action MUST change it:
+        let mut newer_fix = a.clone();
+        newer_fix.fixed_version = Some("1.16.1".into());
+        assert_ne!(alert_state_signature(&newer_fix), base);
+
+        let mut upgraded = a.clone();
+        upgraded.installed_version = Some("1.13.0".into());
+        assert_ne!(alert_state_signature(&upgraded), base);
+
         let mut escalated = a.clone();
         escalated.urgency = "critical".into();
         assert_ne!(alert_state_signature(&escalated), base);
+    }
+
+    #[test]
+    fn normalized_advisory_key_folds_drifting_vuln_counts() {
+        // Count-bearing titles fold to the same key regardless of the count.
+        assert_eq!(
+            normalized_advisory_key("axios@1.12.2: 23 known vulnerabilities"),
+            normalized_advisory_key("axios@1.12.2: 24 known vulnerabilities")
+        );
+        assert_eq!(
+            normalized_advisory_key("axios@1.12.2: 16 known vulnerabilities"),
+            "axios@1.12.2"
+        );
+        // "affected installed versions: N known vulnerabilities" folds to package.
+        assert_eq!(
+            normalized_advisory_key("next@3 affected installed versions: 25 known vulnerabilities"),
+            "next@3"
+        );
+        // Prose titles with no count pass through (lower-cased/trimmed).
+        assert_eq!(
+            normalized_advisory_key("jsonwebtoken has Type Confusion that leads to bypass"),
+            "jsonwebtoken has type confusion that leads to bypass"
+        );
+        // Distinct advisories keep distinct keys.
+        assert_ne!(
+            normalized_advisory_key("axios@1.12.2: 23 known vulnerabilities"),
+            normalized_advisory_key("next@3 affected installed versions: 25 known vulnerabilities")
+        );
     }
 
     /// In-memory history table matching the production schema (post-migration 88).
@@ -4120,16 +4233,45 @@ mod tests {
             )
             .unwrap();
         }
-        // A fix version becomes available -> genuine development -> new signature.
+        // A fix version becomes available -> genuine development -> re-surface.
         let mut changed = a.clone();
         changed.fixed_version = Some("1.16.1".into());
         let (kept, _) =
             classify_preemption_persistence_with_conn(&conn, vec![changed], "2026-07-08", false);
         assert!(
             !kept[0].persistent_unchanged,
-            "a changed state must re-surface as a full card, not a collapsed line"
+            "a changed actionable state must re-surface as a full card, not a collapsed line"
         );
-        assert_eq!(kept[0].times_shown, 0, "the new state has no prior history");
+    }
+
+    #[test]
+    fn classify_collapses_from_legacy_title_history_despite_null_signatures() {
+        // The cold-start fix: rows recorded BEFORE signatures existed (NULL
+        // state_signature) and with a DRIFTING vuln count in the title still
+        // count as prior exposure of the same advisory — so a long-seen advisory
+        // collapses immediately instead of waiting ~2 days to rebuild history.
+        let conn = history_conn();
+        for (d, title) in [
+            ("2026-07-06", "axios@1.12.2: 24 known vulnerabilities"),
+            ("2026-07-07", "axios@1.12.2: 20 known vulnerabilities"),
+        ] {
+            conn.execute(
+                "INSERT INTO briefing_item_history (item_title, source_type, briefing_date, state_signature)
+                 VALUES (?1, 'preemption', ?2, NULL)",
+                rusqlite::params![title, d],
+            )
+            .unwrap();
+        }
+        // Today the same advisory shows with yet another count and (now) a signature.
+        let a = axios_high_alert(); // title "...: 23 known vulnerabilities"
+        let (kept, _) =
+            classify_preemption_persistence_with_conn(&conn, vec![a], "2026-07-08", false);
+        assert_eq!(kept.len(), 1, "a live HIGH vuln is never dropped");
+        assert!(
+            kept[0].persistent_unchanged,
+            "2 legacy title-matched days (>= threshold) must collapse despite NULL signatures and drifting counts"
+        );
+        assert_eq!(kept[0].times_shown, 2);
     }
 
     #[test]
