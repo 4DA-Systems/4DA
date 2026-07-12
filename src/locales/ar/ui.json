@@ -3220,5 +3220,17 @@
   "signals.showTriggers": "Why flagged",
   "result.moreFactors": "+{{count}} more",
   "results.evidenceChain": "Why this surfaced",
-  "results.evidenceOnlyTopic": "Topic similarity only — no dependency link"
+  "results.evidenceOnlyTopic": "Topic similarity only — no dependency link",
+  "license.unverifiedBadge": "License ?",
+  "license.unverifiedTooltip": "License status unavailable (couldn't reach the backend). Your paid tier is not lost - click to re-check.",
+  "settings.license.unverifiedTitle": "Couldn't verify your license",
+  "settings.license.unverifiedBody": "The app couldn't reach the license service at startup (usually a transient timeout while the backend was still loading). Your key is stored locally and has NOT been lost - a paid tier is not dropped by this. Re-check below, or restart the app.",
+  "settings.license.recheck": "Re-check license",
+  "settings.license.rechecking": "Re-checking...",
+  "settings.license.recheckFailed": "Still could not verify - check your connection or restart the app.",
+  "settings.license.recheckOk": "License re-checked.",
+  "license.unverified.title": "Couldn't verify your license",
+  "license.unverified.description": "The app couldn't reach the license service at startup. Your key is stored locally and has NOT been lost - this is usually a transient timeout. Re-check to restore your tier.",
+  "license.unverified.recheck": "Re-check license",
+  "license.unverified.rechecking": "Re-checking..."
 }

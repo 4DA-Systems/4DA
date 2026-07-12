@@ -12,6 +12,13 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
   expiresAt: null,
   daysRemaining: 0,
   expired: false,
+  // `licenseLoaded` flips true the first time get_license_tier returns successfully.
+  // `licenseLoadError` holds the last transient-load failure message (null when healthy).
+  // Together they let the UI distinguish a *confirmed* Free tier (loaded=true, tier='free')
+  // from an *unverified* one (loaded=false, error set), so a paid user is never silently
+  // shown Free just because the backend was still warming up at cold boot.
+  licenseLoaded: false,
+  licenseLoadError: null,
 
   loadLicense: async () => {
     try {
@@ -23,12 +30,26 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
         daysRemaining: result.days_remaining,
         expired: result.expired,
         wasDowngraded: downgraded,
+        licenseLoaded: true,
+        licenseLoadError: null,
       });
       if (downgraded) {
-        console.warn('[4DA] License tier was downgraded to free — key missing or expired');
+        console.warn('[4DA] License tier was downgraded to Free — key missing or expired.');
       }
-    } catch {
-      set({ tier: 'free', expiresAt: null, daysRemaining: 0, expired: false });
+    } catch (e) {
+      // CRITICAL: a transient failure here (IPC timeout / backend still initialising at cold
+      // boot) must NOT be treated as "this user is Free". Doing so silently drops paid users
+      // into the Free experience for the whole session — the recurring Signal->Free badge bug.
+      // Instead: keep whatever tier we already knew, flag the failure so the badge shows an
+      // "unverified" (?) state, and let App.tsx retry with backoff.
+      const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+      set({ licenseLoadError: msg });
+      console.warn(
+        '[4DA] Could not verify your license tier (transient load error — will retry). ' +
+        'Your paid tier is NOT lost; the license is stored locally. ' +
+        'If the badge keeps showing "?", open Settings -> License -> "Re-check licence", or restart the app. ' +
+        'Detail: ' + msg,
+      );
     }
   },
 

@@ -46,6 +46,11 @@ describe('license-slice', () => {
     it('has expired false', () => {
       expect(useAppStore.getState().expired).toBe(false);
     });
+
+    it('has licenseLoaded false and licenseLoadError null', () => {
+      expect(useAppStore.getState().licenseLoaded).toBe(false);
+      expect(useAppStore.getState().licenseLoadError).toBeNull();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -87,15 +92,41 @@ describe('license-slice', () => {
       expect(useAppStore.getState().expired).toBe(true);
     });
 
-    it('resets to free on error', async () => {
-      vi.mocked(invoke).mockRejectedValueOnce(new Error('fail'));
+    it('marks license unverified on error WITHOUT silently downgrading a known tier', async () => {
+      // Simulate a paid user whose tier was already known, then a transient refresh failure.
+      useAppStore.setState({ tier: 'signal', licenseLoaded: true, expired: false });
+      vi.mocked(invoke).mockRejectedValueOnce(new Error('IPC timeout'));
 
       await useAppStore.getState().loadLicense();
 
-      expect(useAppStore.getState().tier).toBe('free');
-      expect(useAppStore.getState().expiresAt).toBeNull();
-      expect(useAppStore.getState().daysRemaining).toBe(0);
-      expect(useAppStore.getState().expired).toBe(false);
+      // The transient failure must NOT drop the paid user to Free.
+      expect(useAppStore.getState().tier).toBe('signal');
+      expect(useAppStore.getState().licenseLoadError).toBe('IPC timeout');
+    });
+
+    it('does not confidently claim Free when the first-ever load fails', async () => {
+      // Fresh boot: tier defaults to 'free' but licenseLoaded is still false, so the UI
+      // treats this as UNVERIFIED (badge "?"), not a confirmed Free tier.
+      vi.mocked(invoke).mockRejectedValueOnce(new Error('backend not ready'));
+
+      await useAppStore.getState().loadLicense();
+
+      expect(useAppStore.getState().licenseLoaded).toBe(false);
+      expect(useAppStore.getState().licenseLoadError).toBe('backend not ready');
+    });
+
+    it('clears licenseLoadError and sets licenseLoaded on a successful (re-)load', async () => {
+      useAppStore.setState({ licenseLoadError: 'earlier failure', licenseLoaded: false });
+      vi.mocked(invoke).mockResolvedValueOnce({
+        tier: 'signal', has_key: true, activated_at: '2026-01-01',
+        expires_at: '2027-01-01', days_remaining: 300, expired: false,
+      });
+
+      await useAppStore.getState().loadLicense();
+
+      expect(useAppStore.getState().tier).toBe('signal');
+      expect(useAppStore.getState().licenseLoaded).toBe(true);
+      expect(useAppStore.getState().licenseLoadError).toBeNull();
     });
   });
 
