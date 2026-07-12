@@ -105,6 +105,13 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
     // Cancel any existing dismiss timer.
     cancel_dismiss_timer();
 
+    // Corner coordination: the small signal toast anchors to the same bottom-right
+    // corner. The briefing (larger, always-on-top) would cover it, so slide any
+    // toast that's currently showing up to the top-right. New toasts raised while
+    // the briefing is visible anchor top-right on their own (see position_window),
+    // so the two surfaces coexist instead of overlapping.
+    crate::notification_window::reanchor_for_briefing(app);
+
     // Recovery: if the window's JS never loaded (dev server race condition on
     // startup), destroy the stale window so it gets recreated with a fresh load.
     // By the time a briefing fires, the dev server is guaranteed to be up.

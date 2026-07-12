@@ -42,6 +42,10 @@ const CARD_EDGE_Y: u32 = u32::midpoint(WINDOW_HEIGHT, CARD_HEIGHT);
 const MARGIN_RIGHT: i32 = 16;
 /// Bottom margin to clear the OS taskbar.
 const MARGIN_BOTTOM: i32 = 64;
+/// Top margin to the visible card when the toast anchors top-right. Used while
+/// the briefing widget occupies the bottom-right corner, so the two coexist
+/// instead of overlapping.
+const MARGIN_TOP: i32 = 16;
 
 // ============================================================================
 // Auto-dismiss cancellation (module-level state)
@@ -133,11 +137,70 @@ pub fn mark_ready() {
     WINDOW_READY.store(true, Ordering::Relaxed);
 }
 
+/// Position the notification window in the right-hand corner of the primary
+/// monitor, accounting for the DPI scale factor.
+///
+/// When `at_top` is true the card anchors top-right (used while the briefing
+/// widget occupies the bottom-right); otherwise bottom-right, above the taskbar.
+/// The window is larger than the card (shadow padding) and the card is centered,
+/// so we anchor on the relevant card edge, not the window edge — this keeps the
+/// visible card MARGIN_* from the screen corner. Transparent shadow padding may
+/// overhang the screen edge; the OS clips it harmlessly.
+fn position_window<R: Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    at_top: bool,
+) -> tauri::Result<()> {
+    let monitor = window
+        .primary_monitor()?
+        .or_else(|| window.available_monitors().ok()?.into_iter().next());
+
+    if let Some(monitor) = monitor {
+        let scale = monitor.scale_factor();
+        let screen = monitor.size();
+        let monitor_pos = monitor.position();
+
+        let px = monitor_pos.x + (screen.width as i32)
+            - ((f64::from(CARD_EDGE_X) * scale) as i32)
+            - ((MARGIN_RIGHT as f64 * scale) as i32);
+        let py = if at_top {
+            // Anchor the card's top edge MARGIN_TOP from the screen top. The card
+            // sits SHADOW_PAD below the window origin, so pull the origin up by it.
+            monitor_pos.y + ((MARGIN_TOP as f64 * scale) as i32)
+                - ((f64::from(SHADOW_PAD) * scale) as i32)
+        } else {
+            monitor_pos.y + (screen.height as i32)
+                - ((f64::from(CARD_EDGE_Y) * scale) as i32)
+                - ((MARGIN_BOTTOM as f64 * scale) as i32)
+        };
+
+        window.set_position(PhysicalPosition::new(px, py))?;
+    } else {
+        warn!(target: "4da::notify", "No monitor detected — centering notification window");
+        window.center()?;
+    }
+    Ok(())
+}
+
+/// Reposition a currently-visible toast to the top-right corner so it coexists
+/// with the briefing widget (which owns the bottom-right). No-op if the toast
+/// window is hidden. Called by the briefing when it appears, so a toast already
+/// on screen slides up out of the way instead of being covered.
+pub fn reanchor_for_briefing<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+        if window.is_visible().unwrap_or(false) {
+            if let Err(e) = position_window(&window, true) {
+                warn!(target: "4da::notify", error = %e, "Failed to reanchor toast for briefing");
+            }
+        }
+    }
+}
+
 /// Show the notification window with the given data payload.
 ///
-/// Positions the window in the bottom-right corner of the primary monitor,
-/// emits the data payload to the frontend, and starts an auto-dismiss timer.
-/// If the window has not been created yet it will be initialised on the fly.
+/// Positions the window in the bottom-right corner of the primary monitor (or
+/// top-right when the briefing widget is showing), emits the data payload to the
+/// frontend, and starts an auto-dismiss timer. If the window has not been created
+/// yet it will be initialised on the fly.
 pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData) {
     // Cancel any existing dismiss timer before doing anything else.
     cancel_dismiss_timer();
@@ -167,39 +230,10 @@ pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData)
         }
     };
 
-    // Position bottom-right, accounting for DPI scale factor.
-    let positioned = (|| -> tauri::Result<()> {
-        let monitor = window
-            .primary_monitor()?
-            .or_else(|| window.available_monitors().ok()?.into_iter().next());
-
-        if let Some(monitor) = monitor {
-            let scale = monitor.scale_factor();
-            let screen = monitor.size();
-            let monitor_pos = monitor.position();
-
-            // Physical pixel coordinates for the window origin. The window is
-            // larger than the card (shadow padding) and the card is centered,
-            // so anchor on the card's far edge, not the window edge — this keeps
-            // the visible card MARGIN_RIGHT/MARGIN_BOTTOM from the screen corner.
-            // The transparent shadow padding may overhang the screen edge; the
-            // OS clips it harmlessly.
-            let px = monitor_pos.x + (screen.width as i32)
-                - ((f64::from(CARD_EDGE_X) * scale) as i32)
-                - ((MARGIN_RIGHT as f64 * scale) as i32);
-            let py = monitor_pos.y + (screen.height as i32)
-                - ((f64::from(CARD_EDGE_Y) * scale) as i32)
-                - ((MARGIN_BOTTOM as f64 * scale) as i32);
-
-            window.set_position(PhysicalPosition::new(px, py))?;
-        } else {
-            warn!(target: "4da::notify", "No monitor detected — centering notification window");
-            window.center()?;
-        }
-        Ok(())
-    })();
-
-    if let Err(e) = positioned {
+    // Position the toast. When the briefing widget owns the bottom-right corner,
+    // anchor top-right instead so the two coexist without overlapping.
+    let at_top = crate::briefing_window::is_briefing_visible();
+    if let Err(e) = position_window(&window, at_top) {
         warn!(target: "4da::notify", error = %e, "Failed to position notification window, using default");
     }
 
