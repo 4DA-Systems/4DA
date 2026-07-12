@@ -217,14 +217,24 @@ export class FourDADatabase {
   }
 
   /**
-   * Validate that a database file exists, is readable, and passes integrity checks.
+   * Validate that a database file exists and is a readable SQLite database.
    *
    * Use this before accepting tool calls to ensure the database is in a good state.
    *
+   * By default this runs a CHEAP probe (open + list tables, ~0.1s) which surfaces
+   * a missing, locked, or corrupt-header file. It deliberately does NOT run a full
+   * `PRAGMA integrity_check`: that is an O(database-size) scan (~11s on a 1.7 GB DB,
+   * and growing) and, because better-sqlite3 is synchronous, it blocks the event
+   * loop — running it on the startup path stalls the MCP stdio handshake until it
+   * finishes, so the host's connect timeout can fire and the server looks like it
+   * "failed to start". Pass `{ deep: true }` for the full integrity_check on the
+   * explicit `--doctor` diagnostic path, where a slow, thorough scan is expected.
+   *
    * @param dbPath - Path to the database file. If omitted, uses the default resolution.
+   * @param opts.deep - Run the full `PRAGMA integrity_check` (slow, blocking). Default false.
    * @returns Validation result with table list on success, or error details on failure.
    */
-  static validateDatabase(dbPath?: string): DatabaseValidationResult {
+  static validateDatabase(dbPath?: string, opts?: { deep?: boolean }): DatabaseValidationResult {
     const resolvedPath = dbPath || getDefaultDbPath();
     const absolutePath = path.isAbsolute(resolvedPath)
       ? resolvedPath
@@ -239,24 +249,27 @@ export class FourDADatabase {
       };
     }
 
-    // Try to open and run integrity check
     let testDb: BetterSqlite3.Database | null = null;
     try {
       testDb = new Database(absolutePath, { readonly: true });
 
-      // Run integrity check
-      const integrityResult = testDb.pragma("integrity_check") as { integrity_check: string }[];
-      const integrityStatus = integrityResult[0]?.integrity_check;
+      // Deep, opt-in integrity check (slow: full-database scan). Only on --doctor.
+      if (opts?.deep) {
+        const integrityResult = testDb.pragma("integrity_check") as { integrity_check: string }[];
+        const integrityStatus = integrityResult[0]?.integrity_check;
 
-      if (integrityStatus !== "ok") {
-        return {
-          valid: false,
-          error: `Database integrity check failed: ${integrityStatus}. `
-            + "The database file may be corrupt. Try deleting data/4da.db and restarting 4DA.",
-        };
+        if (integrityStatus !== "ok") {
+          return {
+            valid: false,
+            error: `Database integrity check failed: ${integrityStatus}. `
+              + "The database file may be corrupt. Try deleting data/4da.db and restarting 4DA.",
+          };
+        }
       }
 
-      // List tables
+      // List tables. This reads the schema, so a truncated/corrupt-header file
+      // (not a valid SQLite DB) throws here and is reported below — giving the
+      // cheap path meaningful corruption detection without a full scan.
       const tables = testDb
         .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         .all() as { name: string }[];
