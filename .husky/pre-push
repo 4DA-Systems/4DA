@@ -134,6 +134,33 @@ while read LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
             echo "Run: node scripts/scan-secrets.cjs  (for full repo audit)"
             exit 1
         fi
+
+        # Private-asset leak scan — blocks pushing any outgoing commit (message OR content) that names the
+        # private external verifier. Complements .husky/commit-msg (which only guards new local messages) and
+        # backstops the 2026-07-13 public-history scrub: a branch based on PRE-SCRUB history is blocked here so
+        # it cannot re-upload the old commits. Detection is HASHED in scripts/private-asset-guard.cjs (no literal
+        # name lives in this hook). FAIL-OPEN on any tool error — never brick the fleet's ability to push; block
+        # ONLY on a positive detection. Bypass (emergencies only): git push --no-verify.
+        if command -v node > /dev/null 2>&1 && [ -f scripts/private-asset-guard.cjs ]; then
+            if [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
+                AR=$(git rev-parse -q --verify origin/main 2>/dev/null) && AR="$AR..$LOCAL_SHA" || AR="$LOCAL_SHA"
+            else
+                AR="$REMOTE_SHA..$LOCAL_SHA"
+            fi
+            # strip the leading diff marker (+/-) so a line-leading addition doesn't glue to a flagged name
+            git log -p -n 2000 --no-color "$AR" 2>/dev/null | sed 's/^[-+]//' | node -e 'try{const {scanText}=require("./scripts/private-asset-guard.cjs");let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{process.exit(scanText(s)?1:0)}catch(e){process.exit(0)}})}catch(e){process.exit(0)}'
+            if [ $? -ne 0 ]; then
+                echo ""
+                echo "============================================================"
+                echo "  PUSH BLOCKED — private external-verifier reference in commits!"
+                echo "============================================================"
+                echo "  This usually means the branch is based on PRE-SCRUB history."
+                echo "  Rebase onto the current origin/main, then re-push:"
+                echo "    git fetch origin && git rebase --onto origin/main \$(git merge-base HEAD <old-base>) HEAD"
+                echo "  Details: .claude/plans/FLEET-RESYNC-2026-07-13.md"
+                exit 1
+            fi
+        fi
     fi
 done
 echo "Pre-push validation passed!"
