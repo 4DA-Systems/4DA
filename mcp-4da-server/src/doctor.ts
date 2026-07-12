@@ -46,8 +46,10 @@ export function runDoctor(): void {
     detail: "better-sqlite3 loaded successfully",
   });
 
-  // 3. Database discovery
-  const validation = FourDADatabase.validateDatabase();
+  // 3. Database discovery — deep integrity_check is appropriate here: --doctor is
+  // an explicit, user-invoked diagnostic where a slow full scan is expected. The
+  // startup path uses the cheap default to keep the MCP handshake responsive.
+  const validation = FourDADatabase.validateDatabase(undefined, { deep: true });
   if (validation.valid) {
     checks.push({
       name: "4DA database",
