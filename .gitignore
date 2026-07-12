@@ -394,13 +394,13 @@ data/engine_receipt_pubkey.hex
 # Local multi-terminal coordination scratchpad (ephemeral; coordinate on the board, not a tracked file)
 .claude/TERMINALS.md
 
-# the external verifier artifacts must NEVER enter this PUBLIC repo (the external verifier is a separate private asset).
+# Private external-verifier runtime artifacts must NEVER enter this PUBLIC repo.
 # Written into the working tree by the verifier / self-gate runs and the coordination board.
 # Enforced by scripts/private-asset-guard.cjs (pre-commit gate + public-readiness audit).
 .self-gate-receipts/
-.external-verifier-log.jsonl
-.external-verifier-log.jsonl.head
-.external-verifier-board.*
+.*-log.jsonl
+.*-log.jsonl.head
+.*-board.*
 .mcp.json.bak*
 .mcp.local.json
 
