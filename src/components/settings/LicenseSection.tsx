@@ -17,6 +17,8 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
   const expired = useAppStore(s => s.expired);
   const daysRemaining = useAppStore(s => s.daysRemaining);
   const expiresAt = useAppStore(s => s.expiresAt);
+  const licenseLoaded = useAppStore(s => s.licenseLoaded);
+  const licenseLoadError = useAppStore(s => s.licenseLoadError);
 
   const recoverLicenseByEmail = useAppStore(s => s.recoverLicenseByEmail);
 
@@ -26,6 +28,24 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoveryResult, setRecoveryResult] = useState<{ ok: boolean; reason?: string } | null>(null);
   const [lastValidated, setLastValidated] = useState<string | null>(null);
+  const [rechecking, setRechecking] = useState(false);
+
+  // Surfaced when the license probe never succeeded this session (loaded=false) but the last
+  // attempt errored — i.e. the badge is showing the "?" unverified state. This is the obvious,
+  // self-service recovery path so a paid user is never stuck guessing why they look Free.
+  const licenseUnverified = !licenseLoaded && licenseLoadError !== null;
+
+  const handleRecheck = async () => {
+    setRechecking(true);
+    await loadLicense();
+    await loadTrialStatus();
+    setRechecking(false);
+    const err = useAppStore.getState().licenseLoadError;
+    onStatus(err
+      ? t('settings.license.recheckFailed', 'Still could not verify - check your connection or restart the app.')
+      : t('settings.license.recheckOk', 'License re-checked.'));
+    setTimeout(() => onStatus(''), 4000);
+  };
 
   useEffect(() => {
     void loadLicense();
@@ -115,6 +135,30 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
           </span>
         )}
       </div>
+
+      {/* License-verification trouble banner. Shows when the tier probe failed and never
+          succeeded this session (badge is "?"). Explains it's transient + not a lost key,
+          and offers a one-click re-check — the obvious troubleshooting path. */}
+      {licenseUnverified && (
+        <div className="mb-3 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+          <p className="text-xs font-medium text-amber-300 mb-1">
+            {t('settings.license.unverifiedTitle', "Couldn't verify your license")}
+          </p>
+          <p className="text-[10px] text-amber-200/70 leading-relaxed">
+            {t('settings.license.unverifiedBody', "The app couldn't reach the license service at startup (usually a transient timeout while the backend was still loading). Your key is stored locally and has NOT been lost - a paid tier is not dropped by this. Re-check below, or restart the app.")}
+          </p>
+          {licenseLoadError && (
+            <p className="text-[10px] text-amber-200/40 mt-1 font-mono break-all">{licenseLoadError}</p>
+          )}
+          <button
+            onClick={() => { void handleRecheck(); }}
+            disabled={rechecking}
+            className="inline-block mt-2 px-3 py-1.5 text-[10px] font-semibold text-bg-primary bg-amber-400 rounded hover:bg-amber-300 transition-colors disabled:opacity-50"
+          >
+            {rechecking ? t('settings.license.rechecking', 'Re-checking...') : t('settings.license.recheck', 'Re-check license')}
+          </button>
+        </div>
+      )}
 
       {/* Expired license banner */}
       {expired && (

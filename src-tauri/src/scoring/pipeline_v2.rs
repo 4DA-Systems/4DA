@@ -1484,6 +1484,16 @@ fn apply_commodity_ceiling(
         return score.min(scoring_config::COMMODITY_CEILING_CLICKBAIT);
     }
 
+    // Off-stack security advisory: a CVE/GHSA for a package NOT in the user's
+    // dependency graph. It matches the security vocabulary (so it would sail
+    // past every other exemption below via has_security_pattern) but has no
+    // bearing on this developer's stack — awareness-only, never CORE. Checked
+    // BEFORE the security exemption precisely because the advisory IS a security
+    // pattern. In-stack advisories (strongly_grounded) fall through untouched.
+    if matches!(content_type, ContentType::SecurityAdvisory) && !strongly_grounded {
+        return score.min(scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED);
+    }
+
     // Only applies to commodity types
     let ceiling = match content_type {
         ContentType::Tutorial => scoring_config::COMMODITY_CEILING_TUTORIAL,
@@ -1493,15 +1503,21 @@ fn apply_commodity_ceiling(
         // community validation earns its slot via the standard bypasses.
         ContentType::ShowAndTell => scoring_config::COMMODITY_CEILING_SHOW_AND_TELL,
         ContentType::AcademicPaper => scoring_config::COMMODITY_CEILING_ACADEMIC,
+        // Job/hiring posts — capped like academic (no crowd/sophistication lift).
+        ContentType::Hiring => scoring_config::COMMODITY_CEILING_HIRING,
         _ => return score,
     };
 
-    if matches!(content_type, ContentType::AcademicPaper) {
-        // Papers: sophistication and community-signal bypasses deliberately
-        // withheld (see fn doc). Strong dependency grounding is the only
-        // class-specific exemption; security/version patterns are checked
-        // below with the shared exemption.
-        if strongly_grounded {
+    if matches!(
+        content_type,
+        ContentType::AcademicPaper | ContentType::Hiring
+    ) {
+        // Papers and job posts: sophistication and community-signal bypasses
+        // deliberately withheld (see fn doc). For papers, strong dependency
+        // grounding is the one class-specific exemption (a paper dissecting your
+        // dep's internals is worth it); a job ad name-dropping your stack is
+        // still a job ad, so hiring gets no grounding bypass either.
+        if matches!(content_type, ContentType::AcademicPaper) && strongly_grounded {
             return score;
         }
     } else {
@@ -3428,6 +3444,83 @@ mod tests {
             score, 0.90,
             "dep-grounded paper must bypass the academic ceiling"
         );
+    }
+
+    const HIRING_TITLE: &str =
+        "CircleCI is hiring Senior Software Engineer #golang #typescript #react";
+    const OFFSTACK_ADVISORY_TITLE: &str =
+        "[GHSA-vjc7-jrh9-9j86] 9router has unauthenticated CRUD on /api/providers";
+
+    #[test]
+    fn ceiling_caps_hiring_post() {
+        // A job ad name-dropping the developer's exact stack keywords (#golang
+        // #react) previously scored CORE (~0.91). It must be capped hard.
+        let capped = apply_commodity_ceiling(
+            0.91,
+            HIRING_TITLE,
+            &crate::content_dna::ContentType::Hiring,
+            0.0,
+            0.0,
+            false,
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_HIRING,
+            "hiring post must be capped at the hiring ceiling"
+        );
+    }
+
+    #[test]
+    fn community_and_grounding_do_not_lift_hiring() {
+        // Neither a popular "Who's hiring" thread (high community_signal) nor a
+        // stack-name match (strongly_grounded) may lift a job ad into the brief.
+        let capped = apply_commodity_ceiling(
+            0.91,
+            HIRING_TITLE,
+            &crate::content_dna::ContentType::Hiring,
+            0.9,
+            1.0,
+            true,
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_HIRING,
+            "no bypass may lift the hiring ceiling"
+        );
+    }
+
+    #[test]
+    fn off_stack_security_advisory_capped_below_core() {
+        // A CVE for a package NOT in the user's deps (9router/rama) must not ride
+        // the security-pattern exemption to CORE.
+        let capped = apply_commodity_ceiling(
+            0.91,
+            OFFSTACK_ADVISORY_TITLE,
+            &crate::content_dna::ContentType::SecurityAdvisory,
+            0.5,
+            0.0,
+            false, // NOT in the user's dependency graph
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED,
+            "off-stack advisory must be capped to the MATCH band"
+        );
+    }
+
+    #[test]
+    fn in_stack_security_advisory_not_capped() {
+        // A CVE for a package the developer actually depends on must surface at
+        // full score — the cap only applies to OFF-stack advisories.
+        let score = apply_commodity_ceiling(
+            0.91,
+            "[GHSA-xxxx] axios SSRF vulnerability",
+            &crate::content_dna::ContentType::SecurityAdvisory,
+            0.5,
+            0.0,
+            true, // strongly grounded — axios IS a dependency
+        );
+        assert_eq!(score, 0.91, "in-stack advisory must NOT be capped");
     }
 
     #[test]

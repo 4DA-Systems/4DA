@@ -23,6 +23,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { HealthBanner } from './components/HealthBanner';
 import { CriticalAlertBanner } from './components/CriticalAlertBanner';
 import { LicenseRecoveryBanner } from './components/LicenseRecoveryBanner';
+import { LicenseUnverifiedBanner } from './components/LicenseUnverifiedBanner';
 import { BackgroundRefreshBanner } from './components/BackgroundRefreshBanner';
 import { TrialExpiryBanner } from './components/TrialExpiryBanner';
 import { CalibrationNudgeBanner } from './components/calibration/CalibrationNudgeBanner';
@@ -105,7 +106,7 @@ function App() {
   );
 
   const feedbackCount = useAppStore(s => Object.keys(s.feedbackGiven).length);
-  const { tier, isPro, trialStatus } = useLicense();
+  const { tier, isPro, trialStatus, licenseUnverified } = useLicense();
   // Reverse-trial honesty: a trial user HAS Signal features - showing
   // "FREE" for 14 days hides what expiry takes away (cold-start run,
   // 2026-06-12). The raw tier stays free; only the badge label changes.
@@ -212,11 +213,30 @@ function App() {
     // so deferring the trial probe would flash "FREE" + the free experience for the
     // whole idle gap on every cold boot. Both are tiny; keep them together.
     void loadPersistedBriefing();
-    void loadLicense();
     void loadTrialStatus();
 
+    // License probe with bounded backoff retry. At cold boot the backend can still be
+    // warming up (keychain hydration, DB init) when this first fires, so a single attempt
+    // that times out would leave a paid user showing "FREE"/unverified for the whole
+    // session (loadLicense no longer assumes Free on failure — it flags licenseLoadError).
+    // Retry a few times over ~12s to cover the warmup window, then stop and let the badge's
+    // "?" state + Settings "Re-check licence" button handle the rare persistent failure.
+    const licenseRetryDelays = [800, 1600, 3200, 6400];
+    let licenseRetryTimer: ReturnType<typeof setTimeout> | undefined;
+    let cancelledLicenseRetry = false;
+    const attemptLoadLicense = (n: number) => {
+      void loadLicense().then(() => {
+        if (cancelledLicenseRetry) return;
+        const { licenseLoaded, licenseLoadError } = useAppStore.getState();
+        if (!licenseLoaded && licenseLoadError !== null && n < licenseRetryDelays.length) {
+          licenseRetryTimer = setTimeout(() => attemptLoadLicense(n + 1), licenseRetryDelays[n]);
+        }
+      });
+    };
+    attemptLoadLicense(0);
+
     // Deferred — none of these gate first paint.
-    return runWhenIdle(() => {
+    const cancelIdle = runWhenIdle(() => {
       // Source metadata populates the dynamic source registry + resets filters
       // (only visible in the relevance view, never the default Brief view).
       void loadSourceMeta().then(() => {
@@ -226,6 +246,11 @@ function App() {
       // Pure maintenance — has no business on the critical mount path.
       void cmd('prune_personalization_cache').catch(() => {});
     });
+    return () => {
+      cancelledLicenseRetry = true;
+      if (licenseRetryTimer) clearTimeout(licenseRetryTimer);
+      cancelIdle();
+    };
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus]);
 
   // Event listeners: deep-link activation, embedding status, framework/comparison triggers, cached result loading
@@ -300,6 +325,7 @@ function App() {
           settingsFormProvider={settingsForm.provider}
           isPro={isPro}
           tier={badgeTier}
+          licenseUnverified={licenseUnverified}
           summaryBadges={summaryBadges}
           aiBriefing={aiBriefing}
           onAnalyze={handleAnalyze}
@@ -323,6 +349,8 @@ function App() {
 
         <main id="main-content">
         <h1 className="sr-only">{t('app.title', '4DA')}</h1>
+        {/* License unverified — transient probe failure, offers one-click re-check */}
+        <LicenseUnverifiedBanner />
         {/* License recovery — non-dismissible until tier restored */}
         <LicenseRecoveryBanner />
         {/* Critical security alerts — persistent until acknowledged */}

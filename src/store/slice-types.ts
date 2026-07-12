@@ -437,6 +437,10 @@ export interface LicenseSlice {
   expiresAt: string | null;
   daysRemaining: number;
   expired: boolean;
+  /** True once get_license_tier has returned successfully at least once this session. */
+  licenseLoaded: boolean;
+  /** Last transient license-load error (IPC timeout / backend warming up), else null. */
+  licenseLoadError: string | null;
   loadLicense: () => Promise<void>;
   activateLicense: (
     key: string,
