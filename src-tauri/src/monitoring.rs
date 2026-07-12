@@ -138,6 +138,8 @@ impl MonitoringState {
 pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
     // Create menu items
     let show_item = MenuItem::with_id(app, "show", "Show 4DA", true, None::<&str>)?;
+    let brief_item =
+        MenuItem::with_id(app, "show_brief", "Show today's brief", true, None::<&str>)?;
     let analyze_item = MenuItem::with_id(app, "analyze", "Analyze Now", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let monitoring_item = MenuItem::with_id(
@@ -155,6 +157,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
         app,
         &[
             &show_item,
+            &brief_item,
             &analyze_item,
             &separator,
             &monitoring_item,
@@ -178,6 +181,23 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
                     if let Some(window) = app.get_webview_window("main") {
                         let _ = window.show();
                         let _ = window.set_focus();
+                    }
+                }
+                "show_brief" => {
+                    // Re-summon today's briefing widget from the saved snapshot
+                    // (<=24h old). If there's no fresh snapshot, fall back to
+                    // opening the app — the Brief tab is the default view and
+                    // renders the persisted briefing.
+                    match crate::briefing_snapshot::load_snapshot() {
+                        Some(snapshot) => {
+                            crate::briefing_window::show_briefing(app, &snapshot.briefing);
+                        }
+                        None => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
                     }
                 }
                 "analyze" => {
