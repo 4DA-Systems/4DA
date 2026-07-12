@@ -749,6 +749,26 @@ pub(crate) fn is_abstention_synthesis(text: &str) -> bool {
 // Enrichment Pipeline
 // ============================================================================
 
+/// NEWS vs STANDING CONDITIONS — the rule that keeps the brief from reading the
+/// same every morning. A full preemption card is reserved for what is genuinely
+/// TODAY'S NEWS and the developer's to act on. An advisory in a SIDE project
+/// (`external` scope) is a STANDING CONDITION: real, tracked, never silenced, but
+/// not the app they ship — an unpatched CVE in a repo they don't maintain is "the
+/// roof still leaks", not a headline. It folds into the compact "still open" strip
+/// instead of re-taking a card slot daily. The one carve-out: a brand-new Critical
+/// (never shown before) still earns a look regardless of scope. Long-unchanged
+/// advisories of ANY scope are folded the same way by
+/// `classify_preemption_persistence`; this adds the scope dimension on top.
+fn is_side_project_standing_condition(
+    scope: Option<&str>,
+    urgency: &str,
+    times_shown: u32,
+) -> bool {
+    let is_side_project = matches!(scope, Some("external"));
+    let brand_new_critical = urgency.eq_ignore_ascii_case("critical") && times_shown == 0;
+    is_side_project && !brand_new_critical
+}
+
 /// Build an enriched briefing from raw items.
 ///
 /// Applies the full quality pipeline: quality gate → dedupe → cap → novelty →
@@ -931,18 +951,35 @@ pub(crate) fn build_enriched_briefing(
             ongoing_topics.sort();
             ongoing_topics.dedup();
         }
-        // Split fresh/changed advisories (full cards) from long-unchanged ones
-        // (compact strip). Fresh advisories lead and take the ~5 card slots; the
-        // unchanged ones are always kept but flagged, so the frontend renders
-        // them as one collapsed line rather than re-screaming detailed cards. An
-        // unfixed live vuln is thus never hidden — only de-emphasized.
+        // Demote side-project advisories to STANDING CONDITIONS so they fold into
+        // the compact strip rather than re-taking a card every morning (see
+        // `is_side_project_standing_condition`). This reuses the existing
+        // `persistent_unchanged` collapse path, so it cascades to BOTH the
+        // frontend cards and the synthesis prompt with no extra plumbing. A live
+        // vuln is never hidden — only moved from "today's news" to "still open".
+        let classified: Vec<BriefingPreemptionAlert> = classified
+            .into_iter()
+            .map(|mut a| {
+                if is_side_project_standing_condition(a.scope.as_deref(), &a.urgency, a.times_shown)
+                {
+                    a.persistent_unchanged = true;
+                }
+                a
+            })
+            .collect();
+        // Split NEWS (full cards) from STANDING CONDITIONS (compact strip). News
+        // leads and takes the ~5 card slots; standing conditions are always kept
+        // but flagged, so the frontend renders them as one collapsed line rather
+        // than re-screaming detailed cards. An unfixed live vuln is thus never
+        // hidden — only de-emphasized. The strip cap is generous: it is a single
+        // line of package names, so listing all open side-project items is cheap.
         let (fresh, persisting): (Vec<_>, Vec<_>) = classified
             .into_iter()
             .partition(|a| !a.persistent_unchanged);
         fresh
             .into_iter()
             .take(5)
-            .chain(persisting.into_iter().take(8))
+            .chain(persisting.into_iter().take(20))
             .collect()
     };
 
@@ -2737,7 +2774,7 @@ async fn synthesize_morning_briefing_once(
                 .map(|a| a.package_name.clone().unwrap_or_else(|| a.title.clone()))
                 .collect();
             out.push_str(&format!(
-                "\nSTILL OPEN, UNCHANGED since an earlier brief ({} advisor{} the user has already seen and not yet patched): {}. Do NOT re-explain these or spend the brief on them -- at most ONE short clause noting they remain open. Put the synthesis's energy on anything genuinely new above.\n",
+                "\nSTANDING CONDITIONS -- {} advisor{} the user has already seen and not yet patched (mostly side projects they don't ship): {}. These are NOT news. Do NOT re-explain them, do NOT lead with them, do NOT describe their mechanics -- at most ONE short clause noting some remain open. Any of these packages that ALSO appear as individual CVE items in the signal list above are the SAME standing condition -- do not treat those as fresh either. Put the synthesis's energy on anything genuinely new; if nothing is, keep it short.\n",
                 persisting.len(),
                 if persisting.len() == 1 { "y" } else { "ies" },
                 names.join(", "),
@@ -2750,11 +2787,13 @@ async fn synthesize_morning_briefing_once(
 
 YOUR JOB: synthesize, don't summarize. Find the 1-2 strongest threads across all signals, explain WHY they matter together, and state what to do. The signal list below handles individual items -- your job is the "so what?" that a senior dev can't see by scanning titles.
 
-PRIORITY ORDER for picking clusters:
-1. Security vulnerabilities in the developer's actual dependencies (CVEs, RCEs)
-2. Research or patterns that change how the developer should build (architecture shifts)
-3. Major version releases of direct dependencies with breaking changes
-4. Everything else -- skip unless it compounds with (1) or (2)
+PRIORITY ORDER for picking clusters (NOVELTY FIRST -- a brief that leads with the same standing problem every morning is worthless; lead with what CHANGED since the developer last looked):
+1. A NEW or newly-worsened security vulnerability in the app the developer SHIPS (primary scope), or a brand-new Critical -- something that changed and demands action TODAY.
+2. Research or patterns that change how the developer should build (architecture shifts).
+3. Major version releases of direct dependencies with breaking changes.
+4. Anything else genuinely new overnight worth a senior dev's attention.
+
+STANDING CONDITIONS -- DEMOTE, NEVER LEAD: security advisories the developer has already seen and not patched (the STILL-OPEN list below), and ANY advisory in a SIDE project they don't ship. These are "the roof still leaks" -- true, tracked, but not today's news. Give them at most ONE short clause; NEVER build the brief around them, NEVER re-explain their mechanics. CRITICAL: the same standing advisories often ALSO appear in the signal list below as individual CVE items (e.g. several axios GHSA entries) -- those are the SAME standing condition, not fresh news; do not resurrect them into the lead just because they appear as separate line items. If the only security is standing/side-project, LEAD WITH THE STRONGEST NON-SECURITY THREAD instead, and if nothing non-security is noteworthy, keep the brief SHORT rather than padding it with re-explained standing vulns.
 
 WHAT GOOD LOOKS LIKE:
 "Tokio has a confirmed RCE via malformed HTTP/2 frames -- patch it today; the alerts list below has the exact fixed version. Upstream's HTTP/2 parser rewrite is still pending, so this is a stopgap.
@@ -4161,6 +4200,56 @@ mod tests {
             normalized_advisory_key("axios@1.12.2: 23 known vulnerabilities"),
             normalized_advisory_key("next@3 affected installed versions: 25 known vulnerabilities")
         );
+    }
+
+    #[test]
+    fn side_project_advisories_are_standing_conditions_not_news() {
+        // A side project (external scope) folds into the "still open" strip even
+        // when fresh — an unpatched CVE in a repo the developer doesn't maintain
+        // is not today's news. This is what stops the daily wall of side-project
+        // cards from making every brief read the same.
+        assert!(is_side_project_standing_condition(
+            Some("external"),
+            "high",
+            0
+        ));
+        assert!(is_side_project_standing_condition(
+            Some("external"),
+            "high",
+            5
+        ));
+        // The app the developer ships (primary) always earns a full card while fresh.
+        assert!(!is_side_project_standing_condition(
+            Some("primary"),
+            "high",
+            0
+        ));
+        assert!(!is_side_project_standing_condition(
+            Some("primary"),
+            "critical",
+            9
+        ));
+        // Dev-only deps are not side-project scope; the persistence path handles them.
+        assert!(!is_side_project_standing_condition(Some("dev"), "high", 3));
+        // Carve-out: a brand-new Critical (never shown) still earns a look anywhere.
+        assert!(!is_side_project_standing_condition(
+            Some("external"),
+            "critical",
+            0
+        ));
+        assert!(!is_side_project_standing_condition(
+            Some("external"),
+            "Critical",
+            0
+        ));
+        // But a Critical already seen once is back to a standing condition.
+        assert!(is_side_project_standing_condition(
+            Some("external"),
+            "critical",
+            1
+        ));
+        // Unknown scope is treated as news (not silently collapsed).
+        assert!(!is_side_project_standing_condition(None, "high", 4));
     }
 
     /// In-memory history table matching the production schema (post-migration 88).
