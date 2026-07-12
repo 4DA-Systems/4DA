@@ -15,6 +15,11 @@ interface IntelligenceFeedProps {
   onDismiss: (item: SourceRelevance) => void;
   onRecordClick: (item: SourceRelevance) => void;
   onViewAll: () => void;
+  /**
+   * Cached cold-boot render: suppress Save/Dismiss on historical rows and the
+   * "view all" navigation (there is no live results set behind a cache).
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -30,6 +35,7 @@ export const IntelligenceFeed = memo(function IntelligenceFeed({
   onDismiss,
   onRecordClick,
   onViewAll,
+  readOnly = false,
 }: IntelligenceFeedProps) {
   const { t } = useTranslation();
 
@@ -52,7 +58,7 @@ export const IntelligenceFeed = memo(function IntelligenceFeed({
         <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider">
           {t('feed.title', 'Signal Stream')}
         </h3>
-        {totalRelevant > 15 && (
+        {!readOnly && totalRelevant > 15 && (
           <button
             onClick={onViewAll}
             className="text-xs text-text-muted hover:text-orange-400 transition-colors"
@@ -71,11 +77,12 @@ export const IntelligenceFeed = memo(function IntelligenceFeed({
             onSave={onSave}
             onDismiss={onDismiss}
             onRecordClick={onRecordClick}
+            readOnly={readOnly}
           />
         ))}
       </div>
 
-      {totalRelevant > 15 && (
+      {!readOnly && totalRelevant > 15 && (
         <div className="flex justify-center mt-4">
           <button
             onClick={onViewAll}
@@ -95,6 +102,7 @@ interface FeedItemProps {
   onSave: (item: SourceRelevance) => void;
   onDismiss: (item: SourceRelevance) => void;
   onRecordClick: (item: SourceRelevance) => void;
+  readOnly?: boolean;
 }
 
 const FeedItem = memo(function FeedItem({
@@ -103,6 +111,7 @@ const FeedItem = memo(function FeedItem({
   onSave,
   onDismiss,
   onRecordClick,
+  readOnly = false,
 }: FeedItemProps) {
   const { t } = useTranslation();
   const { getTranslated } = useTranslatedContent();
@@ -197,7 +206,7 @@ const FeedItem = memo(function FeedItem({
       )}
 
       {/* Hover actions */}
-      {!feedback && (
+      {!readOnly && !feedback && (
         <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
           <button
             onClick={(e) => { e.stopPropagation(); onSave(item); }}
