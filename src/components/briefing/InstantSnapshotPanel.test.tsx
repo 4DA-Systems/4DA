@@ -75,21 +75,62 @@ describe('InstantSnapshotPanel', () => {
       synthesis: 'SITUATION\nA real briefing with substance.\n\nPRIORITY\nPatch axios.',
     });
 
-    it('renders the synthesis and the source-items list', () => {
+    it('renders the item titles through the live three-zone components', () => {
       render(<InstantSnapshotPanel snapshot={real} />);
-      expect(screen.getByText(/A real briefing with substance/)).toBeInTheDocument();
-      expect(screen.getByText('briefing.sourceItems')).toBeInTheDocument();
-      expect(screen.getByText('axios@1.12.2: 24 known vulnerabilities')).toBeInTheDocument();
+      // Items surface through the shared AttentionCards / IntelligenceFeed
+      // components (a featured item appears as a card AND a feed row), so there
+      // may be more than one match — assert at least one.
+      expect(screen.getAllByText('axios@1.12.2: 24 known vulnerabilities').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('I Learned React. Then I Realized…').length).toBeGreaterThan(0);
     });
 
-    it('keeps the "cached briefing — freshening" footer', () => {
+    it('shows the cached "refreshing" pulse with the snapshot timestamp', () => {
       render(<InstantSnapshotPanel snapshot={real} />);
-      expect(screen.getByText('briefing.cachedFreshening')).toBeInTheDocument();
+      expect(screen.getByText('briefing.cachedPulse')).toBeInTheDocument();
+      expect(screen.getByText('Fri Jun 19, 12:04 AM')).toBeInTheDocument();
+    });
+
+    it('is read-only — no Save/Dismiss mutations on historical items', () => {
+      // The cold-boot snapshot is yesterday's data; acting on it would mutate
+      // state for stale ids. Read-only mode suppresses those affordances.
+      render(<InstantSnapshotPanel snapshot={real} />);
+      expect(screen.queryByText('action.save')).not.toBeInTheDocument();
+      expect(screen.queryByText('action.dismiss')).not.toBeInTheDocument();
     });
 
     it('does not show the scanning state when real content exists', () => {
       render(<InstantSnapshotPanel snapshot={real} />);
       expect(screen.queryByText('briefing.coldBootScanning')).not.toBeInTheDocument();
+    });
+
+    it('keeps a Read affordance for items that carry a url', () => {
+      const withUrl = makeSnapshot({
+        items: [{ title: 'Patchable CVE', sourceType: 'osv', score: 0.9, url: 'https://example.com/adv' }],
+      });
+      render(<InstantSnapshotPanel snapshot={withUrl} />);
+      expect(screen.getAllByText('briefing.read').length).toBeGreaterThan(0);
+    });
+  });
+
+  // DRIFT GUARD — the whole point of the cold-boot rewrite is that it composes
+  // through the SAME zone components as the live briefing (AttentionCards +
+  // IntelligenceFeed), so the two render paths cannot visually diverge again.
+  // `feed.title` is IntelligenceFeed's review-queue heading: if a future change
+  // rips the shared feed out of the cold-boot panel (re-opening the drift this
+  // fix closed), this test fails. Keep it in lock-step with the live view's use
+  // of the same components in BriefingContentPanel.
+  describe('shares the live three-zone shell (drift guard)', () => {
+    it('renders through IntelligenceFeed — the review-queue heading is present', () => {
+      const real = makeSnapshot({
+        items: [
+          { title: 'axios@1.12.2: 24 known vulnerabilities', sourceType: 'osv', score: 0.91 },
+          { title: 'Feed-only item', sourceType: 'hackernews', score: 0.72 },
+          { title: 'Another feed item', sourceType: 'devto', score: 0.66 },
+        ],
+        totalRelevant: 3,
+      });
+      render(<InstantSnapshotPanel snapshot={real} />);
+      expect(screen.getByText('feed.title')).toBeInTheDocument();
     });
   });
 });
