@@ -415,7 +415,11 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
         let app_synth = app.clone();
         let briefing_synth = briefing.clone();
         tauri::async_runtime::spawn(async move {
-            match crate::monitoring_briefing::synthesize_morning_briefing(&briefing_synth).await {
+            let synthesis = match crate::monitoring_briefing::synthesize_morning_briefing(
+                &briefing_synth,
+            )
+            .await
+            {
                 Ok(result) => {
                     info!(
                         target: "4da::briefing",
@@ -429,12 +433,23 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                         "tier": &result.synthesis_tier,
                     });
                     let _ = app_synth.emit_to("briefing", "briefing-synthesis-meta", &meta);
+                    Some(result.prose)
                 }
                 Err(e) => {
                     info!(target: "4da::briefing", reason = %e, "Manual synthesis skipped");
                     let _ = app_synth.emit_to("briefing", "briefing-synthesis-hint", &e);
+                    None
                 }
-            }
+            };
+            // Persist the freshly-generated brief so a cold boot / app restart
+            // shows THIS brief — with its standing-conditions collapse — instead
+            // of reverting to the last scheduled (08:00) snapshot. Without this a
+            // manual trigger updated only the live window; the on-disk snapshot
+            // stayed stale until the next scheduled run. Mirrors the scheduler's
+            // save-after-synthesis; save_snapshot self-guards empty/abstention.
+            let mut enriched = briefing_synth;
+            enriched.synthesis = synthesis;
+            crate::briefing_snapshot::save_snapshot(&enriched);
         });
     }
 
