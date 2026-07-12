@@ -769,6 +769,23 @@ fn is_side_project_standing_condition(
     is_side_project && !brand_new_critical
 }
 
+/// True when a content item is a security advisory ALREADY surfaced by the
+/// preemption section (the canonical security surface), so it must not also take
+/// a content-item slot. A CVE-heavy overnight feed otherwise fills the brief with
+/// `osv` items for the exact packages already in the "still open" strip, crowding
+/// genuinely fresh news out and leaving the synthesis with "nothing but the
+/// standing backlog". Only security-source items are eligible for removal; `keys`
+/// holds lowercased package names + advisory ids from the finalized preemption
+/// alerts. Non-security content (HN, dev.to, papers) is never touched.
+fn security_item_duplicates_preemption(
+    source_type: &str,
+    title_lower: &str,
+    keys: &std::collections::HashSet<String>,
+) -> bool {
+    let is_security_source = matches!(source_type, "osv" | "cve" | "github_advisory" | "ghsa");
+    is_security_source && keys.iter().any(|k| title_lower.contains(k.as_str()))
+}
+
 /// Build an enriched briefing from raw items.
 ///
 /// Applies the full quality pipeline: quality gate → dedupe → cap → novelty →
@@ -981,6 +998,41 @@ pub(crate) fn build_enriched_briefing(
             .take(5)
             .chain(persisting.into_iter().take(20))
             .collect()
+    };
+
+    // De-duplicate security across surfaces: a CVE already shown in the
+    // preemption section must not ALSO occupy a content-item slot. Without this,
+    // a CVE-heavy night fills `items` with osv entries for the very packages
+    // already collapsed into the strip, crowding out genuinely fresh news and
+    // leaving the synthesis with "nothing but the standing backlog". Drop only
+    // security-source items whose package/advisory is already a preemption alert;
+    // non-security content and novel (non-preempted) advisories are untouched.
+    let items = {
+        let mut keys: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for a in &preemption_alerts {
+            if let Some(p) = &a.package_name {
+                let p = p.trim().to_lowercase();
+                if p.len() >= 3 {
+                    keys.insert(p);
+                }
+            }
+            for id in &a.advisory_ids {
+                let id = id.trim().to_lowercase();
+                if !id.is_empty() {
+                    keys.insert(id);
+                }
+            }
+        }
+        items
+            .into_iter()
+            .filter(|it| {
+                !security_item_duplicates_preemption(
+                    &it.source_type,
+                    &it.title.to_lowercase(),
+                    &keys,
+                )
+            })
+            .collect::<Vec<_>>()
     };
 
     // Abstention: when novelty filtering removed all items AND all preemption
@@ -4250,6 +4302,39 @@ mod tests {
         ));
         // Unknown scope is treated as news (not silently collapsed).
         assert!(!is_side_project_standing_condition(None, "high", 4));
+    }
+
+    #[test]
+    fn security_content_items_duplicating_preemption_are_dropped() {
+        use std::collections::HashSet;
+        let keys: HashSet<String> = ["axios".to_string(), "ghsa-hfxv-24rg-xrqf".to_string()]
+            .into_iter()
+            .collect();
+        // An osv item for a package already collapsed into the strip is a
+        // duplicate of the security surface -> drop it so fresh news can lead.
+        assert!(security_item_duplicates_preemption(
+            "osv",
+            "[ghsa-3p68-rc4w-qgx5] axios has a no_proxy hostname normalization bypass",
+            &keys
+        ));
+        // Advisory-id match also counts.
+        assert!(security_item_duplicates_preemption(
+            "cve",
+            "advisory references ghsa-hfxv-24rg-xrqf",
+            &keys
+        ));
+        // Non-security content is NEVER removed, even if it mentions the package.
+        assert!(!security_item_duplicates_preemption(
+            "hackernews",
+            "why we migrated off axios to fetch",
+            &keys
+        ));
+        // A security advisory for a package NOT in preemption is genuine news -> keep.
+        assert!(!security_item_duplicates_preemption(
+            "osv",
+            "openssl x509 heap buffer overflow",
+            &keys
+        ));
     }
 
     /// In-memory history table matching the production schema (post-migration 88).
