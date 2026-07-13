@@ -57,6 +57,12 @@ pub(crate) struct NecessityInputs {
     /// mentions a dep name can't become "New release in your stack" (the
     /// 2026-07-13 junk-crate class).
     pub strongly_grounded: bool,
+    /// Version verdict for security advisories: `Some(false)` = the user's
+    /// installed version is CONFIRMED outside the affected range (patched or
+    /// never affected). Such advisories are awareness at most, never the
+    /// dep-match urgency tier — the OSV backfill floods decades of historical,
+    /// long-fixed advisories per package.
+    pub version_affected: Option<bool>,
 }
 
 /// Result of necessity computation
@@ -291,6 +297,18 @@ fn try_security_path(
         .map(str::to_string)
         .or_else(|| inputs.cvss_score.map(severity_from_cvss))
         .unwrap_or_else(|| "medium".to_string());
+
+    // CONFIRMED not-affected (installed version outside the affected range /
+    // at-or-past the fix): historical or already-patched advisory. Awareness
+    // only — and the reason must say so instead of claiming impact.
+    if inputs.version_affected == Some(false) {
+        return Some((
+            0.15,
+            format!("Advisory for {dep_names} \u{2014} your installed version is not affected"),
+            NecessityCategory::SecurityVulnerability,
+            Urgency::Awareness,
+        ));
+    }
 
     if has_dep_match {
         let (score, urgency) = match severity.to_lowercase().as_str() {

@@ -2155,7 +2155,7 @@ pub(crate) fn score_item(
         .collect();
 
     // ── Signal classification ─────────────────────────────────────────
-    let (sig_type, sig_priority, sig_action, sig_triggers, sig_horizon) = classify_signals(
+    let (sig_type, mut sig_priority, sig_action, sig_triggers, sig_horizon) = classify_signals(
         relevant,
         combined_score,
         raw.domain_relevance,
@@ -2169,86 +2169,9 @@ pub(crate) fn score_item(
         db,
     );
 
-    // ── Necessity scoring ─────────────────────────────────────────────
-    let age_hours = input.created_at.map_or(0.0, |ts| {
-        (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
-    });
-
-    // Contradiction boost: check if item topics overlap with contradicted topics
-    let contradiction_boost = if ctx.contradicted_topics.is_empty() {
-        0.0
-    } else {
-        let overlap_count = raw
-            .topics
-            .iter()
-            .filter(|t| ctx.contradicted_topics.contains(t.as_str()))
-            .count();
-        // Normalize: 1 match = 0.5, 2+ = 1.0
-        match overlap_count {
-            0 => 0.0,
-            1 => 0.5,
-            _ => 1.0,
-        }
-    };
-
-    // Security severity evidence feeds the necessity bucket below, so extract it
-    // BEFORE building NecessityInputs. Previously it was computed afterward, so a real
-    // critical CVE on a dev-only dep (which can reach the security path with no signal
-    // priority) fell back to "medium" instead of critical (bug J).
+    // ── Security version evidence (extracted BEFORE necessity/applicability
+    //    so the version verdict can inform both) ───────────────────────
     let is_security_source = matches!(input.source_type, "cve" | "osv");
-    let (cvss_score, cvss_severity) = if is_security_source {
-        extract_cvss_from_content(input.content)
-    } else {
-        (None, None)
-    };
-
-    // Window title resolved in-memory (open_windows is already loaded) so the
-    // decision-relevant necessity reason can name the decision it claims relevance to.
-    let matched_window_label = matched_window_id.and_then(|wid| {
-        ctx.open_windows
-            .iter()
-            .find(|w| w.id == wid)
-            .map(|w| w.title.clone())
-    });
-
-    let necessity_inputs = necessity::NecessityInputs {
-        dep_match_score: raw.dep_match_score,
-        matched_deps: matched_dep_names.clone(),
-        signal_type: sig_type.clone(),
-        signal_priority: sig_priority.clone(),
-        cve_severity: None, // folded into signal_priority by the classifier
-        cvss_score,         // numeric severity fallback when no priority is present
-        affected_project_count: count_affected_projects(db, &matched_dep_names),
-        skill_gap_boost,
-        matched_skill_gaps: matched_skill_gaps.clone(),
-        window_boost,
-        matched_window_label: matched_window_label.clone(),
-        age_hours,
-        content_type: Some(content_type.slug().to_string()),
-        contradiction_boost,
-        strongly_grounded: grounding.strong,
-    };
-    let mut necessity_result = necessity::compute_necessity(&necessity_inputs);
-
-    // ── Source authority weighting for necessity ───────────────────────
-    // Security items are NOT penalized — a CVE is critical regardless of source.
-    // All other necessity categories are modulated by source authority.
-    if necessity_result.category != necessity::NecessityCategory::SecurityVulnerability
-        && necessity_result.score > 0.0
-    {
-        let authority = authority::source_authority(input.source_type);
-        necessity_result.score = (necessity_result.score * authority).clamp(0.0, 1.0);
-    }
-
-    // ── Security applicability + critical alert gate ────────────────────
-    let (applicability, is_critical_alert) = if sig_type.as_deref() == Some("security_alert") {
-        security_applicability(&raw.matched_deps, &advisory_ecosystems)
-    } else {
-        (None, false)
-    };
-
-    // ── Security evidence extraction ─────────────────────────────────
-    // (cvss_score / cvss_severity already extracted above for the necessity bucket)
     let advisory_id = if is_security_source {
         extract_advisory_id(input.title)
     } else {
@@ -2281,6 +2204,110 @@ pub(crate) fn score_item(
         affected_versions.as_deref(),
         fixed_version.as_deref(),
     );
+
+    // A CONFIRMED not-affected advisory (installed version outside the affected
+    // range / at-or-past the fix) is awareness at most — never Critical/Alert.
+    // The OSV backfill floods dozens of historical, long-patched advisories per
+    // package; without this they all page as if they endanger today's build.
+    let version_negative =
+        sig_type.as_deref() == Some("security_alert") && is_version_affected == Some(false);
+    if version_negative
+        && matches!(
+            sig_priority.as_deref(),
+            Some("critical") | Some("alert") | Some("advisory")
+        )
+    {
+        sig_priority = Some("watch".to_string());
+    }
+
+    // ── Necessity scoring ─────────────────────────────────────────────
+    let age_hours = input.created_at.map_or(0.0, |ts| {
+        (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
+    });
+
+    // Contradiction boost: check if item topics overlap with contradicted topics
+    let contradiction_boost = if ctx.contradicted_topics.is_empty() {
+        0.0
+    } else {
+        let overlap_count = raw
+            .topics
+            .iter()
+            .filter(|t| ctx.contradicted_topics.contains(t.as_str()))
+            .count();
+        // Normalize: 1 match = 0.5, 2+ = 1.0
+        match overlap_count {
+            0 => 0.0,
+            1 => 0.5,
+            _ => 1.0,
+        }
+    };
+
+    // Security severity evidence feeds the necessity bucket below, so extract it
+    // BEFORE building NecessityInputs. Previously it was computed afterward, so a real
+    // critical CVE on a dev-only dep (which can reach the security path with no signal
+    // priority) fell back to "medium" instead of critical (bug J).
+    // (is_security_source computed above with the version evidence block.)
+    let (cvss_score, cvss_severity) = if is_security_source {
+        extract_cvss_from_content(input.content)
+    } else {
+        (None, None)
+    };
+
+    // Window title resolved in-memory (open_windows is already loaded) so the
+    // decision-relevant necessity reason can name the decision it claims relevance to.
+    let matched_window_label = matched_window_id.and_then(|wid| {
+        ctx.open_windows
+            .iter()
+            .find(|w| w.id == wid)
+            .map(|w| w.title.clone())
+    });
+
+    let necessity_inputs = necessity::NecessityInputs {
+        dep_match_score: raw.dep_match_score,
+        matched_deps: matched_dep_names.clone(),
+        signal_type: sig_type.clone(),
+        signal_priority: sig_priority.clone(),
+        cve_severity: None, // folded into signal_priority by the classifier
+        cvss_score,         // numeric severity fallback when no priority is present
+        affected_project_count: count_affected_projects(db, &matched_dep_names),
+        skill_gap_boost,
+        matched_skill_gaps: matched_skill_gaps.clone(),
+        window_boost,
+        matched_window_label: matched_window_label.clone(),
+        age_hours,
+        content_type: Some(content_type.slug().to_string()),
+        contradiction_boost,
+        strongly_grounded: grounding.strong,
+        version_affected: is_version_affected,
+    };
+    let mut necessity_result = necessity::compute_necessity(&necessity_inputs);
+
+    // ── Source authority weighting for necessity ───────────────────────
+    // Security items are NOT penalized — a CVE is critical regardless of source.
+    // All other necessity categories are modulated by source authority.
+    if necessity_result.category != necessity::NecessityCategory::SecurityVulnerability
+        && necessity_result.score > 0.0
+    {
+        let authority = authority::source_authority(input.source_type);
+        necessity_result.score = (necessity_result.score * authority).clamp(0.0, 1.0);
+    }
+
+    // ── Security applicability + critical alert gate ────────────────────
+    // The version verdict overrides the name/ecosystem route: a CONFIRMED
+    // not-affected advisory (installed version outside the affected range /
+    // at-or-past the fix) is `not_affected` and never a critical alert — the
+    // evidence pool keeps it out of "Affects You".
+    let (applicability, is_critical_alert) = if version_negative {
+        (Some("not_affected".to_string()), false)
+    } else if sig_type.as_deref() == Some("security_alert") {
+        security_applicability(&raw.matched_deps, &advisory_ecosystems)
+    } else {
+        (None, false)
+    };
+
+    // (advisory_id / fixed_version / affected_versions / dep_path /
+    // installed_version / is_version_affected extracted above, before
+    // necessity, so the version verdict informs it.)
     let sec_affected_project_count = count_affected_projects(db, &matched_dep_names) as u32;
 
     // ── Explanation evidence chain ────────────────────────────────────

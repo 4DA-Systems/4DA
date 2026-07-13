@@ -20,7 +20,36 @@ fn default_inputs() -> NecessityInputs {
         content_type: None,
         contradiction_boost: 0.0,
         strongly_grounded: false,
+        version_affected: None,
     }
+}
+
+#[test]
+fn test_version_negative_advisory_is_awareness_only() {
+    // A long-fixed advisory for a dep the user has already patched must not
+    // page as if it endangers today's build (the 2026-07-09 OSV backfill
+    // flooded 34 historical axios advisories, all claiming "affects you").
+    let inputs = NecessityInputs {
+        dep_match_score: 0.7,
+        matched_deps: vec!["axios".to_string()],
+        signal_type: Some("security_alert".to_string()),
+        cve_severity: Some("CRITICAL".to_string()),
+        version_affected: Some(false),
+        strongly_grounded: true,
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert!(
+        result.score <= 0.25,
+        "patched advisory must be awareness-only, got {}",
+        result.score
+    );
+    assert_eq!(result.urgency, Urgency::Awareness);
+    assert!(
+        result.reason.contains("not affected"),
+        "reason must state the honest verdict: {}",
+        result.reason
+    );
 }
 
 #[test]

@@ -221,3 +221,101 @@ fn junk_registry_item_has_no_corroborated_deps() {
         }
     }
 }
+
+/// Advisory truth (2026-07-09 OSV backfill flood): a historical advisory whose
+/// fix PRE-DATES the user's installed version must read `not_affected`, never
+/// page as critical, and carry the honest awareness-only necessity reason.
+/// A still-affecting advisory for the same dep must keep its urgency.
+#[test]
+fn patched_advisory_is_not_affected_and_never_critical() {
+    let db = bench_db();
+    let opts = ScoringOptions {
+        apply_freshness: false,
+        apply_signals: true,
+        trend_topics: vec![],
+    };
+    let classifier = crate::signals::SignalClassifier::new();
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
+
+    let mut ctx = profile_ctx("fullstack_js");
+    // axios installed at 1.13.0 — PAST the 1.12.2 fix below.
+    let info = super::dependencies::DepInfo {
+        package_name: "axios".to_string(),
+        version: Some("1.13.0".to_string()),
+        is_dev: false,
+        is_direct: true,
+        search_terms: super::dependencies::extract_search_terms("axios"),
+        ecosystem: "javascript".to_string(),
+    };
+    ctx.ace_ctx.dependency_names.insert("axios".to_string());
+    ctx.ace_ctx.dependency_info.insert("axios".to_string(), info);
+
+    let score_advisory = |id: u64, title: &str, content: &str| {
+        let input = ScoringInput {
+            id,
+            title,
+            url: Some("https://example.com"),
+            content,
+            source_type: "osv",
+            embedding: &zero_emb,
+            created_at: None,
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+            source_id: Some("GHSA-test"),
+        };
+        score_item(&input, &ctx, &db, &opts, Some(&classifier))
+    };
+
+    // Historical, long-fixed advisory: fixed in 1.12.2, user runs 1.13.0.
+    let patched = score_advisory(
+        1,
+        "[GHSA-wf5p-g6vw-rhxx] Axios Cross-Site Request Forgery Vulnerability",
+        "An issue in axios exposes a CSRF vector.\nSeverity: HIGH\n\
+         Affected: axios (npm)\nFixed in: 1.12.2",
+    );
+    assert_eq!(
+        patched.applicability.as_deref(),
+        Some("not_affected"),
+        "installed 1.13.0 >= fix 1.12.2 must read not_affected"
+    );
+    assert!(
+        !patched.is_critical_alert,
+        "patched advisory must not be a critical alert"
+    );
+    assert_ne!(
+        patched.signal_priority.as_deref(),
+        Some("critical"),
+        "patched advisory must not page critical"
+    );
+    let bd = patched.score_breakdown.as_ref().expect("breakdown");
+    assert!(
+        bd.necessity_score <= 0.30,
+        "patched advisory necessity must be awareness-only, got {}",
+        bd.necessity_score
+    );
+
+    // Control: an advisory whose fix is AHEAD of the installed version still
+    // carries its full urgency — the version gate must not eat real alerts.
+    let affecting = score_advisory(
+        2,
+        "[GHSA-9999-xxxx-yyyy] Axios: Header Injection via Prototype Pollution",
+        "A vulnerability in axios allows header injection via prototype pollution.\n\
+         Severity: CRITICAL\nAffected: axios (npm)\nFixed in: 1.14.1",
+    );
+    assert_ne!(
+        affecting.applicability.as_deref(),
+        Some("not_affected"),
+        "installed 1.13.0 < fix 1.14.1 is still affected"
+    );
+    assert!(
+        affecting
+            .score_breakdown
+            .as_ref()
+            .map(|b| b.necessity_score)
+            .unwrap_or(0.0)
+            > 0.5,
+        "still-affecting advisory keeps real necessity"
+    );
+}
