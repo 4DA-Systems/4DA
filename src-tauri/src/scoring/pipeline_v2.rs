@@ -1413,11 +1413,21 @@ fn apply_gate_effect(
     };
 
     // Score ceiling applied LAST — domain boost cannot push above gate ceiling.
-    // Hard cap at 0.95: no item should display 100% — that implies perfect
-    // certainty which no heuristic pipeline can guarantee.
-    (gated * domain_gate_mult)
-        .min(score_ceiling)
-        .clamp(0.0, scoring_config::FINAL_CEILING_ABSOLUTE_MAX)
+    //
+    // De-saturation (2026-07-13): the old hard
+    // `.min(score_ceiling).clamp(0, 0.95)` was the pipeline's only
+    // NON-INJECTIVE operation — it flattened every strong item onto a single
+    // mass point (362 live items persisted the identical 0.9017062 =
+    // soft_ceiling(0.95 + offset)), destroying ranking exactly where it
+    // matters most and reducing top-band order to the necessity tiebreaker.
+    // Soft-compress instead: `soft_ceiling` hard-mins when the cap is at or
+    // below the knee (so the 0.20 / 0.28 / 0.72 noise-suppression tiers keep
+    // their exact semantics) and maps `(knee, ∞)` injectively onto
+    // `(knee, cap)` for the high tiers — distinct strong items stay distinct,
+    // order preserved, and the "no item displays 100%" invariant still holds
+    // because the cap never exceeds FINAL_CEILING_ABSOLUTE_MAX.
+    let effective_cap = score_ceiling.min(scoring_config::FINAL_CEILING_ABSOLUTE_MAX);
+    soft_ceiling(gated * domain_gate_mult, SOFT_CEILING_KNEE, effective_cap).max(0.0)
 }
 
 // ============================================================================
@@ -1625,15 +1635,111 @@ pub(crate) fn apply_final_soft_ceiling(score: f32) -> f32 {
     )
 }
 
-/// THE single authoritative score-shaping boundary. Applies the final ceiling
-/// to every result's persisted `top_score`, exactly once, after all rerank
-/// stages and before persistence. Call this at the end of EVERY analysis path
-/// (cached, fresh, deep-scan) so `relevance_score` honors the ceiling no matter
-/// which reranker last overwrote `top_score`. Does NOT reorder — each path keeps
-/// its own sort / composition-floor logic, which must run after this.
+/// Boundary knee for [`finalize_scores`]. Sits ABOVE the maximum value
+/// `score_item` can emit, so the boundary pass is the IDENTITY for pipeline
+/// outputs and only compresses reranker overwrites:
+///
+///   score_item's terminal soft ceiling receives at most
+///   gate-asymptote (0.95) + score offset (0.02) + topic-attention max (0.05)
+///   = 1.02, and soft(1.02, 0.80, 0.95) ≈ 0.915.
+///
+/// Values above this knee can only come from post-pipeline writers (the
+/// cross-encoder blend, the reconciler's final_rank, dedup boosts) whose
+/// outputs range up to ~1.0 — those are compressed injectively into
+/// (0.92, 0.95), preserving their relative order. Pre-2026-07-13 the boundary
+/// re-applied the 0.80-knee ceiling to ALREADY-CEILINGED values, so the same
+/// item persisted 0.9017 via the backfill path (no boundary call) but 0.8739
+/// via the live analyzer path (double compression).
+const BOUNDARY_CEILING_KNEE: f32 = 0.92;
+
+#[cfg(test)]
+mod desaturation_tests {
+    use super::*;
+
+    /// The 362-way-tie regression: distinct strong inputs must stay distinct
+    /// through the gate. Pre-fix, every 4/5-signal item with
+    /// `gated * domain ≥ 0.95` collapsed onto exactly 0.95 (then a fixed
+    /// offset + soft ceiling relabeled the pile to 0.9017062 — 362 identical
+    /// persisted scores on the live corpus).
+    #[test]
+    fn gate_does_not_flatten_strong_items() {
+        let ctx = ScoringContext::builder().build();
+        // 4 confirmed signals → tier ceiling 1.0; the old absolute clamp was
+        // the only binding cap. Three distinct strong scores:
+        let a = apply_gate_effect(0.80, 4, 0.9, &ctx, 0.10, 0.0);
+        let b = apply_gate_effect(0.90, 4, 0.9, &ctx, 0.10, 0.0);
+        let c = apply_gate_effect(1.00, 4, 0.9, &ctx, 0.10, 0.0);
+        assert!(a < b && b < c, "order must be preserved: {a} {b} {c}");
+        assert!(
+            (b - a) > 1e-4 && (c - b) > 1e-4,
+            "strong items must stay separated, got {a} {b} {c}"
+        );
+        assert!(
+            c < scoring_config::FINAL_CEILING_ABSOLUTE_MAX,
+            "absolute-max invariant must hold, got {c}"
+        );
+    }
+
+    /// Low/noise tiers keep their EXACT hard-cap semantics (soft_ceiling
+    /// hard-mins whenever cap <= knee) — noise suppression must not soften.
+    #[test]
+    fn low_signal_tiers_keep_hard_caps() {
+        let ctx = ScoringContext::builder().build();
+        // 0/1-signal ceilings (0.20 / 0.28 + bonus) are far below the knee.
+        let zero = apply_gate_effect(1.0, 0, 0.9, &ctx, 0.0, 0.0);
+        let one = apply_gate_effect(1.0, 1, 0.9, &ctx, 0.0, 0.0);
+        assert!(zero <= 0.20 + 1e-6, "0-signal cap must stay hard: {zero}");
+        assert!(one <= 0.28 + 1e-6, "1-signal cap must stay hard: {one}");
+    }
+
+    /// The boundary pass is the IDENTITY for anything score_item can emit —
+    /// calling it on every persistence path yields path-independent scores.
+    /// (finalize_scores is a trivial loop over this same map, so the float
+    /// map IS the behavior under test.)
+    #[test]
+    fn boundary_finalize_is_identity_for_pipeline_outputs() {
+        let boundary = |v: f32| {
+            soft_ceiling(
+                v,
+                BOUNDARY_CEILING_KNEE,
+                scoring_config::FINAL_CEILING_ABSOLUTE_MAX,
+            )
+        };
+        // Max pipeline output ≈ soft(1.02, 0.80, 0.95) ≈ 0.915 < knee 0.92.
+        let max_pipeline = apply_final_soft_ceiling(1.02);
+        assert!(
+            max_pipeline < BOUNDARY_CEILING_KNEE,
+            "boundary knee must clear the pipeline max ({max_pipeline})"
+        );
+        for v in [0.10_f32, 0.50, 0.80, 0.9017, max_pipeline] {
+            assert!(
+                (boundary(v) - v).abs() < 1e-6,
+                "boundary must not re-compress pipeline output {v}, got {}",
+                boundary(v)
+            );
+        }
+        // …while reranker overwrites above the knee are compressed under the
+        // absolute max, injectively (order preserved).
+        let (a, b) = (boundary(0.96), boundary(0.99));
+        assert!(a < b, "order preserved: {a} vs {b}");
+        assert!(b < scoring_config::FINAL_CEILING_ABSOLUTE_MAX);
+    }
+}
+
+/// THE single authoritative score-shaping boundary. Call at the end of EVERY
+/// analysis path (cached, fresh, deep-scan, backfill, headless) so the stored
+/// `relevance_score` honors the `final_ceiling.absolute_max` invariant no
+/// matter which reranker last overwrote `top_score`. IDEMPOTENT for values
+/// `score_item` produces (identity below the boundary knee), so calling it on
+/// every path yields path-independent persisted scores. Does NOT reorder —
+/// each path keeps its own sort / composition-floor logic.
 pub(crate) fn finalize_scores(results: &mut [crate::SourceRelevance]) {
     for r in results.iter_mut() {
-        r.top_score = apply_final_soft_ceiling(r.top_score);
+        r.top_score = soft_ceiling(
+            r.top_score,
+            BOUNDARY_CEILING_KNEE,
+            scoring_config::FINAL_CEILING_ABSOLUTE_MAX,
+        );
     }
 }
 

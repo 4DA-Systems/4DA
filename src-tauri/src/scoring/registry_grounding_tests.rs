@@ -248,7 +248,9 @@ fn patched_advisory_is_not_affected_and_never_critical() {
         ecosystem: "javascript".to_string(),
     };
     ctx.ace_ctx.dependency_names.insert("axios".to_string());
-    ctx.ace_ctx.dependency_info.insert("axios".to_string(), info);
+    ctx.ace_ctx
+        .dependency_info
+        .insert("axios".to_string(), info);
 
     let score_advisory = |id: u64, title: &str, content: &str| {
         let input = ScoringInput {
