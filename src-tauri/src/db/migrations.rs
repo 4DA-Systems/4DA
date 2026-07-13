@@ -600,7 +600,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 89;
+        const TARGET_VERSION: i64 = 90;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3201,6 +3201,42 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Recomputed topic affinities under strength-weighted formula"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 90 {
+                Self::run_versioned_migration(
+                    &conn,
+                    89,
+                    90,
+                    "Phase 90: affinity instant-arm keyed on weighted evidence (re-recompute)",
+                    |c| {
+                        // Phase 89's instant negative arm checked the HISTORICAL
+                        // positive_signals count, which pre-dates weighting and
+                        // reads 0 for pre-2026-07-13 evidence — so one explicit
+                        // dismissal of a junk item left `rust` at -1.0 despite
+                        // backfilled positive weighted evidence. The arm (in
+                        // RECOMPUTE_AFFINITY_SQL) now keys on weighted_positive;
+                        // re-run the recompute so dormant rows heal too.
+                        let has_table: bool = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='topic_affinities'",
+                                [],
+                                |row| row.get::<_, i64>(0).map(|n| n > 0),
+                            )
+                            .unwrap_or(false);
+                        if !has_table {
+                            return Ok(());
+                        }
+                        let recompute_all = crate::ace::behavior::tracking::RECOMPUTE_AFFINITY_SQL
+                            .replace(" WHERE topic = ?1", "");
+                        c.execute_batch(&recompute_all)?;
+                        info!(
+                            target: "4da::db",
+                            "Re-ran affinity recompute with weighted-evidence instant arm"
                         );
                         Ok(())
                     },
