@@ -19,14 +19,20 @@ use super::types::{BehaviorAction, BehaviorSignal};
 /// rejection weighed the same).
 ///
 /// The instant-activation arm requires an EXPLICIT rejection
-/// (`explicit_negative_signals`, strength <= −0.8) — a topic the user has
-/// only ever scrolled past can no longer snap to −1.0 at full confidence.
+/// (`explicit_negative_signals`, strength <= −0.8) AND zero accumulated
+/// positive evidence — a topic the user has only ever scrolled past can no
+/// longer snap to −1.0, and one dismissal of a junk item cannot hard-poison a
+/// topic the user has also engaged with positively (the check is on
+/// `weighted_positive`, the backfilled truth, not the historical
+/// `positive_signals` count, which pre-dates weighting and reads 0 for
+/// evidence recorded before 2026-07-13).
 ///
-/// Shared verbatim by the live per-interaction update and the Phase-80
-/// migration's one-time profile recompute so both produce identical scores.
+/// Shared verbatim by the live per-interaction update and the profile-repair
+/// migrations (Phase 89 backfill, Phase 90 arm correction) so all paths
+/// produce identical scores.
 pub(crate) const RECOMPUTE_AFFINITY_SQL: &str = "UPDATE topic_affinities SET
     affinity_score = CASE
-        WHEN explicit_negative_signals > 0 AND positive_signals = 0 THEN
+        WHEN explicit_negative_signals > 0 AND weighted_positive <= 0.0 THEN
             -1.0 * MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
         WHEN total_exposures >= 3 THEN
             MAX(-1.0, MIN(1.0,
@@ -35,7 +41,7 @@ pub(crate) const RECOMPUTE_AFFINITY_SQL: &str = "UPDATE topic_affinities SET
         ELSE 0.0
     END,
     confidence = CASE
-        WHEN explicit_negative_signals > 0 AND positive_signals = 0 THEN
+        WHEN explicit_negative_signals > 0 AND weighted_positive <= 0.0 THEN
             MAX(0.3, MIN(CAST(total_exposures AS REAL) / 10.0, 1.0))
         ELSE MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
     END
@@ -630,6 +636,54 @@ mod learning_loop_tests {
             topic.confidence >= 0.3,
             "explicit rejection carries immediate confidence, got {}",
             topic.confidence
+        );
+    }
+
+    /// The live `rust` residual (2026-07-14): ONE explicit dismissal of a
+    /// junk item must not hard-poison a topic that also carries positive
+    /// weighted evidence — the instant arm keys on weighted_positive (the
+    /// backfilled truth), and the weighted formula takes over.
+    #[test]
+    fn one_explicit_rejection_does_not_hard_poison_engaged_topic() {
+        let ace = create_test_ace();
+
+        // Real positive engagement first…
+        ace.record_interaction(
+            1,
+            BehaviorAction::Click {
+                dwell_time_seconds: 30,
+                pattern: None,
+            },
+            vec!["rust".to_string()],
+            "hackernews".to_string(),
+        )
+        .expect("click");
+        // …then one explicit rejection (of, say, a junk item titled with rust).
+        ace.record_interaction(
+            2,
+            BehaviorAction::Dismiss,
+            vec!["rust".to_string()],
+            "crates_io".to_string(),
+        )
+        .expect("dismiss");
+        // Some passive exposures so the weighted arm is active (>= 3).
+        ace.record_interaction(
+            3,
+            BehaviorAction::Ignore,
+            vec!["rust".to_string()],
+            "hackernews".to_string(),
+        )
+        .expect("ignore");
+
+        let affinities = ace.get_topic_affinities_min(1).expect("read affinities");
+        let rust = affinities
+            .iter()
+            .find(|a| a.topic == "rust")
+            .expect("rust affinity present");
+        assert!(
+            rust.affinity_score > -0.5,
+            "one dismissal must not hard-poison an engaged topic, got {}",
+            rust.affinity_score
         );
     }
 
