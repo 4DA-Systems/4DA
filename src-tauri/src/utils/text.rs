@@ -197,7 +197,7 @@ pub(crate) fn chunk_text(text: &str, source_file: &str) -> Vec<(String, String)>
 
     let mut current_chunk = String::new();
 
-    let mut push_chunk = |chunks: &mut Vec<(String, String)>, chunk: String| {
+    let push_chunk = |chunks: &mut Vec<(String, String)>, chunk: String| {
         let cleaned = strip_shebang_line(&chunk);
         if !is_boilerplate_chunk(cleaned) {
             chunks.push((source_file.to_string(), cleaned.to_string()));
