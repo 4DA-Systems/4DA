@@ -51,6 +51,12 @@ pub(crate) struct NecessityInputs {
     pub content_type: Option<String>,
     /// Contradiction boost: how much this item overlaps with contradicted topics (0.0-1.0)
     pub contradiction_boost: f32,
+    /// The canonical grounding verdict (`dependencies::compute_grounding_verdict`).
+    /// A weak text match (`dep_match_score > 0`) is NOT stack membership — the
+    /// stack-update path requires this, so a third-party release that merely
+    /// mentions a dep name can't become "New release in your stack" (the
+    /// 2026-07-13 junk-crate class).
+    pub strongly_grounded: bool,
 }
 
 /// Result of necessity computation
@@ -386,8 +392,12 @@ fn try_deprecation_path(
 /// through to the generic blind-spot path and was recency-decayed into invisibility,
 /// so a dev's own stack updates never surfaced above unrelated security/blind-spot noise.
 ///
-/// Gated on a real dependency match, so it only fires for YOUR stack — never generic
-/// topical content (that stays low, preserving the necessity-over-want doctrine).
+/// Gated on the CANONICAL grounding verdict (`inputs.strongly_grounded`), so it
+/// only fires for YOUR stack — never generic topical content, and never a
+/// third-party package that merely mentions a dep name in its description
+/// (`has_dep_match` alone allowed exactly that: any weak text hit qualified,
+/// which is how `crates.io: capacitor-tauri v0.0.0` became "New release in
+/// your stack: tauri" and topped the feed, 2026-07-13).
 fn try_stack_update_path(
     inputs: &NecessityInputs,
     has_dep_match: bool,
@@ -398,7 +408,7 @@ fn try_stack_update_path(
         .as_deref()
         .is_some_and(|ct| ct == "release_notes" || ct == "platform_update");
 
-    if !is_update || !has_dep_match {
+    if !is_update || !has_dep_match || !inputs.strongly_grounded {
         return None;
     }
 

@@ -1,0 +1,223 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
+//! Registry-subject grounding regression corpus (2026-07-13 live-feed audit).
+//!
+//! Every negative fixture here is a REAL item that topped the live "Affects
+//! You" pool by riding a text mention of a user dependency inside a
+//! third-party package's title/description. The doctrine under test:
+//! **a registry release item is grounded ONLY by its subject package** —
+//! subject ∈ user deps, ecosystem-congruent. Text mentions can never
+//! strongly-ground a registry item, never mint "New release in your stack",
+//! and never award the fast-path floors.
+//!
+//! Run: `cargo test scoring::registry_grounding -- --nocapture`
+
+use super::benchmark::{bench_db, no_freshness};
+use super::benchmark_scenarios::profile_ctx;
+use super::pipeline::ScoringInput;
+use super::*;
+
+fn score<'a>(
+    ctx: &ScoringContext,
+    db: &crate::db::Database,
+    source_type: &'a str,
+    source_id: Option<&'a str>,
+    title: &'a str,
+    content: &'a str,
+) -> crate::SourceRelevance {
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let opts = no_freshness();
+    let input = ScoringInput {
+        id: 1,
+        title,
+        url: Some("https://example.com"),
+        content,
+        source_type,
+        embedding: &zero_emb,
+        created_at: None,
+        detected_lang: "en",
+        source_tags: &[],
+        tags_json: None,
+        feed_origin: None,
+        source_id,
+    };
+    score_item(&input, ctx, db, &opts, None)
+}
+
+fn grounded(r: &crate::SourceRelevance) -> bool {
+    r.score_breakdown
+        .as_ref()
+        .map(|b| b.strongly_grounded)
+        .unwrap_or(false)
+}
+
+fn necessity_category(r: &crate::SourceRelevance) -> Option<String> {
+    r.score_breakdown
+        .as_ref()
+        .and_then(|b| b.necessity_category.clone())
+}
+
+/// The live #1 item: a zero-download placeholder crate whose description says
+/// "for Tauri apps". It strongly-grounded to the user's `tauri` dep and was
+/// classified "New release in your stack: tauri".
+#[test]
+fn junk_crate_mentioning_dep_is_not_grounded() {
+    let db = bench_db();
+    let ctx = profile_ctx("rust_developer"); // has `tauri` (rust, direct)
+    let r = score(
+        &ctx,
+        &db,
+        "crates_io",
+        Some("crate-capacitor-tauri"),
+        "crates.io: capacitor-tauri v0.0.0",
+        "Capacitor platform runtime for Tauri apps.\nDownloads: 0",
+    );
+    assert!(
+        !grounded(&r),
+        "third-party crate mentioning 'Tauri' must not strongly-ground (breakdown: {:?})",
+        r.score_breakdown.as_ref().map(|b| &b.matched_deps)
+    );
+    assert_ne!(
+        necessity_category(&r).as_deref(),
+        Some("ecosystem_shift"),
+        "junk crate must not be classified as the user's stack update: {:?}",
+        r.score_breakdown
+            .as_ref()
+            .and_then(|b| b.necessity_reason.clone())
+    );
+}
+
+/// Suffix-compound title: "tauri" inside "crepuscularity-tauri" rode a
+/// full-strength title hit pre-fix (the damper only checked term-THEN-hyphen).
+#[test]
+fn junk_crate_suffix_compound_title_is_not_grounded() {
+    let db = bench_db();
+    let ctx = profile_ctx("rust_developer");
+    let r = score(
+        &ctx,
+        &db,
+        "crates_io",
+        Some("crate-crepuscularity-tauri"),
+        "crates.io: crepuscularity-tauri v0.1.0",
+        "Tauri v1/v2 static-bundle adapter for Crepuscularity.\nDownloads: 0",
+    );
+    assert!(!grounded(&r), "suffix-compound junk crate must not ground");
+    assert_ne!(necessity_category(&r).as_deref(), Some("ecosystem_shift"));
+}
+
+/// Cross-ecosystem: a RUST crate whose description says "React-like" grounded
+/// to the user's JAVASCRIPT `react` dependency on the live feed.
+#[test]
+fn cross_ecosystem_mention_is_not_grounded() {
+    let db = bench_db();
+    let ctx = profile_ctx("fullstack_js"); // has `react` (javascript, direct)
+    let r = score(
+        &ctx,
+        &db,
+        "crates_io",
+        Some("crate-orbit-md"),
+        "crates.io: orbit-md v0.1.0",
+        "Fast static site generator with React-like Markdown components\nDownloads: 0",
+    );
+    assert!(
+        !grounded(&r),
+        "a Rust crate mentioning React must not ground the JS `react` dep"
+    );
+}
+
+/// Positive control: a release of the user's OWN dependency must ground and
+/// must be classified as a stack update — the registry-subject route must not
+/// throw the baby out with the bathwater.
+#[test]
+fn release_of_user_dep_is_grounded_stack_update() {
+    let db = bench_db();
+    let ctx = profile_ctx("rust_developer");
+    let r = score(
+        &ctx,
+        &db,
+        "crates_io",
+        Some("crate-tauri"),
+        "crates.io: tauri v2.9.0",
+        "Build smaller, faster, and more secure desktop applications with a web frontend.\nDownloads: 4200000",
+    );
+    assert!(
+        grounded(&r),
+        "a release of the user's own `tauri` dep MUST strongly-ground"
+    );
+    assert_eq!(
+        necessity_category(&r).as_deref(),
+        Some("ecosystem_shift"),
+        "own-dep release should be a stack update (reason: {:?})",
+        r.score_breakdown
+            .as_ref()
+            .and_then(|b| b.necessity_reason.clone())
+    );
+}
+
+/// Fallback path: ad-hoc scoring without a source_id keeps the corroborated
+/// text route, so a genuine own-dep release still grounds.
+#[test]
+fn release_of_user_dep_without_source_id_still_grounds() {
+    let db = bench_db();
+    let ctx = profile_ctx("rust_developer");
+    let r = score(
+        &ctx,
+        &db,
+        "crates_io",
+        None,
+        "crates.io: tauri v2.9.0",
+        "Build smaller, faster, and more secure desktop applications with a web frontend.",
+    );
+    assert!(
+        grounded(&r),
+        "own-dep release must still ground on the no-source_id fallback path"
+    );
+}
+
+/// Ecosystem congruence on the subject route itself: an npm package named
+/// `tauri` (a squatter of the Rust crate's name) must not ground the user's
+/// RUST `tauri` dependency.
+#[test]
+fn registry_subject_respects_ecosystem() {
+    let db = bench_db();
+    let ctx = profile_ctx("rust_developer"); // tauri is a RUST dep here
+    let r = score(
+        &ctx,
+        &db,
+        "npm_registry",
+        Some("tauri@0.1.0"),
+        "npm: tauri v0.1.0",
+        "Placeholder package.",
+    );
+    assert!(
+        !grounded(&r),
+        "npm squatter of a Rust dep's name must not ground cross-ecosystem"
+    );
+}
+
+/// Chips honesty: on a junk registry item, no matched dep may keep a
+/// `corroborated` flag — "named in the item text" evidence must not render.
+#[test]
+fn junk_registry_item_has_no_corroborated_deps() {
+    let db = bench_db();
+    let ctx = profile_ctx("rust_developer");
+    let r = score(
+        &ctx,
+        &db,
+        "crates_io",
+        Some("crate-capacitor-tauri"),
+        "crates.io: capacitor-tauri v0.0.0",
+        "Capacitor platform runtime for Tauri apps.\nDownloads: 0",
+    );
+    // The evidence chain's dependency factor only renders corroborated deps;
+    // signal trigger chips filter on the same flag. Verify via the factors:
+    // no "Names your dependency" display line may survive.
+    if let Some(b) = &r.score_breakdown {
+        for f in &b.explanation_factors {
+            assert!(
+                !f.display.to_lowercase().contains("names your dependency"),
+                "junk registry item must not carry name-evidence chips: {}",
+                f.display
+            );
+        }
+    }
+}

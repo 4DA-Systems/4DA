@@ -592,6 +592,13 @@ fn extract_signals(
             }
         }
 
+        // Registry release items: a dep-name mention in another package's
+        // description is not "named in the item text" evidence — only the
+        // SUBJECT package is what the item is about. Align the corroborated
+        // flags so evidence chips and the grounding candidate route agree
+        // with the registry-subject verdict below.
+        dependencies::align_registry_corroboration(input.source_type, input.source_id, &mut deps);
+
         (deps, score)
     };
 
@@ -1645,6 +1652,7 @@ fn classify_signals(
     input: &ScoringInput,
     ctx: &ScoringContext,
     matched_deps: &[dependencies::DepMatch],
+    grounding: dependencies::GroundingVerdict,
     db: &Database,
 ) -> (
     Option<String>,
@@ -1700,7 +1708,7 @@ fn classify_signals(
             // Prevents single-subterm matches (e.g. "react" from "sentry-react") from
             // triggering misleading Critical alerts.
             if !matched_deps.is_empty() {
-                let has_strong_dep = dependencies::is_strongly_grounded(matched_deps);
+                let has_strong_dep = grounding.strong;
                 if c.signal_type == signals::SignalType::SecurityAlert && has_strong_dep {
                     c.priority = signals::SignalPriority::Critical;
                     // Name the highest-confidence GROUNDED match — the action
@@ -1752,7 +1760,7 @@ fn classify_signals(
             // TRUST GATE: Critical requires verified dependency evidence.
             // If signal classifier set Critical but there's no strong direct dep match, downgrade.
             if c.priority == signals::SignalPriority::Critical {
-                let has_strong_direct_dep = dependencies::is_strongly_grounded_direct(matched_deps);
+                let has_strong_direct_dep = grounding.strong_direct;
                 if !has_strong_direct_dep {
                     c.priority = signals::SignalPriority::Alert;
                     if matched_deps.is_empty() {
@@ -1981,6 +1989,19 @@ pub(crate) fn score_item(
         raw.dep_match_score,
     );
 
+    // ── Canonical grounding verdict ───────────────────────────────────
+    // Computed ONCE and shared by every downstream consumer: the commodity
+    // bypass, the critical fast-path floors, the Critical trust gate, the
+    // necessity stack-update path, and the persisted breakdown (→ the
+    // evidence pool). Registry items are judged by their SUBJECT package
+    // (source_id), never by text mentions in another package's description.
+    let grounding = dependencies::compute_grounding_verdict(
+        input.source_type,
+        input.source_id,
+        &raw.matched_deps,
+        &ctx.ace_ctx,
+    );
+
     // ── Phase 8: Final adjustments ────────────────────────────────────
     let combined_score = apply_final_adjustments(
         gated_score,
@@ -1990,7 +2011,7 @@ pub(crate) fn score_item(
         community_signal,
         // Same grounding evidence the gate consumes — lets a dep-grounded
         // academic paper bypass its commodity ceiling.
-        dependencies::is_strongly_grounded(&raw.matched_deps),
+        grounding.strong,
     );
 
     // ── Score offset normalization ────────────────────────────────────
@@ -2041,7 +2062,7 @@ pub(crate) fn score_item(
     let is_breaking = content_type == crate::content_dna::ContentType::BreakingChange;
     let has_strong_dep_match = raw.dep_match_score
         >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD
-        && dependencies::is_strongly_grounded(&raw.matched_deps);
+        && grounding.strong;
     let critical_fast_path = (is_security || is_breaking) && has_strong_dep_match;
 
     // A CVE confirmed against the user's DIRECT (non-dev) dependency is the
@@ -2051,7 +2072,7 @@ pub(crate) fn score_item(
     // sitting at the bare 0.50 floor. The higher tier requires the direct dep
     // itself to be the strongly grounded edge (canonical predicate), not just
     // any direct dep riding alongside a grounded transitive match.
-    let has_direct_dep = dependencies::is_strongly_grounded_direct(&raw.matched_deps);
+    let has_direct_dep = grounding.strong_direct;
     let fast_path_floor = if has_direct_dep {
         scoring_config::CRITICAL_FASTPATH_DIRECT_DEP_FLOOR
     } else {
@@ -2144,6 +2165,7 @@ pub(crate) fn score_item(
         input,
         ctx,
         &raw.matched_deps,
+        grounding,
         db,
     );
 
@@ -2204,6 +2226,7 @@ pub(crate) fn score_item(
         age_hours,
         content_type: Some(content_type.slug().to_string()),
         contradiction_boost,
+        strongly_grounded: grounding.strong,
     };
     let mut necessity_result = necessity::compute_necessity(&necessity_inputs);
 
@@ -2292,6 +2315,7 @@ pub(crate) fn score_item(
             cvss_severity: cvss_severity.as_deref(),
             fixed_version: fixed_version.as_deref(),
             installed_version: installed_version.as_deref(),
+            via_registry_subject: grounding.via_registry_subject,
         });
     let explanation = if relevant || combined_score >= 0.3 {
         explanation_chain::render_subtitle(&explanation_factors)
@@ -2316,7 +2340,7 @@ pub(crate) fn score_item(
         confirmation_mult,
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names,
-        strongly_grounded: dependencies::is_strongly_grounded(&raw.matched_deps),
+        strongly_grounded: grounding.strong,
         domain_relevance: raw.domain_relevance,
         content_quality_mult,
         novelty_mult,
@@ -2603,6 +2627,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         }
     }
 
@@ -2721,6 +2746,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let result = score_item(&input, &ctx, &db, &options, None);
 
@@ -2821,6 +2847,7 @@ mod tests {
             source_tags: &tags,
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
 
@@ -2885,6 +2912,7 @@ mod tests {
             source_tags: &tags,
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
 
@@ -3002,6 +3030,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let cleaned = dep_match_content_for(&input);
         assert_eq!(cleaned, "desc text.");
@@ -3022,6 +3051,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let cleaned = dep_match_content_for(&input);
         assert_eq!(cleaned, "summary.");
@@ -3041,6 +3071,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         // Non-security source content is passed through verbatim
         let cleaned = dep_match_content_for(&input);

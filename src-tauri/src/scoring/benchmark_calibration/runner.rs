@@ -54,6 +54,7 @@ pub(super) fn run_benchmark_with_embeddings(
             source_tags: &tags,
             tags_json: tags_json_ref,
             feed_origin: None,
+            source_id: None,
         };
 
         let result = score_item(&input, &ctx, db, &opts, None);

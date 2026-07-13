@@ -32,6 +32,12 @@ pub(crate) struct ScoringInput<'a> {
     /// Per-feed provenance (RSS feed URL, YouTube channel ID, etc.).
     /// Used by curated feed registry to override tier and content type.
     pub feed_origin: Option<&'a str>,
+    /// The adapter's stable per-item identifier (`source_items.source_id`).
+    /// For registry sources this structurally names the SUBJECT package
+    /// (`crate-serde`, `react@19.2.5`) — the only trustworthy grounding
+    /// evidence for a registry release item. `None` only on paths that
+    /// don't originate from a stored source item (ad-hoc scoring, tests).
+    pub source_id: Option<&'a str>,
 }
 
 /// Options controlling which scoring stages are applied

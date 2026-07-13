@@ -29,6 +29,8 @@ mod pipeline_v2;
 #[allow(dead_code, unused_imports)]
 pub(crate) mod query_weighting;
 pub(crate) mod reexamination;
+#[cfg(test)]
+mod registry_grounding_tests;
 mod role_inference;
 mod semantic;
 #[cfg(test)]

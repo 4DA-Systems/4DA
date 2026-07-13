@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use super::ace_context::ACEContext;
-use super::utils::{has_word_boundary_match, topic_grounds};
+use super::utils::topic_grounds;
 
 /// Metadata for a tracked dependency from user's project manifests
 #[derive(Debug, Clone)]
@@ -110,6 +110,102 @@ pub(crate) fn is_strongly_grounded(deps: &[DepMatch]) -> bool {
 pub(crate) fn is_strongly_grounded_direct(deps: &[DepMatch]) -> bool {
     deps.iter()
         .any(|d| is_strong_grounding_match(d) && d.is_direct)
+}
+
+/// The canonical grounding verdict for one item, computed ONCE per score and
+/// shared by every consumer (ScoreBreakdown.strongly_grounded → the evidence
+/// pool, the Critical trust gate, the necessity stack-update path).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GroundingVerdict {
+    /// A trustworthy edge to the user's stack exists.
+    pub strong: bool,
+    /// That edge is a DIRECT dependency (Critical-alert trust floor).
+    pub strong_direct: bool,
+    /// True when the registry-subject route decided this verdict — the item
+    /// IS a release of the user's own dependency (vs a text-route match).
+    pub via_registry_subject: bool,
+}
+
+/// Manifest language a registry source's packages belong to, for congruence
+/// against `user_dependencies.ecosystem` ("rust" / "javascript" / "python" /
+/// "go" — set by the manifest scanners). Registries whose language never
+/// appears in scanned manifests return None and cannot subject-ground.
+fn registry_manifest_language(source_type: &str) -> Option<&'static str> {
+    match source_type {
+        "crates_io" | "crates" => Some("rust"),
+        "npm_registry" | "npm" => Some("javascript"),
+        "pypi" => Some("python"),
+        "go_modules" | "go" => Some("go"),
+        _ => None,
+    }
+}
+
+/// Does the manifest language of a registry item agree with a dependency's
+/// recorded ecosystem? TypeScript manifests are scanned as JavaScript-family,
+/// so both spellings accept npm subjects. Unknown/empty dep ecosystems do NOT
+/// ground — cross-ecosystem name collisions are precisely the failure class
+/// this exists to stop (a Rust crate mentioning "react" grounding a JS dep).
+fn ecosystem_congruent(registry_lang: &str, dep_ecosystem: &str) -> bool {
+    let dep = dep_ecosystem.to_lowercase();
+    match registry_lang {
+        "javascript" => dep == "javascript" || dep == "typescript",
+        other => dep == other,
+    }
+}
+
+/// Compute the canonical grounding verdict.
+///
+/// Registry release items (crates.io / npm / PyPI / …) have a structurally
+/// known SUBJECT package in `source_id`. For them, grounding is decided ONLY
+/// by "is the subject the user's own dependency (same ecosystem)?" — a text
+/// mention of a dep name in a third-party package's description can never
+/// strongly-ground (the 2026-07-13 junk-crate class: `capacitor-tauri v0.0.0`
+/// "for Tauri apps" grounding to the user's `tauri`). This mirrors the
+/// persistence layer's Tier-1 `exact_registry` proof
+/// (`dep_linker::classify_item_dep_match`), which already refused those links.
+///
+/// Non-registry items (and registry items scored without a `source_id`, which
+/// only happens on ad-hoc paths that never reach the feed) keep the
+/// corroborated text route.
+pub(crate) fn compute_grounding_verdict(
+    source_type: &str,
+    source_id: Option<&str>,
+    deps: &[DepMatch],
+    ace_ctx: &ACEContext,
+) -> GroundingVerdict {
+    if crate::dep_linker::is_registry_source(source_type) {
+        if let Some(sid) = source_id {
+            let subject = crate::dep_linker::extract_registry_package(source_type, sid)
+                .map(|s| normalize_package_name(&s));
+            let registry_lang = registry_manifest_language(source_type);
+            if let (Some(subject), Some(lang)) = (subject, registry_lang) {
+                if let Some(info) = ace_ctx.dependency_info.values().find(|info| {
+                    normalize_package_name(&info.package_name) == subject
+                        && ecosystem_congruent(lang, &info.ecosystem)
+                }) {
+                    return GroundingVerdict {
+                        strong: !info.is_dev,
+                        strong_direct: !info.is_dev && info.is_direct,
+                        via_registry_subject: true,
+                    };
+                }
+            }
+            // Registry item whose subject is NOT the user's dependency: never
+            // strongly grounded, regardless of what the description mentions.
+            return GroundingVerdict {
+                strong: false,
+                strong_direct: false,
+                via_registry_subject: false,
+            };
+        }
+        // Registry item with no source_id (ad-hoc path): fall through to the
+        // text route rather than silently un-grounding real releases.
+    }
+    GroundingVerdict {
+        strong: is_strongly_grounded(deps),
+        strong_direct: is_strongly_grounded_direct(deps),
+        via_registry_subject: false,
+    }
 }
 
 /// Common English words AND generic tech stems that collide with package names.
@@ -1017,6 +1113,100 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
     (names, details)
 }
 
+/// How a search term occurs in a piece of text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TermOccurrence {
+    /// At least one occurrence is a true standalone word — not glued into a
+    /// larger package-style compound.
+    Standalone,
+    /// The term occurs (with word boundaries) but EVERY occurrence is glued to
+    /// a hyphen/underscore/dot compound — i.e. it is a fragment of a DIFFERENT
+    /// package's name ("tauri" inside "capacitor-tauri" or "tauri-plugin-x").
+    CompoundOnly,
+    /// No word-boundary occurrence at all.
+    Absent,
+}
+
+/// Classify term occurrences with package-name-aware glue detection, symmetric
+/// on BOTH sides (the old check only looked for a hyphen AFTER the term, so
+/// suffix compounds like "capacitor-tauri" passed as full title hits).
+/// Dot handling mirrors `package_name_positions`: a `.js`/`.ts`/`.rs` suffix or
+/// a sentence period is a legitimate boundary ("next.js" is the next package;
+/// "…use tauri." is a word end); any other dotted continuation ("axios.get")
+/// counts as glue.
+fn classify_term_occurrence(text: &str, term: &str) -> TermOccurrence {
+    if term.is_empty() {
+        return TermOccurrence::Absent;
+    }
+    let mut any_boundary_hit = false;
+    for (pos, _) in text.match_indices(term) {
+        let before = text[..pos].chars().next_back();
+        let after_str = &text[pos + term.len()..];
+        let after = after_str.chars().next();
+        // Word boundary in the has_word_boundary_match sense.
+        if before.is_some_and(|c| c.is_alphanumeric()) || after.is_some_and(|c| c.is_alphanumeric())
+        {
+            continue;
+        }
+        any_boundary_hit = true;
+
+        let glue_before = match before {
+            Some('-') | Some('_') => true,
+            Some('.') => text[..pos.saturating_sub(1)]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric()),
+            _ => false,
+        };
+        let glue_after = match after {
+            Some('-') | Some('_') => true,
+            Some('.') => {
+                let legit_suffix = after_str.starts_with(".js")
+                    || after_str.starts_with(".ts")
+                    || after_str.starts_with(".rs");
+                let sentence_period = after_str[1..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| !c.is_alphanumeric());
+                !(legit_suffix || sentence_period)
+            }
+            _ => false,
+        };
+        if !glue_before && !glue_after {
+            return TermOccurrence::Standalone;
+        }
+    }
+    if any_boundary_hit {
+        TermOccurrence::CompoundOnly
+    } else {
+        TermOccurrence::Absent
+    }
+}
+
+/// Align text-derived `corroborated` flags with registry truth. On a registry
+/// release item the only package the item is ABOUT is its subject; a dep-name
+/// mention in the description ("Capacitor platform runtime for Tauri apps")
+/// must not mint "named in the item text" evidence chips. No-op for
+/// non-registry sources or when `source_id` is unavailable.
+pub(crate) fn align_registry_corroboration(
+    source_type: &str,
+    source_id: Option<&str>,
+    deps: &mut [DepMatch],
+) {
+    if !crate::dep_linker::is_registry_source(source_type) {
+        return;
+    }
+    let Some(sid) = source_id else { return };
+    let Some(subject) = crate::dep_linker::extract_registry_package(source_type, sid)
+        .map(|s| normalize_package_name(&s))
+    else {
+        return;
+    };
+    for d in deps.iter_mut() {
+        d.corroborated = d.package_name == subject;
+    }
+}
+
 /// Match content (title + body) against user's dependency graph.
 /// Returns matched packages and an aggregate score (0.0-1.0).
 pub(crate) fn match_dependencies(
@@ -1041,34 +1231,42 @@ pub(crate) fn match_dependencies(
             let is_ambiguous = is_ambiguous_dep_name(term);
 
             // Title match (highest value)
-            if has_word_boundary_match(&title_lower, term) {
-                // Check if this is a compound-prefix match (e.g. "i18next" inside "i18next-http-middleware")
-                let is_compound_prefix = title_lower.match_indices(term).any(|(pos, _)| {
-                    let after = pos + term.len();
-                    after < title_lower.len() && title_lower.as_bytes()[after] == b'-'
-                });
-                if is_compound_prefix {
-                    // Different package — minimal confidence
-                    confidence += 0.10;
-                } else if is_ambiguous {
-                    if has_language_context_nearby(&title_lower, 0, title_lower.len()) {
-                        confidence += 0.4;
-                    }
-                } else {
-                    confidence += 0.5;
-                }
-            }
-            // Content match
-            else if has_word_boundary_match(&text_lower, term) {
-                if is_ambiguous {
-                    // For ambiguous terms in content, need language context within 80 chars
-                    if let Some(pos) = text_lower.find(term) {
-                        if has_language_context_nearby(&text_lower, pos, 80) {
-                            confidence += 0.15;
+            match classify_term_occurrence(&title_lower, term) {
+                TermOccurrence::Standalone => {
+                    if is_ambiguous {
+                        if has_language_context_nearby(&title_lower, 0, title_lower.len()) {
+                            confidence += 0.4;
                         }
+                    } else {
+                        confidence += 0.5;
                     }
-                } else {
-                    confidence += 0.2;
+                }
+                // Every title occurrence is glued into a LARGER package name
+                // ("i18next" in "i18next-http-middleware", "tauri" in
+                // "capacitor-tauri") — a DIFFERENT package. Minimal credit.
+                // Pre-fix this only caught term-THEN-hyphen; the suffix side
+                // ("capacitor-tauri") rode a full-strength title hit (the
+                // 2026-07-13 junk-crate class).
+                TermOccurrence::CompoundOnly => confidence += 0.10,
+                TermOccurrence::Absent => {
+                    // Content match
+                    match classify_term_occurrence(&text_lower, term) {
+                        TermOccurrence::Standalone => {
+                            if is_ambiguous {
+                                // Ambiguous terms in content need language context within 80 chars
+                                if let Some(pos) = text_lower.find(term) {
+                                    if has_language_context_nearby(&text_lower, pos, 80) {
+                                        confidence += 0.15;
+                                    }
+                                }
+                            } else {
+                                confidence += 0.2;
+                            }
+                        }
+                        // Glued into another package's name in prose: near-noise.
+                        TermOccurrence::CompoundOnly => confidence += 0.05,
+                        TermOccurrence::Absent => {}
+                    }
                 }
             }
 
@@ -1821,12 +2019,17 @@ mod tests {
                 direct_dep_info(dep_name, Some("1.0.0"), ecosystem),
             );
             let (matches, _) = match_dependencies(title, "", &[], &ace_ctx);
-            let m = matches
+            let Some(m) = matches
                 .iter()
                 .find(|m| m.package_name == normalize_package_name(dep_name))
-                .unwrap_or_else(|| {
-                    panic!("fixture must reproduce the subterm phantom for {dep_name}: {title}")
-                });
+            else {
+                // Stronger outcome than "matched but not grounded": since the
+                // symmetric compound damper (2026-07-13), a hyphen-glued
+                // subterm occurrence ("updater" in "auto-updater") earns only
+                // compound-only credit and never even reaches the match noise
+                // floor. Phantom eliminated at the matcher level.
+                continue;
+            };
             assert!(
                 m.confidence >= STRONG_GROUNDING_CONFIDENCE,
                 "phantom mechanism requires a confident match, got {} for {dep_name}",

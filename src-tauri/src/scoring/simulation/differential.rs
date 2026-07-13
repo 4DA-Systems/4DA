@@ -535,6 +535,7 @@ fn source_type_does_not_affect_core_score_determinism() {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         score_item(&input, &ctx, &db, &opts, None)
     };
@@ -552,6 +553,7 @@ fn source_type_does_not_affect_core_score_determinism() {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         score_item(&input, &ctx, &db, &opts, None)
     };

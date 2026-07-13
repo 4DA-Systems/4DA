@@ -19,6 +19,7 @@ fn default_inputs() -> NecessityInputs {
         age_hours: 0.0,
         content_type: None,
         contradiction_boost: 0.0,
+        strongly_grounded: false,
     }
 }
 
@@ -31,6 +32,7 @@ fn test_stack_update_release_of_a_dependency_surfaces() {
         matched_deps: vec!["axum".to_string()],
         content_type: Some("release_notes".to_string()),
         age_hours: 24.0,
+        strongly_grounded: true,
         ..default_inputs()
     };
     let result = compute_necessity(&inputs);
@@ -41,6 +43,28 @@ fn test_stack_update_release_of_a_dependency_surfaces() {
         result.score
     );
     assert!(result.reason.contains("axum"));
+}
+
+#[test]
+fn test_weak_text_match_does_not_fire_stack_update() {
+    // The 2026-07-13 junk-crate class: a THIRD-PARTY release whose description
+    // merely mentions a dep name produces a nonzero dep_match_score but is NOT
+    // strongly grounded. It must not become "New release in your stack".
+    let inputs = NecessityInputs {
+        dep_match_score: 0.5,
+        matched_deps: vec!["tauri".to_string()],
+        content_type: Some("release_notes".to_string()),
+        age_hours: 4.0,
+        strongly_grounded: false,
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert_ne!(
+        result.category,
+        NecessityCategory::EcosystemShift,
+        "un-grounded release must not claim the user's stack: {:?}",
+        result.reason
+    );
 }
 
 #[test]

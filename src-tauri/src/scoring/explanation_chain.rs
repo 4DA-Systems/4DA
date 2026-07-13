@@ -70,6 +70,9 @@ pub(crate) struct ChainInputs<'a> {
     pub cvss_severity: Option<&'a str>,
     pub fixed_version: Option<&'a str>,
     pub installed_version: Option<&'a str>,
+    /// The grounding verdict came from the registry-subject route: the item is
+    /// a release OF the user's dependency (subject match), not a text mention.
+    pub via_registry_subject: bool,
 }
 
 /// Word-boundary-aware topic match (same rule the score path applies): the
@@ -219,10 +222,23 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
         for n in &names {
             used_topics.push(n.to_lowercase());
         }
+        // Registry-subject releases get the honest, stronger claim: the item
+        // IS a release of the user's dependency, not merely text naming it.
+        let (display, evidence_tail) = if inp.via_registry_subject {
+            (
+                format!("Release of your {noun} {}", names.join(", ")),
+                "the subject of this release",
+            )
+        } else {
+            (
+                format!("Names your {noun} {}", names.join(", ")),
+                "named in the item text",
+            )
+        };
         factors.push(WeightedFactor {
             kind: FactorKind::DependencyMatch,
-            display: format!("Names your {noun} {}", names.join(", ")),
-            evidence: format!("{evidence} \u{2014} named in the item text"),
+            display,
+            evidence: format!("{evidence} \u{2014} {evidence_tail}"),
             weight: inp.dep_match_score,
         });
     }
