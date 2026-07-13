@@ -280,7 +280,7 @@ All clients:
 
 ## Signal Terminal (Inbound Only)
 
-4DA runs a local HTTP server at `127.0.0.1:4444` (production) for its own UI. This is **inbound only** -- it does not make outbound connections.
+4DA runs a local HTTP server at `127.0.0.1:4446` (production) for its own UI. This is **inbound only** -- it does not make outbound connections.
 
 - **Binding:** localhost only (not accessible from other machines)
 - **Authentication:** `X-4DA-Token` header required for API routes

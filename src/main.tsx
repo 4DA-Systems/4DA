@@ -10,6 +10,25 @@ import App from './App';
 import type { InstantBriefingSnapshot } from './store/types';
 
 // ============================================================================
+// Service-worker guard — the 4DA app frontend must NEVER be controlled by a
+// service worker. The embedded Signal Terminal registers one on ITS OWN origin
+// for offline support. Historically the terminal (prod) and the Vite dev server
+// shared localhost:4444, so the terminal's SW could land on the app's origin,
+// hijack the shell, and serve its cached "Signal Terminal Offline" page instead
+// of the real UI whenever the dev server was momentarily unreachable. We now
+// keep the ports disjoint, but we also defensively unregister any SW controlling
+// this origin on every boot so a stale registration can never black-hole the app.
+// ============================================================================
+if ('serviceWorker' in navigator) {
+  void navigator.serviceWorker
+    .getRegistrations()
+    .then((regs) => regs.forEach((r) => void r.unregister()))
+    .catch(() => {
+      /* non-fatal — SW API unavailable or blocked */
+    });
+}
+
+// ============================================================================
 // Error handling: 4DA has NO third-party crash reporting and NO telemetry.
 // Production frontend errors are forwarded to the LOCAL rotating log via
 // `log_frontend_error` (see src/lib/error-reporter.ts) and never leave the
