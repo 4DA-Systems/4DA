@@ -3,7 +3,7 @@
 
 mod decay;
 mod queries;
-mod tracking;
+pub(crate) mod tracking;
 mod types;
 
 pub use types::*;

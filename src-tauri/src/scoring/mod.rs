@@ -29,6 +29,8 @@ mod pipeline_v2;
 #[allow(dead_code, unused_imports)]
 pub(crate) mod query_weighting;
 pub(crate) mod reexamination;
+#[cfg(test)]
+mod registry_grounding_tests;
 mod role_inference;
 mod semantic;
 #[cfg(test)]
@@ -200,7 +202,7 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // security-pattern exemption to CORE — now capped to the MATCH band (0.44) unless
 // strongly grounded in the user's dependency graph. The bump re-stamps the corpus
 // so the polluted CORE band re-scores clean.
-pub(crate) const PIPELINE_VERSION: i32 = 15;
+pub(crate) const PIPELINE_VERSION: i32 = 16;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;

@@ -380,6 +380,7 @@ fn diagnostic_dump_all_scenarios() {
             source_tags: &tags,
             tags_json: scenario.item.tags_json.as_deref(),
             feed_origin: None,
+            source_id: None,
         };
 
         let result = score_item(&input, &ctx, &db, &opts, None);

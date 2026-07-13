@@ -194,6 +194,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
                 source_tags: &[],
                 tags_json: None,
                 feed_origin: item.feed_origin.as_deref(),
+                source_id: Some(&item.source_id),
             },
             &scoring_ctx,
             db,

@@ -556,7 +556,9 @@ fn classify_item_dep_match(item: &UnlinkedItem, dep_name: &str) -> Option<(&'sta
 }
 
 /// Is this source_type a package registry?
-fn is_registry_source(source_type: &str) -> bool {
+/// `pub(crate)`: the live scoring pipeline shares this predicate so registry
+/// items are grounded by their SUBJECT package everywhere, not just here.
+pub(crate) fn is_registry_source(source_type: &str) -> bool {
     matches!(
         source_type,
         "npm_registry"
@@ -590,8 +592,11 @@ fn is_advisory_source(source_type: &str, content_type: Option<&str>) -> bool {
 /// Handles adapter-specific formats:
 /// - npm_registry: `react@19.2.5` → `react`, `@tanstack/react-query@5.0.0` → `@tanstack/react-query`
 /// - crates_io: `crate-serde` → `serde`
+/// - pypi: `requests-2.31.0` → `requests` (adapter emits `{name}-{version}`)
 /// - Others: source_id is the bare package name.
-fn extract_registry_package(source_type: &str, source_id: &str) -> Option<String> {
+///
+/// `pub(crate)`: shared with the live scoring pipeline (registry subject grounding).
+pub(crate) fn extract_registry_package(source_type: &str, source_id: &str) -> Option<String> {
     match source_type {
         "npm_registry" | "npm" => {
             // npm source_id format: `name@version` or `@scope/name@version`
@@ -620,8 +625,27 @@ fn extract_registry_package(source_type: &str, source_id: &str) -> Option<String
                     .to_string(),
             )
         }
-        "pypi" | "go_modules" | "go" | "maven" | "nuget" | "packagist" | "rubygems"
-        | "cocoapods" => Some(source_id.to_string()),
+        "pypi" => {
+            // pypi adapter emits `{name}-{version}` (sources/pypi.rs). Strip the
+            // trailing version segment — the LAST hyphen-delimited segment that
+            // starts with a digit ("requests-2.31.0" → "requests",
+            // "zope-interface-6.0" → "zope-interface"). A name with no
+            // version-looking tail passes through unchanged.
+            match source_id.rfind('-') {
+                Some(pos)
+                    if source_id[pos + 1..]
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_digit()) =>
+                {
+                    Some(source_id[..pos].to_string())
+                }
+                _ => Some(source_id.to_string()),
+            }
+        }
+        "go_modules" | "go" | "maven" | "nuget" | "packagist" | "rubygems" | "cocoapods" => {
+            Some(source_id.to_string())
+        }
         _ => None,
     }
 }

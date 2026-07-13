@@ -600,7 +600,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 88;
+        const TARGET_VERSION: i64 = 89;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3114,6 +3114,94 @@ impl Database {
                             )?;
                             info!(target: "4da::db", "Added state_signature column to briefing_item_history");
                         }
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 89 {
+                Self::run_versioned_migration(
+                    &conn,
+                    88,
+                    89,
+                    "Phase 89: strength-weighted topic affinities + poisoned-profile recompute",
+                    |c| {
+                        // topic_affinities/interactions are created by the ACE
+                        // bootstrap (ace/db.rs), which shares the production DB
+                        // file but is absent on a fresh main-DB (in-memory
+                        // tests, first run before ACE init). Fresh databases
+                        // get the full column set from the ACE CREATE; this
+                        // phase only repairs EXISTING profiles.
+                        let has_table = |name: &str| -> bool {
+                            c.query_row(
+                                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                                [name],
+                                |row| row.get::<_, i64>(0).map(|n| n > 0),
+                            )
+                            .unwrap_or(false)
+                        };
+                        if !has_table("topic_affinities") || !has_table("interactions") {
+                            info!(
+                                target: "4da::db",
+                                "Phase 89: ACE tables not present (fresh DB) — nothing to repair"
+                            );
+                            return Ok(());
+                        }
+
+                        // Columns for strength-weighted affinity evidence. The
+                        // old formula compared bare COUNTS, and its instant
+                        // negative arm fired for ANY negatives-only topic — so
+                        // 40 passive ignores (−0.1) poisoned a topic exactly
+                        // like 40 explicit rejections (−1.0). The 2026-07-13
+                        // live profile had the user's own stack (typescript,
+                        // tauri, rust, sqlite, tokio…) at hard-negative
+                        // affinity with ZERO positive signals.
+                        let has_column: bool = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM pragma_table_info('topic_affinities') WHERE name='weighted_positive'",
+                                [],
+                                |row| row.get::<_, i64>(0).map(|count| count > 0),
+                            )
+                            .unwrap_or(false);
+                        if !has_column {
+                            c.execute_batch(
+                                "ALTER TABLE topic_affinities ADD COLUMN weighted_positive REAL NOT NULL DEFAULT 0;
+                                 ALTER TABLE topic_affinities ADD COLUMN weighted_negative REAL NOT NULL DEFAULT 0;
+                                 ALTER TABLE topic_affinities ADD COLUMN explicit_negative_signals INTEGER NOT NULL DEFAULT 0;",
+                            )?;
+                        }
+
+                        // One-time deterministic profile repair: rebuild the
+                        // weighted evidence from the intact interaction log
+                        // (interactions.item_topics JSON + signal_strength),
+                        // then recompute every affinity under the corrected
+                        // formula. Topics with no logged interactions reset to
+                        // neutral evidence — stale poison does not survive.
+                        c.execute_batch(
+                            "WITH per_topic AS (
+                                 SELECT je.value AS topic,
+                                        SUM(CASE WHEN i.signal_strength > 0 THEN MIN(i.signal_strength, 1.5) ELSE 0 END) AS wpos,
+                                        SUM(CASE WHEN i.signal_strength < 0 THEN MIN(-i.signal_strength, 1.5) ELSE 0 END) AS wneg,
+                                        SUM(CASE WHEN i.signal_strength <= -0.8 THEN 1 ELSE 0 END) AS expneg
+                                 FROM interactions i, json_each(i.item_topics) je
+                                 WHERE i.item_topics IS NOT NULL AND json_valid(i.item_topics)
+                                 GROUP BY je.value
+                             )
+                             UPDATE topic_affinities SET
+                                 weighted_positive = COALESCE((SELECT wpos FROM per_topic WHERE per_topic.topic = topic_affinities.topic), 0),
+                                 weighted_negative = COALESCE((SELECT wneg FROM per_topic WHERE per_topic.topic = topic_affinities.topic), 0),
+                                 explicit_negative_signals = COALESCE((SELECT expneg FROM per_topic WHERE per_topic.topic = topic_affinities.topic), 0);",
+                        )?;
+                        // Recompute all rows under the corrected formula (the
+                        // exact SQL the live per-interaction path uses, minus
+                        // the per-topic WHERE).
+                        let recompute_all = crate::ace::behavior::tracking::RECOMPUTE_AFFINITY_SQL
+                            .replace(" WHERE topic = ?1", "");
+                        c.execute_batch(&recompute_all)?;
+                        info!(
+                            target: "4da::db",
+                            "Recomputed topic affinities under strength-weighted formula"
+                        );
                         Ok(())
                     },
                 )?;

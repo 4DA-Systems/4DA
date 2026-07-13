@@ -72,6 +72,23 @@ describe('computeEvidencePool', () => {
     expect(computeEvidencePool(r)).toBe('ambient');
   });
 
+  it('not_affected overrides even a strong dep match (patched historical advisory)', () => {
+    // The OSV-backfill case: a 2023 axios CVE, axios IS the user's direct dep
+    // (strongly_grounded true), but the installed version is confirmed past
+    // the fix. It is ABOUT the dep yet does not affect the build — it must
+    // never occupy the highest-trust pool.
+    const r = item({
+      applicability: 'not_affected',
+      score_breakdown: {
+        strongly_grounded: true,
+        matched_deps: ['axios'],
+        domain_relevance: 0.85,
+      } as never,
+    });
+    expect(isGrounded(r)).toBe(false);
+    expect(computeEvidencePool(r)).toBe('in_orbit');
+  });
+
   it('defaults a bare item (no breakdown) to Ambient', () => {
     expect(computeEvidencePool(item({}))).toBe('ambient');
     expect(groundingDeps(item({}))).toEqual([]);

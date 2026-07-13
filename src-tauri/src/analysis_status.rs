@@ -579,6 +579,7 @@ async fn analyze_cached_content_inner(
                     source_tags: &[],
                     tags_json: item.tags.as_deref(),
                     feed_origin: item.feed_origin.as_deref(),
+                    source_id: Some(&item.source_id),
                 },
                 &scoring_ctx,
                 db,

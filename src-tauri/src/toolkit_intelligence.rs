@@ -170,6 +170,9 @@ pub async fn toolkit_score_sandbox(
         source_tags: &[],
         tags_json: None,
         feed_origin: None,
+        // Sandbox scoring has no stored item; registry-subject grounding
+        // falls back to the text route by design.
+        source_id: None,
     };
 
     let options = crate::scoring::ScoringOptions {

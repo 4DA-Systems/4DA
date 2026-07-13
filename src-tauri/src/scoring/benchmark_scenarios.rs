@@ -474,6 +474,7 @@ pub(crate) fn run_benchmark(db: &crate::db::Database) -> BenchmarkReport {
             source_tags: &tags,
             tags_json: tags_json_ref,
             feed_origin: None,
+            source_id: None,
         };
 
         let result = score_item(&input, &ctx, db, &opts, None);
@@ -734,6 +735,7 @@ fn cold_start_scores_have_spread() {
             source_tags: &tags,
             tags_json: tags_json_ref,
             feed_origin: None,
+            source_id: None,
         };
 
         let result = score_item(&input, &ctx, &db, &opts, None);
@@ -796,6 +798,7 @@ fn direct_dep_cve_clears_the_direct_dep_floor() {
         source_tags: &tags,
         tags_json: None,
         feed_origin: None,
+        source_id: None,
     };
     let direct = score_item(&input, &ctx, &db, &opts, None).top_score;
 
@@ -813,6 +816,7 @@ fn direct_dep_cve_clears_the_direct_dep_floor() {
         source_tags: &tags,
         tags_json: None,
         feed_origin: None,
+        source_id: None,
     };
     let unrelated = score_item(&unrelated_input, &ctx, &db, &opts, None).top_score;
 

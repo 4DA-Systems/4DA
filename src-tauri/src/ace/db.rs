@@ -154,6 +154,9 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
             total_exposures INTEGER DEFAULT 0,
             affinity_score REAL DEFAULT 0.0,
             confidence REAL DEFAULT 0.0,
+            weighted_positive REAL NOT NULL DEFAULT 0,
+            weighted_negative REAL NOT NULL DEFAULT 0,
+            explicit_negative_signals INTEGER NOT NULL DEFAULT 0,
             last_interaction TEXT DEFAULT (datetime('now')),
             decay_applied INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now')),
@@ -292,6 +295,24 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
     // This replaces the boolean decay_applied flag with a timestamp
     conn.execute_batch("ALTER TABLE topic_affinities ADD COLUMN last_decay_at TEXT DEFAULT NULL;")
         .ok(); // ok() because column may already exist on subsequent runs
+
+    // Strength-weighted affinity evidence (2026-07-13 doom-loop fix): the
+    // instant negative arm keys on EXPLICIT rejections only, and the affinity
+    // formula weighs |signal_strength| instead of bare counts. Main-DB
+    // migration Phase 89 backfills + recomputes existing profiles; these
+    // idempotent ALTERs cover fresh ACE bootstraps and test databases.
+    conn.execute_batch(
+        "ALTER TABLE topic_affinities ADD COLUMN weighted_positive REAL NOT NULL DEFAULT 0;",
+    )
+    .ok();
+    conn.execute_batch(
+        "ALTER TABLE topic_affinities ADD COLUMN weighted_negative REAL NOT NULL DEFAULT 0;",
+    )
+    .ok();
+    conn.execute_batch(
+        "ALTER TABLE topic_affinities ADD COLUMN explicit_negative_signals INTEGER NOT NULL DEFAULT 0;",
+    )
+    .ok();
 
     // detected_tech needs the same re-baseline column so its half-life decay is
     // incremental, not compounding (the sibling topic decay already has it). Without
