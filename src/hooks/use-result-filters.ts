@@ -2,6 +2,7 @@
 import { useMemo, useCallback } from 'react';
 import { useAppStore } from '../store';
 import { isProfileEmpty } from '../utils/profile-empty';
+import type { SourceRelevance } from '../types';
 
 /** Run promise-returning tasks with bounded concurrency (prevents IPC queue saturation) */
 async function pLimit<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<PromiseSettledResult<T>[]> {
@@ -38,6 +39,52 @@ function normalizeUrl(url: string | null | undefined): string | null {
   } catch {
     return url;
   }
+}
+
+/** Cap on sibling titles carried by an advisory stack's representative. */
+const ADVISORY_STACK_TITLE_CAP = 8;
+
+/**
+ * Collapse same-package security advisories behind their highest-scoring
+ * representative. An OSV backfill can land dozens of advisories for one
+ * dependency in a single sync (34 axios advisories, 2026-07-09); as sibling
+ * cards they carry one card of information. Grouping key: the advisory's
+ * primary matched dependency. Items that aren't security alerts, or matched
+ * no dependency, pass through untouched. Exported for tests.
+ */
+export function stackAdvisories(items: SourceRelevance[]): SourceRelevance[] {
+  const groups = new Map<string, SourceRelevance[]>();
+  const passthrough: SourceRelevance[] = [];
+  for (const item of items) {
+    const dep = item.score_breakdown?.matched_deps?.[0];
+    if (item.signal_type === 'security_alert' && dep) {
+      const group = groups.get(dep);
+      if (group) group.push(item);
+      else groups.set(dep, [item]);
+    } else {
+      passthrough.push(item);
+    }
+  }
+  const out: SourceRelevance[] = [];
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      out.push(group[0]!);
+      continue;
+    }
+    // Representative = most urgent verdict first, then score: an "affected"
+    // sibling must front the stack even if a stale one scored higher.
+    const applicabilityRank = (r: SourceRelevance) =>
+      r.applicability === 'affected' ? 0
+      : r.applicability === 'likely_affected' ? 1
+      : r.applicability === 'not_affected' ? 3
+      : 2;
+    group.sort((a, b) => (applicabilityRank(a) - applicabilityRank(b)) || (b.top_score - a.top_score));
+    const rep = { ...group[0]! };
+    rep.advisory_stack_count = group.length - 1;
+    rep.advisory_stack_titles = group.slice(1, 1 + ADVISORY_STACK_TITLE_CAP).map(g => g.title);
+    out.push(rep);
+  }
+  return [...out, ...passthrough];
 }
 
 /**
@@ -114,7 +161,7 @@ export const useResultFilters = () => {
     }
 
     // Keep highest-scoring item per URL group, tag with seen_on
-    const deduped: typeof filtered = [];
+    const urlDeduped: typeof filtered = [];
     for (const group of urlGroups.values()) {
       // Sort by score desc, pick best
       group.sort((a, b) => b.top_score - a.top_score);
@@ -122,9 +169,13 @@ export const useResultFilters = () => {
       if (group.length > 1) {
         best.seen_on = [...new Set(group.map(g => g.source_type || 'hackernews'))];
       }
-      deduped.push(best);
+      urlDeduped.push(best);
     }
-    deduped.push(...noUrl);
+    urlDeduped.push(...noUrl);
+
+    // Step 2b: Advisory stacking — same-package advisories collapse behind
+    // one representative row (see stackAdvisories).
+    const deduped = stackAdvisories(urlDeduped);
 
     // Step 3: Sort
     const priorityOrder: Record<string, number> = {

@@ -189,6 +189,7 @@ impl Database {
             Option<String>,
             Option<String>,
             Option<String>,
+            Option<String>,
         )],
     ) -> SqliteResult<usize> {
         let conn = self.conn.lock();
@@ -205,14 +206,14 @@ impl Database {
                  cve_ids = COALESCE(?8, source_items.cve_ids), \
                  feed_origin = COALESCE(?9, source_items.feed_origin), \
                  tags = COALESCE(?10, source_items.tags), \
-                 last_seen = datetime('now') WHERE id = ?11",
+                 published_at = COALESCE(source_items.published_at, ?11), \n                 last_seen = datetime('now') WHERE id = ?12",
             )?;
             let mut update_vec_stmt =
                 tx.prepare_cached("UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2")?;
             let mut insert_stmt = tx.prepare_cached(
                 "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, \
-                 embedding, detected_lang, content_type, cve_ids, feed_origin, tags, last_seen)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, datetime('now'))",
+                 embedding, detected_lang, content_type, cve_ids, feed_origin, tags, published_at, last_seen)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, datetime('now'))",
             )?;
             let mut insert_vec_stmt =
                 tx.prepare_cached("INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)")?;
@@ -232,6 +233,7 @@ impl Database {
                 cve_ids,
                 feed_origin,
                 tags,
+                published_at,
             ) in items
             {
                 let content_hash = hash_content_parts(&[title, content]);
@@ -253,6 +255,7 @@ impl Database {
                         cve_ids,
                         feed_origin,
                         tags,
+                        published_at,
                         id
                     ])?;
                     update_vec_stmt.execute(params![embedding_blob, id])?;
@@ -270,7 +273,8 @@ impl Database {
                         content_type,
                         cve_ids,
                         feed_origin,
-                        tags
+                        tags,
+                        published_at
                     ])?;
                     let id = tx.last_insert_rowid();
                     insert_vec_stmt.execute(params![id, embedding_blob])?;
@@ -459,7 +463,7 @@ impl Database {
     ) -> SqliteResult<Option<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
              FROM source_items
              WHERE source_type = ?1 AND source_id = ?2
              AND (embedding_status IS NULL OR embedding_status = 'complete')"
@@ -483,6 +487,9 @@ impl Database {
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(11).ok().flatten(),
                 tags: row.get(12).ok().flatten(),
+                published_at: crate::db::parse_datetime_opt(
+                    row.get::<_, Option<String>>(13).ok().flatten(),
+                ),
             })
         })?;
 
@@ -570,7 +577,7 @@ impl Database {
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
              FROM source_items
              WHERE source_type = ?1
              ORDER BY last_seen DESC
@@ -595,6 +602,9 @@ impl Database {
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(11).ok().flatten(),
                 tags: row.get(12).ok().flatten(),
+                published_at: crate::db::parse_datetime_opt(
+                    row.get::<_, Option<String>>(13).ok().flatten(),
+                ),
             })
         })?;
 
@@ -653,19 +663,19 @@ impl Database {
                 SELECT id, source_type, source_id, url, title, content, content_hash,
                        embedding, created_at, last_seen,
                        COALESCE(detected_lang, 'en') AS detected_lang,
-                       feed_origin, tags,
+                       feed_origin, tags, published_at,
                        ROW_NUMBER() OVER (
                          PARTITION BY source_type
-                         ORDER BY last_seen DESC
+                         ORDER BY COALESCE(published_at, created_at) DESC
                        ) AS rn
                 FROM source_items
-                WHERE last_seen >= ?1
+                WHERE COALESCE(published_at, created_at) >= ?1
              )
              SELECT id, source_type, source_id, url, title, content, content_hash,
-                    embedding, created_at, last_seen, detected_lang, feed_origin, tags
+                    embedding, created_at, last_seen, detected_lang, feed_origin, tags, published_at
              FROM ranked
              WHERE rn <= ?2
-             ORDER BY last_seen DESC
+             ORDER BY COALESCE(published_at, created_at) DESC
              LIMIT ?3",
         )?;
 
@@ -689,6 +699,9 @@ impl Database {
                         .unwrap_or_else(|_| "en".to_string()),
                     feed_origin: row.get(11).ok().flatten(),
                     tags: row.get(12).ok().flatten(),
+                    published_at: crate::db::parse_datetime_opt(
+                        row.get::<_, Option<String>>(13).ok().flatten(),
+                    ),
                 })
             },
         )?;
@@ -707,7 +720,7 @@ impl Database {
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
         let cutoff_str = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
              FROM source_items
              WHERE last_seen >= ?1
              ORDER BY last_seen DESC
@@ -732,6 +745,9 @@ impl Database {
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(11).ok().flatten(),
                 tags: row.get(12).ok().flatten(),
+                published_at: crate::db::parse_datetime_opt(
+                    row.get::<_, Option<String>>(13).ok().flatten(),
+                ),
             })
         })?;
 
@@ -769,7 +785,7 @@ impl Database {
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
              FROM source_items
              WHERE last_seen > ?1
              ORDER BY last_seen DESC
@@ -794,6 +810,9 @@ impl Database {
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(11).ok().flatten(),
                 tags: row.get(12).ok().flatten(),
+                published_at: crate::db::parse_datetime_opt(
+                    row.get::<_, Option<String>>(13).ok().flatten(),
+                ),
             })
         })?;
 
@@ -1435,6 +1454,100 @@ mod tests {
             "Same source_type+source_id should return same row id"
         );
         assert_eq!(db.total_item_count().unwrap(), 1);
+    }
+
+    /// Batch-upsert tuple helper for published_at tests.
+    fn batch_tuple(
+        source_id: &str,
+        published_at: Option<&str>,
+        emb: &[f32],
+    ) -> (
+        String,
+        String,
+        Option<String>,
+        String,
+        String,
+        Vec<f32>,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) {
+        (
+            "rss".to_string(),
+            source_id.to_string(),
+            None,
+            format!("Item {source_id}"),
+            "content".to_string(),
+            emb.to_vec(),
+            "en".to_string(),
+            None,
+            None,
+            None,
+            None,
+            published_at.map(String::from),
+        )
+    }
+
+    #[test]
+    fn test_published_at_persists_and_reads_back() {
+        let db = test_db();
+        let emb = seed_embedding("rss:pub1");
+        db.batch_upsert_source_items(&[batch_tuple("pub1", Some("2023-05-01 10:00:00"), &emb)])
+            .unwrap();
+        let item = db.get_source_item("rss", "pub1").unwrap().unwrap();
+        let pub_at = item.published_at.expect("published_at should round-trip");
+        assert_eq!(
+            pub_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2023-05-01 10:00:00"
+        );
+    }
+
+    #[test]
+    fn test_published_at_never_regresses_on_reupsert() {
+        // A feed re-serving the same entry (the last_seen refresh mechanism)
+        // must not overwrite the original publication date — first non-null wins.
+        let db = test_db();
+        let emb = seed_embedding("rss:pub2");
+        db.batch_upsert_source_items(&[batch_tuple("pub2", Some("2023-05-01 10:00:00"), &emb)])
+            .unwrap();
+        db.batch_upsert_source_items(&[batch_tuple("pub2", Some("2026-07-14 00:00:00"), &emb)])
+            .unwrap();
+        let item = db.get_source_item("rss", "pub2").unwrap().unwrap();
+        assert_eq!(
+            item.published_at.unwrap().format("%Y-%m-%d").to_string(),
+            "2023-05-01",
+            "re-upsert must keep the original publication date"
+        );
+    }
+
+    #[test]
+    fn test_analysis_window_excludes_stale_published_items() {
+        // The "TypeScript 5.1 Beta" leak: an old article a feed keeps serving
+        // has fresh last_seen forever but a 2023 publication date — it must NOT
+        // enter the analysis window. An item with no published_at falls back to
+        // created_at (fresh insert => in-window).
+        let db = test_db();
+        let emb_old = seed_embedding("rss:stale");
+        let emb_new = seed_embedding("rss:fresh");
+        db.batch_upsert_source_items(&[
+            batch_tuple("stale", Some("2023-05-01 10:00:00"), &emb_old),
+            batch_tuple("fresh", None, &emb_new),
+        ])
+        .unwrap();
+
+        let items = db.get_items_balanced_by_source(48, 100, 100).unwrap();
+        let ids: Vec<&str> = items.iter().map(|i| i.source_id.as_str()).collect();
+        assert!(
+            ids.contains(&"fresh"),
+            "no-published-date item falls back to created_at (fresh) and stays in-window"
+        );
+        assert!(
+            !ids.contains(&"stale"),
+            "stale-published item must be excluded despite fresh last_seen"
+        );
     }
 
     #[test]

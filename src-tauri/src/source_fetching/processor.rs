@@ -43,6 +43,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
         String,
         String,
         Option<String>,
+        Option<String>,
     )> = Vec::new();
 
     let all_sources = crate::sources::build_all_sources();
@@ -164,6 +165,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                         .is_none()
                     {
                         let feed_origin = super::extract_feed_origin(&item);
+                        let published_at = super::extract_published_at(&item);
                         new_items_to_embed.push((
                             st.to_string(),
                             item.source_id,
@@ -171,6 +173,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                             item.title,
                             item.content,
                             feed_origin,
+                            published_at,
                         ));
                     } else {
                         db.touch_source_item(&st, &item.source_id).ok();
@@ -201,26 +204,40 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
         // Decode HTML entities at ingestion time
         let new_items_to_embed: Vec<_> = new_items_to_embed
             .into_iter()
-            .map(|(st, sid, url, title, content, feed_origin)| {
-                (
-                    st,
-                    sid,
-                    url,
-                    crate::decode_html_entities(&title),
-                    crate::decode_html_entities(&content),
-                    feed_origin,
-                )
-            })
+            .map(
+                |(st, sid, url, title, content, feed_origin, published_at)| {
+                    (
+                        st,
+                        sid,
+                        url,
+                        crate::decode_html_entities(&title),
+                        crate::decode_html_entities(&content),
+                        feed_origin,
+                        published_at,
+                    )
+                },
+            )
             .collect();
 
         // Detect language from title text (before embedding)
         let new_items_to_embed: Vec<_> = new_items_to_embed
             .into_iter()
-            .map(|(st, sid, url, title, content, feed_origin)| {
-                let detected_lang =
-                    crate::language_detect::detect_language_with_content(&title, &content);
-                (st, sid, url, title, content, detected_lang, feed_origin)
-            })
+            .map(
+                |(st, sid, url, title, content, feed_origin, published_at)| {
+                    let detected_lang =
+                        crate::language_detect::detect_language_with_content(&title, &content);
+                    (
+                        st,
+                        sid,
+                        url,
+                        title,
+                        content,
+                        detected_lang,
+                        feed_origin,
+                        published_at,
+                    )
+                },
+            )
             .collect();
 
         // Drop foreign-language items that won't be translated into the user's
@@ -238,7 +255,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
         let before_filter = new_items_to_embed.len();
         let new_items_to_embed: Vec<_> = new_items_to_embed
             .into_iter()
-            .filter(|(st, _, _, title, _, detected, _)| {
+            .filter(|(st, _, _, title, _, detected, _, _)| {
                 // Security advisories (OSV/CVE) are version-matched to a pinned dependency — they
                 // are relevant regardless of the advisory text's DETECTED language (the title
                 // carries an "[id] pkg:" prefix that skews short-title detection, so an English
@@ -269,8 +286,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
             let translation_requests: Vec<crate::content_translation::TranslationRequest> =
                 new_items_to_embed
                     .iter()
-                    .filter(|(_, _, _, _, _, detected, _)| detected != &user_lang)
-                    .map(|(_, sid, _, title, _, _, _)| {
+                    .filter(|(_, _, _, _, _, detected, _, _)| detected != &user_lang)
+                    .map(|(_, sid, _, title, _, _, _, _)| {
                         crate::content_translation::TranslationRequest {
                             id: sid.clone(),
                             text: title.clone(),
@@ -315,7 +332,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
 
         let texts: Vec<String> = new_items_to_embed
             .iter()
-            .map(|(st, _, _, title, content, _, _)| {
+            .map(|(st, _, _, title, content, _, _, _)| {
                 let compressed = crate::compression_rules::compress(st, content);
                 build_embedding_text(title, &compressed)
             })
@@ -337,6 +354,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                     Option<String>,
                     Option<String>,
                     Option<String>,
+                    Option<String>,
                 )> = new_items_to_embed
                     .into_iter()
                     .zip(embeddings)
@@ -345,7 +363,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                     // pinned dependency, NOT embedding similarity, so dropping one for a zero/
                     // failed embedding would silently lose a real exposure. A zero vector is inert
                     // in cosine similarity, and the ledger + engine matcher ground it by version.
-                    .filter(|((source_type, source_id, _, _, _, _, _), embedding)| {
+                    .filter(|((source_type, source_id, _, _, _, _, _, _), embedding)| {
                         if embedding.iter().all(|&v| v == 0.0) {
                             let security = source_type == "osv" || source_type == "cve";
                             if security {
@@ -365,6 +383,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                                 content,
                                 detected_lang,
                                 feed_origin,
+                                published_at,
                             ),
                             embedding,
                         )| {
@@ -387,6 +406,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                                 cve_ids,
                                 feed_origin,
                                 None,
+                                published_at,
                             )
                         },
                     )
@@ -453,6 +473,9 @@ pub(crate) fn process_source_items(
                     content: cached.content,
                     feed_origin: cached.feed_origin,
                     tags: None,
+                    published_at: cached
+                        .published_at
+                        .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string()),
                 },
                 cached.embedding,
             ));
@@ -466,6 +489,7 @@ pub(crate) fn process_source_items(
                 content: item.content.clone(),
                 feed_origin: super::extract_feed_origin(&item),
                 tags: None,
+                published_at: super::extract_published_at(&item),
             };
 
             let compressed = crate::compression_rules::compress(source_type, &item.content);

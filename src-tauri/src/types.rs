@@ -36,6 +36,11 @@ pub(crate) struct GenericSourceItem {
     pub content: String,
     pub feed_origin: Option<String>,
     pub tags: Option<String>,
+    /// Publication date from adapter metadata, SQLite canonical format
+    /// (`%Y-%m-%d %H:%M:%S`, UTC). None when the adapter carried no parseable
+    /// date — persistence then leaves the column NULL and readers fall back
+    /// to first-seen (`created_at`).
+    pub published_at: Option<String>,
 }
 
 /// Relevance match between an HN item and context

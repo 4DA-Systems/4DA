@@ -18,6 +18,7 @@ mod vector;
 pub(crate) use path::sanitize_path;
 pub(crate) use scraping::scrape_article_content;
 #[allow(unused_imports)] // Used by scraping submodule via super::text::MAX_CONTENT_LENGTH
+pub(crate) use text::is_boilerplate_chunk;
 pub(crate) use text::MAX_CONTENT_LENGTH;
 pub(crate) use text::{
     build_embedding_text, chunk_text, decode_html_entities, preprocess_content, strip_html_tags,

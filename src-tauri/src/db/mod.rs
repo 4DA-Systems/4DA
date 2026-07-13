@@ -74,6 +74,13 @@ pub struct StoredSourceItem {
     /// JSON-serialized structured tags from source metadata (SO tags, GitHub topics, etc.).
     /// Parsed at scoring time for source-fair topic extraction.
     pub tags: Option<String>,
+    /// Publication date from the source adapter (RSS pubDate, npm time, OSV
+    /// published, ...). None for items whose adapter carried no parseable date
+    /// or that predate the column — readers fall back to created_at
+    /// (first-seen). This is the honest freshness axis: last_seen refreshes on
+    /// every re-fetch, created_at is when 4DA first saw it, published_at is
+    /// when the content actually appeared.
+    pub published_at: Option<DateTime<Utc>>,
 }
 
 /// Similarity result from vector search
@@ -465,6 +472,18 @@ pub(crate) fn parse_datetime(s: String) -> chrono::DateTime<chrono::Utc> {
             tracing::warn!("Failed to parse datetime '{}', falling back to now", s);
             Utc::now()
         })
+}
+
+/// Parse an optional SQLite datetime column STRICTLY. Unlike
+/// `parse_datetime`, a NULL or unparseable value yields `None` — never a
+/// fabricated `now()`, which for `published_at` would fake freshness.
+pub(crate) fn parse_datetime_opt(s: Option<String>) -> Option<chrono::DateTime<chrono::Utc>> {
+    use chrono::{NaiveDateTime, TimeZone, Utc};
+    s.and_then(|s| {
+        NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S")
+            .map(|dt| Utc.from_utc_datetime(&dt))
+            .ok()
+    })
 }
 
 /// Hash content for deduplication
