@@ -600,7 +600,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 90;
+        const TARGET_VERSION: i64 = 91;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3238,6 +3238,40 @@ impl Database {
                             target: "4da::db",
                             "Re-ran affinity recompute with weighted-evidence instant arm"
                         );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 91 {
+                Self::run_versioned_migration(
+                    &conn,
+                    90,
+                    91,
+                    "Phase 91: published_at on source_items (freshness truth)",
+                    |c| {
+                        // Publication date from source adapters (RSS pubDate,
+                        // npm time, OSV published, ...). Adapters always parsed
+                        // these but they were dropped at the DB boundary, so a
+                        // 2023 article a feed keeps in its XML re-entered the
+                        // analysis window forever via last_seen refreshes.
+                        // NULL = unknown; every reader COALESCEs to created_at
+                        // (first-seen), so no backfill is needed or honest.
+                        let has_column: bool = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name='published_at'",
+                                [],
+                                |row| row.get::<_, i64>(0).map(|count| count > 0),
+                            )
+                            .unwrap_or(false);
+                        if !has_column {
+                            c.execute_batch(
+                                "ALTER TABLE source_items ADD COLUMN published_at TEXT DEFAULT NULL;
+                                 CREATE INDEX IF NOT EXISTS idx_source_items_effective_published
+                                     ON source_items(COALESCE(published_at, created_at));",
+                            )?;
+                            info!(target: "4da::db", "Added published_at to source_items");
+                        }
                         Ok(())
                     },
                 )?;

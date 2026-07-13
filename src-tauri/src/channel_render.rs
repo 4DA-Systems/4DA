@@ -657,6 +657,7 @@ mod tests {
                 detected_lang: "en".to_string(),
                 feed_origin: None,
                 tags: None,
+                published_at: None,
             },
             0.9,
         )];

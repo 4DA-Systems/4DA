@@ -1960,6 +1960,13 @@ pub(crate) fn score_item(
         db.find_similar_contexts(input.embedding, 3)
             .unwrap_or_default()
             .into_iter()
+            // Boilerplate chunks (shebangs, license headers) match everything
+            // and were surfacing as top "Similar to your code" evidence on
+            // unrelated items. The chunker no longer indexes them; this filter
+            // protects users whose existing DBs still contain them — filtering
+            // here also keeps them out of the context score itself, not just
+            // the displayed evidence.
+            .filter(|result| !crate::utils::is_boilerplate_chunk(&result.text))
             .map(|result| {
                 let similarity = 1.0 / (1.0 + result.distance);
                 let matched_text = if result.text.len() > 100 {
@@ -2852,9 +2859,16 @@ mod tests {
     fn v2_zero_embedding_yields_no_context_axis() {
         let db = crate::test_utils::test_db();
         // Store a real context chunk so KNN WOULD return rows if queried.
+        // Long enough to clear the boilerplate min-chunk floor — the match-time
+        // hygiene filter drops sub-50-char fragments (they no longer exist in
+        // post-2026-07-14 indexes).
         let stored = crate::test_utils::seed_embedding("context-chunk");
-        db.upsert_context("src/main.rs", "rust tauri ipc command handler", &stored)
-            .expect("store context chunk");
+        db.upsert_context(
+            "src/main.rs",
+            "rust tauri ipc command handler registering invoke handlers for the main window",
+            &stored,
+        )
+        .expect("store context chunk");
 
         let ctx = crate::scoring::ScoringContext::builder()
             .cached_context_count(1)

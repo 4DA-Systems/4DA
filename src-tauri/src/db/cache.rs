@@ -259,7 +259,7 @@ impl Database {
         let sql = format!(
             "SELECT id, source_type, source_id, url, title, content, content_hash,
                     embedding, created_at, last_seen, COALESCE(detected_lang, 'en'),
-                    feed_origin, tags
+                    feed_origin, tags, published_at
              FROM source_items
              WHERE scored_pipeline_version < ?1
                AND relevance_score IS NOT NULL{time_clause}
@@ -287,6 +287,9 @@ impl Database {
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(11).ok().flatten(),
                 tags: row.get(12).ok().flatten(),
+                published_at: crate::db::parse_datetime_opt(
+                    row.get::<_, Option<String>>(13).ok().flatten(),
+                ),
             })
         })?;
         rows.collect()
@@ -524,7 +527,7 @@ impl Database {
     pub fn get_source_item_by_id(&self, id: i64) -> SqliteResult<Option<StoredSourceItem>> {
         let conn = self.conn.lock();
         conn.query_row(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
              FROM source_items WHERE id = ?1",
             params![id],
             |row| {
@@ -543,7 +546,7 @@ impl Database {
                     detected_lang: row.get::<_, String>(10).unwrap_or_else(|_| "en".to_string()),
                     feed_origin: row.get(11).ok().flatten(),
                     tags: row.get(12).ok().flatten(),
-                })
+                published_at: crate::db::parse_datetime_opt(row.get::<_, Option<String>>(13).ok().flatten()),})
             },
         ).optional()
     }

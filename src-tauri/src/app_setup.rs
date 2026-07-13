@@ -1078,6 +1078,53 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     });
 
+    // One-time context-index hygiene rebuild: pre-2026-07-14 indexes contain
+    // boilerplate chunks (shebangs, license headers) whose embeddings match
+    // everything — the live source of phantom "Similar to your code" evidence.
+    // The chunker now filters them at index time and scoring filters them at
+    // match time; this rebuild purges them from EXISTING indexes so the vec
+    // table and chunk table stay consistent (index_context clears both in one
+    // transaction and re-chunks through the new filter). Version-flagged in
+    // kv_store so it runs exactly once.
+    tauri::async_runtime::spawn(async {
+        const HYGIENE_KEY: &str = "context_index_hygiene_version";
+        const HYGIENE_VERSION: &str = "2";
+        let already = crate::open_db_connection().ok().and_then(|conn| {
+            conn.query_row(
+                "SELECT value FROM kv_store WHERE key = ?1",
+                rusqlite::params![HYGIENE_KEY],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+        });
+        if already.as_deref() == Some(HYGIENE_VERSION) {
+            return;
+        }
+        let has_chunks = crate::get_database()
+            .ok()
+            .and_then(|db| db.context_count().ok())
+            .unwrap_or(0)
+            > 0;
+        if has_chunks {
+            match crate::context_commands::index_context().await {
+                Ok(msg) => {
+                    info!(target: "4da::startup", %msg, "Context index hygiene rebuild complete")
+                }
+                Err(e) => {
+                    // Leave the flag unset so the rebuild retries next launch.
+                    warn!(target: "4da::startup", error = %e, "Context index hygiene rebuild failed");
+                    return;
+                }
+            }
+        }
+        if let Ok(conn) = crate::open_db_connection() {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO kv_store (key, value, updated_at) VALUES (?1, ?2, datetime('now'))",
+                rusqlite::params![HYGIENE_KEY, HYGIENE_VERSION],
+            );
+        }
+    });
+
     // Background OSV advisory sync — keeps the local mirror fresh.
     // Only runs if deps exist and last sync > 6 hours ago (or never synced).
     tauri::async_runtime::spawn(async {

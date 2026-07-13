@@ -78,6 +78,8 @@ pub(crate) fn score_item(
         db.find_similar_contexts(input.embedding, 3)
             .unwrap_or_default()
             .into_iter()
+            // Mirror of V2's boilerplate-context guard (see pipeline_v2).
+            .filter(|result| !crate::utils::is_boilerplate_chunk(&result.text))
             .map(|result| {
                 let similarity = 1.0 / (1.0 + result.distance);
                 let matched_text = if result.text.len() > 100 {

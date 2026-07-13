@@ -84,7 +84,8 @@ pub(crate) async fn backfill_unscored_cycle(chunk_size: usize) -> Result<Backfil
                 content: &item.content,
                 source_type: &item.source_type,
                 embedding: &item.embedding,
-                created_at: Some(&item.created_at),
+                // Effective publication date: honest freshness (falls back to first-seen)
+                created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
                 detected_lang: &item.detected_lang,
                 source_tags: &[],
                 tags_json: item.tags.as_deref(),
@@ -198,7 +199,8 @@ pub(crate) async fn drain_stale_version_cycle(chunk_size: usize) -> Result<Backf
                 content: &item.content,
                 source_type: &item.source_type,
                 embedding: &item.embedding,
-                created_at: Some(&item.created_at),
+                // Effective publication date: honest freshness (falls back to first-seen)
+                created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
                 detected_lang: &item.detected_lang,
                 source_tags: &[],
                 tags_json: item.tags.as_deref(),

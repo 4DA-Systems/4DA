@@ -177,7 +177,8 @@ pub(crate) async fn score_items_full(
                 content: &item.content,
                 source_type: &item.source_type,
                 embedding: &item.embedding,
-                created_at: Some(&item.created_at),
+                // Effective publication date: honest freshness (falls back to first-seen)
+                created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
                 detected_lang: &item.detected_lang,
                 source_tags: &parsed_tags,
                 tags_json: item.tags.as_deref(),
@@ -471,7 +472,8 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
                 content: &item.content,
                 source_type: &item.source_type,
                 embedding: &item.embedding,
-                created_at: Some(&item.created_at),
+                // Effective publication date: honest freshness (falls back to first-seen)
+                created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
                 detected_lang: &item.detected_lang,
                 source_tags: &parsed_tags,
                 tags_json: item.tags.as_deref(),
