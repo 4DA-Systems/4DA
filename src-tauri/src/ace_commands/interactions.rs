@@ -62,6 +62,20 @@ pub async fn ace_record_interaction(
 ) -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
 
+    // Frontend call sites pass `actionData: JSON.stringify({...})` — a JSON
+    // STRING, which deserializes to Value::String, so every `.get(...)` below
+    // silently returned None. Live impact (2026-07-13 audit): all 819 scroll
+    // interactions persisted visible_seconds 0.0 → signal_strength 0 — the
+    // feed's dominant POSITIVE signal was discarded wholesale while passive
+    // ignores kept their full negative weight, driving stack-topic affinities
+    // hard negative. Accept both shapes.
+    let action_data = action_data.map(|v| match v {
+        serde_json::Value::String(s) => {
+            serde_json::from_str(&s).unwrap_or(serde_json::Value::String(s))
+        }
+        other => other,
+    });
+
     // Parse action type into BehaviorAction
     let action = match action_type.as_str() {
         "click" => {
