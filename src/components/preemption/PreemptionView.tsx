@@ -13,48 +13,58 @@ import { PreemptionTierSection } from './PreemptionTierSection';
 import { PreemptionFreeFloorNotice } from './PreemptionFreeFloorNotice';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 
-const DISMISS_STORAGE_KEY = 'preemption_dismissed';
-const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// "Not affected" is a REVIEWABLE bucket, not a black hole. Marking an advisory
+// "Not affected" parks it here (persistent, no auto-expiry) so the user can
+// always find what they dismissed and, if they were wrong, restore it — or, if
+// they are sure, delete it permanently. A permanently-deleted id is suppressed
+// even when the backend re-serves the same advisory on the next scan.
+const NOT_AFFECTED_KEY = 'preemption_not_affected';
+const DELETED_KEY = 'preemption_deleted';
 
-function loadPersistedDismissals(): Set<string> {
+interface NotAffectedEntry {
+  id: string;
+  ts: number;
+  title: string;
+  deps: string[];
+}
+
+function loadNotAffected(): NotAffectedEntry[] {
   try {
-    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+    const raw = localStorage.getItem(NOT_AFFECTED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as NotAffectedEntry[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function saveNotAffected(entries: NotAffectedEntry[]) {
+  try { localStorage.setItem(NOT_AFFECTED_KEY, JSON.stringify(entries)); }
+  catch { /* non-fatal */ }
+}
+
+function loadDeleted(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_KEY);
     if (!raw) return new Set();
-    const parsed = JSON.parse(raw) as Array<{ id: string; ts: number }>;
-    const now = Date.now();
-    const valid = parsed.filter(e => now - e.ts < DISMISS_TTL_MS);
-    if (valid.length !== parsed.length) {
-      localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(valid));
-    }
-    return new Set(valid.map(e => e.id));
+    const parsed = JSON.parse(raw) as string[];
+    return new Set(Array.isArray(parsed) ? parsed : []);
   } catch { return new Set(); }
 }
 
-function persistDismissal(id: string) {
-  try {
-    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
-    const parsed: Array<{ id: string; ts: number }> = raw ? JSON.parse(raw) : [];
-    parsed.push({ id, ts: Date.now() });
-    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(parsed));
-  } catch { /* non-fatal */ }
-}
-
-function removeDismissal(id: string) {
-  try {
-    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
-    if (!raw) return;
-    const parsed: Array<{ id: string; ts: number }> = JSON.parse(raw);
-    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(parsed.filter(e => e.id !== id)));
-  } catch { /* non-fatal */ }
+function saveDeleted(ids: Set<string>) {
+  try { localStorage.setItem(DELETED_KEY, JSON.stringify([...ids])); }
+  catch { /* non-fatal */ }
 }
 
 const PreemptionView = memo(function PreemptionView() {
   const { t } = useTranslation();
   const isColdStart = useColdStartGate();
   const surfacedRef = useRef(new Set<string>());
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(loadPersistedDismissals);
+  const [notAffected, setNotAffected] = useState<NotAffectedEntry[]>(loadNotAffected);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(loadDeleted);
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
   const [showOtherTargets, setShowOtherTargets] = useState(false);
+  const [showNotAffected, setShowNotAffected] = useState(false);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { feed, loading, error, paywalled } = useAppStore(
@@ -71,29 +81,70 @@ const PreemptionView = memo(function PreemptionView() {
     void loadPreemption();
   }, [loadPreemption]);
 
+  // Mark "Not affected": park the advisory in the reviewable bucket. Snapshot
+  // title + deps so the bucket still renders if the advisory later drops out of
+  // the feed (e.g. the dependency was upgraded out of the affected range).
   const handleDismiss = useCallback((id: string) => {
-    setDismissedIds(prev => new Set(prev).add(id));
-    persistDismissal(id);
+    const item = feed?.items.find(i => i.id === id);
+    setNotAffected(prev => {
+      if (prev.some(e => e.id === id)) return prev;
+      const next: NotAffectedEntry[] = [
+        { id, ts: Date.now(), title: item?.title ?? id, deps: item?.affected_deps ?? [] },
+        ...prev,
+      ];
+      saveNotAffected(next);
+      return next;
+    });
     setLastDismissed(id);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     undoTimerRef.current = setTimeout(() => setLastDismissed(null), 8000);
-  }, []);
+  }, [feed]);
 
   const handleUndo = useCallback(() => {
     if (!lastDismissed) return;
-    setDismissedIds(prev => {
-      const next = new Set(prev);
-      next.delete(lastDismissed);
+    setNotAffected(prev => {
+      const next = prev.filter(e => e.id !== lastDismissed);
+      saveNotAffected(next);
       return next;
     });
-    removeDismissal(lastDismissed);
     setLastDismissed(null);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
   }, [lastDismissed]);
 
+  // Bucket actions: bring an advisory back to the live feed, or suppress it for
+  // good (survives re-scans via the deleted-id set).
+  const handleRestore = useCallback((id: string) => {
+    setNotAffected(prev => {
+      const next = prev.filter(e => e.id !== id);
+      saveNotAffected(next);
+      return next;
+    });
+  }, []);
+
+  const handleDeleteForever = useCallback((id: string) => {
+    setNotAffected(prev => {
+      const next = prev.filter(e => e.id !== id);
+      saveNotAffected(next);
+      return next;
+    });
+    setDeletedIds(prev => {
+      const next = new Set(prev).add(id);
+      saveDeleted(next);
+      return next;
+    });
+  }, []);
+
+  // Items in the "Not affected" bucket or permanently deleted are pulled out of
+  // the live tiers (but the bucket ones remain reachable in the review section).
+  const hiddenIds = useMemo(() => {
+    const s = new Set(deletedIds);
+    for (const e of notAffected) s.add(e.id);
+    return s;
+  }, [notAffected, deletedIds]);
+
   const { verifiedItems, assessedItems, developingItems, otherTargetItems, criticalCount, highCount } = useMemo(() => {
     const visible = (feed?.items ?? [])
-      .filter(item => !dismissedIds.has(item.id))
+      .filter(item => !hiddenIds.has(item.id))
       .slice()
       .sort(
         (a, b) => URGENCY_ORDER.indexOf(a.urgency) - URGENCY_ORDER.indexOf(b.urgency),
@@ -134,7 +185,7 @@ const PreemptionView = memo(function PreemptionView() {
       criticalCount: critical,
       highCount: high,
     };
-  }, [feed, dismissedIds]);
+  }, [feed, hiddenIds]);
 
   const totalVisible =
     verifiedItems.length + assessedItems.length + developingItems.length + otherTargetItems.length;
@@ -221,7 +272,7 @@ const PreemptionView = memo(function PreemptionView() {
 
           {lastDismissed !== null && (
             <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 animate-in fade-in">
-              <span className="text-xs text-amber-400">{t('preemption.dismissed')}</span>
+              <span className="text-xs text-amber-400">{t('preemption.notAffected.moved', 'Moved to "Not affected"')}</span>
               <button
                 type="button"
                 onClick={handleUndo}
@@ -300,6 +351,77 @@ const PreemptionView = memo(function PreemptionView() {
             </section>
           )}
         </>
+      )}
+
+      {/* "Not affected" review bucket — everything the user marked not affected,
+          kept reachable (never a black hole). Restore if they were wrong, or
+          delete permanently if they are sure. Rendered outside the active-feed
+          block so it stays available even when the live feed is empty. */}
+      {notAffected.length > 0 && (
+        <section
+          className="rounded-lg border border-border bg-bg-secondary overflow-hidden"
+          aria-label={t('preemption.notAffected.title', 'Not affected')}
+        >
+          <button
+            type="button"
+            onClick={() => setShowNotAffected(v => !v)}
+            aria-expanded={showNotAffected}
+            className="w-full px-4 py-3 flex items-center gap-2 hover:bg-bg-tertiary/30 transition-colors"
+          >
+            <div className="w-2 h-2 rounded-full shrink-0 bg-[#8A8A8A]" />
+            <h3 className="text-sm font-medium text-text-secondary flex-1 text-left">
+              {t('preemption.notAffected.title', 'Not affected')} ({notAffected.length})
+            </h3>
+            <span className="text-[10px] text-text-muted">
+              {showNotAffected
+                ? t('preemption.notAffected.hide', 'hide')
+                : t('preemption.notAffected.show', 'review')}
+            </span>
+          </button>
+          {showNotAffected && (
+            <div className="border-t border-border">
+              <p className="px-4 py-2 text-[11px] text-text-muted">
+                {t(
+                  'preemption.notAffected.hint',
+                  'Advisories you marked not affected. Restore one if you were wrong, or delete it permanently if you are sure.',
+                )}
+              </p>
+              <ul className="divide-y divide-border">
+                {notAffected.map(entry => (
+                  <li key={entry.id} className="px-4 py-3 flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-text-secondary truncate" title={entry.title}>
+                        {entry.title}
+                      </p>
+                      {entry.deps.length > 0 && (
+                        <p className="mt-0.5 text-[10px] font-mono text-text-muted truncate">
+                          {entry.deps.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleRestore(entry.id)}
+                        className="px-2 py-1 text-[10px] rounded border border-border text-text-secondary hover:text-text-primary hover:border-text-primary/20 transition-colors"
+                      >
+                        {t('preemption.notAffected.restore', 'Restore')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteForever(entry.id)}
+                        title={t('preemption.notAffected.deleteHint', 'Delete permanently — will not resurface on future scans')}
+                        className="px-2 py-1 text-[10px] rounded border border-red-500/25 text-red-400/80 hover:text-red-400 hover:border-red-500/50 transition-colors"
+                      >
+                        {t('preemption.notAffected.delete', 'Delete')}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
       )}
 
       {feed && isFreeFloor && !isColdStart && <PreemptionFreeFloorNotice />}
