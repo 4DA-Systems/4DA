@@ -31,8 +31,8 @@ code{background:#1A1A1A;padding:2px 6px;border-radius:3px;font-size:12px;color:#
 
 <h2>Score This — Bookmarklet</h2>
 <p>Drag this button to your bookmarks bar. Click it on any page to score it against your 4DA profile.</p>
-<a class="bm-link" href="javascript:void(window.open('http://localhost:4445/score-popup?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'4da','width=420,height=500'))">Score This</a>
-<p class="note">Default port is <code>4445</code> (dev) or <code>4444</code> (production). Edit the bookmarklet URL if your port differs.</p>
+<a class="bm-link" href="javascript:void(window.open('http://localhost:4447/score-popup?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'4da','width=420,height=500'))">Score This</a>
+<p class="note">Default port is <code>4447</code> (dev) or <code>4446</code> (production). Edit the bookmarklet URL if your port differs.</p>
 
 <h2>LAN Access</h2>
 <div class="token-box" id="token-display">Token: loading...</div>
