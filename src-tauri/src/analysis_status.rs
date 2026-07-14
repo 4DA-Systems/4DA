@@ -44,7 +44,12 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
         guard.running = true;
         guard.completed = false;
         guard.error = None;
-        guard.results = None;
+        // Deliberately KEEP guard.results — the previous run's feed stays
+        // visible while this run works. Blanking it here meant that during a
+        // pipeline-version drain (every run slow, scheduled runs churning)
+        // the state spent most of its time EMPTY: each new run wiped the
+        // last completion's results before producing its own (2026-07-14
+        // live incident). Results are replaced atomically on completion.
         guard.started_at = Some(chrono::Utc::now().timestamp());
     }
 
@@ -67,6 +72,11 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 let near_misses = crate::types::extract_near_misses(&results);
                 guard.results = Some(results.clone());
                 guard.near_misses = near_misses;
+                // A completion supersedes any stale watchdog verdict: if
+                // get_analysis_status auto-reset this run as "timed out"
+                // while it was still (slowly) progressing, the error must
+                // not survive next to real results.
+                guard.error = None;
                 guard.last_completed_at =
                     Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
                 guard.completed = true; // Mark completed LAST — after all data is stored
