@@ -92,6 +92,23 @@ pub struct SimilarityResult {
     pub distance: f32,
 }
 
+/// Outcome of [`Database::reconcile_context_provenance`] — how many chunks were
+/// scanned, re-tagged, and pruned when healing the context corpus.
+#[derive(Debug, Default, Clone)]
+pub struct ContextReconcileStats {
+    pub scanned: usize,
+    pub reclassified: usize,
+    pub pruned_reject: usize,
+    pub pruned_over_cap: usize,
+}
+
+impl ContextReconcileStats {
+    /// Total chunks removed from the corpus (reject + over-cap).
+    pub fn total_pruned(&self) -> usize {
+        self.pruned_reject + self.pruned_over_cap
+    }
+}
+
 /// Aggregate scoring statistics (rejection rate measurement)
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ScoringStatsAggregate {
@@ -342,7 +359,14 @@ impl Database {
         self.upsert_context_weighted(source_file, text, embedding, 1.0)
     }
 
-    /// Upsert context with weight for section-aware indexing
+    /// Upsert context with weight for section-aware indexing.
+    ///
+    /// This is the single chokepoint every context writer funnels through, so
+    /// the content-admission policy ([`crate::context_admission`]) is enforced
+    /// HERE: reject non-context provenance, tag `source_type`, apply the
+    /// class weight multiplier, and cap how much any one doc source may
+    /// contribute. No indexer — present or future — can bypass it. Returns `0`
+    /// (never a valid rowid) when the chunk is not admitted.
     pub fn upsert_context_weighted(
         &self,
         source_file: &str,
@@ -350,6 +374,16 @@ impl Database {
         embedding: &[f32],
         weight: f32,
     ) -> SqliteResult<i64> {
+        use crate::context_admission::{classify_source, ContextClass, MAX_DOC_CHUNKS_PER_SOURCE};
+
+        let class = classify_source(source_file);
+        if !class.is_admitted() {
+            crate::context_admission::log_admission_skip(source_file, "rejected-provenance");
+            return Ok(0);
+        }
+        let source_type = class.source_type();
+        let effective_weight = weight * class.weight_multiplier();
+
         let conn = self.conn.lock();
         let content_hash = hash_content(text);
         let embedding_blob = embedding_to_blob(embedding);
@@ -362,11 +396,30 @@ impl Database {
             )
             .ok();
 
+        // Per-source proportionality cap (content-agnostic): a single doc file
+        // may contribute at most MAX_DOC_CHUNKS_PER_SOURCE chunks. Only checked
+        // for NEW doc chunks — an update re-weights an existing row. Code/config
+        // are exempt (many files legitimately share a basename; aggregate
+        // dominance is caught by the corpus-health check instead).
+        if existing_id.is_none() && class == ContextClass::Doc {
+            let existing_for_source: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM context_chunks WHERE source_file = ?1 AND source_type = 'doc'",
+                    params![source_file],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            if existing_for_source as usize >= MAX_DOC_CHUNKS_PER_SOURCE {
+                crate::context_admission::log_admission_skip(source_file, "doc-source-cap");
+                return Ok(0);
+            }
+        }
+
         let tx = conn.unchecked_transaction()?;
         if let Some(id) = existing_id {
             tx.execute(
-                "UPDATE context_chunks SET source_file = ?1, weight = ?2, updated_at = datetime('now') WHERE id = ?3",
-                params![source_file, weight, id],
+                "UPDATE context_chunks SET source_file = ?1, weight = ?2, source_type = ?3, updated_at = datetime('now') WHERE id = ?4",
+                params![source_file, effective_weight, source_type, id],
             )?;
             tx.execute(
                 "UPDATE context_vec SET embedding = ?1 WHERE rowid = ?2",
@@ -376,9 +429,9 @@ impl Database {
             Ok(id)
         } else {
             tx.execute(
-                "INSERT INTO context_chunks (source_file, content_hash, text, embedding, weight, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
-                params![source_file, content_hash, text, embedding_blob, weight],
+                "INSERT INTO context_chunks (source_file, content_hash, text, embedding, weight, source_type, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))",
+                params![source_file, content_hash, text, embedding_blob, effective_weight, source_type],
             )?;
             let id = tx.last_insert_rowid();
             tx.execute(
@@ -429,7 +482,122 @@ impl Database {
         conn.query_row("SELECT COUNT(*) FROM context_chunks", [], |row| row.get(0))
     }
 
-    /// KNN search for similar contexts using sqlite-vec (O(log n) instead of O(n))
+    /// Snapshot the grounding-corpus composition and assess its health (the
+    /// immune system). Cheap `GROUP BY`; call at startup and after indexing to
+    /// catch a pollution recurrence the moment it forms.
+    pub fn context_health(&self) -> SqliteResult<crate::context_admission::CorpusHealth> {
+        let conn = self.read_conn();
+        let mut stmt = conn.prepare(
+            "SELECT source_file, COALESCE(source_type, 'text') AS st, COUNT(*) AS c
+             FROM context_chunks GROUP BY source_file, st",
+        )?;
+        let tallies = stmt
+            .query_map([], |row| {
+                Ok(crate::context_admission::SourceTally {
+                    source_file: row.get(0)?,
+                    source_type: row.get(1)?,
+                    count: row.get::<_, i64>(2)? as usize,
+                })
+            })?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        Ok(crate::context_admission::assess_corpus(&tallies))
+    }
+
+    /// Reclassify every context chunk's provenance from its source path and
+    /// prune what the admission policy would not admit today: `reject`-classed
+    /// rows and doc chunks beyond the per-file cap (keeping the earliest-indexed
+    /// ones). Removes from both `context_chunks` and the `context_vec` shadow.
+    ///
+    /// This is the healing routine shared by the one-time migration (installed
+    /// base) and the startup immune system (ongoing auto-quarantine). Idempotent:
+    /// a second run reclassifies nothing and prunes nothing.
+    pub fn reconcile_context_provenance(&self) -> SqliteResult<ContextReconcileStats> {
+        use crate::context_admission::{classify_source, ContextClass, MAX_DOC_CHUNKS_PER_SOURCE};
+        use std::collections::HashMap;
+
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, source_file, COALESCE(source_type, '') FROM context_chunks ORDER BY id",
+        )?;
+        struct Row {
+            id: i64,
+            source_file: String,
+            source_type: String,
+        }
+        let rows: Vec<Row> = stmt
+            .query_map([], |r| {
+                Ok(Row {
+                    id: r.get(0)?,
+                    source_file: r.get(1)?,
+                    source_type: r.get(2)?,
+                })
+            })?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        drop(stmt);
+
+        let mut stats = ContextReconcileStats {
+            scanned: rows.len(),
+            ..Default::default()
+        };
+        let mut reclass: Vec<(i64, &'static str)> = Vec::new();
+        let mut delete_ids: Vec<i64> = Vec::new();
+        let mut doc_counts: HashMap<String, usize> = HashMap::new();
+
+        for row in &rows {
+            let class = classify_source(&row.source_file);
+            if class == ContextClass::Reject {
+                delete_ids.push(row.id);
+                stats.pruned_reject += 1;
+                continue;
+            }
+            if class == ContextClass::Doc {
+                let n = doc_counts.entry(row.source_file.clone()).or_insert(0);
+                *n += 1;
+                if *n > MAX_DOC_CHUNKS_PER_SOURCE {
+                    delete_ids.push(row.id);
+                    stats.pruned_over_cap += 1;
+                    continue;
+                }
+            }
+            let st = class.source_type();
+            if row.source_type != st {
+                reclass.push((row.id, st));
+            }
+        }
+
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut up = tx.prepare("UPDATE context_chunks SET source_type = ?1 WHERE id = ?2")?;
+            for (id, st) in &reclass {
+                up.execute(params![st, id])?;
+            }
+        }
+        stats.reclassified = reclass.len();
+        {
+            let mut del_c = tx.prepare("DELETE FROM context_chunks WHERE id = ?1")?;
+            let mut del_v = tx.prepare("DELETE FROM context_vec WHERE rowid = ?1")?;
+            for id in &delete_ids {
+                del_v.execute(params![id])?;
+                del_c.execute(params![id])?;
+            }
+        }
+        tx.commit()?;
+        Ok(stats)
+    }
+
+    /// KNN search for similar contexts using sqlite-vec (O(log n) instead of O(n)).
+    ///
+    /// Grounding is CODE-ONLY: results are restricted to grounding-eligible
+    /// provenance (`code`/`config` — see [`crate::context_admission`]). Prose /
+    /// doc embeddings are semantic wildcards that once surfaced a Spanish
+    /// business course as "Similar to your code" on a Docker tool; they must
+    /// never ground the feed nor move the context score. Both scoring pipelines
+    /// read from here, so this one filter fixes evidence AND score at once.
+    ///
+    /// The filter is applied by OVER-FETCHING from the KNN index and then
+    /// keeping only grounding-eligible rows — not as a `WHERE` on the vec
+    /// `MATCH`, because sqlite-vec selects `k` rows FIRST and applies join
+    /// predicates after, which would silently under-fill the result.
     pub fn find_similar_contexts(
         &self,
         query_embedding: &[f32],
@@ -437,25 +605,41 @@ impl Database {
     ) -> SqliteResult<Vec<SimilarityResult>> {
         let conn = self.read_conn();
         let embedding_blob = embedding_to_blob(query_embedding);
+        let overfetch = limit.saturating_mul(6).max(24) as i64;
 
         let mut stmt = conn.prepare(
-            "SELECT v.rowid, v.distance, c.source_file, c.text
+            "SELECT v.rowid, v.distance, c.source_file, c.text, c.source_type
              FROM context_vec v
              JOIN context_chunks c ON c.id = v.rowid
              WHERE v.embedding MATCH ?1 AND k = ?2
              ORDER BY v.distance",
         )?;
 
-        let rows = stmt.query_map(params![embedding_blob, limit as i64], |row| {
-            Ok(SimilarityResult {
-                context_id: row.get(0)?,
-                distance: row.get(1)?,
-                source_file: row.get(2)?,
-                text: row.get(3)?,
-            })
+        let rows = stmt.query_map(params![embedding_blob, overfetch], |row| {
+            Ok((
+                SimilarityResult {
+                    context_id: row.get(0)?,
+                    distance: row.get(1)?,
+                    source_file: row.get(2)?,
+                    text: row.get(3)?,
+                },
+                row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+            ))
         })?;
 
-        rows.collect()
+        let mut out = Vec::with_capacity(limit);
+        for row in rows {
+            let (res, source_type) = row?;
+            let grounds = crate::context_admission::ContextClass::from_source_type(&source_type)
+                .is_some_and(crate::context_admission::ContextClass::grounding_eligible);
+            if grounds {
+                out.push(res);
+                if out.len() >= limit {
+                    break;
+                }
+            }
+        }
+        Ok(out)
     }
 }
 
