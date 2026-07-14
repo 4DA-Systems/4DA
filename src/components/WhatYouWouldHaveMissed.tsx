@@ -31,35 +31,34 @@ import { SignalUpgradeCTA } from './SignalUpgradeCTA';
  */
 const KIND_PRIORITY_ORDER: SignalKind[] = ['security', 'breaking', 'tool'];
 
+/** Does this item name a CONCRETE dependency the user actually has? */
+function hasConcreteStackLink(r: SourceRelevance): boolean {
+  // Gate on matched_deps (the real package names the card displays), NOT
+  // dep_match_score. A live audit found 33 relevant items with
+  // dep_match_score > 0.2 but EMPTY matched_deps — phantom matches where the
+  // number claims "in your stack" with no package behind it (a Portabase Docker
+  // discussion scored 0.595 with matched_deps: [], and kept winning the hero).
+  return (r.score_breakdown?.matched_deps?.length ?? 0) > 0;
+}
+
 export function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | null {
-  // For security items, require dependency confirmation — an irrelevant CVE as hero card destroys trust
+  // A "critical save" is the ONE thing you would have missed — so it must be
+  // genuinely tied to the user's stack: a CONCRETE dependency they actually use.
+  // Security first. A tool/advisory with no named stack package is a
+  // nice-to-know that belongs in Key Signals, never the hero.
+  //
+  // Deliberately NO fabrication fallback. The prior logic surfaced the top
+  // tool_discovery with no dep requirement, then ultimately the highest-scoring
+  // item of any kind — which presented a Docker tool with "no confirmed link to
+  // your stack" as the daily "critical save". If nothing is stack-grounded we
+  // return null and the hero renders an honest "you're clear" state instead of
+  // inventing a save. That honesty is the point: the card that sometimes says
+  // "you're good" is the one users believe the day it says "you're not".
   for (const kind of KIND_PRIORITY_ORDER) {
-    const isSecurityType = kind === 'security' || kind === 'breaking';
-    const match = results.find(
-      r => classifySignal(r) === kind
-        && (!isSecurityType || (r.score_breakdown?.dep_match_score ?? 0) > 0.2)
-    );
+    const match = results.find(r => classifySignal(r) === kind && hasConcreteStackLink(r));
     if (match) return match;
   }
-
-  // Fallback: security items without dep match (still better than nothing)
-  for (const kind of KIND_PRIORITY_ORDER) {
-    const match = results.find(r => classifySignal(r) === kind);
-    if (match) return match;
-  }
-
-  // Fallback: highest dependency match score
-  const withDeps = results.filter(r => (r.score_breakdown?.dep_match_score ?? 0) > 0.2);
-  if (withDeps.length > 0) {
-    return withDeps.sort((a, b) =>
-      (b.score_breakdown?.dep_match_score ?? 0) - (a.score_breakdown?.dep_match_score ?? 0)
-    )[0] ?? null;
-  }
-
-  // Final fallback: highest scoring item
-  return results.length > 0
-    ? results.reduce((best, r) => r.top_score > best.top_score ? r : best)
-    : null;
+  return null;
 }
 
 /**
@@ -219,8 +218,9 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
           </div>
         </div>
 
-        {/* The critical save — "this is the one" */}
-        {criticalSave && (
+        {/* The critical save — "this is the one" — or an honest "you're clear"
+            state when nothing is genuinely tied to the user's stack. */}
+        {criticalSave ? (
           <div
             className="rounded-lg p-3 border"
             style={{
@@ -280,6 +280,24 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
                 >
                   {t(getRelevancePresentation(criticalSave.top_score).labelKey)}
                 </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="rounded-lg p-3 border"
+            style={{ backgroundColor: '#22C55E0F', borderColor: '#22C55E33' }}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className="w-1 self-stretch min-h-[36px] rounded-full flex-shrink-0"
+                style={{ backgroundColor: '#22C55E' }}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-text-primary font-medium">{t('missed.clearTitle')}</p>
+                <p className="text-xs text-text-muted mt-1">
+                  {t('missed.clearBody', { relevant: relevant.length })}
+                </p>
               </div>
             </div>
           </div>
