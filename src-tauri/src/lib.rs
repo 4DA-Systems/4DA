@@ -255,6 +255,7 @@ mod briefing_groundedness;
 #[cfg(test)]
 mod briefing_pipeline_tests;
 mod briefing_quality;
+pub(crate) mod context_admission;
 /// Intelligence Reconciliation (2026-04-16) — the canonical EvidenceItem type
 /// that every intelligence surface emits after Phases 3-5. Read
 /// `docs/strategy/INTELLIGENCE-RECONCILIATION.md` before touching intelligence.

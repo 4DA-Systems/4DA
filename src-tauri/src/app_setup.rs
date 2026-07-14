@@ -1125,6 +1125,90 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     });
 
+    // Context provenance reconcile (one-time heal of the installed base) + the
+    // corpus-health immune system (every boot). A live user's grounding corpus
+    // was once 46% a Spanish/Portuguese business course indexed as "your code"
+    // (module-e1-execution-playbook.md alone = 3,455 chunks). The reconcile
+    // reclassifies every chunk by source provenance (code/config/doc) and prunes
+    // what admission would not admit today — reject-classed rows and doc chunks
+    // beyond the per-file cap — WITHOUT re-embedding (fast; heals regardless of
+    // whether the source files still exist). The health check then runs every
+    // boot as a sentinel: if composition drifts back into the pollution shape it
+    // is logged loudly and auto-quarantined, so a recurrence self-announces
+    // instead of silently poisoning the feed for weeks.
+    tauri::async_runtime::spawn(async {
+        const RECONCILE_KEY: &str = "context_provenance_reconcile_version";
+        const RECONCILE_VERSION: &str = "1";
+        let db = match crate::get_database() {
+            Ok(db) => db,
+            Err(_) => return,
+        };
+
+        let already = crate::open_db_connection().ok().and_then(|conn| {
+            conn.query_row(
+                "SELECT value FROM kv_store WHERE key = ?1",
+                rusqlite::params![RECONCILE_KEY],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+        });
+        if already.as_deref() != Some(RECONCILE_VERSION) {
+            match db.reconcile_context_provenance() {
+                Ok(stats) => {
+                    info!(
+                        target: "4da::startup",
+                        scanned = stats.scanned,
+                        reclassified = stats.reclassified,
+                        pruned_reject = stats.pruned_reject,
+                        pruned_over_cap = stats.pruned_over_cap,
+                        "Context provenance reconcile complete"
+                    );
+                    if let Ok(conn) = crate::open_db_connection() {
+                        let _ = conn.execute(
+                            "INSERT OR REPLACE INTO kv_store (key, value, updated_at) VALUES (?1, ?2, datetime('now'))",
+                            rusqlite::params![RECONCILE_KEY, RECONCILE_VERSION],
+                        );
+                    }
+                }
+                Err(e) => {
+                    // Leave the flag unset so the reconcile retries next launch.
+                    warn!(target: "4da::startup", error = %e, "Context provenance reconcile failed (will retry next launch)");
+                }
+            }
+        }
+
+        // Immune system — assessed every boot.
+        match db.context_health() {
+            Ok(health) if health.healthy => {
+                info!(
+                    target: "4da::startup",
+                    total = health.total,
+                    doc_pct = format!("{:.1}", health.doc_fraction * 100.0),
+                    "Context grounding corpus healthy"
+                );
+            }
+            Ok(health) => {
+                warn!(
+                    target: "4da::startup",
+                    total = health.total,
+                    issues = ?health.issues,
+                    "Context grounding corpus UNHEALTHY — auto-quarantining pathological sources"
+                );
+                match db.reconcile_context_provenance() {
+                    Ok(stats) => warn!(
+                        target: "4da::startup",
+                        pruned = stats.total_pruned(),
+                        "Auto-quarantine pruned pathological context sources"
+                    ),
+                    Err(e) => warn!(target: "4da::startup", error = %e, "Auto-quarantine failed"),
+                }
+            }
+            Err(e) => {
+                warn!(target: "4da::startup", error = %e, "Context health check failed");
+            }
+        }
+    });
+
     // Background OSV advisory sync — keeps the local mirror fresh.
     // Only runs if deps exist and last sync > 6 hours ago (or never synced).
     tauri::async_runtime::spawn(async {
