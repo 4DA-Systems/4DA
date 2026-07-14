@@ -9,6 +9,7 @@ function item(partial: {
   signal_type?: string | null;
   content_type?: string | null;
   dep_match_score?: number;
+  matched_deps?: string[];
   top_score?: number;
 }): SourceRelevance {
   return {
@@ -18,6 +19,7 @@ function item(partial: {
     score_breakdown: {
       content_type: partial.content_type ?? null,
       dep_match_score: partial.dep_match_score ?? 0,
+      matched_deps: partial.matched_deps ?? [],
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any as SourceRelevance;
@@ -72,17 +74,38 @@ describe('findMostCriticalSave hero selection', () => {
     // Real CVEs arrive as content_type="security_advisory" with signal_type unset.
     // The old chooser compared the signal-vocab string against both fields, so it
     // skipped this at the security tier and a Show HN won the hero card (bug_001).
-    const cve = item({ content_type: 'security_advisory', signal_type: null, dep_match_score: 0.4, top_score: 0.72 });
-    const showHn = item({ signal_type: 'tool_discovery', content_type: 'show_and_tell', dep_match_score: 0, top_score: 0.55 });
+    const cve = item({ content_type: 'security_advisory', signal_type: null, matched_deps: ['express'], top_score: 0.72 });
+    const showHn = item({ signal_type: 'tool_discovery', content_type: 'show_and_tell', matched_deps: [], top_score: 0.55 });
     expect(findMostCriticalSave([showHn, cve])).toBe(cve);
   });
 
-  it('still requires dependency confirmation for security items', () => {
-    // A security advisory with no dep match must NOT be hero'd just for being
-    // security — an irrelevant CVE as hero card destroys trust. It loses to a
-    // (dep-unconstrained) tool item in the priority walk.
-    const irrelevantCve = item({ content_type: 'security_advisory', dep_match_score: 0, top_score: 0.9 });
-    const tool = item({ signal_type: 'tool_discovery', dep_match_score: 0, top_score: 0.5 });
-    expect(findMostCriticalSave([irrelevantCve, tool])).toBe(tool);
+  it('rejects a PHANTOM dep match — high dep_match_score but empty matched_deps', () => {
+    // The live regression: a Portabase Docker discussion scored dep_match_score
+    // 0.595 with matched_deps: [] and kept winning the hero. Gating on the score
+    // is fooled; gating on the concrete matched_deps is not.
+    const phantom = item({ signal_type: 'tool_discovery', dep_match_score: 0.595, matched_deps: [], top_score: 0.63 });
+    expect(findMostCriticalSave([phantom])).toBeNull();
+  });
+
+  it('returns null (honest "you\'re clear") when nothing names a concrete dep', () => {
+    const irrelevantCve = item({ content_type: 'security_advisory', matched_deps: [], top_score: 0.9 });
+    const unlinkedTool = item({ signal_type: 'tool_discovery', matched_deps: [], top_score: 0.82 });
+    expect(findMostCriticalSave([irrelevantCve, unlinkedTool])).toBeNull();
+  });
+
+  it('surfaces a dep-grounded tool over a higher-scoring ungrounded one', () => {
+    const linkedTool = item({ signal_type: 'tool_discovery', matched_deps: ['redis'], top_score: 0.6 });
+    const ungroundedNoise = item({ signal_type: 'tool_discovery', matched_deps: [], top_score: 0.95 });
+    expect(findMostCriticalSave([ungroundedNoise, linkedTool])).toBe(linkedTool);
+  });
+
+  it('never fabricates a save from the highest-scoring ungrounded item', () => {
+    const highButUngrounded = item({
+      content_type: 'release_notes',
+      signal_type: null,
+      matched_deps: [],
+      top_score: 0.99,
+    });
+    expect(findMostCriticalSave([highButUngrounded])).toBeNull();
   });
 });

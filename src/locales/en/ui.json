@@ -2206,6 +2206,8 @@
   "missed.filtered": "filtered",
   "missed.freeTeaser": "4DA filtered {{rejected}} items to surface {{relevant}} signals that matter to you.",
   "missed.freeSubtext": "Unlock full analytics — see exactly what was buried and why it matters.",
+  "missed.clearTitle": "Nothing critical in your stack today",
+  "missed.clearBody": "No security, breaking change, or dependency alert needs your attention. The {{relevant}} signals below are worth a look — none are urgent.",
   "profile.loadFailed": "Failed to load your developer profile.",
   "profile.copyProfile": "Copy Profile",
   "profile.exportJson": "Export JSON",
