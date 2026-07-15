@@ -152,17 +152,21 @@ pub async fn clear_context() -> Result<String> {
     ))
 }
 
-/// Index context files - read, chunk, embed, and store in database
+/// Index context files - read, chunk, embed, and atomically swap into the database.
+///
+/// ORDER MATTERS: all slow work (file IO, chunking, ~minutes of embedding)
+/// happens BEFORE the corpus is touched, and the swap itself is one
+/// transaction ([`Database::rebuild_contexts`]). The previous version cleared
+/// the corpus FIRST and rebuilt into the emptiness — on 2026-07-15 that left
+/// the grounding corpus empty for ~10 minutes per run, during which a
+/// scheduled engine cycle scored 701 items ungrounded (relevant collapsed
+/// 24 -> 3) and the daily briefing reported a false "thin day". A crash
+/// mid-rebuild would have lost the corpus outright.
 #[tauri::command]
 pub async fn index_context() -> Result<String> {
     info!(target: "4da::context", "Indexing context files");
 
     let db = get_database()?;
-
-    // First clear existing context to avoid duplicates
-    if let Err(e) = db.clear_contexts() {
-        tracing::warn!("Failed to clear contexts: {e}");
-    }
 
     // Read context files from configured directories
     let context_files = get_context_files().await?;
@@ -188,23 +192,59 @@ pub async fn index_context() -> Result<String> {
         return Err("No content to index from context files.".into());
     }
 
-    // Generate embeddings
+    // Generate embeddings — the slow part, still against the intact old corpus.
     debug!(target: "4da::embed", chunks = all_chunks.len(), "Generating embeddings for chunks");
     let chunk_texts: Vec<String> = all_chunks.iter().map(|(_, text)| text.clone()).collect();
     let chunk_embeddings = embed_texts(&chunk_texts).await?;
 
-    // Store in database
-    debug!(target: "4da::context", chunks = all_chunks.len(), "Storing context chunks in database");
-    for ((source, text), embedding) in all_chunks.iter().zip(chunk_embeddings.iter()) {
-        db.upsert_context(source, text, embedding)
-            .context("Failed to store context")?;
+    // Atomic swap: old corpus stays readable until the replacement commits.
+    let entries: Vec<crate::db::NewContextChunk> = all_chunks
+        .into_iter()
+        .zip(chunk_embeddings)
+        .map(
+            |((source_file, text), embedding)| crate::db::NewContextChunk {
+                source_file,
+                text,
+                embedding,
+                weight: 1.0,
+            },
+        )
+        .collect();
+    let stats = db
+        .rebuild_contexts(&entries)
+        .context("Failed to rebuild context corpus")?;
+    if let Some(reason) = stats.refused {
+        tracing::warn!(
+            target: "4da::context",
+            reason,
+            attempted = stats.attempted,
+            previous = stats.previous_count,
+            "Context rebuild refused — existing corpus preserved"
+        );
+        return Err(format!(
+            "Context rebuild refused ({reason}) — existing {} chunks preserved",
+            stats.previous_count
+        )
+        .into());
     }
 
-    info!(target: "4da::context", files = context_files.len(), chunks = all_chunks.len(), "Context indexed successfully");
+    info!(
+        target: "4da::context",
+        files = context_files.len(),
+        attempted = stats.attempted,
+        admitted = stats.admitted,
+        deduped = stats.deduped,
+        skipped_reject = stats.skipped_reject,
+        skipped_doc_cap = stats.skipped_doc_cap,
+        previous = stats.previous_count,
+        "Context indexed successfully"
+    );
     Ok(format!(
-        "Indexed {} files ({} chunks)",
+        "Indexed {} files ({} chunks admitted of {} attempted; replaced {} previous)",
         context_files.len(),
-        all_chunks.len()
+        stats.admitted,
+        stats.attempted,
+        stats.previous_count
     ))
 }
 
