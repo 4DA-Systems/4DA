@@ -20,7 +20,11 @@
     "overrides": {
       "liquidjs": ">=10.26.0",
       "markdown-it": ">=14.2.0 <15",
-      "js-yaml": ">=4.2.0 <5"
+      "js-yaml": ">=4.2.0 <5",
+      "ws": ">=8.21.0 <9",
+      "picomatch@2": ">=2.3.2 <3",
+      "picomatch@4": ">=4.0.4 <5",
+      "brace-expansion@1": ">=1.1.13 <2"
     }
   }
 }
