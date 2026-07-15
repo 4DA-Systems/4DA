@@ -493,6 +493,19 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_context_source ON context_chunks(source_file);
             CREATE INDEX IF NOT EXISTS idx_context_hash ON context_chunks(content_hash);
 
+            -- Generic key-value store. Historically created only by the ACE
+            -- schema init (ace/db.rs) with `value REAL NOT NULL`, which meant
+            -- (a) a headless-first or test database had no kv_store at all and
+            -- (b) string flags were coerced to REAL by column affinity.
+            -- Declared here typeless (BLOB affinity: stores TEXT as TEXT,
+            -- numbers as numbers) so whichever init runs first, the table
+            -- exists; Database::get_kv normalizes whatever affinity produced.
+            CREATE TABLE IF NOT EXISTS kv_store (
+                key TEXT PRIMARY KEY NOT NULL,
+                value,
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+
             -- Source items table (HN, arXiv, RSS, etc.)
             CREATE TABLE IF NOT EXISTS source_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
