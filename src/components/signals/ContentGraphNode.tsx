@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useState, useCallback } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+// Theme overrides for React Flow's chrome (zoom Controls, MiniMap). Imported
+// here — the node module is always in the graph bundle — so it also applies to
+// the Controls/MiniMap rendered by ContentGraphView without editing that file.
+import './content-graph.css';
 
 interface ContentNodeData {
   title: string;
@@ -62,6 +66,17 @@ function truncate(text: string, max: number): string {
   return text.slice(0, max - 1) + '…';
 }
 
+// The node color already encodes the source, so a redundant "crates.io: " /
+// "npm: " prefix just eats label space. Strip a leading KNOWN-source prefix
+// only — never a generic "word:" so real titles like "Rust 1.80: released"
+// keep their colon.
+const SOURCE_PREFIX =
+  /^(crates\.io|npm|pypi|pep|github|gh|hn|reddit|arxiv|dev\.to|lobsters|lobste\.rs|stack ?overflow|so|product ?hunt|hugging ?face|hf|go modules?|youtube|yt|bluesky|mastodon|cve|osv|rss)\s*[:\-–]\s+/i;
+
+function cleanTitle(raw: string): string {
+  return raw.replace(SOURCE_PREFIX, '').trim() || raw;
+}
+
 const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<ContentNode>) {
   const [hovered, setHovered] = useState(false);
   const onEnter = useCallback(() => setHovered(true), []);
@@ -70,12 +85,13 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
   const color = SOURCE_COLORS[data.source_type] ?? '#6B7280';
   const size = 28 + (data.relevance_score * 28);
   const glow = getGlowStyle(data.signal_priority);
+  const label = cleanTitle(data.title);
 
   return (
     <div
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
-      style={{ position: 'relative' }}
+      style={{ position: 'relative', width: size, height: size }}
     >
       <Handle
         type="target"
@@ -96,6 +112,11 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
         />
       )}
 
+      {/* The dot carries source (color), relevance (size) and priority (glow).
+          The item title lives in the readable label below — text jammed inside
+          a 28-56px circle was illegible (only ~3 chars fit). The label is
+          absolutely positioned so the node's measured box stays the dot and
+          edges keep anchoring at the circle, not below the text. */}
       <div
         style={{
           width: size,
@@ -104,38 +125,41 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
           backgroundColor: color,
           border: `2px solid ${brighten(color)}`,
           boxShadow: glow,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
           cursor: 'pointer',
           transition: 'transform 150ms ease',
           transform: hovered ? 'scale(1.15)' : 'scale(1)',
         }}
+      />
+
+      <span
+        style={{
+          position: 'absolute',
+          top: size + 3,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 128,
+          color: hovered ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+          fontSize: 10,
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: 500,
+          lineHeight: 1.15,
+          textAlign: 'center',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          // Halo in the page color keeps labels legible over edge lines.
+          textShadow: '0 1px 4px var(--color-bg-primary), 0 0 2px var(--color-bg-primary)',
+        }}
       >
-        <span
-          style={{
-            color: 'var(--color-text-primary)',
-            fontSize: Math.max(8, size * 0.22),
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 500,
-            lineHeight: 1.1,
-            textAlign: 'center',
-            padding: 2,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            maxWidth: size - 8,
-          }}
-        >
-          {truncate(data.title, 25)}
-        </span>
-      </div>
+        {truncate(label, 22)}
+      </span>
 
       {hovered && (
         <div
           style={{
             position: 'absolute',
-            top: size + 6,
+            top: size + 22,
             left: '50%',
             transform: 'translateX(-50%)',
             backgroundColor: 'var(--color-bg-tertiary)',

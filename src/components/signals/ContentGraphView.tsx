@@ -5,6 +5,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  Panel,
   type Node,
   type Edge,
   useNodesState,
@@ -51,7 +52,11 @@ function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): 
     id: `cluster-${c.id}`,
     type: 'clusterLabel' as const,
     position: { x: c.centroid_x, y: c.centroid_y - 30 },
-    data: { label: c.label, count: c.source_count },
+    // Show the cluster's ITEM count (node_ids), not source_count — the latter
+    // is almost always 1 (clusters form from same-source neighbours), so it
+    // read as a meaningless "(1)" on every label (doctrine rule 3: no vanity
+    // metrics). Item count tells the user how big the cluster actually is.
+    data: { label: c.label, count: c.node_ids.length },
     selectable: false,
     draggable: false,
     connectable: false,
@@ -150,6 +155,27 @@ function minimapNodeColor(node: Node): string {
   return SOURCE_COLORS[data.source_type] ?? '#6B7280';
 }
 
+// Node color encodes the source; the legend makes that decodable.
+const SOURCE_LABELS: Record<string, string> = {
+  hackernews: 'Hacker News',
+  crates_io: 'crates.io',
+  go_modules: 'Go',
+  papers_with_code: 'Papers w/ Code',
+  producthunt: 'Product Hunt',
+  stackoverflow: 'Stack Overflow',
+  devto: 'dev.to',
+  huggingface: 'Hugging Face',
+  pypi: 'PyPI',
+  npm: 'npm',
+  cve: 'CVE',
+  osv: 'OSV',
+  rss: 'RSS',
+};
+
+function prettySource(s: string): string {
+  return SOURCE_LABELS[s] ?? s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function openExternal(url: string) {
   import('@tauri-apps/plugin-opener')
     .then(({ openUrl }) => openUrl(url))
@@ -245,6 +271,17 @@ export default function ContentGraphView() {
     instance.fitView();
   }, []);
 
+  // Distinct source types present in the current graph — drives the legend.
+  const legendSources = useMemo(() => {
+    const seen = new Set<string>();
+    for (const n of nodes) {
+      if (n.type !== 'contentNode') continue;
+      const st = (n.data as ContentNode['data']).source_type;
+      if (st) seen.add(st);
+    }
+    return [...seen].sort();
+  }, [nodes]);
+
   const isEmpty = !loading && nodes.length === 0;
 
   if (loading) return <LoadingState />;
@@ -279,6 +316,48 @@ export default function ContentGraphView() {
         elementsSelectable
         style={{ flex: '1 1 0%', minHeight: 0 }}
       >
+        {legendSources.length > 0 && (
+          <Panel position="top-left">
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '4px 10px',
+                maxWidth: 260,
+                padding: '8px 10px',
+                backgroundColor: 'var(--color-bg-secondary)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 8,
+                fontFamily: 'Inter, sans-serif',
+              }}
+            >
+              {legendSources.map((st) => (
+                <span
+                  key={st}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 10,
+                    color: 'var(--color-text-secondary)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      backgroundColor: SOURCE_COLORS[st] ?? '#6B7280',
+                    }}
+                  />
+                  {prettySource(st)}
+                </span>
+              ))}
+            </div>
+          </Panel>
+        )}
+
         {/* React Flow paints these via SVG presentation attributes, which
             cannot resolve var() — resolve concrete values per theme here */}
         <Background color={isLight ? '#DDDAD2' : '#2A2A2A'} gap={20} />
