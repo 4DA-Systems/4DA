@@ -17,9 +17,15 @@ pub(super) fn load_scored_items(
     days: u32,
     max_nodes: usize,
 ) -> Result<Vec<RawItem>> {
+    // signal_type/signal_priority are plain columns on source_items (Phase 82).
+    // The matched package comes from dep_linker's link table via a correlated
+    // pick of the highest-confidence row (indexed on source_item_id).
     let mut stmt = conn.prepare(
         "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score,
-                si.created_at, si.embedding
+                si.created_at, si.embedding, si.signal_type, si.signal_priority,
+                (SELECT sid.package_name FROM source_item_dependencies sid
+                 WHERE sid.source_item_id = si.id
+                 ORDER BY sid.confidence DESC, sid.id LIMIT 1) AS matched_package
          FROM source_items si
          WHERE si.relevance_score IS NOT NULL
            AND si.created_at >= datetime('now', ?1)
@@ -39,12 +45,26 @@ pub(super) fn load_scored_items(
             row.get::<_, f64>(4)? as f32,
             row.get::<_, String>(5)?,
             embedding_blob,
+            row.get::<_, Option<String>>(7)?,
+            row.get::<_, Option<String>>(8)?,
+            row.get::<_, Option<String>>(9)?,
         ))
     })?;
 
     let mut items = Vec::new();
     for row in rows {
-        let (id, title, url, source_type, score, created_at, embedding_blob) = row?;
+        let (
+            id,
+            title,
+            url,
+            source_type,
+            score,
+            created_at,
+            embedding_blob,
+            signal_type,
+            signal_priority,
+            matched_package,
+        ) = row?;
         let embedding = blob_to_embedding(&embedding_blob);
         if embedding.is_empty() || embedding.iter().all(|&v| v == 0.0) {
             continue;
@@ -55,6 +75,9 @@ pub(super) fn load_scored_items(
             url,
             source_type,
             relevance_score: score,
+            signal_type,
+            signal_priority,
+            matched_package,
             created_at,
             embedding,
         });

@@ -69,25 +69,58 @@ pub(super) fn compute_clusters(items: &[RawItem], edges: &[GraphEdge]) -> Vec<Gr
     clusters
 }
 
+/// Label clusters by c-TF-IDF: a term scores by how frequent it is INSIDE the
+/// cluster, discounted by how many OTHER clusters also use it. Raw frequency
+/// produced junk labels ("our · middleware · second", "axios · via ·
+/// prototype") because advisory boilerplate and connective words dominate
+/// counts; distinctiveness against the sibling clusters is what names a topic.
 pub(super) fn assign_cluster_labels(items: &[RawItem], clusters: &mut [GraphCluster]) {
     let item_map: HashMap<i64, &RawItem> = items.iter().map(|i| (i.id, i)).collect();
 
-    for cluster in clusters.iter_mut() {
-        let mut word_freq: HashMap<String, usize> = HashMap::new();
-        for &id in &cluster.node_ids {
-            if let Some(item) = item_map.get(&id) {
-                for word in extract_title_keywords(&item.title) {
-                    *word_freq.entry(word).or_insert(0) += 1;
+    // Per-cluster term frequencies.
+    let tfs: Vec<HashMap<String, usize>> = clusters
+        .iter()
+        .map(|cluster| {
+            let mut tf: HashMap<String, usize> = HashMap::new();
+            for &id in &cluster.node_ids {
+                if let Some(item) = item_map.get(&id) {
+                    for word in extract_title_keywords(&item.title) {
+                        *tf.entry(word).or_insert(0) += 1;
+                    }
                 }
             }
-        }
+            tf
+        })
+        .collect();
 
-        let mut words: Vec<(String, usize)> = word_freq.into_iter().collect();
-        words.sort_by_key(|b| std::cmp::Reverse(b.1));
-        cluster.label = words
+    // Document frequency across clusters (a "document" = one cluster).
+    let mut df: HashMap<&str, usize> = HashMap::new();
+    for tf in &tfs {
+        for term in tf.keys() {
+            *df.entry(term.as_str()).or_insert(0) += 1;
+        }
+    }
+
+    let n_clusters = clusters.len().max(1) as f32;
+    for (cluster, tf) in clusters.iter_mut().zip(&tfs) {
+        let mut scored: Vec<(&str, f32)> = tf
+            .iter()
+            .map(|(term, &count)| {
+                let d = df.get(term.as_str()).copied().unwrap_or(1) as f32;
+                let idf = (1.0 + n_clusters / d).ln();
+                (term.as_str(), count as f32 * idf)
+            })
+            .collect();
+        // Deterministic: score desc, then alphabetical.
+        scored.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.0.cmp(b.0))
+        });
+        cluster.label = scored
             .iter()
             .take(3)
-            .map(|(w, _)| w.as_str())
+            .map(|(w, _)| *w)
             .collect::<Vec<_>>()
             .join(" · ");
     }
@@ -100,13 +133,35 @@ pub(super) fn extract_title_keywords(title: &str) -> Vec<String> {
         "do", "does", "did", "will", "would", "could", "should", "may", "can", "not", "no", "but",
         "or", "if", "how", "what", "when", "where", "who", "why", "which", "all", "each", "every",
         "both", "more", "most", "other", "some", "such", "than", "too", "very", "just", "about",
-        "up", "out", "so", "show", "hn", "ask",
+        "up", "out", "so", "show", "hn", "ask", "via", "our", "you", "your", "using", "into",
+        "http", "https", "www", "com",
     ];
 
     title
         .to_lowercase()
         .split(|c: char| !c.is_alphanumeric() && c != '-' && c != '_')
-        .filter(|w| w.len() >= 3 && !STOPWORDS.contains(w))
+        // Tokens carrying a long digit run are ids/timestamps/URL fragments
+        // (live: a mastodon status id glued to text tokenized as
+        // "116885294589687234here") — maximally "distinctive" to c-TF-IDF yet
+        // they name nothing. Short numerics in real names ("v5-9", "x86-64")
+        // survive.
+        .filter(|w| w.len() >= 3 && !STOPWORDS.contains(w) && !has_long_digit_run(w))
         .map(String::from)
         .collect()
+}
+
+/// True when the token contains 8+ consecutive ASCII digits.
+fn has_long_digit_run(token: &str) -> bool {
+    let mut run = 0usize;
+    for c in token.chars() {
+        if c.is_ascii_digit() {
+            run += 1;
+            if run >= 8 {
+                return true;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    false
 }

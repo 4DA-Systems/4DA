@@ -4,22 +4,23 @@
 
 //! Content Graph — relationship visualization for surfaced intelligence.
 //!
-//! Assembles edges from four existing relationship systems:
-//! - topic_clustering (cosine >= 0.77 semantic similarity)
-//! - signal_chains (temporal causal links across days)
-//! - concept_graph (topic co-occurrence)
-//! - dedup (Jaccard >= 0.65 near-duplicates)
+//! Pipeline: load scored items → collapse near-duplicates into STORIES
+//! (story.rs — one node per advisory storm / mirrored announcement) → compute
+//! semantic + signal-chain edges between stories → connected-component
+//! clusters with c-TF-IDF labels → two-phase cluster-first layout →
+//! sparsify display edges to backbone + top-K.
 //!
-//! Computes a deterministic force-directed layout in Rust and returns
-//! positioned nodes + edges for the frontend to render without JS layout.
+//! Everything is computed deterministically in Rust; the frontend renders
+//! positioned nodes without any JS layout.
 
 mod clustering;
 mod edges;
 mod layout;
 mod loading;
+mod story;
 mod types;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use tracing::info;
 
@@ -33,10 +34,11 @@ const DEFAULT_MAX_NODES: usize = 150;
 const SIMILARITY_THRESHOLD: f32 = 0.77;
 const LEXICAL_FALLBACK_THRESHOLD: f32 = 0.73;
 const LEXICAL_OVERLAP_MIN: f32 = 0.60;
-const MIN_EDGES_TO_APPEAR: usize = 1;
-const LAYOUT_WIDTH: f32 = 1000.0;
-const LAYOUT_HEIGHT: f32 = 800.0;
-const LAYOUT_ITERATIONS: usize = 80;
+/// Isolated singletons shown on the orbit ring, by relevance; the rest stay
+/// in the List view (counted honestly in `meta.hidden_items`).
+const RING_CAP: usize = 40;
+/// Per-node top-K edges kept for display (plus the spanning backbone).
+const TOP_K_EDGES: usize = 4;
 
 // ============================================================================
 // Graph Construction
@@ -57,53 +59,102 @@ pub fn build_graph(
                 total_items: 0,
                 total_edges: 0,
                 cluster_count: 0,
+                story_count: 0,
+                collapsed_items: 0,
+                hidden_items: 0,
                 time_window_days: days,
                 edge_threshold: format!("cosine >= {SIMILARITY_THRESHOLD}"),
             },
         });
     }
 
-    let mut edge_list = Vec::new();
-    let id_set: HashSet<i64> = items.iter().map(|i| i.id).collect();
+    // Collapse near-duplicates into stories FIRST: redundancy becomes one
+    // node instead of a rendered clique (86% of live edges before this).
+    let stories = story::collapse_stories(items);
+    let mut rep_of: HashMap<i64, i64> = HashMap::new();
+    for s in &stories {
+        for &member in &s.member_ids {
+            rep_of.insert(member, s.item.id);
+        }
+    }
+    let story_items: Vec<types::RawItem> =
+        stories.iter().map(|s| story::clone_raw(&s.item)).collect();
 
-    edges::compute_semantic_edges(&items, &mut edge_list);
-    edges::compute_chain_edges(conn, &id_set, &mut edge_list);
+    let mut edge_list = Vec::new();
+    edges::compute_semantic_edges(&story_items, &mut edge_list);
+    edges::compute_chain_edges(conn, &rep_of, &mut edge_list);
     edges::merge_duplicate_edges(&mut edge_list);
 
-    let mut clusters = clustering::compute_clusters(&items, &edge_list);
-    clustering::assign_cluster_labels(&items, &mut clusters);
+    let clusters = clustering::compute_clusters(&story_items, &edge_list);
 
-    let edge_count_per_node = edges::count_edges_per_node(&edge_list);
-    let mut nodes: Vec<GraphNode> = items
+    // Visibility: anything connected or aggregated appears; isolated plain
+    // items appear on the orbit ring up to RING_CAP by relevance.
+    struct Vis {
+        id: i64,
+        relevance: f32,
+        connected: bool,
+        is_story: bool,
+    }
+    let degree = edges::count_edges_per_node(&edge_list);
+    let mut handles: Vec<Vis> = stories
         .iter()
-        .filter(|item| {
-            edge_count_per_node.get(&item.id).copied().unwrap_or(0) >= MIN_EDGES_TO_APPEAR
+        .map(|s| Vis {
+            id: s.item.id,
+            relevance: s.item.relevance_score,
+            connected: degree.get(&s.item.id).copied().unwrap_or(0) > 0,
+            is_story: s.member_count > 1,
         })
-        .map(|item| {
+        .collect();
+    handles.sort_by(|a, b| {
+        b.relevance
+            .partial_cmp(&a.relevance)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.id.cmp(&b.id))
+    });
+    let mut visible_ids: HashSet<i64> = HashSet::new();
+    let mut ring_candidates: Vec<&Vis> = Vec::new();
+    for handle in &handles {
+        if handle.connected || handle.is_story {
+            visible_ids.insert(handle.id);
+        } else {
+            ring_candidates.push(handle);
+        }
+    }
+    let hidden_items = ring_candidates.len().saturating_sub(RING_CAP);
+    for handle in ring_candidates.iter().take(RING_CAP) {
+        visible_ids.insert(handle.id);
+    }
+
+    let mut nodes: Vec<GraphNode> = stories
+        .iter()
+        .filter(|s| visible_ids.contains(&s.item.id))
+        .map(|s| {
             let cluster_id = clusters
                 .iter()
-                .find(|c| c.node_ids.contains(&item.id))
+                .find(|c| c.node_ids.contains(&s.item.id))
                 .map(|c| c.id.clone());
             GraphNode {
-                id: item.id,
-                title: item.title.clone(),
-                url: item.url.clone(),
-                source_type: item.source_type.clone(),
-                relevance_score: item.relevance_score,
-                signal_type: None,
-                signal_priority: None,
-                created_at: item.created_at.clone(),
+                id: s.item.id,
+                title: s.item.title.clone(),
+                url: s.item.url.clone(),
+                source_type: s.item.source_type.clone(),
+                relevance_score: s.item.relevance_score,
+                signal_type: s.item.signal_type.clone(),
+                signal_priority: s.item.signal_priority.clone(),
+                created_at: s.item.created_at.clone(),
                 primary_topic: None,
                 cluster_id,
+                member_count: s.member_count,
+                member_titles: s.member_titles.clone(),
+                member_ids: s.member_ids.clone(),
                 x: 0.0,
                 y: 0.0,
             }
         })
         .collect();
 
-    let visible_ids: HashSet<i64> = nodes.iter().map(|n| n.id).collect();
     edge_list.retain(|e| visible_ids.contains(&e.source) && visible_ids.contains(&e.target));
-    let clusters: Vec<GraphCluster> = clusters
+    let mut clusters: Vec<GraphCluster> = clusters
         .into_iter()
         .map(|mut c| {
             c.node_ids.retain(|id| visible_ids.contains(id));
@@ -111,14 +162,23 @@ pub fn build_graph(
         })
         .filter(|c| c.node_ids.len() >= 2)
         .collect();
+    clustering::assign_cluster_labels(&story_items, &mut clusters);
 
-    let mut clusters = clusters;
+    // Layout sees the full retained edge set (affinity fidelity); display
+    // gets the sparsified backbone + top-K.
     layout::compute_layout(&mut nodes, &edge_list, &mut clusters);
+    edges::sparsify_edges(&mut edge_list, TOP_K_EDGES);
+
+    let story_count = nodes.iter().filter(|n| n.member_count > 1).count();
+    let collapsed_items: usize = nodes.iter().map(|n| n.member_count.saturating_sub(1)).sum();
 
     let meta = GraphMeta {
         total_items: nodes.len(),
         total_edges: edge_list.len(),
         cluster_count: clusters.len(),
+        story_count,
+        collapsed_items,
+        hidden_items,
         time_window_days: days,
         edge_threshold: format!("cosine >= {SIMILARITY_THRESHOLD}"),
     };
@@ -128,6 +188,9 @@ pub fn build_graph(
         nodes = nodes.len(),
         edges = edge_list.len(),
         clusters = clusters.len(),
+        stories = story_count,
+        collapsed = collapsed_items,
+        hidden = hidden_items,
         "Content graph built"
     );
 
@@ -160,6 +223,32 @@ mod tests {
     use super::*;
     use types::RawItem;
 
+    fn raw(id: i64, title: &str, source_type: &str, score: f32, embedding: Vec<f32>) -> RawItem {
+        RawItem {
+            id,
+            title: title.to_string(),
+            url: None,
+            source_type: source_type.to_string(),
+            relevance_score: score,
+            signal_type: None,
+            signal_priority: None,
+            matched_package: None,
+            created_at: "2026-05-24".to_string(),
+            embedding,
+        }
+    }
+
+    fn edge(source: i64, target: i64, weight: f32) -> GraphEdge {
+        GraphEdge {
+            source,
+            target,
+            edge_type: EdgeType::Semantic,
+            weight,
+            label: None,
+            methods: vec!["semantic".to_string()],
+        }
+    }
+
     #[test]
     fn test_empty_graph() {
         let graph = ContentGraph {
@@ -170,6 +259,9 @@ mod tests {
                 total_items: 0,
                 total_edges: 0,
                 cluster_count: 0,
+                story_count: 0,
+                collapsed_items: 0,
+                hidden_items: 0,
                 time_window_days: 7,
                 edge_threshold: "cosine >= 0.77".to_string(),
             },
@@ -181,24 +273,20 @@ mod tests {
     #[test]
     fn test_semantic_edge_above_threshold() {
         let items = vec![
-            RawItem {
-                id: 1,
-                title: "Rust async runtime".to_string(),
-                url: None,
-                source_type: "hackernews".to_string(),
-                relevance_score: 0.8,
-                created_at: "2026-05-24".to_string(),
-                embedding: vec![1.0, 0.0, 0.0],
-            },
-            RawItem {
-                id: 2,
-                title: "Rust async runtime update".to_string(),
-                url: None,
-                source_type: "reddit".to_string(),
-                relevance_score: 0.7,
-                created_at: "2026-05-24".to_string(),
-                embedding: vec![1.0, 0.0, 0.0],
-            },
+            raw(
+                1,
+                "Rust async runtime",
+                "hackernews",
+                0.8,
+                vec![1.0, 0.0, 0.0],
+            ),
+            raw(
+                2,
+                "Rust async runtime update",
+                "reddit",
+                0.7,
+                vec![1.0, 0.0, 0.0],
+            ),
         ];
 
         let mut edge_list = Vec::new();
@@ -216,24 +304,14 @@ mod tests {
     #[test]
     fn test_no_edge_below_threshold() {
         let items = vec![
-            RawItem {
-                id: 1,
-                title: "Rust async".to_string(),
-                url: None,
-                source_type: "hackernews".to_string(),
-                relevance_score: 0.8,
-                created_at: "2026-05-24".to_string(),
-                embedding: vec![1.0, 0.0, 0.0],
-            },
-            RawItem {
-                id: 2,
-                title: "Python web framework".to_string(),
-                url: None,
-                source_type: "reddit".to_string(),
-                relevance_score: 0.7,
-                created_at: "2026-05-24".to_string(),
-                embedding: vec![0.0, 1.0, 0.0],
-            },
+            raw(1, "Rust async", "hackernews", 0.8, vec![1.0, 0.0, 0.0]),
+            raw(
+                2,
+                "Python web framework",
+                "reddit",
+                0.7,
+                vec![0.0, 1.0, 0.0],
+            ),
         ];
 
         let mut edge_list = Vec::new();
@@ -277,43 +355,12 @@ mod tests {
     #[test]
     fn test_cluster_formation() {
         let items = vec![
-            RawItem {
-                id: 1,
-                title: "A".to_string(),
-                url: None,
-                source_type: "hn".to_string(),
-                relevance_score: 0.8,
-                created_at: "".to_string(),
-                embedding: vec![1.0, 0.0],
-            },
-            RawItem {
-                id: 2,
-                title: "B".to_string(),
-                url: None,
-                source_type: "reddit".to_string(),
-                relevance_score: 0.7,
-                created_at: "".to_string(),
-                embedding: vec![1.0, 0.0],
-            },
-            RawItem {
-                id: 3,
-                title: "C".to_string(),
-                url: None,
-                source_type: "github".to_string(),
-                relevance_score: 0.6,
-                created_at: "".to_string(),
-                embedding: vec![0.0, 1.0],
-            },
+            raw(1, "A", "hn", 0.8, vec![1.0, 0.0]),
+            raw(2, "B", "reddit", 0.7, vec![1.0, 0.0]),
+            raw(3, "C", "github", 0.6, vec![0.0, 1.0]),
         ];
 
-        let edge_list = vec![GraphEdge {
-            source: 1,
-            target: 2,
-            edge_type: EdgeType::Semantic,
-            weight: 0.9,
-            label: None,
-            methods: vec!["semantic".to_string()],
-        }];
+        let edge_list = vec![edge(1, 2, 0.9)];
 
         let clusters = clustering::compute_clusters(&items, &edge_list);
         assert_eq!(clusters.len(), 1, "connected items should form one cluster");
@@ -322,61 +369,87 @@ mod tests {
     }
 
     #[test]
-    fn test_layout_positions_in_bounds() {
-        let mut nodes = vec![
-            GraphNode {
-                id: 1,
-                title: "A".to_string(),
-                url: None,
-                source_type: "hn".to_string(),
-                relevance_score: 0.8,
-                signal_type: None,
-                signal_priority: None,
-                created_at: "".to_string(),
-                primary_topic: None,
-                cluster_id: None,
-                x: 0.0,
-                y: 0.0,
-            },
-            GraphNode {
-                id: 2,
-                title: "B".to_string(),
-                url: None,
-                source_type: "reddit".to_string(),
-                relevance_score: 0.7,
-                signal_type: None,
-                signal_priority: None,
-                created_at: "".to_string(),
-                primary_topic: None,
-                cluster_id: None,
-                x: 0.0,
-                y: 0.0,
-            },
+    fn test_cluster_labels_prefer_distinctive_terms() {
+        // "release" appears in both clusters; the distinctive terms must win.
+        let items = vec![
+            raw(
+                1,
+                "React server components release",
+                "hn",
+                0.8,
+                vec![1.0, 0.0],
+            ),
+            raw(
+                2,
+                "React server actions release",
+                "reddit",
+                0.7,
+                vec![1.0, 0.0],
+            ),
+            raw(3, "Tokio scheduler release", "hn", 0.8, vec![0.0, 1.0]),
+            raw(
+                4,
+                "Tokio runtime internals release",
+                "reddit",
+                0.7,
+                vec![0.0, 1.0],
+            ),
         ];
+        let edge_list = vec![edge(1, 2, 0.9), edge(3, 4, 0.9)];
 
-        let edge_list = vec![GraphEdge {
-            source: 1,
-            target: 2,
-            edge_type: EdgeType::Semantic,
-            weight: 0.9,
-            label: None,
-            methods: vec![],
-        }];
+        let mut clusters = clustering::compute_clusters(&items, &edge_list);
+        clustering::assign_cluster_labels(&items, &mut clusters);
 
-        layout::compute_layout(&mut nodes, &edge_list, &mut []);
-
-        for node in &nodes {
-            assert!(
-                node.x >= 0.0 && node.x <= LAYOUT_WIDTH,
-                "x out of bounds: {}",
-                node.x
-            );
-            assert!(
-                node.y >= 0.0 && node.y <= LAYOUT_HEIGHT,
-                "y out of bounds: {}",
-                node.y
+        for cluster in &clusters {
+            let first = cluster.label.split(" · ").next().unwrap_or("");
+            assert_ne!(
+                first, "release",
+                "shared term must not lead a label; got '{}'",
+                cluster.label
             );
         }
+    }
+
+    #[test]
+    fn test_sparsify_keeps_backbone_connectivity() {
+        // A 10-node clique: sparsify must keep every node reachable and cut
+        // well below the full 45 edges.
+        let mut edge_list = Vec::new();
+        for i in 1..=10i64 {
+            for j in (i + 1)..=10 {
+                edge_list.push(edge(i, j, 0.8 + (i as f32) * 0.001));
+            }
+        }
+        edges::sparsify_edges(&mut edge_list, 3);
+
+        assert!(
+            edge_list.len() < 45,
+            "clique should shrink, kept {}",
+            edge_list.len()
+        );
+        // Connectivity: union everything and confirm one component.
+        let mut parent: std::collections::HashMap<i64, i64> = (1..=10).map(|i| (i, i)).collect();
+        fn find(parent: &std::collections::HashMap<i64, i64>, mut x: i64) -> i64 {
+            while parent[&x] != x {
+                x = parent[&x];
+            }
+            x
+        }
+        for e in &edge_list {
+            let (a, b) = (find(&parent, e.source), find(&parent, e.target));
+            if a != b {
+                parent.insert(a.max(b), a.min(b));
+            }
+        }
+        let roots: std::collections::HashSet<i64> = (1..=10).map(|i| find(&parent, i)).collect();
+        assert_eq!(roots.len(), 1, "sparsified graph must stay connected");
+    }
+
+    #[test]
+    fn test_sparsify_leaves_sparse_graphs_alone() {
+        let mut edge_list = vec![edge(1, 2, 0.9), edge(2, 3, 0.8)];
+        edges::sparsify_edges(&mut edge_list, 4);
+        assert_eq!(edge_list.len(), 2);
     }
 
     #[test]
@@ -408,25 +481,23 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_title_keywords_drops_numeric_ids() {
+        // Live label leak: a mastodon status URL glued to text tokenized as
+        // "116885294589687234here".
+        let keywords = clustering::extract_title_keywords(
+            "RE: fosstodon 116885294589687234Here TypeScript 7.0 released v5-9",
+        );
+        assert!(!keywords.iter().any(|k| k.contains("116885294589687234")));
+        assert!(keywords.contains(&"typescript".to_string()));
+        assert!(
+            keywords.contains(&"v5-9".to_string()),
+            "short numerics stay"
+        );
+    }
+
+    #[test]
     fn test_edge_count_per_node() {
-        let edge_list = vec![
-            GraphEdge {
-                source: 1,
-                target: 2,
-                edge_type: EdgeType::Semantic,
-                weight: 0.9,
-                label: None,
-                methods: vec![],
-            },
-            GraphEdge {
-                source: 1,
-                target: 3,
-                edge_type: EdgeType::Chain,
-                weight: 0.8,
-                label: None,
-                methods: vec![],
-            },
-        ];
+        let edge_list = vec![edge(1, 2, 0.9), edge(1, 3, 0.8)];
 
         let counts = edges::count_edges_per_node(&edge_list);
         assert_eq!(counts[&1], 2);

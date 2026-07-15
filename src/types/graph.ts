@@ -16,6 +16,12 @@ export interface GraphNode {
   created_at: string;
   primary_topic: string | null;
   cluster_id: string | null;
+  /** Total items this node represents (>1 = a story of collapsed near-dupes). */
+  member_count: number;
+  /** Titles of collapsed siblings (representative excluded), capped. */
+  member_titles: string[];
+  /** Item ids of all members including the representative. */
+  member_ids: number[];
   x: number;
   y: number;
 }
@@ -42,6 +48,12 @@ export interface GraphMeta {
   total_items: number;
   total_edges: number;
   cluster_count: number;
+  /** Nodes that represent 2+ collapsed items. */
+  story_count: number;
+  /** Items folded behind story representatives. */
+  collapsed_items: number;
+  /** Low-signal isolated items beyond the orbit-ring cap (List view only). */
+  hidden_items: number;
   time_window_days: number;
   edge_threshold: string;
 }
