@@ -142,6 +142,23 @@ pub const MAX_SINGLE_SOURCE_FRACTION: f64 = 0.15;
 /// per-file cap ([`MAX_DOC_CHUNKS_PER_SOURCE`]) still applies at any size.
 pub const MIN_CORPUS_FOR_DOMINANCE: usize = 500;
 
+/// Collapse detection: the corpus is considered COLLAPSED when it shrinks to
+/// less than `1/CORPUS_COLLAPSE_DIVISOR` of the last recorded sound baseline
+/// (and that baseline was at least [`MIN_CORPUS_FOR_DOMINANCE`]). This is the
+/// wipe detector: on 2026-07-15 a clear-then-rebuild indexing path silently
+/// deleted a 24,113-chunk corpus and the health check blessed the empty table
+/// as "healthy total=0" — an engine cycle then scored 701 items ungrounded.
+/// A >90% overnight shrink of a substantial grounding corpus is never organic.
+pub const CORPUS_COLLAPSE_DIVISOR: usize = 10;
+
+/// kv_store key holding the last sound (healthy AND grounded) corpus size —
+/// the baseline [`assess_corpus`] compares against for collapse detection.
+/// Deliberately only updated when the corpus is sound (see
+/// [`crate::db::Database::record_corpus_baseline`]), so a collapsed corpus
+/// keeps re-alarming against the last sound size instead of ratifying the
+/// collapse as the new normal.
+pub const CORPUS_BASELINE_KV_KEY: &str = "context_corpus_last_sound_size";
+
 // ── Extension tables ────────────────────────────────────────────────────────
 
 /// Recognized source-code extensions (grounding-eligible).
@@ -261,24 +278,43 @@ pub struct SourceTally {
 }
 
 /// A snapshot verdict on the grounding corpus. `healthy == false` means the
-/// composition has drifted into the pollution shape and remediation should fire.
+/// composition has drifted into the pollution shape (or the corpus collapsed)
+/// and remediation should fire.
 #[derive(Debug, Clone)]
 pub struct CorpusHealth {
     pub total: usize,
+    /// Grounding-eligible (code/config) chunks — the substrate the context
+    /// score and "Similar to your code" evidence actually read. Zero means
+    /// every scoring run is ungrounded regardless of `total`.
+    pub grounding_chunks: usize,
     pub doc_fraction: f64,
     pub top_source: Option<(String, usize)>,
     pub top_source_fraction: f64,
     /// Doc sources exceeding [`MAX_DOC_CHUNKS_PER_SOURCE`] — the quarantine list.
     pub over_cap_doc_sources: Vec<SourceTally>,
+    /// True when the corpus shrank below `baseline / CORPUS_COLLAPSE_DIVISOR`
+    /// from a substantial baseline — a wipe, not organic churn. Quarantine
+    /// cannot fix this (there is nothing to prune); it needs a reindex.
+    pub collapsed: bool,
     pub healthy: bool,
     pub issues: Vec<String>,
 }
 
 /// Assess corpus composition from per-source tallies. Pure — the caller supplies
-/// the tallies (from a `GROUP BY source_file, source_type` query) so this is
-/// unit-testable without a database.
-pub fn assess_corpus(tallies: &[SourceTally]) -> CorpusHealth {
+/// the tallies (from a `GROUP BY source_file, source_type` query) and the last
+/// sound baseline size (from kv, see [`CORPUS_BASELINE_KV_KEY`]) so this is
+/// unit-testable without a database. `baseline = None` means no sound corpus
+/// has ever been recorded (cold start) — collapse detection stays silent.
+pub fn assess_corpus(tallies: &[SourceTally], baseline: Option<usize>) -> CorpusHealth {
     let total: usize = tallies.iter().map(|t| t.count).sum();
+    let grounding_chunks: usize = tallies
+        .iter()
+        .filter(|t| {
+            ContextClass::from_source_type(&t.source_type)
+                .is_some_and(ContextClass::grounding_eligible)
+        })
+        .map(|t| t.count)
+        .sum();
     let doc_count: usize = tallies
         .iter()
         .filter(|t| t.source_type == "doc" || t.source_type == "reject")
@@ -330,13 +366,30 @@ pub fn assess_corpus(tallies: &[SourceTally]) -> CorpusHealth {
             MAX_DOC_CHUNKS_PER_SOURCE
         ));
     }
+    // Collapse: a substantial corpus shrinking >90% is a wipe, never organic
+    // churn. Compared against the last SOUND size, not the last boot's size —
+    // so the alarm keeps firing every boot until the corpus actually recovers,
+    // instead of one boot of shrinkage ratifying the collapse as the baseline.
+    let collapsed = matches!(
+        baseline,
+        Some(prev) if prev >= MIN_CORPUS_FOR_DOMINANCE && total < prev / CORPUS_COLLAPSE_DIVISOR
+    );
+    if collapsed {
+        issues.push(format!(
+            "corpus COLLAPSED: {} chunks now vs last sound baseline of {} — a wipe or failed rebuild, not organic churn; reindex needed",
+            total,
+            baseline.unwrap_or(0)
+        ));
+    }
 
     CorpusHealth {
         total,
+        grounding_chunks,
         doc_fraction,
         top_source,
         top_source_fraction,
         over_cap_doc_sources,
+        collapsed,
         healthy: issues.is_empty(),
         issues,
     }
@@ -487,7 +540,7 @@ mod tests {
             source_type: "doc".into(),
             count: 15,
         });
-        let h = assess_corpus(&tallies);
+        let h = assess_corpus(&tallies, None);
         assert!(
             h.total >= MIN_CORPUS_FOR_DOMINANCE,
             "corpus must clear the floor"
@@ -495,6 +548,11 @@ mod tests {
         assert!(h.healthy, "issues: {:?}", h.issues);
         assert!(h.doc_fraction < MAX_DOC_FRACTION);
         assert!(h.top_source_fraction < MAX_SINGLE_SOURCE_FRACTION);
+        assert_eq!(
+            h.grounding_chunks,
+            12 * 50,
+            "grounding = code chunks only, docs excluded"
+        );
     }
 
     #[test]
@@ -513,7 +571,7 @@ mod tests {
                 count: 10,
             },
         ];
-        let h = assess_corpus(&tallies);
+        let h = assess_corpus(&tallies, None);
         assert!(h.total < MIN_CORPUS_FOR_DOMINANCE);
         assert!(h.healthy, "small corpus must not alarm: {:?}", h.issues);
     }
@@ -533,7 +591,7 @@ mod tests {
                 count: 578,
             },
         ];
-        let h = assess_corpus(&tallies);
+        let h = assess_corpus(&tallies, None);
         assert!(!h.healthy);
         assert!(h.doc_fraction > MAX_DOC_FRACTION);
         assert_eq!(h.over_cap_doc_sources.len(), 1);
@@ -546,10 +604,98 @@ mod tests {
     }
 
     #[test]
-    fn empty_corpus_is_vacuously_healthy() {
-        let h = assess_corpus(&[]);
+    fn empty_corpus_with_no_baseline_is_vacuously_healthy() {
+        // Cold start: nothing indexed yet and no sound baseline ever recorded.
+        // This must stay quiet (cold-start doctrine) — the collapse alarm only
+        // arms once a sound corpus has existed.
+        let h = assess_corpus(&[], None);
         assert!(h.healthy);
         assert_eq!(h.total, 0);
+        assert_eq!(h.grounding_chunks, 0);
+        assert!(!h.collapsed);
         assert_eq!(h.doc_fraction, 0.0);
+    }
+
+    #[test]
+    fn collapse_from_a_sound_baseline_is_caught() {
+        // The live 2026-07-15 shape: a 24,113-chunk corpus wiped by a
+        // clear-then-rebuild path; the health check saw total=0 and said
+        // "healthy". With the baseline it must alarm — on the empty table AND
+        // on the tiny partial-rebuild state that followed (126 chunks).
+        for (tallies, label) in [
+            (vec![], "empty table"),
+            (
+                vec![SourceTally {
+                    source_file: "README.md#Features".into(),
+                    source_type: "doc".into(),
+                    count: 126,
+                }],
+                "partial rebuild",
+            ),
+        ] {
+            let h = assess_corpus(&tallies, Some(24_113));
+            assert!(h.collapsed, "{label}: must detect collapse");
+            assert!(!h.healthy, "{label}: collapse is unhealthy");
+            assert!(
+                h.issues.iter().any(|i| i.contains("COLLAPSED")),
+                "{label}: issues: {:?}",
+                h.issues
+            );
+        }
+    }
+
+    #[test]
+    fn collapse_alarm_never_fires_on_organic_or_small_baselines() {
+        let code = |n: usize| {
+            (0..20)
+                .map(|i| SourceTally {
+                    source_file: format!("src/f{i}.rs"),
+                    source_type: "code".into(),
+                    count: n / 20,
+                })
+                .collect::<Vec<_>>()
+        };
+        // Organic churn: 24k -> 20k is fine.
+        let h = assess_corpus(&code(20_000), Some(24_113));
+        assert!(!h.collapsed, "organic shrink must not alarm");
+        assert!(h.healthy, "issues: {:?}", h.issues);
+        // Exactly at the divisor boundary: 24k -> 2.5k is >= prev/10, no alarm.
+        let h = assess_corpus(&code(2_500), Some(24_113));
+        assert!(!h.collapsed, "boundary must not alarm");
+        // A tiny baseline (below the dominance floor) never arms the alarm —
+        // cold-start corpora legitimately churn hard.
+        let h = assess_corpus(&[], Some(300));
+        assert!(!h.collapsed, "sub-floor baseline must not arm the alarm");
+        assert!(h.healthy);
+    }
+
+    #[test]
+    fn grounding_chunks_counts_code_and_config_only() {
+        let tallies = vec![
+            SourceTally {
+                source_file: "main.rs".into(),
+                source_type: "code".into(),
+                count: 10,
+            },
+            SourceTally {
+                source_file: "Cargo.toml".into(),
+                source_type: "config".into(),
+                count: 4,
+            },
+            SourceTally {
+                source_file: "README.md".into(),
+                source_type: "doc".into(),
+                count: 30,
+            },
+            // Legacy pre-reconcile rows must not count as grounding.
+            SourceTally {
+                source_file: "old.md".into(),
+                source_type: "text".into(),
+                count: 50,
+            },
+        ];
+        let h = assess_corpus(&tallies, None);
+        assert_eq!(h.grounding_chunks, 14);
+        assert_eq!(h.total, 94);
     }
 }
