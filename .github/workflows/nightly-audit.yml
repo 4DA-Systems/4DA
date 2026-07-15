@@ -3,7 +3,14 @@
 # Runs every night at 06:00 UTC (≈ early evening AEST) on main. Executes:
 #   1. cargo audit               — RustSec advisories against Cargo.lock
 #   2. cargo deny check          — licence/source/advisory policy
-#   3. pnpm audit --prod --high  — npm advisories on production deps only
+#   3. pnpm audit                — npm advisories against EVERY pnpm-lock.yaml
+#      in the repo: root (production deps only) plus each sub-project with
+#      its own lockfile (site/, paddle-webhook/, mcp-4da-server/,
+#      mcp-streets-server/). Sub-projects are audited with dev deps
+#      included: their trees are almost entirely devDependencies
+#      (eleventy, vercel CLI, tsc) and that build/deploy tooling IS the
+#      supply chain for what they ship — a --prod audit there would scan
+#      a near-empty set and stay blind to advisories Dependabot reports.
 #
 # If ANY of the three fire, an issue is opened (or an existing
 # open one is reused) labelled `security` / `supply-chain` so it
@@ -34,20 +41,23 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v4
-        with:
-          # Pin to the repo's packageManager version. Left unpinned, action-setup
-          # installs the latest pnpm (v10+, which requires Node >=22.13 and the
-          # node:sqlite builtin) and crashes `pnpm store path` on the Node-20 job
-          # — that silently blinded this audit for 3+ nights (2026-06-13).
-          version: 9.15.0
-
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
+          # pnpm 11 (below) requires Node >=22.13.
+          node-version: '22'
+
+      - name: Setup pnpm
+        # npm registry retired the legacy audit endpoints on 2026-07-14
+        # (HTTP 410) — pnpm <=10 (incl. the repo's pinned 9.15.0) can no
+        # longer audit AT ALL; only pnpm 11+ speaks the replacement bulk
+        # advisory endpoint. Installed via npm -g (the validate.yml /
+        # hermetic.yml pattern) because pnpm/action-setup hard-errors when
+        # its `version` input differs from package.json's packageManager
+        # (pnpm@9.15.0, which the rest of the repo keeps for installs).
+        # This job only audits — it never writes a lockfile — so the
+        # version split is safe.
+        run: npm install -g --force pnpm@11.13.0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -98,18 +108,36 @@ jobs:
             echo "CARGO_DENY_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: pnpm install (frozen)
-        run: pnpm install --frozen-lockfile
-
-      - name: pnpm audit (prod, high+)
+      - name: pnpm audit (root + sub-lockfiles, high+)
         id: pnpm_audit
+        # No `pnpm install` needed: `pnpm audit` reads pnpm-lock.yaml only.
+        # pnpm_config_pm_on_fail=ignore stops pnpm 11 from silently
+        # re-executing the root packageManager pin (pnpm@9.15.0), whose
+        # audit is dead against the retired registry endpoint.
+        env:
+          pnpm_config_pm_on_fail: ignore
         continue-on-error: true
         run: |
           set +e
-          OUTPUT=$(pnpm audit --prod --audit-level=high 2>&1)
-          EXIT_CODE=$?
+          EXIT_CODE=0
+          OUTPUT=""
+          # ".:--prod" = root, production deps only (unchanged policy).
+          # Sub-projects include dev deps — see header comment for why.
+          for entry in ".:--prod" "site:" "paddle-webhook:" "mcp-4da-server:" "mcp-streets-server:"; do
+            dir="${entry%%:*}"
+            flags="${entry#*:}"
+            RESULT=$(pnpm --dir "$dir" audit $flags --audit-level=high 2>&1)
+            CODE=$?
+            echo "=== pnpm audit $dir ${flags:+($flags)} — exit $CODE ==="
+            echo "$RESULT"
+            if [ "$CODE" -eq 0 ]; then
+              OUTPUT="${OUTPUT}[$dir] clean"$'\n'
+            else
+              EXIT_CODE=1
+              OUTPUT="${OUTPUT}[$dir] FAILED (exit $CODE):"$'\n'"$RESULT"$'\n'
+            fi
+          done
           set -e
-          echo "$OUTPUT"
           {
             echo "exit_code=$EXIT_CODE"
             echo "output<<PNPM_AUDIT_EOF"
@@ -154,7 +182,7 @@ jobs:
               '',
               section('cargo audit',     process.env.CARGO_AUDIT_EXIT, process.env.CARGO_AUDIT_OUT),
               section('cargo deny check', process.env.CARGO_DENY_EXIT, process.env.CARGO_DENY_OUT),
-              section('pnpm audit --prod --audit-level=high', process.env.PNPM_AUDIT_EXIT, process.env.PNPM_AUDIT_OUT),
+              section('pnpm audit (root --prod + sub-lockfiles, high+)', process.env.PNPM_AUDIT_EXIT, process.env.PNPM_AUDIT_OUT),
             ].join('\n');
 
             // Reuse an existing open issue from a previous nightly if present,

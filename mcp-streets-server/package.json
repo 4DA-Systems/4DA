@@ -46,7 +46,10 @@
     ],
     "overrides": {
       "fast-uri": ">=3.1.2",
-      "ip-address": "^10.1.1"
+      "ip-address": "^10.1.1",
+      "@hono/node-server": ">=1.19.13 <2",
+      "express-rate-limit": ">=8.2.2 <9",
+      "path-to-regexp@8": ">=8.4.0 <9"
     }
   }
 }
