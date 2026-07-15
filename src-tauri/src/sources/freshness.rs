@@ -238,15 +238,6 @@ fn compute_duplicate_ratio(items: &[SourceItem], previous_ids: &[String]) -> f64
 fn find_newest_item_age(items: &[SourceItem], _source_name: &str) -> Option<u64> {
     let now = Utc::now();
 
-    let timestamp_keys = [
-        "published_at",
-        "created_at",
-        "pub_date",
-        "published",
-        "updated_at",
-        "updated",
-    ];
-
     let mut newest: Option<DateTime<Utc>> = None;
 
     for item in items {
@@ -254,7 +245,7 @@ fn find_newest_item_age(items: &[SourceItem], _source_name: &str) -> Option<u64>
             continue;
         };
 
-        for key in &timestamp_keys {
+        for key in PUBLICATION_DATE_KEYS {
             if let Some(val) = meta.get(key) {
                 if let Some(ts) = parse_timestamp(val) {
                     newest = Some(match newest {
@@ -278,14 +269,35 @@ fn find_newest_item_age(items: &[SourceItem], _source_name: &str) -> Option<u64>
     })
 }
 
+/// Canonical metadata keys that may carry an item's publication date, in
+/// priority order. Shared by the staleness probe above and the persistence
+/// extractor (`source_fetching::extract_published_at`) so both read the same
+/// vocabulary.
+pub(crate) const PUBLICATION_DATE_KEYS: &[&str] = &[
+    "published_at",
+    "published_date",
+    "pub_date",
+    "published",
+    "created_at",
+    "updated_at",
+    "updated",
+    "lastModified",
+];
+
 /// Try to parse a JSON value as a datetime.
 ///
-/// Handles: ISO 8601 strings, Unix timestamps (integer or float).
-fn parse_timestamp(val: &serde_json::Value) -> Option<DateTime<Utc>> {
+/// Handles: ISO 8601 / RFC 3339, RFC 2822 (RSS `<pubDate>`), bare dates
+/// (`YYYY-MM-DD`, papers_with_code), and Unix timestamps (integer or float).
+pub(crate) fn parse_timestamp(val: &serde_json::Value) -> Option<DateTime<Utc>> {
     match val {
         serde_json::Value::String(s) => {
+            let s = s.trim();
             // Try ISO 8601 with timezone
             if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+                return Some(dt.with_timezone(&Utc));
+            }
+            // RFC 2822 — RSS <pubDate> ("Mon, 13 Jul 2026 10:00:00 GMT")
+            if let Ok(dt) = DateTime::parse_from_rfc2822(s) {
                 return Some(dt.with_timezone(&Utc));
             }
             // Try ISO 8601 without timezone (assume UTC)
@@ -295,6 +307,10 @@ fn parse_timestamp(val: &serde_json::Value) -> Option<DateTime<Utc>> {
             // Try common date formats
             if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
                 return Some(dt.and_utc());
+            }
+            // Bare date ("2017-06-12") — midnight UTC
+            if let Ok(d) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+                return d.and_hms_opt(0, 0, 0).map(|dt| dt.and_utc());
             }
             None
         }
@@ -318,6 +334,24 @@ fn parse_timestamp(val: &serde_json::Value) -> Option<DateTime<Utc>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn parse_timestamp_rfc2822_and_bare_date() {
+        use super::parse_timestamp;
+        // RSS <pubDate>
+        let v = serde_json::json!("Mon, 01 May 2023 10:00:00 GMT");
+        let dt = parse_timestamp(&v).expect("rfc2822 parses");
+        assert_eq!(
+            dt.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2023-05-01 10:00:00"
+        );
+        // papers_with_code bare date
+        let v = serde_json::json!("2017-06-12");
+        let dt = parse_timestamp(&v).expect("bare date parses");
+        assert_eq!(dt.format("%Y-%m-%d").to_string(), "2017-06-12");
+        // Garbage stays None
+        assert!(parse_timestamp(&serde_json::json!("not a date")).is_none());
+    }
+
     use super::*;
 
     fn make_item(source: &str, id: &str, title: &str) -> SourceItem {

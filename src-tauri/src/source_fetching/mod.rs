@@ -60,6 +60,29 @@ pub(crate) fn extract_source_tags(item: &crate::sources::SourceItem) -> Option<S
     }
 }
 
+/// Extract the item's PUBLICATION date from adapter metadata, normalized to
+/// the SQLite canonical `%Y-%m-%d %H:%M:%S` (UTC) so `parse_datetime` reads
+/// it back losslessly.
+///
+/// Adapters parse pub dates (RSS `<pubDate>`, npm `time`, OSV `published`,
+/// crates.io `updated_at`, …) into metadata but they were dropped at the DB
+/// boundary — so a 2023 article a feed keeps in its XML re-entered the
+/// analysis window forever via `last_seen` refreshes (the "TypeScript 5.1
+/// Beta" leak, 2026-07-13 audit). Keys and parser are shared with the
+/// freshness probe (`sources::freshness`). Returns `None` when no metadata
+/// key parses — callers COALESCE to first-seen.
+pub(crate) fn extract_published_at(item: &crate::sources::SourceItem) -> Option<String> {
+    let meta = item.metadata.as_ref()?;
+    for key in crate::sources::freshness::PUBLICATION_DATE_KEYS {
+        if let Some(val) = meta.get(*key) {
+            if let Some(ts) = crate::sources::freshness::parse_timestamp(val) {
+                return Some(ts.format("%Y-%m-%d %H:%M:%S").to_string());
+            }
+        }
+    }
+    None
+}
+
 // ============================================================================
 // Self-healing retry logic
 // ============================================================================

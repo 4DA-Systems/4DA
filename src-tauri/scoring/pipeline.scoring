@@ -283,6 +283,19 @@ commodity_ceiling {
     # Self-promotional announcements ("Show HN", "I built…"). Standard
     # bypasses apply — real community traction earns the slot.
     show_and_tell: 0.32   # [0.15, 0.45]
+    # Job/hiring posts ("X is hiring Senior Engineer #rust #react"). These
+    # name-drop the developer's exact stack keywords and so score CORE without
+    # a cap (observed: CircleCI/Diligent hiring at 0.91). A job ad is never
+    # stack intelligence — capped below the MATCH band, and (like academic) the
+    # community/sophistication bypasses are withheld so a popular "Who's hiring"
+    # thread can't ride upvotes into the brief.
+    hiring: 0.28          # [0.15, 0.40]
+    # Off-stack security advisories — a CVE/GHSA for a package NOT in the
+    # developer's dependency graph (observed: 9router 0.91, rama 0.78 scoring
+    # CORE though neither is a dependency). Awareness-only: capped to the MATCH
+    # band so it stays visible but never CORE. In-stack advisories
+    # (strongly_grounded) are exempt and surface at full score.
+    security_advisory_ungrounded: 0.44   # [0.30, 0.55]
 }
 
 # Community quality signal thresholds - extracted from source metadata

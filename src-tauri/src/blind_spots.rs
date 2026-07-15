@@ -2545,6 +2545,63 @@ fn truncate_note(s: &str) -> String {
     s.chars().take(200).collect()
 }
 
+/// Parse the true unreviewed-signal count out of a dep's `why` string. That
+/// string is `"{n} unreviewed signal(s), risk=..."` when the dep has real
+/// signals, else a free-form coverage reason (no count). Returns `None` when
+/// there is no authoritative count to enforce against.
+fn parse_why_signal_count(why: &str) -> Option<u32> {
+    if !why.contains("unreviewed signal") {
+        return None;
+    }
+    why.split_whitespace().next()?.parse::<u32>().ok()
+}
+
+/// Guard against LLM count hallucination in the AI recommendation. Observed
+/// incident: the model wrote "React has 73 high-risk unreviewed signals" when
+/// the real figure we fed it was 7 — a fabricated number the UI must never show
+/// (intelligence doctrine: never surface a value the system can't stand behind).
+///
+/// Deterministic and dependency-free: find any bare integer that directly
+/// qualifies the word "signal"/"signals" (allowing intervening adjectives like
+/// "high-risk unreviewed") and, if it disagrees with the authoritative
+/// `expected` count, rewrite it to the truth. Version-like tokens (containing a
+/// '.') are left untouched so "review the 19.x breaking changes" survives.
+fn correct_fabricated_signal_counts(rec: &str, expected: Option<u32>) -> String {
+    let Some(expected) = expected else {
+        return rec.to_string();
+    };
+    let words: Vec<&str> = rec.split(' ').collect();
+    let mut out: Vec<String> = Vec::with_capacity(words.len());
+    for (i, w) in words.iter().enumerate() {
+        // A bare integer token (not a version like "19.2" / "19.x").
+        let digits: String = w.chars().filter(|c| c.is_ascii_digit()).collect();
+        let is_bare_int = !digits.is_empty()
+            && w.chars()
+                .all(|c| c.is_ascii_digit() || !c.is_alphanumeric());
+        if is_bare_int && !w.contains('.') {
+            // Does a following word (within 3) name "signal(s)"?
+            let qualifies_signal = words.iter().skip(i + 1).take(3).any(|nx| {
+                let alpha: String = nx
+                    .chars()
+                    .filter(|c| c.is_ascii_alphabetic())
+                    .collect::<String>()
+                    .to_ascii_lowercase();
+                alpha == "signal" || alpha == "signals"
+            });
+            if qualifies_signal {
+                if let Ok(n) = digits.parse::<u32>() {
+                    if n != expected {
+                        out.push(w.replace(&digits, &expected.to_string()));
+                        continue;
+                    }
+                }
+            }
+        }
+        out.push((*w).to_string());
+    }
+    out.join(" ")
+}
+
 fn now_millis() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
@@ -3387,6 +3444,8 @@ Be strict — most stable, low-churn library crates/packages with no recent secu
 
 The `recommendation` must be ONE short sentence: the reason plus a concrete next step (e.g. "Review the 19.x breaking changes before upgrading" or "Mature crypto primitive, no action needed").
 
+Do NOT state, restate, or invent any signal counts, quantities, or totals in the recommendation — the UI already shows the exact numbers, and a figure that disagrees with the data destroys trust. Speak qualitatively ("has unreviewed breaking-change signals", "several new releases to evaluate"). You MAY cite a specific VERSION number when advising on version churn (e.g. "the 19.x line").
+
 Output a JSON array ONLY, one object per numbered dependency:
 [{"id": <number>, "worth_reviewing": <true|false>, "recommendation": "<one short sentence>"}]"#;
 
@@ -3517,12 +3576,18 @@ fn parse_dep_assessments(response: &str, deps: &[(String, String, bool)]) -> Vec
         if id == 0 || (id as usize) > deps.len() {
             continue;
         }
-        let (name, _, force_worth) = &deps[id as usize - 1];
+        let (name, why, force_worth) = &deps[id as usize - 1];
+        // Correct any hallucinated signal count against the true figure we fed
+        // the model (the leading number in `why`), THEN truncate.
+        let corrected = correct_fabricated_signal_counts(
+            v["recommendation"].as_str().unwrap_or(""),
+            parse_why_signal_count(why),
+        );
         out.push(DepAssessment {
             dep_name: name.clone(),
             // Safety guard: a high-risk dep can never be collapsed to "fine".
             worth_reviewing: v["worth_reviewing"].as_bool().unwrap_or(false) || *force_worth,
-            recommendation: truncate_note(v["recommendation"].as_str().unwrap_or("")),
+            recommendation: truncate_note(&corrected),
         });
     }
     out
@@ -3721,6 +3786,63 @@ pub fn dismiss_blind_spot(
 mod tests {
     use super::*;
     use rusqlite::{params, Connection};
+
+    #[test]
+    fn parse_why_signal_count_reads_leading_count() {
+        assert_eq!(
+            parse_why_signal_count("7 unreviewed signal(s), risk=high"),
+            Some(7)
+        );
+        assert_eq!(
+            parse_why_signal_count("19 unreviewed signal(s), risk=medium"),
+            Some(19)
+        );
+        // Coverage-reason deps carry no authoritative count.
+        assert_eq!(parse_why_signal_count("no confirmed source coverage"), None);
+    }
+
+    #[test]
+    fn corrects_hallucinated_signal_count_to_truth() {
+        // The exact observed incident: model said 73, truth was 7.
+        assert_eq!(
+            correct_fabricated_signal_counts(
+                "React has 73 high-risk unreviewed signals; review breaking changes.",
+                Some(7)
+            ),
+            "React has 7 high-risk unreviewed signals; review breaking changes."
+        );
+    }
+
+    #[test]
+    fn leaves_correct_count_and_versions_untouched() {
+        // Correct count → unchanged.
+        assert_eq!(
+            correct_fabricated_signal_counts("has 7 unreviewed signals", Some(7)),
+            "has 7 unreviewed signals"
+        );
+        // Version numbers must survive (not treated as signal counts).
+        assert_eq!(
+            correct_fabricated_signal_counts(
+                "Review the 19.x breaking changes before upgrading",
+                Some(7)
+            ),
+            "Review the 19.x breaking changes before upgrading"
+        );
+        // A bare version like "React 19" is not a signal count.
+        assert_eq!(
+            correct_fabricated_signal_counts("React 19 shipped; evaluate churn", Some(7)),
+            "React 19 shipped; evaluate churn"
+        );
+    }
+
+    #[test]
+    fn no_authoritative_count_is_passthrough() {
+        // Coverage-gap deps (no count) must not be rewritten.
+        assert_eq!(
+            correct_fabricated_signal_counts("5 signals reported", None),
+            "5 signals reported"
+        );
+    }
 
     #[test]
     fn cap_urgency_at_medium_lowers_only_above_medium() {

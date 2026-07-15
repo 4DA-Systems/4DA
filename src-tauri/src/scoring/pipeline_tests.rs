@@ -24,6 +24,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         }
     }
 
@@ -779,6 +780,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
 
         let normal_input = ScoringInput {
@@ -793,6 +795,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
 
         let long_result = score_item(&long_input, &ctx, &db, &options, None);
@@ -919,6 +922,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let options = ScoringOptions {
             apply_freshness: false,
@@ -1025,6 +1029,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let options = ScoringOptions {
             apply_freshness: false,
@@ -1095,6 +1100,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let options = ScoringOptions {
             apply_freshness: false,
@@ -1165,6 +1171,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let options = ScoringOptions {
             apply_freshness: false,
@@ -1200,6 +1207,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
 
         let low_result = score_item_v2(&low_soph_input, &ctx, &db, &options);
@@ -1257,6 +1265,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let options = ScoringOptions {
             apply_freshness: false,
@@ -1317,6 +1326,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let options = ScoringOptions {
             apply_freshness: true,
@@ -1365,6 +1375,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let options = ScoringOptions {
             apply_freshness: true,
@@ -1408,6 +1419,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let options = ScoringOptions {
             apply_freshness: true,

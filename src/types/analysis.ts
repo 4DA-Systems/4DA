@@ -42,6 +42,15 @@ export interface SourceRelevance {
   advisory_id?: string;
   /** Primary extracted topic for topic clustering (e.g. "webassembly", "rust") */
   primary_topic?: string;
+  /**
+   * Frontend-only (set by use-result-filters advisory stacking): number of
+   * sibling advisories for the same package collapsed behind this
+   * representative item (the highest-scoring one). 34 axios advisories render
+   * as ONE row + "+33 advisories", not 34 sibling cards.
+   */
+  advisory_stack_count?: number;
+  /** Frontend-only: titles of the collapsed sibling advisories (capped). */
+  advisory_stack_titles?: string[];
 }
 
 /** Evidence category of an ExplanationFactor. Mirrors src-tauri/src/types.rs#FactorKind. */

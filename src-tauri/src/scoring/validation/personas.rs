@@ -646,6 +646,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
 
         let result = score_item(&input, &ctx, &db, &no_opts(), None);
@@ -677,6 +678,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
 
         let result = score_item(&input, &ctx, &db, &no_opts(), None);
@@ -708,6 +710,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
 
         let result = score_item(&input, &ctx, &db, &no_opts(), None);
@@ -737,6 +740,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
 
         let react_persona = react_frontend_dev();

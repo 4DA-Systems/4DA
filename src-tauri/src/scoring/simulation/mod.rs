@@ -120,6 +120,7 @@ pub(super) fn sim_input<'a>(
         source_tags: &[],
         tags_json: None,
         feed_origin: None,
+        source_id: None,
     }
 }
 

@@ -9,6 +9,44 @@ use crate::error::Result;
 
 use super::types::{BehaviorAction, BehaviorSignal};
 
+/// Recompute one topic's affinity from its accumulated evidence (`?1` = topic).
+///
+/// Strength-weighted: `weighted_positive` / `weighted_negative` are sums of
+/// |signal_strength|, so 40 passive ignores (−0.1 each) net a mild −4.0 while
+/// three explicit dismissals (−0.8) net −2.4 over far fewer exposures — the
+/// signal magnitude the user actually expressed survives into the score
+/// (pre-2026-07-13 only COUNTS were compared, so passive and explicit
+/// rejection weighed the same).
+///
+/// The instant-activation arm requires an EXPLICIT rejection
+/// (`explicit_negative_signals`, strength <= −0.8) AND zero accumulated
+/// positive evidence — a topic the user has only ever scrolled past can no
+/// longer snap to −1.0, and one dismissal of a junk item cannot hard-poison a
+/// topic the user has also engaged with positively (the check is on
+/// `weighted_positive`, the backfilled truth, not the historical
+/// `positive_signals` count, which pre-dates weighting and reads 0 for
+/// evidence recorded before 2026-07-13).
+///
+/// Shared verbatim by the live per-interaction update and the profile-repair
+/// migrations (Phase 89 backfill, Phase 90 arm correction) so all paths
+/// produce identical scores.
+pub(crate) const RECOMPUTE_AFFINITY_SQL: &str = "UPDATE topic_affinities SET
+    affinity_score = CASE
+        WHEN explicit_negative_signals > 0 AND weighted_positive <= 0.0 THEN
+            -1.0 * MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
+        WHEN total_exposures >= 3 THEN
+            MAX(-1.0, MIN(1.0,
+                (weighted_positive - weighted_negative) / CAST(total_exposures AS REAL)
+            )) * MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
+        ELSE 0.0
+    END,
+    confidence = CASE
+        WHEN explicit_negative_signals > 0 AND weighted_positive <= 0.0 THEN
+            MAX(0.3, MIN(CAST(total_exposures AS REAL) / 10.0, 1.0))
+        ELSE MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
+    END
+ WHERE topic = ?1";
+
 impl ACE {
     /// Record a user interaction
     pub fn record_interaction(
@@ -223,32 +261,49 @@ impl ACE {
     fn update_topic_affinities(&self, signal: &BehaviorSignal) -> Result<()> {
         let conn = self.conn.lock();
 
+        // An explicit rejection (MarkIrrelevant −1.0, Dismiss −0.8) is a user
+        // DECISION; a passive ignore (−0.1) is weak evidence. Only the former
+        // may activate the instant negative arm below. Pre-2026-07-13 the
+        // instant arm keyed on bare counts, so a topic whose only history was
+        // passive ignores snapped to −1.0 at full confidence — the live
+        // profile had typescript/tauri/rust/sqlite all at hard negative with
+        // ZERO positive signals, suppressing the user's own stack at the
+        // affinity multiplier's 0.3x floor.
+        let is_explicit_negative = signal.signal_strength <= -0.8;
+
         for topic in &signal.item_topics {
             if signal.signal_strength > 0.0 {
                 conn.execute(
-                    "INSERT INTO topic_affinities (topic, positive_signals, total_exposures, last_interaction)
-                     VALUES (?1, 1, 1, datetime('now'))
+                    "INSERT INTO topic_affinities (topic, positive_signals, weighted_positive, total_exposures, last_interaction)
+                     VALUES (?1, 1, ?2, 1, datetime('now'))
                      ON CONFLICT(topic) DO UPDATE SET
                         positive_signals = topic_affinities.positive_signals + 1,
+                        weighted_positive = topic_affinities.weighted_positive + ?2,
                         total_exposures = topic_affinities.total_exposures + 1,
                         last_interaction = datetime('now'),
                         decay_applied = 0,
                         last_decay_at = NULL,
                         updated_at = datetime('now')",
-                    rusqlite::params![topic],
+                    rusqlite::params![topic, signal.signal_strength.min(1.5)],
                 )
             } else if signal.signal_strength < 0.0 {
                 conn.execute(
-                    "INSERT INTO topic_affinities (topic, negative_signals, total_exposures, last_interaction)
-                     VALUES (?1, 1, 1, datetime('now'))
+                    "INSERT INTO topic_affinities (topic, negative_signals, weighted_negative, explicit_negative_signals, total_exposures, last_interaction)
+                     VALUES (?1, 1, ?2, ?3, 1, datetime('now'))
                      ON CONFLICT(topic) DO UPDATE SET
                         negative_signals = topic_affinities.negative_signals + 1,
+                        weighted_negative = topic_affinities.weighted_negative + ?2,
+                        explicit_negative_signals = topic_affinities.explicit_negative_signals + ?3,
                         total_exposures = topic_affinities.total_exposures + 1,
                         last_interaction = datetime('now'),
                         decay_applied = 0,
                         last_decay_at = NULL,
                         updated_at = datetime('now')",
-                    rusqlite::params![topic],
+                    rusqlite::params![
+                        topic,
+                        (-signal.signal_strength).min(1.5),
+                        i64::from(is_explicit_negative)
+                    ],
                 )
             } else {
                 conn.execute(
@@ -262,27 +317,7 @@ impl ACE {
                 )
             }?;
 
-            // For strong negative signals (MarkIrrelevant = -1.0, Dismiss = -0.8),
-            // activate affinity immediately — don't wait for 5 exposures.
-            // Users expect instant feedback when they explicitly reject content.
-            conn.execute(
-                "UPDATE topic_affinities SET
-                    affinity_score = CASE
-                        WHEN negative_signals > 0 AND positive_signals = 0 THEN
-                            -1.0 * MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
-                        WHEN total_exposures >= 3 THEN
-                            (CAST(positive_signals AS REAL) - CAST(negative_signals AS REAL)) / CAST(total_exposures AS REAL)
-                            * MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
-                        ELSE 0.0
-                    END,
-                    confidence = CASE
-                        WHEN negative_signals > 0 AND positive_signals = 0 THEN
-                            MAX(0.3, MIN(CAST(total_exposures AS REAL) / 10.0, 1.0))
-                        ELSE MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
-                    END
-                 WHERE topic = ?1",
-                rusqlite::params![topic],
-            )?;
+            conn.execute(RECOMPUTE_AFFINITY_SQL, rusqlite::params![topic])?;
 
             // Structured observability for the compound-learning loop. This is the
             // single source of truth for the "4DA gets sharper every day" promise —
@@ -529,5 +564,165 @@ mod learning_loop_tests {
             .expect("count test rows")
         };
         assert_eq!(test_rows, 1, "the test_ interaction must still be recorded");
+    }
+
+    /// The 2026-07-13 doom loop: passive ignores alone must NEVER hard-poison
+    /// a topic. Pre-fix, the instant negative arm keyed on bare counts, so a
+    /// topic whose only history was −0.1 ignores snapped to −1.0 at full
+    /// confidence (live profile: typescript −1.0, tauri −1.0, rust −0.84, all
+    /// with ZERO positive signals — the user's own stack suppressed at the
+    /// affinity multiplier's 0.3x floor).
+    #[test]
+    fn passive_ignores_cannot_hard_poison_a_topic() {
+        let ace = create_test_ace();
+
+        for item_id in 1..=10 {
+            ace.record_interaction(
+                item_id,
+                BehaviorAction::Ignore,
+                vec!["tauri".to_string()],
+                "crates_io".to_string(),
+            )
+            .expect("record ignore");
+        }
+
+        let affinities = ace.get_topic_affinities_min(1).expect("read affinities");
+        let tauri = affinities
+            .iter()
+            .find(|a| a.topic == "tauri")
+            .expect("tauri affinity present");
+        // 10 ignores × −0.1 = weighted_negative 1.0 over 10 exposures →
+        // affinity −0.1 × exposure-conf 1.0 = −0.10. Mildly negative is
+        // correct (the user did skip it); hard-negative is the bug.
+        assert!(
+            tauri.affinity_score > -0.25,
+            "passive ignores must stay mild, got {}",
+            tauri.affinity_score
+        );
+        assert!(
+            tauri.affinity_score <= 0.0,
+            "ignores are still (weak) negative evidence, got {}",
+            tauri.affinity_score
+        );
+    }
+
+    /// Explicit rejection keeps its instant-activation teeth: one
+    /// MarkIrrelevant must move the topic negative immediately with real
+    /// confidence — users expect explicit feedback to bite without waiting
+    /// for exposure accumulation.
+    #[test]
+    fn explicit_rejection_still_activates_instantly() {
+        let ace = create_test_ace();
+
+        ace.record_interaction(
+            1,
+            BehaviorAction::MarkIrrelevant,
+            vec!["blockchain".to_string()],
+            "hackernews".to_string(),
+        )
+        .expect("record mark_irrelevant");
+
+        let affinities = ace.get_topic_affinities_min(1).expect("read affinities");
+        let topic = affinities
+            .iter()
+            .find(|a| a.topic == "blockchain")
+            .expect("affinity present");
+        assert!(
+            topic.affinity_score < 0.0,
+            "explicit rejection must go negative immediately, got {}",
+            topic.affinity_score
+        );
+        assert!(
+            topic.confidence >= 0.3,
+            "explicit rejection carries immediate confidence, got {}",
+            topic.confidence
+        );
+    }
+
+    /// The live `rust` residual (2026-07-14): ONE explicit dismissal of a
+    /// junk item must not hard-poison a topic that also carries positive
+    /// weighted evidence — the instant arm keys on weighted_positive (the
+    /// backfilled truth), and the weighted formula takes over.
+    #[test]
+    fn one_explicit_rejection_does_not_hard_poison_engaged_topic() {
+        let ace = create_test_ace();
+
+        // Real positive engagement first…
+        ace.record_interaction(
+            1,
+            BehaviorAction::Click {
+                dwell_time_seconds: 30,
+                pattern: None,
+            },
+            vec!["rust".to_string()],
+            "hackernews".to_string(),
+        )
+        .expect("click");
+        // …then one explicit rejection (of, say, a junk item titled with rust).
+        ace.record_interaction(
+            2,
+            BehaviorAction::Dismiss,
+            vec!["rust".to_string()],
+            "crates_io".to_string(),
+        )
+        .expect("dismiss");
+        // Some passive exposures so the weighted arm is active (>= 3).
+        ace.record_interaction(
+            3,
+            BehaviorAction::Ignore,
+            vec!["rust".to_string()],
+            "hackernews".to_string(),
+        )
+        .expect("ignore");
+
+        let affinities = ace.get_topic_affinities_min(1).expect("read affinities");
+        let rust = affinities
+            .iter()
+            .find(|a| a.topic == "rust")
+            .expect("rust affinity present");
+        assert!(
+            rust.affinity_score > -0.5,
+            "one dismissal must not hard-poison an engaged topic, got {}",
+            rust.affinity_score
+        );
+    }
+
+    /// The strength-weighted formula keeps magnitudes honest when positives
+    /// and passive negatives mix: a topic with real engagement plus a few
+    /// scroll-pasts must stay net-positive.
+    #[test]
+    fn mixed_engagement_stays_net_positive() {
+        let ace = create_test_ace();
+
+        for item_id in 1..=2 {
+            ace.record_interaction(
+                item_id,
+                BehaviorAction::Save,
+                vec!["rust".to_string()],
+                "hackernews".to_string(),
+            )
+            .expect("save");
+        }
+        for item_id in 3..=6 {
+            ace.record_interaction(
+                item_id,
+                BehaviorAction::Ignore,
+                vec!["rust".to_string()],
+                "hackernews".to_string(),
+            )
+            .expect("ignore");
+        }
+
+        let affinities = ace.get_topic_affinities_min(1).expect("read affinities");
+        let rust = affinities
+            .iter()
+            .find(|a| a.topic == "rust")
+            .expect("rust affinity present");
+        // weighted: +2.0 vs −0.4 over 6 exposures → clearly positive.
+        assert!(
+            rust.affinity_score > 0.05,
+            "2 saves must outweigh 4 passive ignores, got {}",
+            rust.affinity_score
+        );
     }
 }

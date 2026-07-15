@@ -350,6 +350,7 @@ pub(crate) fn run_probe_calibration(
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let result = score_item(&input, ctx, db, &opts, None);
         total += 1;
@@ -690,6 +691,7 @@ mod tests {
                 source_tags: &[],
                 tags_json: None,
                 feed_origin: None,
+                source_id: None,
             }
         }
 

@@ -32,6 +32,12 @@ pub(crate) struct ScoringInput<'a> {
     /// Per-feed provenance (RSS feed URL, YouTube channel ID, etc.).
     /// Used by curated feed registry to override tier and content type.
     pub feed_origin: Option<&'a str>,
+    /// The adapter's stable per-item identifier (`source_items.source_id`).
+    /// For registry sources this structurally names the SUBJECT package
+    /// (`crate-serde`, `react@19.2.5`) — the only trustworthy grounding
+    /// evidence for a registry release item. `None` only on paths that
+    /// don't originate from a stored source item (ad-hoc scoring, tests).
+    pub source_id: Option<&'a str>,
 }
 
 /// Options controlling which scoring stages are applied
@@ -72,6 +78,8 @@ pub(crate) fn score_item(
         db.find_similar_contexts(input.embedding, 3)
             .unwrap_or_default()
             .into_iter()
+            // Mirror of V2's boilerplate-context guard (see pipeline_v2).
+            .filter(|result| !crate::utils::is_boilerplate_chunk(&result.text))
             .map(|result| {
                 let similarity = 1.0 / (1.0 + result.distance);
                 let matched_text = if result.text.len() > 100 {

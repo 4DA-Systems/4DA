@@ -592,6 +592,13 @@ fn extract_signals(
             }
         }
 
+        // Registry release items: a dep-name mention in another package's
+        // description is not "named in the item text" evidence — only the
+        // SUBJECT package is what the item is about. Align the corroborated
+        // flags so evidence chips and the grounding candidate route agree
+        // with the registry-subject verdict below.
+        dependencies::align_registry_corroboration(input.source_type, input.source_id, &mut deps);
+
         (deps, score)
     };
 
@@ -1406,11 +1413,21 @@ fn apply_gate_effect(
     };
 
     // Score ceiling applied LAST — domain boost cannot push above gate ceiling.
-    // Hard cap at 0.95: no item should display 100% — that implies perfect
-    // certainty which no heuristic pipeline can guarantee.
-    (gated * domain_gate_mult)
-        .min(score_ceiling)
-        .clamp(0.0, scoring_config::FINAL_CEILING_ABSOLUTE_MAX)
+    //
+    // De-saturation (2026-07-13): the old hard
+    // `.min(score_ceiling).clamp(0, 0.95)` was the pipeline's only
+    // NON-INJECTIVE operation — it flattened every strong item onto a single
+    // mass point (362 live items persisted the identical 0.9017062 =
+    // soft_ceiling(0.95 + offset)), destroying ranking exactly where it
+    // matters most and reducing top-band order to the necessity tiebreaker.
+    // Soft-compress instead: `soft_ceiling` hard-mins when the cap is at or
+    // below the knee (so the 0.20 / 0.28 / 0.72 noise-suppression tiers keep
+    // their exact semantics) and maps `(knee, ∞)` injectively onto
+    // `(knee, cap)` for the high tiers — distinct strong items stay distinct,
+    // order preserved, and the "no item displays 100%" invariant still holds
+    // because the cap never exceeds FINAL_CEILING_ABSOLUTE_MAX.
+    let effective_cap = score_ceiling.min(scoring_config::FINAL_CEILING_ABSOLUTE_MAX);
+    soft_ceiling(gated * domain_gate_mult, SOFT_CEILING_KNEE, effective_cap).max(0.0)
 }
 
 // ============================================================================
@@ -1484,6 +1501,16 @@ fn apply_commodity_ceiling(
         return score.min(scoring_config::COMMODITY_CEILING_CLICKBAIT);
     }
 
+    // Off-stack security advisory: a CVE/GHSA for a package NOT in the user's
+    // dependency graph. It matches the security vocabulary (so it would sail
+    // past every other exemption below via has_security_pattern) but has no
+    // bearing on this developer's stack — awareness-only, never CORE. Checked
+    // BEFORE the security exemption precisely because the advisory IS a security
+    // pattern. In-stack advisories (strongly_grounded) fall through untouched.
+    if matches!(content_type, ContentType::SecurityAdvisory) && !strongly_grounded {
+        return score.min(scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED);
+    }
+
     // Only applies to commodity types
     let ceiling = match content_type {
         ContentType::Tutorial => scoring_config::COMMODITY_CEILING_TUTORIAL,
@@ -1493,15 +1520,21 @@ fn apply_commodity_ceiling(
         // community validation earns its slot via the standard bypasses.
         ContentType::ShowAndTell => scoring_config::COMMODITY_CEILING_SHOW_AND_TELL,
         ContentType::AcademicPaper => scoring_config::COMMODITY_CEILING_ACADEMIC,
+        // Job/hiring posts — capped like academic (no crowd/sophistication lift).
+        ContentType::Hiring => scoring_config::COMMODITY_CEILING_HIRING,
         _ => return score,
     };
 
-    if matches!(content_type, ContentType::AcademicPaper) {
-        // Papers: sophistication and community-signal bypasses deliberately
-        // withheld (see fn doc). Strong dependency grounding is the only
-        // class-specific exemption; security/version patterns are checked
-        // below with the shared exemption.
-        if strongly_grounded {
+    if matches!(
+        content_type,
+        ContentType::AcademicPaper | ContentType::Hiring
+    ) {
+        // Papers and job posts: sophistication and community-signal bypasses
+        // deliberately withheld (see fn doc). For papers, strong dependency
+        // grounding is the one class-specific exemption (a paper dissecting your
+        // dep's internals is worth it); a job ad name-dropping your stack is
+        // still a job ad, so hiring gets no grounding bypass either.
+        if matches!(content_type, ContentType::AcademicPaper) && strongly_grounded {
             return score;
         }
     } else {
@@ -1602,15 +1635,111 @@ pub(crate) fn apply_final_soft_ceiling(score: f32) -> f32 {
     )
 }
 
-/// THE single authoritative score-shaping boundary. Applies the final ceiling
-/// to every result's persisted `top_score`, exactly once, after all rerank
-/// stages and before persistence. Call this at the end of EVERY analysis path
-/// (cached, fresh, deep-scan) so `relevance_score` honors the ceiling no matter
-/// which reranker last overwrote `top_score`. Does NOT reorder — each path keeps
-/// its own sort / composition-floor logic, which must run after this.
+/// Boundary knee for [`finalize_scores`]. Sits ABOVE the maximum value
+/// `score_item` can emit, so the boundary pass is the IDENTITY for pipeline
+/// outputs and only compresses reranker overwrites:
+///
+///   score_item's terminal soft ceiling receives at most
+///   gate-asymptote (0.95) + score offset (0.02) + topic-attention max (0.05)
+///   = 1.02, and soft(1.02, 0.80, 0.95) ≈ 0.915.
+///
+/// Values above this knee can only come from post-pipeline writers (the
+/// cross-encoder blend, the reconciler's final_rank, dedup boosts) whose
+/// outputs range up to ~1.0 — those are compressed injectively into
+/// (0.92, 0.95), preserving their relative order. Pre-2026-07-13 the boundary
+/// re-applied the 0.80-knee ceiling to ALREADY-CEILINGED values, so the same
+/// item persisted 0.9017 via the backfill path (no boundary call) but 0.8739
+/// via the live analyzer path (double compression).
+const BOUNDARY_CEILING_KNEE: f32 = 0.92;
+
+#[cfg(test)]
+mod desaturation_tests {
+    use super::*;
+
+    /// The 362-way-tie regression: distinct strong inputs must stay distinct
+    /// through the gate. Pre-fix, every 4/5-signal item with
+    /// `gated * domain ≥ 0.95` collapsed onto exactly 0.95 (then a fixed
+    /// offset + soft ceiling relabeled the pile to 0.9017062 — 362 identical
+    /// persisted scores on the live corpus).
+    #[test]
+    fn gate_does_not_flatten_strong_items() {
+        let ctx = ScoringContext::builder().build();
+        // 4 confirmed signals → tier ceiling 1.0; the old absolute clamp was
+        // the only binding cap. Three distinct strong scores:
+        let a = apply_gate_effect(0.80, 4, 0.9, &ctx, 0.10, 0.0);
+        let b = apply_gate_effect(0.90, 4, 0.9, &ctx, 0.10, 0.0);
+        let c = apply_gate_effect(1.00, 4, 0.9, &ctx, 0.10, 0.0);
+        assert!(a < b && b < c, "order must be preserved: {a} {b} {c}");
+        assert!(
+            (b - a) > 1e-4 && (c - b) > 1e-4,
+            "strong items must stay separated, got {a} {b} {c}"
+        );
+        assert!(
+            c < scoring_config::FINAL_CEILING_ABSOLUTE_MAX,
+            "absolute-max invariant must hold, got {c}"
+        );
+    }
+
+    /// Low/noise tiers keep their EXACT hard-cap semantics (soft_ceiling
+    /// hard-mins whenever cap <= knee) — noise suppression must not soften.
+    #[test]
+    fn low_signal_tiers_keep_hard_caps() {
+        let ctx = ScoringContext::builder().build();
+        // 0/1-signal ceilings (0.20 / 0.28 + bonus) are far below the knee.
+        let zero = apply_gate_effect(1.0, 0, 0.9, &ctx, 0.0, 0.0);
+        let one = apply_gate_effect(1.0, 1, 0.9, &ctx, 0.0, 0.0);
+        assert!(zero <= 0.20 + 1e-6, "0-signal cap must stay hard: {zero}");
+        assert!(one <= 0.28 + 1e-6, "1-signal cap must stay hard: {one}");
+    }
+
+    /// The boundary pass is the IDENTITY for anything score_item can emit —
+    /// calling it on every persistence path yields path-independent scores.
+    /// (finalize_scores is a trivial loop over this same map, so the float
+    /// map IS the behavior under test.)
+    #[test]
+    fn boundary_finalize_is_identity_for_pipeline_outputs() {
+        let boundary = |v: f32| {
+            soft_ceiling(
+                v,
+                BOUNDARY_CEILING_KNEE,
+                scoring_config::FINAL_CEILING_ABSOLUTE_MAX,
+            )
+        };
+        // Max pipeline output ≈ soft(1.02, 0.80, 0.95) ≈ 0.915 < knee 0.92.
+        let max_pipeline = apply_final_soft_ceiling(1.02);
+        assert!(
+            max_pipeline < BOUNDARY_CEILING_KNEE,
+            "boundary knee must clear the pipeline max ({max_pipeline})"
+        );
+        for v in [0.10_f32, 0.50, 0.80, 0.9017, max_pipeline] {
+            assert!(
+                (boundary(v) - v).abs() < 1e-6,
+                "boundary must not re-compress pipeline output {v}, got {}",
+                boundary(v)
+            );
+        }
+        // …while reranker overwrites above the knee are compressed under the
+        // absolute max, injectively (order preserved).
+        let (a, b) = (boundary(0.96), boundary(0.99));
+        assert!(a < b, "order preserved: {a} vs {b}");
+        assert!(b < scoring_config::FINAL_CEILING_ABSOLUTE_MAX);
+    }
+}
+
+/// THE single authoritative score-shaping boundary. Call at the end of EVERY
+/// analysis path (cached, fresh, deep-scan, backfill, headless) so the stored
+/// `relevance_score` honors the `final_ceiling.absolute_max` invariant no
+/// matter which reranker last overwrote `top_score`. IDEMPOTENT for values
+/// `score_item` produces (identity below the boundary knee), so calling it on
+/// every path yields path-independent persisted scores. Does NOT reorder —
+/// each path keeps its own sort / composition-floor logic.
 pub(crate) fn finalize_scores(results: &mut [crate::SourceRelevance]) {
     for r in results.iter_mut() {
-        r.top_score = apply_final_soft_ceiling(r.top_score);
+        r.top_score = soft_ceiling(
+            r.top_score,
+            BOUNDARY_CEILING_KNEE,
+            scoring_config::FINAL_CEILING_ABSOLUTE_MAX,
+        );
     }
 }
 
@@ -1629,6 +1758,7 @@ fn classify_signals(
     input: &ScoringInput,
     ctx: &ScoringContext,
     matched_deps: &[dependencies::DepMatch],
+    grounding: dependencies::GroundingVerdict,
     db: &Database,
 ) -> (
     Option<String>,
@@ -1684,7 +1814,7 @@ fn classify_signals(
             // Prevents single-subterm matches (e.g. "react" from "sentry-react") from
             // triggering misleading Critical alerts.
             if !matched_deps.is_empty() {
-                let has_strong_dep = dependencies::is_strongly_grounded(matched_deps);
+                let has_strong_dep = grounding.strong;
                 if c.signal_type == signals::SignalType::SecurityAlert && has_strong_dep {
                     c.priority = signals::SignalPriority::Critical;
                     // Name the highest-confidence GROUNDED match — the action
@@ -1736,7 +1866,7 @@ fn classify_signals(
             // TRUST GATE: Critical requires verified dependency evidence.
             // If signal classifier set Critical but there's no strong direct dep match, downgrade.
             if c.priority == signals::SignalPriority::Critical {
-                let has_strong_direct_dep = dependencies::is_strongly_grounded_direct(matched_deps);
+                let has_strong_direct_dep = grounding.strong_direct;
                 if !has_strong_direct_dep {
                     c.priority = signals::SignalPriority::Alert;
                     if matched_deps.is_empty() {
@@ -1830,6 +1960,13 @@ pub(crate) fn score_item(
         db.find_similar_contexts(input.embedding, 3)
             .unwrap_or_default()
             .into_iter()
+            // Boilerplate chunks (shebangs, license headers) match everything
+            // and were surfacing as top "Similar to your code" evidence on
+            // unrelated items. The chunker no longer indexes them; this filter
+            // protects users whose existing DBs still contain them — filtering
+            // here also keeps them out of the context score itself, not just
+            // the displayed evidence.
+            .filter(|result| !crate::utils::is_boilerplate_chunk(&result.text))
             .map(|result| {
                 let similarity = 1.0 / (1.0 + result.distance);
                 let matched_text = if result.text.len() > 100 {
@@ -1965,6 +2102,19 @@ pub(crate) fn score_item(
         raw.dep_match_score,
     );
 
+    // ── Canonical grounding verdict ───────────────────────────────────
+    // Computed ONCE and shared by every downstream consumer: the commodity
+    // bypass, the critical fast-path floors, the Critical trust gate, the
+    // necessity stack-update path, and the persisted breakdown (→ the
+    // evidence pool). Registry items are judged by their SUBJECT package
+    // (source_id), never by text mentions in another package's description.
+    let grounding = dependencies::compute_grounding_verdict(
+        input.source_type,
+        input.source_id,
+        &raw.matched_deps,
+        &ctx.ace_ctx,
+    );
+
     // ── Phase 8: Final adjustments ────────────────────────────────────
     let combined_score = apply_final_adjustments(
         gated_score,
@@ -1974,7 +2124,7 @@ pub(crate) fn score_item(
         community_signal,
         // Same grounding evidence the gate consumes — lets a dep-grounded
         // academic paper bypass its commodity ceiling.
-        dependencies::is_strongly_grounded(&raw.matched_deps),
+        grounding.strong,
     );
 
     // ── Score offset normalization ────────────────────────────────────
@@ -2025,7 +2175,7 @@ pub(crate) fn score_item(
     let is_breaking = content_type == crate::content_dna::ContentType::BreakingChange;
     let has_strong_dep_match = raw.dep_match_score
         >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD
-        && dependencies::is_strongly_grounded(&raw.matched_deps);
+        && grounding.strong;
     let critical_fast_path = (is_security || is_breaking) && has_strong_dep_match;
 
     // A CVE confirmed against the user's DIRECT (non-dev) dependency is the
@@ -2035,7 +2185,7 @@ pub(crate) fn score_item(
     // sitting at the bare 0.50 floor. The higher tier requires the direct dep
     // itself to be the strongly grounded edge (canonical predicate), not just
     // any direct dep riding alongside a grounded transitive match.
-    let has_direct_dep = dependencies::is_strongly_grounded_direct(&raw.matched_deps);
+    let has_direct_dep = grounding.strong_direct;
     let fast_path_floor = if has_direct_dep {
         scoring_config::CRITICAL_FASTPATH_DIRECT_DEP_FLOOR
     } else {
@@ -2118,7 +2268,7 @@ pub(crate) fn score_item(
         .collect();
 
     // ── Signal classification ─────────────────────────────────────────
-    let (sig_type, sig_priority, sig_action, sig_triggers, sig_horizon) = classify_signals(
+    let (sig_type, mut sig_priority, sig_action, sig_triggers, sig_horizon) = classify_signals(
         relevant,
         combined_score,
         raw.domain_relevance,
@@ -2128,88 +2278,13 @@ pub(crate) fn score_item(
         input,
         ctx,
         &raw.matched_deps,
+        grounding,
         db,
     );
 
-    // ── Necessity scoring ─────────────────────────────────────────────
-    let age_hours = input.created_at.map_or(0.0, |ts| {
-        (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
-    });
-
-    // Contradiction boost: check if item topics overlap with contradicted topics
-    let contradiction_boost = if ctx.contradicted_topics.is_empty() {
-        0.0
-    } else {
-        let overlap_count = raw
-            .topics
-            .iter()
-            .filter(|t| ctx.contradicted_topics.contains(t.as_str()))
-            .count();
-        // Normalize: 1 match = 0.5, 2+ = 1.0
-        match overlap_count {
-            0 => 0.0,
-            1 => 0.5,
-            _ => 1.0,
-        }
-    };
-
-    // Security severity evidence feeds the necessity bucket below, so extract it
-    // BEFORE building NecessityInputs. Previously it was computed afterward, so a real
-    // critical CVE on a dev-only dep (which can reach the security path with no signal
-    // priority) fell back to "medium" instead of critical (bug J).
+    // ── Security version evidence (extracted BEFORE necessity/applicability
+    //    so the version verdict can inform both) ───────────────────────
     let is_security_source = matches!(input.source_type, "cve" | "osv");
-    let (cvss_score, cvss_severity) = if is_security_source {
-        extract_cvss_from_content(input.content)
-    } else {
-        (None, None)
-    };
-
-    // Window title resolved in-memory (open_windows is already loaded) so the
-    // decision-relevant necessity reason can name the decision it claims relevance to.
-    let matched_window_label = matched_window_id.and_then(|wid| {
-        ctx.open_windows
-            .iter()
-            .find(|w| w.id == wid)
-            .map(|w| w.title.clone())
-    });
-
-    let necessity_inputs = necessity::NecessityInputs {
-        dep_match_score: raw.dep_match_score,
-        matched_deps: matched_dep_names.clone(),
-        signal_type: sig_type.clone(),
-        signal_priority: sig_priority.clone(),
-        cve_severity: None, // folded into signal_priority by the classifier
-        cvss_score,         // numeric severity fallback when no priority is present
-        affected_project_count: count_affected_projects(db, &matched_dep_names),
-        skill_gap_boost,
-        matched_skill_gaps: matched_skill_gaps.clone(),
-        window_boost,
-        matched_window_label: matched_window_label.clone(),
-        age_hours,
-        content_type: Some(content_type.slug().to_string()),
-        contradiction_boost,
-    };
-    let mut necessity_result = necessity::compute_necessity(&necessity_inputs);
-
-    // ── Source authority weighting for necessity ───────────────────────
-    // Security items are NOT penalized — a CVE is critical regardless of source.
-    // All other necessity categories are modulated by source authority.
-    if necessity_result.category != necessity::NecessityCategory::SecurityVulnerability
-        && necessity_result.score > 0.0
-    {
-        let authority = authority::source_authority(input.source_type);
-        necessity_result.score = (necessity_result.score * authority).clamp(0.0, 1.0);
-    }
-
-    // ── Security applicability + critical alert gate ────────────────────
-    let (applicability, is_critical_alert) = if sig_type.as_deref() == Some("security_alert") {
-        security_applicability(&raw.matched_deps, &advisory_ecosystems)
-    } else {
-        (None, false)
-    };
-
-    // ── Security evidence extraction ─────────────────────────────────
-    // (cvss_score / cvss_severity already extracted above for the necessity bucket)
     let advisory_id = if is_security_source {
         extract_advisory_id(input.title)
     } else {
@@ -2242,6 +2317,110 @@ pub(crate) fn score_item(
         affected_versions.as_deref(),
         fixed_version.as_deref(),
     );
+
+    // A CONFIRMED not-affected advisory (installed version outside the affected
+    // range / at-or-past the fix) is awareness at most — never Critical/Alert.
+    // The OSV backfill floods dozens of historical, long-patched advisories per
+    // package; without this they all page as if they endanger today's build.
+    let version_negative =
+        sig_type.as_deref() == Some("security_alert") && is_version_affected == Some(false);
+    if version_negative
+        && matches!(
+            sig_priority.as_deref(),
+            Some("critical") | Some("alert") | Some("advisory")
+        )
+    {
+        sig_priority = Some("watch".to_string());
+    }
+
+    // ── Necessity scoring ─────────────────────────────────────────────
+    let age_hours = input.created_at.map_or(0.0, |ts| {
+        (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
+    });
+
+    // Contradiction boost: check if item topics overlap with contradicted topics
+    let contradiction_boost = if ctx.contradicted_topics.is_empty() {
+        0.0
+    } else {
+        let overlap_count = raw
+            .topics
+            .iter()
+            .filter(|t| ctx.contradicted_topics.contains(t.as_str()))
+            .count();
+        // Normalize: 1 match = 0.5, 2+ = 1.0
+        match overlap_count {
+            0 => 0.0,
+            1 => 0.5,
+            _ => 1.0,
+        }
+    };
+
+    // Security severity evidence feeds the necessity bucket below, so extract it
+    // BEFORE building NecessityInputs. Previously it was computed afterward, so a real
+    // critical CVE on a dev-only dep (which can reach the security path with no signal
+    // priority) fell back to "medium" instead of critical (bug J).
+    // (is_security_source computed above with the version evidence block.)
+    let (cvss_score, cvss_severity) = if is_security_source {
+        extract_cvss_from_content(input.content)
+    } else {
+        (None, None)
+    };
+
+    // Window title resolved in-memory (open_windows is already loaded) so the
+    // decision-relevant necessity reason can name the decision it claims relevance to.
+    let matched_window_label = matched_window_id.and_then(|wid| {
+        ctx.open_windows
+            .iter()
+            .find(|w| w.id == wid)
+            .map(|w| w.title.clone())
+    });
+
+    let necessity_inputs = necessity::NecessityInputs {
+        dep_match_score: raw.dep_match_score,
+        matched_deps: matched_dep_names.clone(),
+        signal_type: sig_type.clone(),
+        signal_priority: sig_priority.clone(),
+        cve_severity: None, // folded into signal_priority by the classifier
+        cvss_score,         // numeric severity fallback when no priority is present
+        affected_project_count: count_affected_projects(db, &matched_dep_names),
+        skill_gap_boost,
+        matched_skill_gaps: matched_skill_gaps.clone(),
+        window_boost,
+        matched_window_label: matched_window_label.clone(),
+        age_hours,
+        content_type: Some(content_type.slug().to_string()),
+        contradiction_boost,
+        strongly_grounded: grounding.strong,
+        version_affected: is_version_affected,
+    };
+    let mut necessity_result = necessity::compute_necessity(&necessity_inputs);
+
+    // ── Source authority weighting for necessity ───────────────────────
+    // Security items are NOT penalized — a CVE is critical regardless of source.
+    // All other necessity categories are modulated by source authority.
+    if necessity_result.category != necessity::NecessityCategory::SecurityVulnerability
+        && necessity_result.score > 0.0
+    {
+        let authority = authority::source_authority(input.source_type);
+        necessity_result.score = (necessity_result.score * authority).clamp(0.0, 1.0);
+    }
+
+    // ── Security applicability + critical alert gate ────────────────────
+    // The version verdict overrides the name/ecosystem route: a CONFIRMED
+    // not-affected advisory (installed version outside the affected range /
+    // at-or-past the fix) is `not_affected` and never a critical alert — the
+    // evidence pool keeps it out of "Affects You".
+    let (applicability, is_critical_alert) = if version_negative {
+        (Some("not_affected".to_string()), false)
+    } else if sig_type.as_deref() == Some("security_alert") {
+        security_applicability(&raw.matched_deps, &advisory_ecosystems)
+    } else {
+        (None, false)
+    };
+
+    // (advisory_id / fixed_version / affected_versions / dep_path /
+    // installed_version / is_version_affected extracted above, before
+    // necessity, so the version verdict informs it.)
     let sec_affected_project_count = count_affected_projects(db, &matched_dep_names) as u32;
 
     // ── Explanation evidence chain ────────────────────────────────────
@@ -2276,6 +2455,7 @@ pub(crate) fn score_item(
             cvss_severity: cvss_severity.as_deref(),
             fixed_version: fixed_version.as_deref(),
             installed_version: installed_version.as_deref(),
+            via_registry_subject: grounding.via_registry_subject,
         });
     let explanation = if relevant || combined_score >= 0.3 {
         explanation_chain::render_subtitle(&explanation_factors)
@@ -2300,7 +2480,7 @@ pub(crate) fn score_item(
         confirmation_mult,
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names,
-        strongly_grounded: dependencies::is_strongly_grounded(&raw.matched_deps),
+        strongly_grounded: grounding.strong,
         domain_relevance: raw.domain_relevance,
         content_quality_mult,
         novelty_mult,
@@ -2587,6 +2767,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         }
     }
 
@@ -2678,9 +2859,16 @@ mod tests {
     fn v2_zero_embedding_yields_no_context_axis() {
         let db = crate::test_utils::test_db();
         // Store a real context chunk so KNN WOULD return rows if queried.
+        // Long enough to clear the boilerplate min-chunk floor — the match-time
+        // hygiene filter drops sub-50-char fragments (they no longer exist in
+        // post-2026-07-14 indexes).
         let stored = crate::test_utils::seed_embedding("context-chunk");
-        db.upsert_context("src/main.rs", "rust tauri ipc command handler", &stored)
-            .expect("store context chunk");
+        db.upsert_context(
+            "src/main.rs",
+            "rust tauri ipc command handler registering invoke handlers for the main window",
+            &stored,
+        )
+        .expect("store context chunk");
 
         let ctx = crate::scoring::ScoringContext::builder()
             .cached_context_count(1)
@@ -2705,6 +2893,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let result = score_item(&input, &ctx, &db, &options, None);
 
@@ -2805,6 +2994,7 @@ mod tests {
             source_tags: &tags,
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
 
@@ -2869,6 +3059,7 @@ mod tests {
             source_tags: &tags,
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
 
@@ -2986,6 +3177,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let cleaned = dep_match_content_for(&input);
         assert_eq!(cleaned, "desc text.");
@@ -3006,6 +3198,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         let cleaned = dep_match_content_for(&input);
         assert_eq!(cleaned, "summary.");
@@ -3025,6 +3218,7 @@ mod tests {
             source_tags: &[],
             tags_json: None,
             feed_origin: None,
+            source_id: None,
         };
         // Non-security source content is passed through verbatim
         let cleaned = dep_match_content_for(&input);
@@ -3428,6 +3622,83 @@ mod tests {
             score, 0.90,
             "dep-grounded paper must bypass the academic ceiling"
         );
+    }
+
+    const HIRING_TITLE: &str =
+        "CircleCI is hiring Senior Software Engineer #golang #typescript #react";
+    const OFFSTACK_ADVISORY_TITLE: &str =
+        "[GHSA-vjc7-jrh9-9j86] 9router has unauthenticated CRUD on /api/providers";
+
+    #[test]
+    fn ceiling_caps_hiring_post() {
+        // A job ad name-dropping the developer's exact stack keywords (#golang
+        // #react) previously scored CORE (~0.91). It must be capped hard.
+        let capped = apply_commodity_ceiling(
+            0.91,
+            HIRING_TITLE,
+            &crate::content_dna::ContentType::Hiring,
+            0.0,
+            0.0,
+            false,
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_HIRING,
+            "hiring post must be capped at the hiring ceiling"
+        );
+    }
+
+    #[test]
+    fn community_and_grounding_do_not_lift_hiring() {
+        // Neither a popular "Who's hiring" thread (high community_signal) nor a
+        // stack-name match (strongly_grounded) may lift a job ad into the brief.
+        let capped = apply_commodity_ceiling(
+            0.91,
+            HIRING_TITLE,
+            &crate::content_dna::ContentType::Hiring,
+            0.9,
+            1.0,
+            true,
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_HIRING,
+            "no bypass may lift the hiring ceiling"
+        );
+    }
+
+    #[test]
+    fn off_stack_security_advisory_capped_below_core() {
+        // A CVE for a package NOT in the user's deps (9router/rama) must not ride
+        // the security-pattern exemption to CORE.
+        let capped = apply_commodity_ceiling(
+            0.91,
+            OFFSTACK_ADVISORY_TITLE,
+            &crate::content_dna::ContentType::SecurityAdvisory,
+            0.5,
+            0.0,
+            false, // NOT in the user's dependency graph
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED,
+            "off-stack advisory must be capped to the MATCH band"
+        );
+    }
+
+    #[test]
+    fn in_stack_security_advisory_not_capped() {
+        // A CVE for a package the developer actually depends on must surface at
+        // full score — the cap only applies to OFF-stack advisories.
+        let score = apply_commodity_ceiling(
+            0.91,
+            "[GHSA-xxxx] axios SSRF vulnerability",
+            &crate::content_dna::ContentType::SecurityAdvisory,
+            0.5,
+            0.0,
+            true, // strongly grounded — axios IS a dependency
+        );
+        assert_eq!(score, 0.91, "in-stack advisory must NOT be capped");
     }
 
     #[test]

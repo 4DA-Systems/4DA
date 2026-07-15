@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Signal Terminal Integration Tests
 // Run: node scripts/test-signal-terminal.cjs
-// Requires: 4DA app running (localhost:4445)
+// Requires: 4DA app running (localhost:4447)
 
-const BASE = 'http://localhost:4445';
+const BASE = 'http://localhost:4447';
 let passed = 0, failed = 0, total = 0;
 
 async function test(name, fn) {

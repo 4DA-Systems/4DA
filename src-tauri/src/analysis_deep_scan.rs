@@ -181,6 +181,14 @@ pub(crate) async fn run_multi_source_analysis_impl(
             );
         }
 
+        // Deep-scan scores pre-persist items, so there is no created_at row yet —
+        // but the adapter's publication date IS known. Freshness/necessity age
+        // read it; None only when the adapter carried no parseable date.
+        let published_at = item.published_at.as_deref().and_then(|p| {
+            chrono::NaiveDateTime::parse_from_str(p, "%Y-%m-%d %H:%M:%S")
+                .ok()
+                .map(|dt| dt.and_utc())
+        });
         results.push(scoring::score_item(
             &scoring::ScoringInput {
                 id: item.id,
@@ -189,11 +197,12 @@ pub(crate) async fn run_multi_source_analysis_impl(
                 content: &item.content,
                 source_type: &item.source_type,
                 embedding: item_embedding,
-                created_at: None,
+                created_at: published_at.as_ref(),
                 detected_lang: "en",
                 source_tags: &[],
                 tags_json: None,
                 feed_origin: item.feed_origin.as_deref(),
+                source_id: Some(&item.source_id),
             },
             &scoring_ctx,
             db,

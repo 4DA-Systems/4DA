@@ -1,0 +1,6 @@
+#!/bin/sh
+# Private-asset leak guard for commit MESSAGES (the content gate cannot see messages).
+node -e "const fs=require('fs');const {scanText}=require('./scripts/private-asset-guard.cjs');process.exit(scanText(fs.readFileSync(process.argv[1],'utf8'))?1:0)" "$1" || {
+  echo '[private-asset-guard] commit message names the private external verifier — rephrase to "external verifier".'
+  exit 1
+}

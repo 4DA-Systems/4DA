@@ -105,6 +105,13 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
     // Cancel any existing dismiss timer.
     cancel_dismiss_timer();
 
+    // Corner coordination: the small signal toast anchors to the same bottom-right
+    // corner. The briefing (larger, always-on-top) would cover it, so slide any
+    // toast that's currently showing up to the top-right. New toasts raised while
+    // the briefing is visible anchor top-right on their own (see position_window),
+    // so the two surfaces coexist instead of overlapping.
+    crate::notification_window::reanchor_for_briefing(app);
+
     // Recovery: if the window's JS never loaded (dev server race condition on
     // startup), destroy the stale window so it gets recreated with a fresh load.
     // By the time a briefing fires, the dev server is guaranteed to be up.
@@ -415,7 +422,11 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
         let app_synth = app.clone();
         let briefing_synth = briefing.clone();
         tauri::async_runtime::spawn(async move {
-            match crate::monitoring_briefing::synthesize_morning_briefing(&briefing_synth).await {
+            let synthesis = match crate::monitoring_briefing::synthesize_morning_briefing(
+                &briefing_synth,
+            )
+            .await
+            {
                 Ok(result) => {
                     info!(
                         target: "4da::briefing",
@@ -429,12 +440,23 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                         "tier": &result.synthesis_tier,
                     });
                     let _ = app_synth.emit_to("briefing", "briefing-synthesis-meta", &meta);
+                    Some(result.prose)
                 }
                 Err(e) => {
                     info!(target: "4da::briefing", reason = %e, "Manual synthesis skipped");
                     let _ = app_synth.emit_to("briefing", "briefing-synthesis-hint", &e);
+                    None
                 }
-            }
+            };
+            // Persist the freshly-generated brief so a cold boot / app restart
+            // shows THIS brief — with its standing-conditions collapse — instead
+            // of reverting to the last scheduled (08:00) snapshot. Without this a
+            // manual trigger updated only the live window; the on-disk snapshot
+            // stayed stale until the next scheduled run. Mirrors the scheduler's
+            // save-after-synthesis; save_snapshot self-guards empty/abstention.
+            let mut enriched = briefing_synth;
+            enriched.synthesis = synthesis;
+            crate::briefing_snapshot::save_snapshot(&enriched);
         });
     }
 

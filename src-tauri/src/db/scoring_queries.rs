@@ -122,7 +122,7 @@ impl Database {
         let sql = format!(
             "SELECT id, source_type, source_id, url, title, content, content_hash,
                     embedding, created_at, last_seen, COALESCE(detected_lang, 'en'),
-                    feed_origin, tags
+                    feed_origin, tags, published_at
              FROM source_items
              WHERE scored_pipeline_version = 0{time_clause}
              ORDER BY
@@ -154,6 +154,9 @@ impl Database {
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(11).ok().flatten(),
                 tags: row.get(12).ok().flatten(),
+                published_at: crate::db::parse_datetime_opt(
+                    row.get::<_, Option<String>>(13).ok().flatten(),
+                ),
             })
         })?;
         rows.collect()

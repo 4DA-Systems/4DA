@@ -5,7 +5,11 @@
 //! Signal Terminal — lightweight HTTP server embedded in the Tauri desktop app.
 //!
 //! Serves a self-contained terminal UI and JSON API at localhost.
-//! Dev mode: 127.0.0.1:4445 | Production: 127.0.0.1:4444
+//! Dev mode: 127.0.0.1:4447 | Production: 127.0.0.1:4446
+//!
+//! Ports are deliberately disjoint from the Vite toolchain (dev server 4444,
+//! HMR 4445): sharing an origin let the terminal's service worker hijack the
+//! app shell. Keep this range (4446/4447) clear of the frontend dev ports.
 //!
 //! Security model:
 //! - CORS: denies ALL cross-origin requests (no Access-Control-Allow-Origin header)
@@ -1015,10 +1019,13 @@ fn build_router(token: String) -> Router {
 
 /// Start the Signal Terminal HTTP server on a background Tokio task.
 ///
-/// - Dev mode (`debug_assertions`): port 4445
-/// - Production: port 4444
+/// - Dev mode (`debug_assertions`): port 4447
+/// - Production: port 4446
+///
+/// These are intentionally clear of the Vite toolchain (dev server 4444, HMR
+/// 4445) so the terminal's service worker can never share the app's origin.
 pub fn start_signal_terminal() {
-    let port: u16 = if cfg!(debug_assertions) { 4445 } else { 4444 };
+    let port: u16 = if cfg!(debug_assertions) { 4447 } else { 4446 };
     let token = get_or_create_token();
 
     info!(target: "4da::terminal", port = port, "Starting Signal Terminal");

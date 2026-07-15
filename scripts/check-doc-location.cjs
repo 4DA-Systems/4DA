@@ -28,7 +28,7 @@ const { execSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { scanthe external verifierLeakFile } = require('./private-asset-guard.cjs');
+const { scanPrivateAssetLeakFile } = require('./private-asset-guard.cjs');
 
 const RED = '\x1b[31m';
 const YELLOW = '\x1b[33m';
@@ -201,7 +201,7 @@ function main() {
   const rootViolations = [];
   const mixedViolations = [];
   const piiViolations = [];
-  const external-verifierViolations = [];
+  const assetViolations = [];
 
   for (const file of staged) {
     // 1. Root-level .md check
@@ -223,10 +223,10 @@ function main() {
       piiViolations.push({ file, hits: piiHits });
     }
 
-    // 4. private-asset-leak scan — keep the private asset out of this public repo
-    const external-verifierHits = scanthe external verifierLeakFile(REPO_ROOT, file);
-    if (external-verifierHits.length > 0) {
-      external-verifierViolations.push({ file, hits: external-verifierHits.map((h) => h.msg) });
+    // 4. Private-asset leak scan — keep the private asset out of this public repo
+    const assetHits = scanPrivateAssetLeakFile(REPO_ROOT, file);
+    if (assetHits.length > 0) {
+      assetViolations.push({ file, hits: assetHits.map((h) => h.msg) });
     }
   }
 
@@ -234,7 +234,7 @@ function main() {
     rootViolations.length > 0 ||
     mixedViolations.length > 0 ||
     piiViolations.length > 0 ||
-    external-verifierViolations.length > 0;
+    assetViolations.length > 0;
 
   if (!hasViolations) return 0;
 
@@ -270,14 +270,14 @@ function main() {
     console.error('');
   }
 
-  if (external-verifierViolations.length > 0) {
-    console.error(`${BOLD}${RED}the external verifier leak in staged file(s) — this is a PUBLIC repo:${RESET}`);
-    for (const v of external-verifierViolations) {
+  if (assetViolations.length > 0) {
+    console.error(`${BOLD}${RED}Private-asset leak in staged file(s) — this is a PUBLIC repo:${RESET}`);
+    for (const v of assetViolations) {
       console.error(`  ${RED}${v.file}${RESET}`);
       for (const m of v.hits) console.error(`    - ${m}`);
     }
     console.error('');
-    console.error(`${YELLOW}the external verifier is a separate PRIVATE asset. Keep its config/credentials/artifacts/name${RESET}`);
+    console.error(`${YELLOW}The external verifier is a separate PRIVATE asset. Keep its config/credentials/artifacts/name${RESET}`);
     console.error(`${YELLOW}out of 4DA. MCP block -> gitignored .mcp.local.json or user scope; artifacts are${RESET}`);
     console.error(`${YELLOW}gitignored; the name -> a generic "external verifier". Rules: scripts/private-asset-guard.cjs${RESET}`);
     console.error('');

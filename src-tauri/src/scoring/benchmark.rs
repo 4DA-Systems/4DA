@@ -47,6 +47,7 @@ pub(super) fn bench_input<'a>(
         source_tags: &[],
         tags_json: None,
         feed_origin: None,
+        source_id: None,
     }
 }
 

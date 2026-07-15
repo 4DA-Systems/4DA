@@ -31,6 +31,12 @@ export const ORBIT_DOMAIN_THRESHOLD = 0.7;
  * an installed version. This is the trust boundary for the highlighted pool.
  */
 export function isGrounded(r: SourceRelevance): boolean {
+  // CONFIRMED not-affected (installed version outside the affected range /
+  // at-or-past the fix, verified by the backend version check): the advisory
+  // is ABOUT the user's dependency but does not endanger their build — it
+  // must never occupy the highest-trust pool, even though the dep-name match
+  // is real and strong.
+  if (r.applicability === 'not_affected') return false;
   return (
     // Independent advisory routes — a backend-confirmed CVE edge grounds the
     // item regardless of dep-name matching (kept so a real advisory whose title

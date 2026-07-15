@@ -36,6 +36,11 @@ pub(crate) struct GenericSourceItem {
     pub content: String,
     pub feed_origin: Option<String>,
     pub tags: Option<String>,
+    /// Publication date from adapter metadata, SQLite canonical format
+    /// (`%Y-%m-%d %H:%M:%S`, UTC). None when the adapter carried no parseable
+    /// date — persistence then leaves the column NULL and readers fall back
+    /// to first-seen (`created_at`).
+    pub published_at: Option<String>,
 }
 
 /// Relevance match between an HN item and context
@@ -457,8 +462,16 @@ pub struct AnalysisState {
     pub near_misses: Option<Vec<SourceRelevance>>,
 }
 
-/// Maximum analysis duration in seconds before auto-timeout
-pub(crate) const ANALYSIS_TIMEOUT_SECS: i64 = 300;
+/// Maximum analysis duration in seconds before auto-timeout.
+///
+/// 900, not 300: a PIPELINE_VERSION bump makes every analysis cycle drain a
+/// 499-item stale chunk through the FULL scoring path (~3-5 min) on top of
+/// normal work, so 300s flagged every legitimate drain-era run as "timed out"
+/// — and the auto-reset in `get_analysis_status` then reported an empty feed
+/// while the run was still alive and about to complete (2026-07-14 live
+/// incident). The watchdog exists to recover from a genuinely dead task, not
+/// to police slow-but-progressing work.
+pub(crate) const ANALYSIS_TIMEOUT_SECS: i64 = 900;
 
 /// Near-miss threshold: items scoring above this but below relevance threshold
 /// are candidates for "almost relevant" guidance.

@@ -23,6 +23,8 @@ interface UnifiedAppBarProps {
   settingsFormProvider: string;
   isPro: boolean;
   tier: string;
+  /** True when the license probe failed and never succeeded — badge shows "?" not "FREE". */
+  licenseUnverified?: boolean;
   summaryBadges: { relevantCount: number; topCount: number; total: number } | null;
   aiBriefing: { error: string | null };
   onAnalyze: () => void;
@@ -41,6 +43,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
   settingsFormProvider,
   isPro,
   tier,
+  licenseUnverified,
   summaryBadges,
   aiBriefing,
   onAnalyze,
@@ -192,14 +195,27 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           )}
           <OllamaStatus provider={settingsFormProvider} />
 
-          {/* Tier badge */}
-          <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded ${
-            isPro
-              ? 'bg-accent-gold/20 text-accent-gold border border-accent-gold/30'
-              : 'bg-bg-tertiary text-gray-400 border border-border'
-          }`}>
-            {tier}
-          </span>
+          {/* Tier badge. When the license probe failed and never succeeded we show a "?"
+              button (not a confident "FREE") so a paid user whose cold-boot probe timed out
+              is never silently presented as Free — click to open Settings and re-check. */}
+          {licenseUnverified ? (
+            <button
+              onClick={onOpenSettings}
+              title={t('license.unverifiedTooltip', "License status unavailable (couldn't reach the backend). Your paid tier is not lost - click to re-check.")}
+              aria-label={t('license.unverifiedTooltip', "License status unavailable (couldn't reach the backend). Your paid tier is not lost - click to re-check.")}
+              className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20 transition-colors cursor-pointer"
+            >
+              {t('license.unverifiedBadge', 'License ?')}
+            </button>
+          ) : (
+            <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded ${
+              isPro
+                ? 'bg-accent-gold/20 text-accent-gold border border-accent-gold/30'
+                : 'bg-bg-tertiary text-gray-400 border border-border'
+            }`}>
+              {tier}
+            </span>
+          )}
 
           {/* System health — shows amber/red dot if issues detected */}
           <SystemHealthDot onClick={onOpenSettings} />

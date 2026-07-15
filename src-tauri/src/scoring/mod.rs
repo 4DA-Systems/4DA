@@ -29,6 +29,8 @@ mod pipeline_v2;
 #[allow(dead_code, unused_imports)]
 pub(crate) mod query_weighting;
 pub(crate) mod reexamination;
+#[cfg(test)]
+mod registry_grounding_tests;
 mod role_inference;
 mod semantic;
 #[cfg(test)]
@@ -190,7 +192,17 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // one-shot version-NULL heuristic (js/py/go). The bump re-stamps the corpus
 // so items scored against the polluted dep set re-score against the clean
 // one (same failure mode as v6/v9: merged-but-dark without a bump).
-pub(crate) const PIPELINE_VERSION: i32 = 14;
+//
+// v15 (2026-07-12): commodity-ceiling coverage for two CORE-band leaks the
+// synthesized brief was silently cleaning up (raw feed / attention cards / Signal
+// graph showed them, the LLM filtered them): (1) `hiring` job posts scored CORE
+// (0.81–0.91) off pure stack-keyword overlap — now capped at 0.28 with no
+// crowd/sophistication bypass; (2) off-stack `security_advisory` items (a CVE for
+// a package NOT in the user's deps — 9router 0.91, rama 0.78) rode the
+// security-pattern exemption to CORE — now capped to the MATCH band (0.44) unless
+// strongly grounded in the user's dependency graph. The bump re-stamps the corpus
+// so the polluted CORE band re-scores clean.
+pub(crate) const PIPELINE_VERSION: i32 = 16;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;

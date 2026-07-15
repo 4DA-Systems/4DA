@@ -29,6 +29,7 @@ struct Fixture {
     cvss_severity: Option<String>,
     fixed_version: Option<String>,
     installed_version: Option<String>,
+    via_registry_subject: bool,
 }
 
 impl Default for Fixture {
@@ -59,6 +60,7 @@ impl Default for Fixture {
             cvss_severity: None,
             fixed_version: None,
             installed_version: None,
+            via_registry_subject: false,
         }
     }
 }
@@ -91,6 +93,7 @@ impl Fixture {
             cvss_severity: self.cvss_severity.as_deref(),
             fixed_version: self.fixed_version.as_deref(),
             installed_version: self.installed_version.as_deref(),
+            via_registry_subject: self.via_registry_subject,
         }
     }
 

@@ -16,6 +16,13 @@ interface AttentionCardsProps {
   onSave: (item: SourceRelevance) => void;
   onDismiss: (item: SourceRelevance) => void;
   onRecordClick: (item: SourceRelevance) => void;
+  /**
+   * Cached cold-boot render: the items are historical (yesterday's snapshot),
+   * so state-mutating actions (Save / Dismiss / triage) are suppressed — only
+   * the truthful "Read" (open URL) affordance remains. Keeps the exact same
+   * card visuals as the live view so the cold-boot → live handoff is continuous.
+   */
+  readOnly?: boolean;
 }
 
 const PRIORITY_STYLES: Record<string, { border: string; dot: string }> = {
@@ -35,6 +42,7 @@ export const AttentionCards = memo(function AttentionCards({
   onSave,
   onDismiss,
   onRecordClick,
+  readOnly = false,
 }: AttentionCardsProps) {
   // Merge signals + top picks, max 5, sorted by necessity score (highest first)
   const items = useMemo(() => {
@@ -61,6 +69,7 @@ export const AttentionCards = memo(function AttentionCards({
             onSave={onSave}
             onDismiss={onDismiss}
             onRecordClick={onRecordClick}
+            readOnly={readOnly}
           />
         ))}
       </div>
@@ -75,6 +84,7 @@ interface AttentionCardProps {
   onSave: (item: SourceRelevance) => void;
   onDismiss: (item: SourceRelevance) => void;
   onRecordClick: (item: SourceRelevance) => void;
+  readOnly?: boolean;
 }
 
 const AttentionCard = memo(function AttentionCard({
@@ -84,6 +94,7 @@ const AttentionCard = memo(function AttentionCard({
   onSave,
   onDismiss,
   onRecordClick,
+  readOnly = false,
 }: AttentionCardProps) {
   const { t } = useTranslation();
   const { getTranslated } = useTranslatedContent();
@@ -176,7 +187,19 @@ const AttentionCard = memo(function AttentionCard({
 
       {/* Actions */}
       <div className="flex items-center gap-2 mt-auto">
-        {isSecurityItem ? (
+        {readOnly ? (
+          // Cached cold-boot item: historical, so no Save/Dismiss/triage —
+          // only the truthful "Read" (open the real URL) affordance.
+          item.url && isSafeUrl(item.url) && (
+            <button
+              onClick={handleOpen}
+              aria-label={t('briefing.read', 'Read') + ': ' + item.title}
+              className="px-2.5 py-1 text-xs bg-bg-tertiary text-text-secondary border border-border rounded hover:bg-border transition-all"
+            >
+              {t('briefing.read', 'Read')}
+            </button>
+          )
+        ) : isSecurityItem ? (
           triageAction ? (
             <span className={`text-[11px] ${
               triageAction === 'investigating' ? 'text-blue-400'

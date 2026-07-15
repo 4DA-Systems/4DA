@@ -98,51 +98,6 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
           {t(relevance.labelKey)}
         </button>
 
-        {/* Reason chips: named evidence factors 2..4 from the explanation chain */}
-        {factorChips && factorChips.chips.map(display => (
-          <span
-            key={display}
-            className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-text-primary/[0.04] text-text-muted border border-border/40 max-w-[180px] truncate"
-            title={display}
-          >
-            {display}
-          </span>
-        ))}
-        {factorChips && factorChips.remaining > 0 && (
-          <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded text-text-muted/70">
-            {t('result.moreFactors', { count: factorChips.remaining })}
-          </span>
-        )}
-        {/* Legacy generic chips — chain-less items only */}
-        {!factorChips && chipKeys.length > 0 && chipKeys.map(k => (
-          <span
-            key={k}
-            className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-text-primary/[0.04] text-text-muted border border-border/40"
-          >
-            {t(k)}
-          </span>
-        ))}
-
-        {/* Signal strength: micro-dots showing independent confirmation axes */}
-        {item.score_breakdown && (item.score_breakdown.signal_count ?? 0) > 0 && (
-          <span
-            className="flex-shrink-0 flex gap-px"
-            title={t('results.signalStrength', { count: item.score_breakdown.signal_count })}
-            aria-label={t('results.signalStrength', { count: item.score_breakdown.signal_count })}
-          >
-            {[0, 1, 2, 3, 4].map(i => (
-              <span
-                key={i}
-                className={`w-1 h-1 rounded-full ${
-                  i < (item.score_breakdown?.signal_count ?? 0)
-                    ? (item.score_breakdown?.signal_count ?? 0) >= 4 ? 'bg-green-400' : 'bg-text-muted'
-                    : 'bg-text-primary/[0.06]'
-                }`}
-              />
-            ))}
-          </span>
-        )}
-
         {/* Source badge */}
         <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${getSourceColorClass(item.source_type || '')}`}>
           {getSourceLabel(item.source_type || '') || item.source_type || t('results.unknownSource')}
@@ -185,6 +140,66 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
             </button>
           )}
         </div>
+
+        {/* Reason chips AFTER the title (2026-07-14 layout re-prioritization):
+            the payload (what is this item?) leads the scan line; evidence
+            (why is it here?) is secondary metadata. Chip contract unchanged:
+            strongest factor first, "+N more" only as a suffix to named chips,
+            legacy generic chips only for chain-less items. */}
+        {factorChips && factorChips.chips.map(display => (
+          <span
+            key={display}
+            className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-text-primary/[0.04] text-text-muted border border-border/40 max-w-[150px] truncate hidden md:inline-block"
+            title={display}
+          >
+            {display}
+          </span>
+        ))}
+        {factorChips && factorChips.remaining > 0 && (
+          <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded text-text-muted/70 hidden md:inline-block">
+            {t('result.moreFactors', { count: factorChips.remaining })}
+          </span>
+        )}
+        {/* Legacy generic chips — chain-less items only */}
+        {!factorChips && chipKeys.length > 0 && chipKeys.map(k => (
+          <span
+            key={k}
+            className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-text-primary/[0.04] text-text-muted border border-border/40 hidden md:inline-block"
+          >
+            {t(k)}
+          </span>
+        ))}
+
+        {/* Advisory stack: siblings for the same package collapsed behind
+            this representative — expand to see them. */}
+        {(item.advisory_stack_count ?? 0) > 0 && (
+          <span
+            className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20"
+            title={t('results.advisoryStackTitle')}
+          >
+            {t('results.advisoryStack', { count: item.advisory_stack_count })}
+          </span>
+        )}
+
+        {/* Signal strength: micro-dots showing independent confirmation axes */}
+        {item.score_breakdown && (item.score_breakdown.signal_count ?? 0) > 0 && (
+          <span
+            className="flex-shrink-0 flex gap-px"
+            title={t('results.signalStrength', { count: item.score_breakdown.signal_count })}
+            aria-label={t('results.signalStrength', { count: item.score_breakdown.signal_count })}
+          >
+            {[0, 1, 2, 3, 4].map(i => (
+              <span
+                key={i}
+                className={`w-1 h-1 rounded-full ${
+                  i < (item.score_breakdown?.signal_count ?? 0)
+                    ? (item.score_breakdown?.signal_count ?? 0) >= 4 ? 'bg-green-400' : 'bg-text-muted'
+                    : 'bg-text-primary/[0.06]'
+                }`}
+              />
+            ))}
+          </span>
+        )}
 
         {/* Age */}
         {item.created_at && (
@@ -241,6 +256,25 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
           {item.similar_titles && item.similar_titles.length > 0 && (
             <ul className="mt-1 ms-3 space-y-0.5">
               {item.similar_titles.map((title, i) => (
+                <li key={i} className="text-[10px] text-text-muted truncate">
+                  {title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </details>
+      )}
+
+      {/* Stacked sibling advisories for the same package (only when expanded) */}
+      {isExpanded && (item.advisory_stack_count ?? 0) > 0 && (
+        <details className="mt-1 ps-[3.75rem] group">
+          <summary className="text-[10px] text-amber-400/80 cursor-pointer hover:text-amber-300 select-none list-none flex items-center gap-1">
+            <span className="text-[10px] group-open:rotate-90 transition-transform">&#9654;</span>
+            {t('results.advisoryStackExpanded', { count: item.advisory_stack_count })}
+          </summary>
+          {item.advisory_stack_titles && item.advisory_stack_titles.length > 0 && (
+            <ul className="mt-1 ms-3 space-y-0.5">
+              {item.advisory_stack_titles.map((title, i) => (
                 <li key={i} className="text-[10px] text-text-muted truncate">
                   {title}
                 </li>

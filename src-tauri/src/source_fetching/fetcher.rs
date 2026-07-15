@@ -319,6 +319,9 @@ pub(crate) async fn fetch_all_sources(
                                 content: cached.content,
                                 feed_origin: cached.feed_origin,
                                 tags: cached.tags.or(source_tags.clone()),
+                                published_at: cached
+                                    .published_at
+                                    .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string()),
                             },
                             cached.embedding,
                         ));
@@ -364,6 +367,7 @@ pub(crate) async fn fetch_all_sources(
                             content: content.clone(),
                             feed_origin: super::extract_feed_origin(&item),
                             tags: source_tags,
+                            published_at: super::extract_published_at(&item),
                         };
 
                         let compressed = crate::compression_rules::compress(source_type, &content);
@@ -570,6 +574,7 @@ pub(crate) async fn fetch_all_sources(
                         cve_ids,
                         item.feed_origin.clone(),
                         item.tags.clone(),
+                        item.published_at.clone(),
                     ));
                 }
                 all_items.push((item, embedding));

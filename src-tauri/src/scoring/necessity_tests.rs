@@ -19,7 +19,37 @@ fn default_inputs() -> NecessityInputs {
         age_hours: 0.0,
         content_type: None,
         contradiction_boost: 0.0,
+        strongly_grounded: false,
+        version_affected: None,
     }
+}
+
+#[test]
+fn test_version_negative_advisory_is_awareness_only() {
+    // A long-fixed advisory for a dep the user has already patched must not
+    // page as if it endangers today's build (the 2026-07-09 OSV backfill
+    // flooded 34 historical axios advisories, all claiming "affects you").
+    let inputs = NecessityInputs {
+        dep_match_score: 0.7,
+        matched_deps: vec!["axios".to_string()],
+        signal_type: Some("security_alert".to_string()),
+        cve_severity: Some("CRITICAL".to_string()),
+        version_affected: Some(false),
+        strongly_grounded: true,
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert!(
+        result.score <= 0.25,
+        "patched advisory must be awareness-only, got {}",
+        result.score
+    );
+    assert_eq!(result.urgency, Urgency::Awareness);
+    assert!(
+        result.reason.contains("not affected"),
+        "reason must state the honest verdict: {}",
+        result.reason
+    );
 }
 
 #[test]
@@ -31,6 +61,7 @@ fn test_stack_update_release_of_a_dependency_surfaces() {
         matched_deps: vec!["axum".to_string()],
         content_type: Some("release_notes".to_string()),
         age_hours: 24.0,
+        strongly_grounded: true,
         ..default_inputs()
     };
     let result = compute_necessity(&inputs);
@@ -41,6 +72,28 @@ fn test_stack_update_release_of_a_dependency_surfaces() {
         result.score
     );
     assert!(result.reason.contains("axum"));
+}
+
+#[test]
+fn test_weak_text_match_does_not_fire_stack_update() {
+    // The 2026-07-13 junk-crate class: a THIRD-PARTY release whose description
+    // merely mentions a dep name produces a nonzero dep_match_score but is NOT
+    // strongly grounded. It must not become "New release in your stack".
+    let inputs = NecessityInputs {
+        dep_match_score: 0.5,
+        matched_deps: vec!["tauri".to_string()],
+        content_type: Some("release_notes".to_string()),
+        age_hours: 4.0,
+        strongly_grounded: false,
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert_ne!(
+        result.category,
+        NecessityCategory::EcosystemShift,
+        "un-grounded release must not claim the user's stack: {:?}",
+        result.reason
+    );
 }
 
 #[test]

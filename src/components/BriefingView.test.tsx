@@ -231,8 +231,10 @@ describe('BriefingView', () => {
         instantSnapshot: snapshot,
       });
       render(<BriefingView />);
-      // Snapshot source item is on screen ...
-      expect(screen.getByText('Snapshot item headline')).toBeInTheDocument();
+      // Snapshot source item is on screen — now rendered through the shared
+      // three-zone components, so a featured item appears as an attention card
+      // AND a feed row (>= 1 match).
+      expect(screen.getAllByText('Snapshot item headline').length).toBeGreaterThan(0);
       // ... and the empty "Run an analysis" pulse is NOT (the regression).
       expect(screen.queryByText('pulse.noData')).not.toBeInTheDocument();
     });

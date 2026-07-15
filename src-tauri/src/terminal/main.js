@@ -1730,20 +1730,20 @@ function cmdShell() {
   w('');
   wh('<span class="g">\u2500\u2500 bash / zsh \u2500\u2500</span>');
   wh('<span class="d">  # Add to ~/.bashrc or ~/.zshrc</span>');
-  wh('  4da_signals() { curl -s http://localhost:4445/api/status 2>/dev/null | grep -o \'"total_relevant":[0-9]*\' | cut -d: -f2; }');
+  wh('  4da_signals() { curl -s http://localhost:4447/api/status 2>/dev/null | grep -o \'"total_relevant":[0-9]*\' | cut -d: -f2; }');
   wh('  export RPROMPT=\'$(4da_signals) signals\'');
   w('');
   wh('<span class="g">\u2500\u2500 fish \u2500\u2500</span>');
   wh('<span class="d">  # Add to ~/.config/fish/config.fish</span>');
-  wh('  function 4da_signals; curl -s http://localhost:4445/api/status 2>/dev/null | string match -r \'"total_relevant":\\d+\' | string split : | tail -1; end');
+  wh('  function 4da_signals; curl -s http://localhost:4447/api/status 2>/dev/null | string match -r \'"total_relevant":\\d+\' | string split : | tail -1; end');
   w('');
   wh('<span class="g">\u2500\u2500 PowerShell \u2500\u2500</span>');
   wh('<span class="d">  # Add to $PROFILE</span>');
-  wh('  function 4da { (Invoke-RestMethod http://localhost:4445/api/status).total_relevant }');
+  wh('  function 4da { (Invoke-RestMethod http://localhost:4447/api/status).total_relevant }');
   w('');
   wh('<span class="g">\u2500\u2500 CI/CD (GitHub Actions) \u2500\u2500</span>');
   wh('<span class="d">  # Check for critical gaps before deploy</span>');
-  wh('  curl -s http://localhost:4445/api/gaps | jq \'.gaps[] | select(.severity == "critical")\'');
+  wh('  curl -s http://localhost:4447/api/gaps | jq \'.gaps[] | select(.severity == "critical")\'');
   w('');
   whint('copy last output with: copy');
 }

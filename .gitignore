@@ -52,6 +52,10 @@ src-tauri/target-codex-audit/
 src-tauri/fourda-macros/target/
 src-tauri/fourda-macros/Cargo.lock
 
+# Stray root-level cargo build dir (e.g. probe/experiment builds run from repo
+# root) — the crate lives in src-tauri/, so a root /target/ is never tracked.
+/target/
+
 # Runtime cache (model downloads, embeddings cache)
 data/cache/
 
@@ -63,6 +67,8 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 data/*.db.bak*
+data/*.db.backup.*
+data/*.db.corrupt
 
 # Runtime usage stats (changes every session)
 data/usage.json
@@ -394,18 +400,20 @@ data/engine_receipt_pubkey.hex
 # Local multi-terminal coordination scratchpad (ephemeral; coordinate on the board, not a tracked file)
 .claude/TERMINALS.md
 
-# the external verifier artifacts must NEVER enter this PUBLIC repo (the external verifier is a separate private asset).
+# Private external-verifier runtime artifacts must NEVER enter this PUBLIC repo.
 # Written into the working tree by the verifier / self-gate runs and the coordination board.
 # Enforced by scripts/private-asset-guard.cjs (pre-commit gate + public-readiness audit).
 .self-gate-receipts/
-.external-verifier-log.jsonl
-.external-verifier-log.jsonl.head
-.external-verifier-board.*
+.*-log.jsonl
+.*-log.jsonl.head
+.*-board.*
 .mcp.json.bak*
 .mcp.local.json
 
 # Manual DB snapshots taken before risky migrations/dogfood runs (e.g.
 # 4da.db-wal.bak-pre-v8-*). Operator backups — kept on disk, never tracked.
-# (main already ignores data/*.db.bak*; these add the -wal.bak variant.)
+# (main already ignores data/*.db.bak*
+data/*.db.backup.*
+data/*.db.corrupt; these add the -wal.bak variant.)
 data/*.bak-*
 data/*.db-wal.bak*

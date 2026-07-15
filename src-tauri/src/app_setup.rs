@@ -372,6 +372,42 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
     let _startup_issues = crate::startup_health::run_startup_health_check();
 }
 
+/// Persist a one-time-migration flag through the mutex-serialized writer
+/// connection, retrying on transient failure and REFUSING to fail silently.
+///
+/// The previous pattern — `let _ = ad_hoc_connection.execute(...)` — lost the
+/// write four boots in a row on 2026-07-14 (SQLITE_BUSY under startup
+/// contention, error discarded), so the "one-time" context hygiene rebuild
+/// re-ran every boot: each run cleared the grounding corpus and spent ~10
+/// minutes re-embedding 49k chunks. A migration flag that silently fails to
+/// persist turns a one-time migration into a permanent boot tax.
+async fn persist_one_time_flag(db: &crate::db::Database, key: &str, version: &str) {
+    const ATTEMPTS: u32 = 3;
+    for attempt in 1..=ATTEMPTS {
+        match db.set_kv(key, version) {
+            Ok(()) => {
+                if attempt > 1 {
+                    info!(target: "4da::startup", key, attempt, "one-time flag persisted after retry");
+                }
+                return;
+            }
+            Err(e) if attempt < ATTEMPTS => {
+                warn!(target: "4da::startup", key, attempt, error = %e, "one-time flag write failed — retrying");
+                tokio::time::sleep(std::time::Duration::from_millis(200 * u64::from(attempt)))
+                    .await;
+            }
+            Err(e) => {
+                warn!(
+                    target: "4da::startup",
+                    key,
+                    error = %e,
+                    "one-time flag write FAILED after retries — this migration WILL re-run next launch"
+                );
+            }
+        }
+    }
+}
+
 /// Tauri `setup()` callback body.
 ///
 /// Handles tray, monitoring, event listeners, background tasks, and ACE initialization.
@@ -1074,6 +1110,151 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     warn!(target: "4da::startup", error = %e, "dep_linker repair_evidence failed");
                 }
                 _ => {}
+            }
+        }
+    });
+
+    // Context-corpus maintenance runs as ONE sequential task (reconcile ->
+    // hygiene rebuild -> health check) — see the block after the dep-linker
+    // repair below. The two maintenance passes used to be independent spawns;
+    // on 2026-07-15 the hygiene rebuild's corpus clear queued behind the
+    // reconcile's long transaction and landed mid-boot, precisely between the
+    // reconcile's "24,113 chunks" and the health check's "total=0".
+    // Deterministic ordering makes that interleaving impossible.
+
+    // Context-corpus maintenance — ONE sequential task, deterministic order:
+    //
+    //   1. Provenance reconcile (one-time heal of the installed base): a live
+    //      user's grounding corpus was once 46% a Spanish/Portuguese business
+    //      course indexed as "your code" (module-e1-execution-playbook.md
+    //      alone = 3,455 chunks). Reclassifies every chunk by source
+    //      provenance and prunes what admission would not admit today,
+    //      WITHOUT re-embedding.
+    //   2. Hygiene rebuild (one-time): pre-2026-07-14 indexes contain
+    //      boilerplate chunks (shebangs, license headers) whose embeddings
+    //      match everything. index_context re-chunks through the new filter
+    //      and atomically swaps the corpus (rebuild_contexts) — the old
+    //      corpus stays live until the replacement commits.
+    //   3. Corpus-health immune system (every boot): pollution shape is
+    //      auto-quarantined; a COLLAPSE (corpus shrank >90% from the last
+    //      sound baseline — the 2026-07-15 wipe signature) and an ungrounded
+    //      corpus (zero code/config chunks) are alarmed loudly. The baseline
+    //      is only advanced while the corpus is sound, so a collapse keeps
+    //      re-alarming until the corpus actually recovers.
+    //
+    // Both one-time passes version-flag through persist_one_time_flag — the
+    // old `let _ = conn.execute(...)` pattern silently lost the flag write
+    // four boots in a row, turning "one-time" into an every-boot corpus wipe.
+    tauri::async_runtime::spawn(async {
+        const RECONCILE_KEY: &str = "context_provenance_reconcile_version";
+        const RECONCILE_VERSION: &str = "1";
+        const HYGIENE_KEY: &str = "context_index_hygiene_version";
+        const HYGIENE_VERSION: &str = "2";
+        let db = match crate::get_database() {
+            Ok(db) => db,
+            Err(_) => return,
+        };
+
+        // 1. Provenance reconcile (one-time).
+        let already = db.get_kv(RECONCILE_KEY).ok().flatten();
+        if already.as_deref() != Some(RECONCILE_VERSION) {
+            match db.reconcile_context_provenance() {
+                Ok(stats) => {
+                    info!(
+                        target: "4da::startup",
+                        scanned = stats.scanned,
+                        reclassified = stats.reclassified,
+                        pruned_reject = stats.pruned_reject,
+                        pruned_over_cap = stats.pruned_over_cap,
+                        "Context provenance reconcile complete"
+                    );
+                    persist_one_time_flag(db.as_ref(), RECONCILE_KEY, RECONCILE_VERSION).await;
+                }
+                Err(e) => {
+                    // Leave the flag unset so the reconcile retries next launch.
+                    warn!(target: "4da::startup", error = %e, "Context provenance reconcile failed (will retry next launch)");
+                }
+            }
+        }
+
+        // 2. Hygiene rebuild (one-time).
+        let already = db.get_kv(HYGIENE_KEY).ok().flatten();
+        if already.as_deref() != Some(HYGIENE_VERSION) {
+            let has_chunks = db.context_count().unwrap_or(0) > 0;
+            let mut rebuild_ok = true;
+            if has_chunks {
+                match crate::context_commands::index_context().await {
+                    Ok(msg) => {
+                        info!(target: "4da::startup", %msg, "Context index hygiene rebuild complete");
+                    }
+                    Err(e) => {
+                        // Leave the flag unset so the rebuild retries next launch.
+                        rebuild_ok = false;
+                        warn!(target: "4da::startup", error = %e, "Context index hygiene rebuild failed");
+                    }
+                }
+            }
+            if rebuild_ok {
+                persist_one_time_flag(db.as_ref(), HYGIENE_KEY, HYGIENE_VERSION).await;
+            }
+        }
+
+        // 3. Immune system — assessed every boot, after any maintenance above.
+        match db.context_health() {
+            Ok(health) if health.healthy => {
+                if health.grounding_chunks == 0 {
+                    // Composition is fine but there is nothing to ground on —
+                    // every scoring run is ungrounded until a reindex. Normal
+                    // for a first boot before onboarding; loud on purpose.
+                    warn!(
+                        target: "4da::startup",
+                        total = health.total,
+                        "Grounding corpus has ZERO code/config chunks — context scoring is dead until a reindex"
+                    );
+                } else {
+                    info!(
+                        target: "4da::startup",
+                        total = health.total,
+                        grounding = health.grounding_chunks,
+                        doc_pct = format!("{:.1}", health.doc_fraction * 100.0),
+                        "Context grounding corpus healthy"
+                    );
+                    // Advance the collapse-detection baseline only from a
+                    // sound state (healthy AND grounded).
+                    if let Err(e) = db.record_corpus_baseline(&health) {
+                        warn!(target: "4da::startup", error = %e, "Failed to record corpus baseline");
+                    }
+                }
+            }
+            Ok(health) if health.collapsed => {
+                // Quarantine cannot fix a collapse — there is nothing to
+                // prune. This needs a reindex (Settings, or the engine's
+                // cold-start self-heal on its next cycle).
+                warn!(
+                    target: "4da::startup",
+                    total = health.total,
+                    issues = ?health.issues,
+                    "Context grounding corpus COLLAPSED — a wipe or failed rebuild; reindex needed"
+                );
+            }
+            Ok(health) => {
+                warn!(
+                    target: "4da::startup",
+                    total = health.total,
+                    issues = ?health.issues,
+                    "Context grounding corpus UNHEALTHY — auto-quarantining pathological sources"
+                );
+                match db.reconcile_context_provenance() {
+                    Ok(stats) => warn!(
+                        target: "4da::startup",
+                        pruned = stats.total_pruned(),
+                        "Auto-quarantine pruned pathological context sources"
+                    ),
+                    Err(e) => warn!(target: "4da::startup", error = %e, "Auto-quarantine failed"),
+                }
+            }
+            Err(e) => {
+                warn!(target: "4da::startup", error = %e, "Context health check failed");
             }
         }
     });

@@ -110,21 +110,24 @@ mod tests {
 
     #[test]
     fn test_analysis_timeout_constant() {
+        // 900s (15 min): a pipeline-version drain adds a 499-item full-path
+        // re-score to every cycle (~3-5 min); 300s flagged every legitimate
+        // drain-era run as timed out and blanked the feed (2026-07-14).
         assert_eq!(
-            ANALYSIS_TIMEOUT_SECS, 300,
-            "Timeout should be 300 seconds (5 minutes)"
+            ANALYSIS_TIMEOUT_SECS, 900,
+            "Timeout should be 900 seconds (15 minutes)"
         );
     }
 
     #[test]
     fn test_timeout_detection_logic() {
         // Simulate the timeout detection from get_analysis_status
-        let started_at = chrono::Utc::now().timestamp() - 400; // Started 400s ago
+        let started_at = chrono::Utc::now().timestamp() - 1_000; // Started 1000s ago
         let elapsed = chrono::Utc::now().timestamp() - started_at;
 
         assert!(
             elapsed > ANALYSIS_TIMEOUT_SECS,
-            "400s elapsed should exceed 300s timeout"
+            "1000s elapsed should exceed the 900s timeout"
         );
     }
 
@@ -136,7 +139,7 @@ mod tests {
 
         assert!(
             elapsed <= ANALYSIS_TIMEOUT_SECS,
-            "10s elapsed should not exceed 300s timeout"
+            "10s elapsed should not exceed the timeout"
         );
     }
 
@@ -149,7 +152,7 @@ mod tests {
             error: None,
             results: None,
             near_misses: None,
-            started_at: Some(chrono::Utc::now().timestamp() - 600),
+            started_at: Some(chrono::Utc::now().timestamp() - 1_200),
             last_completed_at: None,
         };
 

@@ -107,7 +107,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
         if (isBrowser) {
           // In real browsers, redirect to Signal Terminal (skip in test/JSDOM)
           if (!import.meta.env.VITEST) {
-            const terminalPort = import.meta.env.DEV ? 4445 : 4444;
+            const terminalPort = import.meta.env.DEV ? 4447 : 4446;
             window.location.href = `http://localhost:${terminalPort}/`;
             return;
           }

@@ -204,6 +204,27 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // Never clears or re-indexes existing context — strictly a cold-start self-heal.
     ensure_context_indexed().await;
 
+    // Grounding sanity — say it LOUDLY if this cycle will score ungrounded.
+    // On 2026-07-15 a GUI-side rebuild wiped the corpus mid-cycle and this
+    // engine scored 701 items with a zero context axis: relevant collapsed
+    // 24 -> 3 and the daily briefing reported a false "thin day". The scores
+    // self-correct on a later cycle, but the silence was the real failure.
+    if let Ok(db) = crate::get_database() {
+        match db.context_health() {
+            Ok(h) if h.collapsed => warn!(
+                target: "4da::headless",
+                total = h.total,
+                "Grounding corpus COLLAPSED (wipe signature) — this cycle's context scoring is degraded; reindex needed"
+            ),
+            Ok(h) if h.grounding_chunks == 0 => warn!(
+                target: "4da::headless",
+                total = h.total,
+                "Grounding corpus has ZERO code/config chunks — scoring runs UNGROUNDED this cycle"
+            ),
+            _ => {}
+        }
+    }
+
     // Step 0b — refresh the dependency profile if a manifest changed or it has gone stale.
     // Decoupled from the context cold-start gate so a dep added or a version bumped on a LIVE
     // deployment is picked up (the dependency axis + OSV version-matching read these tables
