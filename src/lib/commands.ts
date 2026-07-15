@@ -841,10 +841,10 @@ interface ModelEvalSummary {
 }
 
 interface ContentGraph {
-  nodes: Array<{ id: number; title: string; url: string | null; source_type: string; relevance_score: number; signal_type: string | null; signal_priority: string | null; created_at: string; primary_topic: string | null; cluster_id: string | null; x: number; y: number }>;
+  nodes: Array<{ id: number; title: string; url: string | null; source_type: string; relevance_score: number; signal_type: string | null; signal_priority: string | null; created_at: string; primary_topic: string | null; cluster_id: string | null; member_count: number; member_titles: string[]; member_ids: number[]; x: number; y: number }>;
   edges: Array<{ source: number; target: number; edge_type: 'semantic' | 'chain' | 'concept' | 'convergence' | 'duplicate'; weight: number; label: string | null; methods: string[] }>;
   clusters: Array<{ id: string; label: string; node_ids: number[]; source_count: number; centroid_x: number; centroid_y: number }>;
-  meta: { total_items: number; total_edges: number; cluster_count: number; time_window_days: number; edge_threshold: string };
+  meta: { total_items: number; total_edges: number; cluster_count: number; story_count: number; collapsed_items: number; hidden_items: number; time_window_days: number; edge_threshold: string };
 }
 
 // ============================================================================

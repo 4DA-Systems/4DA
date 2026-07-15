@@ -44,6 +44,8 @@ function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): 
       signal_priority: n.signal_priority,
       primary_topic: n.primary_topic,
       cluster_id: n.cluster_id,
+      member_count: n.member_count,
+      member_titles: n.member_titles,
       isNew: n.created_at ? new Date(n.created_at).getTime() > lastViewedMs : false,
     },
   }));
@@ -388,6 +390,12 @@ export default function ContentGraphView() {
               <span>{meta.total_items} {t('signals.graphNodes', 'nodes')}</span>
               <span>{meta.total_edges} {t('signals.graphEdges', 'edges')}</span>
               <span>{meta.cluster_count} {t('signals.graphClusters', 'clusters')}</span>
+              {meta.collapsed_items > 0 && (
+                <span>{t('signals.graphCollapsedNote', { items: meta.collapsed_items, stories: meta.story_count })}</span>
+              )}
+              {meta.hidden_items > 0 && (
+                <span>{t('signals.graphHiddenNote', { items: meta.hidden_items })}</span>
+              )}
             </>
           )}
         </div>

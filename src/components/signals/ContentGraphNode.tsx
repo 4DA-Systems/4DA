@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useState, useCallback } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import { useTranslation } from 'react-i18next';
 // Theme overrides for React Flow's chrome (zoom Controls, MiniMap). Imported
 // here — the node module is always in the graph bundle — so it also applies to
 // the Controls/MiniMap rendered by ContentGraphView without editing that file.
@@ -15,6 +16,10 @@ interface ContentNodeData {
   signal_priority: string | null;
   primary_topic: string | null;
   cluster_id: string | null;
+  /** Items this node represents; >1 = a story of collapsed near-duplicates. */
+  member_count: number;
+  /** Collapsed sibling titles (capped by the backend). */
+  member_titles: string[];
   isNew?: boolean;
   [key: string]: unknown;
 }
@@ -78,14 +83,22 @@ function cleanTitle(raw: string): string {
 }
 
 const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<ContentNode>) {
+  const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const onEnter = useCallback(() => setHovered(true), []);
   const onLeave = useCallback(() => setHovered(false), []);
 
   const color = SOURCE_COLORS[data.source_type] ?? '#6B7280';
-  const size = 28 + (data.relevance_score * 28);
+  const memberCount = data.member_count ?? 1;
+  // Stories grow with how much they collapsed (sqrt: 26 advisories shouldn't
+  // be 26x the dot); plain items keep the relevance sizing.
+  const size =
+    memberCount > 1
+      ? Math.min(72, 36 + Math.sqrt(memberCount) * 6)
+      : 28 + data.relevance_score * 28;
   const glow = getGlowStyle(data.signal_priority);
   const label = cleanTitle(data.title);
+  const extraCount = memberCount - 1;
 
   return (
     <div
@@ -130,6 +143,28 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
           transform: hovered ? 'scale(1.15)' : 'scale(1)',
         }}
       />
+
+      {extraCount > 0 && (
+        <span
+          style={{
+            position: 'absolute',
+            top: -6,
+            right: -10,
+            padding: '1px 5px',
+            borderRadius: 8,
+            backgroundColor: 'var(--color-bg-tertiary)',
+            border: `1px solid ${brighten(color)}`,
+            color: 'var(--color-text-primary)',
+            fontSize: 9,
+            fontWeight: 600,
+            fontFamily: 'JetBrains Mono, monospace',
+            lineHeight: 1.4,
+            pointerEvents: 'none',
+          }}
+        >
+          {`+${extraCount}`}
+        </span>
+      )}
 
       <span
         style={{
@@ -182,6 +217,41 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
           {data.primary_topic && (
             <div style={{ color: 'var(--color-text-muted)', fontSize: 10, marginTop: 2, fontFamily: 'Inter, sans-serif' }}>
               {data.primary_topic}
+            </div>
+          )}
+          {extraCount > 0 && (
+            <div
+              style={{
+                marginTop: 6,
+                paddingTop: 6,
+                borderTop: '1px solid var(--color-border)',
+              }}
+            >
+              <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, fontWeight: 600, marginBottom: 2, fontFamily: 'Inter, sans-serif' }}>
+                {t('signals.graphStoryMembers', { count: extraCount })}
+              </div>
+              {(data.member_titles ?? []).map((title) => (
+                <div
+                  key={title}
+                  style={{
+                    color: 'var(--color-text-muted)',
+                    fontSize: 10,
+                    fontFamily: 'Inter, sans-serif',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {title}
+                </div>
+              ))}
+              {extraCount > (data.member_titles?.length ?? 0) && (
+                <div style={{ color: 'var(--color-text-muted)', fontSize: 10, fontFamily: 'Inter, sans-serif' }}>
+                  {t('signals.graphStoryMore', {
+                    count: extraCount - (data.member_titles?.length ?? 0),
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
