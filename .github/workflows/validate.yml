@@ -97,7 +97,19 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Security audit (npm)
-        run: pnpm audit --audit-level=high
+        # npm retired the legacy audit endpoint on 2026-07-14 (HTTP 410) —
+        # pnpm <=10, including the repo's pinned 9.15.0, can no longer audit
+        # at all; only pnpm 11+ speaks the replacement bulk advisory endpoint.
+        # This step therefore runs the audit through a ONE-SHOT pnpm 11 via
+        # npx, leaving the global pnpm 9.15.0 (which installs and runs
+        # everything else in this job) untouched. pm_on_fail=ignore stops
+        # pnpm 11 from re-executing the root packageManager pin (pnpm@9.15.0),
+        # whose audit is dead. Same pattern as nightly-audit.yml, proven
+        # green there on 2026-07-15. Without this fix the required Validate
+        # gate 410-failed on EVERY frontend-touching PR.
+        env:
+          pnpm_config_pm_on_fail: ignore
+        run: npx -y pnpm@11.13.0 audit --audit-level=high
 
       - name: Check file sizes
         run: node scripts/check-file-sizes.cjs --ci

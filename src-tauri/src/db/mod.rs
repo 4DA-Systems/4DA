@@ -9,6 +9,8 @@ mod cache;
 mod channels;
 #[cfg(test)]
 mod concurrency_tests;
+#[cfg(test)]
+mod context_rebuild_tests;
 pub(crate) mod dep_snapshots;
 mod dependencies;
 pub(crate) mod encryption;
@@ -107,6 +109,30 @@ impl ContextReconcileStats {
     pub fn total_pruned(&self) -> usize {
         self.pruned_reject + self.pruned_over_cap
     }
+}
+
+/// A fully-prepared chunk (text + embedding already computed) for
+/// [`Database::rebuild_contexts`].
+#[derive(Debug, Clone)]
+pub struct NewContextChunk {
+    pub source_file: String,
+    pub text: String,
+    pub embedding: Vec<f32>,
+    pub weight: f32,
+}
+
+/// Outcome of [`Database::rebuild_contexts`]. `refused` set means the corpus
+/// was left UNTOUCHED (the replacement set was unusable — committing it would
+/// have amounted to a wipe).
+#[derive(Debug, Default, Clone)]
+pub struct ContextRebuildStats {
+    pub previous_count: usize,
+    pub attempted: usize,
+    pub admitted: usize,
+    pub skipped_reject: usize,
+    pub skipped_doc_cap: usize,
+    pub deduped: usize,
+    pub refused: Option<&'static str>,
 }
 
 /// Aggregate scoring statistics (rejection rate measurement)
@@ -466,7 +492,11 @@ impl Database {
         rows.collect()
     }
 
-    /// Clear all context chunks (for re-indexing)
+    /// Clear all context chunks. Reserved for the EXPLICIT user action
+    /// (`clear_context` command). Indexing paths must never call this — use
+    /// [`Self::rebuild_contexts`], which replaces the corpus atomically.
+    /// (A startup path that cleared first and re-embedded for ~10 minutes left
+    /// the 2026-07-15 boot scoring 701 items against an empty corpus.)
     pub fn clear_contexts(&self) -> SqliteResult<usize> {
         let conn = self.conn.lock();
         let tx = conn.unchecked_transaction()?;
@@ -474,6 +504,169 @@ impl Database {
         let count = tx.execute("DELETE FROM context_chunks", [])?;
         tx.commit()?;
         Ok(count)
+    }
+
+    /// Atomically replace the grounding corpus with a fully-prepared entry set.
+    ///
+    /// The whole swap — delete old rows, admit new ones — happens in ONE
+    /// transaction, so no reader ever observes an empty or partial corpus and
+    /// a crash at any point leaves the previous corpus intact. Callers do all
+    /// slow work (file IO, chunking, embedding) BEFORE calling this; the swap
+    /// itself is sub-second.
+    ///
+    /// Every entry passes the same admission policy as
+    /// [`Self::upsert_context_weighted`] (classify by provenance, reject class
+    /// dropped, docs capped per source, content-hash dedupe within the set),
+    /// so this path cannot be used to bypass the chokepoint.
+    ///
+    /// Refuses (corpus untouched, `refused` set) when the entry set is empty
+    /// or when nothing in it is admissible — committing either would be a
+    /// wipe wearing a rebuild's clothes.
+    pub fn rebuild_contexts(
+        &self,
+        entries: &[NewContextChunk],
+    ) -> SqliteResult<ContextRebuildStats> {
+        use crate::context_admission::{
+            classify_source, log_admission_skip, ContextClass, MAX_DOC_CHUNKS_PER_SOURCE,
+        };
+        use std::collections::{HashMap, HashSet};
+
+        let conn = self.conn.lock();
+        let previous_count = conn.query_row("SELECT COUNT(*) FROM context_chunks", [], |r| {
+            r.get::<_, i64>(0)
+        })? as usize;
+        let mut stats = ContextRebuildStats {
+            previous_count,
+            ..Default::default()
+        };
+        if entries.is_empty() {
+            stats.refused = Some("empty-entry-set");
+            return Ok(stats);
+        }
+
+        let tx = conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM context_vec", [])?;
+        tx.execute("DELETE FROM context_chunks", [])?;
+        {
+            let mut ins_chunk = tx.prepare(
+                "INSERT INTO context_chunks (source_file, content_hash, text, embedding, weight, source_type, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))",
+            )?;
+            let mut ins_vec =
+                tx.prepare("INSERT INTO context_vec (rowid, embedding) VALUES (?1, ?2)")?;
+            let mut seen_hashes: HashSet<String> = HashSet::new();
+            let mut doc_counts: HashMap<&str, usize> = HashMap::new();
+
+            for e in entries {
+                stats.attempted += 1;
+                let class = classify_source(&e.source_file);
+                if !class.is_admitted() {
+                    log_admission_skip(&e.source_file, "rejected-provenance");
+                    stats.skipped_reject += 1;
+                    continue;
+                }
+                let content_hash = hash_content(&e.text);
+                if !seen_hashes.insert(content_hash.clone()) {
+                    stats.deduped += 1;
+                    continue;
+                }
+                if class == ContextClass::Doc {
+                    let n = doc_counts.entry(e.source_file.as_str()).or_insert(0);
+                    *n += 1;
+                    if *n > MAX_DOC_CHUNKS_PER_SOURCE {
+                        log_admission_skip(&e.source_file, "doc-source-cap");
+                        stats.skipped_doc_cap += 1;
+                        continue;
+                    }
+                }
+                let blob = embedding_to_blob(&e.embedding);
+                ins_chunk.execute(params![
+                    e.source_file,
+                    content_hash,
+                    e.text,
+                    blob,
+                    e.weight * class.weight_multiplier(),
+                    class.source_type(),
+                ])?;
+                let id = tx.last_insert_rowid();
+                ins_vec.execute(params![id, blob])?;
+                stats.admitted += 1;
+            }
+        }
+
+        if stats.admitted == 0 {
+            // Dropping the uncommitted transaction rolls the deletes back —
+            // the previous corpus survives.
+            stats.refused = Some("zero-admitted");
+            return Ok(stats);
+        }
+        tx.commit()?;
+        Ok(stats)
+    }
+
+    /// Read a value from the generic `kv_store` table, normalized to a string
+    /// REGARDLESS of the storage class SQLite kept it in.
+    ///
+    /// This normalization is load-bearing: the installed-base `kv_store` was
+    /// created by the ACE schema with `value REAL NOT NULL`, so a flag written
+    /// as the string '2' is coerced to REAL 2.0 by column affinity. A plain
+    /// `row.get::<String>` on that REAL fails (InvalidColumnType), and the old
+    /// `.ok()`-swallowed read returned None — making every "one-time"
+    /// migration flag unreadable and re-running the corpus-wiping hygiene
+    /// rebuild on EVERY boot (observed five consecutive times, 2026-07-14/15).
+    /// Integral REALs normalize back to their integer string ("2.0" -> "2")
+    /// so version comparisons and `parse::<usize>()` round-trip.
+    pub fn get_kv(&self, key: &str) -> SqliteResult<Option<String>> {
+        use rusqlite::types::Value;
+        use rusqlite::OptionalExtension;
+        let conn = self.read_conn();
+        let v: Option<Value> = conn
+            .query_row(
+                "SELECT value FROM kv_store WHERE key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(v.map(|v| match v {
+            Value::Text(s) => s,
+            Value::Integer(i) => i.to_string(),
+            #[allow(clippy::cast_possible_truncation)]
+            Value::Real(f) if f.fract() == 0.0 && f.abs() < i64::MAX as f64 => {
+                (f as i64).to_string()
+            }
+            Value::Real(f) => f.to_string(),
+            Value::Blob(b) => String::from_utf8_lossy(&b).into_owned(),
+            Value::Null => String::new(),
+        }))
+    }
+
+    /// Write a value to the generic `kv_store` table. Goes through the
+    /// mutex-serialized writer connection, so unlike an ad-hoc connection it
+    /// cannot lose a race for the write lock and fail with SQLITE_BUSY — the
+    /// failure mode that silently dropped one-time-migration flags four boots
+    /// in a row (2026-07-14) and made a corpus-wiping rebuild re-run each boot.
+    pub fn set_kv(&self, key: &str, value: &str) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT OR REPLACE INTO kv_store (key, value, updated_at) VALUES (?1, ?2, datetime('now'))",
+            params![key, value],
+        )?;
+        Ok(())
+    }
+
+    /// Record the current corpus size as the collapse-detection baseline.
+    /// Call ONLY when the corpus is sound (healthy AND grounded) — a collapsed
+    /// corpus must keep re-alarming against the last sound size, not ratify
+    /// the collapse as the new normal.
+    pub fn record_corpus_baseline(
+        &self,
+        health: &crate::context_admission::CorpusHealth,
+    ) -> SqliteResult<()> {
+        debug_assert!(health.healthy && health.grounding_chunks > 0);
+        self.set_kv(
+            crate::context_admission::CORPUS_BASELINE_KV_KEY,
+            &health.total.to_string(),
+        )
     }
 
     /// Get context count
@@ -500,7 +693,12 @@ impl Database {
                 })
             })?
             .collect::<SqliteResult<Vec<_>>>()?;
-        Ok(crate::context_admission::assess_corpus(&tallies))
+        drop(stmt);
+        drop(conn);
+        let baseline = self
+            .get_kv(crate::context_admission::CORPUS_BASELINE_KV_KEY)?
+            .and_then(|v| v.parse::<usize>().ok());
+        Ok(crate::context_admission::assess_corpus(&tallies, baseline))
     }
 
     /// Reclassify every context chunk's provenance from its source path and
