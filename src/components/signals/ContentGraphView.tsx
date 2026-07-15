@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -8,6 +8,7 @@ import {
   Panel,
   type Node,
   type Edge,
+  type NodeChange,
   useNodesState,
   useEdgesState,
 } from '@xyflow/react';
@@ -204,6 +205,7 @@ export default function ContentGraphView() {
     cmd('build_content_graph', { days, maxNodes: 150 })
       .then((graph: ContentGraph) => {
         if (cancelled) return;
+        needsFitRef.current = true;
         setNodes(toFlowNodes(graph.nodes, graph.clusters));
         const flowEdges = toFlowEdges(graph.edges);
         setEdges(flowEdges);
@@ -269,9 +271,29 @@ export default function ContentGraphView() {
     setHoveredNodeId(null);
   }, []);
 
-  const onInit = useCallback((instance: { fitView: () => void }) => {
+  const flowRef = useRef<{ fitView: (opts?: { padding?: number }) => void } | null>(null);
+  const needsFitRef = useRef(false);
+
+  const onInit = useCallback((instance: { fitView: (opts?: { padding?: number }) => void }) => {
+    flowRef.current = instance;
     instance.fitView();
   }, []);
+
+  // The graph loads AFTER React Flow mounts, so the onInit fitView runs on an
+  // empty canvas and data arrives into a stale viewport (tiny graph in one
+  // corner). Fitting on a timer/rAF is unreliable — React Flow computes
+  // bounds from MEASURED node dimensions, which land asynchronously. So: arm
+  // a flag on data load, and fit on the first batch of dimension changes.
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      onNodesChange(changes);
+      if (needsFitRef.current && changes.some((c) => c.type === 'dimensions')) {
+        needsFitRef.current = false;
+        requestAnimationFrame(() => flowRef.current?.fitView({ padding: 0.12 }));
+      }
+    },
+    [onNodesChange],
+  );
 
   // Distinct source types present in the current graph — drives the legend.
   const legendSources = useMemo(() => {
@@ -301,7 +323,7 @@ export default function ContentGraphView() {
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
         onNodeMouseEnter={onNodeMouseEnter}

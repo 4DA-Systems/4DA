@@ -481,6 +481,21 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_title_keywords_drops_numeric_ids() {
+        // Live label leak: a mastodon status URL glued to text tokenized as
+        // "116885294589687234here".
+        let keywords = clustering::extract_title_keywords(
+            "RE: fosstodon 116885294589687234Here TypeScript 7.0 released v5-9",
+        );
+        assert!(!keywords.iter().any(|k| k.contains("116885294589687234")));
+        assert!(keywords.contains(&"typescript".to_string()));
+        assert!(
+            keywords.contains(&"v5-9".to_string()),
+            "short numerics stay"
+        );
+    }
+
+    #[test]
     fn test_edge_count_per_node() {
         let edge_list = vec![edge(1, 2, 0.9), edge(1, 3, 0.8)];
 

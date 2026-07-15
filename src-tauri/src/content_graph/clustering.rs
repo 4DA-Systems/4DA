@@ -140,7 +140,28 @@ pub(super) fn extract_title_keywords(title: &str) -> Vec<String> {
     title
         .to_lowercase()
         .split(|c: char| !c.is_alphanumeric() && c != '-' && c != '_')
-        .filter(|w| w.len() >= 3 && !STOPWORDS.contains(w))
+        // Tokens carrying a long digit run are ids/timestamps/URL fragments
+        // (live: a mastodon status id glued to text tokenized as
+        // "116885294589687234here") — maximally "distinctive" to c-TF-IDF yet
+        // they name nothing. Short numerics in real names ("v5-9", "x86-64")
+        // survive.
+        .filter(|w| w.len() >= 3 && !STOPWORDS.contains(w) && !has_long_digit_run(w))
         .map(String::from)
         .collect()
+}
+
+/// True when the token contains 8+ consecutive ASCII digits.
+fn has_long_digit_run(token: &str) -> bool {
+    let mut run = 0usize;
+    for c in token.chars() {
+        if c.is_ascii_digit() {
+            run += 1;
+            if run >= 8 {
+                return true;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    false
 }
