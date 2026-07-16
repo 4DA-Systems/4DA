@@ -1,8 +1,157 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tests for dependency intelligence CRUD operations.
 
-use crate::db::dependencies::types::DependencyAlert;
+use crate::db::dependencies::types::{DependencyAlert, DependencyInstanceInput};
 use crate::test_utils::test_db;
+
+fn inst(name: &str, version: &str, is_direct: bool) -> DependencyInstanceInput {
+    DependencyInstanceInput {
+        package_name: name.to_string(),
+        version: version.to_string(),
+        is_direct,
+        is_dev: false,
+        scope: "unknown".to_string(),
+    }
+}
+
+#[test]
+fn dependency_instances_keep_multiple_versions_of_one_package() {
+    // THE launch-blocking correctness gate (Phase 92): user_dependencies /
+    // project_dependencies collapse to one row per (project, package,
+    // ecosystem), so a package installed at two versions in ONE project loses a
+    // version — and a negative verdict computed against only the survivor can
+    // pass a still-vulnerable duplicate as "not affected". dependency_instances
+    // must retain BOTH.
+    let db = test_db();
+    let project = "/projects/monorepo";
+    db.store_dependency_instances(
+        project,
+        "javascript",
+        &[
+            inst("lodash", "4.17.20", false),
+            inst("lodash", "4.17.21", true),
+            inst("react", "18.3.1", true),
+        ],
+    )
+    .unwrap();
+
+    let all = db.get_dependency_instances(project).unwrap();
+    assert_eq!(
+        all.len(),
+        3,
+        "both lodash versions + react must be retained"
+    );
+
+    let lodash: Vec<_> = all.iter().filter(|i| i.package_name == "lodash").collect();
+    assert_eq!(
+        lodash.len(),
+        2,
+        "both lodash instances survive (no collapse)"
+    );
+    let mut versions: Vec<&str> = lodash.iter().map(|i| i.version.as_str()).collect();
+    versions.sort_unstable();
+    assert_eq!(versions, vec!["4.17.20", "4.17.21"]);
+    // is_direct is tracked per instance, not collapsed away.
+    assert!(lodash.iter().any(|i| i.version == "4.17.21" && i.is_direct));
+    assert!(lodash
+        .iter()
+        .any(|i| i.version == "4.17.20" && !i.is_direct));
+}
+
+#[test]
+fn dependency_instances_refresh_not_accumulate_on_rescan() {
+    // DELETE-then-insert per (project, ecosystem): a rescan after an upgrade
+    // must REPLACE the set, so a version upgraded away does not linger as a
+    // phantom vulnerable instance (the opposite failure to the collapse).
+    let db = test_db();
+    let project = "/projects/app";
+    db.store_dependency_instances(project, "rust", &[inst("tokio", "1.35.0", true)])
+        .unwrap();
+    db.store_dependency_instances(project, "rust", &[inst("tokio", "1.40.0", true)])
+        .unwrap();
+
+    let all = db.get_dependency_instances(project).unwrap();
+    assert_eq!(all.len(), 1, "rescan replaces, not accumulates");
+    assert_eq!(all[0].version, "1.40.0", "the fresh version wins");
+}
+
+#[test]
+fn dependency_instances_isolate_per_ecosystem_on_refresh() {
+    // A rust rescan must not wipe the javascript instances of the same project.
+    let db = test_db();
+    let project = "/projects/tauri-app";
+    db.store_dependency_instances(project, "rust", &[inst("serde", "1.0.200", true)])
+        .unwrap();
+    db.store_dependency_instances(project, "javascript", &[inst("react", "18.3.1", true)])
+        .unwrap();
+    // Re-scan rust only.
+    db.store_dependency_instances(project, "rust", &[inst("serde", "1.0.210", true)])
+        .unwrap();
+
+    let all = db.get_dependency_instances(project).unwrap();
+    assert_eq!(all.len(), 2, "rust refresh leaves the js instance intact");
+    assert!(all
+        .iter()
+        .any(|i| i.package_name == "react" && i.version == "18.3.1"));
+    assert!(all
+        .iter()
+        .any(|i| i.package_name == "serde" && i.version == "1.0.210"));
+}
+
+#[test]
+fn get_package_instances_is_cross_project_and_ecosystem_normalized() {
+    // The version-confirmed matcher's read: every installed version of a
+    // package across all projects, reachable by ACE language string OR OSV name.
+    let db = test_db();
+    db.store_dependency_instances("/projects/a", "rust", &[inst("openssl", "0.10.55", true)])
+        .unwrap();
+    db.store_dependency_instances("/projects/b", "rust", &[inst("openssl", "0.10.70", true)])
+        .unwrap();
+
+    // Queried by the OSV ecosystem name ("crates.io"), not the stored language ("rust").
+    let instances = db.get_package_instances("crates.io", "openssl").unwrap();
+    assert_eq!(instances.len(), 2, "both projects' versions returned");
+    let mut versions: Vec<&str> = instances.iter().map(|i| i.version.as_str()).collect();
+    versions.sort_unstable();
+    assert_eq!(versions, vec!["0.10.55", "0.10.70"]);
+    // And by the stored language string too.
+    assert_eq!(
+        db.get_package_instances("rust", "openssl").unwrap().len(),
+        2
+    );
+}
+
+#[test]
+fn dependency_instances_coverage_gate_and_exclusion() {
+    let db = test_db();
+    // Excluded paths (agent worktrees / scratch) never populate — the write is a
+    // silent no-op, mirroring store_dependency.
+    let written = db
+        .store_dependency_instances(
+            "/repo/.claude/worktrees/x",
+            "rust",
+            &[inst("tokio", "1.0.0", true)],
+        )
+        .unwrap();
+    assert_eq!(written, 0, "excluded path stores nothing");
+    assert!(!db
+        .project_has_dependency_instances("/repo/.claude/worktrees/x")
+        .unwrap());
+
+    // A real project: coverage gate flips true once populated.
+    assert!(!db
+        .project_has_dependency_instances("/projects/real")
+        .unwrap());
+    db.store_dependency_instances(
+        "/projects/real",
+        "go",
+        &[inst("golang.org/x/net", "0.17.0", true)],
+    )
+    .unwrap();
+    assert!(db
+        .project_has_dependency_instances("/projects/real")
+        .unwrap());
+}
 
 #[test]
 fn test_store_and_retrieve_dependency() {

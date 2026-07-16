@@ -6,7 +6,42 @@ use std::path::PathBuf;
 use tracing::info;
 
 use crate::db::Database;
+use crate::db::DependencyInstanceInput;
 use crate::get_ace_engine;
+
+/// Build the multi-version instance list (`dependency_instances`, Phase 92)
+/// from a parsed lockfile's `(name, version)` pairs, classifying `is_direct`
+/// by manifest membership. A lockfile that resolves a package at multiple
+/// versions yields multiple instances here — the data the collapsing
+/// `store_dependency` upsert discards. `is_dev`/`scope` are not resolved at the
+/// lockfile layer today (processors pass `is_dev = false`), so they are
+/// recorded honestly as `false` / `"unknown"` pending scope refinement.
+fn instances_from_packages(
+    packages: &[(String, String)],
+    direct_deps: &[String],
+    case_insensitive: bool,
+) -> Vec<DependencyInstanceInput> {
+    packages
+        .iter()
+        .map(|(name, version)| {
+            let is_direct = !direct_deps.is_empty()
+                && direct_deps.iter().any(|d| {
+                    if case_insensitive {
+                        d.eq_ignore_ascii_case(name)
+                    } else {
+                        d == name
+                    }
+                });
+            DependencyInstanceInput {
+                package_name: name.clone(),
+                version: version.clone(),
+                is_direct,
+                is_dev: false,
+                scope: "unknown".to_string(),
+            }
+        })
+        .collect()
+}
 
 /// Store discovered direct dependencies from ACE into user_dependencies table.
 pub(super) fn store_direct_dependencies(db: &Database) {
@@ -167,6 +202,12 @@ fn process_cargo_lock(
 
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_cargo_lock(&content);
+    db.store_dependency_instances(
+        project_path,
+        "rust",
+        &instances_from_packages(&packages, &direct_deps, false),
+    )
+    .ok();
     for (name, version) in &packages {
         if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
             db.store_transitive_dependency(
@@ -218,6 +259,12 @@ fn process_package_lock(
 
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_package_lock_json(&content);
+    db.store_dependency_instances(
+        project_path,
+        "javascript",
+        &instances_from_packages(&packages, &direct_deps, false),
+    )
+    .ok();
     for (name, version) in &packages {
         if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
             db.store_transitive_dependency(
@@ -268,6 +315,12 @@ fn process_pnpm_lock(
 
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_pnpm_lock_yaml(&content);
+    db.store_dependency_instances(
+        project_path,
+        "javascript",
+        &instances_from_packages(&packages, &direct_deps, false),
+    )
+    .ok();
     for (name, version) in &packages {
         if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
             db.store_transitive_dependency(
@@ -313,6 +366,12 @@ fn process_yarn_lock(
 
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_yarn_lock(&content);
+    db.store_dependency_instances(
+        project_path,
+        "javascript",
+        &instances_from_packages(&packages, &direct_deps, false),
+    )
+    .ok();
     for (name, version) in &packages {
         if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
             db.store_transitive_dependency(
@@ -358,6 +417,12 @@ fn process_poetry_lock(
 
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_poetry_lock(&content);
+    db.store_dependency_instances(
+        project_path,
+        "python",
+        &instances_from_packages(&packages, &direct_deps, true),
+    )
+    .ok();
     for (name, version) in &packages {
         if direct_deps.is_empty() || !direct_deps.iter().any(|d| d.eq_ignore_ascii_case(name)) {
             db.store_transitive_dependency(
@@ -398,6 +463,23 @@ fn process_requirements_txt(db: &Database, dir: &PathBuf, project_path: &str) ->
         return 0;
     };
     let pins = crate::ace::scanner::ProjectScanner::parse_requirements_txt_pins(&content);
+    // requirements.txt `==` pins ARE the direct deps (there is no separate
+    // manifest membership to check), so every instance is direct.
+    db.store_dependency_instances(
+        project_path,
+        "python",
+        &pins
+            .iter()
+            .map(|(name, version)| DependencyInstanceInput {
+                package_name: name.clone(),
+                version: version.clone(),
+                is_direct: true,
+                is_dev: false,
+                scope: "unknown".to_string(),
+            })
+            .collect::<Vec<_>>(),
+    )
+    .ok();
     let mut count = 0u32;
     for (name, version) in &pins {
         // requirements.txt entries are direct deps; store_dependency upserts the version onto the
@@ -435,6 +517,12 @@ fn process_go_sum(
 
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_go_sum(&content);
+    db.store_dependency_instances(
+        project_path,
+        "go",
+        &instances_from_packages(&packages, &direct_deps, false),
+    )
+    .ok();
     for (name, version) in &packages {
         if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
             db.store_transitive_dependency(project_path, name, Some(version.as_str()), "go", false)
@@ -474,6 +562,12 @@ fn process_gemfile_lock(
 
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_gemfile_lock(&content);
+    db.store_dependency_instances(
+        project_path,
+        "ruby",
+        &instances_from_packages(&packages, &direct_deps, false),
+    )
+    .ok();
     for (name, version) in &packages {
         if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
             db.store_transitive_dependency(
@@ -513,6 +607,12 @@ fn process_composer_lock(db: &Database, dir: &PathBuf, project_path: &str) -> u3
 
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_composer_lock(&content);
+    db.store_dependency_instances(
+        project_path,
+        "php",
+        &instances_from_packages(&packages, &direct_deps, false),
+    )
+    .ok();
     for (name, version) in &packages {
         if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
             db.store_transitive_dependency(

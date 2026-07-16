@@ -22,4 +22,7 @@ pub use hygiene::{
     OrphanedProjectPurge,
 };
 pub(crate) use queries::is_excluded_project_path;
-pub use types::{CrossProjectPackage, DependencyAlert, DependencyEdgeRow, StoredDependency};
+pub use types::{
+    CrossProjectPackage, DependencyAlert, DependencyEdgeRow, DependencyInstanceInput,
+    DependencyInstanceRow, StoredDependency,
+};

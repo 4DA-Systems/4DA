@@ -9,7 +9,10 @@ use crate::db::Database;
 use crate::ace::scanner::DependencyEdge;
 
 use super::mappers::map_dependency_row;
-use super::types::{CrossProjectPackage, DependencyEdgeRow, StoredDependency};
+use super::types::{
+    CrossProjectPackage, DependencyEdgeRow, DependencyInstanceInput, DependencyInstanceRow,
+    StoredDependency,
+};
 
 /// Hard project exclusion, applied at WRITE time to every dependency table
 /// and mirrored by the `get_auditable_*` read filters.
@@ -617,4 +620,155 @@ impl Database {
             })
             .collect())
     }
+
+    /// Bulk-replace the installed-instance inventory for one
+    /// `(project_path, ecosystem)` (`dependency_instances`, Phase 92).
+    ///
+    /// DELETE-then-insert in a single transaction so a rescan REFRESHES the set
+    /// rather than accumulating stale versions (a package upgraded away must not
+    /// linger as a phantom vulnerable instance — the opposite failure to the
+    /// collapse this table fixes). The `UNIQUE(project, ecosystem, package,
+    /// version)` key permits the same package at multiple versions;
+    /// `INSERT OR IGNORE` dedups an exact `(package, version)` repeated within a
+    /// lockfile. Skips excluded paths and canonicalizes exactly like
+    /// [`Self::store_dependency`], so instances land on the same project key as
+    /// the collapsed tables. Returns the number of rows written.
+    ///
+    /// A directory holding two lockfiles of the SAME ecosystem (e.g. both
+    /// `package-lock.json` and `pnpm-lock.yaml`) resolves to the last
+    /// processor's set — matching the existing last-write-wins semantics of the
+    /// collapsed tables; well-formed projects have one lockfile per ecosystem.
+    pub(crate) fn store_dependency_instances(
+        &self,
+        project_path: &str,
+        ecosystem: &str,
+        instances: &[DependencyInstanceInput],
+    ) -> SqliteResult<usize> {
+        if is_excluded_project_path(project_path) {
+            return Ok(0);
+        }
+        let project_path = canonicalize_project_path(project_path);
+        // Store the OSV-canonical ecosystem name (npm / crates.io / PyPI / Go /
+        // ...), not the ACE language string ("rust"/"javascript"), so the
+        // version-confirmed matcher joins advisories (keyed on OSV names)
+        // directly. Normalized once here → DELETE and INSERT stay consistent.
+        let ecosystem =
+            crate::ecosystem::Ecosystem::parse(ecosystem).map_or(ecosystem, |e| e.osv_name());
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "DELETE FROM dependency_instances WHERE project_path = ?1 AND ecosystem = ?2",
+            params![project_path, ecosystem],
+        )?;
+        let mut inserted = 0usize;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR IGNORE INTO dependency_instances
+                     (project_path, ecosystem, package_name, version, is_direct, is_dev, scope, detected_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
+            )?;
+            for inst in instances {
+                inserted += stmt.execute(params![
+                    project_path,
+                    ecosystem,
+                    inst.package_name,
+                    inst.version,
+                    inst.is_direct as i32,
+                    inst.is_dev as i32,
+                    inst.scope,
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(inserted)
+    }
+
+    /// All installed instances for a project (every version of every package),
+    /// ordered for stable output. Reads the raw inventory; because writes are
+    /// path-guarded and canonicalized and this table is new (no pre-guard stale
+    /// rows), no post-filter is applied here — a consumer feeding an
+    /// intelligence surface applies the canonical inclusion policy at the
+    /// match layer, as the OSV matcher already does.
+    pub fn get_dependency_instances(
+        &self,
+        project_path: &str,
+    ) -> SqliteResult<Vec<DependencyInstanceRow>> {
+        let project_path = canonicalize_project_path(project_path);
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, project_path, ecosystem, package_name, version,
+                    is_direct, is_dev, scope, detected_at
+             FROM dependency_instances
+             WHERE project_path = ?1
+             ORDER BY ecosystem, package_name, version",
+        )?;
+        let rows = stmt.query_map(params![project_path], map_instance_row)?;
+        Ok(collect_instance_rows(rows))
+    }
+
+    /// Every installed instance of one package across ALL projects, matched by
+    /// OSV-normalized ecosystem so callers pass either the ACE language string
+    /// (`"rust"`) or the OSV name (`"crates.io"`). This is the read the
+    /// version-confirmed matcher uses to prove an advisory against EVERY
+    /// installed version — the whole reason the table exists.
+    pub fn get_package_instances(
+        &self,
+        ecosystem: &str,
+        package_name: &str,
+    ) -> SqliteResult<Vec<DependencyInstanceRow>> {
+        let osv = crate::ecosystem::Ecosystem::parse(ecosystem).map_or(ecosystem, |e| e.osv_name());
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, project_path, ecosystem, package_name, version,
+                    is_direct, is_dev, scope, detected_at
+             FROM dependency_instances
+             WHERE package_name = ?1
+               AND (ecosystem = ?2 OR ecosystem = ?3)
+             ORDER BY project_path, version",
+        )?;
+        let rows = stmt.query_map(params![package_name, ecosystem, osv], map_instance_row)?;
+        Ok(collect_instance_rows(rows))
+    }
+
+    /// Whether the multi-version inventory has any rows for a project — the
+    /// D-3 coverage gate. A negative verdict (`not_affected` / safe-to-close /
+    /// quiet-week) is only honest for a project whose instances were captured;
+    /// this returns false when the inventory is absent (fail closed).
+    pub fn project_has_dependency_instances(&self, project_path: &str) -> SqliteResult<bool> {
+        let project_path = canonicalize_project_path(project_path);
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM dependency_instances WHERE project_path = ?1)",
+            params![project_path],
+            |row| row.get::<_, i64>(0).map(|n| n > 0),
+        )
+    }
+}
+
+fn map_instance_row(row: &rusqlite::Row<'_>) -> SqliteResult<DependencyInstanceRow> {
+    Ok(DependencyInstanceRow {
+        id: row.get(0)?,
+        project_path: row.get(1)?,
+        ecosystem: row.get(2)?,
+        package_name: row.get(3)?,
+        version: row.get(4)?,
+        is_direct: row.get::<_, i64>(5)? != 0,
+        is_dev: row.get::<_, i64>(6)? != 0,
+        scope: row.get(7)?,
+        detected_at: row.get(8)?,
+    })
+}
+
+fn collect_instance_rows<I>(rows: I) -> Vec<DependencyInstanceRow>
+where
+    I: Iterator<Item = SqliteResult<DependencyInstanceRow>>,
+{
+    rows.filter_map(|r| match r {
+        Ok(v) => Some(v),
+        Err(e) => {
+            tracing::warn!("Row processing failed in dependency instances: {e}");
+            None
+        }
+    })
+    .collect()
 }
