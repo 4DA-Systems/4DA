@@ -22,6 +22,10 @@ export interface GraphNode {
   member_titles: string[];
   /** Item ids of all members including the representative. */
   member_ids: number[];
+  /** Content category: 'security' | 'release' | 'discussion' | 'research'. */
+  category: string;
+  /** A member is linked to one of the user's declared dependencies. */
+  affects_you: boolean;
   x: number;
   y: number;
 }

@@ -13,4 +13,14 @@ member_titles: Array<string>,
 /**
  * Item ids of all members including the representative.
  */
-member_ids: Array<bigint>, x: number, y: number, };
+member_ids: Array<bigint>, 
+/**
+ * Content category: "security" | "release" | "discussion" | "research".
+ * The primary color channel — source identity moved to the tooltip.
+ */
+category: string, 
+/**
+ * Any member is linked to one of the user's declared dependencies
+ * (dep_linker) — rendered as the gold "touches your stack" ring.
+ */
+affects_you: boolean, x: number, y: number, };

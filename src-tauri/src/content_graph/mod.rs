@@ -13,6 +13,7 @@
 //! Everything is computed deterministically in Rust; the frontend renders
 //! positioned nodes without any JS layout.
 
+mod category;
 mod clustering;
 mod edges;
 mod layout;
@@ -34,9 +35,10 @@ const DEFAULT_MAX_NODES: usize = 150;
 const SIMILARITY_THRESHOLD: f32 = 0.77;
 const LEXICAL_FALLBACK_THRESHOLD: f32 = 0.73;
 const LEXICAL_OVERLAP_MIN: f32 = 0.60;
-/// Isolated singletons shown on the orbit ring, by relevance; the rest stay
-/// in the List view (counted honestly in `meta.hidden_items`).
-const RING_CAP: usize = 40;
+/// Isolated singletons shown on the map (as semantic satellites or on the
+/// shelf), by relevance; the rest stay in the List view (counted honestly in
+/// `meta.hidden_items`).
+const SINGLETON_CAP: usize = 40;
 /// Per-node top-K edges kept for display (plus the spanning backbone).
 const TOP_K_EDGES: usize = 4;
 
@@ -88,7 +90,8 @@ pub fn build_graph(
     let clusters = clustering::compute_clusters(&story_items, &edge_list);
 
     // Visibility: anything connected or aggregated appears; isolated plain
-    // items appear on the orbit ring up to RING_CAP by relevance.
+    // items appear as semantic satellites (or shelf) up to SINGLETON_CAP by
+    // relevance.
     struct Vis {
         id: i64,
         relevance: f32,
@@ -120,8 +123,8 @@ pub fn build_graph(
             ring_candidates.push(handle);
         }
     }
-    let hidden_items = ring_candidates.len().saturating_sub(RING_CAP);
-    for handle in ring_candidates.iter().take(RING_CAP) {
+    let hidden_items = ring_candidates.len().saturating_sub(SINGLETON_CAP);
+    for handle in ring_candidates.iter().take(SINGLETON_CAP) {
         visible_ids.insert(handle.id);
     }
 
@@ -147,6 +150,12 @@ pub fn build_graph(
                 member_count: s.member_count,
                 member_titles: s.member_titles.clone(),
                 member_ids: s.member_ids.clone(),
+                category: category::category_for(
+                    &s.item.source_type,
+                    s.item.signal_type.as_deref(),
+                )
+                .to_string(),
+                affects_you: s.affects_you,
                 x: 0.0,
                 y: 0.0,
             }
@@ -164,9 +173,51 @@ pub fn build_graph(
         .collect();
     clustering::assign_cluster_labels(&story_items, &mut clusters);
 
+    // Semantic satellite assignment: each visible singleton attaches to its
+    // nearest clustered story (max member cosine). Below the floor it goes
+    // to the shelf — genuinely unrelated. Live evidence for this design:
+    // 90 of 93 window singletons sat at cosine 0.45-0.77 from a cluster.
+    let clustered_visible: Vec<&types::RawItem> = story_items
+        .iter()
+        .filter(|item| {
+            visible_ids.contains(&item.id) && clusters.iter().any(|c| c.node_ids.contains(&item.id))
+        })
+        .collect();
+    let mut satellite_of: HashMap<i64, layout::SatelliteAssign> = HashMap::new();
+    for node in &nodes {
+        if node.cluster_id.is_some() {
+            continue;
+        }
+        let Some(item) = story_items.iter().find(|i| i.id == node.id) else {
+            continue;
+        };
+        let best = clustered_visible
+            .iter()
+            .map(|c| {
+                (
+                    c.id,
+                    crate::utils::cosine_similarity(&item.embedding, &c.embedding),
+                )
+            })
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        if let Some((nearest_id, sim)) = best {
+            if sim >= layout::SATELLITE_MIN_SIM {
+                if let Some(cluster) = clusters.iter().find(|c| c.node_ids.contains(&nearest_id)) {
+                    satellite_of.insert(
+                        node.id,
+                        layout::SatelliteAssign {
+                            cluster_id: cluster.id.clone(),
+                            sim,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
     // Layout sees the full retained edge set (affinity fidelity); display
     // gets the sparsified backbone + top-K.
-    layout::compute_layout(&mut nodes, &edge_list, &mut clusters);
+    layout::compute_layout(&mut nodes, &edge_list, &mut clusters, &satellite_of);
     edges::sparsify_edges(&mut edge_list, TOP_K_EDGES);
 
     let story_count = nodes.iter().filter(|n| n.member_count > 1).count();

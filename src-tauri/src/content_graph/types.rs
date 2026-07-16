@@ -36,6 +36,12 @@ pub struct GraphNode {
     pub member_titles: Vec<String>,
     /// Item ids of all members including the representative.
     pub member_ids: Vec<i64>,
+    /// Content category: "security" | "release" | "discussion" | "research".
+    /// The primary color channel — source identity moved to the tooltip.
+    pub category: String,
+    /// Any member is linked to one of the user's declared dependencies
+    /// (dep_linker) — rendered as the gold "touches your stack" ring.
+    pub affects_you: bool,
     pub x: f32,
     pub y: f32,
 }
@@ -114,4 +120,6 @@ pub(super) struct StoryItem {
     pub member_ids: Vec<i64>,
     pub member_titles: Vec<String>,
     pub member_count: usize,
+    /// Any member carries a dep_linker match to the user's declared stack.
+    pub affects_you: bool,
 }
