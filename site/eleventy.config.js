@@ -11,6 +11,9 @@ export default function(eleventyConfig) {
   eleventyConfig.addPassthroughCopy({ "api": "api" });
   eleventyConfig.addPassthroughCopy({ "shopify-theme.css": "shopify-theme.css" });
   eleventyConfig.addPassthroughCopy({ "test-e2e-stripe.mjs": "test-e2e-stripe.mjs" });
+  // Stack Scan — self-contained static app (no analytics by design; must NOT go through
+  // base.njk, which injects PostHog — the page's promise is a clean Network tab)
+  eleventyConfig.addPassthroughCopy({ "scan": "scan" });
 
   // Exclude utility files from processing
   eleventyConfig.ignores.add("src/og-image.html");

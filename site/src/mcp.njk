@@ -1,0 +1,170 @@
+---
+title: "4DA MCP Server — stack awareness for your coding agent in one line"
+description: "One command gives Claude Code, Cursor, or Windsurf nine live tools: vulnerability scans, dependency health, upgrade plans. No account, no API key, privacy-first."
+permalink: "/mcp/"
+---
+{% extends "base.njk" %}
+
+{% block head %}
+  <link rel="canonical" href="https://4da.ai/mcp">
+  <meta property="og:title" content="Give your coding agent stack awareness in one line">
+  <meta property="og:description" content="One command adds nine live tools to Claude Code, Cursor, or Windsurf — vulnerability scans, dependency health, upgrade plans. No account, no API key.">
+  <meta property="og:url" content="https://4da.ai/mcp">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0A0A0A; --bg-card: #141414; --bg-hover: #1A1A1A;
+      --text: #FFFFFF; --text-secondary: #A0A0A0; --text-muted: #666666;
+      --accent: #F97316; --border: #2A2A2A; --radius: 12px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+    .container { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+    .mcp-nav { height: 56px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+    .mcp-nav .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; color: var(--text); }
+    .mcp-nav .brand .dot { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; font-weight: 600; }
+    .mcp-nav .links { display: flex; gap: 22px; }
+    .mcp-nav .links a { color: var(--text-muted); font-size: 14px; }
+    .mcp-nav .links a:hover { color: var(--text); }
+
+    .mcp-hero { text-align: center; padding: 64px 0 8px; }
+    .mcp-hero .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
+    .mcp-hero h1 { font-size: 40px; font-weight: 600; letter-spacing: -.02em; margin: 12px 0 10px; }
+    .mcp-hero p { color: var(--text-secondary); max-width: 58ch; margin: 0 auto; }
+
+    .mcp-install { display: grid; gap: 14px; margin: 40px 0 12px; }
+    .mcp-client { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+    .mcp-client h3 { font-size: 15px; margin-bottom: 10px; }
+    .mcp-cmd { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 8px 8px 12px; overflow-x: auto; }
+    .mcp-cmd code { font-size: 13px; color: var(--text); white-space: pre; }
+    .mcp-cmd code .cm { color: var(--text-muted); }
+    .copy-btn { appearance: none; cursor: pointer; background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; font-weight: 500; padding: 5px 10px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; transition: color .15s, border-color .15s; flex-shrink: 0; }
+    .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+    .copy-btn.copied { color: #22C55E; border-color: #22C55E; }
+    .mcp-client .where { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+    .mcp-setup-note { text-align: center; font-size: 13.5px; color: var(--text-secondary); margin: 4px 0 8px; }
+
+    .mcp-section { border-top: 1px solid var(--border); margin-top: 40px; padding: 40px 0 8px; }
+    .mcp-section .section-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+    .mcp-section h2 { font-size: 22px; font-weight: 600; margin: 10px 0 20px; }
+
+    .tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .tool { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--bg-card); }
+    .tool .tname { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text); margin-bottom: 4px; }
+    .tool p { font-size: 13px; color: var(--text-secondary); }
+    .mcp-applayer { border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-top: 14px; font-size: 13.5px; color: var(--text-secondary); }
+    .mcp-applayer strong { color: var(--text); }
+
+    .mcp-privacy p { font-size: 14px; color: var(--text-secondary); max-width: 72ch; }
+    .mcp-privacy strong { color: var(--text); }
+
+    .mcp-try { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin: 40px 0 0; }
+    .mcp-try-text { font-size: 14px; color: var(--text-secondary); max-width: 60ch; }
+    .mcp-try-text strong { color: var(--text); }
+    .mcp-try-btn { display: inline-block; background: var(--text); color: var(--bg); font-weight: 600; font-size: 14px; padding: 10px 18px; border-radius: 8px; transition: opacity .2s; flex-shrink: 0; }
+    .mcp-try-btn:hover { opacity: .9; }
+
+    .mcp-footer { text-align: center; padding: 56px 0 80px; }
+    .mcp-footer .line { font-size: 15px; color: var(--text-secondary); font-style: italic; margin-bottom: 16px; }
+    .mcp-footer a.dl { display: inline-block; background: var(--text); color: var(--bg); font-weight: 600; font-size: 14px; padding: 11px 22px; border-radius: 8px; }
+    .mcp-footer a.dl:hover { opacity: .9; }
+
+    @media (max-width: 720px) {
+      .tool-grid { grid-template-columns: 1fr; }
+      .mcp-hero h1 { font-size: 32px; }
+    }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <div class="container">
+    <nav class="mcp-nav">
+      <a href="/" class="brand"><span class="dot">4</span> 4DA</a>
+      <div class="links"><a href="/">Home</a><a href="/scan/">Stack Scan</a><a href="/download/">Download</a><a href="https://github.com/4DA-Systems/4DA">GitHub</a></div>
+    </nav>
+  </div>
+
+  <div class="container">
+    <header class="mcp-hero">
+      <div class="eyebrow">One line &middot; No account &middot; No API key &middot; Apache-2.0</div>
+      <h1>Give your coding agent stack awareness</h1>
+      <p>Your coding agent can write the upgrade. It doesn&rsquo;t know the CVE landed this morning, that the new major breaks your middleware, or that the package it&rsquo;s about to suggest was deprecated last week. One line fixes that.</p>
+    </header>
+
+    <div class="mcp-install">
+      <div class="mcp-client">
+        <h3>Claude Code</h3>
+        <div class="mcp-cmd">
+          <code>claude mcp add 4da -- npx -y @4da/mcp-server</code>
+          <button type="button" class="copy-btn" data-copy="claude mcp add 4da -- npx -y @4da/mcp-server" aria-label="Copy command">Copy</button>
+        </div>
+      </div>
+      <div class="mcp-client">
+        <h3>Cursor</h3>
+        <div class="mcp-cmd">
+          <code>{ "mcpServers": { "4da": { "command": "npx", "args": ["-y", "@4da/mcp-server"] } } }</code>
+          <button type="button" class="copy-btn" data-copy='{ "mcpServers": { "4da": { "command": "npx", "args": ["-y", "@4da/mcp-server"] } } }' aria-label="Copy config">Copy</button>
+        </div>
+        <div class="where">Add to <code>.cursor/mcp.json</code> (project) or <code>~/.cursor/mcp.json</code> (global).</div>
+      </div>
+      <div class="mcp-client">
+        <h3>Windsurf</h3>
+        <div class="where" style="margin-top:0">Same JSON shape in <code>~/.codeium/windsurf/mcp_config.json</code>.</div>
+      </div>
+    </div>
+    <p class="mcp-setup-note">That&rsquo;s the whole setup. The server scans the project it starts in and works immediately.</p>
+
+    <section class="mcp-section">
+      <div class="section-label">What your agent can now do</div>
+      <h2>Nine tools work standalone, the moment it&rsquo;s installed</h2>
+      <div class="tool-grid">
+        <div class="tool"><div class="tname">vulnerability_scan</div><p>The full resolvable lockfile tree &mdash; transitives included &mdash; against OSV.dev: severity, fix versions, upgrade commands. Your agent checks <em>before</em> it bumps.</p></div>
+        <div class="tool"><div class="tname">dependency_health</div><p>Freshness, deprecations, known issues across npm, Rust, Python, Go.</p></div>
+        <div class="tool"><div class="tname">upgrade_planner</div><p>Ranked upgrade plan: quick wins vs breaking majors.</p></div>
+        <div class="tool"><div class="tname">what_should_i_know</div><p>Pre-task briefing: advisories and decisions relevant to the task your agent is about to start.</p></div>
+        <div class="tool"><div class="tname">ecosystem_pulse</div><p>What moved in your ecosystem lately.</p></div>
+        <div class="tool"><div class="tname">get_context</div><p>Your stack, as detected &mdash; so the agent stops guessing your versions.</p></div>
+        <div class="tool"><div class="tname">decision_memory + check_decision_alignment</div><p>Record architecture decisions once; every future agent session checks against them before suggesting a rewrite.</p></div>
+        <div class="tool"><div class="tname">agent_memory</div><p>What one agent session learns, the next one knows.</p></div>
+      </div>
+      <div class="mcp-applayer">
+        <strong>Five more light up when the <a href="/download/">4DA desktop app</a> is running</strong> &mdash; the always-on layer: your scored intelligence feed, actionable signals, knowledge gaps, developer DNA, and live feedback learning. The server tells your agent honestly when that data is fresh versus stale (<code>data_freshness</code> on every feed-backed answer &mdash; no silent staleness).
+      </div>
+    </section>
+
+    <section class="mcp-section mcp-privacy">
+      <div class="section-label">Privacy</div>
+      <h2>The actual answer, not the reassuring one</h2>
+      <p>Standalone mode sends exactly one category of data anywhere: <strong>package names and versions</strong> &mdash; the public contents of your manifest &mdash; to OSV.dev and public registries. Your code, your paths, your prompts: never. The desktop app&rsquo;s intelligence stays on your machine entirely. The server is <a href="https://github.com/4DA-Systems/4DA/tree/main/mcp-4da-server">Apache-2.0 and small; read it</a>.</p>
+    </section>
+
+    <div class="mcp-try">
+      <div class="mcp-try-text"><strong>Not ready to add a server?</strong> Paste your package.json / Cargo.toml / requirements.txt / go.mod and see the last 30 days around your stack &mdash; in your browser. Nothing leaves the page except those same public package names. Watch the network tab.</div>
+      <a class="mcp-try-btn" href="/scan/">Try Stack Scan &rarr;</a>
+    </div>
+
+    <div class="mcp-footer">
+      <div class="line">The server answers when asked. The app watches all day.</div>
+      <a class="dl" href="/download/">Download 4DA</a>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      document.querySelectorAll('.copy-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          if (!navigator.clipboard) return;
+          navigator.clipboard.writeText(btn.getAttribute('data-copy') || '').then(function() {
+            var orig = btn.textContent; btn.textContent = 'Copied'; btn.classList.add('copied');
+            if (typeof posthog !== 'undefined') posthog.capture('mcp_copy', { source: 'mcp_page' });
+            setTimeout(function() { btn.textContent = orig; btn.classList.remove('copied'); }, 1600);
+          }).catch(function() {});
+        });
+      });
+    })();
+  </script>
+{% endblock %}

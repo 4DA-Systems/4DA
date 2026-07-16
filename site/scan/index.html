@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What happened around your stack — 4DA</title>
+<meta name="description" content="Paste a manifest. See the last 30 days around your dependencies — advisories, releases, deprecations. Runs entirely in your browser.">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="What happened around your stack — 4DA">
+<meta property="og:description" content="Paste a manifest. Advisories, releases, deprecations — the last 30 days, entirely in your browser.">
+<meta property="og:image" content="https://4da.ai/scan/assets/og.png">
+<link rel="canonical" href="https://4da.ai/scan/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="styles.css">
+<!-- No analytics. No fonts CDN. No third-party scripts. The only network traffic this page
+     produces is public package names sent to public registries and OSV.dev — verifiable in
+     your DevTools Network tab. -->
+</head>
+<body>
+<div class="glow" aria-hidden="true"></div>
+
+<header class="site-header">
+  <a class="brand" href="https://4da.ai" rel="noopener">
+    <svg class="mark" viewBox="0 0 64 64" width="26" height="26" aria-hidden="true">
+      <!-- pentachoron (4-simplex) projection: 5 vertices, all 10 edges -->
+      <g stroke="#D4AF37" fill="none" stroke-width="1.4">
+        <path opacity=".85" d="M32 6 L58 24 L48 56 L16 56 L6 24 Z"/>
+        <path opacity=".45" d="M32 6 L48 56 M32 6 L16 56 M58 24 L16 56 M58 24 L6 24 M48 56 L6 24"/>
+        <path opacity=".7" d="M32 34 L32 6 M32 34 L58 24 M32 34 L48 56 M32 34 L16 56 M32 34 L6 24"/>
+      </g>
+      <circle cx="32" cy="34" r="1.8" fill="#D4AF37"/>
+    </svg>
+    <span class="brand-name">4DA</span>
+  </a>
+  <span class="header-tag">stack scan</span>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>What happened around your stack.</h1>
+    <p class="sub">Paste a manifest. Get the last 30 days against what you actually depend on —
+    security advisories, releases, majors you're falling behind, deprecations.</p>
+    <p class="privacy">Runs entirely in your browser. Your manifest is never uploaded — the only
+    requests are public package names to public registries.
+    <span class="privacy-verify">Verify it: DevTools &rarr; Network.</span></p>
+  </section>
+
+  <section class="input-card" id="inputCard">
+    <textarea id="manifest" spellcheck="false" autocomplete="off"
+      placeholder="Paste package.json, Cargo.toml, requirements.txt, or go.mod &mdash; or drop the file here"></textarea>
+    <div class="input-row">
+      <div class="detect" id="detect" aria-live="polite"></div>
+      <button class="scan-btn" id="scanBtn" disabled>Scan</button>
+    </div>
+    <div class="samples">
+      <span>no manifest handy &mdash; try a stack:</span>
+      <button data-sample="rust">Rust service</button>
+      <button data-sample="next">Next.js app</button>
+      <button data-sample="py">Python ML</button>
+      <button data-sample="go">Go service</button>
+    </div>
+    <p class="input-error" id="inputError" role="alert" hidden></p>
+  </section>
+
+  <section class="feed-card" id="feedCard" hidden>
+    <div class="feed-head">
+      <span class="feed-title" id="feedTitle">scanning</span>
+      <span class="hairline" aria-hidden="true"></span>
+    </div>
+    <pre class="feed" id="feed" aria-live="polite"></pre>
+  </section>
+
+  <section id="results" hidden></section>
+
+  <footer class="site-footer" id="resultsFooter" hidden>
+    <p class="footer-line">This was one scan of one manifest, thirty days deep.</p>
+    <p class="footer-pitch"><a href="https://4da.ai" rel="noopener">4DA</a> reads the internet for
+    developers &mdash; privately, locally &mdash; and gets sharper every day.</p>
+  </footer>
+</main>
+
+<script type="module" src="src/app.mjs"></script>
+</body>
+</html>
