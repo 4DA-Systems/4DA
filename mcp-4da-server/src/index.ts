@@ -13,7 +13,7 @@
  * do NOT expose it over a network without putting your own auth in front.
  */
 /**
- * 4DA MCP Server v4.6.2 — Dependency Intelligence for AI Coding Agents
+ * 4DA MCP Server v4.6.3 — Dependency Intelligence for AI Coding Agents
  *
  * 14 tools across 5 categories. Live vulnerability scanning (OSV.dev),
  * ecosystem news, persistent memory, and tech stack awareness for any MCP host.
@@ -65,7 +65,7 @@ import { createDatabase, FourDADatabase, type DatabaseValidationResult } from ".
 const server = new Server(
   {
     name: "4da-server",
-    version: "4.6.2",
+    version: "4.6.3",
   },
   {
     capabilities: {
@@ -339,7 +339,7 @@ async function main() {
 
   // Version
   if (args.includes("--version") || args.includes("-v")) {
-    console.log("@4da/mcp-server 4.6.2");
+    console.log("@4da/mcp-server 4.6.3");
     return;
   }
 
@@ -434,7 +434,7 @@ async function main() {
   });
 
   const toolCount = getSlimToolList().length;
-  console.error(`4DA MCP Server v4.6.2 started — ${toolCount} tools, stdio transport`);
+  console.error(`4DA MCP Server v4.6.3 started — ${toolCount} tools, stdio transport`);
   console.error("  Use --http for Streamable HTTP, --setup to configure editors, --doctor to check health");
 }
 

@@ -104,7 +104,7 @@ interface WhatShouldIKnowResult {
 export const whatShouldIKnowTool = {
   name: "what_should_i_know",
   description:
-    "Pre-task intelligence briefing. Given a task description and optional file paths, returns filtered advisories, decision windows, signal chains, relevant wisdom, and a delegation assessment. Call before starting any non-trivial task.",
+    "Pre-task intelligence briefing. Given a task description and optional file paths, returns filtered advisories, decision windows, signal chains, relevant wisdom, and a delegation assessment. Call before starting any non-trivial task. If the task involves upgrading, adding, or auditing dependencies, follow with upgrade_planner for the ranked plan.",
   inputSchema: {
     type: "object" as const,
     properties: {

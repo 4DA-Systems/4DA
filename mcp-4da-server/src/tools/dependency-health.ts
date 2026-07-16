@@ -160,7 +160,7 @@ export async function executeDependencyHealth(
 
   return {
     scannedAt: new Date().toISOString(),
-    projectPath: process.cwd(),
+    projectPath: liveIntel.getProjectRoot() ?? process.cwd(),
     ecosystemsScanned: ecosystems,
     totalDeps: total,
     outdatedCount: outdated,
