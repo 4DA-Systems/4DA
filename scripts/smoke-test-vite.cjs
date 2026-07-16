@@ -84,9 +84,23 @@ function findCannotFindModule(body) {
 }
 
 async function main() {
+  // A live dev server owns port 4444 AND the node_modules/.vite/deps cache.
+  // Killing it and wiping that cache from here crashes the running fourda.exe
+  // ("Cannot find module vite@..." — the exact bug this script exists to catch),
+  // which is how fleet validation cycles kept murdering the operator's dev app
+  // (observed live 2026-07-17: three kills in 15 minutes). A cold-start check
+  // is impossible without disrupting the running instance, so skip honestly —
+  // CI and any dev-server-down run keep full coverage.
+  if (await waitForServerReady(1500)) {
+    log(`SKIPPED: a dev server is already running on port ${PORT}.`);
+    log('Cold-start smoke cannot run without killing it (port + .vite/deps cache are shared).');
+    log('Full coverage still runs in CI and whenever no dev server is up.');
+    process.exit(0);
+  }
+
   log('Starting fresh Vite dev server...');
 
-  // Kill anything already on the port first (matches pnpm run dev behavior)
+  // Port is free (checked above); clear any zombie holder without a listener.
   try {
     const { execSync } = require('node:child_process');
     execSync(`node "${path.join(__dirname, 'kill-port.cjs')}" ${PORT}`, { stdio: 'ignore' });
