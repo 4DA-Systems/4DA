@@ -1,7 +1,7 @@
 {
   "name": "@4da/mcp-server",
   "version": "4.6.3",
-  "mcpName": "io.github.runyourempire/4da-mcp-server",
+  "mcpName": "io.github.4da-systems/4da-mcp-server",
   "description": "Dependency intelligence for AI coding agents. Live CVE scanning, dependency health, upgrade planning, ecosystem news, decision memory — zero config, privacy-first. 9 tools standalone, 14 total with desktop app.",
   "type": "module",
   "main": "dist/index.js",
@@ -72,12 +72,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/runyourempire/4DA.git",
+    "url": "git+https://github.com/4DA-Systems/4DA.git",
     "directory": "mcp-4da-server"
   },
   "homepage": "https://4da.ai",
   "bugs": {
-    "url": "https://github.com/runyourempire/4DA/issues"
+    "url": "https://github.com/4DA-Systems/4DA/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

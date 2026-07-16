@@ -43,7 +43,7 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
           </button>
         ) : (
           <a
-            href={`https://github.com/runyourempire/4DA/releases/latest`}
+            href={`https://github.com/4DA-Systems/4DA/releases/latest`}
             target="_blank"
             rel="noopener noreferrer"
             className="px-4 py-1.5 text-xs font-medium text-bg-primary bg-accent-gold rounded-lg hover:bg-accent-gold-hover transition-colors inline-block"

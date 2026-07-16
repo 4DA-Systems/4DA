@@ -13,7 +13,7 @@
 #   - Windows: Visual Studio Build Tools 2022 + "Desktop development with C++"
 #   - macOS:   xcode-select --install
 #   - Linux:   see docs/BUILD-FROM-SOURCE.md for the apt/dnf list
-git clone https://github.com/runyourempire/4DA.git
+git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA
 pnpm install
 pnpm tauri dev
@@ -110,4 +110,4 @@ By submitting a PR, you agree to the [Contributor License Agreement](CLA.md).
 
 ## Questions?
 
-Open a [Discussion](https://github.com/runyourempire/4DA/discussions) on GitHub.
+Open a [Discussion](https://github.com/4DA-Systems/4DA/discussions) on GitHub.

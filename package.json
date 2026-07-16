@@ -7,10 +7,10 @@
   "homepage": "https://4da.ai",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/runyourempire/4DA.git"
+    "url": "git+https://github.com/4DA-Systems/4DA.git"
   },
   "bugs": {
-    "url": "https://github.com/runyourempire/4DA/issues"
+    "url": "https://github.com/4DA-Systems/4DA/issues"
   },
   "keywords": [
     "tauri",

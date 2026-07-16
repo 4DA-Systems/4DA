@@ -20,7 +20,7 @@ depends=('webkit2gtk-4.1' 'gtk3' 'libappindicator-gtk3')
 provides=('4da')
 conflicts=('4da')
 options=(!strip)
-source=("${pkgname}-${pkgver}.AppImage::https://github.com/runyourempire/4DA/releases/download/v${pkgver}/4DA-Home_${pkgver}_amd64.AppImage")
+source=("${pkgname}-${pkgver}.AppImage::https://github.com/4DA-Systems/4DA/releases/download/v${pkgver}/4DA-Home_${pkgver}_amd64.AppImage")
 sha256sums=('REPLACE_WITH_SHA256')
 
 prepare() {
@@ -46,6 +46,6 @@ package() {
 
     install -Dm644 /dev/stdin "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE" <<'EOF'
 Functional Source License, Version 1.1, Apache 2.0 Future License
-See https://github.com/runyourempire/4DA/blob/main/LICENSE
+See https://github.com/4DA-Systems/4DA/blob/main/LICENSE
 EOF
 }

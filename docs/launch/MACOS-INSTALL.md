@@ -10,7 +10,7 @@
 
 ### 1. Download
 
-Download the latest `4DA-*.dmg` from the [Releases page](https://github.com/runyourempire/4DA/releases/latest). Choose the correct architecture:
+Download the latest `4DA-*.dmg` from the [Releases page](https://github.com/4DA-Systems/4DA/releases/latest). Choose the correct architecture:
 
 - **Apple Silicon** (M1/M2/M3/M4): `4DA-*_aarch64.dmg`
 - **Intel**: `4DA-*_x64.dmg`
@@ -79,4 +79,4 @@ See the [Privacy Policy](https://4da.ai/privacy) for full detail.
 
 ## Questions
 
-Open an issue at [github.com/runyourempire/4DA/issues](https://github.com/runyourempire/4DA/issues) or email `support@4da.ai`.
+Open an issue at [github.com/4DA-Systems/4DA/issues](https://github.com/4DA-Systems/4DA/issues) or email `support@4da.ai`.

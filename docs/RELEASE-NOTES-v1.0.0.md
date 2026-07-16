@@ -34,7 +34,7 @@ Every asset includes a SHA-256 checksum. Verify before running:
 sha256sum -c SHASUMS256.txt
 ```
 
-See [VERIFY-DOWNLOADS.md](https://github.com/runyourempire/4DA/blob/main/docs/VERIFY-DOWNLOADS.md) for full verification instructions including minisign signatures.
+See [VERIFY-DOWNLOADS.md](https://github.com/4DA-Systems/4DA/blob/main/docs/VERIFY-DOWNLOADS.md) for full verification instructions including minisign signatures.
 
 ### Windows: first-run note
 
@@ -62,7 +62,7 @@ The MCP server works standalone — no desktop app required. 14 tools for vulner
 - **BYOK** — bring your own API key (Anthropic, OpenAI, Google, or Ollama for fully offline use)
 - API keys are stored in local config and never transmitted anywhere
 - All content processing and scoring happens on your machine
-- Full network transparency: [NETWORK-TRANSPARENCY.md](https://github.com/runyourempire/4DA/blob/main/docs/NETWORK-TRANSPARENCY.md)
+- Full network transparency: [NETWORK-TRANSPARENCY.md](https://github.com/4DA-Systems/4DA/blob/main/docs/NETWORK-TRANSPARENCY.md)
 
 ## Pricing
 
@@ -85,17 +85,17 @@ Free is not a demo. It's the full intelligence engine with 20+ sources, AI brief
 ## Build from Source
 
 ```bash
-git clone https://github.com/runyourempire/4DA.git
+git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA && git checkout v1.0.0
 pnpm install && pnpm run tauri build
 ```
 
-See [BUILD-FROM-SOURCE.md](https://github.com/runyourempire/4DA/blob/main/docs/BUILD-FROM-SOURCE.md) for prerequisites and detailed instructions.
+See [BUILD-FROM-SOURCE.md](https://github.com/4DA-Systems/4DA/blob/main/docs/BUILD-FROM-SOURCE.md) for prerequisites and detailed instructions.
 
 ## Links
 
 - Website: [4da.ai](https://4da.ai)
-- Documentation: [github.com/runyourempire/4DA](https://github.com/runyourempire/4DA)
+- Documentation: [github.com/4DA-Systems/4DA](https://github.com/4DA-Systems/4DA)
 - MCP Server: [npmjs.com/package/@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server)
 - Security: security@4da.ai
 

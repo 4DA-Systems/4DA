@@ -206,7 +206,7 @@ Only contacted when you enter a license key (`src-tauri/src/settings/license/key
 (`src-tauri/tauri.conf.json` → `plugins.updater`)
 
 - **Host:** `github.com` (GitHub Releases)
-- **Endpoint:** `GET /runyourempire/4DA/releases/latest/download/latest.json`
+- **Endpoint:** `GET /4DA-Systems/4DA/releases/latest/download/latest.json`
 - **Trigger:** shortly after startup, once per session; silent on failure.
 - **Data sent:** plain `GET` — no version reporting, no device info. Updates are
   **minisign-verified** against the embedded public key before install; the user must click to apply.

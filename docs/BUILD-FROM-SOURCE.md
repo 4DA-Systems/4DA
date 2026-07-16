@@ -94,7 +94,7 @@ Five commands from zero to a running build:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/runyourempire/4DA.git
+git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA
 
 # 2. Checkout a specific release (recommended)
@@ -122,7 +122,7 @@ pnpm run tauri build
 ### 1. Clone and Checkout
 
 ```bash
-git clone https://github.com/runyourempire/4DA.git
+git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA
 ```
 

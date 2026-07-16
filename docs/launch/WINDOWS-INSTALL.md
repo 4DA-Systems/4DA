@@ -10,7 +10,7 @@
 
 ### 1. Download
 
-Download the latest `4DA-Setup-*.exe` from the [Releases page](https://github.com/runyourempire/4DA/releases/latest). The download page also lists:
+Download the latest `4DA-Setup-*.exe` from the [Releases page](https://github.com/4DA-Systems/4DA/releases/latest). The download page also lists:
 
 - **`SHASUMS256.txt`** — a single canonical file listing the SHA-256 of every artifact in the release. Download this alongside the installer.
 - **`<installer>.exe.sha256`** — a per-file sidecar with just the hash for your installer, convenient for one-line verification.
@@ -94,4 +94,4 @@ See the [Privacy Policy](https://4da.ai/privacy) for full detail.
 
 ## Questions
 
-Open an issue at [github.com/runyourempire/4DA/issues](https://github.com/runyourempire/4DA/issues) or email `support@4da.ai`.
+Open an issue at [github.com/4DA-Systems/4DA/issues](https://github.com/4DA-Systems/4DA/issues) or email `support@4da.ai`.

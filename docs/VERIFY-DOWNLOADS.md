@@ -26,7 +26,7 @@ Every GitHub release includes a checksum file listing the SHA-256 hash for each 
 
 ### Download the checksum file
 
-Go to the release page at [github.com/runyourempire/4DA/releases](https://github.com/runyourempire/4DA/releases) and download the checksum file alongside your installer.
+Go to the release page at [github.com/4DA-Systems/4DA/releases](https://github.com/4DA-Systems/4DA/releases) and download the checksum file alongside your installer.
 
 ### Compute the hash of your downloaded file
 
@@ -139,7 +139,7 @@ RWQDF5e2sUKvGYCPxka/KazOY6s/8w85tK7C8rD6IRAb1ucOhVfePRZF
 ```
 
 - **Key ID:** `19AF42B1B6971703`
-- This key is embedded in the application source code at [`src-tauri/tauri.conf.json` (line 48)](https://github.com/runyourempire/4DA/blob/main/src-tauri/tauri.conf.json#L48) as a base64-encoded string. You can decode it yourself to confirm it matches the key above.
+- This key is embedded in the application source code at [`src-tauri/tauri.conf.json` (line 48)](https://github.com/4DA-Systems/4DA/blob/main/src-tauri/tauri.conf.json#L48) as a base64-encoded string. You can decode it yourself to confirm it matches the key above.
 
 ### Install minisign
 
@@ -185,7 +185,7 @@ If you want the highest level of assurance, you can build 4DA from source and co
 
 ```bash
 # Clone the repository
-git clone https://github.com/runyourempire/4DA.git
+git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA
 
 # Checkout the release tag
@@ -206,10 +206,10 @@ The `Cargo.lock` and `pnpm-lock.yaml` files are committed to the repository and 
 
 | Material | Location |
 |---|---|
-| Installers, checksums, and signatures | [GitHub Releases](https://github.com/runyourempire/4DA/releases) |
-| Minisign public key (in source) | [`src-tauri/tauri.conf.json`](https://github.com/runyourempire/4DA/blob/main/src-tauri/tauri.conf.json) line 48 |
-| This document | [`docs/VERIFY-DOWNLOADS.md`](https://github.com/runyourempire/4DA/blob/main/docs/VERIFY-DOWNLOADS.md) |
-| Security policy and vulnerability reporting | [`SECURITY.md`](https://github.com/runyourempire/4DA/blob/main/SECURITY.md) |
+| Installers, checksums, and signatures | [GitHub Releases](https://github.com/4DA-Systems/4DA/releases) |
+| Minisign public key (in source) | [`src-tauri/tauri.conf.json`](https://github.com/4DA-Systems/4DA/blob/main/src-tauri/tauri.conf.json) line 48 |
+| This document | [`docs/VERIFY-DOWNLOADS.md`](https://github.com/4DA-Systems/4DA/blob/main/docs/VERIFY-DOWNLOADS.md) |
+| Security policy and vulnerability reporting | [`SECURITY.md`](https://github.com/4DA-Systems/4DA/blob/main/SECURITY.md) |
 | Network transparency audit | [`docs/NETWORK-TRANSPARENCY.md`](NETWORK-TRANSPARENCY.md) |
 | How to build from source | [`docs/BUILD-FROM-SOURCE.md`](BUILD-FROM-SOURCE.md) |
 
@@ -218,9 +218,9 @@ The `Cargo.lock` and `pnpm-lock.yaml` files are committed to the repository and 
 ## 6. What If Verification Fails
 
 1. **Do not run the binary.** A failed verification means the file may have been tampered with or corrupted.
-2. **Re-download** directly from the official [GitHub Releases page](https://github.com/runyourempire/4DA/releases). Do not use mirrors or third-party download sites.
+2. **Re-download** directly from the official [GitHub Releases page](https://github.com/4DA-Systems/4DA/releases). Do not use mirrors or third-party download sites.
 3. **Verify again** using the steps above.
-4. **Check the repository URL.** Ensure you are downloading from `github.com/runyourempire/4DA` and not a similarly named repository.
+4. **Check the repository URL.** Ensure you are downloading from `github.com/4DA-Systems/4DA` and not a similarly named repository.
 5. **If the problem persists,** report the issue to **security@4da.ai** with the following details:
    - Which file you downloaded and its SHA-256 hash
    - Which verification step failed
