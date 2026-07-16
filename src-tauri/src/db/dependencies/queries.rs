@@ -706,6 +706,21 @@ impl Database {
         Ok(collect_instance_rows(rows))
     }
 
+    /// Every installed instance across ALL projects — the bulk read the OSV
+    /// matcher and alert auto-resolver index once per pass (cheaper than a
+    /// per-advisory/per-alert query). Ecosystem is already stored OSV-canonical.
+    pub fn get_all_dependency_instances(&self) -> SqliteResult<Vec<DependencyInstanceRow>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, project_path, ecosystem, package_name, version,
+                    is_direct, is_dev, scope, detected_at
+             FROM dependency_instances
+             ORDER BY project_path, ecosystem, package_name, version",
+        )?;
+        let rows = stmt.query_map([], map_instance_row)?;
+        Ok(collect_instance_rows(rows))
+    }
+
     /// Every installed instance of one package across ALL projects, matched by
     /// OSV-normalized ecosystem so callers pass either the ACE language string
     /// (`"rust"`) or the OSV name (`"crates.io"`). This is the read the
