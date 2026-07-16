@@ -1,6 +1,6 @@
 {
   "name": "what_should_i_know",
-  "description": "Pre-task intelligence briefing. Given a task description and optional file paths, returns filtered advisories (security alerts, breaking changes), active decision windows, signal chains, relevant past decisions/memories, and a delegation assessment. Call this before starting any non-trivial task to get caught up on what matters.",
+  "description": "Pre-task intelligence briefing. Given a task description and optional file paths, returns filtered advisories (security alerts, breaking changes), active decision windows, signal chains, relevant past decisions/memories, and a delegation assessment. Call this before starting any non-trivial task to get caught up on what matters. If the task involves upgrading, adding, or auditing dependencies, follow with upgrade_planner for the ranked plan.",
   "inputSchema": {
     "type": "object",
     "properties": {

@@ -1,6 +1,6 @@
 {
   "name": "upgrade_planner",
-  "description": "Ranked upgrade recommendations for project dependencies. Combines vulnerability severity, deprecation status, and version distance to produce a prioritized upgrade plan.\n\nShows quick wins (safe patch/minor upgrades) separately from breaking changes (major version bumps). Call after dependency_health to plan your upgrade strategy.\n\nPrivacy: uses cached registry data. No additional network calls beyond what dependency_health already fetched.",
+  "description": "Ranked standalone upgrade recommendations for project dependencies — call before upgrading, adding, or auditing any dependency to pick the safest order. Combines vulnerability severity, deprecation status, and version distance into a prioritized plan.\n\nSplits recommendations three ways: quick wins (safe patch/minor upgrades), breaking changes (major version bumps), and transitive CVEs marked waiting_on_upstream (not declared in your manifest — the fix arrives via a parent package update or a lockfile refresh). Call dependency_health first for registry context and vulnerability_scan first for a CVE-aware plan; without a scan the output says it is CVE-blind.\n\nProvenance: standalone heuristic — a point-in-time plan from local lockfiles plus live registry/OSV lookups, not the 4DA desktop app's cross-project, version-confirmed plan.\n\nPrivacy: live mode may query public registries and OSV with package names and versions. It never sends source code.",
   "inputSchema": {
     "type": "object",
     "properties": {

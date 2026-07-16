@@ -45,6 +45,7 @@ export class LiveIntelligence {
   private resolvedDeps: ResolvedDependency[] = [];
   private auditDeps: ResolvedDependency[] = [];
   private initialized = false;
+  private projectRoot: string | null = null;
 
   constructor(db: Database.Database) {
     this.enabled = process.env.FOURDA_OFFLINE !== "true";
@@ -70,6 +71,7 @@ export class LiveIntelligence {
   ): void {
     this.resolvedDeps = resolveVersions(projectPath, deps, devDeps, language);
     this.auditDeps = resolveAuditVersions(projectPath, deps, devDeps, language);
+    this.projectRoot = projectPath;
     this.initialized = true;
   }
 
@@ -91,6 +93,7 @@ export class LiveIntelligence {
     }
     this.resolvedDeps = dedupeDependencies(allResolved);
     this.auditDeps = dedupeDependencies(allAudit);
+    this.projectRoot = projectPath;
     this.initialized = true;
   }
 
@@ -115,7 +118,18 @@ export class LiveIntelligence {
     }
     this.resolvedDeps = dedupeDependencies(allResolved);
     this.auditDeps = dedupeDependencies(allAudit);
+    this.projectRoot = commonPathRoot(groups.map((g) => g.dir));
     this.initialized = true;
+  }
+
+  /**
+   * Root directory the dependency set was resolved from, or null before init.
+   * For multi-manifest (grouped) init this is the deepest common ancestor of
+   * the group directories — honest scope reporting for tool output, instead
+   * of whatever `process.cwd()` happens to be.
+   */
+  getProjectRoot(): string | null {
+    return this.projectRoot;
   }
 
   /**
@@ -272,6 +286,24 @@ export class LiveIntelligence {
       cachedHeadlineCount: this.lastHeadlines.length,
     };
   }
+}
+
+/**
+ * Deepest common ancestor of a set of directories (segment-wise, both slash
+ * styles). Null for an empty set; a single dir is its own root.
+ */
+function commonPathRoot(dirs: string[]): string | null {
+  if (dirs.length === 0) return null;
+  const split = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").split("/");
+  let common = split(dirs[0]);
+  for (const dir of dirs.slice(1)) {
+    const parts = split(dir);
+    let i = 0;
+    while (i < common.length && i < parts.length && common[i].toLowerCase() === parts[i].toLowerCase()) i++;
+    common = common.slice(0, i);
+    if (common.length === 0) break;
+  }
+  return common.length > 0 ? common.join("/") : null;
 }
 
 function dedupeDependencies(deps: ResolvedDependency[]): ResolvedDependency[] {
