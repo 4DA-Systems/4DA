@@ -995,6 +995,7 @@ pub fn run() {
             preemption::get_preemption_alerts,
             // Content Graph
             content_graph::build_content_graph,
+            content_graph::get_graph_node_details,
             semantic_diff::get_semantic_shifts,
             project_health::get_project_health,
             developer_dna::get_developer_dna,

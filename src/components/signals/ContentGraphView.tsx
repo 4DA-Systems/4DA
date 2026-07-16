@@ -23,13 +23,10 @@ import type {
   GraphEdge as ContentGraphEdge,
   GraphCluster,
 } from '../../types/graph';
-import ContentGraphNodeComponent, {
-  CATEGORY_COLORS,
-  CATEGORY_SHAPES,
-  AFFECTS_GOLD,
-  type ContentNode,
-} from './ContentGraphNode';
+import ContentGraphNodeComponent, { CATEGORY_COLORS, type ContentNode } from './ContentGraphNode';
 import ContentGraphEdgeComponent from './ContentGraphEdge';
+import GraphDetailPanel from './GraphDetailPanel';
+import { ClusterLabelNode, LoadingState, EmptyState, GraphLegend } from './ContentGraphChrome';
 
 const LAST_VIEW_KEY = '4da:graph:lastViewedAt';
 
@@ -52,6 +49,7 @@ function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): 
       cluster_id: n.cluster_id,
       member_count: n.member_count,
       member_titles: n.member_titles,
+      member_ids: n.member_ids,
       category: n.category,
       affects_you: n.affects_you,
       isNew: n.created_at ? new Date(n.created_at).getTime() > lastViewedMs : false,
@@ -90,72 +88,6 @@ function toFlowEdges(graphEdges: ContentGraphEdge[]): Edge[] {
   }));
 }
 
-function ClusterLabelNode({ data }: { data: { label: string; count: number } }) {
-  return (
-    <div
-      style={{
-        color: 'var(--color-text-secondary)',
-        fontSize: 11,
-        fontWeight: 600,
-        fontFamily: 'Inter, sans-serif',
-        letterSpacing: '0.03em',
-        textTransform: 'uppercase',
-        pointerEvents: 'none',
-        whiteSpace: 'nowrap',
-        // Halo in the page color lifts the label off edge lines in both themes
-        textShadow: '0 1px 4px var(--color-bg-primary)',
-        transform: 'translateX(-50%)',
-      }}
-    >
-      {data.label}
-      <span style={{ color: 'var(--color-text-muted)', fontWeight: 400, marginLeft: 4, fontSize: 10 }}>
-        ({data.count})
-      </span>
-    </div>
-  );
-}
-
-function LoadingState() {
-  const { t } = useTranslation();
-  return (
-    <div className="h-full min-h-[500px] flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-2 border-text-primary/30 border-t-text-primary rounded-full animate-spin" />
-        <span style={{ color: 'var(--color-text-secondary)', fontSize: 13, fontFamily: 'Inter, sans-serif' }}>
-          {t('action.loading')}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function EmptyState() {
-  const { t } = useTranslation();
-  return (
-    <div className="h-full min-h-[500px] flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
-      <div className="flex flex-col items-center gap-2">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="stroke-text-muted" strokeWidth="1.5">
-          <circle cx="12" cy="12" r="3" />
-          <circle cx="4" cy="8" r="2" />
-          <circle cx="20" cy="8" r="2" />
-          <circle cx="4" cy="16" r="2" />
-          <circle cx="20" cy="16" r="2" />
-          <line x1="9.5" y1="10.5" x2="5.5" y2="8.5" />
-          <line x1="14.5" y1="10.5" x2="18.5" y2="8.5" />
-          <line x1="9.5" y1="13.5" x2="5.5" y2="15.5" />
-          <line x1="14.5" y1="13.5" x2="18.5" y2="15.5" />
-        </svg>
-        <span style={{ color: 'var(--color-text-muted)', fontSize: 14, fontFamily: 'Inter, sans-serif' }}>
-          {t('signals.graphEmpty')}
-        </span>
-        <span style={{ color: 'var(--color-text-muted)', fontSize: 12, fontFamily: 'Inter, sans-serif' }}>
-          {t('signals.graphEmptySub')}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 const nodeTypes = { contentNode: ContentGraphNodeComponent, clusterLabel: ClusterLabelNode };
 const edgeTypes = { contentEdge: ContentGraphEdgeComponent };
 
@@ -169,12 +101,6 @@ function minimapNodeColor(node: Node): string {
 // (never hue alone), so the legend swatches repeat the node silhouettes.
 const LEGEND_CATEGORIES = ['security', 'release', 'discussion', 'research'] as const;
 
-function openExternal(url: string) {
-  import('@tauri-apps/plugin-opener')
-    .then(({ openUrl }) => openUrl(url))
-    .catch(() => window.open(url, '_blank', 'noopener,noreferrer'));
-}
-
 const TIME_WINDOWS = [7, 14, 30] as const;
 
 export default function ContentGraphView() {
@@ -183,6 +109,7 @@ export default function ContentGraphView() {
   const [days, setDays] = useState(7);
   const [loading, setLoading] = useState(true);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [meta, setMeta] = useState<ContentGraph['meta'] | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -196,6 +123,7 @@ export default function ContentGraphView() {
       .then((graph: ContentGraph) => {
         if (cancelled) return;
         needsFitRef.current = true;
+        setSelectedNodeId(null);
         setNodes(toFlowNodes(graph.nodes, graph.clusters));
         const flowEdges = toFlowEdges(graph.edges);
         setEdges(flowEdges);
@@ -243,14 +171,22 @@ export default function ContentGraphView() {
     }));
   }, [hoveredNodeId, connectedNodeIds, setNodes]);
 
+  // Selecting a node opens the in-app detail panel — the graph is a tool, not
+  // a launcher. Engagement ('click') is recorded when the user actually opens
+  // a link from the panel, so panel-browsing never pollutes the learning loop.
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     if (node.type === 'clusterLabel') return;
-    const data = node.data as ContentNode['data'];
-    const itemId = Number(node.id);
-    if (!Number.isNaN(itemId)) {
-      cmd('record_interaction', { sourceItemId: itemId, action: 'click' }).catch(() => {});
-    }
-    if (data?.url) openExternal(data.url);
+    setSelectedNodeId(node.id);
+  }, []);
+
+  const closePanel = useCallback(() => {
+    setSelectedNodeId(null);
+    // Clear React Flow's own selection so the ring matches the panel state.
+    setNodes((nds) => (nds.some((n) => n.selected) ? nds.map((n) => (n.selected ? { ...n, selected: false } : n)) : nds));
+  }, [setNodes]);
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNodeId(null);
   }, []);
 
   const onNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
@@ -304,6 +240,10 @@ export default function ContentGraphView() {
 
   const isEmpty = !loading && nodes.length === 0;
 
+  const selectedNode = selectedNodeId
+    ? nodes.find((n) => n.id === selectedNodeId && n.type === 'contentNode')
+    : undefined;
+
   if (loading) return <LoadingState />;
   if (isEmpty) return <EmptyState />;
 
@@ -316,12 +256,16 @@ export default function ContentGraphView() {
       className="flex flex-col"
       style={{ height: 'calc(100vh - 190px)', minHeight: 500, backgroundColor: 'var(--color-bg-primary)' }}
     >
+      {/* Relative wrapper so the detail panel can overlay the canvas without
+          reflowing it (React Flow needs its definite flex height intact). */}
+      <div className="relative flex flex-col" style={{ flex: '1 1 0%', minHeight: 0 }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
         onNodeMouseEnter={onNodeMouseEnter}
         onNodeMouseLeave={onNodeMouseLeave}
         nodeTypes={nodeTypes}
@@ -338,83 +282,7 @@ export default function ContentGraphView() {
       >
         {legend.categories.length > 0 && (
           <Panel position="top-left">
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '4px 12px',
-                maxWidth: 300,
-                padding: '8px 10px',
-                backgroundColor: 'var(--color-bg-secondary)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 8,
-                fontFamily: 'Inter, sans-serif',
-              }}
-            >
-              {legend.categories.map((cat) => {
-                const shape = CATEGORY_SHAPES[cat];
-                return (
-                  <span
-                    key={cat}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      fontSize: 10,
-                      color: 'var(--color-text-secondary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 9,
-                        height: 9,
-                        borderRadius: shape?.borderRadius ?? '50%',
-                        transform: shape?.rotate ? 'rotate(45deg)' : undefined,
-                        backgroundColor: CATEGORY_COLORS[cat],
-                        position: 'relative',
-                        display: 'inline-block',
-                      }}
-                    >
-                      {shape?.donut && (
-                        <span
-                          style={{
-                            position: 'absolute',
-                            inset: '30%',
-                            borderRadius: '50%',
-                            backgroundColor: 'var(--color-bg-secondary)',
-                          }}
-                        />
-                      )}
-                    </span>
-                    {t(`signals.graphCat_${cat}`)}
-                  </span>
-                );
-              })}
-              {legend.anyAffects && (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    fontSize: 10,
-                    color: 'var(--color-text-secondary)',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 9,
-                      height: 9,
-                      borderRadius: '50%',
-                      border: `2px solid ${AFFECTS_GOLD}`,
-                      display: 'inline-block',
-                    }}
-                  />
-                  {t('signals.graphAffectsYou')}
-                </span>
-              )}
-            </div>
+            <GraphLegend categories={legend.categories} anyAffects={legend.anyAffects} />
           </Panel>
         )}
 
@@ -438,6 +306,15 @@ export default function ContentGraphView() {
           }}
         />
       </ReactFlow>
+      {selectedNode && (
+        <GraphDetailPanel
+          key={selectedNode.id}
+          nodeId={Number(selectedNode.id)}
+          data={selectedNode.data as ContentNode['data']}
+          onClose={closePanel}
+        />
+      )}
+      </div>
       <div
         className="flex items-center justify-between px-4 py-2 border-t"
         style={{ backgroundColor: 'var(--color-bg-secondary)', borderColor: 'var(--color-border)' }}

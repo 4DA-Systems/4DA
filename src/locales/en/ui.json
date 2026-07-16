@@ -1945,6 +1945,8 @@
   "signals.graphStoryMembers_other": "{{count}} collapsed items",
   "signals.graphStoryMore_one": "+{{count}} more",
   "signals.graphStoryMore_other": "+{{count}} more",
+  "signals.graphDetailAria": "Item details",
+  "signals.graphDetailError": "Couldn't load item details",
   "techRadar.title": "Tech Radar",
   "techRadar.loading": "Loading tech radar...",
   "techRadar.empty": "No radar data available",

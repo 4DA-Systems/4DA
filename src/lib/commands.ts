@@ -814,6 +814,7 @@ interface CommandMap {
 
   // -- Content Graph --
   build_content_graph: { params: { days?: number; maxNodes?: number }; result: ContentGraph };
+  get_graph_node_details: { params: { itemIds: number[] }; result: GraphNodeDetail[] };
 
   // -- Waitlist --
   save_waitlist_signup: { params: { tier: string; email: string; name?: string | null; teamSize?: string | null; company?: string | null; role?: string | null }; result: { success: boolean; tier: string; email: string } };
@@ -838,6 +839,18 @@ interface ModelEvalSummary {
     synthesis_text: string;
     duration_ms: number;
   }>;
+}
+
+/** Per-member hydration for the graph detail panel (mirrors Rust GraphNodeDetail). */
+export interface GraphNodeDetail {
+  id: number;
+  title: string;
+  url: string | null;
+  source_type: string;
+  relevance_score: number;
+  created_at: string;
+  matched_package: string | null;
+  summary: string | null;
 }
 
 interface ContentGraph {
