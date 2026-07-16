@@ -20,6 +20,8 @@ interface ContentNodeData {
   member_count: number;
   /** Collapsed sibling titles (capped by the backend). */
   member_titles: string[];
+  /** Item ids of ALL members including the representative — detail panel hydration. */
+  member_ids: number[];
   /** Content category — the primary color + shape channel. */
   category: string;
   /** Linked to the user's declared dependencies → gold ring. */
@@ -95,7 +97,7 @@ function cleanTitle(raw: string): string {
   return raw.replace(SOURCE_PREFIX, '').trim() || raw;
 }
 
-const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<ContentNode>) {
+const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: NodeProps<ContentNode>) {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const onEnter = useCallback(() => setHovered(true), []);
@@ -119,7 +121,12 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
   const affectsRing = data.affects_you
     ? `0 0 0 2px var(--color-bg-primary), 0 0 0 4px ${AFFECTS_GOLD}`
     : '';
-  const boxShadow = [affectsRing, glow === 'none' ? '' : glow]
+  // Selection ring (detail panel open) sits outside every other ring so it
+  // never collides with the gold stack ring.
+  const selectedRing = selected
+    ? `0 0 0 ${data.affects_you ? 6 : 2}px var(--color-bg-primary), 0 0 0 ${data.affects_you ? 8 : 4}px var(--color-text-primary)`
+    : '';
+  const boxShadow = [affectsRing, selectedRing, glow === 'none' ? '' : glow]
     .filter(Boolean)
     .join(', ') || 'none';
   const shapeTransform = shape.rotate ? ' rotate(45deg)' : '';

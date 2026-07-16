@@ -154,6 +154,7 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "get_knowledge_gaps",
     "get_preemption_alerts",
     "build_content_graph",
+    "get_graph_node_details",
     "get_semantic_shifts",
     "get_project_health",
     "get_developer_dna",

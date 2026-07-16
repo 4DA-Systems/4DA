@@ -15,6 +15,7 @@
 
 mod category;
 mod clustering;
+mod detail;
 mod edges;
 mod layout;
 mod loading;
@@ -29,6 +30,8 @@ use crate::error::Result;
 
 #[allow(unused_imports)]
 pub use types::{ContentGraph, EdgeType, GraphCluster, GraphEdge, GraphMeta, GraphNode};
+
+pub use detail::GraphNodeDetail;
 
 const DEFAULT_DAYS: u32 = 7;
 const DEFAULT_MAX_NODES: usize = 150;
@@ -263,6 +266,14 @@ pub fn build_content_graph(days: Option<u32>, max_nodes: Option<usize>) -> Resul
     let d = days.unwrap_or(DEFAULT_DAYS);
     let m = max_nodes.unwrap_or(DEFAULT_MAX_NODES);
     build_graph(&conn, d, m)
+}
+
+/// Hydrate a selected node's members for the detail panel (keyed lookup of
+/// items already surfaced by `build_content_graph` — not a ranked feed).
+#[tauri::command]
+pub fn get_graph_node_details(item_ids: Vec<i64>) -> Result<Vec<GraphNodeDetail>> {
+    let conn = crate::open_db_connection()?;
+    detail::fetch_node_details(&conn, &item_ids)
 }
 
 // ============================================================================
