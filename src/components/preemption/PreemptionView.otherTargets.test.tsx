@@ -45,7 +45,7 @@ function item(id: string, urgency: string, otherBuildTarget: boolean) {
     suggested_actions: [],
     precedents: [],
     refutation_condition: null,
-    lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: otherBuildTarget },
+    lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: otherBuildTarget, upgrade_plan: false },
     created_at: 0,
     expires_at: null,
   };

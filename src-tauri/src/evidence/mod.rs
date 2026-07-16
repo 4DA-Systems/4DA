@@ -22,10 +22,17 @@
 
 mod materializer;
 mod types;
+mod upgrade_plan;
 mod validate;
 
 #[cfg(test)]
 mod tests;
+
+// Phase 1 dependency Upgrade Plan brain. `build_upgrade_plan` produces the
+// ranked plan as EvidenceItems; SILENT until the Preemption "Upgrade Plan"
+// group render lands (next stone), so the export is unused for now.
+#[allow(unused_imports)]
+pub use upgrade_plan::build_upgrade_plan;
 
 // These are published for consumption by Phases 3-5 (where existing
 // Preemption / BlindSpots / KnowledgeDecay / SignalChains producers will

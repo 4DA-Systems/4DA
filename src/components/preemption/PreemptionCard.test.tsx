@@ -34,7 +34,7 @@ const makeItem = (overrides: Partial<EvidenceItem> = {}): EvidenceItem => ({
   suggested_actions: [],
   precedents: [],
   refutation_condition: null,
-  lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: false },
+  lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: false, upgrade_plan: false },
   created_at: BigInt(Date.now()),
   expires_at: null,
   ...overrides,
@@ -101,7 +101,7 @@ describe('ItemCard', () => {
 
   it('renders the "other build target" badge when lens_hints.other_build_target is set (Phase 2c)', () => {
     const item = makeItem({
-      lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: true },
+      lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: true, upgrade_plan: false },
     });
     render(<ItemCard item={item} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
     expect(screen.getByText('preemption.otherTargets.badge')).toBeDefined();

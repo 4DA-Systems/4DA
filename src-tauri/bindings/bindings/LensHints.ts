@@ -12,4 +12,12 @@ export type LensHints = { briefing: boolean, preemption: boolean, blind_spots: b
  * platform-inactive in every tracked project/target. Defaults `false` for
  * back-compat with pre-Phase-2c items.
  */
-other_build_target: boolean, };
+other_build_target: boolean, 
+/**
+ * Rendering hint (Phase 1 dependency-upgrade plan): the item is a ranked
+ * upgrade-plan step ("upgrade X — clears N advisories across M projects"),
+ * so the Preemption lens groups it under the "Upgrade Plan" section instead
+ * of the flat advisory list. Set by `upgrade_plan::build_upgrade_plan`.
+ * `false` for all normal items; defaults `false` for back-compat.
+ */
+upgrade_plan: boolean, };
