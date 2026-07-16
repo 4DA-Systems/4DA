@@ -1703,6 +1703,35 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
         );
     }
 
+    // Upgrade Plan (Phase 1 dependency intelligence): append the ranked
+    // per-package upgrade steps. Deliberately AFTER the adversarial filter —
+    // plan steps are deterministic aggregates of version-confirmed advisory
+    // matches; there is nothing for an LLM to second-guess (the same reasoning
+    // that exempts the free floor). Heuristic provenance keeps them out of
+    // `free_floor_view` (pinned by test) — the ranked plan is the Signal
+    // artifact; the underlying OSV-verified alerts remain the free security
+    // floor. The lens regroups: packages represented by a plan step render in
+    // the "Upgrade Plan" section instead of duplicating in the alert list.
+    let mut items = items;
+    match crate::get_database() {
+        Ok(db) => {
+            let plan = crate::evidence::build_upgrade_plan(db);
+            if !plan.is_empty() {
+                info!(
+                    target: "4da::preemption",
+                    steps = plan.len(),
+                    "upgrade plan appended to preemption feed"
+                );
+                items.extend(plan);
+            }
+        }
+        Err(e) => warn!(
+            target: "4da::preemption",
+            error = %e,
+            "upgrade plan skipped — database unavailable"
+        ),
+    }
+
     let mut feed = EvidenceFeed::from_items(items);
     feed.tier_scope = Some(TierScope::Full);
     Ok(feed)
@@ -1878,6 +1907,39 @@ mod tests {
         // Counts must describe the narrowed list, not the original feed.
         assert_eq!(floor.critical_count, 1);
         assert_eq!(floor.high_count, 1);
+    }
+
+    #[test]
+    fn free_floor_view_excludes_upgrade_plan_items() {
+        // The ranked Upgrade Plan is the Signal artifact; the free floor keeps
+        // only OSV-verified alerts. Plan steps carry Heuristic provenance, so
+        // the provenance narrowing excludes them — but that exclusion is a SIDE
+        // EFFECT of provenance, one refactor away from a tier leak. This test
+        // pins it directly (blueprint gate: free-floor provenance-exclusion
+        // regression test).
+        let plan_step = EvidenceItem {
+            lens_hints: LensHints::upgrade_plan(),
+            affected_deps: vec!["lodash".to_string()],
+            ..floor_test_item(
+                "upgrade-plan:npm:lodash",
+                Confidence::heuristic(0.9),
+                Urgency::High,
+            )
+        };
+        assert!(plan_step.lens_hints.upgrade_plan);
+        let full = EvidenceFeed {
+            tier_scope: Some(TierScope::Full),
+            ..EvidenceFeed::from_items(vec![
+                floor_test_item("osv-1", Confidence::osv_verified(0.9), Urgency::Critical),
+                plan_step,
+            ])
+        };
+        let floor = free_floor_view(full);
+        assert_eq!(floor.total, 1, "only the OSV-verified alert survives");
+        assert!(
+            floor.items.iter().all(|i| !i.lens_hints.upgrade_plan),
+            "no upgrade-plan step may leak into the free floor"
+        );
     }
 
     #[test]

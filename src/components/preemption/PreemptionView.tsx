@@ -91,13 +91,27 @@ const PreemptionView = memo(function PreemptionView() {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
   }, [lastDismissed]);
 
-  const { verifiedItems, assessedItems, developingItems, otherTargetItems, criticalCount, highCount } = useMemo(() => {
+  const { planItems, verifiedItems, assessedItems, developingItems, otherTargetItems, criticalCount, highCount } = useMemo(() => {
     const visible = (feed?.items ?? [])
       .filter(item => !dismissedIds.has(item.id))
       .slice()
       .sort(
         (a, b) => URGENCY_ORDER.indexOf(a.urgency) - URGENCY_ORDER.indexOf(b.urgency),
       );
+
+    // Phase 1 dependency intelligence: ranked "Upgrade Plan" steps (Signal tier;
+    // the free floor never contains them). Rendered as their own section above
+    // the tiers. The stable urgency sort preserves the backend's within-urgency
+    // ranking (fixable-now first, widest blast radius first).
+    const plan: EvidenceItem[] = visible.filter(item => item.lens_hints.upgrade_plan);
+    // A package represented by a plan step must not ALSO appear as its
+    // per-package advisory alert in the verified tier below — same facts, two
+    // cards (the plan step carries the same advisory citations plus the action
+    // framing). Regrouped, not suppressed: free tier has no plan items and is
+    // untouched, and non-verified/other-target items never match this rule.
+    const planPackages = new Set(
+      plan.flatMap(item => item.affected_deps.map(dep => dep.toLowerCase())),
+    );
 
     const verified: EvidenceItem[] = [];
     const assessed: EvidenceItem[] = [];
@@ -108,14 +122,26 @@ const PreemptionView = memo(function PreemptionView() {
     const otherTarget: EvidenceItem[] = [];
     // Count urgencies from the VISIBLE (post-dismissal) set, not feed.*_count from the
     // backend — otherwise dismissing the only critical leaves the bar reading "1 critical"
-    // over an empty list (the count must match the cards beneath it).
+    // over an empty list (the count must match the cards beneath it). Regrouped
+    // duplicates are skipped BEFORE counting for the same reason.
     let critical = 0;
     let high = 0;
     for (const item of visible) {
+      if (item.lens_hints.upgrade_plan) {
+        if (item.urgency === 'critical') critical += 1;
+        else if (item.urgency === 'high') high += 1;
+        continue; // already in `plan`
+      }
       if (item.lens_hints.other_build_target) {
         otherTarget.push(item);
         continue;
       }
+      const coveredByPlan =
+        planPackages.size > 0 &&
+        item.confidence.provenance === 'osv_verified' &&
+        item.affected_deps.length > 0 &&
+        item.affected_deps.every(dep => planPackages.has(dep.toLowerCase()));
+      if (coveredByPlan) continue;
       if (item.urgency === 'critical') critical += 1;
       else if (item.urgency === 'high') high += 1;
       if (item.confidence.provenance === 'osv_verified') {
@@ -127,6 +153,7 @@ const PreemptionView = memo(function PreemptionView() {
       }
     }
     return {
+      planItems: plan,
       verifiedItems: verified,
       assessedItems: assessed,
       developingItems: developing,
@@ -137,6 +164,7 @@ const PreemptionView = memo(function PreemptionView() {
   }, [feed, dismissedIds]);
 
   const totalVisible =
+    planItems.length +
     verifiedItems.length + assessedItems.length + developingItems.length + otherTargetItems.length;
   // Free security floor: the backend served Tier 1 (OSV-verified) only.
   // Render the floor normally plus a compact locked-tiers notice — never a
@@ -230,6 +258,22 @@ const PreemptionView = memo(function PreemptionView() {
                 {t('preemption.action.undo')}
               </button>
             </div>
+          )}
+
+          {/* Phase 1 dependency intelligence: the ranked Upgrade Plan — which
+              upgrade matters most, highest impact first. Signal-tier (the free
+              floor never contains plan steps); absent entirely when empty. */}
+          {planItems.length > 0 && (
+            <PreemptionTierSection
+              dotColor="#D4AF37"
+              borderColor="rgba(212, 175, 55, 0.25)"
+              title={t('preemption.upgradePlan.title')}
+              subtitle={t('preemption.upgradePlan.subtitle', { count: planItems.length })}
+              items={planItems}
+              surfacedRef={surfacedRef}
+              onDismiss={handleDismiss}
+              emptyText={t('preemption.upgradePlan.empty')}
+            />
           )}
 
           {verifiedItems.length > 0 && (

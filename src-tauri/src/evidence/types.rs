@@ -345,8 +345,6 @@ impl LensHints {
     /// Convenience: an Upgrade Plan step. It lives in the Preemption lens but is
     /// grouped separately (a ranked "upgrade X" recommendation, not a raw
     /// advisory), so both `preemption` and `upgrade_plan` are set.
-    // Consumed by the Preemption Upgrade Plan render (next stone); test-exercised.
-    #[allow(dead_code)] // REMOVE BY 2026-09-15
     pub fn upgrade_plan() -> Self {
         Self {
             preemption: true,

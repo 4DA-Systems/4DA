@@ -42,12 +42,8 @@ const MAX_CITATIONS: usize = 8;
 /// most-actionable first. Returns an empty vec on cold-start (no matches) or if
 /// the matcher errors — never breaks on a data quirk.
 ///
-/// SILENT: test-exercised but not yet called in production — the Preemption
-/// "Upgrade Plan" group render + Signal-gating land in the next stone. Mirrors
-/// the codebase's Phase-9 scaffolding convention (`Confidence::calibrated`,
-/// `LensHints::evidence_only`).
-// Consumed by the Preemption Upgrade Plan render (next stone); test-exercised.
-#[allow(dead_code)] // REMOVE BY 2026-09-15
+/// Consumed by `preemption::compute_preemption_evidence_feed` (the Signal-tier
+/// feed); the lens renders these items as the "Upgrade Plan" group.
 pub fn build_upgrade_plan(db: &Database) -> Vec<EvidenceItem> {
     let matches = match crate::osv::matching::get_matched_advisories(db) {
         Ok(m) => m,
