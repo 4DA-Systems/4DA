@@ -62,7 +62,7 @@ pub fn build_upgrade_plan(db: &Database) -> Vec<EvidenceItem> {
     groups.retain(|g| g.any_confirmed);
 
     // Rank: most-urgent → confirmed → fixable-now → widest blast radius → CVSS.
-    groups.sort_by(|a, b| a.sort_key().cmp(&b.sort_key()));
+    groups.sort_by_key(PackageGroup::sort_key);
 
     let now = chrono::Utc::now().timestamp_millis();
     groups
