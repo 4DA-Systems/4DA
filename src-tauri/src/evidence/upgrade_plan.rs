@@ -439,7 +439,10 @@ fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
     }
-    let budget = max.saturating_sub(1);
+    // The schema limit is BYTE length and the ellipsis is 3 bytes in UTF-8 —
+    // budgeting 1 byte for it emitted up to max+2 bytes, which hard-panicked
+    // the validator in dev (CitationNoteTooLong { len: 202 }, live 2026-07-17).
+    let budget = max.saturating_sub('\u{2026}'.len_utf8());
     let mut end = budget.min(s.len());
     while end > 0 && !s.is_char_boundary(end) {
         end -= 1;
