@@ -63,7 +63,7 @@ vi.mock('../../store', () => ({
 function depRow(name: string): DepRow {
   return {
     name, status: 'blind_spot', urgency: 'high',
-    gap: { id: `bs_uncov_x_${name}`, affected_deps: [name], lens_hints: { other_build_target: false } } as unknown as DepRow['gap'],
+    gap: { id: `bs_uncov_x_${name}`, affected_deps: [name], lens_hints: { other_build_target: false, upgrade_plan: false } } as unknown as DepRow['gap'],
     signals: [], projects: [],
   };
 }

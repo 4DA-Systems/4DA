@@ -53,7 +53,7 @@ function gap(id: string, otherBuildTarget: boolean) {
     urgency: 'high', reversibility: null, evidence: [],
     affected_projects: [], affected_deps: [id], suggested_actions: [],
     precedents: [], refutation_condition: null,
-    lens_hints: { briefing: false, preemption: false, blind_spots: true, evidence: false, other_build_target: otherBuildTarget },
+    lens_hints: { briefing: false, preemption: false, blind_spots: true, evidence: false, other_build_target: otherBuildTarget, upgrade_plan: false },
     created_at: 0, expires_at: null,
   } as unknown as DepRow['gap'];
 }

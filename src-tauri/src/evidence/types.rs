@@ -315,6 +315,14 @@ pub struct LensHints {
     /// back-compat with pre-Phase-2c items.
     #[serde(default)]
     pub other_build_target: bool,
+
+    /// Rendering hint (Phase 1 dependency-upgrade plan): the item is a ranked
+    /// upgrade-plan step ("upgrade X — clears N advisories across M projects"),
+    /// so the Preemption lens groups it under the "Upgrade Plan" section instead
+    /// of the flat advisory list. Set by `upgrade_plan::build_upgrade_plan`.
+    /// `false` for all normal items; defaults `false` for back-compat.
+    #[serde(default)]
+    pub upgrade_plan: bool,
 }
 
 impl LensHints {
@@ -330,6 +338,19 @@ impl LensHints {
     pub fn blind_spots_only() -> Self {
         Self {
             blind_spots: true,
+            ..Default::default()
+        }
+    }
+
+    /// Convenience: an Upgrade Plan step. It lives in the Preemption lens but is
+    /// grouped separately (a ranked "upgrade X" recommendation, not a raw
+    /// advisory), so both `preemption` and `upgrade_plan` are set.
+    // Consumed by the Preemption Upgrade Plan render (next stone); test-exercised.
+    #[allow(dead_code)] // REMOVE BY 2026-09-15
+    pub fn upgrade_plan() -> Self {
+        Self {
+            preemption: true,
+            upgrade_plan: true,
             ..Default::default()
         }
     }

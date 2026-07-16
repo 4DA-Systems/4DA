@@ -1054,6 +1054,8 @@ impl KnowledgeGap {
                 evidence: true,
                 // Knowledge-decay gaps are not platform-target-scoped (Phase 2c).
                 other_build_target: false,
+                // Not an upgrade-plan step (Phase 1 dep plan).
+                upgrade_plan: false,
             },
             created_at: chrono::Utc::now().timestamp_millis(),
             expires_at: None,
