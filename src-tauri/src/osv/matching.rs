@@ -76,6 +76,38 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
         dep_index.entry(key).or_default().push(dep);
     }
 
+    // Multi-version inventory (Phase 92). The collapsed dep tables keep ONE
+    // version per (project, package), so a project holding both a vulnerable and
+    // a patched copy of a package surfaces only the survivor — a false negative
+    // when the survivor is the patched one. `dependency_instances` retains every
+    // installed version. Indexed by (project_norm, package_lower, ecosystem_osv);
+    // per dep below we check the UNION of the collapsed version and all instance
+    // versions. Union (never replacement) is strictly additive — it can only ADD
+    // a missing affected version, and degrades to today's behavior wherever
+    // instances are not yet populated (pre-Phase-92 scans).
+    let mut instance_index: HashMap<(String, String, String), Vec<(String, bool, bool)>> =
+        HashMap::new();
+    match db.get_all_dependency_instances() {
+        Ok(rows) => {
+            for r in rows {
+                let key = (
+                    normalize_project_path(&r.project_path),
+                    r.package_name.to_lowercase(),
+                    normalize_ecosystem(&r.ecosystem).to_string(),
+                );
+                instance_index
+                    .entry(key)
+                    .or_default()
+                    .push((r.version, r.is_direct, r.is_dev));
+            }
+        }
+        Err(e) => tracing::warn!(
+            target: "4da::osv",
+            error = %e,
+            "OSV matching: dependency_instances read failed — falling back to collapsed versions"
+        ),
+    }
+
     let mut matches: Vec<MatchedAdvisory> = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
@@ -90,20 +122,53 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
             None => continue,
         };
 
-        // Check each dependency instance (could be in multiple projects)
+        // Check each dependency instance (could be in multiple projects, and —
+        // via the multi-version inventory — multiple versions per project).
         let mut dependency_instances = Vec::new();
         for dep in dep_entries {
-            let (is_affected, confirmed) =
-                check_version_affected(dep.version.as_deref(), &advisory.affected_ranges);
+            // Union of every installed instance version for this (project,
+            // package) with the collapsed survivor, deduped by version string.
+            // Per-instance is_direct/is_dev is used where the inventory has it
+            // (a version can be direct in one place, transitive in another).
+            let inst_key = (
+                normalize_project_path(&dep.project_path),
+                dep.package_name.to_lowercase(),
+                normalize_ecosystem(&dep.ecosystem).to_string(),
+            );
+            let mut candidates: Vec<(Option<String>, bool, bool)> = Vec::new();
+            let mut seen_versions: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            if let Some(instances) = instance_index.get(&inst_key) {
+                for (ver, is_direct, is_dev) in instances {
+                    if seen_versions.insert(ver.clone()) {
+                        candidates.push((Some(ver.clone()), *is_direct, *is_dev));
+                    }
+                }
+            }
+            // Always include the collapsed survivor: it covers projects without
+            // instance coverage yet, and a version-less row the parser could not
+            // resolve (conservative match). Skip only if an instance already
+            // carried that exact version.
+            let survivor_is_dup = dep
+                .version
+                .as_ref()
+                .is_some_and(|v| seen_versions.contains(v));
+            if !survivor_is_dup {
+                candidates.push((dep.version.clone(), dep.is_direct, dep.is_dev));
+            }
 
-            if is_affected {
-                dependency_instances.push(MatchedDependency {
-                    project_path: normalize_project_path(&dep.project_path),
-                    installed_version: dep.version.clone(),
-                    is_direct: dep.is_direct,
-                    is_dev: dep.is_dev,
-                    is_version_confirmed: confirmed,
-                });
+            for (version, is_direct, is_dev) in candidates {
+                let (is_affected, confirmed) =
+                    check_version_affected(version.as_deref(), &advisory.affected_ranges);
+                if is_affected {
+                    dependency_instances.push(MatchedDependency {
+                        project_path: normalize_project_path(&dep.project_path),
+                        installed_version: version,
+                        is_direct,
+                        is_dev,
+                        is_version_confirmed: confirmed,
+                    });
+                }
             }
         }
 
@@ -648,6 +713,116 @@ mod tests {
         let matches = get_matched_advisories(&db).unwrap();
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].project_paths.len(), 2);
+    }
+
+    // ---- Multi-version inventory (Phase 92) — false-negative fix ----
+
+    fn vuln_advisory(db: &Database, id: &str, pkg: &str, eco: &str, fixed: &str) {
+        db.upsert_osv_advisory(
+            id,
+            &format!("Vuln in {pkg}"),
+            None,
+            pkg,
+            eco,
+            Some(&format!(
+                r#"[{{"type":"SEMVER","events":[{{"introduced":"0"}},{{"fixed":"{fixed}"}}]}}]"#
+            )),
+            Some(&format!(r#"["{fixed}"]"#)),
+            Some("CVSS_V3"),
+            Some(7.5),
+            None,
+            Some("2026-01-01T00:00:00Z"),
+            None,
+            None,
+        )
+        .unwrap();
+    }
+
+    fn inst(pkg: &str, version: &str, is_direct: bool) -> crate::db::DependencyInstanceInput {
+        crate::db::DependencyInstanceInput {
+            package_name: pkg.to_string(),
+            version: version.to_string(),
+            is_direct,
+            is_dev: false,
+            scope: "unknown".to_string(),
+        }
+    }
+
+    #[test]
+    fn matcher_surfaces_vulnerable_duplicate_hidden_by_collapse() {
+        use crate::test_utils::test_db;
+        let db = test_db();
+
+        // The collapsed user_dependencies row keeps only the patched survivor —
+        // exactly the state in which test_no_match_when_version_patched (above)
+        // correctly reports NO match. But the project ALSO installs a vulnerable
+        // transitive copy, retained only by the multi-version inventory.
+        db.store_dependency("/project/a", "lodash", Some("4.17.21"), "npm", false, None)
+            .unwrap();
+        db.store_dependency_instances(
+            "/project/a",
+            "npm",
+            &[
+                inst("lodash", "4.17.21", true),
+                inst("lodash", "4.17.20", false),
+            ],
+        )
+        .unwrap();
+        vuln_advisory(&db, "GHSA-dup-1", "lodash", "npm", "4.17.21");
+
+        let matches = get_matched_advisories(&db).unwrap();
+        assert_eq!(
+            matches.len(),
+            1,
+            "the hidden vulnerable 4.17.20 duplicate must surface the advisory"
+        );
+        assert!(matches[0].is_version_confirmed);
+        assert!(
+            matches[0]
+                .dependency_instances
+                .iter()
+                .any(
+                    |d| d.installed_version.as_deref() == Some("4.17.20") && d.is_version_confirmed
+                ),
+            "the confirmed-affected instance is the vulnerable duplicate; got {:?}",
+            matches[0].dependency_instances
+        );
+        assert_eq!(matches[0].project_paths, vec!["/project/a"]);
+    }
+
+    #[test]
+    fn matcher_no_instances_falls_back_to_collapsed_unchanged() {
+        use crate::test_utils::test_db;
+        let db = test_db();
+        // No instance rows (a pre-Phase-92 scan): behavior is identical to before
+        // — the collapsed version alone decides the match.
+        db.store_dependency("/project/a", "lodash", Some("4.17.21"), "npm", false, None)
+            .unwrap();
+        vuln_advisory(&db, "GHSA-fallback-1", "lodash", "npm", "4.17.21");
+        assert!(
+            get_matched_advisories(&db).unwrap().is_empty(),
+            "patched collapsed version with no instances still must not match"
+        );
+    }
+
+    #[test]
+    fn matcher_dedups_instance_matching_collapsed_version() {
+        use crate::test_utils::test_db;
+        let db = test_db();
+        db.store_dependency("/project/a", "lodash", Some("4.17.20"), "npm", false, None)
+            .unwrap();
+        // Instance carries the SAME version as the collapsed survivor.
+        db.store_dependency_instances("/project/a", "npm", &[inst("lodash", "4.17.20", true)])
+            .unwrap();
+        vuln_advisory(&db, "GHSA-dedup-1", "lodash", "npm", "4.17.21");
+
+        let matches = get_matched_advisories(&db).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(
+            matches[0].dependency_instances.len(),
+            1,
+            "instance duplicating the collapsed version must not be double-counted"
+        );
     }
 }
 
