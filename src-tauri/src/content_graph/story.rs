@@ -220,6 +220,7 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
             member_ids: vec![rep.id],
             member_titles: Vec::new(),
             member_count: 1,
+            affects_you: rep.matched_package.is_some(),
         };
     }
 
@@ -264,6 +265,10 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
         .map(|&idx| items[idx].title.clone())
         .collect();
 
+    let affects_you = member_idxs
+        .iter()
+        .any(|&idx| items[idx].matched_package.is_some());
+
     StoryItem {
         item: RawItem {
             id: rep.id,
@@ -280,6 +285,7 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
         member_ids,
         member_titles,
         member_count: member_idxs.len(),
+        affects_you,
     }
 }
 

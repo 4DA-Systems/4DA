@@ -20,38 +20,51 @@ interface ContentNodeData {
   member_count: number;
   /** Collapsed sibling titles (capped by the backend). */
   member_titles: string[];
+  /** Content category — the primary color + shape channel. */
+  category: string;
+  /** Linked to the user's declared dependencies → gold ring. */
+  affects_you: boolean;
   isNew?: boolean;
   [key: string]: unknown;
 }
 
 export type ContentNode = Node<ContentNodeData, 'contentNode'>;
 
-const SOURCE_COLORS: Record<string, string> = {
-  hackernews: '#F97316',
-  reddit: '#3B82F6',
-  github: '#6B7280',
-  arxiv: '#A855F7',
-  rss: '#D97706',
-  devto: '#22C55E',
-  lobsters: '#EF4444',
-  lemmy: '#22C55E',
-  mastodon: '#A855F7',
-  bluesky: '#3B82F6',
-  producthunt: '#F97316',
-  crates_io: '#F97316',
-  npm: '#EF4444',
-  pypi: '#3B82F6',
-  youtube: '#EF4444',
-  stackoverflow: '#F97316',
-  twitter: '#0EA5E9',
-  huggingface: '#EAB308',
-  cve: '#EF4444',
-  osv: '#EF4444',
-  papers_with_code: '#6366F1',
-  go_modules: '#06B6D4',
+// Category is the color channel (source identity lives in the tooltip — 22
+// sources shared 8 hues, five of them one red; undecodable by construction).
+// Palette validated with the dataviz six-checks validator on the #0A0A0A
+// surface: CVD-adjacent ΔE 9.2 (deutan), normal-vision 21.6, contrast ≥3:1.
+// Each category ALSO carries a distinct silhouette (shape), so identity never
+// rides on hue alone (colorblind/grayscale-safe).
+const CATEGORY_COLORS: Record<string, string> = {
+  security: '#C23237',
+  release: '#CFA01F',
+  discussion: '#3B9EFF',
+  research: '#B658C4',
 };
+const DEFAULT_CATEGORY_COLOR = '#6B7280';
 
-export { SOURCE_COLORS };
+/** Gold = "touches your declared stack" (reserved accent, never a category). */
+const AFFECTS_GOLD = '#D4AF37';
+
+interface CategoryShape {
+  borderRadius: string;
+  rotate: boolean;
+  donut: boolean;
+}
+
+// Distinct silhouettes: circle (discussion), rounded square (release),
+// diamond (security — reads as an alert marker), donut (research). All are
+// border-radius/rotation based so box-shadow rings follow the shape.
+const CATEGORY_SHAPES: Record<string, CategoryShape> = {
+  discussion: { borderRadius: '50%', rotate: false, donut: false },
+  release: { borderRadius: '22%', rotate: false, donut: false },
+  security: { borderRadius: '18%', rotate: true, donut: false },
+  research: { borderRadius: '50%', rotate: false, donut: true },
+};
+const DEFAULT_SHAPE: CategoryShape = CATEGORY_SHAPES.discussion!;
+
+export { CATEGORY_COLORS, AFFECTS_GOLD, CATEGORY_SHAPES };
 
 function getGlowStyle(priority: string | null): string {
   if (priority === 'critical') return '0 0 12px 3px rgba(239, 68, 68, 0.5)';
@@ -88,7 +101,8 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
   const onEnter = useCallback(() => setHovered(true), []);
   const onLeave = useCallback(() => setHovered(false), []);
 
-  const color = SOURCE_COLORS[data.source_type] ?? '#6B7280';
+  const color = CATEGORY_COLORS[data.category] ?? DEFAULT_CATEGORY_COLOR;
+  const shape = CATEGORY_SHAPES[data.category] ?? DEFAULT_SHAPE;
   const memberCount = data.member_count ?? 1;
   // Stories grow with how much they collapsed (sqrt: 26 advisories shouldn't
   // be 26x the dot); plain items keep the relevance sizing.
@@ -99,6 +113,16 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
   const glow = getGlowStyle(data.signal_priority);
   const label = cleanTitle(data.title);
   const extraCount = memberCount - 1;
+
+  // Gold ring = touches your declared stack; a 2px surface-color gap keeps
+  // the ring readable against every category fill (incl. the amber release).
+  const affectsRing = data.affects_you
+    ? `0 0 0 2px var(--color-bg-primary), 0 0 0 4px ${AFFECTS_GOLD}`
+    : '';
+  const boxShadow = [affectsRing, glow === 'none' ? '' : glow]
+    .filter(Boolean)
+    .join(', ') || 'none';
+  const shapeTransform = shape.rotate ? ' rotate(45deg)' : '';
 
   return (
     <div
@@ -117,7 +141,8 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
           style={{
             position: 'absolute',
             inset: -4,
-            borderRadius: '50%',
+            borderRadius: shape.borderRadius,
+            transform: shape.rotate ? 'rotate(45deg)' : undefined,
             border: `2px solid ${color}`,
             opacity: 0.6,
             animation: 'graph-node-pulse 2s ease-in-out infinite',
@@ -125,24 +150,37 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
         />
       )}
 
-      {/* The dot carries source (color), relevance (size) and priority (glow).
-          The item title lives in the readable label below — text jammed inside
-          a 28-56px circle was illegible (only ~3 chars fit). The label is
-          absolutely positioned so the node's measured box stays the dot and
-          edges keep anchoring at the circle, not below the text. */}
+      {/* The mark carries category (color + silhouette), story mass /
+          relevance (size), priority (glow) and stack relevance (gold ring).
+          The title lives in the readable label below — text jammed inside a
+          28-56px shape was illegible. The label is absolutely positioned so
+          the node's measured box stays the mark and edges keep anchoring at
+          its center. */}
       <div
         style={{
           width: size,
           height: size,
-          borderRadius: '50%',
+          borderRadius: shape.borderRadius,
           backgroundColor: color,
           border: `2px solid ${brighten(color)}`,
-          boxShadow: glow,
+          boxShadow,
           cursor: 'pointer',
           transition: 'transform 150ms ease',
-          transform: hovered ? 'scale(1.15)' : 'scale(1)',
+          transform: (hovered ? 'scale(1.15)' : 'scale(1)') + shapeTransform,
         }}
-      />
+      >
+        {shape.donut && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: '32%',
+              borderRadius: '50%',
+              backgroundColor: 'var(--color-bg-primary)',
+              pointerEvents: 'none',
+            }}
+          />
+        )}
+      </div>
 
       {extraCount > 0 && (
         <span

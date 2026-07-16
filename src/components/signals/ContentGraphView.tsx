@@ -23,7 +23,12 @@ import type {
   GraphEdge as ContentGraphEdge,
   GraphCluster,
 } from '../../types/graph';
-import ContentGraphNodeComponent, { SOURCE_COLORS, type ContentNode } from './ContentGraphNode';
+import ContentGraphNodeComponent, {
+  CATEGORY_COLORS,
+  CATEGORY_SHAPES,
+  AFFECTS_GOLD,
+  type ContentNode,
+} from './ContentGraphNode';
 import ContentGraphEdgeComponent from './ContentGraphEdge';
 
 const LAST_VIEW_KEY = '4da:graph:lastViewedAt';
@@ -47,6 +52,8 @@ function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): 
       cluster_id: n.cluster_id,
       member_count: n.member_count,
       member_titles: n.member_titles,
+      category: n.category,
+      affects_you: n.affects_you,
       isNew: n.created_at ? new Date(n.created_at).getTime() > lastViewedMs : false,
     },
   }));
@@ -154,30 +161,13 @@ const edgeTypes = { contentEdge: ContentGraphEdgeComponent };
 
 function minimapNodeColor(node: Node): string {
   const data = node.data as ContentNode['data'] | undefined;
-  if (!data?.source_type) return '#6B7280';
-  return SOURCE_COLORS[data.source_type] ?? '#6B7280';
+  if (!data?.category) return '#6B7280';
+  return CATEGORY_COLORS[data.category] ?? '#6B7280';
 }
 
-// Node color encodes the source; the legend makes that decodable.
-const SOURCE_LABELS: Record<string, string> = {
-  hackernews: 'Hacker News',
-  crates_io: 'crates.io',
-  go_modules: 'Go',
-  papers_with_code: 'Papers w/ Code',
-  producthunt: 'Product Hunt',
-  stackoverflow: 'Stack Overflow',
-  devto: 'dev.to',
-  huggingface: 'Hugging Face',
-  pypi: 'PyPI',
-  npm: 'npm',
-  cve: 'CVE',
-  osv: 'OSV',
-  rss: 'RSS',
-};
-
-function prettySource(s: string): string {
-  return SOURCE_LABELS[s] ?? s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
+// Fixed legend order: most-urgent first. Category identity is color + shape
+// (never hue alone), so the legend swatches repeat the node silhouettes.
+const LEGEND_CATEGORIES = ['security', 'release', 'discussion', 'research'] as const;
 
 function openExternal(url: string) {
   import('@tauri-apps/plugin-opener')
@@ -295,15 +285,21 @@ export default function ContentGraphView() {
     [onNodesChange],
   );
 
-  // Distinct source types present in the current graph — drives the legend.
-  const legendSources = useMemo(() => {
+  // Categories present in the current graph (fixed order, never re-ranked)
+  // + whether any node touches the user's stack — drives the legend.
+  const legend = useMemo(() => {
     const seen = new Set<string>();
+    let anyAffects = false;
     for (const n of nodes) {
       if (n.type !== 'contentNode') continue;
-      const st = (n.data as ContentNode['data']).source_type;
-      if (st) seen.add(st);
+      const d = n.data as ContentNode['data'];
+      if (d.category) seen.add(d.category);
+      if (d.affects_you) anyAffects = true;
     }
-    return [...seen].sort();
+    return {
+      categories: LEGEND_CATEGORIES.filter((c) => seen.has(c)),
+      anyAffects,
+    };
   }, [nodes]);
 
   const isEmpty = !loading && nodes.length === 0;
@@ -340,14 +336,14 @@ export default function ContentGraphView() {
         elementsSelectable
         style={{ flex: '1 1 0%', minHeight: 0 }}
       >
-        {legendSources.length > 0 && (
+        {legend.categories.length > 0 && (
           <Panel position="top-left">
             <div
               style={{
                 display: 'flex',
                 flexWrap: 'wrap',
-                gap: '4px 10px',
-                maxWidth: 260,
+                gap: '4px 12px',
+                maxWidth: 300,
                 padding: '8px 10px',
                 backgroundColor: 'var(--color-bg-secondary)',
                 border: '1px solid var(--color-border)',
@@ -355,13 +351,52 @@ export default function ContentGraphView() {
                 fontFamily: 'Inter, sans-serif',
               }}
             >
-              {legendSources.map((st) => (
+              {legend.categories.map((cat) => {
+                const shape = CATEGORY_SHAPES[cat];
+                return (
+                  <span
+                    key={cat}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      fontSize: 10,
+                      color: 'var(--color-text-secondary)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 9,
+                        height: 9,
+                        borderRadius: shape?.borderRadius ?? '50%',
+                        transform: shape?.rotate ? 'rotate(45deg)' : undefined,
+                        backgroundColor: CATEGORY_COLORS[cat],
+                        position: 'relative',
+                        display: 'inline-block',
+                      }}
+                    >
+                      {shape?.donut && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            inset: '30%',
+                            borderRadius: '50%',
+                            backgroundColor: 'var(--color-bg-secondary)',
+                          }}
+                        />
+                      )}
+                    </span>
+                    {t(`signals.graphCat_${cat}`)}
+                  </span>
+                );
+              })}
+              {legend.anyAffects && (
                 <span
-                  key={st}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 4,
+                    gap: 5,
                     fontSize: 10,
                     color: 'var(--color-text-secondary)',
                     whiteSpace: 'nowrap',
@@ -369,15 +404,16 @@ export default function ContentGraphView() {
                 >
                   <span
                     style={{
-                      width: 8,
-                      height: 8,
+                      width: 9,
+                      height: 9,
                       borderRadius: '50%',
-                      backgroundColor: SOURCE_COLORS[st] ?? '#6B7280',
+                      border: `2px solid ${AFFECTS_GOLD}`,
+                      display: 'inline-block',
                     }}
                   />
-                  {prettySource(st)}
+                  {t('signals.graphAffectsYou')}
                 </span>
-              ))}
+              )}
             </div>
           </Panel>
         )}
