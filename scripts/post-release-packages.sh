@@ -50,7 +50,7 @@ APPIMAGE=$(find "${TMPDIR}" -name "*.AppImage" | head -1)
 if [ -n "$NSIS_FILE" ]; then
     NSIS_SHA=$(sha256sum "$NSIS_FILE" | cut -d' ' -f1)
     echo "Winget SHA256: ${NSIS_SHA}"
-    echo "  wingetcreate update 4DA.4DAHome --version ${SEMVER} --urls https://github.com/runyourempire/4DA/releases/download/${VERSION}/$(basename ${NSIS_FILE}) --submit"
+    echo "  wingetcreate update 4DA.4DAHome --version ${SEMVER} --urls https://github.com/4DA-Systems/4DA/releases/download/${VERSION}/$(basename ${NSIS_FILE}) --submit"
     echo ""
 fi
 

@@ -455,7 +455,7 @@ cd src-tauri && cargo test data_export --lib
 ```json
 "updater": {
   "endpoints": [
-    "https://github.com/runyourempire/4DA/releases/latest/download/latest.json"
+    "https://github.com/4DA-Systems/4DA/releases/latest/download/latest.json"
   ],
   "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIH..."
 }

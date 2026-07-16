@@ -125,7 +125,7 @@ export function runDoctor(): void {
     console.log("  Standalone: scans your dependencies for known CVEs and provides project context.");
     console.log("  Full app: adds content scoring, source monitoring, and more.");
     console.log("");
-    console.log("  Desktop app: https://github.com/runyourempire/4DA/releases/latest");
+    console.log("  Desktop app: https://github.com/4DA-Systems/4DA/releases/latest");
     console.log("  Learn more: https://4da.ai");
     console.log("");
   }

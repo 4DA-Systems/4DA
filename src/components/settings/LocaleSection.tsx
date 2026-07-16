@@ -190,7 +190,7 @@ export function LocaleSection() {
               <button
                 onClick={() => {
                   const lang = getLanguageName(language);
-                  const url = `https://github.com/runyourempire/4DA/issues/new?template=translation.yml&labels=i18n&title=${encodeURIComponent(`[i18n] ${lang}: Translation improvement`)}&language=${encodeURIComponent(lang)}&version=${encodeURIComponent(String(__APP_VERSION__))}`;
+                  const url = `https://github.com/4DA-Systems/4DA/issues/new?template=translation.yml&labels=i18n&title=${encodeURIComponent(`[i18n] ${lang}: Translation improvement`)}&language=${encodeURIComponent(lang)}&version=${encodeURIComponent(String(__APP_VERSION__))}`;
                   void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(url));
                 }}
                 className="text-accent-gold hover:text-[#C4A030] transition-colors underline underline-offset-2"

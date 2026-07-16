@@ -6,7 +6,7 @@ This guide will walk you through setting up 4DA for the first time.
 
 ### From a pre-built release (recommended)
 
-Download the latest installer for your platform from the [Releases page](https://github.com/runyourempire/4DA/releases/latest).
+Download the latest installer for your platform from the [Releases page](https://github.com/4DA-Systems/4DA/releases/latest).
 
 - **Windows** — `.exe` installer. On first run, Windows SmartScreen will prompt for confirmation because 4DA is a newly released app; click **More info → Run anyway**. See the full [Windows install guide](launch/WINDOWS-INSTALL.md) for SHA-256 verification, signature validation, and auto-update details.
 - **macOS** — `.dmg` disk image. Drag 4DA to Applications. Builds are signed and notarised by Apple.

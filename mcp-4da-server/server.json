@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.runyourempire/4da-mcp-server",
+  "name": "io.github.4da-systems/4da-mcp-server",
   "description": "Dependency intelligence for AI agents. CVE scanning, health checks, upgrade planning.",
   "repository": {
-    "url": "https://github.com/runyourempire/4DA",
+    "url": "https://github.com/4DA-Systems/4DA",
     "source": "github",
     "subfolder": "mcp-4da-server"
   },

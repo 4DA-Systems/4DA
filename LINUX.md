@@ -119,7 +119,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 npm install -g pnpm
 
 # Clone and build
-git clone https://github.com/runyourempire/4da.git
+git clone https://github.com/4DA-Systems/4DA.git
 cd 4da
 pnpm install
 pnpm run tauri build

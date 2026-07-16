@@ -16,8 +16,8 @@ cask "4da" do
   sha256 arm:   "REPLACE_WITH_AARCH64_SHA256",
          intel: "REPLACE_WITH_X86_64_SHA256"
 
-  url "https://github.com/runyourempire/4DA/releases/download/v#{version}/4DA-Home_#{version}_#{arch}.dmg",
-      verified: "github.com/runyourempire/4DA/"
+  url "https://github.com/4DA-Systems/4DA/releases/download/v#{version}/4DA-Home_#{version}_#{arch}.dmg",
+      verified: "github.com/4DA-Systems/4DA/"
   name "4DA"
   desc "Privacy-first developer intelligence — scores content against your codebase"
   homepage "https://4da.ai"

@@ -172,7 +172,7 @@ export function runSetup(dryRun = false): void {
   console.log("");
   console.log("  Note: This server reads data from the 4DA desktop app.");
   console.log("  If you haven't installed it yet:");
-  console.log("    https://github.com/runyourempire/4DA/releases/latest");
+  console.log("    https://github.com/4DA-Systems/4DA/releases/latest");
   console.log("");
   console.log("  Run: npx @4da/mcp-server --doctor  to verify everything works.\n");
 }

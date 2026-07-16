@@ -4,7 +4,7 @@
 
 <br />
 
-[![CI](https://github.com/runyourempire/4DA/actions/workflows/validate.yml/badge.svg)](https://github.com/runyourempire/4DA/actions/workflows/validate.yml)
+[![CI](https://github.com/4DA-Systems/4DA/actions/workflows/validate.yml/badge.svg)](https://github.com/4DA-Systems/4DA/actions/workflows/validate.yml)
 [![License: FSL-1.1](https://img.shields.io/badge/License-FSL--1.1--Apache--2.0-blue.svg)](LICENSE)
 [![MCP Server](https://img.shields.io/npm/v/@4da/mcp-server?label=MCP%20Server&color=gold)](https://www.npmjs.com/package/@4da/mcp-server)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-brightgreen.svg)](#download)
@@ -114,9 +114,9 @@ Don't take our word for it:
 
 | Platform | Download | Auto-updates |
 |----------|----------|:------------:|
-| **Windows** | [`.exe` installer](https://github.com/runyourempire/4DA/releases/latest) | Yes |
-| **macOS** | [`.dmg` (Apple Silicon & Intel)](https://github.com/runyourempire/4DA/releases/latest) | Yes |
-| **Linux** | [`.AppImage` / `.deb`](https://github.com/runyourempire/4DA/releases/latest) | Yes |
+| **Windows** | [`.exe` installer](https://github.com/4DA-Systems/4DA/releases/latest) | Yes |
+| **macOS** | [`.dmg` (Apple Silicon & Intel)](https://github.com/4DA-Systems/4DA/releases/latest) | Yes |
+| **Linux** | [`.AppImage` / `.deb`](https://github.com/4DA-Systems/4DA/releases/latest) | Yes |
 
 Every release publishes `SHASUMS256.txt` and per-file `.sha256` sidecars. [Verification instructions.](docs/VERIFY-DOWNLOADS.md)
 
@@ -130,7 +130,7 @@ npx @4da/mcp-server
 ### Build from Source
 
 ```bash
-git clone https://github.com/runyourempire/4DA.git
+git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA
 pnpm install
 pnpm tauri dev   # First build: 5-15 min. Dev server: localhost:4444.

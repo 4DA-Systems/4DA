@@ -368,7 +368,7 @@ async function main() {
 
   Works standalone (scans your project on startup) or with the full
   4DA desktop app for content scoring, source monitoring, and more.
-  Desktop app: https://github.com/runyourempire/4DA/releases/latest
+  Desktop app: https://github.com/4DA-Systems/4DA/releases/latest
   Docs:        https://4da.ai
 `);
     return;

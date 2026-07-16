@@ -174,7 +174,7 @@ The MCP server works without the desktop app. On first run it creates a local da
 | Actionable signals + knowledge gaps | -- | Yes |
 | Compound intelligence (learns over time) | -- | Yes |
 
-> **[Download 4DA](https://github.com/runyourempire/4DA/releases/latest)** for the full experience.
+> **[Download 4DA](https://github.com/4DA-Systems/4DA/releases/latest)** for the full experience.
 
 ## Transports
 
@@ -219,7 +219,7 @@ Any tool that supports [MCP](https://modelcontextprotocol.io): Claude Code, Clau
 ## Build from Source
 
 ```bash
-git clone https://github.com/runyourempire/4DA.git
+git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA/mcp-4da-server
 pnpm install
 pnpm build

@@ -134,7 +134,7 @@ All content sources are user-configurable. Each can be enabled or disabled in th
 
 The Tauri updater checks for new application versions by fetching a JSON manifest from GitHub Releases.
 
-- **Endpoint:** `https://github.com/runyourempire/4DA/releases/latest/download/latest.json`
+- **Endpoint:** `https://github.com/4DA-Systems/4DA/releases/latest/download/latest.json`
 - **Data sent:** Standard GET request. No personal data, no device identifiers, no telemetry.
 - **Security:** Updates are signed with Minisign. The public key (ID: `19AF42B1B6971703`) is embedded in `src-tauri/tauri.conf.json` (line 48). The updater rejects any payload that fails signature verification.
 - **Configuration:** `src-tauri/tauri.conf.json`, lines 44-49
@@ -299,4 +299,4 @@ If you find a network connection not listed in this document, please report it a
 
 ---
 
-4DA Systems Pty Ltd (ACN 696 078 841) | FSL-1.1-Apache-2.0 | [Source Code](https://github.com/runyourempire/4DA)
+4DA Systems Pty Ltd (ACN 696 078 841) | FSL-1.1-Apache-2.0 | [Source Code](https://github.com/4DA-Systems/4DA)
