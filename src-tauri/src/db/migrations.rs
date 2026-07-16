@@ -613,7 +613,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 91;
+        const TARGET_VERSION: i64 = 92;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3290,6 +3290,52 @@ impl Database {
                 )?;
             }
 
+            // Phase 92: dependency_instances — the multi-version installed
+            // inventory. Every prior dep table collapses to one row per
+            // (project, package, ecosystem): the UNIQUE(...) DO UPDATE SET
+            // version = COALESCE(...) upsert discards every extra installed
+            // version (diamond deps, monorepo duplicates, a direct+transitive
+            // version skew). A lockfile genuinely resolves a package at
+            // multiple versions, and matching an advisory against only the
+            // surviving row lets a still-vulnerable duplicate pass as
+            // "not affected" — a false negative (accuracy-first: worse than a
+            // competitor's noise). This table records ONE ROW PER INSTALLED
+            // INSTANCE so negative verdicts (not_affected / safe-to-close /
+            // quiet-week) can be proven against EVERY installed version.
+            // Ships SILENT: populated by the lockfile processors, not yet read
+            // by any surface (the version-confirmed matcher rewires onto it
+            // next, behind the founder dogfood gate).
+            if current_version < 92 {
+                Self::run_versioned_migration(
+                    &conn,
+                    91,
+                    92,
+                    "Phase 92: dependency_instances multi-version inventory",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS dependency_instances (
+                                 id INTEGER PRIMARY KEY,
+                                 project_path TEXT NOT NULL,
+                                 ecosystem TEXT NOT NULL,
+                                 package_name TEXT NOT NULL,
+                                 version TEXT NOT NULL,
+                                 is_direct INTEGER NOT NULL DEFAULT 0,
+                                 is_dev INTEGER NOT NULL DEFAULT 0,
+                                 scope TEXT NOT NULL DEFAULT 'unknown',
+                                 detected_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                 UNIQUE(project_path, ecosystem, package_name, version)
+                             );
+                             CREATE INDEX IF NOT EXISTS idx_dep_instances_project
+                                 ON dependency_instances (project_path, ecosystem);
+                             CREATE INDEX IF NOT EXISTS idx_dep_instances_pkg
+                                 ON dependency_instances (ecosystem, package_name);",
+                        )?;
+                        info!(target: "4da::db", "Created dependency_instances table (Phase 92)");
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -4218,6 +4264,97 @@ mod tests {
                 indexes
             );
         }
+    }
+
+    /// Phase 92: dependency_instances exists with the multi-version UNIQUE key,
+    /// expected columns, and indexes; and the key genuinely permits the same
+    /// package at two versions in one project (the collapse the table fixes).
+    #[test]
+    fn test_phase_92_dependency_instances_table_and_multi_version() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='dependency_instances'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(table_exists, "dependency_instances table should exist");
+
+        let mut stmt = conn
+            .prepare("SELECT name FROM pragma_table_info('dependency_instances')")
+            .unwrap();
+        let cols: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(Result::ok)
+            .collect();
+        for col in [
+            "id",
+            "project_path",
+            "ecosystem",
+            "package_name",
+            "version",
+            "is_direct",
+            "is_dev",
+            "scope",
+            "detected_at",
+        ] {
+            assert!(
+                cols.iter().any(|c| c == col),
+                "dependency_instances column '{col}' missing; got {cols:?}"
+            );
+        }
+
+        let mut idx_stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='dependency_instances'")
+            .unwrap();
+        let indexes: Vec<String> = idx_stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(Result::ok)
+            .collect();
+        for idx in ["idx_dep_instances_project", "idx_dep_instances_pkg"] {
+            assert!(
+                indexes.iter().any(|i| i == idx),
+                "dependency_instances index '{idx}' missing; got {indexes:?}"
+            );
+        }
+
+        // The UNIQUE(project, ecosystem, package, version) key must ADMIT two
+        // versions of one package in one project — the entire purpose. A key
+        // that collapsed versions would reject the second insert.
+        conn.execute_batch(
+            "INSERT INTO dependency_instances (project_path, ecosystem, package_name, version)
+                 VALUES ('/p', 'npm', 'lodash', '4.17.20');
+             INSERT INTO dependency_instances (project_path, ecosystem, package_name, version)
+                 VALUES ('/p', 'npm', 'lodash', '4.17.21');",
+        )
+        .expect("multi-version insert must be permitted by the UNIQUE key");
+        let n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM dependency_instances WHERE project_path='/p' AND package_name='lodash'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 2, "both versions retained");
+    }
+
+    /// Phase 92 lifts TARGET_VERSION to 92. Verify the test DB reached it.
+    #[test]
+    fn test_phase_92_schema_version_reached() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 92,
+            "schema_version should be >= 92 after migration; got {version}"
+        );
     }
 
     /// Phase 84 lifts TARGET_VERSION to 84. Verify the test DB reached it.
