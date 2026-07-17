@@ -950,3 +950,27 @@ fn purge_agent_infra_canonicalizes_residual_paths() {
     assert_eq!(deps.len(), 1);
     assert_eq!(deps[0].package_name, "express");
 }
+
+#[test]
+fn platform_inactive_packages_flags_only_packages_inactive_everywhere() {
+    // `MAX(platform_active) = 0` => the package has NO active instance in any
+    // project. A package active in >= 1 project is NOT platform-inactive.
+    let db = test_db();
+    {
+        let conn = db.conn.lock();
+        conn.execute_batch(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, is_direct, language, platform_active) VALUES
+                ('/a', 'cargotoml', 'winapi', 1, 'rust', 0),
+                ('/b', 'cargotoml', 'winapi', 1, 'rust', 0),
+                ('/a', 'cargotoml', 'serde', 1, 'rust', 0),
+                ('/b', 'cargotoml', 'serde', 1, 'rust', 1);",
+        )
+        .unwrap();
+    }
+    let inactive = db.platform_inactive_packages();
+    assert!(inactive.contains("winapi"), "inactive in every project");
+    assert!(
+        !inactive.contains("serde"),
+        "active in >= 1 project -> not platform-inactive"
+    );
+}

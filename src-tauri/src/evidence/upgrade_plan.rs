@@ -57,6 +57,17 @@ pub fn build_upgrade_plan(db: &Database) -> Vec<EvidenceItem> {
     // Accuracy-first: the plan is the version-confirmed set only.
     groups.retain(|g| g.any_confirmed);
 
+    // Platform relevance (Phase 85): drop packages that are inactive on every
+    // build target the host builds (e.g. a `cfg(not(windows))`-only crate's CVE
+    // on Windows). The plan answers "which upgrade matters to YOUR build", so a
+    // genuinely-irrelevant advisory is not a plan step — but it is NOT hidden:
+    // it still surfaces in Preemption's collapsed "other build targets" group
+    // (label-and-de-prioritise, never suppress). Unknown platform = kept.
+    let platform_inactive = db.platform_inactive_packages();
+    if !platform_inactive.is_empty() {
+        groups.retain(|g| !platform_inactive.contains(&g.package.to_lowercase()));
+    }
+
     // Rank: most-urgent → confirmed → fixable-now → widest blast radius → CVSS.
     groups.sort_by_key(PackageGroup::sort_key);
 

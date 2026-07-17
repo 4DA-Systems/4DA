@@ -349,3 +349,35 @@ fn truncate_result_never_exceeds_the_byte_budget() {
         }
     }
 }
+
+#[test]
+fn platform_inactive_package_is_excluded_from_the_plan() {
+    // The plan answers "which upgrade matters to YOUR build". A package that is
+    // platform-inactive in every project (a cfg(not(windows))-only crate on
+    // Windows) is genuinely irrelevant — excluded from the ranked plan. It is
+    // NOT hidden: Preemption still surfaces its advisory in the collapsed "other
+    // build targets" group. An active package with the same severity stays.
+    let db = test_db();
+    {
+        let conn = db.conn.lock();
+        conn.execute_batch(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_direct, language, platform_active) VALUES
+                ('/proj/a', 'cargotoml', 'winapi', '0.3.0', 1, 'rust', 0),
+                ('/proj/a', 'packagejson', 'axios', '1.5.0', 1, 'javascript', 1);",
+        )
+        .unwrap();
+    }
+    advisory(&db, "GHSA-winapi-1", "winapi", "crates.io", "0.4.0", 7.5);
+    advisory(&db, "GHSA-axios-1", "axios", "npm", "1.6.0", 7.5);
+
+    let plan = build_upgrade_plan(&db);
+    let pkgs: Vec<String> = plan.iter().flat_map(|i| i.affected_deps.clone()).collect();
+    assert!(
+        pkgs.iter().any(|p| p == "axios"),
+        "platform-active package must be in the plan; got {pkgs:?}"
+    );
+    assert!(
+        !pkgs.iter().any(|p| p == "winapi"),
+        "platform-inactive package must be excluded from the plan; got {pkgs:?}"
+    );
+}

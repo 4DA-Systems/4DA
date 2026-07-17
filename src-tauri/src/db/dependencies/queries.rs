@@ -758,6 +758,40 @@ impl Database {
             |row| row.get::<_, i64>(0).map(|n| n > 0),
         )
     }
+
+    /// Lowercase names of packages that are platform-INACTIVE in every tracked
+    /// project — i.e. gated behind a build target (e.g. `cfg(not(windows))`) the
+    /// host does not build (Phase 85 `platform_active`). `MAX(platform_active)=0`
+    /// means no project has an active instance. Empty when the column is absent
+    /// (pre-Phase-85 DB) — fail open, so nothing is wrongly de-prioritised.
+    ///
+    /// Read by the Upgrade Plan brain to keep genuinely-irrelevant advisories
+    /// (a Linux-only crate's CVE on a Windows box) OUT of the ranked plan — they
+    /// still surface in Preemption's collapsed "other build targets" group, so
+    /// this labels-and-de-prioritises, never suppresses (doctrine).
+    pub fn platform_inactive_packages(&self) -> std::collections::HashSet<String> {
+        let conn = self.conn.lock();
+        let has_col: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name='platform_active'",
+                [],
+                |row| row.get::<_, i64>(0).map(|n| n > 0),
+            )
+            .unwrap_or(false);
+        if !has_col {
+            return std::collections::HashSet::new();
+        }
+        let mut stmt = match conn.prepare(
+            "SELECT LOWER(package_name) FROM project_dependencies
+             GROUP BY LOWER(package_name) HAVING MAX(platform_active) = 0",
+        ) {
+            Ok(s) => s,
+            Err(_) => return std::collections::HashSet::new(),
+        };
+        stmt.query_map([], |row| row.get::<_, String>(0))
+            .map(|rows| rows.flatten().collect())
+            .unwrap_or_default()
+    }
 }
 
 fn map_instance_row(row: &rusqlite::Row<'_>) -> SqliteResult<DependencyInstanceRow> {
