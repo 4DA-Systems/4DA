@@ -76,17 +76,35 @@ struct MastodonTag {
 /// Mastodon posts have no title (microblog) — derive a clean, short one from the HTML body: strip
 /// tags, decode the common entities, collapse whitespace, truncate at a word boundary.
 ///
+/// Titles are the app's densest display surface, so three microblog artifacts
+/// are scrubbed (live corpus 2026-07-17: 3,208/20,938 items had a URL glued
+/// into the title, 7,818 carried hashtags):
+/// - tag boundaries become word boundaries — anchor/br removal used to weld
+///   adjacent runs together ("editionshttps://…", "clienthttps://…")
+/// - bare URL tokens are dropped — the link already lives in `item.url`;
+///   inside a title it is pure noise
+/// - a trailing run of 2+ hashtags (poster metadata: "… #HackerNews #Tech
+///   #Rust") is dropped; an inline/grammatical hashtag keeps its word with the
+///   '#' stripped ("#Microsoft releases…" → "Microsoft releases…")
+///
 /// When the body mentions a CVE/GHSA id, that id is hoisted to the front so a
 /// rambling toot ("Saturday, but self hosting, so here we go. …CVE-2026-49975…")
 /// leads with the newsworthy token instead of conversational preamble. This also
 /// lets the downstream content classifier see the id and tag the item as a
 /// security advisory (it classifies off the title).
-fn derive_title(html: &str) -> String {
+///
+/// `pub(crate)`: the Phase 93 migration re-derives stored titles with this
+/// same function so historical rows heal identically to fresh ingest.
+pub(crate) fn derive_title(html: &str) -> String {
     let mut text = String::with_capacity(html.len());
     let mut in_tag = false;
     for c in html.chars() {
         match c {
-            '<' => in_tag = true,
+            '<' => {
+                in_tag = true;
+                // A tag boundary is a word boundary — never weld adjacent runs.
+                text.push(' ');
+            }
             '>' => in_tag = false,
             _ if !in_tag => text.push(c),
             _ => {}
@@ -99,7 +117,42 @@ fn derive_title(html: &str) -> String {
         .replace("&#39;", "'")
         .replace("&quot;", "\"")
         .replace("&nbsp;", " ");
-    let collapsed = decoded.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    // Mastodon renders hashtags and mentions as `#<span>tag</span>` /
+    // `@<span>user</span>` — the tag-boundary space above splits those into a
+    // lone sigil followed by the word. Re-join them so the hashtag rules see
+    // "#tag" and mentions read "@user" instead of "( @ user )".
+    let raw_words: Vec<&str> = decoded
+        .split_whitespace()
+        .filter(|w| !w.contains("://"))
+        .collect();
+    let mut joined: Vec<String> = Vec::with_capacity(raw_words.len());
+    let mut i = 0;
+    while i < raw_words.len() {
+        if (raw_words[i] == "#" || raw_words[i] == "@") && i + 1 < raw_words.len() {
+            joined.push(format!("{}{}", raw_words[i], raw_words[i + 1]));
+            i += 2;
+        } else {
+            joined.push(raw_words[i].to_string());
+            i += 1;
+        }
+    }
+    let mut words: Vec<&str> = joined.iter().map(String::as_str).collect();
+
+    // Drop a trailing hashtag RUN (2+ = poster metadata). A single trailing
+    // hashtag is usually grammatical ("… released as #opensource") and is
+    // handled by the inline rule below instead.
+    let trailing = words.iter().rev().take_while(|w| is_hashtag(w)).count();
+    if trailing >= 2 {
+        words.truncate(words.len() - trailing);
+    }
+
+    // Inline hashtags keep their word, minus the '#'.
+    let collapsed = words
+        .iter()
+        .map(|w| if is_hashtag(w) { &w[1..] } else { w })
+        .collect::<Vec<_>>()
+        .join(" ");
 
     // Hoist a security id to the front when it isn't already near the start.
     if let Some(id) = first_security_id(&collapsed) {
@@ -110,6 +163,16 @@ fn derive_title(html: &str) -> String {
     }
 
     truncate_at_word(&collapsed, 120)
+}
+
+/// A '#'-led token whose body is word-like (letters/digits/_/-), e.g. a
+/// Mastodon hashtag. "C#" or a lone "#" are not hashtags.
+fn is_hashtag(w: &str) -> bool {
+    w.len() > 1
+        && w.starts_with('#')
+        && w[1..]
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
 }
 
 /// Truncate `text` to at most `max` chars at a word boundary, appending an
@@ -509,6 +572,62 @@ mod tests {
             "long titles truncate at a word boundary"
         );
         assert_eq!(derive_title("<p></p>"), "");
+    }
+
+    #[test]
+    fn tag_boundaries_are_word_boundaries() {
+        // Live-corpus regression (2026-07-17): anchor/br removal welded runs
+        // together — "editionshttps://mort.coffee/…", "clienthttps://github…".
+        assert_eq!(
+            derive_title(
+                "<p>SQLite should have (Rust-style) editions<br><a href=\"https://mort.coffee/x\">https://mort.coffee/home/sqlite-editions/</a></p>"
+            ),
+            "SQLite should have (Rust-style) editions"
+        );
+    }
+
+    #[test]
+    fn drops_url_tokens_from_title() {
+        // The link already lives in item.url — inside a title it is noise.
+        assert_eq!(
+            derive_title("<p>RE: <a href=\"x\">https://mastodon.social/@arstechnica/1169</a>It feels great to see this</p>"),
+            "RE: It feels great to see this"
+        );
+        // A URL-only toot derives an empty title (caller drops the item).
+        assert_eq!(
+            derive_title("<p><a href=\"x\">https://example.com/post</a></p>"),
+            ""
+        );
+    }
+
+    #[test]
+    fn hashtags_trailing_run_dropped_inline_kept() {
+        // Trailing run of 2+ = poster metadata — dropped.
+        assert_eq!(
+            derive_title("<p>Here's how I host my own AIM server <a>#SelfHosting</a> <a>#Networking</a> <a>#Retro</a></p>"),
+            "Here's how I host my own AIM server"
+        );
+        // Inline hashtags are grammar — keep the word, strip the '#'. A SINGLE
+        // trailing hashtag is treated as grammar too ("released as #opensource").
+        assert_eq!(
+            derive_title("<p><a>#Microsoft</a> releases its weird '90s <a>#IRC</a> client as <a>#opensource</a></p>"),
+            "Microsoft releases its weird '90s IRC client as opensource"
+        );
+        // "C#" is not a hashtag.
+        assert_eq!(derive_title("<p>why C# wins here</p>"), "why C# wins here");
+        // Mastodon's real hashtag markup splits '#' and the word into separate
+        // text nodes: `#<span>tag</span>` — they must re-join before the rules.
+        assert_eq!(
+            derive_title("<p>Learn Linux with David <a>#<span>Linux</span></a> <a>#<span>Ubuntu</span></a> <a>#<span>KaliLinux</span></a></p>"),
+            "Learn Linux with David"
+        );
+        // Mentions split the same way and must re-join (and stay in the title).
+        // Surrounding punctuation stays space-separated (tag boundaries are
+        // word boundaries) — "( @amnesty )" is readable; "( @ amnesty )" wasn't.
+        assert_eq!(
+            derive_title("<p>Amnesty (<a>@<span>amnesty</span></a>) released a breakdown</p>"),
+            "Amnesty ( @amnesty ) released a breakdown"
+        );
     }
 
     #[test]
