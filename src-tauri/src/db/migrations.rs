@@ -613,7 +613,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 93;
+        const TARGET_VERSION: i64 = 94;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3386,6 +3386,54 @@ impl Database {
                 )?;
             }
 
+            // Phase 94: second mastodon-title heal with derive_title v3. The
+            // Phase 93 rules left an ongoing residue class: Mastodon splits a
+            // long displayed URL across invisible/ellipsis spans, so the
+            // scheme-less visible part ("news.ycombinator.com/item?id=4") and
+            // the severed tail ("8895199") survived as title words, plus the
+            // now-orphaned label they hung off ("Comments:"). v3 drops all
+            // three (dev vocabulary like node.js / TCP/IP survives — see the
+            // is_bare_url/is_url_tail unit tests). Same re-derive-all shape
+            // as Phase 93; rows whose body re-derives to empty keep their old
+            // title.
+            if current_version < 94 {
+                Self::run_versioned_migration(
+                    &conn,
+                    93,
+                    94,
+                    "Phase 94: re-derive mastodon titles (scheme-less URLs + severed tails)",
+                    |c| {
+                        let mut stmt = c.prepare(
+                            "SELECT id, content FROM source_items
+                             WHERE source_type = 'mastodon'
+                               AND content IS NOT NULL AND content != ''",
+                        )?;
+                        let rows: Vec<(i64, String)> = stmt
+                            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                            .collect::<std::result::Result<_, _>>()?;
+                        drop(stmt);
+
+                        let mut healed = 0usize;
+                        for (id, content) in rows {
+                            let title = crate::sources::mastodon::derive_title(&content);
+                            if !title.is_empty() {
+                                c.execute(
+                                    "UPDATE source_items SET title = ?1 WHERE id = ?2",
+                                    rusqlite::params![title, id],
+                                )?;
+                                healed += 1;
+                            }
+                        }
+                        info!(
+                            target: "4da::db",
+                            healed,
+                            "Phase 94: re-derived mastodon titles (v3 rules)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -4445,6 +4493,43 @@ mod tests {
             )
             .unwrap();
         assert_eq!(healed, "SQLite editions");
+    }
+
+    /// Phase 94 re-heals with derive_title v3 (scheme-less URLs, severed
+    /// tails, orphaned labels). Wind back to 93, seed the residue class
+    /// Phase 93 left behind, re-run, assert clean.
+    #[test]
+    fn test_phase_94_heals_schemeless_url_residue() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 94,
+            "schema_version should be >= 94 after migration; got {version}"
+        );
+
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, url, content_hash, embedding)
+             VALUES ('mastodon', 'tag:test-94', 'Parsing SGF files for fun video.infosec.exchange/w/8iK3',
+                     '<p>Parsing SGF files for fun <a>video.infosec.exchange/w/8iK3NByz1pVVba4kGmycDs</a></p>',
+                     'https://example.com/2', 'hash-test-94', X'00');
+             UPDATE schema_version SET version = 93;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v93");
+
+        let conn = db.conn.lock();
+        let healed: String = conn
+            .query_row(
+                "SELECT title FROM source_items WHERE source_id = 'tag:test-94'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(healed, "Parsing SGF files for fun");
     }
 
     /// Phase 84 lifts TARGET_VERSION to 84. Verify the test DB reached it.
