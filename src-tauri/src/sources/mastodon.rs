@@ -81,8 +81,13 @@ struct MastodonTag {
 /// into the title, 7,818 carried hashtags):
 /// - tag boundaries become word boundaries — anchor/br removal used to weld
 ///   adjacent runs together ("editionshttps://…", "clienthttps://…")
-/// - bare URL tokens are dropped — the link already lives in `item.url`;
-///   inside a title it is pure noise
+/// - URL text is dropped — the link already lives in `item.url`; inside a
+///   title it is pure noise. This covers scheme tokens ("https://…"),
+///   scheme-less displayed link text ("news.ycombinator.com/item?id=4" — a
+///   dot-TLD host followed by '/'; "node.js" and "TCP/IP" survive), the
+///   tail fragments Mastodon's ellipsis/invisible spans sever off a long URL
+///   ("8895199", "ns/"), and a now-orphaned trailing label ("Comments:")
+///   whose URL was just dropped
 /// - a trailing run of 2+ hashtags (poster metadata: "… #HackerNews #Tech
 ///   #Rust") is dropped; an inline/grammatical hashtag keeps its word with the
 ///   '#' stripped ("#Microsoft releases…" → "Microsoft releases…")
@@ -122,10 +127,7 @@ pub(crate) fn derive_title(html: &str) -> String {
     // `@<span>user</span>` — the tag-boundary space above splits those into a
     // lone sigil followed by the word. Re-join them so the hashtag rules see
     // "#tag" and mentions read "@user" instead of "( @ user )".
-    let raw_words: Vec<&str> = decoded
-        .split_whitespace()
-        .filter(|w| !w.contains("://"))
-        .collect();
+    let raw_words: Vec<&str> = decoded.split_whitespace().collect();
     let mut joined: Vec<String> = Vec::with_capacity(raw_words.len());
     let mut i = 0;
     while i < raw_words.len() {
@@ -137,7 +139,32 @@ pub(crate) fn derive_title(html: &str) -> String {
             i += 1;
         }
     }
-    let mut words: Vec<&str> = joined.iter().map(String::as_str).collect();
+
+    // URL scrub with drop-tracking. Mastodon splits a long displayed URL
+    // across ellipsis/invisible spans ("https://" · "news.ycombinator.com/
+    // item?id=4" · "8895199"), so the scheme token, the scheme-less visible
+    // part, and the severed tail must all go — and a label the URL hung off
+    // ("Comments:") is dropped when its URL is.
+    let mut kept: Vec<&str> = Vec::with_capacity(joined.len());
+    let mut prev_dropped = false;
+    for w in &joined {
+        let dropped = w.contains("://") || is_bare_url(w) || (prev_dropped && is_url_tail(w));
+        if dropped {
+            // First drop of a run orphans a preceding "Label:" — take it too.
+            if !prev_dropped {
+                if let Some(last) = kept.last() {
+                    if last.ends_with(':') && last.len() > 1 {
+                        kept.pop();
+                    }
+                }
+            }
+            prev_dropped = true;
+            continue;
+        }
+        prev_dropped = false;
+        kept.push(w.as_str());
+    }
+    let mut words = kept;
 
     // Drop a trailing hashtag RUN (2+ = poster metadata). A single trailing
     // hashtag is usually grammatical ("… released as #opensource") and is
@@ -163,6 +190,32 @@ pub(crate) fn derive_title(html: &str) -> String {
     }
 
     truncate_at_word(&collapsed, 120)
+}
+
+/// Scheme-less displayed link text: a host with a dot + alphabetic TLD
+/// followed by a '/' path ("mort.coffee/home/x", "news.ycombinator.com/item?id=4").
+/// "node.js" / "socket.io" (no slash) and "TCP/IP" (no dot-TLD host) survive.
+fn is_bare_url(w: &str) -> bool {
+    let Some(slash) = w.find('/') else {
+        return false;
+    };
+    let host = &w[..slash];
+    let Some(dot) = host.rfind('.') else {
+        return false;
+    };
+    let tld = &host[dot + 1..];
+    dot > 0 && !tld.is_empty() && tld.len() <= 24 && tld.chars().all(|c| c.is_ascii_alphabetic())
+}
+
+/// A URL tail severed by Mastodon's ellipsis/invisible spans ("8895199",
+/// "ns/", "8iK3NByz1pVVba4kGmycDs"): URL-safe characters with at least one
+/// digit or path/query character. Only meaningful right after a dropped URL
+/// token — plain words ("rocks") never match, so grammar is safe.
+fn is_url_tail(w: &str) -> bool {
+    !w.is_empty()
+        && w.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "/?=&._%-".contains(c))
+        && w.chars().any(|c| c.is_ascii_digit() || "/?=&%".contains(c))
 }
 
 /// A '#'-led token whose body is word-like (letters/digits/_/-), e.g. a
@@ -589,14 +642,48 @@ mod tests {
     #[test]
     fn drops_url_tokens_from_title() {
         // The link already lives in item.url — inside a title it is noise.
+        // "RE:" is an orphaned label once its URL goes, so it goes too.
         assert_eq!(
             derive_title("<p>RE: <a href=\"x\">https://mastodon.social/@arstechnica/1169</a>It feels great to see this</p>"),
-            "RE: It feels great to see this"
+            "It feels great to see this"
         );
         // A URL-only toot derives an empty title (caller drops the item).
         assert_eq!(
             derive_title("<p><a href=\"x\">https://example.com/post</a></p>"),
             ""
+        );
+    }
+
+    #[test]
+    fn drops_schemeless_urls_severed_tails_and_orphaned_labels() {
+        // Live-corpus residue class (2026-07-17): Mastodon splits a long URL
+        // across invisible/ellipsis spans — scheme token, visible scheme-less
+        // part, and severed tail all become separate words. All must go, and
+        // the "Comments:" label that hung off the URL goes with it.
+        assert_eq!(
+            derive_title(
+                "<p>SQLite should have (Rust-style) editions <a>mort.coffee/home/sqlite-editio</a><span>ns/</span> Comments: <a><span>https://</span>news.ycombinator.com/item?id=4</a><span>8895199</span></p>"
+            ),
+            "SQLite should have (Rust-style) editions"
+        );
+        assert_eq!(
+            derive_title("<p>Parsing SGF files for fun <a>video.infosec.exchange/w/8iK3NByz1pVVba4kGmycDs</a></p>"),
+            "Parsing SGF files for fun"
+        );
+        // Dev vocabulary is NOT a URL: no slash after the dot-TLD…
+        assert_eq!(
+            derive_title("<p>why node.js beats socket.io here</p>"),
+            "why node.js beats socket.io here"
+        );
+        // …and no dot-TLD host before the slash.
+        assert_eq!(
+            derive_title("<p>TCP/IP stack rewrite, 1.80/1.81 diff</p>"),
+            "TCP/IP stack rewrite, 1.80/1.81 diff"
+        );
+        // A plain word after a dropped URL is grammar, not a tail.
+        assert_eq!(
+            derive_title("<p>see <a>https://example.com/docs</a> rocks anyway</p>"),
+            "see rocks anyway"
         );
     }
 
