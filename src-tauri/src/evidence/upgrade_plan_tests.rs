@@ -280,3 +280,72 @@ fn cross_project_multiplicity_widens_blast_radius_and_ranks_up() {
         plan[wide].title
     );
 }
+
+#[test]
+fn long_project_list_never_produces_an_over_length_citation_note() {
+    // Regression for the CitationNoteTooLong bug fixed in #316 (truncate budgeted
+    // 1 byte for the 3-byte "…" ellipsis → 202-byte notes → validate_item reject
+    // → the plan step silently dropped in release). Live-caught on the founder's
+    // corpus; hermetic fixtures had short paths and missed it. This reproduces
+    // the exact trigger: a package across many long project paths + a long
+    // advisory summary, both of which drive the citation `truncate` path.
+    let db = test_db();
+    for i in 0..12 {
+        let proj = format!("C:/Users/dev/workspace/monorepo-{i}/packages/service-{i}/frontend");
+        db.store_dependency(&proj, "lodash", Some("4.17.20"), "npm", false, None)
+            .unwrap();
+    }
+    db.upsert_osv_advisory(
+        "GHSA-long-1",
+        &"Prototype pollution in lodash allows an attacker to modify the prototype of a base object. ".repeat(4),
+        None,
+        "lodash",
+        "npm",
+        Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"4.17.21"}]}]"#),
+        Some(r#"["4.17.21"]"#),
+        Some("CVSS_V3"),
+        Some(9.8),
+        Some("https://osv.dev/GHSA-long-1"),
+        Some("2026-01-01T00:00:00Z"),
+        None,
+        None,
+    )
+    .unwrap();
+
+    let plan = build_upgrade_plan(&db);
+    assert_eq!(plan.len(), 1, "the plan step must survive (not be dropped)");
+    validate_item(&plan[0]).expect("plan item must pass validate_item");
+    for cite in &plan[0].evidence {
+        assert!(
+            cite.relevance_note.len() <= 200,
+            "citation note {} bytes exceeds the 200-byte bound: {:?}",
+            cite.relevance_note.len(),
+            cite.relevance_note
+        );
+    }
+}
+
+#[test]
+fn truncate_result_never_exceeds_the_byte_budget() {
+    // Unit guard on the helper across ASCII + multibyte inputs, over the budget
+    // range the plan actually uses (>= the 3-byte ellipsis width; call sites pass
+    // 160 and 200). Would fail against the pre-#316 code, which overshot by 2.
+    for &max in &[3usize, 4, 10, 50, 160, 200] {
+        for s in [
+            "",
+            "short",
+            &"x".repeat(500),
+            &"é".repeat(300),
+            &"世界".repeat(200),
+        ] {
+            let out = super::truncate(s, max);
+            assert!(
+                out.len() <= max || s.len() <= max,
+                "truncate(<{} bytes>, {}) = {} bytes",
+                s.len(),
+                max,
+                out.len()
+            );
+        }
+    }
+}
