@@ -83,6 +83,27 @@ function findCannotFindModule(body) {
   return m ? m[0].trim() : null;
 }
 
+/** Anything LISTENING on the port — the same signal kill-port kills by. */
+function portIsBusy(port) {
+  const { execSync } = require('node:child_process');
+  try {
+    if (process.platform === 'win32') {
+      const out = execSync(`netstat -ano | findstr :${port} | findstr LISTENING`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      return out.trim().length > 0;
+    }
+    const out = execSync(`lsof -ti :${port}`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return out.trim().length > 0;
+  } catch {
+    return false; // findstr/lsof exit non-zero when nothing matches
+  }
+}
+
 async function main() {
   // A live dev server owns port 4444 AND the node_modules/.vite/deps cache.
   // Killing it and wiping that cache from here crashes the running fourda.exe
@@ -91,20 +112,22 @@ async function main() {
   // (observed live 2026-07-17: three kills in 15 minutes). A cold-start check
   // is impossible without disrupting the running instance, so skip honestly —
   // CI and any dev-server-down run keep full coverage.
-  if (await waitForServerReady(1500)) {
-    log(`SKIPPED: a dev server is already running on port ${PORT}.`);
+  //
+  // Guard v2 (observed live 2026-07-18): the original 1.5s HTTP-200 probe
+  // missed under load — 18 queued CI jobs starved the running vite past the
+  // timeout, the guard read "no dev server", and kill-port murdered it anyway.
+  // A LISTENING socket is the same signal kill-port kills by and has no
+  // timing sensitivity: if ANYTHING listens on the port, the cold-start
+  // cannot run safely — skip. (A dead-but-listening zombie would fail this
+  // run visibly at bind time rather than silently killing a live instance.)
+  if (portIsBusy(PORT)) {
+    log(`SKIPPED: something is listening on port ${PORT} (a dev server is likely running).`);
     log('Cold-start smoke cannot run without killing it (port + .vite/deps cache are shared).');
     log('Full coverage still runs in CI and whenever no dev server is up.');
     process.exit(0);
   }
 
   log('Starting fresh Vite dev server...');
-
-  // Port is free (checked above); clear any zombie holder without a listener.
-  try {
-    const { execSync } = require('node:child_process');
-    execSync(`node "${path.join(__dirname, 'kill-port.cjs')}" ${PORT}`, { stdio: 'ignore' });
-  } catch { /* port may already be free */ }
 
   // Clean the Vite deps cache so we do a true cold start
   const depsCache = path.join(__dirname, '..', 'node_modules', '.vite', 'deps');
