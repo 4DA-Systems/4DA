@@ -41,7 +41,15 @@ pub use materializer::{EvidenceMaterializer, MaterializeContext};
 #[allow(unused_imports)]
 pub use types::{
     Action, Confidence, ConfidenceProvenance, EvidenceCitation, EvidenceFeed, EvidenceItem,
-    EvidenceKind, LensHints, PrecedentOutcome, PrecedentRef, TierScope, Urgency, ACTION_IDS,
+    EvidenceKind, LensHints, PrecedentOutcome, PrecedentRef, TierScope, UpgradePlanSnapshot,
+    Urgency, ACTION_IDS,
 };
+
+// Phase 2 (D-1, DB-as-interface): persist the ranked plan for out-of-process
+// readers (the MCP server / a future CLI). `read_upgrade_plan_snapshot` is not
+// yet called in-process (the app reads the plan live from the feed) — the MCP
+// read path is a later, operator-gated distribution stone.
+#[allow(unused_imports)]
+pub use upgrade_plan::{persist_upgrade_plan, read_upgrade_plan_snapshot};
 #[allow(unused_imports)]
 pub use validate::{validate_item, ValidationError};

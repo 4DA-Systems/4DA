@@ -381,3 +381,74 @@ fn platform_inactive_package_is_excluded_from_the_plan() {
         "platform-inactive package must be excluded from the plan; got {pkgs:?}"
     );
 }
+
+#[test]
+fn persist_and_read_upgrade_plan_snapshot_round_trips() {
+    use super::{persist_upgrade_plan, read_upgrade_plan_snapshot};
+    let db = test_db();
+    // No snapshot yet -> None.
+    assert!(read_upgrade_plan_snapshot(&db).is_none());
+
+    // Build a real plan and persist it.
+    db.store_dependency("/proj/a", "lodash", Some("4.17.20"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-snap-1", "lodash", "npm", "4.17.21", 7.5);
+    let plan = build_upgrade_plan(&db);
+    assert_eq!(plan.len(), 1);
+    persist_upgrade_plan(&db, &plan);
+
+    let snap = read_upgrade_plan_snapshot(&db).expect("snapshot present after persist");
+    assert_eq!(snap.item_count, 1);
+    assert_eq!(snap.items.len(), 1);
+    assert_eq!(snap.items[0].affected_deps, vec!["lodash"]);
+    assert!(!snap.generated_at.is_empty());
+    assert!(!snap.generator_version.is_empty());
+    // Items survive the JSON round-trip byte-for-byte.
+    assert_eq!(snap.items, plan);
+}
+
+#[test]
+fn persist_upgrade_plan_records_an_empty_plan() {
+    // "Evaluated, nothing to do" must be distinguishable from "never computed":
+    // an empty plan still writes a snapshot with a fresh timestamp and 0 items.
+    use super::{persist_upgrade_plan, read_upgrade_plan_snapshot};
+    let db = test_db();
+    persist_upgrade_plan(&db, &[]);
+    let snap = read_upgrade_plan_snapshot(&db).expect("empty plan is still persisted");
+    assert_eq!(snap.item_count, 0);
+    assert!(snap.items.is_empty());
+    assert!(!snap.generated_at.is_empty());
+}
+
+#[test]
+fn persist_upgrade_plan_is_latest_wins() {
+    use super::{persist_upgrade_plan, read_upgrade_plan_snapshot};
+    let db = test_db();
+    db.store_dependency("/proj/a", "lodash", Some("4.17.20"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-lw-1", "lodash", "npm", "4.17.21", 7.5);
+    persist_upgrade_plan(&db, &build_upgrade_plan(&db));
+    // A later empty compute overwrites the single row.
+    persist_upgrade_plan(&db, &[]);
+    let snap = read_upgrade_plan_snapshot(&db).unwrap();
+    assert_eq!(
+        snap.item_count, 0,
+        "latest-wins: the empty snapshot replaced the earlier one"
+    );
+}
+
+#[test]
+fn read_upgrade_plan_snapshot_rejects_incompatible_schema_version() {
+    // A snapshot written by a future/incompatible build is treated as absent
+    // (fail closed) — a reader must never act on a snapshot it cannot trust.
+    use super::read_upgrade_plan_snapshot;
+    let db = test_db();
+    // A well-formed envelope but with a schema_version we do not understand.
+    let bogus = r#"{"schema_version":999999,"generated_at":"2026-01-01T00:00:00Z","generator_version":"x","item_count":0,"items":[]}"#;
+    db.set_kv("upgrade_plan_snapshot", bogus).unwrap();
+    assert!(read_upgrade_plan_snapshot(&db).is_none());
+
+    // Garbage JSON is also treated as absent, not a panic.
+    db.set_kv("upgrade_plan_snapshot", "not json").unwrap();
+    assert!(read_upgrade_plan_snapshot(&db).is_none());
+}
