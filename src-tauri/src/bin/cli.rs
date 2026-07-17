@@ -733,6 +733,7 @@ fn format_plan_human(json: &str) -> String {
         items.len(),
         generated
     );
+    use std::fmt::Write as _;
     for (i, item) in items.iter().enumerate() {
         let title = item
             .get("title")
@@ -744,7 +745,10 @@ fn format_plan_human(json: &str) -> String {
         } else {
             format!(" [{urgency}]")
         };
-        out.push_str(&format!("\n{:>2}.{} {}", i + 1, badge, title));
+        // write! into the String (not push_str(&format!(..))) to satisfy
+        // clippy::format_push_string under CI's `-D warnings`; writing to a
+        // String is infallible, so the Result is deliberately discarded.
+        let _ = write!(out, "\n{:>2}.{} {}", i + 1, badge, title);
     }
     out
 }
