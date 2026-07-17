@@ -613,7 +613,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 92;
+        const TARGET_VERSION: i64 = 93;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3336,6 +3336,56 @@ impl Database {
                 )?;
             }
 
+            // Phase 93: heal Mastodon titles. derive_title() used to weld text
+            // runs at stripped-tag boundaries ("editionshttps://…"), keep bare
+            // URL anchor text, and keep hashtag runs — 3,208/20,938 stored
+            // mastodon titles carried a URL, 7,818 carried hashtags (live
+            // corpus 2026-07-17). Titles are display + classifier input on
+            // every surface, so re-derive EVERY stored mastodon title from the
+            // raw HTML body with the FIXED function — historical rows heal
+            // identically to fresh ingest (welds like "debutASRock" carry no
+            // '#' or '://', so a targeted filter would miss them; the dry-run
+            // on a corpus copy showed re-derivation is safe across all rows).
+            // Rows whose body re-derives to empty (URL-only toots) keep their
+            // old title rather than going blank.
+            if current_version < 93 {
+                Self::run_versioned_migration(
+                    &conn,
+                    92,
+                    93,
+                    "Phase 93: re-derive polluted mastodon titles from content",
+                    |c| {
+                        let mut stmt = c.prepare(
+                            "SELECT id, content FROM source_items
+                             WHERE source_type = 'mastodon'
+                               AND content IS NOT NULL AND content != ''",
+                        )?;
+                        let rows: Vec<(i64, String)> = stmt
+                            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                            .collect::<std::result::Result<_, _>>()?;
+                        drop(stmt);
+
+                        let mut healed = 0usize;
+                        for (id, content) in rows {
+                            let title = crate::sources::mastodon::derive_title(&content);
+                            if !title.is_empty() {
+                                c.execute(
+                                    "UPDATE source_items SET title = ?1 WHERE id = ?2",
+                                    rusqlite::params![title, id],
+                                )?;
+                                healed += 1;
+                            }
+                        }
+                        info!(
+                            target: "4da::db",
+                            healed,
+                            "Phase 93: re-derived mastodon titles"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -4355,6 +4405,46 @@ mod tests {
             version >= 92,
             "schema_version should be >= 92 after migration; got {version}"
         );
+    }
+
+    /// Phase 93 lifts TARGET_VERSION to 93 and re-derives polluted mastodon
+    /// titles (URL-welds, hashtag runs) from stored content with the fixed
+    /// derive_title. Verify the version and the healing behavior.
+    #[test]
+    fn test_phase_93_heals_mastodon_titles() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 93,
+            "schema_version should be >= 93 after migration; got {version}"
+        );
+
+        // Seed a polluted row the way the old derive_title wrote it, wind the
+        // version back to 92, and run the (idempotent, versioned) migration
+        // pass again so only Phase 93 re-executes.
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, url, content_hash, embedding)
+             VALUES ('mastodon', 'tag:test-93', 'SQLite editionshttps://mort.coffee/x#Tech #Rust',
+                     '<p>SQLite editions<br><a href=\"https://mort.coffee/x\">https://mort.coffee/x</a> <a>#Tech</a> <a>#Rust</a></p>',
+                     'https://example.com/1', 'hash-test-93', X'00');
+             UPDATE schema_version SET version = 92;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v92");
+
+        let conn = db.conn.lock();
+        let healed: String = conn
+            .query_row(
+                "SELECT title FROM source_items WHERE source_id = 'tag:test-93'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(healed, "SQLite editions");
     }
 
     /// Phase 84 lifts TARGET_VERSION to 84. Verify the test DB reached it.
