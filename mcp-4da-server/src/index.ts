@@ -74,6 +74,18 @@ import { createDatabase, FourDADatabase, type DatabaseValidationResult } from ".
 // Server Setup
 // =============================================================================
 
+/**
+ * Project root for scanning/scoping. FOURDA_PROJECT_DIR overrides cwd for
+ * hosts where cwd is meaningless (Claude Desktop launches extension servers
+ * from an app directory) — the .mcpb bundle wires its directory picker to it.
+ * A value still containing "${" is an unsubstituted host template; ignore it.
+ */
+function resolveProjectDir(): string {
+  const dir = process.env.FOURDA_PROJECT_DIR?.trim();
+  if (dir && !dir.includes("${")) return dir;
+  return process.cwd();
+}
+
 const server = new Server(
   {
     name: "4da-server",
@@ -105,9 +117,12 @@ function getDatabase(): FourDADatabase {
     liveIntel = new LiveIntelligence(db.getRawDb());
     setLiveIntelligence(liveIntel);
 
-    // Standalone mode: auto-populate from project scan
+    // Standalone mode: auto-populate from project scan.
+    // FOURDA_PROJECT_DIR overrides cwd for hosts where cwd is meaningless
+    // (Claude Desktop launches extension servers from an app directory, not
+    // the user's code) — the .mcpb bundle wires its directory picker to this.
     if (db.isStandalone) {
-      const cwd = process.cwd();
+      const cwd = resolveProjectDir();
       const scan = scanCurrentProject(cwd);
       db.populateFromScan(scan);
 
@@ -163,7 +178,7 @@ function getDatabase(): FourDADatabase {
         // database (the ACE engine indexes every local project) must not bleed
         // into this project's vulnerability scan.
         const norm = (p: string) => p.replace(/\\/g, "/").toLowerCase().replace(/\/+$/, "");
-        const rootNorm = norm(process.cwd());
+        const rootNorm = norm(resolveProjectDir());
 
         const groups = new Map<string, { dir: string; language: string; deps: string[]; devDeps: string[] }>();
         for (const row of rows) {
