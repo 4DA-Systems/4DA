@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -108,13 +108,22 @@ describe('SprintPhase — labeling flow', () => {
     wireBackend();
     render(<SprintPhase onClose={() => {}} />);
     await waitFor(() => expect(screen.getByText('Rust 1.99 released')).toBeInTheDocument());
+    // The keydown listener is (re)attached in an effect whose deps include the
+    // freshly-loaded cards — flush effects so the key can't hit a stale closure
+    // where cards is still [] (flaked twice on the loaded CI runner, 2026-07-16).
+    await act(async () => {});
 
     fireEvent.keyDown(window, { key: 'ArrowRight' });
-    await waitFor(() =>
-      expect(mockInvoke).toHaveBeenCalledWith(
-        'record_calibration_sprint_response',
-        { sourceItemId: 11, response: 'relevant' },
-      ),
+    // Generous timeout: the assertion polls an async respond() chain; the default
+    // 1s expired under full-suite CPU starvation while the same test passes in
+    // isolation at ~10ms.
+    await waitFor(
+      () =>
+        expect(mockInvoke).toHaveBeenCalledWith(
+          'record_calibration_sprint_response',
+          { sourceItemId: 11, response: 'relevant' },
+        ),
+      { timeout: 10_000 },
     );
   });
 
