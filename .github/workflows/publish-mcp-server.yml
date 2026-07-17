@@ -44,7 +44,16 @@ jobs:
           fi
           echo "Publishing @4da/mcp-server@$PKG_VERSION"
 
-      - run: pnpm publish --access public --no-git-checks
+      # Idempotent: a partial failure after npm publish (e.g. the registry step)
+      # must be retryable by re-pushing the tag without a version bump.
+      - name: Publish to npm (skip if version already live)
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if npm view "@4da/mcp-server@$PKG_VERSION" version >/dev/null 2>&1; then
+            echo "@4da/mcp-server@$PKG_VERSION already on npm — skipping publish"
+          else
+            pnpm publish --access public --no-git-checks
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
