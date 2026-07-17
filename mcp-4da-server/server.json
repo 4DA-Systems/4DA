@@ -7,12 +7,12 @@
     "source": "github",
     "subfolder": "mcp-4da-server"
   },
-  "version": "4.6.4",
+  "version": "4.6.5",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@4da/mcp-server",
-      "version": "4.6.4",
+      "version": "4.6.5",
       "transport": {
         "type": "stdio"
       }
