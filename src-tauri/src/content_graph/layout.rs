@@ -392,7 +392,6 @@ mod tests {
             primary_topic: None,
             cluster_id: None,
             member_count: 1,
-            member_titles: Vec::new(),
             member_ids: vec![id],
             category: "discussion".to_string(),
             affects_you: false,

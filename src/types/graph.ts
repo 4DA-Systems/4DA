@@ -18,8 +18,6 @@ export interface GraphNode {
   cluster_id: string | null;
   /** Total items this node represents (>1 = a story of collapsed near-dupes). */
   member_count: number;
-  /** Titles of collapsed siblings (representative excluded), capped. */
-  member_titles: string[];
   /** Item ids of all members including the representative. */
   member_ids: number[];
   /** Content category: 'security' | 'release' | 'discussion' | 'research'. */

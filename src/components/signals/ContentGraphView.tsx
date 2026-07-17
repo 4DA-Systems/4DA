@@ -48,7 +48,6 @@ function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): 
       primary_topic: n.primary_topic,
       cluster_id: n.cluster_id,
       member_count: n.member_count,
-      member_titles: n.member_titles,
       member_ids: n.member_ids,
       category: n.category,
       affects_you: n.affects_you,
