@@ -668,6 +668,88 @@ fn cmd_status(conn: &rusqlite::Connection, json_mode: bool) {
 }
 
 // ============================================================================
+// Plan — read the persisted Upgrade Plan snapshot (kv_store: upgrade_plan_snapshot)
+// ============================================================================
+
+/// Print the Upgrade Plan the desktop app persisted after its last preemption
+/// compute. Read-only: the CLI never computes the plan, it only surfaces what
+/// the app already wrote. In `--json` mode the persisted envelope is emitted
+/// verbatim (the app is the single source of truth); human mode renders a
+/// short summary. Honest when nothing has been computed yet.
+fn cmd_plan(conn: &rusqlite::Connection, json_mode: bool) {
+    let raw: Option<String> = conn
+        .query_row(
+            "SELECT value FROM kv_store WHERE key = 'upgrade_plan_snapshot'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .unwrap_or(None);
+    println!("{}", render_plan(raw, json_mode));
+}
+
+/// Pure formatting of the persisted snapshot into what `cmd_plan` prints.
+/// Split out so the JSON-passthrough / human / empty branches are unit-testable
+/// without a live database.
+fn render_plan(raw: Option<String>, json_mode: bool) -> String {
+    match (raw, json_mode) {
+        // The persisted value IS the JSON envelope the app serialized — emit it
+        // verbatim so downstream agents/scripts see exactly what the app wrote.
+        (Some(json), true) => json,
+        (Some(json), false) => format_plan_human(&json),
+        (None, true) => "{\"available\":false,\"reason\":\"No upgrade plan computed yet. Open the 4DA desktop app (Signal tier) to compute one.\"}".to_string(),
+        (None, false) => {
+            "No upgrade plan computed yet.\nOpen the 4DA desktop app (Signal tier) to compute one.".to_string()
+        }
+    }
+}
+
+/// Render the snapshot JSON as a short human summary. Field-by-field via
+/// `serde_json::Value` (not a mirror struct) so a schema drift in the app
+/// degrades to a graceful line rather than a parse panic.
+fn format_plan_human(json: &str) -> String {
+    let v: serde_json::Value = match serde_json::from_str(json) {
+        Ok(v) => v,
+        Err(_) => {
+            return "Upgrade plan snapshot is present but unreadable (schema mismatch).".to_string()
+        }
+    };
+    let generated = v
+        .get("generated_at")
+        .and_then(|x| x.as_str())
+        .unwrap_or("unknown");
+    let items = v
+        .get("items")
+        .and_then(|x| x.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if items.is_empty() {
+        return format!(
+            "Upgrade Plan (generated {generated})\n\nNo upgrade actions right now — nothing version-confirmed and fixable."
+        );
+    }
+    let mut out = format!(
+        "Upgrade Plan — {} step(s), generated {}\n",
+        items.len(),
+        generated
+    );
+    for (i, item) in items.iter().enumerate() {
+        let title = item
+            .get("title")
+            .and_then(|x| x.as_str())
+            .unwrap_or("(untitled)");
+        let urgency = item.get("urgency").and_then(|x| x.as_str()).unwrap_or("");
+        let badge = if urgency.is_empty() {
+            String::new()
+        } else {
+            format!(" [{urgency}]")
+        };
+        out.push_str(&format!("\n{:>2}.{} {}", i + 1, badge, title));
+    }
+    out
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -728,6 +810,7 @@ fn main() {
         }
         "gaps" | "gap" | "g" => cmd_gaps(&conn, json_mode),
         "health" | "h" => cmd_health(&conn, json_mode),
+        "plan" | "p" => cmd_plan(&conn, json_mode),
         "status" | "st" => cmd_status(&conn, json_mode),
         other => {
             if json_mode {
@@ -754,6 +837,7 @@ fn print_usage() {
              --critical, -c   Only critical/high priority\n\
            gaps, g           Show knowledge gaps in your dependencies\n\
            health, h         Show project dependency health\n\
+           plan, p           Show the ranked dependency Upgrade Plan\n\
            status, st        Show database stats\n\
          \n\
          Flags:\n\
@@ -769,4 +853,63 @@ fn print_usage() {
          The CLI reads from the same database as the 4DA desktop app.\n\
          All data stays on your machine."
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{format_plan_human, render_plan};
+
+    const SAMPLE: &str = r#"{
+        "schema_version": 1,
+        "generated_at": "2026-07-17T00:00:00Z",
+        "generator_version": "1.0.0",
+        "item_count": 2,
+        "items": [
+            {"title": "Upgrade lodash to >= 4.17.21 — clears 1 advisory", "urgency": "high"},
+            {"title": "Upgrade axios to >= 1.7.4 — clears 2 advisories", "urgency": "critical"}
+        ]
+    }"#;
+
+    #[test]
+    fn json_mode_passes_the_envelope_through_verbatim() {
+        // The persisted value is the single source of truth — the CLI must not
+        // re-serialize or reshape it.
+        let out = render_plan(Some(SAMPLE.to_string()), true);
+        assert_eq!(out, SAMPLE);
+    }
+
+    #[test]
+    fn json_mode_is_honest_when_nothing_is_computed() {
+        let out = render_plan(None, true);
+        assert!(out.contains("\"available\":false"));
+        assert!(serde_json::from_str::<serde_json::Value>(&out).is_ok());
+    }
+
+    #[test]
+    fn human_mode_is_honest_when_nothing_is_computed() {
+        let out = render_plan(None, false);
+        assert!(out.contains("No upgrade plan computed yet"));
+    }
+
+    #[test]
+    fn human_mode_summarizes_steps_with_urgency_badges() {
+        let out = format_plan_human(SAMPLE);
+        assert!(out.contains("2 step(s)"));
+        assert!(out.contains("2026-07-17T00:00:00Z"));
+        assert!(out.contains(" 1. [high] Upgrade lodash"));
+        assert!(out.contains(" 2. [critical] Upgrade axios"));
+    }
+
+    #[test]
+    fn human_mode_reports_empty_plan_distinctly_from_absent() {
+        let empty = r#"{"schema_version":1,"generated_at":"2026-07-17T00:00:00Z","generator_version":"1.0.0","item_count":0,"items":[]}"#;
+        let out = format_plan_human(empty);
+        assert!(out.contains("No upgrade actions right now"));
+    }
+
+    #[test]
+    fn human_mode_degrades_gracefully_on_unparseable_snapshot() {
+        let out = format_plan_human("{ this is not json ");
+        assert!(out.contains("unreadable"));
+    }
 }
