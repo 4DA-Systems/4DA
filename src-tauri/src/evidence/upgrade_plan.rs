@@ -38,6 +38,63 @@ use super::types::{
 /// in the title/explanation still reflects the true total).
 const MAX_CITATIONS: usize = 8;
 
+/// `kv_store` key under which the persisted plan snapshot lives (single,
+/// latest-wins). The MCP server reads this same key from the shared SQLite file.
+const PLAN_KV_KEY: &str = "upgrade_plan_snapshot";
+
+/// Persisted-shape version. Bump on an incompatible change to
+/// [`super::types::UpgradePlanSnapshot`] / the item JSON; a reader that sees a
+/// higher version treats the snapshot as absent (fail closed).
+const PLAN_SCHEMA_VERSION: u32 = 1;
+
+/// Persist the ranked plan to `kv_store` (blueprint D-1, DB-as-interface) so it
+/// survives restart and is readable out-of-process (the MCP server; a future
+/// `fourda-engine plan --json`). Called from the feed compute — persists EVERY
+/// computed plan, including an empty one, so a reader can tell "evaluated,
+/// nothing to do" (fresh `generated_at`, 0 items) from "never computed" (no
+/// key). Best-effort: a write error is logged, never propagated into the feed.
+pub fn persist_upgrade_plan(db: &Database, items: &[EvidenceItem]) {
+    let snapshot = super::types::UpgradePlanSnapshot {
+        schema_version: PLAN_SCHEMA_VERSION,
+        generated_at: chrono::Utc::now().to_rfc3339(),
+        generator_version: env!("CARGO_PKG_VERSION").to_string(),
+        item_count: items.len(),
+        items: items.to_vec(),
+    };
+    match serde_json::to_string(&snapshot) {
+        Ok(json) => {
+            if let Err(e) = db.set_kv(PLAN_KV_KEY, &json) {
+                tracing::warn!(target: "4da::upgrade_plan", error = %e, "failed to persist upgrade plan snapshot");
+            }
+        }
+        Err(e) => {
+            tracing::warn!(target: "4da::upgrade_plan", error = %e, "failed to serialize upgrade plan snapshot");
+        }
+    }
+}
+
+/// Read the persisted plan snapshot. Returns `None` when absent, unparseable, or
+/// written by an incompatible schema version (fail closed — a reader must never
+/// act on a snapshot it cannot fully trust).
+///
+/// Test-exercised; the in-process production reader is the operator-gated
+/// Phase-2a MCP/CLI handoff (the MCP also reads the `kv_store` key directly).
+#[allow(dead_code)] // REMOVE BY 2026-10-01 — wired by the Phase-2a plan reader
+pub fn read_upgrade_plan_snapshot(db: &Database) -> Option<super::types::UpgradePlanSnapshot> {
+    let json = db.get_kv(PLAN_KV_KEY).ok().flatten()?;
+    let snapshot: super::types::UpgradePlanSnapshot = serde_json::from_str(&json).ok()?;
+    if snapshot.schema_version != PLAN_SCHEMA_VERSION {
+        tracing::debug!(
+            target: "4da::upgrade_plan",
+            found = snapshot.schema_version,
+            expected = PLAN_SCHEMA_VERSION,
+            "upgrade plan snapshot schema mismatch — treated as absent"
+        );
+        return None;
+    }
+    Some(snapshot)
+}
+
 /// Build the ranked dependency Upgrade Plan as validated [`EvidenceItem`]s,
 /// most-actionable first. Returns an empty vec on cold-start (no matches) or if
 /// the matcher errors — never breaks on a data quirk.

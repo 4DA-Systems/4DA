@@ -458,3 +458,31 @@ impl EvidenceFeed {
         feed
     }
 }
+
+// ============================================================================
+// UpgradePlanSnapshot — the persisted (DB) form of the ranked Upgrade Plan
+// ============================================================================
+
+/// A point-in-time snapshot of the ranked Upgrade Plan, persisted to `kv_store`
+/// so it survives restart and is readable by out-of-process consumers (the MCP
+/// server opens the same SQLite file; a future `fourda-engine plan --json`).
+///
+/// Deliberately NOT a `#[ts(export)]` frontend type: the app reads the plan live
+/// from the Preemption feed. This is the DB-as-interface artifact (blueprint
+/// D-1). The envelope carries its own metadata so a reader can judge staleness
+/// and schema compatibility WITHOUT a dedicated table — `schema_version` lets a
+/// reader reject a snapshot written by an incompatible build (fail closed).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UpgradePlanSnapshot {
+    /// Bumped when the persisted shape changes incompatibly. A reader that sees
+    /// a version it does not understand treats the snapshot as absent.
+    pub schema_version: u32,
+    /// ISO-8601 UTC of the compute that produced this plan (staleness signal).
+    pub generated_at: String,
+    /// App/build that generated it (`CARGO_PKG_VERSION`) — provenance.
+    pub generator_version: String,
+    /// Convenience count; equals `items.len()` (0 = evaluated, nothing to do).
+    pub item_count: usize,
+    /// The ranked plan steps, exactly as the lens renders them.
+    pub items: Vec<EvidenceItem>,
+}
