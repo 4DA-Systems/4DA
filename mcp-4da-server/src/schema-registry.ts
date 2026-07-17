@@ -20,6 +20,18 @@ export type ToolCategory =
   | "agent"
   | "identity";
 
+/**
+ * MCP tool annotations (spec 2025-03-26+). Directory reviews (Anthropic
+ * Connectors, client marketplaces) expect these on every tool; a missing
+ * readOnlyHint/destructiveHint is a documented rejection cause.
+ */
+export interface ToolAnnotations {
+  readOnlyHint: boolean;
+  openWorldHint: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+}
+
 /** Shape of each entry in the tool registry */
 export interface ToolRegistryEntry {
   summary: string;
@@ -27,6 +39,7 @@ export interface ToolRegistryEntry {
   category: ToolCategory;
   tags: string[];
   standalone: boolean;
+  annotations: ToolAnnotations;
 }
 
 /**
@@ -43,6 +56,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "security",
     tags: ["security", "vulnerabilities", "cve", "dependencies", "osv"],
     standalone: true,
+    annotations: { readOnlyHint: true, openWorldHint: true },
   },
   dependency_health: {
     summary: "Dependency version freshness, deprecation, and CVE counts across npm/Rust/Python/Go. Call when the user asks whether their dependencies are outdated, stale, or need updating.",
@@ -50,6 +64,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "security",
     tags: ["dependencies", "health", "outdated", "deprecated", "versions"],
     standalone: true,
+    annotations: { readOnlyHint: true, openWorldHint: true },
   },
   upgrade_planner: {
     summary: "Prioritized upgrade plan (CVE severity, deprecation, version distance), quick wins vs breaking changes. Call when the user asks what to upgrade, or after dependency_health surfaces problems.",
@@ -57,6 +72,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "security",
     tags: ["upgrade", "dependencies", "recommendations", "versions"],
     standalone: true,
+    annotations: { readOnlyHint: true, openWorldHint: true },
   },
 
   // --- Intelligence (mixed) ---
@@ -66,6 +82,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "intelligence",
     tags: ["briefing", "advisories", "pre-task", "signals"],
     standalone: true,
+    annotations: { readOnlyHint: true, openWorldHint: true },
   },
   ecosystem_pulse: {
     summary: "Live Hacker News discussions filtered to the user's tech stack. Call when the user asks what is new or trending in their ecosystem.",
@@ -73,6 +90,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "intelligence",
     tags: ["ecosystem", "news", "hacker-news", "live"],
     standalone: true,
+    annotations: { readOnlyHint: true, openWorldHint: true },
   },
   get_context: {
     summary: "What 4DA knows about the user: role, tech stack, interests, and learned affinities. Call FIRST when you need to know what the user works on before answering or recommending.",
@@ -80,6 +98,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "intelligence",
     tags: ["context", "interests", "tech-stack", "profile"],
     standalone: true,
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
   get_relevant_content: {
     summary: "The user's personalized feed: articles, advisories, releases scored by relevance to their stack. Call when the user asks what to read, what is relevant to them, or for content on a topic.",
@@ -87,6 +106,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "intelligence",
     tags: ["content", "feed", "relevance", "filter"],
     standalone: false,
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
   get_actionable_signals: {
     summary: "Classify content into prioritized signals (security_alert, breaking_change, tool_discovery, tech_trend, learning, competitive_intel). Call when the user wants what is urgent or actionable, not just relevant.",
@@ -94,6 +114,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "intelligence",
     tags: ["signals", "priority", "actionable", "classification"],
     standalone: false,
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
   knowledge_gaps: {
     summary: "Dependencies the user relies on but never reads about, where a CVE or breaking change could surprise them. Call when the user asks what they are missing or where their blind spots are.",
@@ -101,6 +122,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "intelligence",
     tags: ["gaps", "dependencies", "knowledge", "blind-spots"],
     standalone: false,
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
   record_feedback: {
     summary: "Record click/save/dismiss on a content item to sharpen future scoring. Call AFTER the user reacts to a surfaced item (opens, saves, or dismisses it).",
@@ -108,6 +130,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "intelligence",
     tags: ["feedback", "learning", "save", "dismiss"],
     standalone: false,
+    annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false, idempotentHint: false },
   },
 
   // --- Decisions (standalone) ---
@@ -117,6 +140,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "decisions",
     tags: ["decisions", "memory", "record", "architecture"],
     standalone: true,
+    annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false, idempotentHint: false },
   },
   check_decision_alignment: {
     summary: "Check whether a technology or pattern aligns with the developer's recorded decisions. Call BEFORE suggesting a major tech change, new library, or architecture shift.",
@@ -124,6 +148,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "decisions",
     tags: ["alignment", "decisions", "enforcement", "check"],
     standalone: true,
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
 
   // --- Agent (standalone) ---
@@ -133,6 +158,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "agent",
     tags: ["agent", "memory", "persistent", "cross-session"],
     standalone: true,
+    annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false, idempotentHint: false },
   },
 
   // --- Identity (full-mode) ---
@@ -142,6 +168,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "identity",
     tags: ["identity", "dna", "profile", "tech-stack", "export"],
     standalone: false,
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
 };
 
@@ -153,6 +180,7 @@ export function getSlimToolList(standaloneOnly?: boolean): Array<{
   name: string;
   description: string;
   inputSchema: { type: "object" };
+  annotations: ToolAnnotations;
 }> {
   return Object.entries(TOOL_REGISTRY)
     .filter(([, info]) => standaloneOnly == null || info.standalone === standaloneOnly)
@@ -160,6 +188,7 @@ export function getSlimToolList(standaloneOnly?: boolean): Array<{
       name,
       description: info.summary,
       inputSchema: { type: "object" as const },
+      annotations: info.annotations,
     }));
 }
 

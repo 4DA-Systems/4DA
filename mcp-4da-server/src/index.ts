@@ -56,6 +56,18 @@ import { dispatchTool } from "./tool-dispatch.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Single source of truth for the server version — read from package.json so
+// serverInfo and --version can never drift from the published version again
+// (drift shipped in 4.6.1: serverInfo reported 4.6.0).
+const SERVER_VERSION: string = (() => {
+  try {
+    const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf8")) as { version?: string };
+    return pkg.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
+
 import { createDatabase, FourDADatabase, type DatabaseValidationResult } from "./db.js";
 
 // =============================================================================
@@ -65,7 +77,7 @@ import { createDatabase, FourDADatabase, type DatabaseValidationResult } from ".
 const server = new Server(
   {
     name: "4da-server",
-    version: "4.6.3",
+    version: SERVER_VERSION,
   },
   {
     capabilities: {
@@ -339,7 +351,7 @@ async function main() {
 
   // Version
   if (args.includes("--version") || args.includes("-v")) {
-    console.log("@4da/mcp-server 4.6.3");
+    console.log(`@4da/mcp-server ${SERVER_VERSION}`);
     return;
   }
 
