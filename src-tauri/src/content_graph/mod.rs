@@ -151,7 +151,6 @@ pub fn build_graph(
                 primary_topic: None,
                 cluster_id,
                 member_count: s.member_count,
-                member_titles: s.member_titles.clone(),
                 member_ids: s.member_ids.clone(),
                 category: category::category_for(
                     &s.item.source_type,

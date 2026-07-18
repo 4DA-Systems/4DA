@@ -32,9 +32,8 @@ pub struct GraphNode {
     /// Total items this node represents (1 = a plain item; >1 = a story that
     /// collapsed near-duplicate items behind one representative).
     pub member_count: usize,
-    /// Titles of the collapsed siblings (representative excluded), capped.
-    pub member_titles: Vec<String>,
-    /// Item ids of all members including the representative.
+    /// Item ids of all members including the representative — the detail
+    /// panel hydrates member rows from these via `get_graph_node_details`.
     pub member_ids: Vec<i64>,
     /// Content category: "security" | "release" | "discussion" | "research".
     /// The primary color channel — source identity moved to the tooltip.
@@ -118,7 +117,6 @@ pub(super) struct StoryItem {
     /// `relevance_score` the member max.
     pub item: RawItem,
     pub member_ids: Vec<i64>,
-    pub member_titles: Vec<String>,
     pub member_count: usize,
     /// Any member carries a dep_linker match to the user's declared stack.
     pub affects_you: bool,

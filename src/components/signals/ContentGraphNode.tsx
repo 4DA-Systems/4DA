@@ -18,8 +18,6 @@ interface ContentNodeData {
   cluster_id: string | null;
   /** Items this node represents; >1 = a story of collapsed near-duplicates. */
   member_count: number;
-  /** Collapsed sibling titles (capped by the backend). */
-  member_titles: string[];
   /** Item ids of ALL members including the representative — detail panel hydration. */
   member_ids: number[];
   /** Content category — the primary color + shape channel. */
@@ -264,39 +262,23 @@ const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: Node
               {data.primary_topic}
             </div>
           )}
+          {/* Hover is for scanning; depth lives in the click-through detail
+              panel, which lists every member openable. The old per-title dump
+              here duplicated the panel and made 25-member advisory storms
+              throw a giant hover box over the canvas. */}
           {extraCount > 0 && (
             <div
               style={{
                 marginTop: 6,
                 paddingTop: 6,
                 borderTop: '1px solid var(--color-border)',
+                color: 'var(--color-text-secondary)',
+                fontSize: 10,
+                fontWeight: 600,
+                fontFamily: 'Inter, sans-serif',
               }}
             >
-              <div style={{ color: 'var(--color-text-secondary)', fontSize: 10, fontWeight: 600, marginBottom: 2, fontFamily: 'Inter, sans-serif' }}>
-                {t('signals.graphStoryMembers', { count: extraCount })}
-              </div>
-              {(data.member_titles ?? []).map((title) => (
-                <div
-                  key={title}
-                  style={{
-                    color: 'var(--color-text-muted)',
-                    fontSize: 10,
-                    fontFamily: 'Inter, sans-serif',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {title}
-                </div>
-              ))}
-              {extraCount > (data.member_titles?.length ?? 0) && (
-                <div style={{ color: 'var(--color-text-muted)', fontSize: 10, fontFamily: 'Inter, sans-serif' }}>
-                  {t('signals.graphStoryMore', {
-                    count: extraCount - (data.member_titles?.length ?? 0),
-                  })}
-                </div>
-              )}
+              {t('signals.graphStoryMembers', { count: extraCount })}
             </div>
           )}
         </div>

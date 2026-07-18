@@ -34,9 +34,6 @@ const STORY_COSINE: f32 = 0.92;
 const STORY_COSINE_WITH_OVERLAP: f32 = 0.85;
 /// Title-word Jaccard required to corroborate the relaxed cosine floor.
 const STORY_OVERLAP_MIN: f32 = 0.50;
-/// Cap on sibling titles carried by a story node (mirrors the feed's
-/// advisory-stack cap).
-const STORY_TITLE_CAP: usize = 8;
 /// The feed's advisory-stacking gate; stories reuse it where persisted.
 const SECURITY_SIGNAL: &str = "security_alert";
 /// Sources that ONLY emit security advisories. `signal_type` is persisted
@@ -218,7 +215,6 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
         return StoryItem {
             item: clone_raw(rep),
             member_ids: vec![rep.id],
-            member_titles: Vec::new(),
             member_count: 1,
             affects_you: rep.matched_package.is_some(),
         };
@@ -258,12 +254,6 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
         .min_by_key(|p| priority_rank(Some(p)));
 
     let member_ids: Vec<i64> = member_idxs.iter().map(|&idx| items[idx].id).collect();
-    let member_titles: Vec<String> = member_idxs
-        .iter()
-        .filter(|&&idx| idx != rep_idx)
-        .take(STORY_TITLE_CAP)
-        .map(|&idx| items[idx].title.clone())
-        .collect();
 
     let affects_you = member_idxs
         .iter()
@@ -283,7 +273,6 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
             embedding: centroid,
         },
         member_ids,
-        member_titles,
         member_count: member_idxs.len(),
         affects_you,
     }
@@ -337,7 +326,6 @@ mod tests {
         assert_eq!(stories.len(), 1, "same-package advisories form one story");
         assert_eq!(stories[0].member_count, 2);
         assert_eq!(stories[0].member_ids, vec![1, 2]);
-        assert_eq!(stories[0].member_titles.len(), 1);
     }
 
     #[test]
