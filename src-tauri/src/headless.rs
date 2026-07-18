@@ -357,6 +357,23 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
         }
     }
 
+    // Step 3b — refresh the persisted Upgrade Plan snapshot so out-of-process
+    // readers (the `4da plan` CLI, the Phase-2a MCP handoff) see a CURRENT plan
+    // even when the GUI never runs. Without this the snapshot is written ONLY by
+    // the GUI's Signal-tier preemption compute (warm_preemption_cache /
+    // get_preemption_alerts), so a headless-only or GUI-closed deployment leaves
+    // the DB-as-interface starved — the engine freshens the plan's exact inputs
+    // (deps in step 0b, OSV matches in step 3) yet never computed the plan from
+    // them. `build_upgrade_plan` is deterministic + DB-only (no LLM, no network),
+    // so this is cheap; `persist_upgrade_plan` always writes (even an empty plan =
+    // "evaluated, nothing to do"). Best-effort: it logs its own failures.
+    if let Ok(db) = crate::get_database() {
+        let plan = crate::evidence::build_upgrade_plan(&db);
+        let steps = plan.len();
+        crate::evidence::persist_upgrade_plan(&db, &plan);
+        info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed");
+    }
+
     receipt.duration_ms = started.elapsed().as_millis() as u64;
     let exit_code = i32::from(!receipt.ok);
     crate::engine_runs::record(receipt);
