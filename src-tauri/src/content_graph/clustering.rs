@@ -512,6 +512,9 @@ pub(super) fn extract_title_keywords(title: &str) -> Vec<String> {
         // AHEAD · ahead-of-time", "ANNOUNCING · llvm · rust". Tech names
         // ("next", "go", "rust") stay labelable.
         "now",
+        "one",
+        "two",
+        "three",
         "come",
         "comes",
         "coming",

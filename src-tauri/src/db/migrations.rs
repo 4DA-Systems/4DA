@@ -613,7 +613,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 96;
+        const TARGET_VERSION: i64 = 97;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3511,6 +3511,39 @@ impl Database {
                 )?;
             }
 
+            // Phase 97: content-graph layout anchors — persisted cluster
+            // positions so the map stays spatially recognizable day-over-day.
+            // Deterministic-per-build layouts still recomputed globally on
+            // every corpus change, so one new item could rearrange the whole
+            // map (audit P2.11). Clusters that overlap a stored anchor's
+            // member set seed at the anchor position instead of a spiral slot.
+            if current_version < 97 {
+                Self::run_versioned_migration(
+                    &conn,
+                    96,
+                    97,
+                    "Phase 97: graph_layout_anchors (temporal layout stability)",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS graph_layout_anchors (
+                                 window_days INTEGER NOT NULL,
+                                 cluster_key TEXT NOT NULL,
+                                 x REAL NOT NULL,
+                                 y REAL NOT NULL,
+                                 member_ids TEXT NOT NULL,
+                                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                 PRIMARY KEY (window_days, cluster_key)
+                             );",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 97: graph_layout_anchors table created"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -4274,6 +4307,8 @@ mod tests {
             "brief_rejections",
             // Phase 96: snooze becomes filterable (schema-owned table)
             "snoozed_items",
+            // Phase 97: temporal layout stability for the content graph
+            "graph_layout_anchors",
         ];
         for table in &expected {
             assert!(

@@ -434,17 +434,22 @@ export default function ContentGraphView() {
                   total: meta.window_candidates,
                 })}</span>
               )}
-              {/* Corpus parity ramp (Phase 95): how many nodes carry a real
-                  feed-curation verdict vs recent not-yet-judged items. */}
-              {meta.curated_items > 0 && meta.curated_items < meta.total_items && (
+              {/* Corpus parity ramp (Phase 95): curated vs unjudged in ITEM
+                  units (P2.14 — story collapse can't inflate the ramp). */}
+              {meta.curated_items > 0 && meta.curated_items < meta.total_items + meta.collapsed_items && (
                 <span>{t('signals.graphCuratedNote', '{{curated}} curated · {{recent}} recent unjudged', {
                   curated: meta.curated_items,
-                  recent: meta.total_items - meta.curated_items,
+                  recent: meta.total_items + meta.collapsed_items - meta.curated_items,
                 })}</span>
               )}
             </>
           )}
         </div>
+        {/* The 7/14/30d toggle renders only when the windows would actually
+            differ (curated verdicts older than 7d exist) — a control that
+            does nothing is a cold-start-doctrine violation. Kept visible if
+            the user already switched off the default so they can get back. */}
+        {(meta?.windows_differ || days !== 7) && (
         <div className="flex items-center gap-1">
           {TIME_WINDOWS.map((w) => (
             <button
@@ -462,6 +467,7 @@ export default function ContentGraphView() {
             </button>
           ))}
         </div>
+        )}
       </div>
     </div>
   );

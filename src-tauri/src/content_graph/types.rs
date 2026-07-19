@@ -104,10 +104,15 @@ pub struct GraphMeta {
     /// quality gauge, comparable across corpora and windows. `None` when no
     /// cluster has 2+ members.
     pub mean_cluster_coherence: Option<f32>,
-    /// Nodes whose story carries a persisted feed-curation verdict
-    /// (corpus parity, Phase 95). The remainder are young not-yet-judged
-    /// items; this count makes the curation ramp measurable, not hidden.
+    /// Member ITEMS on the map carrying a persisted feed-curation verdict
+    /// (corpus parity, Phase 95). Counted per item, not per story — a story
+    /// with one curated member and five unjudged ones contributes 1, so the
+    /// curation ramp cannot be inflated by near-duplicate collapse (P2.14).
     pub curated_items: usize,
+    /// True when curated verdicts older than 7 days exist — i.e. the
+    /// 7/14/30d window toggle would produce different graphs. While false
+    /// the toggle is inert and the UI hides it (cold-start doctrine).
+    pub windows_differ: bool,
 }
 
 /// Internal raw item loaded from the database (not exported).
@@ -127,6 +132,10 @@ pub(super) struct RawItem {
     /// the feed corpus (`feed_relevant = 1`, Phase 95). False = not yet
     /// judged (young interim items) — judged-and-rejected items never load.
     pub curated: bool,
+    /// Holds one of the stratified category quota slots (P2.12: top security
+    /// / research items of the window) — exempt from relevance-first caps so
+    /// starved categories stay represented on the map.
+    pub reserved: bool,
     pub embedding: Vec<f32>,
 }
 
@@ -140,4 +149,7 @@ pub(super) struct StoryItem {
     pub member_count: usize,
     /// Any member carries a dep_linker match to the user's declared stack.
     pub affects_you: bool,
+    /// Members with a persisted curation verdict — the item-level count the
+    /// ramp metric sums (P2.14: story-level "any member curated" inflated it).
+    pub curated_count: usize,
 }

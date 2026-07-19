@@ -122,10 +122,15 @@ export default function GraphDetailPanel({ nodeId, data, onClose }: GraphDetailP
 
   const handleSnooze = useCallback(() => {
     void recordInteraction(nodeId, 'snooze', toFeedbackItem(data.title, data.source_type, data.relevance_score));
-    cmd('snooze_item', { sourceItemId: nodeId, days: 7 }).catch(() => {});
-    // Optimistic store update — the Signal list hides it immediately; the
+    // Snooze EVERY member (P2.13): deferring only the representative would
+    // resurrect the story on the next build under a different member. One
+    // learning event fires (backend records the representative only).
+    const ids = data.member_ids?.length ? data.member_ids : [nodeId];
+    cmd('snooze_items', { sourceItemIds: ids, days: 7 }).catch(() => {});
+    // Optimistic store update — the Signal list hides them immediately; the
     // graph applies the snooze on its next build (backend-side filter).
-    useAppStore.getState().markSnoozed(nodeId);
+    const { markSnoozed } = useAppStore.getState();
+    for (const id of ids) markSnoozed(id);
     recordTrustEvent({
       eventType: 'dismissed',
       signalId: String(nodeId),
@@ -133,7 +138,7 @@ export default function GraphDetailPanel({ nodeId, data, onClose }: GraphDetailP
       topic: data.title,
       notes: 'snoozed_7d',
     });
-  }, [nodeId, data.title, data.source_type, data.relevance_score, recordInteraction]);
+  }, [nodeId, data.title, data.source_type, data.relevance_score, data.member_ids, recordInteraction]);
 
   const handleNotRelevant = useCallback(() => {
     void recordInteraction(nodeId, 'mark_irrelevant', toFeedbackItem(data.title, data.source_type, data.relevance_score));

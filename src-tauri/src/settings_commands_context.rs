@@ -341,6 +341,39 @@ pub async fn snooze_item(source_item_id: i64, days: u32) -> Result<serde_json::V
     }))
 }
 
+/// Snooze every member of a story in one call (P2.13). Snoozing only the
+/// representative resurrects the story on the next graph build under a new
+/// representative — the deferral must cover the whole member set. Records ONE
+/// learning interaction (the representative), not one per member: a single
+/// user gesture is a single signal.
+#[tauri::command]
+pub async fn snooze_items(source_item_ids: Vec<i64>, days: u32) -> Result<serde_json::Value> {
+    const MAX_BULK: usize = 64; // matches the detail panel's hydration cap
+    let days = days.clamp(1, 30);
+    let ids: Vec<i64> = source_item_ids.into_iter().take(MAX_BULK).collect();
+    if ids.is_empty() {
+        return Ok(serde_json::json!({ "success": true, "snoozed": 0 }));
+    }
+    let conn = crate::state::open_db_connection()?;
+    {
+        let mut stmt = conn
+            .prepare(
+                "INSERT OR REPLACE INTO snoozed_items (source_item_id, snooze_until)
+                 VALUES (?1, datetime('now', ?2))",
+            )
+            .map_err(|e| format!("Failed to prepare snooze: {e}"))?;
+        for id in &ids {
+            stmt.execute(rusqlite::params![id, format!("+{days} days")])
+                .map_err(|e| format!("Failed to snooze item {id}: {e}"))?;
+        }
+    }
+    if let Ok(engine) = get_context_engine() {
+        let _ = engine.record_interaction(ids[0], InteractionType::Ignore, None, None);
+    }
+    debug!(target: "4da::context", count = ids.len(), days = days, "Snoozed story members");
+    Ok(serde_json::json!({ "success": true, "snoozed": ids.len() }))
+}
+
 /// Item ids currently under an active snooze. Surfaces (Signal list, content
 /// graph) hide these until `snooze_until` passes; expiry is implicit — the
 /// filter compares against now, so items resurface with no un-snooze step.

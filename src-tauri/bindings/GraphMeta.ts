@@ -28,8 +28,15 @@ window_candidates: number, time_window_days: number, edge_threshold: string,
  */
 mean_cluster_coherence: number | null, 
 /**
- * Nodes whose story carries a persisted feed-curation verdict
- * (corpus parity, Phase 95). The remainder are young not-yet-judged
- * items; this count makes the curation ramp measurable, not hidden.
+ * Member ITEMS on the map carrying a persisted feed-curation verdict
+ * (corpus parity, Phase 95). Counted per item, not per story — a story
+ * with one curated member and five unjudged ones contributes 1, so the
+ * curation ramp cannot be inflated by near-duplicate collapse (P2.14).
  */
-curated_items: number, };
+curated_items: number, 
+/**
+ * True when curated verdicts older than 7 days exist — i.e. the
+ * 7/14/30d window toggle would produce different graphs. While false
+ * the toggle is inert and the UI hides it (cold-start doctrine).
+ */
+windows_differ: boolean, };

@@ -112,13 +112,17 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           {summaryBadges && isComplete && (
             <span
               className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] bg-bg-tertiary/60 text-text-secondary rounded font-mono border border-border"
-              title={t('header.summaryTooltip', '{{top}} to review · {{rel}} in corpus', {
+              title={t('header.summaryTooltipRelevant', '{{top}} to review · {{rel}} relevant this run', {
                 top: summaryBadges.topCount,
                 rel: summaryBadges.relevantCount,
               })}
             >
-              {/* Lead with the actionable, prioritized set ("to review"); the larger
-                  relevant set is the searchable corpus, not a backlog the user must clear. */}
+              {/* Lead with the actionable, prioritized set ("to review"). The
+                  second number is THIS RUN's score-relevant count — labeled
+                  "relevant", not "in corpus": the persisted curated corpus
+                  (feed_relevant, shown by the graph) is a different, smaller
+                  set, and one word carrying two numbers read as a
+                  contradiction (live 2026-07-20: header 430 vs graph 41). */}
               {summaryBadges.topCount > 0 && (
                 <>
                   <span className="text-orange-400">{summaryBadges.topCount}</span>
@@ -127,7 +131,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
                 </>
               )}
               <span className="text-green-400">{summaryBadges.relevantCount}</span>
-              <span className="text-text-muted">{t('header.inCorpus', 'in corpus')}</span>
+              <span className="text-text-muted">{t('header.relevantBadge', 'relevant')}</span>
             </span>
           )}
 
