@@ -20,6 +20,7 @@ import type {
   ScoreBreakdown,
 } from '../types/analysis';
 import type { CalibrationResult, CurveFitReport, CurveStatus, TasteTestStepResult, TasteProfileSummary } from '../types/calibration';
+import type { ContentGraph } from '../types/graph';
 import type {
   Settings,
   MonitoringStatus,
@@ -311,6 +312,7 @@ interface CommandMap {
   trigger_morning_briefing: { params: Record<string, never>; result: string };
   record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
   snooze_item: { params: { sourceItemId: number; days: number }; result: { success: boolean; snooze_days: number } };
+  get_snoozed_item_ids: { params: Record<string, never>; result: number[] };
   watch_item: { params: { sourceItemId: number; topic: string; title: string }; result: { success: boolean; topic: string } };
   unwatch_item: { params: { sourceItemId: number }; result: { success: boolean } };
   get_watched_items: { params: Record<string, never>; result: { watched_items: Array<{ source_item_id: number; topic: string; title: string; created_at: string }> } };
@@ -853,12 +855,8 @@ export interface GraphNodeDetail {
   summary: string | null;
 }
 
-interface ContentGraph {
-  nodes: Array<{ id: number; title: string; url: string | null; source_type: string; relevance_score: number; signal_type: string | null; signal_priority: string | null; created_at: string; primary_topic: string | null; cluster_id: string | null; member_count: number; member_ids: number[]; category: string; affects_you: boolean; x: number; y: number }>;
-  edges: Array<{ source: number; target: number; edge_type: 'semantic' | 'chain' | 'concept' | 'convergence' | 'duplicate'; weight: number; label: string | null; methods: string[] }>;
-  clusters: Array<{ id: string; label: string; node_ids: number[]; source_count: number; coherence: number; centroid_x: number; centroid_y: number }>;
-  meta: { total_items: number; total_edges: number; cluster_count: number; story_count: number; collapsed_items: number; hidden_items: number; time_window_days: number; edge_threshold: string; mean_cluster_coherence: number | null; curated_items: number };
-}
+// ContentGraph is imported from ../types/graph — a third inline copy of the
+// shape drifted (it still carried EdgeType variants the backend deleted).
 
 // ============================================================================
 // Types referenced above but not yet in shared type files

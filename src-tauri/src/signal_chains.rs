@@ -280,7 +280,7 @@ fn detect_chains_from_items(
 /// below the grounded band — it can still surface as low-urgency awareness when
 /// well-corroborated, but never out-ranks (or masquerades as) a chain that actually
 /// touches the user's stack.
-const UNGROUNDED_CONFIDENCE_CAP: f64 = 0.35;
+pub(crate) const UNGROUNDED_CONFIDENCE_CAP: f64 = 0.35;
 
 /// Pure urgency/confidence policy for a detected chain, separated from DB access so the
 /// grounding rules are unit-testable without a live database.

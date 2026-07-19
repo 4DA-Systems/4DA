@@ -169,6 +169,12 @@ export interface FeedbackSlice {
   feedbackGiven: FeedbackGiven;
   learnedAffinities: TopicAffinity[];
   antiTopics: AntiTopic[];
+  /** Item ids under an active snooze — filtered out of the Signal list (the
+   *  graph filters backend-side). Loaded once per session, updated
+   *  optimistically on snooze. */
+  snoozedItemIds: Set<number>;
+  loadSnoozedIds: () => Promise<void>;
+  markSnoozed: (itemId: number) => void;
   lastLearnedTopic: {
     topic: string;
     direction: 'positive' | 'negative';

@@ -12,12 +12,13 @@ interface ContentEdgeData {
 
 export type ContentEdge = Edge<ContentEdgeData, 'contentEdge'>;
 
+// The three edge types the backend emits (EdgeType::Concept/Duplicate exist
+// in the enum but no pipeline stage produces them — no styles for ghosts).
+// Mirrored by EDGE_LEGEND in ContentGraphChrome.
 const EDGE_STYLES: Record<string, { color: string; dasharray: string; width: number }> = {
   semantic: { color: '#6366F1', dasharray: 'none', width: 1.5 },
   chain: { color: '#F59E0B', dasharray: '6 3', width: 1.5 },
-  concept: { color: '#8B5CF6', dasharray: '2 3', width: 1.5 },
   convergence: { color: '#22C55E', dasharray: 'none', width: 2.5 },
-  duplicate: { color: '#EF4444', dasharray: '2 3', width: 1 },
 };
 
 const ContentGraphEdge = memo(function ContentGraphEdge({

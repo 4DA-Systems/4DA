@@ -10,9 +10,17 @@ story_count: number,
  */
 collapsed_items: number, 
 /**
- * Low-signal isolated items dropped beyond the orbit-ring cap.
+ * Items selected for the window but not on the map: non-curated isolated
+ * singletons beyond the shelf cap, plus items behind stories truncated by
+ * the node budget. Curated items are never hidden (corpus parity).
  */
-hidden_items: number, time_window_days: number, edge_threshold: string, 
+hidden_items: number, 
+/**
+ * Total items matching the corpus selection in this window, independent
+ * of the node budget — lets the UI state real coverage ("top N of M")
+ * instead of implying the map is exhaustive.
+ */
+window_candidates: number, time_window_days: number, edge_threshold: string, 
 /**
  * Pair-count-weighted mean of per-cluster coherence — the graph's own
  * quality gauge, comparable across corpora and windows. `None` when no

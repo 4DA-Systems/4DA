@@ -613,7 +613,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 95;
+        const TARGET_VERSION: i64 = 96;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3479,6 +3479,38 @@ impl Database {
                 )?;
             }
 
+            // Phase 96: snoozed_items becomes schema-owned. The snooze_item
+            // command previously created this table lazily on first use, so
+            // every read path had to tolerate its absence — and none did: the
+            // table was write-only (live audit 2026-07-19: `snooze_until`
+            // appeared in exactly two places, the CREATE and the INSERT).
+            // Owning it in migrations lets the graph and feed filter on it
+            // unconditionally, which is what makes Snooze real.
+            if current_version < 96 {
+                Self::run_versioned_migration(
+                    &conn,
+                    95,
+                    96,
+                    "Phase 96: snoozed_items owned by schema (snooze becomes filterable)",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS snoozed_items (
+                                 source_item_id INTEGER PRIMARY KEY,
+                                 snooze_until TEXT NOT NULL,
+                                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                             );
+                             CREATE INDEX IF NOT EXISTS idx_snoozed_until
+                                 ON snoozed_items(snooze_until);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 96: snoozed_items table owned by schema"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -4240,6 +4272,8 @@ mod tests {
             "feed_health",
             // Phase 86: Brief rejection verdicts
             "brief_rejections",
+            // Phase 96: snooze becomes filterable (schema-owned table)
+            "snoozed_items",
         ];
         for table in &expected {
             assert!(

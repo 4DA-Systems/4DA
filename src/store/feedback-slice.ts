@@ -18,9 +18,27 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
   feedbackGiven: {},
   learnedAffinities: [],
   antiTopics: [],
+  snoozedItemIds: new Set<number>(),
   lastLearnedTopic: null,
 
   setLastLearnedTopic: (topic) => set({ lastLearnedTopic: topic }),
+
+  loadSnoozedIds: async () => {
+    try {
+      const ids = await cmd('get_snoozed_item_ids');
+      set({ snoozedItemIds: new Set(ids) });
+    } catch {
+      /* snoozed ids not available — items simply stay visible */
+    }
+  },
+
+  markSnoozed: (itemId) => {
+    set(state => {
+      const next = new Set(state.snoozedItemIds);
+      next.add(itemId);
+      return { snoozedItemIds: next };
+    });
+  },
 
   setFeedbackGivenFull: (updater) => {
     set(state => ({

@@ -882,6 +882,7 @@ pub fn run() {
             settings_commands::remove_exclusion,
             settings_commands::record_interaction,
             settings_commands::snooze_item,
+            settings_commands::get_snoozed_item_ids,
             settings_commands::watch_item,
             settings_commands::unwatch_item,
             settings_commands::get_watched_items,

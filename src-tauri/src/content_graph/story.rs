@@ -206,8 +206,10 @@ pub(super) fn collapse_stories(items: Vec<RawItem>) -> Vec<StoryItem> {
 }
 
 fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryItem {
-    // Representative: highest relevance, ties to the earliest-loaded (input is
-    // already relevance-sorted, so the first index wins both).
+    // Representative: first index in load order. The loader orders curated
+    // items first, then by relevance — so a story containing any curated
+    // member fronts a curated representative (the item the feed stands
+    // behind), and pure-unjudged stories front their highest-relevance member.
     let rep_idx = member_idxs[0];
     let rep = &items[rep_idx];
 

@@ -62,9 +62,7 @@ pub struct GraphEdge {
 pub enum EdgeType {
     Semantic,
     Chain,
-    Concept,
     Convergence,
-    Duplicate,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -92,8 +90,14 @@ pub struct GraphMeta {
     pub story_count: usize,
     /// Items folded behind story representatives (not separately visible).
     pub collapsed_items: usize,
-    /// Low-signal isolated items dropped beyond the orbit-ring cap.
+    /// Items selected for the window but not on the map: non-curated isolated
+    /// singletons beyond the shelf cap, plus items behind stories truncated by
+    /// the node budget. Curated items are never hidden (corpus parity).
     pub hidden_items: usize,
+    /// Total items matching the corpus selection in this window, independent
+    /// of the node budget — lets the UI state real coverage ("top N of M")
+    /// instead of implying the map is exhaustive.
+    pub window_candidates: usize,
     pub time_window_days: u32,
     pub edge_threshold: String,
     /// Pair-count-weighted mean of per-cluster coherence — the graph's own

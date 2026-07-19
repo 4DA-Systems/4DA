@@ -14,6 +14,8 @@ function setMockStoreState(overrides: Record<string, unknown>) {
   mockStoreState = {
     appState: { relevanceResults: [] },
     feedbackGiven: {},
+    snoozedItemIds: new Set<number>(),
+    loadSnoozedIds: vi.fn(async () => {}),
     recordInteraction: vi.fn(),
     setSettingsStatus: vi.fn(),
     sourceFilters: new Set(['hackernews', 'arxiv', 'reddit', 'github']),
@@ -81,6 +83,17 @@ describe('useResultFilters', () => {
       const { result } = renderHook(() => useResultFilters());
       expect(result.current.filteredResults).toHaveLength(2);
       expect(result.current.filteredResults.map((r: { id: number; source_type?: string }) => r.source_type)).toEqual(['hackernews', 'arxiv']);
+    });
+
+    it('hides items under an active snooze (Phase 96)', () => {
+      setMockStoreState({
+        appState: {
+          relevanceResults: [makeItem(1), makeItem(2), makeItem(3)],
+        },
+        snoozedItemIds: new Set([2]),
+      });
+      const { result } = renderHook(() => useResultFilters());
+      expect(result.current.filteredResults.map((r: { id: number }) => r.id)).toEqual([1, 3]);
     });
 
     it('filters by relevance when showOnlyRelevant is true', () => {

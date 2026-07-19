@@ -320,16 +320,8 @@ pub async fn snooze_item(source_item_id: i64, days: u32) -> Result<serde_json::V
     let days = days.clamp(1, 30);
     let conn = crate::state::open_db_connection()?;
 
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS snoozed_items (
-            source_item_id INTEGER PRIMARY KEY,
-            snooze_until TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )",
-        [],
-    )
-    .map_err(|e| format!("Failed to create snoozed_items table: {e}"))?;
-
+    // The table is schema-owned (Phase 96) — read paths (graph loading, feed
+    // filtering) rely on it existing unconditionally.
     conn.execute(
         "INSERT OR REPLACE INTO snoozed_items (source_item_id, snooze_until)
          VALUES (?1, datetime('now', ?2))",
@@ -347,6 +339,23 @@ pub async fn snooze_item(source_item_id: i64, days: u32) -> Result<serde_json::V
         "success": true,
         "snooze_days": days
     }))
+}
+
+/// Item ids currently under an active snooze. Surfaces (Signal list, content
+/// graph) hide these until `snooze_until` passes; expiry is implicit — the
+/// filter compares against now, so items resurface with no un-snooze step.
+#[tauri::command]
+pub async fn get_snoozed_item_ids() -> Result<Vec<i64>> {
+    let conn = crate::state::open_db_connection()?;
+    let mut stmt = conn
+        .prepare("SELECT source_item_id FROM snoozed_items WHERE snooze_until > datetime('now') ORDER BY source_item_id")
+        .map_err(|e| format!("Failed to prepare snoozed lookup: {e}"))?;
+    let ids: Vec<i64> = stmt
+        .query_map([], |row| row.get(0))
+        .map_err(|e| format!("Failed to read snoozed items: {e}"))?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(ids)
 }
 
 /// Watch an item — resurface when new signals arrive for the same topic

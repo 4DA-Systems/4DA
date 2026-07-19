@@ -123,6 +123,9 @@ export default function GraphDetailPanel({ nodeId, data, onClose }: GraphDetailP
   const handleSnooze = useCallback(() => {
     void recordInteraction(nodeId, 'snooze', toFeedbackItem(data.title, data.source_type, data.relevance_score));
     cmd('snooze_item', { sourceItemId: nodeId, days: 7 }).catch(() => {});
+    // Optimistic store update — the Signal list hides it immediately; the
+    // graph applies the snooze on its next build (backend-side filter).
+    useAppStore.getState().markSnoozed(nodeId);
     recordTrustEvent({
       eventType: 'dismissed',
       signalId: String(nodeId),

@@ -74,6 +74,17 @@ pub(super) fn compute_semantic_edges(items: &[RawItem], edges: &mut Vec<GraphEdg
     }
 }
 
+/// Only dependency-grounded chains render as graph edges. Chain topics come
+/// from whole-word vocabulary matches over title+content, so an incidental
+/// mention welds unrelated items ("The Bipartisan War on Marine Mammals" in
+/// an "api" chain, live 2026-07-19). The chain policy already encodes the
+/// trust split: ungrounded chains are capped at `UNGROUNDED_CONFIDENCE_CAP`
+/// (0.35) while chains grounded in an installed dependency start at ~0.43 —
+/// this floor sits strictly between the bands, so it admits exactly the
+/// grounded chains (a `chain_floor_sits_between_confidence_bands` test pins
+/// the ordering against policy drift).
+pub(crate) const CHAIN_MIN_CONFIDENCE: f64 = 0.4;
+
 /// Chain links reference ORIGINAL item ids; with story aggregation each id
 /// maps to its story representative first (`rep_of`), and links that land
 /// inside one story collapse away instead of becoming self-loops.
@@ -82,6 +93,10 @@ pub(super) fn compute_semantic_edges(items: &[RawItem], edges: &mut Vec<GraphEdg
 /// loaded member id), not the global recency window: the graph loads by
 /// relevance while `detect_chains` reads by recency, and the two sets shared
 /// 0 of 150 items live (2026-07-19) — chain edges could never fire.
+///
+/// These edges are rendered context only — they are computed AFTER community
+/// detection and never feed cluster formation (see `build_graph`): live
+/// forensics showed 2 of 30 clusters existed solely on keyword-chain edges.
 pub(super) fn compute_chain_edges(
     conn: &rusqlite::Connection,
     rep_of: &HashMap<i64, i64>,
@@ -98,6 +113,9 @@ pub(super) fn compute_chain_edges(
     };
 
     for chain in &chains {
+        if chain.confidence < CHAIN_MIN_CONFIDENCE {
+            continue;
+        }
         let mut chain_reps: Vec<i64> = Vec::new();
         for link in &chain.links {
             if let Some(&rep) = rep_of.get(&link.source_item_id) {
