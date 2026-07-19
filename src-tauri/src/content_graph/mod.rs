@@ -74,6 +74,7 @@ pub fn build_graph(
                 time_window_days: days,
                 edge_threshold: format!("mutual top-{KNN_K} nearest neighbors"),
                 mean_cluster_coherence: None,
+                curated_items: 0,
             },
         });
     }
@@ -263,6 +264,10 @@ pub fn build_graph(
 
     let story_count = nodes.iter().filter(|n| n.member_count > 1).count();
     let collapsed_items: usize = nodes.iter().map(|n| n.member_count.saturating_sub(1)).sum();
+    let curated_items = stories
+        .iter()
+        .filter(|s| visible_ids.contains(&s.item.id) && s.item.curated)
+        .count();
 
     let meta = GraphMeta {
         total_items: nodes.len(),
@@ -274,6 +279,7 @@ pub fn build_graph(
         time_window_days: days,
         edge_threshold: format!("mutual top-{KNN_K} nearest neighbors"),
         mean_cluster_coherence,
+        curated_items,
     };
 
     info!(
@@ -336,6 +342,7 @@ mod tests {
             signal_priority: None,
             matched_package: None,
             created_at: "2026-05-24".to_string(),
+            curated: false,
             embedding,
         }
     }
@@ -367,6 +374,7 @@ mod tests {
                 time_window_days: 7,
                 edge_threshold: "mutual top-3 nearest neighbors".to_string(),
                 mean_cluster_coherence: None,
+                curated_items: 0,
             },
         };
         assert_eq!(graph.nodes.len(), 0);
@@ -897,5 +905,66 @@ mod tests {
         let b = build_graph(&conn, 7, 150).expect("second build");
         assert_eq!(a.nodes.len(), 24, "fixture loads fully");
         assert_eq!(sig(&a), sig(&b), "two same-corpus builds must be identical");
+    }
+
+    /// Corpus parity (W4-5, Phase 95): the graph shows what the current
+    /// brain stands behind. Curated items load at any age in the window;
+    /// young not-yet-judged items load as an honest interim; judged-and-
+    /// rejected items and OLD never-judged items (stale-epoch scores — the
+    /// live war-news-at-0.94 class) never load.
+    #[test]
+    fn test_graph_corpus_selects_verdicts_first() {
+        use crate::test_utils::test_db;
+
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        let mut insert = |id: i64, title: &str, age: &str, verdict: Option<i64>, score: f64| {
+            // Distinct (orthogonal) embeddings — near-dup story collapse
+            // would otherwise fold the fixture behind one representative.
+            let mut v = vec![0.0f32; 8];
+            v[id as usize] = 1.0;
+            let emb = crate::db::embedding_to_blob(&v);
+            conn.execute(
+                "INSERT INTO source_items (id, source_type, source_id, title, content,
+                    content_hash, embedding, embedding_status, relevance_score,
+                    created_at, feed_relevant)
+                 VALUES (?1, 'hackernews', ?2, ?3, '', ?4, ?5, 'complete', ?6,
+                    datetime('now', ?7), ?8)",
+                rusqlite::params![
+                    id,
+                    format!("hn{id}"),
+                    title,
+                    format!("h{id}"),
+                    emb,
+                    score,
+                    age,
+                    verdict
+                ],
+            )
+            .expect("insert");
+        };
+
+        insert(1, "curated but old", "-5 days", Some(1), 0.6);
+        insert(2, "curated and fresh", "-1 hours", Some(1), 0.7);
+        insert(3, "young, not yet judged", "-1 hours", None, 0.95);
+        insert(4, "old, never judged (stale epoch)", "-5 days", None, 0.94);
+        insert(5, "judged and rejected", "-1 hours", Some(0), 0.93);
+
+        let graph = build_graph(&conn, 7, 150).expect("build");
+        let ids: Vec<i64> = graph.nodes.iter().map(|n| n.id).collect();
+
+        assert!(ids.contains(&1), "old curated item belongs to the corpus");
+        assert!(ids.contains(&2), "fresh curated item belongs to the corpus");
+        assert!(
+            ids.contains(&3),
+            "young unjudged item loads as honest interim"
+        );
+        assert!(
+            !ids.contains(&4),
+            "old never-judged item (stale-epoch score) must not load"
+        );
+        assert!(!ids.contains(&5), "rejected item must not load");
+        assert_eq!(graph.meta.curated_items, 2, "curated count is honest");
     }
 }

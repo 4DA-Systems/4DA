@@ -62,4 +62,6 @@ export interface GraphMeta {
   edge_threshold: string;
   /** Pair-count-weighted mean of per-cluster coherence (null = no clusters). */
   mean_cluster_coherence: number | null;
+  /** Nodes carrying a persisted feed-curation verdict (corpus-parity ramp). */
+  curated_items: number;
 }

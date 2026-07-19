@@ -613,7 +613,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 94;
+        const TARGET_VERSION: i64 = 95;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3434,6 +3434,51 @@ impl Database {
                 )?;
             }
 
+            // Phase 95: persist the per-run feed curation verdict. The
+            // analysis run computes a curated corpus every time (dedup,
+            // diversity, rerank, brief-rejection demotions, threshold) and
+            // then throws the verdict away — only raw scores persist. Any
+            // surface re-deriving "the corpus" from raw scores (the content
+            // graph did) resurrects items today's brain rejects, because old
+            // items are never re-scored and scoring is non-stationary even
+            // within one pipeline version (live 2026-07-19: war-news items
+            // held stale 0.94 scores under v16 while the current run scored
+            // fresh war news 0.07-0.40, relevant=false). NULL = never judged,
+            // 1 = in the curated corpus, 0 = judged and rejected.
+            if current_version < 95 {
+                Self::run_versioned_migration(
+                    &conn,
+                    94,
+                    95,
+                    "Phase 95: feed_relevant curation verdict on source_items",
+                    |c| {
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when the column
+                        // is genuinely absent.
+                        let has_column: bool = c
+                            .prepare("SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name = 'feed_relevant'")?
+                            .query_row([], |r| r.get::<_, i64>(0))
+                            .map(|n| n > 0)?;
+                        if !has_column {
+                            c.execute_batch(
+                                "ALTER TABLE source_items ADD COLUMN feed_relevant INTEGER;
+                                 ALTER TABLE source_items ADD COLUMN feed_verdict_at TEXT;",
+                            )?;
+                        }
+                        c.execute_batch(
+                            "CREATE INDEX IF NOT EXISTS idx_si_feed_relevant
+                                 ON source_items(feed_relevant, created_at)
+                                 WHERE feed_relevant IS NOT NULL;",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 95: feed_relevant verdict columns added"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -4632,6 +4677,48 @@ mod tests {
                 indexes
             );
         }
+    }
+
+    /// Phase 95 adds the persisted feed-curation verdict (corpus parity).
+    #[test]
+    fn test_phase_95_feed_verdict_columns() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        let mut stmt = conn
+            .prepare("SELECT name FROM pragma_table_info('source_items')")
+            .unwrap();
+        let cols: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        for col in ["feed_relevant", "feed_verdict_at"] {
+            assert!(
+                cols.iter().any(|c| c == col),
+                "source_items column '{}' missing; got {:?}",
+                col,
+                cols
+            );
+        }
+
+        let idx_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master
+                 WHERE type='index' AND name='idx_si_feed_relevant'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(idx_exists, "idx_si_feed_relevant missing");
+
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 95,
+            "schema_version should be >= 95; got {version}"
+        );
     }
 
     #[test]

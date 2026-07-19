@@ -259,6 +259,8 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
         .iter()
         .any(|&idx| items[idx].matched_package.is_some());
 
+    let curated = member_idxs.iter().any(|&idx| items[idx].curated);
+
     StoryItem {
         item: RawItem {
             id: rep.id,
@@ -270,6 +272,7 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
             signal_priority,
             matched_package: rep.matched_package.clone(),
             created_at: rep.created_at.clone(),
+            curated,
             embedding: centroid,
         },
         member_ids,
@@ -289,6 +292,7 @@ pub(super) fn clone_raw(item: &RawItem) -> RawItem {
         signal_priority: item.signal_priority.clone(),
         matched_package: item.matched_package.clone(),
         created_at: item.created_at.clone(),
+        curated: item.curated,
         embedding: item.embedding.clone(),
     }
 }
@@ -308,6 +312,7 @@ mod tests {
             signal_priority: None,
             matched_package: None,
             created_at: String::new(),
+            curated: false,
             embedding,
         }
     }

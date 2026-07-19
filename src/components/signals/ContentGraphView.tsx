@@ -330,6 +330,14 @@ export default function ContentGraphView() {
               {meta.hidden_items > 0 && (
                 <span>{t('signals.graphHiddenNote', { items: meta.hidden_items })}</span>
               )}
+              {/* Corpus parity ramp (Phase 95): how many nodes carry a real
+                  feed-curation verdict vs recent not-yet-judged items. */}
+              {meta.curated_items > 0 && meta.curated_items < meta.total_items && (
+                <span>{t('signals.graphCuratedNote', '{{curated}} curated · {{recent}} recent unjudged', {
+                  curated: meta.curated_items,
+                  recent: meta.total_items - meta.curated_items,
+                })}</span>
+              )}
             </>
           )}
         </div>

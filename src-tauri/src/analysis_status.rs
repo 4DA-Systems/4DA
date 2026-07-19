@@ -114,6 +114,16 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                         tracing::warn!(target: "4da::scoring", error = %e, "Failed to stamp scored pipeline version");
                     }
 
+                    // Persist the curation VERDICT for every item judged this
+                    // run (relevant = in the curated corpus). Corpus-parity
+                    // surfaces (content graph) select on this instead of
+                    // re-deriving a corpus from raw cross-epoch scores.
+                    let verdicts: Vec<(i64, bool)> =
+                        results.iter().map(|r| (r.id as i64, r.relevant)).collect();
+                    if let Err(e) = db.persist_feed_verdicts(&verdicts) {
+                        tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist feed verdicts");
+                    }
+
                     // Scoring event log — audit trail for debugging + recalibration
                     let total_scored = results.len();
                     let relevant_items: Vec<&SourceRelevance> =
