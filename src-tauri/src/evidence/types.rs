@@ -479,8 +479,29 @@ pub struct UpgradePlanSnapshot {
     pub schema_version: u32,
     /// ISO-8601 UTC of the compute that produced this plan (staleness signal).
     pub generated_at: String,
+    /// ISO-8601 UTC after which a reader should treat this plan as stale
+    /// (`generated_at` + the OSV-sync freshness horizon). "Plan freshness = last
+    /// successful scan + OSV sync" — this states that horizon so an out-of-process
+    /// reader can decide staleness without knowing 4DA's sync policy.
+    pub expires_at: String,
     /// App/build that generated it (`CARGO_PKG_VERSION`) — provenance.
     pub generator_version: String,
+    /// Tier in effect at generation: `"signal"` or `"free"`. On lapse a reader
+    /// scopes/labels an old full plan by this (the paid boundary is freshness &
+    /// recompute, never secrecy of rows) — never as a fresh paid surface.
+    pub entitlement_scope_at_generation: String,
+    /// Whether the multi-version dependency inventory (`dependency_instances`,
+    /// Phase 92) is populated. Negative/close verdicts (not-affected, fixed-at)
+    /// are trustworthy ONLY when this is true; a reader must return "unknown" for
+    /// those decisions when it is false.
+    pub multi_version_coverage: bool,
+    /// Stable SHA-256 (hex) of the sorted dependency inventory this plan was
+    /// computed from `(project, ecosystem, package, version)`. A reader detects
+    /// "the inventory changed since this plan" by comparing against a fresh hash.
+    pub dependency_inventory_hash: String,
+    /// Plan steps dropped because they failed `validate_item` during the build.
+    /// A non-zero value is the "thin plan" canary — the plan may under-report.
+    pub validation_drop_count: u32,
     /// Convenience count; equals `items.len()` (0 = evaluated, nothing to do).
     pub item_count: usize,
     /// The ranked plan steps, exactly as the lens renders them.

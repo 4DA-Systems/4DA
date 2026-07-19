@@ -1715,12 +1715,12 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
     let mut items = items;
     match crate::get_database() {
         Ok(db) => {
-            let plan = crate::evidence::build_upgrade_plan(db);
+            let (plan, drops) = crate::evidence::build_upgrade_plan_with_drops(db);
             // Persist the plan to kv_store (D-1, DB-as-interface) so the MCP
             // server / CLI can read it out-of-process. Always persist — even an
             // empty plan — so a reader distinguishes "evaluated, nothing to do"
             // from "never computed". Best-effort; never blocks the feed.
-            crate::evidence::persist_upgrade_plan(db, &plan);
+            crate::evidence::persist_upgrade_plan(db, &plan, drops);
             if !plan.is_empty() {
                 info!(
                     target: "4da::preemption",

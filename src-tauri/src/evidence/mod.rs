@@ -28,9 +28,9 @@ mod validate;
 #[cfg(test)]
 mod tests;
 
-// Phase 1 dependency Upgrade Plan brain. `build_upgrade_plan` produces the
-// ranked plan as EvidenceItems, consumed by the Preemption feed (Signal tier).
-pub use upgrade_plan::build_upgrade_plan;
+// Phase 1 dependency Upgrade Plan brain. `_with_drops` returns the ranked plan
+// plus the validation-drop canary the persisted snapshot records.
+pub use upgrade_plan::build_upgrade_plan_with_drops;
 
 // These are published for consumption by Phases 3-5 (where existing
 // Preemption / BlindSpots / KnowledgeDecay / SignalChains producers will

@@ -368,9 +368,9 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // so this is cheap; `persist_upgrade_plan` always writes (even an empty plan =
     // "evaluated, nothing to do"). Best-effort: it logs its own failures.
     if let Ok(db) = crate::get_database() {
-        let plan = crate::evidence::build_upgrade_plan(&db);
+        let (plan, drops) = crate::evidence::build_upgrade_plan_with_drops(&db);
         let steps = plan.len();
-        crate::evidence::persist_upgrade_plan(&db, &plan);
+        crate::evidence::persist_upgrade_plan(&db, &plan, drops);
         info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed");
     }
 
