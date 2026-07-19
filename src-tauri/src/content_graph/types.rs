@@ -100,6 +100,10 @@ pub struct GraphMeta {
     /// quality gauge, comparable across corpora and windows. `None` when no
     /// cluster has 2+ members.
     pub mean_cluster_coherence: Option<f32>,
+    /// Nodes whose story carries a persisted feed-curation verdict
+    /// (corpus parity, Phase 95). The remainder are young not-yet-judged
+    /// items; this count makes the curation ramp measurable, not hidden.
+    pub curated_items: usize,
 }
 
 /// Internal raw item loaded from the database (not exported).
@@ -115,6 +119,10 @@ pub(super) struct RawItem {
     /// used as the exact grouping key for security-advisory stories.
     pub matched_package: Option<String>,
     pub created_at: String,
+    /// The analysis run's persisted curation verdict says this item is in
+    /// the feed corpus (`feed_relevant = 1`, Phase 95). False = not yet
+    /// judged (young interim items) — judged-and-rejected items never load.
+    pub curated: bool,
     pub embedding: Vec<f32>,
 }
 

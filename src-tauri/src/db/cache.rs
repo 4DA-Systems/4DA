@@ -192,6 +192,35 @@ impl Database {
         Ok(count)
     }
 
+    /// Persist the per-run feed curation VERDICT (Phase 95, W4-5 corpus
+    /// parity). The analysis pipeline decides `relevant` after dedup,
+    /// diversity, reranking, and brief-rejection demotions — that verdict is
+    /// the curated corpus, and it used to evaporate with the run. Persisting
+    /// it lets every surface (the content graph first) select "what the
+    /// current brain actually stands behind" instead of re-deriving a corpus
+    /// from raw cross-epoch scores.
+    pub fn persist_feed_verdicts(&self, verdicts: &[(i64, bool)]) -> SqliteResult<usize> {
+        if verdicts.is_empty() {
+            return Ok(0);
+        }
+        let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
+        let mut count = 0;
+        {
+            let mut stmt = tx.prepare_cached(
+                "UPDATE source_items
+                 SET feed_relevant = ?1, feed_verdict_at = datetime('now')
+                 WHERE id = ?2",
+            )?;
+            for (id, relevant) in verdicts {
+                stmt.execute(params![i64::from(*relevant), id])?;
+                count += 1;
+            }
+        }
+        tx.commit()?;
+        Ok(count)
+    }
+
     /// Stamp `scored_pipeline_version` for every item that was scored this run,
     /// regardless of its relevance. This is load-bearing for the stale-drain:
     /// `persist_analysis_scores` only writes items with `top_score > 0`, so items

@@ -636,6 +636,18 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
                 info!(target: "4da::scoring", count = score_data.len(), "Relevance scores persisted to DB");
             }
         }
+
+        // Persist the curation VERDICT for every item judged this run —
+        // background analysis path (the UI path stamps in analysis_status.rs).
+        // Corpus-parity surfaces (content graph) select on this instead of
+        // re-deriving a corpus from raw cross-epoch scores.
+        let verdicts: Vec<(i64, bool)> = new_results
+            .iter()
+            .map(|r| (r.id as i64, r.relevant))
+            .collect();
+        if let Err(e) = db.persist_feed_verdicts(&verdicts) {
+            warn!(target: "4da::scoring", error = %e, "Failed to persist feed verdicts");
+        }
     }
 
     // Emit background results event to frontend (silent - no UI progress)

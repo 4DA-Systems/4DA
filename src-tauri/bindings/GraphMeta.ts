@@ -18,4 +18,10 @@ hidden_items: number, time_window_days: number, edge_threshold: string,
  * quality gauge, comparable across corpora and windows. `None` when no
  * cluster has 2+ members.
  */
-mean_cluster_coherence: number | null, };
+mean_cluster_coherence: number | null, 
+/**
+ * Nodes whose story carries a persisted feed-curation verdict
+ * (corpus parity, Phase 95). The remainder are young not-yet-judged
+ * items; this count makes the curation ramp measurable, not hidden.
+ */
+curated_items: number, };
