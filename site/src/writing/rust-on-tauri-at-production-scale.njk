@@ -1,0 +1,123 @@
+---
+title: "A quarter-million lines of Rust on Tauri 2.0: what shipping at this scale actually taught us — 4DA"
+description: "599 Rust files, 268,000 lines, 380 IPC commands, one SQLite file with vector search, and a windowless engine — the production-scale Tauri lessons the hello-world posts can't teach."
+permalink: "/writing/rust-on-tauri-at-production-scale/"
+---
+{% extends "base.njk" %}
+
+{% block head %}
+  <link rel="canonical" href="https://4da.ai/writing/rust-on-tauri-at-production-scale/">
+  <meta property="og:title" content="A quarter-million lines of Rust on Tauri 2.0: what shipping at this scale actually taught us">
+  <meta property="og:description" content="599 Rust files, 268,000 lines, 380 IPC commands, one SQLite file with vector search, and a windowless engine — production-scale Tauri lessons with scars attached.">
+  <meta property="og:url" content="https://4da.ai/writing/rust-on-tauri-at-production-scale/">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <meta property="og:type" content="article">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --bg: #0A0A0A; --bg-card: #141414; --text: #FFFFFF; --text-secondary: #A0A0A0; --text-muted: #666666; --accent: #F97316; --border: #2A2A2A; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.65; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; }
+    code { font-family: 'JetBrains Mono', monospace; font-size: .92em; background: var(--bg-card); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; }
+    pre { font-family: 'JetBrains Mono', monospace; font-size: 13px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 0 0 16px; color: var(--text-secondary); }
+    pre code { background: none; border: none; padding: 0; }
+    .container { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+    .w-nav { height: 56px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+    .w-nav .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; color: var(--text); }
+    .w-nav .brand .dot { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; font-weight: 600; }
+    .w-nav .links { display: flex; gap: 22px; }
+    .w-nav .links a { color: var(--text-muted); font-size: 14px; }
+    .w-nav .links a:hover { color: var(--text); }
+    article { max-width: 720px; margin: 0 auto; padding: 56px 0 40px; }
+    article h1 { font-size: 32px; font-weight: 600; letter-spacing: -.02em; line-height: 1.28; margin-bottom: 12px; }
+    article .standfirst { color: var(--text-muted); font-size: 14px; margin-bottom: 28px; font-family: 'JetBrains Mono', monospace; }
+    article h2 { font-size: 22px; font-weight: 600; margin: 36px 0 12px; }
+    article p { color: var(--text-secondary); margin: 0 0 16px; }
+    article strong { color: var(--text); }
+    article ul { color: var(--text-secondary); margin: 0 0 16px 22px; }
+    article li { margin-bottom: 10px; }
+    footer.w-footer { border-top: 1px solid var(--border); padding: 24px 0 60px; text-align: center; font-size: 13px; color: var(--text-muted); }
+    footer.w-footer a { color: var(--text-muted); margin: 0 10px; }
+    footer.w-footer a:hover { color: var(--text); }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <div class="container">
+    <nav class="w-nav">
+      <a href="/" class="brand"><span class="dot">4</span> 4DA</a>
+      <div class="links"><a href="/writing/">Writing</a><a href="/scan/">Stack Scan</a><a href="/mcp/">MCP</a><a href="/download/">Download</a></div>
+    </nav>
+  </div>
+
+  <div class="container">
+    <article>
+      <h1>A quarter-million lines of Rust on Tauri 2.0: what shipping at this scale actually taught us</h1>
+      <p class="standfirst">599 Rust files &middot; 268,450 lines &middot; 380 registered IPC commands &middot; 5,676 tests &middot; counts re-verified against the tree at publish</p>
+
+      <p>Most Tauri content is written at hello-world scale: a webview, a couple of <code>#[tauri::command]</code> functions, a 600&nbsp;KB &ldquo;look how small&rdquo; binary. Useful, but it answers the wrong question. The question that decided our architecture was: <strong>what happens when the Rust side becomes the whole product?</strong></p>
+      <p><a href="https://github.com/4DA-Systems/4DA">4DA</a> is a developer-intelligence engine that happens to have a window: 599 Rust files, 268,000 lines, 380 registered IPC commands, a SQLite database with vector search, an embedded scoring pipeline, and a background engine that runs with no UI at all. The webview is one consumer of that machine &mdash; not the machine. A year of building it this way taught us things the hello-world posts can&rsquo;t. Here are the ones with scars attached.</p>
+
+      <h2>1. Your backend is a real process. Treat it like one.</h2>
+      <p>The best architectural decision we made was discovering &mdash; mid-project, under pressure &mdash; that a Tauri app doesn&rsquo;t need a window to be a Tauri app.</p>
+      <p>Our pipeline (fetch twenty sources, embed, score against the user&rsquo;s codebase) only borrows the <code>AppHandle</code> for best-effort UI events. When the GUI is closed, nothing refreshes the database &mdash; unless something else can run the pipeline. The fix is two lines we&rsquo;ve never seen documented anywhere:</p>
+      <pre><code>let mut context = crate::app_context();
+context.config_mut().app.windows.clear();   // headless.rs</code></pre>
+      <p>Clear the window list before building the app, and you get a genuine <code>AppHandle</code> &mdash; events, state, everything &mdash; with <strong>zero WebView2 instantiation</strong>. The same binary now has a second front door: <code>fourda.exe --engine-once</code> runs a full fetch-score-audit cycle from Task Scheduler, windowless, writing a signed receipt per run. One codebase, one binary, two process personalities.</p>
+      <p>The corollary cost us a real bug to learn: if two personalities share one SQLite database, your single-instance lock must become conditional. The GUI takes a file lock before opening the DB (preventing WAL corruption from two processes racing, <code>app_setup.rs</code>); the headless engine deliberately skips it and coexists with a running GUI over the same WAL file (<code>headless.rs</code>). WAL mode makes this safe; <em>assuming</em> it would have made it a corruption lottery.</p>
+
+      <h2>2. At 380 commands, IPC is an API product</h2>
+      <p>Nobody warns you what <code>invoke()</code> looks like at scale. We register 380 commands (460 defined; the delta is feature-gated and test-only). At that count, three things stop being optional:</p>
+      <p><strong>A typed contract.</strong> Every frontend call goes through one generated layer (<code>src/lib/commands.ts</code>) &mdash; names, argument shapes, return types. Raw <code>invoke("string", {...})</code> scattered through components is how you build a liar&rsquo;s API.</p>
+      <p><strong>Ghost detection.</strong> The deadliest IPC failure is silent: the frontend invokes a command no backend registered, gets a rejected promise, and a feature quietly dies. We keep a static registry of every handler (<code>victauri_commands.rs</code>) and a release-gate check that diffs every frontend <code>invoke()</code> against it. Ghost count must be zero to ship.</p>
+      <p><strong>A casing convention you enforce, not remember.</strong> Tauri maps JS <code>camelCase</code> arguments onto Rust <code>snake_case</code> parameters. Across 380 commands, &ldquo;remember the convention&rdquo; fails &mdash; our worst single bug class was an argument-name mismatch that silently dropped user feedback writes, starving the learning pipeline that is the entire product. The fix wasn&rsquo;t discipline; it was making the typed layer the only path.</p>
+
+      <h2>3. Async Rust state wants a written constitution</h2>
+      <p>With dozens of long-lived subsystems sharing state across an async runtime, we ended up doing something that felt bureaucratic and has since prevented every deadlock: a lock-order comment at the top of <code>state.rs</code> that is law:</p>
+      <pre><code>LOCK ORDERING (acquire in this order to prevent deadlocks)
+ 1. SETTINGS_MANAGER  2. DATABASE  3. CONTEXT_ENGINE
+ 4. ACE_ENGINE        5. SOURCE_REGISTRY  6. ANALYSIS_STATE
+CRITICAL: Never hold a MutexGuard&lt;T&gt; across an .await point.</code></pre>
+      <p>That last line is the one that bites every Tauri team eventually: <code>parking_lot::MutexGuard</code> is not <code>Send</code>, so holding one across an await is a compile error in the lucky cases and a redesign in the rest. Our patterns that survived: clone-and-drop the guard before awaiting; <code>Arc&lt;AtomicBool&gt;</code> instead of a mutex for cross-async flags (our analysis-abort signal); <code>OnceCell</code> for lazy singletons. And log-stampede hygiene nobody warns you about: our &ldquo;sqlite-vec verified&rdquo; line printed 224 times per cold boot &mdash; once per connection callsite &mdash; until a one-shot atomic made verification once-per-process.</p>
+
+      <h2>4. Windows-the-OS will fight your windows-the-feature</h2>
+      <p>Three windows: the main app, plus two transparent, borderless, pre-created-hidden surfaces (a notification card and a morning briefing). Lessons, each paid for:</p>
+      <ul>
+        <li><strong>Pre-create and hide.</strong> Creating a webview window on demand is slow enough to miss the moment. Both auxiliary windows are built hidden at startup and shown when needed &mdash; with a JS-listener readiness gate, because in dev the window can exist before its JavaScript does (<code>notification_window.rs</code>).</li>
+        <li><strong>Transparency is geometry.</strong> A transparent card needs its drop shadow inside the window bounds &mdash; our 408&times;134 card lives in a 528&times;254 window for shadow padding. Nothing tells you this; the shadow just clips.</li>
+        <li><strong>Timing is product.</strong> The briefing auto-dismissed after 60 seconds; users routinely missed it. It&rsquo;s 5 minutes now, always-on-top for the first 30 seconds only (<code>briefing_window.rs</code>). Window behavior is UX, not plumbing.</li>
+        <li><strong>The console window incident.</strong> Release builds carry <code>windows_subsystem = "windows"</code> &mdash; no console. But any child process you spawn without <code>CREATE_NO_WINDOW</code> gets a fresh black console flashed at the user. Our background refresh did exactly that every 30 minutes, and the founder&rsquo;s honest first instinct was that the app had malware. That incident became a build gate: a script now scans every <code>Command::new</code> in the tree and fails CI unless the flag is set. When your own founder almost kills your process on sight, encode the lesson where it can&rsquo;t be forgotten.</li>
+      </ul>
+
+      <h2>5. SQLite is enough &mdash; if you respect its sharp edges</h2>
+      <p>One WAL-mode SQLite file is our entire persistence story: content, embeddings, full-text index, settings, signed engine receipts. At ~150 tables it is still boring in the best way. The sharp edges were all at the extension boundary:</p>
+      <ul>
+        <li><strong>Vector search lives in the WHERE clause.</strong> sqlite-vec KNN queries require the candidate count as a constraint &mdash; <code>WHERE embedding MATCH ?1 AND k = ?2</code> &mdash; not a <code>LIMIT</code> at the end (<code>db/hybrid_search.rs</code>). Get it wrong and you don&rsquo;t get an error; you get nonsense.</li>
+        <li><strong>Load extensions like they might explode.</strong> Our sqlite-vec init is wrapped in <code>catch_unwind</code> around the unsafe FFI registration; on failure the app degrades to keyword-only search instead of dying. A search-quality downgrade is a log line; a crashed app is a refund.</li>
+        <li><strong>Hybrid beats either.</strong> BM25 over FTS5 fused with vector KNN via reciprocal-rank fusion (smoothing k=60) outperformed both alone &mdash; and FTS5 query sanitization is mandatory unless you enjoy users crashing search with a stray <code>"</code>.</li>
+      </ul>
+
+      <h2>6. Test through the glass, not at it</h2>
+      <p>Webview-driver testing treats your app as pixels. We embedded the instrumentation <em>inside</em> the process instead: a debug-mode MCP server runs in the app itself, with direct access to the real <code>AppHandle</code> &mdash; invoke any registered command, query the live database, snapshot the actual DOM, and cross-check what the frontend renders against what the backend knows. Sub-millisecond, no driver flakiness, and it catches the class browser tools structurally can&rsquo;t: frontend and backend disagreeing about the same fact. It started as our test harness and became an open-source project &mdash; <a href="https://github.com/4DA-Systems/Victauri">Victauri</a> &mdash; because every Tauri team hits this wall.</p>
+
+      <h2>The small stuff that will bite you specifically</h2>
+      <ul>
+        <li><code>"freezePrototype": true</code> in tauri.conf.json is good security &mdash; but freeze only <code>Object.prototype</code>. Freezing Array/Map/Set prototypes breaks React outright.</li>
+        <li>WebView2 is evergreen and rides Edge updates. We ship a startup health check that reads the runtime version from the registry and links the user to the installer (<code>startup_health_platform.rs</code>), because &ldquo;works on my machine&rdquo; has a Microsoft-shaped failure mode.</li>
+        <li>Updating Vite-adjacent dependencies while the dev binary is running poisons the module graph the running process holds in memory. Our <code>postinstall</code> clears the Vite dep cache and a smoke test cold-starts 13 routes, because we got tired of learning this one repeatedly.</li>
+      </ul>
+
+      <h2>The honest verdict</h2>
+      <p>The release binary is 56&nbsp;MB &mdash; embedded models and a large feature surface; nobody should repeat the &ldquo;Tauri means 600&nbsp;KB&rdquo; line at production scale. What survives honestly: a fraction of Electron&rsquo;s memory budget, sub-second cold start, one language for the entire engine, and an OS webview that has been a smaller source of bugs than our own async code.</p>
+      <p>Tauri 2.0&rsquo;s real promise at this scale isn&rsquo;t the small binary. It&rsquo;s that <strong>the backend is a first-class Rust process that happens to know how to open windows</strong> &mdash; which meant that when we needed a windowless engine, signed background receipts, and an in-process test harness, the framework didn&rsquo;t fight us. We cleared a window list and kept building.</p>
+      <p>5,676 tests pass as of publication &mdash; 4,326 Rust, 1,350 frontend. The webview never met most of them.</p>
+
+      <p style="color: var(--text-muted); font-style: italic; border-top: 1px solid var(--border); padding-top: 20px;">4DA reads the internet for developers &mdash; privately, locally &mdash; and gets sharper every day. The engine described here is at <a href="/">4da.ai</a> (every network call it makes is enumerated in <a href="https://github.com/4DA-Systems/4DA/blob/main/NETWORK.md">NETWORK.md</a>); the in-process testing framework is <a href="https://github.com/4DA-Systems/Victauri">open source</a>.</p>
+    </article>
+  </div>
+
+  <footer class="w-footer">
+    <div class="container">
+      <a href="/">4DA</a><a href="/writing/">Writing</a><a href="/scan/">Stack Scan</a><a href="/mcp/">MCP Server</a><a href="/download/">Download</a>
+    </div>
+  </footer>
+{% endblock %}
