@@ -157,6 +157,12 @@ pub(super) fn merge_duplicate_edges(edges: &mut Vec<GraphEdge>) {
     }
 
     *edges = merged.into_values().collect();
+    // HashMap iteration order varies per instance (random hash seed), and the
+    // edge ORDER feeds f32 accumulations downstream (Louvain link sums, disc
+    // affinity forces) where float addition is non-associative — live measure
+    // 2026-07-19: two same-corpus builds diverged on 104/139 node positions.
+    // A canonical order makes the whole pipeline deterministic again.
+    edges.sort_by_key(|e| (e.source, e.target));
 }
 
 /// Keep the readable backbone of a dense edge set: a maximum-spanning forest
