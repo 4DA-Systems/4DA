@@ -128,9 +128,30 @@ fn find_dep_in_title() {
 
 #[test]
 fn find_dep_in_content() {
+    let deps = vec!["fastify".to_string()];
+    assert_eq!(
+        find_matching_dep("Security alert", "fastify has a CVE", &deps),
+        Some("fastify".to_string())
+    );
+}
+
+#[test]
+fn find_dep_ambiguous_name_needs_title_plus_context() {
+    // "express" is a common English word ("Defense Express" war-news outlet
+    // painted the gold ring live, 2026-07-19) — since then it is ambiguous:
+    // a bare content mention must NOT ground, while a title mention with
+    // ecosystem context must.
     let deps = vec!["express".to_string()];
     assert_eq!(
         find_matching_dep("Security alert", "express has a CVE", &deps),
+        None
+    );
+    assert_eq!(
+        find_matching_dep(
+            "express middleware vulnerability",
+            "patch your npm dependencies",
+            &deps
+        ),
         Some("express".to_string())
     );
 }

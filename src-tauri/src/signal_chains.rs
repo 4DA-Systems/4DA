@@ -90,6 +90,62 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
         })
         .collect();
 
+    detect_chains_from_items(conn, items)
+}
+
+/// Detect chains among a SPECIFIC item set (by id), instead of the global
+/// 200-most-recent window.
+///
+/// The content graph needs this: it loads its nodes by RELEVANCE while
+/// `detect_chains` reads by RECENCY — live-measured 2026-07-19, the two sets
+/// shared 0 of 150 items, so graph chain edges could structurally never fire.
+pub fn detect_chains_for_items(
+    conn: &rusqlite::Connection,
+    item_ids: &[i64],
+) -> Result<Vec<SignalChain>> {
+    if item_ids.is_empty() {
+        return Ok(vec![]);
+    }
+    // Chunk to stay far below SQLite's bound-parameter limit.
+    let mut items: Vec<(i64, String, String, String, String)> = Vec::new();
+    for chunk in item_ids.chunks(500) {
+        let placeholders = vec!["?"; chunk.len()].join(",");
+        let sql = format!(
+            "SELECT si.id, si.title, si.source_type, si.created_at, si.content
+                 FROM source_items si
+                 WHERE si.id IN ({placeholders})"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::types::ToSql> = chunk
+            .iter()
+            .map(|id| id as &dyn rusqlite::types::ToSql)
+            .collect();
+        let rows = stmt.query_map(params.as_slice(), |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get::<_, String>(4).unwrap_or_default(),
+            ))
+        })?;
+        for r in rows {
+            match r {
+                Ok(v) => items.push(v),
+                Err(e) => tracing::warn!("Row processing failed in signal_chains: {e}"),
+            }
+        }
+    }
+    // Deterministic order regardless of chunking/IN-clause order.
+    items.sort_by_key(|(id, ..)| *id);
+    detect_chains_from_items(conn, items)
+}
+
+/// Core chain detection over an already-loaded item set.
+fn detect_chains_from_items(
+    conn: &rusqlite::Connection,
+    items: Vec<(i64, String, String, String, String)>,
+) -> Result<Vec<SignalChain>> {
     if items.is_empty() {
         return Ok(vec![]);
     }

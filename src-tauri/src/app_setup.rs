@@ -1690,8 +1690,22 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     .build()
                     .unwrap_or_default();
 
-                let dev_url =
-                    url::Url::parse("http://localhost:4444/").expect("hardcoded dev URL is valid");
+                // Use the CONFIGURED dev URL, not a hardcoded port: with the
+                // standard port-bump workflow (isolated worktree verify on
+                // :4448) a hardcoded 4444 makes this recovery loop HIJACK the
+                // webview onto whatever other process serves 4444 — live
+                // 2026-07-19, a peer lane's vite — wedging the app on a
+                // foreign frontend. Fall back to 4444 only when no dev URL is
+                // configured.
+                let dev_url = ready_handle
+                    .config()
+                    .build
+                    .dev_url
+                    .clone()
+                    .unwrap_or_else(|| {
+                        url::Url::parse("http://localhost:4444/")
+                            .expect("hardcoded dev URL is valid")
+                    });
 
                 let mut window_shown_locally = false;
 

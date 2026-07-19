@@ -8,30 +8,68 @@ use std::collections::{HashMap, HashSet};
 
 use tracing::debug;
 
-use crate::signal_chains::detect_chains;
+use crate::signal_chains::detect_chains_for_items;
 use crate::utils::cosine_similarity;
 
 use super::types::{EdgeType, GraphEdge, RawItem};
-use super::{LEXICAL_FALLBACK_THRESHOLD, LEXICAL_OVERLAP_MIN, SIMILARITY_THRESHOLD};
+use super::{KNN_FLOOR, KNN_K};
 
+/// Mutual k-nearest-neighbor semantic edges.
+///
+/// Replaces the old global `cosine >= 0.77` gate. Live audit 2026-07-19 across
+/// 7/14/30-day windows showed an absolute threshold cannot work: same-source
+/// similarity baselines differ by source (crates.io templated titles median
+/// 0.733 vs mastodon 0.570), and cross-source pairs about the SAME topic
+/// almost never reach 0.77 (1 of 2,536 pairs) — so real cross-source themes
+/// were structurally invisible while template-similar registry items over-
+/// connected. Rank-based mutuality self-calibrates to each neighborhood's
+/// density: an edge exists only when each endpoint ranks the other in its own
+/// top-[`KNN_K`], with an absolute floor to keep nonsense pairs out of sparse
+/// corners. No per-corpus tuning — this is what makes every user's graph
+/// self-optimizing.
 pub(super) fn compute_semantic_edges(items: &[RawItem], edges: &mut Vec<GraphEdge>) {
-    for i in 0..items.len() {
-        for j in (i + 1)..items.len() {
-            let sim = cosine_similarity(&items[i].embedding, &items[j].embedding);
-            let should_connect = sim >= SIMILARITY_THRESHOLD
-                || (sim >= LEXICAL_FALLBACK_THRESHOLD
-                    && title_word_overlap(&items[i].title, &items[j].title) >= LEXICAL_OVERLAP_MIN);
+    let n = items.len();
+    if n < 2 {
+        return;
+    }
 
-            if should_connect {
-                edges.push(GraphEdge {
-                    source: items[i].id,
-                    target: items[j].id,
-                    edge_type: EdgeType::Semantic,
-                    weight: sim.clamp(0.0, 1.0),
-                    label: Some(format!("similarity: {:.2}", sim)),
-                    methods: vec!["semantic".to_string()],
-                });
+    // Top-K neighbor lists, deterministic (sim desc, then neighbor id asc).
+    let mut top: Vec<Vec<(f32, usize)>> = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut sims: Vec<(f32, usize)> = (0..n)
+            .filter(|&j| j != i)
+            .map(|j| {
+                (
+                    cosine_similarity(&items[i].embedding, &items[j].embedding),
+                    j,
+                )
+            })
+            .collect();
+        sims.sort_by(|a, b| {
+            b.0.partial_cmp(&a.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| items[a.1].id.cmp(&items[b.1].id))
+        });
+        sims.truncate(KNN_K);
+        top.push(sims);
+    }
+
+    for i in 0..n {
+        for &(sim, j) in &top[i] {
+            if i >= j || sim < KNN_FLOOR {
+                continue;
             }
+            if !top[j].iter().any(|&(_, jj)| jj == i) {
+                continue;
+            }
+            edges.push(GraphEdge {
+                source: items[i].id,
+                target: items[j].id,
+                edge_type: EdgeType::Semantic,
+                weight: sim.clamp(0.0, 1.0),
+                label: Some(format!("similarity: {:.2}", sim)),
+                methods: vec!["semantic".to_string()],
+            });
         }
     }
 }
@@ -39,12 +77,19 @@ pub(super) fn compute_semantic_edges(items: &[RawItem], edges: &mut Vec<GraphEdg
 /// Chain links reference ORIGINAL item ids; with story aggregation each id
 /// maps to its story representative first (`rep_of`), and links that land
 /// inside one story collapse away instead of becoming self-loops.
+///
+/// Chains are detected over the GRAPH'S OWN item set (`rep_of` keys — every
+/// loaded member id), not the global recency window: the graph loads by
+/// relevance while `detect_chains` reads by recency, and the two sets shared
+/// 0 of 150 items live (2026-07-19) — chain edges could never fire.
 pub(super) fn compute_chain_edges(
     conn: &rusqlite::Connection,
     rep_of: &HashMap<i64, i64>,
     edges: &mut Vec<GraphEdge>,
 ) {
-    let chains = match detect_chains(conn) {
+    let mut member_ids: Vec<i64> = rep_of.keys().copied().collect();
+    member_ids.sort_unstable();
+    let chains = match detect_chains_for_items(conn, &member_ids) {
         Ok(c) => c,
         Err(e) => {
             debug!(target: "4da::content_graph", error = %e, "Signal chain detection failed, skipping chain edges");

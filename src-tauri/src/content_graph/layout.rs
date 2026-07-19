@@ -289,8 +289,13 @@ fn place_cluster_discs(
         }
     }
 
-    // Deterministic seed: size order, largest at the center, the rest on a
-    // circle wide enough that no pair starts overlapping.
+    // Deterministic seed: size order, largest central, the rest on a compact
+    // golden-angle (sunflower) spiral. Community detection yields ~40 small
+    // discs at steady state (live sweep 2026-07-19) — the previous
+    // one-circle seed would arrange them all on a single giant ring, the
+    // exact "big circle encodes nothing" pathology Wave 2 removed for
+    // singletons, resurfacing at cluster level. A spiral seed packs the
+    // plane; the separation pass below resolves residual overlap.
     let mut order: Vec<usize> = (0..k).collect();
     order.sort_by(|&a, &b| {
         radii[b]
@@ -298,18 +303,16 @@ fn place_cluster_discs(
             .unwrap_or(std::cmp::Ordering::Equal)
             .then(a.cmp(&b))
     });
-    let max_r = radii.iter().fold(0.0f32, |m, &r| m.max(r));
-    let seed_radius = (2.0 * max_r + CLUSTER_GAP).max(300.0);
+    let mean_halo = radii.iter().sum::<f32>() / k as f32;
+    let spiral_step = (2.0 * mean_halo + CLUSTER_GAP) * 0.62;
     let mut centers = vec![CENTER; k];
     for (slot, &ci) in order.iter().enumerate() {
         if slot == 0 {
             centers[ci] = CENTER;
         } else {
-            let theta = (slot - 1) as f32 / (k - 1).max(1) as f32 * 2.0 * std::f32::consts::PI;
-            centers[ci] = (
-                CENTER.0 + seed_radius * theta.cos(),
-                CENTER.1 + seed_radius * theta.sin(),
-            );
+            let r = spiral_step * (slot as f32).sqrt();
+            let theta = slot as f32 * GOLDEN_ANGLE;
+            centers[ci] = (CENTER.0 + r * theta.cos(), CENTER.1 + r * theta.sin());
         }
     }
 
@@ -406,6 +409,7 @@ mod tests {
             label: String::new(),
             node_ids,
             source_count: 1,
+            coherence: 0.0,
             centroid_x: 0.0,
             centroid_y: 0.0,
         }

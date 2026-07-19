@@ -35,9 +35,13 @@ pub use detail::GraphNodeDetail;
 
 const DEFAULT_DAYS: u32 = 7;
 const DEFAULT_MAX_NODES: usize = 150;
-const SIMILARITY_THRESHOLD: f32 = 0.77;
-const LEXICAL_FALLBACK_THRESHOLD: f32 = 0.73;
-const LEXICAL_OVERLAP_MIN: f32 = 0.60;
+/// Mutual k-nearest-neighbor edge construction: each endpoint must rank the
+/// other in its own top-K by cosine. Rank-based, so it self-calibrates to
+/// every corpus — validated across 7/14/30-day windows 2026-07-19 (k=3 beat
+/// k=4/5 on theme purity; results insensitive to the floor within 0.50–0.60).
+const KNN_K: usize = 3;
+/// Absolute floor under which even a mutual nearest neighbor is noise.
+const KNN_FLOOR: f32 = 0.55;
 /// Isolated singletons shown on the map (as semantic satellites or on the
 /// shelf), by relevance; the rest stay in the List view (counted honestly in
 /// `meta.hidden_items`).
@@ -68,7 +72,8 @@ pub fn build_graph(
                 collapsed_items: 0,
                 hidden_items: 0,
                 time_window_days: days,
-                edge_threshold: format!("cosine >= {SIMILARITY_THRESHOLD}"),
+                edge_threshold: format!("mutual top-{KNN_K} nearest neighbors"),
+                mean_cluster_coherence: None,
             },
         });
     }
@@ -175,6 +180,40 @@ pub fn build_graph(
         .collect();
     clustering::assign_cluster_labels(&story_items, &mut clusters);
 
+    // Coherence: mean pairwise member cosine per cluster, and the pair-count
+    // weighted mean across clusters — the graph measures its own theme
+    // tightness on every corpus instead of asserting it.
+    let embedding_of: HashMap<i64, &[f32]> = story_items
+        .iter()
+        .map(|i| (i.id, i.embedding.as_slice()))
+        .collect();
+    let mut coherence_sum = 0.0f64;
+    let mut coherence_pairs = 0usize;
+    for cluster in &mut clusters {
+        let mut sum = 0.0f64;
+        let mut pairs = 0usize;
+        for (ai, a) in cluster.node_ids.iter().enumerate() {
+            for b in &cluster.node_ids[ai + 1..] {
+                if let (Some(ea), Some(eb)) = (embedding_of.get(a), embedding_of.get(b)) {
+                    sum += f64::from(crate::utils::cosine_similarity(ea, eb));
+                    pairs += 1;
+                }
+            }
+        }
+        cluster.coherence = if pairs > 0 {
+            (sum / pairs as f64) as f32
+        } else {
+            0.0
+        };
+        coherence_sum += sum;
+        coherence_pairs += pairs;
+    }
+    let mean_cluster_coherence = if coherence_pairs > 0 {
+        Some((coherence_sum / coherence_pairs as f64) as f32)
+    } else {
+        None
+    };
+
     // Semantic satellite assignment: each visible singleton attaches to its
     // nearest clustered story (max member cosine). Below the floor it goes
     // to the shelf — genuinely unrelated. Live evidence for this design:
@@ -233,7 +272,8 @@ pub fn build_graph(
         collapsed_items,
         hidden_items,
         time_window_days: days,
-        edge_threshold: format!("cosine >= {SIMILARITY_THRESHOLD}"),
+        edge_threshold: format!("mutual top-{KNN_K} nearest neighbors"),
+        mean_cluster_coherence,
     };
 
     info!(
@@ -244,6 +284,7 @@ pub fn build_graph(
         stories = story_count,
         collapsed = collapsed_items,
         hidden = hidden_items,
+        coherence = mean_cluster_coherence.unwrap_or(0.0),
         "Content graph built"
     );
 
@@ -324,7 +365,8 @@ mod tests {
                 collapsed_items: 0,
                 hidden_items: 0,
                 time_window_days: 7,
-                edge_threshold: "cosine >= 0.77".to_string(),
+                edge_threshold: "mutual top-3 nearest neighbors".to_string(),
+                mean_cluster_coherence: None,
             },
         };
         assert_eq!(graph.nodes.len(), 0);
@@ -332,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn test_semantic_edge_above_threshold() {
+    fn test_mutual_neighbors_create_edge() {
         let items = vec![
             raw(
                 1,
@@ -356,14 +398,16 @@ mod tests {
         assert_eq!(
             edge_list.len(),
             1,
-            "identical embeddings should create an edge"
+            "identical embeddings are mutual nearest neighbors"
         );
         assert_eq!(edge_list[0].edge_type, EdgeType::Semantic);
         assert!((edge_list[0].weight - 1.0).abs() < f32::EPSILON);
     }
 
     #[test]
-    fn test_no_edge_below_threshold() {
+    fn test_knn_floor_blocks_nonsense_mutual_pairs() {
+        // Two orthogonal items are each other's ONLY neighbor — mutual by
+        // construction — but similarity 0 sits under KNN_FLOOR, so no edge.
         let items = vec![
             raw(1, "Rust async", "hackernews", 0.8, vec![1.0, 0.0, 0.0]),
             raw(
@@ -380,8 +424,58 @@ mod tests {
 
         assert!(
             edge_list.is_empty(),
-            "orthogonal embeddings should create no edge"
+            "sub-floor mutual neighbors must not connect"
         );
+    }
+
+    #[test]
+    fn test_knn_mutuality_required() {
+        // Hub h is near a, b, c, d (its top-3 covers only 3 of them), while
+        // e is far from everything except h. e ranks h first, but h's top-3
+        // never includes e -> no h–e edge (this asymmetry-cut is what stops
+        // one promiscuous hub from wiring the whole corpus together).
+        let items = vec![
+            raw(1, "hub", "hn", 0.9, vec![1.0, 0.0, 0.0]),
+            raw(2, "a", "hn", 0.9, vec![0.99, 0.14, 0.0]),
+            raw(3, "b", "hn", 0.9, vec![0.99, 0.0, 0.14]),
+            raw(4, "c", "hn", 0.9, vec![0.99, 0.10, 0.10]),
+            raw(5, "e", "hn", 0.9, vec![0.75, -0.66, 0.0]),
+        ];
+
+        let mut edge_list = Vec::new();
+        edges::compute_semantic_edges(&items, &mut edge_list);
+
+        assert!(
+            !edge_list
+                .iter()
+                .any(|e| (e.source == 1 && e.target == 5) || (e.source == 5 && e.target == 1)),
+            "one-sided nearest-neighbor pairs must not connect"
+        );
+    }
+
+    #[test]
+    fn test_knn_edges_deterministic() {
+        let build = || {
+            let items: Vec<RawItem> = (0..20)
+                .map(|i| {
+                    let angle = i as f32 * 0.3;
+                    raw(
+                        i64::from(i),
+                        "t",
+                        "hn",
+                        0.5,
+                        vec![angle.cos(), angle.sin(), 0.2],
+                    )
+                })
+                .collect();
+            let mut edge_list = Vec::new();
+            edges::compute_semantic_edges(&items, &mut edge_list);
+            edge_list
+                .iter()
+                .map(|e| (e.source, e.target))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(build(), build());
     }
 
     #[test]
@@ -515,20 +609,171 @@ mod tests {
 
     #[test]
     fn test_title_word_overlap_high() {
+        // 0.5 = STORY_OVERLAP_MIN in story.rs, title_word_overlap's only consumer.
         let overlap = edges::title_word_overlap(
             "React 19 server components released",
             "React 19 server components update",
         );
         assert!(
-            overlap > LEXICAL_OVERLAP_MIN,
-            "similar titles should overlap >{LEXICAL_OVERLAP_MIN}, got {overlap}"
+            overlap > 0.5,
+            "similar titles should overlap >0.5, got {overlap}"
         );
     }
 
     #[test]
     fn test_title_word_overlap_low() {
         let overlap = edges::title_word_overlap("Rust async runtime", "Python web framework");
-        assert!(overlap < LEXICAL_OVERLAP_MIN);
+        assert!(overlap < 0.5);
+    }
+
+    #[test]
+    fn test_louvain_cuts_hub_chains() {
+        // Two dense themes bridged by one promiscuous hub. Connected
+        // components fused all 9 nodes into one cluster (the live 23-node
+        // crates blob); modularity must keep the themes separate.
+        let items: Vec<RawItem> = (1..=9)
+            .map(|i| raw(i, "t", "src", 0.5, vec![1.0, 0.0]))
+            .collect();
+        let mut edge_list = Vec::new();
+        // Theme A: 1-2-3-4 clique.
+        for i in 1..=4i64 {
+            for j in (i + 1)..=4 {
+                edge_list.push(edge(i, j, 0.9));
+            }
+        }
+        // Theme B: 5-6-7-8 clique.
+        for i in 5..=8i64 {
+            for j in (i + 1)..=8 {
+                edge_list.push(edge(i, j, 0.9));
+            }
+        }
+        // Hub 9 weakly touches both themes.
+        edge_list.push(edge(9, 1, 0.6));
+        edge_list.push(edge(9, 5, 0.6));
+
+        let clusters = clustering::compute_clusters(&items, &edge_list);
+
+        let of = |id: i64| {
+            clusters
+                .iter()
+                .position(|c| c.node_ids.contains(&id))
+                .expect("clustered")
+        };
+        assert_eq!(of(1), of(4), "theme A stays together");
+        assert_eq!(of(5), of(8), "theme B stays together");
+        assert_ne!(of(1), of(5), "hub must not weld the two themes");
+    }
+
+    #[test]
+    fn test_louvain_deterministic() {
+        let build = || {
+            let items: Vec<RawItem> = (1..=12)
+                .map(|i| raw(i, "t", "src", 0.5, vec![1.0, 0.0]))
+                .collect();
+            let mut edge_list = Vec::new();
+            for i in 1..=6i64 {
+                for j in (i + 1)..=6 {
+                    edge_list.push(edge(i, j, 0.8));
+                }
+            }
+            for i in 7..=12i64 {
+                for j in (i + 1)..=12 {
+                    edge_list.push(edge(i, j, 0.8));
+                }
+            }
+            edge_list.push(edge(3, 9, 0.55));
+            clustering::compute_clusters(&items, &edge_list)
+                .into_iter()
+                .map(|c| c.node_ids)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(build(), build());
+    }
+
+    #[test]
+    fn test_label_falls_back_to_source_digest_when_no_shared_topic() {
+        // Six crates.io releases with NOTHING in common except the source
+        // template — the live case whose label degenerated to
+        // "crates · agentmail-rs · alpacars". "crates" is source boilerplate
+        // (in 100% of titles) and no other term covers 30%, so the honest
+        // digest label must win.
+        let titles = [
+            "crates.io: agentmail-rs v0.2.0",
+            "crates.io: alpacars v0.3.0",
+            "crates.io: krb5-gss v0.1.0",
+            "crates.io: rust-ynab v0.5.6",
+            "crates.io: oganesson-rs v0.2.1",
+            "crates.io: nidus-sqs v1.0.12",
+        ];
+        let items: Vec<RawItem> = titles
+            .iter()
+            .enumerate()
+            .map(|(i, t)| raw(i as i64 + 1, t, "crates_io", 0.5, vec![1.0, 0.0]))
+            .collect();
+        let mut edge_list = Vec::new();
+        for i in 1..=6i64 {
+            for j in (i + 1)..=6 {
+                edge_list.push(edge(i, j, 0.8));
+            }
+        }
+
+        let mut clusters = clustering::compute_clusters(&items, &edge_list);
+        assert_eq!(clusters.len(), 1);
+        clustering::assign_cluster_labels(&items, &mut clusters);
+
+        assert_eq!(
+            clusters[0].label, "crates.io · assorted",
+            "template-only cohesion must get an honest digest label"
+        );
+    }
+
+    #[test]
+    fn test_label_uses_real_topic_despite_source_boilerplate() {
+        // Boilerplate-heavy source ("crates" in every title) plus a REAL
+        // shared theme inside compound names — the live tauri sub-theme. The
+        // item universe includes unrelated crates so "tauri" is a topic
+        // (5 of 11 items), not source boilerplate. Sub-token extraction must
+        // surface it and the label must not be the digest fallback.
+        let titles = [
+            "crates.io: tauri-browser v0.5.0",
+            "crates.io: tauri-plugin-syncular v0.3.1",
+            "crates.io: tauri-plugin-hdiff-update v0.3.0",
+            "crates.io: tauri-plugin-thermal-printer v2.1.0",
+            "crates.io: tauri-plugin-serialplugin v3.0.1",
+            "crates.io: agentmail-rs v0.2.0",
+            "crates.io: alpacars v0.3.0",
+            "crates.io: krb5-gss v0.1.0",
+            "crates.io: rust-ynab v0.5.6",
+            "crates.io: oganesson-rs v0.2.1",
+            "crates.io: nidus-sqs v1.0.12",
+        ];
+        let items: Vec<RawItem> = titles
+            .iter()
+            .enumerate()
+            .map(|(i, t)| raw(i as i64 + 1, t, "crates_io", 0.5, vec![1.0, 0.0]))
+            .collect();
+        // Only the five tauri crates form a cluster.
+        let mut edge_list = Vec::new();
+        for i in 1..=5i64 {
+            for j in (i + 1)..=5 {
+                edge_list.push(edge(i, j, 0.85));
+            }
+        }
+
+        let mut clusters = clustering::compute_clusters(&items, &edge_list);
+        assert_eq!(clusters.len(), 1);
+        clustering::assign_cluster_labels(&items, &mut clusters);
+
+        assert!(
+            clusters[0].label.split(" · ").any(|w| w == "tauri"),
+            "the shared 'tauri' theme must be labelable; got '{}'",
+            clusters[0].label
+        );
+        assert!(
+            !clusters[0].label.split(" · ").any(|w| w == "crates"),
+            "source boilerplate must not enter labels; got '{}'",
+            clusters[0].label
+        );
     }
 
     #[test]
@@ -542,18 +787,27 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_title_keywords_drops_numeric_ids() {
-        // Live label leak: a mastodon status URL glued to text tokenized as
-        // "116885294589687234here".
+    fn test_extract_title_keywords_drops_numeric_noise() {
+        // Two live label leaks: a mastodon status URL glued to text tokenized
+        // as "116885294589687234Here" (2026-07-16), and short version/count
+        // tokens crowning labels ("152", "8th", "191k", "160-post",
+        // 2026-07-19). Digit-dominated tokens never label; real names with
+        // incidental digits survive.
         let keywords = clustering::extract_title_keywords(
-            "RE: fosstodon 116885294589687234Here TypeScript 7.0 released v5-9",
+            "RE: fosstodon 116885294589687234Here TypeScript 7.0 released v5-9 8th 191k sqlite3",
         );
         assert!(!keywords.iter().any(|k| k.contains("116885294589687234")));
         assert!(keywords.contains(&"typescript".to_string()));
         assert!(
-            keywords.contains(&"v5-9".to_string()),
-            "short numerics stay"
+            keywords.contains(&"sqlite3".to_string()),
+            "incidental digit stays"
         );
+        for noise in ["v5-9", "8th", "191k"] {
+            assert!(
+                !keywords.contains(&noise.to_string()),
+                "digit-dominated token '{noise}' must not label"
+            );
+        }
     }
 
     #[test]

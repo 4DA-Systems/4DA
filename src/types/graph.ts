@@ -42,6 +42,8 @@ export interface GraphCluster {
   label: string;
   node_ids: number[];
   source_count: number;
+  /** Mean pairwise embedding cosine among members — theme tightness. */
+  coherence: number;
   centroid_x: number;
   centroid_y: number;
 }
@@ -58,4 +60,6 @@ export interface GraphMeta {
   hidden_items: number;
   time_window_days: number;
   edge_threshold: string;
+  /** Pair-count-weighted mean of per-cluster coherence (null = no clusters). */
+  mean_cluster_coherence: number | null;
 }

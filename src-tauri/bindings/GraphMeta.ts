@@ -12,4 +12,10 @@ collapsed_items: number,
 /**
  * Low-signal isolated items dropped beyond the orbit-ring cap.
  */
-hidden_items: number, time_window_days: number, edge_threshold: string, };
+hidden_items: number, time_window_days: number, edge_threshold: string, 
+/**
+ * Pair-count-weighted mean of per-cluster coherence — the graph's own
+ * quality gauge, comparable across corpora and windows. `None` when no
+ * cluster has 2+ members.
+ */
+mean_cluster_coherence: number | null, };
