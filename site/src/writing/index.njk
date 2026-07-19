@@ -1,0 +1,61 @@
+---
+title: "Writing — 4DA"
+description: "Engineering deep-dives and honest explainers from the team building 4DA: developer intelligence, privately, locally."
+permalink: "/writing/"
+---
+{% extends "base.njk" %}
+
+{% block head %}
+  <link rel="canonical" href="https://4da.ai/writing/">
+  <meta property="og:title" content="Writing — 4DA">
+  <meta property="og:description" content="Engineering deep-dives and honest explainers from the team building 4DA.">
+  <meta property="og:url" content="https://4da.ai/writing/">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --bg: #0A0A0A; --bg-card: #141414; --text: #FFFFFF; --text-secondary: #A0A0A0; --text-muted: #666666; --accent: #F97316; --border: #2A2A2A; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.65; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; }
+    .container { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+    .w-nav { height: 56px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+    .w-nav .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; color: var(--text); }
+    .w-nav .brand .dot { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; font-weight: 600; }
+    .w-nav .links { display: flex; gap: 22px; }
+    .w-nav .links a { color: var(--text-muted); font-size: 14px; }
+    .w-nav .links a:hover { color: var(--text); }
+    .w-head { padding: 56px 0 8px; }
+    .w-head h1 { font-size: 32px; font-weight: 600; letter-spacing: -.02em; }
+    .w-head p { color: var(--text-secondary); margin-top: 8px; }
+    .posts { padding: 24px 0 80px; display: grid; gap: 14px; }
+    .post { display: block; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; transition: border-color .15s; }
+    .post:hover { border-color: var(--accent); }
+    .post h2 { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .post p { font-size: 14px; color: var(--text-secondary); }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <div class="container">
+    <nav class="w-nav">
+      <a href="/" class="brand"><span class="dot">4</span> 4DA</a>
+      <div class="links"><a href="/">Home</a><a href="/scan/">Stack Scan</a><a href="/mcp/">MCP</a><a href="/download/">Download</a></div>
+    </nav>
+  </div>
+
+  <div class="container">
+    <header class="w-head">
+      <h1>Writing</h1>
+      <p>Engineering deep-dives and honest explainers. Every claim verifiable; every cost stated.</p>
+    </header>
+    <div class="posts">
+      <a class="post" href="/writing/rust-on-tauri-at-production-scale/">
+        <h2>A quarter-million lines of Rust on Tauri 2.0: what shipping at this scale actually taught us</h2>
+        <p>599 Rust files, 380 IPC commands, one SQLite file with vector search, and a windowless engine &mdash; the lessons with scars attached.</p>
+      </a>
+      <a class="post" href="/writing/where-vulnerability-data-comes-from/">
+        <h2>Where vulnerability data actually comes from (and why your alerts feel useless)</h2>
+        <p>Every dependency scanner drinks from the same public well. Once you see the plumbing, alert fatigue makes sense &mdash; and so does the fix.</p>
+      </a>
+    </div>
+  </div>
+{% endblock %}
