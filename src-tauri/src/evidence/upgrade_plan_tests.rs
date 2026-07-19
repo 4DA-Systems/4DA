@@ -400,7 +400,7 @@ fn persist_and_read_upgrade_plan_snapshot_round_trips() {
     advisory(&db, "GHSA-snap-1", "lodash", "npm", "4.17.21", 7.5);
     let plan = build_upgrade_plan(&db);
     assert_eq!(plan.len(), 1);
-    persist_upgrade_plan(&db, &plan, 0);
+    persist_upgrade_plan(&db, &plan, 0, None);
 
     let snap = read_upgrade_plan_snapshot(&db).expect("snapshot present after persist");
     assert_eq!(snap.item_count, 1);
@@ -430,8 +430,44 @@ fn persist_and_read_upgrade_plan_snapshot_round_trips() {
         !snap.multi_version_coverage,
         "no multi-version inventory -> coverage gate is not green"
     );
+    // This (GUI-style) persist attributes no engine run.
+    assert!(
+        snap.engine_run_id.is_none(),
+        "GUI/test persist stamps no engine_run_id"
+    );
     // Items survive the JSON round-trip byte-for-byte.
     assert_eq!(snap.items, plan);
+}
+
+#[test]
+fn envelope_stamps_engine_run_id_and_source_freshness() {
+    use super::{persist_upgrade_plan, read_upgrade_plan_snapshot};
+    let db = test_db();
+
+    // The headless path attributes the engine run id it is handed.
+    persist_upgrade_plan(&db, &[], 0, Some(4242));
+    let snap = read_upgrade_plan_snapshot(&db).unwrap();
+    assert_eq!(
+        snap.engine_run_id,
+        Some(4242),
+        "headless persist stamps the run id"
+    );
+    // No OSV sync recorded yet -> no freshness floor.
+    assert!(
+        snap.source_freshness.is_none(),
+        "no ecosystem synced -> no freshness floor"
+    );
+
+    // Once an ecosystem has synced, the plan records the freshness floor; a GUI
+    // persist (None) carries no run id.
+    db.update_osv_sync_status("npm", 100, None).unwrap();
+    persist_upgrade_plan(&db, &[], 0, None);
+    let snap = read_upgrade_plan_snapshot(&db).unwrap();
+    assert!(
+        snap.source_freshness.is_some(),
+        "a synced ecosystem sets the freshness floor"
+    );
+    assert!(snap.engine_run_id.is_none(), "GUI persist -> no run id");
 }
 
 #[test]
@@ -440,7 +476,7 @@ fn persist_upgrade_plan_records_an_empty_plan() {
     // an empty plan still writes a snapshot with a fresh timestamp and 0 items.
     use super::{persist_upgrade_plan, read_upgrade_plan_snapshot};
     let db = test_db();
-    persist_upgrade_plan(&db, &[], 0);
+    persist_upgrade_plan(&db, &[], 0, None);
     let snap = read_upgrade_plan_snapshot(&db).expect("empty plan is still persisted");
     assert_eq!(snap.item_count, 0);
     assert!(snap.items.is_empty());
@@ -454,9 +490,9 @@ fn persist_upgrade_plan_is_latest_wins() {
     db.store_dependency("/proj/a", "lodash", Some("4.17.20"), "npm", false, None)
         .unwrap();
     advisory(&db, "GHSA-lw-1", "lodash", "npm", "4.17.21", 7.5);
-    persist_upgrade_plan(&db, &build_upgrade_plan(&db), 0);
+    persist_upgrade_plan(&db, &build_upgrade_plan(&db), 0, None);
     // A later empty compute overwrites the single row.
-    persist_upgrade_plan(&db, &[], 0);
+    persist_upgrade_plan(&db, &[], 0, None);
     let snap = read_upgrade_plan_snapshot(&db).unwrap();
     assert_eq!(
         snap.item_count, 0,
@@ -479,7 +515,7 @@ fn envelope_metadata_reflects_inventory_coverage_and_hash() {
 
     // No multi-version inventory -> gate not green; hash of the empty set is a
     // stable non-empty constant.
-    persist_upgrade_plan(&db, &[], 0);
+    persist_upgrade_plan(&db, &[], 0, None);
     let empty_hash = read_upgrade_plan_snapshot(&db)
         .unwrap()
         .dependency_inventory_hash;
@@ -492,7 +528,7 @@ fn envelope_metadata_reflects_inventory_coverage_and_hash() {
         &[mk("lodash", "4.17.20"), mk("lodash", "4.17.21")],
     )
     .unwrap();
-    persist_upgrade_plan(&db, &[], 0);
+    persist_upgrade_plan(&db, &[], 0, None);
     let snap1 = read_upgrade_plan_snapshot(&db).unwrap();
     assert!(
         snap1.multi_version_coverage,
@@ -504,7 +540,7 @@ fn envelope_metadata_reflects_inventory_coverage_and_hash() {
     );
 
     // Unchanged inventory -> identical hash (deterministic).
-    persist_upgrade_plan(&db, &[], 0);
+    persist_upgrade_plan(&db, &[], 0, None);
     assert_eq!(
         read_upgrade_plan_snapshot(&db)
             .unwrap()
@@ -516,7 +552,7 @@ fn envelope_metadata_reflects_inventory_coverage_and_hash() {
     // Changed inventory -> different hash (a reader can detect drift).
     db.store_dependency_instances("/proj/a", "javascript", &[mk("lodash", "4.17.20")])
         .unwrap();
-    persist_upgrade_plan(&db, &[], 0);
+    persist_upgrade_plan(&db, &[], 0, None);
     assert_ne!(
         read_upgrade_plan_snapshot(&db)
             .unwrap()

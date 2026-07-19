@@ -1720,7 +1720,8 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
             // server / CLI can read it out-of-process. Always persist — even an
             // empty plan — so a reader distinguishes "evaluated, nothing to do"
             // from "never computed". Best-effort; never blocks the feed.
-            crate::evidence::persist_upgrade_plan(db, &plan, drops);
+            // GUI compute — no engine run to attribute (engine_run_id = None).
+            crate::evidence::persist_upgrade_plan(db, &plan, drops, None);
             if !plan.is_empty() {
                 info!(
                     target: "4da::preemption",
