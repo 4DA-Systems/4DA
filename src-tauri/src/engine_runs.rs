@@ -203,10 +203,12 @@ impl RunReceipt {
     }
 }
 
-/// Persist a cycle receipt. Best-effort: a failure here must never break the cycle, so errors are
-/// logged and swallowed. Derives the freshness watermark, source-item total, and content
-/// fingerprint from the live DB so the row reflects ground truth rather than the caller's claim.
-pub(crate) fn record(mut receipt: RunReceipt) {
+/// Persist a cycle receipt and return the inserted row id (the `engine_run_id`
+/// the Upgrade Plan snapshot stamps). Best-effort: a failure here must never
+/// break the cycle, so errors are logged and swallowed and `None` is returned.
+/// Derives the freshness watermark, source-item total, and content fingerprint
+/// from the live DB so the row reflects ground truth rather than the caller's claim.
+pub(crate) fn record(mut receipt: RunReceipt) -> Option<i64> {
     if receipt.completed_at.is_empty() {
         receipt.completed_at = now_rfc3339();
     }
@@ -214,13 +216,13 @@ pub(crate) fn record(mut receipt: RunReceipt) {
         Ok(db) => db,
         Err(e) => {
             warn!(target: "4da::engine_runs", error = %e, "Skipping receipt — database unavailable");
-            return;
+            return None;
         }
     };
     let conn = db.conn.lock();
     if let Err(e) = ensure_table(&conn) {
         warn!(target: "4da::engine_runs", error = %e, "Skipping receipt — ensure_table failed");
-        return;
+        return None;
     }
 
     let (total, watermark) = source_items_state(&conn);
@@ -261,17 +263,23 @@ pub(crate) fn record(mut receipt: RunReceipt) {
         ],
     );
     match res {
-        Ok(_) => debug!(
-            target: "4da::engine_runs",
-            trigger = receipt.trigger,
-            new_items = receipt.new_items,
-            scored = receipt.items_scored,
-            total,
-            ok = receipt.ok,
-            "Engine-run receipt recorded"
-        ),
+        Ok(_) => {
+            let id = conn.last_insert_rowid();
+            debug!(
+                target: "4da::engine_runs",
+                trigger = receipt.trigger,
+                new_items = receipt.new_items,
+                scored = receipt.items_scored,
+                total,
+                ok = receipt.ok,
+                run_id = id,
+                "Engine-run receipt recorded"
+            );
+            Some(id)
+        }
         Err(e) => {
-            warn!(target: "4da::engine_runs", error = %e, "Failed to insert engine-run receipt")
+            warn!(target: "4da::engine_runs", error = %e, "Failed to insert engine-run receipt");
+            None
         }
     }
 }

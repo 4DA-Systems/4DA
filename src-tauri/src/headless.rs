@@ -357,6 +357,12 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
         }
     }
 
+    receipt.duration_ms = started.elapsed().as_millis() as u64;
+    let exit_code = i32::from(!receipt.ok);
+    // Record the receipt FIRST so the plan snapshot below can stamp this cycle's
+    // engine_run_id (the receipt's inserted row id).
+    let run_id = crate::engine_runs::record(receipt);
+
     // Step 3b — refresh the persisted Upgrade Plan snapshot so out-of-process
     // readers (the `4da plan` CLI, the Phase-2a MCP handoff) see a CURRENT plan
     // even when the GUI never runs. Without this the snapshot is written ONLY by
@@ -364,19 +370,15 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // get_preemption_alerts), so a headless-only or GUI-closed deployment leaves
     // the DB-as-interface starved — the engine freshens the plan's exact inputs
     // (deps in step 0b, OSV matches in step 3) yet never computed the plan from
-    // them. `build_upgrade_plan` is deterministic + DB-only (no LLM, no network),
-    // so this is cheap; `persist_upgrade_plan` always writes (even an empty plan =
-    // "evaluated, nothing to do"). Best-effort: it logs its own failures.
+    // them. `build_upgrade_plan_with_drops` is deterministic + DB-only (no LLM,
+    // no network), so this is cheap; `persist_upgrade_plan` always writes (even an
+    // empty plan = "evaluated, nothing to do"). Best-effort: it logs its failures.
     if let Ok(db) = crate::get_database() {
         let (plan, drops) = crate::evidence::build_upgrade_plan_with_drops(&db);
         let steps = plan.len();
-        crate::evidence::persist_upgrade_plan(&db, &plan, drops);
+        crate::evidence::persist_upgrade_plan(&db, &plan, drops, run_id);
         info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed");
     }
-
-    receipt.duration_ms = started.elapsed().as_millis() as u64;
-    let exit_code = i32::from(!receipt.ok);
-    crate::engine_runs::record(receipt);
 
     // Log the resulting ground-truth freshness so a tail of the run shows the real DB state — this
     // is what an external verifier asserts against (count moved / watermark advanced / fingerprint changed).

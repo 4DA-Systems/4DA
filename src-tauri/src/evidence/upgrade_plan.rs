@@ -45,7 +45,7 @@ const PLAN_KV_KEY: &str = "upgrade_plan_snapshot";
 /// Persisted-shape version. Bump on an incompatible change to
 /// [`super::types::UpgradePlanSnapshot`] / the item JSON; a reader that sees a
 /// higher version treats the snapshot as absent (fail closed).
-const PLAN_SCHEMA_VERSION: u32 = 2;
+const PLAN_SCHEMA_VERSION: u32 = 3;
 
 /// Persist the ranked plan to `kv_store` (blueprint D-1, DB-as-interface) so it
 /// survives restart and is readable out-of-process (the MCP server; a future
@@ -53,8 +53,20 @@ const PLAN_SCHEMA_VERSION: u32 = 2;
 /// computed plan, including an empty one, so a reader can tell "evaluated,
 /// nothing to do" (fresh `generated_at`, 0 items) from "never computed" (no
 /// key). Best-effort: a write error is logged, never propagated into the feed.
-pub fn persist_upgrade_plan(db: &Database, items: &[EvidenceItem], validation_drop_count: u32) {
+pub fn persist_upgrade_plan(
+    db: &Database,
+    items: &[EvidenceItem],
+    validation_drop_count: u32,
+    engine_run_id: Option<i64>,
+) {
     let generated = chrono::Utc::now();
+    // Freshness FLOOR of the security data: the oldest ecosystem sync timestamp
+    // (lexicographic min of the fixed-width `YYYY-MM-DD HH:MM:SS` = chronological
+    // oldest). A reader pairs this with `expires_at` to judge staleness honestly.
+    let source_freshness = db
+        .get_osv_sync_statuses()
+        .ok()
+        .and_then(|statuses| statuses.into_iter().filter_map(|s| s.last_synced_at).min());
     // Staleness horizon: the plan is only as fresh as the security data it read,
     // and that data is refreshed on the OSV sync cadence. State that horizon so a
     // reader judges staleness without knowing 4DA's policy.
@@ -94,6 +106,8 @@ pub fn persist_upgrade_plan(db: &Database, items: &[EvidenceItem], validation_dr
         multi_version_coverage: !instances.is_empty(),
         dependency_inventory_hash,
         validation_drop_count,
+        source_freshness,
+        engine_run_id,
         item_count: items.len(),
         items: items.to_vec(),
     };
