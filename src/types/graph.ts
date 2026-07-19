@@ -31,7 +31,7 @@ export interface GraphNode {
 export interface GraphEdge {
   source: number;
   target: number;
-  edge_type: 'semantic' | 'chain' | 'concept' | 'convergence' | 'duplicate';
+  edge_type: 'semantic' | 'chain' | 'convergence';
   weight: number;
   label: string | null;
   methods: string[];
@@ -56,8 +56,12 @@ export interface GraphMeta {
   story_count: number;
   /** Items folded behind story representatives. */
   collapsed_items: number;
-  /** Low-signal isolated items beyond the orbit-ring cap (List view only). */
+  /** Items selected for the window but not on the map (cap overflow + story
+   *  truncation). Curated items are never hidden. */
   hidden_items: number;
+  /** Total items matching the corpus selection this window, independent of
+   *  the node budget — drives the honest "top N of M" coverage note. */
+  window_candidates: number;
   time_window_days: number;
   edge_threshold: string;
   /** Pair-count-weighted mean of per-cluster coherence (null = no clusters). */

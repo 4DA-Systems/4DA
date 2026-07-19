@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
 import { useTheme } from '../../lib/theme';
+import { useAppStore } from '../../store';
 import type {
   ContentGraph,
   GraphNode as ContentGraphNode,
@@ -26,9 +27,19 @@ import type {
 import ContentGraphNodeComponent, { CATEGORY_COLORS, type ContentNode } from './ContentGraphNode';
 import ContentGraphEdgeComponent from './ContentGraphEdge';
 import GraphDetailPanel from './GraphDetailPanel';
-import { ClusterLabelNode, LoadingState, EmptyState, GraphLegend } from './ContentGraphChrome';
+import {
+  ClusterLabelNode,
+  ClusterHullNode,
+  LoadingState,
+  EmptyState,
+  ErrorState,
+  GraphLegend,
+} from './ContentGraphChrome';
 
 const LAST_VIEW_KEY = '4da:graph:lastViewedAt';
+
+/** Free space between a cluster's outermost member and its hull ring. */
+const HULL_PADDING = 60;
 
 function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): Node[] {
   const lastViewed = localStorage.getItem(LAST_VIEW_KEY);
@@ -55,6 +66,34 @@ function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): 
     },
   }));
 
+  // Hull discs render UNDER members (array order = paint order) so theme
+  // grouping is visible at fit zoom — proximity alone stops carrying it once
+  // clusters shrink to 2-5 members.
+  const positionOf = new Map(graphNodes.map((n) => [n.id, { x: n.x, y: n.y }]));
+  const hullNodes: Node[] = clusters.map((c) => {
+    let radius = 0;
+    for (const id of c.node_ids) {
+      const p = positionOf.get(id);
+      if (!p) continue;
+      const d = Math.hypot(p.x - c.centroid_x, p.y - c.centroid_y);
+      if (d > radius) radius = d;
+    }
+    radius += HULL_PADDING;
+    return {
+      id: `hull-${c.id}`,
+      type: 'clusterHull' as const,
+      position: { x: c.centroid_x - radius, y: c.centroid_y - radius },
+      data: { radius },
+      selectable: false,
+      draggable: false,
+      connectable: false,
+      focusable: false,
+      // On the WRAPPER, not just the inner div: otherwise the disc swallows
+      // pane clicks/drags across its whole area (deselect + panning break).
+      style: { pointerEvents: 'none' as const },
+    };
+  });
+
   const clusterNodes: Node[] = clusters.map((c) => ({
     id: `cluster-${c.id}`,
     type: 'clusterLabel' as const,
@@ -69,7 +108,7 @@ function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): 
     connectable: false,
   }));
 
-  return [...contentNodes, ...clusterNodes];
+  return [...hullNodes, ...contentNodes, ...clusterNodes];
 }
 
 function toFlowEdges(graphEdges: ContentGraphEdge[]): Edge[] {
@@ -87,14 +126,22 @@ function toFlowEdges(graphEdges: ContentGraphEdge[]): Edge[] {
   }));
 }
 
-const nodeTypes = { contentNode: ContentGraphNodeComponent, clusterLabel: ClusterLabelNode };
+const nodeTypes = {
+  contentNode: ContentGraphNodeComponent,
+  clusterLabel: ClusterLabelNode,
+  clusterHull: ClusterHullNode,
+};
 const edgeTypes = { contentEdge: ContentGraphEdgeComponent };
 
+// Only content nodes appear in the minimap — label/hull helper nodes drew as
+// phantom gray dots (live audit 2026-07-19).
 function minimapNodeColor(node: Node): string {
+  if (node.type !== 'contentNode') return 'transparent';
   const data = node.data as ContentNode['data'] | undefined;
   if (!data?.category) return '#6B7280';
   return CATEGORY_COLORS[data.category] ?? '#6B7280';
 }
+
 
 // Fixed legend order: most-urgent first. Category identity is color + shape
 // (never hue alone), so the legend swatches repeat the node silhouettes.
@@ -107,16 +154,27 @@ export default function ContentGraphView() {
   const { isLight } = useTheme();
   const [days, setDays] = useState(7);
   const [loading, setLoading] = useState(true);
+  // A failed build is an ERROR, not an empty corpus — rendering EmptyState on
+  // failure told users "no data" when the backend was down (audit 2026-07-19).
+  const [loadError, setLoadError] = useState(false);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [meta, setMeta] = useState<ContentGraph['meta'] | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [baseEdges, setBaseEdges] = useState<Edge[]>([]);
+  // Corpus snapshot the current graph was built against — when a new analysis
+  // lands, the map is stale and says so instead of silently contradicting the
+  // header (live: corpus went 32→430 mid-session with no refresh path).
+  const relevanceResults = useAppStore((s) => s.appState.relevanceResults);
+  const builtAgainstRef = useRef<unknown>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const reload = useCallback(() => setReloadToken((n) => n + 1), []);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(false);
 
     cmd('build_content_graph', { days, maxNodes: 150 })
       .then((graph: ContentGraph) => {
@@ -128,17 +186,23 @@ export default function ContentGraphView() {
         setEdges(flowEdges);
         setBaseEdges(flowEdges);
         setMeta(graph.meta);
+        builtAgainstRef.current = useAppStore.getState().appState.relevanceResults;
         localStorage.setItem(LAST_VIEW_KEY, new Date().toISOString());
       })
       .catch((err) => {
-        if (!cancelled) console.error('[ContentGraph] Failed to load:', err);
+        if (cancelled) return;
+        console.error('[ContentGraph] Failed to load:', err);
+        setLoadError(true);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
 
     return () => { cancelled = true; };
-  }, [days, setNodes, setEdges]);
+  }, [days, reloadToken, setNodes, setEdges]);
+
+  const corpusChanged =
+    !loading && builtAgainstRef.current !== null && relevanceResults !== builtAgainstRef.current;
 
   const connectedNodeIds = useMemo(() => {
     if (!hoveredNodeId) return new Set<string>();
@@ -161,11 +225,15 @@ export default function ContentGraphView() {
     }));
   }, [hoveredNodeId, baseEdges, setEdges]);
 
+  // Dim non-neighbors while hovering AND restore on unhover — the reset
+  // branch is load-bearing: an early return on null left 128/129 nodes stuck
+  // at 25% opacity after the first hover (live-verified 2026-07-19).
   useEffect(() => {
-    if (!hoveredNodeId) return;
     setNodes((nds) => nds.map((n) => {
-      if (n.type === 'clusterLabel') return n;
-      const dimmed = n.id !== hoveredNodeId && !connectedNodeIds.has(n.id);
+      if (n.type !== 'contentNode') return n;
+      const dimmed = hoveredNodeId !== null
+        && n.id !== hoveredNodeId
+        && !connectedNodeIds.has(n.id);
       return { ...n, style: dimmed ? { opacity: 0.25, transition: 'opacity 200ms ease' } : { opacity: 1, transition: 'opacity 200ms ease' } };
     }));
   }, [hoveredNodeId, connectedNodeIds, setNodes]);
@@ -220,8 +288,8 @@ export default function ContentGraphView() {
     [onNodesChange],
   );
 
-  // Categories present in the current graph (fixed order, never re-ranked)
-  // + whether any node touches the user's stack — drives the legend.
+  // Categories + edge types present in the current graph (fixed order, never
+  // re-ranked) + whether any node touches the user's stack — drives the legend.
   const legend = useMemo(() => {
     const seen = new Set<string>();
     let anyAffects = false;
@@ -231,19 +299,26 @@ export default function ContentGraphView() {
       if (d.category) seen.add(d.category);
       if (d.affects_you) anyAffects = true;
     }
+    const edgeTypes = new Set<string>();
+    for (const e of baseEdges) {
+      const d = e.data as { edge_type?: string } | undefined;
+      if (d?.edge_type) edgeTypes.add(d.edge_type);
+    }
     return {
       categories: LEGEND_CATEGORIES.filter((c) => seen.has(c)),
       anyAffects,
+      edgeTypes: [...edgeTypes],
     };
-  }, [nodes]);
+  }, [nodes, baseEdges]);
 
-  const isEmpty = !loading && nodes.length === 0;
+  const isEmpty = !loading && !loadError && nodes.length === 0;
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId && n.type === 'contentNode')
     : undefined;
 
   if (loading) return <LoadingState />;
+  if (loadError) return <ErrorState onRetry={reload} />;
   if (isEmpty) return <EmptyState />;
 
   return (
@@ -281,7 +356,30 @@ export default function ContentGraphView() {
       >
         {legend.categories.length > 0 && (
           <Panel position="top-left">
-            <GraphLegend categories={legend.categories} anyAffects={legend.anyAffects} />
+            <GraphLegend
+              categories={legend.categories}
+              anyAffects={legend.anyAffects}
+              edgeTypes={legend.edgeTypes}
+            />
+          </Panel>
+        )}
+
+        {/* Stale-corpus pill: a new analysis landed after this map was built.
+            Refresh is explicit — silent rebuilds would yank the viewport. */}
+        {corpusChanged && (
+          <Panel position="top-right">
+            <button
+              onClick={reload}
+              className="px-2.5 py-1 text-[11px] rounded border transition-colors hover:bg-bg-tertiary"
+              style={{
+                color: 'var(--color-accent-gold, #D4AF37)',
+                borderColor: 'var(--color-border)',
+                backgroundColor: 'var(--color-bg-secondary)',
+                fontFamily: 'Inter, sans-serif',
+              }}
+            >
+              {t('signals.graphCorpusChanged', 'Corpus updated — refresh')}
+            </button>
           </Panel>
         )}
 
@@ -327,8 +425,14 @@ export default function ContentGraphView() {
               {meta.collapsed_items > 0 && (
                 <span>{t('signals.graphCollapsedNote', { items: meta.collapsed_items, stories: meta.story_count })}</span>
               )}
-              {meta.hidden_items > 0 && (
-                <span>{t('signals.graphHiddenNote', { items: meta.hidden_items })}</span>
+              {/* Honest coverage: the map is the top slice of the window, not
+                  the window. The old "+2 in List only" line counted just the
+                  cap overflow while thousands sat below the load cutoff. */}
+              {meta.window_candidates > meta.total_items + meta.collapsed_items && (
+                <span>{t('signals.graphCoverageNote', 'top {{shown}} of {{total}} this window', {
+                  shown: meta.total_items + meta.collapsed_items,
+                  total: meta.window_candidates,
+                })}</span>
               )}
               {/* Corpus parity ramp (Phase 95): how many nodes carry a real
                   feed-curation verdict vs recent not-yet-judged items. */}

@@ -83,6 +83,9 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
     e.stopPropagation();
     onRecordInteraction(item.id, 'snooze', item);
     cmd('snooze_item', { sourceItemId: item.id, days: 7 }).catch(() => {});
+    // Optimistic store update — the list filter hides the row immediately;
+    // the persisted snooze covers future sessions and the graph.
+    useAppStore.getState().markSnoozed(item.id);
     recordTrustEvent({
       eventType: 'dismissed',
       signalId: String(item.id),

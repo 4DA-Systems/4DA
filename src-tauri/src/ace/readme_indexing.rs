@@ -553,23 +553,40 @@ MIT License
 
     #[test]
     fn test_discover_projects_on_current_dir() {
-        // Test recursive discovery on current project
-        let current_dir = std::env::current_dir().unwrap();
+        // Hermetic fixture: the old version discovered from current_dir(),
+        // which fails whenever the checkout sits inside a scan-excluded tree
+        // (agent worktrees under .claude/ — live failure 2026-07-19). The
+        // discovery contract is exercised on a temp project tree instead.
+        // Root is a WORKSPACE dir (no manifest): discovery must find project
+        // roots beneath it and stop descending once one is found.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().to_path_buf();
+        let rust_proj = root.join("proj-a");
+        std::fs::create_dir_all(&rust_proj).unwrap();
+        std::fs::write(rust_proj.join("Cargo.toml"), "[package]\nname = \"a\"\n").unwrap();
+        let nested = root.join("group").join("proj-b");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("package.json"), "{}").unwrap();
+        let skipped = root.join("node_modules").join("dep");
+        std::fs::create_dir_all(&skipped).unwrap();
+        std::fs::write(skipped.join("package.json"), "{}").unwrap();
+
         let skip_dirs = ["node_modules", "target", ".git", "dist", "build"];
+        let projects = discover_projects_recursive(&root, 2, &skip_dirs);
 
-        // Discover projects with depth 2
-        let projects = discover_projects_recursive(&current_dir, 2, &skip_dirs);
-
-        // Should find at least the current project (has Cargo.toml)
         assert!(
-            !projects.is_empty(),
-            "Should discover at least the current project"
+            projects.contains(&rust_proj),
+            "Should discover the Cargo project at depth 1"
         );
-
-        // Current directory should be in the list
         assert!(
-            projects.contains(&current_dir),
-            "Should discover current project directory"
+            projects.contains(&nested),
+            "Should discover the npm project at depth 2"
+        );
+        assert!(
+            !projects
+                .iter()
+                .any(|p| p.starts_with(root.join("node_modules"))),
+            "Skip dirs must not be discovered"
         );
     }
 }

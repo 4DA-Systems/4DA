@@ -31,6 +31,45 @@ export function ClusterLabelNode({ data }: { data: { label: string; count: numbe
   );
 }
 
+/// Soft disc behind each cluster's members: the theme grouping is visible at
+/// fit zoom instead of only inferable from proximity (the "starfield" gap —
+/// live audit 2026-07-19). Non-interactive by construction.
+export function ClusterHullNode({ data }: { data: { radius: number } }) {
+  const d = data.radius * 2;
+  return (
+    <div
+      style={{
+        width: d,
+        height: d,
+        borderRadius: '50%',
+        border: '1px dashed var(--color-border)',
+        backgroundColor: 'color-mix(in srgb, var(--color-text-primary) 3%, transparent)',
+        pointerEvents: 'none',
+      }}
+    />
+  );
+}
+
+export function ErrorState({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="h-full min-h-[500px] flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+      <div className="flex flex-col items-center gap-2">
+        <span style={{ color: 'var(--color-text-secondary)', fontSize: 14, fontFamily: 'Inter, sans-serif' }}>
+          {t('signals.graphError', 'The graph could not be built')}
+        </span>
+        <button
+          onClick={onRetry}
+          className="px-3 py-1 text-xs rounded border transition-colors hover:bg-bg-tertiary"
+          style={{ color: 'var(--color-text-primary)', borderColor: 'var(--color-border)' }}
+        >
+          {t('action.retry')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function LoadingState() {
   const { t } = useTranslation();
   return (
@@ -75,9 +114,20 @@ export function EmptyState() {
 interface GraphLegendProps {
   categories: string[];
   anyAffects: boolean;
+  /** Edge types present in the current graph — line semantics were
+   *  previously hover-only (audit 2026-07-19). */
+  edgeTypes: string[];
 }
 
-export function GraphLegend({ categories, anyAffects }: GraphLegendProps) {
+// Mirrors EDGE_STYLES in ContentGraphEdge (the swatch IS the line style).
+const EDGE_LEGEND: Record<string, { color: string; dasharray?: string; width: number; labelKey: string; fallback: string }> = {
+  semantic: { color: '#6366F1', width: 1.5, labelKey: 'signals.graphEdgeSemantic', fallback: 'related content' },
+  chain: { color: '#F59E0B', dasharray: '4 2', width: 1.5, labelKey: 'signals.graphEdgeChain', fallback: 'signal chain (your stack)' },
+  convergence: { color: '#22C55E', width: 2.5, labelKey: 'signals.graphEdgeConvergence', fallback: 'both' },
+};
+const EDGE_LEGEND_ORDER = ['semantic', 'chain', 'convergence'] as const;
+
+export function GraphLegend({ categories, anyAffects, edgeTypes }: GraphLegendProps) {
   const { t } = useTranslation();
   return (
     <div
@@ -156,6 +206,35 @@ export function GraphLegend({ categories, anyAffects }: GraphLegendProps) {
           {t('signals.graphAffectsYou')}
         </span>
       )}
+      {EDGE_LEGEND_ORDER.filter((k) => edgeTypes.includes(k)).map((k) => {
+        const s = EDGE_LEGEND[k]!;
+        return (
+          <span
+            key={k}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              fontSize: 10,
+              color: 'var(--color-text-secondary)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <svg width="18" height="6" aria-hidden="true">
+              <line
+                x1="0"
+                y1="3"
+                x2="18"
+                y2="3"
+                stroke={s.color}
+                strokeWidth={s.width}
+                strokeDasharray={s.dasharray}
+              />
+            </svg>
+            {t(s.labelKey, s.fallback)}
+          </span>
+        );
+      })}
     </div>
   );
 }

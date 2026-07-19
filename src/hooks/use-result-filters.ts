@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 import { useAppStore } from '../store';
 import { isProfileEmpty } from '../utils/profile-empty';
 import type { SourceRelevance } from '../types';
@@ -96,8 +96,16 @@ export const useResultFilters = () => {
   const detectedTech = useAppStore(s => s.discoveredContext?.tech);
   const interests = useAppStore(s => s.userContext?.interests);
   const feedbackGiven = useAppStore(s => s.feedbackGiven);
+  const snoozedItemIds = useAppStore(s => s.snoozedItemIds);
+  const loadSnoozedIds = useAppStore(s => s.loadSnoozedIds);
   const recordInteraction = useAppStore(s => s.recordInteraction);
   const setSettingsStatus = useAppStore(s => s.setSettingsStatus);
+
+  // Active snoozes persist across sessions (Phase 96) — hydrate once so the
+  // list respects them; expiry is implicit (backend only returns live ones).
+  useEffect(() => {
+    void loadSnoozedIds();
+  }, [loadSnoozedIds]);
 
   const sourceFilters = useAppStore(s => s.sourceFilters);
   const sortBy = useAppStore(s => s.sortBy);
@@ -124,8 +132,10 @@ export const useResultFilters = () => {
   const filteredResults = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
 
-    // Step 1: Filter by source, relevance, saved, and search query
+    // Step 1: Filter by snooze, source, relevance, saved, and search query
     const filtered = relevanceResults.filter(item => {
+      // Snoozed = deferred, not rejected: hidden until the snooze expires.
+      if (snoozedItemIds.has(item.id)) return false;
       const source = item.source_type || 'hackernews';
       if (!sourceFilters.has(source)) return false;
       if (showOnlyRelevant && !profileEmpty && !item.relevant) return false;
@@ -234,7 +244,7 @@ export const useResultFilters = () => {
     });
 
     return deduped;
-  }, [relevanceResults, profileEmpty, sourceFilters, showOnlyRelevant, showSavedOnly, sortBy, searchQuery, feedbackGiven]);
+  }, [relevanceResults, profileEmpty, sourceFilters, showOnlyRelevant, showSavedOnly, sortBy, searchQuery, feedbackGiven, snoozedItemIds]);
 
   const dismissAllBelow = useCallback(async (threshold: number) => {
     const itemsToDismiss = filteredResults.filter(

@@ -35,6 +35,14 @@ pub use detail::GraphNodeDetail;
 
 const DEFAULT_DAYS: u32 = 7;
 const DEFAULT_MAX_NODES: usize = 150;
+/// Raw items loaded per node of budget. The node budget must apply AFTER
+/// story collapse: with `LIMIT max_nodes` on raw rows, one advisory storm
+/// (26 axios advisories, 2026-07-16) eats a sixth of the load and then folds
+/// into a single node — the map silently shrinks while presenting itself as
+/// the full picture. Loading a multiple and capping post-collapse keeps the
+/// map full under redundancy bursts. O(n²) passes at 3×150 = 450 raw items
+/// remain sub-100ms.
+const RAW_LOAD_FACTOR: usize = 3;
 /// Mutual k-nearest-neighbor edge construction: each endpoint must rank the
 /// other in its own top-K by cosine. Rank-based, so it self-calibrates to
 /// every corpus — validated across 7/14/30-day windows 2026-07-19 (k=3 beat
@@ -58,7 +66,8 @@ pub fn build_graph(
     days: u32,
     max_nodes: usize,
 ) -> Result<ContentGraph> {
-    let items = loading::load_scored_items(conn, days, max_nodes)?;
+    let (items, window_candidates) =
+        loading::load_scored_items(conn, days, max_nodes * RAW_LOAD_FACTOR)?;
     if items.is_empty() {
         return Ok(ContentGraph {
             nodes: Vec::new(),
@@ -71,6 +80,7 @@ pub fn build_graph(
                 story_count: 0,
                 collapsed_items: 0,
                 hidden_items: 0,
+                window_candidates,
                 time_window_days: days,
                 edge_threshold: format!("mutual top-{KNN_K} nearest neighbors"),
                 mean_cluster_coherence: None,
@@ -81,7 +91,24 @@ pub fn build_graph(
 
     // Collapse near-duplicates into stories FIRST: redundancy becomes one
     // node instead of a rendered clique (86% of live edges before this).
-    let stories = story::collapse_stories(items);
+    // The node budget then applies to STORIES (see RAW_LOAD_FACTOR) —
+    // curated stories outrank unjudged ones, matching the load order.
+    let mut stories = story::collapse_stories(items);
+    stories.sort_by(|a, b| {
+        b.item
+            .curated
+            .cmp(&a.item.curated)
+            .then(
+                b.item
+                    .relevance_score
+                    .partial_cmp(&a.item.relevance_score)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
+            .then(a.item.id.cmp(&b.item.id))
+    });
+    let truncated_items: usize = stories.iter().skip(max_nodes).map(|s| s.member_count).sum();
+    stories.truncate(max_nodes);
+
     let mut rep_of: HashMap<i64, i64> = HashMap::new();
     for s in &stories {
         for &member in &s.member_ids {
@@ -91,21 +118,30 @@ pub fn build_graph(
     let story_items: Vec<types::RawItem> =
         stories.iter().map(|s| story::clone_raw(&s.item)).collect();
 
+    // Semantic edges first; communities form from THESE ONLY. Chain edges are
+    // keyword-topic paths (rendered context) — feeding them into community
+    // detection welded semantically unrelated items into fake themes (live
+    // forensics 2026-07-19: 2 of 30 clusters existed solely on chain edges,
+    // 5 more part-welded, one politics item chained into an "api" cluster).
     let mut edge_list = Vec::new();
     edges::compute_semantic_edges(&story_items, &mut edge_list);
+    let clusters = clustering::compute_clusters(&story_items, &edge_list);
+
     edges::compute_chain_edges(conn, &rep_of, &mut edge_list);
     edges::merge_duplicate_edges(&mut edge_list);
 
-    let clusters = clustering::compute_clusters(&story_items, &edge_list);
-
     // Visibility: anything connected or aggregated appears; isolated plain
     // items appear as semantic satellites (or shelf) up to SINGLETON_CAP by
-    // relevance.
+    // relevance. Curated singletons are EXEMPT from the cap: they carry a
+    // persisted feed-curation verdict — the corpus the map claims to show —
+    // so they can never lose a slot to a not-yet-judged item (live
+    // 2026-07-19: both capped items were curated while ~104 unjudged showed).
     struct Vis {
         id: i64,
         relevance: f32,
         connected: bool,
         is_story: bool,
+        curated: bool,
     }
     let degree = edges::count_edges_per_node(&edge_list);
     let mut handles: Vec<Vis> = stories
@@ -115,6 +151,7 @@ pub fn build_graph(
             relevance: s.item.relevance_score,
             connected: degree.get(&s.item.id).copied().unwrap_or(0) > 0,
             is_story: s.member_count > 1,
+            curated: s.item.curated,
         })
         .collect();
     handles.sort_by(|a, b| {
@@ -126,16 +163,17 @@ pub fn build_graph(
     let mut visible_ids: HashSet<i64> = HashSet::new();
     let mut ring_candidates: Vec<&Vis> = Vec::new();
     for handle in &handles {
-        if handle.connected || handle.is_story {
+        if handle.connected || handle.is_story || handle.curated {
             visible_ids.insert(handle.id);
         } else {
             ring_candidates.push(handle);
         }
     }
-    let hidden_items = ring_candidates.len().saturating_sub(SINGLETON_CAP);
+    let hidden_singletons = ring_candidates.len().saturating_sub(SINGLETON_CAP);
     for handle in ring_candidates.iter().take(SINGLETON_CAP) {
         visible_ids.insert(handle.id);
     }
+    let hidden_items = hidden_singletons + truncated_items;
 
     let mut nodes: Vec<GraphNode> = stories
         .iter()
@@ -276,6 +314,7 @@ pub fn build_graph(
         story_count,
         collapsed_items,
         hidden_items,
+        window_candidates,
         time_window_days: days,
         edge_threshold: format!("mutual top-{KNN_K} nearest neighbors"),
         mean_cluster_coherence,
@@ -327,644 +366,5 @@ pub fn get_graph_node_details(item_ids: Vec<i64>) -> Result<Vec<GraphNodeDetail>
 // ============================================================================
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use types::RawItem;
-
-    fn raw(id: i64, title: &str, source_type: &str, score: f32, embedding: Vec<f32>) -> RawItem {
-        RawItem {
-            id,
-            title: title.to_string(),
-            url: None,
-            source_type: source_type.to_string(),
-            relevance_score: score,
-            signal_type: None,
-            signal_priority: None,
-            matched_package: None,
-            created_at: "2026-05-24".to_string(),
-            curated: false,
-            embedding,
-        }
-    }
-
-    fn edge(source: i64, target: i64, weight: f32) -> GraphEdge {
-        GraphEdge {
-            source,
-            target,
-            edge_type: EdgeType::Semantic,
-            weight,
-            label: None,
-            methods: vec!["semantic".to_string()],
-        }
-    }
-
-    #[test]
-    fn test_empty_graph() {
-        let graph = ContentGraph {
-            nodes: Vec::new(),
-            edges: Vec::new(),
-            clusters: Vec::new(),
-            meta: GraphMeta {
-                total_items: 0,
-                total_edges: 0,
-                cluster_count: 0,
-                story_count: 0,
-                collapsed_items: 0,
-                hidden_items: 0,
-                time_window_days: 7,
-                edge_threshold: "mutual top-3 nearest neighbors".to_string(),
-                mean_cluster_coherence: None,
-                curated_items: 0,
-            },
-        };
-        assert_eq!(graph.nodes.len(), 0);
-        assert_eq!(graph.edges.len(), 0);
-    }
-
-    #[test]
-    fn test_mutual_neighbors_create_edge() {
-        let items = vec![
-            raw(
-                1,
-                "Rust async runtime",
-                "hackernews",
-                0.8,
-                vec![1.0, 0.0, 0.0],
-            ),
-            raw(
-                2,
-                "Rust async runtime update",
-                "reddit",
-                0.7,
-                vec![1.0, 0.0, 0.0],
-            ),
-        ];
-
-        let mut edge_list = Vec::new();
-        edges::compute_semantic_edges(&items, &mut edge_list);
-
-        assert_eq!(
-            edge_list.len(),
-            1,
-            "identical embeddings are mutual nearest neighbors"
-        );
-        assert_eq!(edge_list[0].edge_type, EdgeType::Semantic);
-        assert!((edge_list[0].weight - 1.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_knn_floor_blocks_nonsense_mutual_pairs() {
-        // Two orthogonal items are each other's ONLY neighbor — mutual by
-        // construction — but similarity 0 sits under KNN_FLOOR, so no edge.
-        let items = vec![
-            raw(1, "Rust async", "hackernews", 0.8, vec![1.0, 0.0, 0.0]),
-            raw(
-                2,
-                "Python web framework",
-                "reddit",
-                0.7,
-                vec![0.0, 1.0, 0.0],
-            ),
-        ];
-
-        let mut edge_list = Vec::new();
-        edges::compute_semantic_edges(&items, &mut edge_list);
-
-        assert!(
-            edge_list.is_empty(),
-            "sub-floor mutual neighbors must not connect"
-        );
-    }
-
-    #[test]
-    fn test_knn_mutuality_required() {
-        // Hub h is near a, b, c, d (its top-3 covers only 3 of them), while
-        // e is far from everything except h. e ranks h first, but h's top-3
-        // never includes e -> no h–e edge (this asymmetry-cut is what stops
-        // one promiscuous hub from wiring the whole corpus together).
-        let items = vec![
-            raw(1, "hub", "hn", 0.9, vec![1.0, 0.0, 0.0]),
-            raw(2, "a", "hn", 0.9, vec![0.99, 0.14, 0.0]),
-            raw(3, "b", "hn", 0.9, vec![0.99, 0.0, 0.14]),
-            raw(4, "c", "hn", 0.9, vec![0.99, 0.10, 0.10]),
-            raw(5, "e", "hn", 0.9, vec![0.75, -0.66, 0.0]),
-        ];
-
-        let mut edge_list = Vec::new();
-        edges::compute_semantic_edges(&items, &mut edge_list);
-
-        assert!(
-            !edge_list
-                .iter()
-                .any(|e| (e.source == 1 && e.target == 5) || (e.source == 5 && e.target == 1)),
-            "one-sided nearest-neighbor pairs must not connect"
-        );
-    }
-
-    #[test]
-    fn test_knn_edges_deterministic() {
-        let build = || {
-            let items: Vec<RawItem> = (0..20)
-                .map(|i| {
-                    let angle = i as f32 * 0.3;
-                    raw(
-                        i64::from(i),
-                        "t",
-                        "hn",
-                        0.5,
-                        vec![angle.cos(), angle.sin(), 0.2],
-                    )
-                })
-                .collect();
-            let mut edge_list = Vec::new();
-            edges::compute_semantic_edges(&items, &mut edge_list);
-            edge_list
-                .iter()
-                .map(|e| (e.source, e.target))
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(build(), build());
-    }
-
-    #[test]
-    fn test_merge_duplicate_edges() {
-        let mut edge_list = vec![
-            GraphEdge {
-                source: 1,
-                target: 2,
-                edge_type: EdgeType::Semantic,
-                weight: 0.85,
-                label: Some("similarity: 0.85".to_string()),
-                methods: vec!["semantic".to_string()],
-            },
-            GraphEdge {
-                source: 1,
-                target: 2,
-                edge_type: EdgeType::Chain,
-                weight: 0.70,
-                label: Some("chain: tokio".to_string()),
-                methods: vec!["signal_chain".to_string()],
-            },
-        ];
-
-        edges::merge_duplicate_edges(&mut edge_list);
-
-        assert_eq!(edge_list.len(), 1, "duplicate edges should merge");
-        assert_eq!(edge_list[0].edge_type, EdgeType::Convergence);
-        assert_eq!(edge_list[0].methods.len(), 2);
-        assert!((edge_list[0].weight - 0.85).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_cluster_formation() {
-        let items = vec![
-            raw(1, "A", "hn", 0.8, vec![1.0, 0.0]),
-            raw(2, "B", "reddit", 0.7, vec![1.0, 0.0]),
-            raw(3, "C", "github", 0.6, vec![0.0, 1.0]),
-        ];
-
-        let edge_list = vec![edge(1, 2, 0.9)];
-
-        let clusters = clustering::compute_clusters(&items, &edge_list);
-        assert_eq!(clusters.len(), 1, "connected items should form one cluster");
-        assert_eq!(clusters[0].node_ids.len(), 2);
-        assert_eq!(clusters[0].source_count, 2);
-    }
-
-    #[test]
-    fn test_cluster_labels_prefer_distinctive_terms() {
-        // "release" appears in both clusters; the distinctive terms must win.
-        let items = vec![
-            raw(
-                1,
-                "React server components release",
-                "hn",
-                0.8,
-                vec![1.0, 0.0],
-            ),
-            raw(
-                2,
-                "React server actions release",
-                "reddit",
-                0.7,
-                vec![1.0, 0.0],
-            ),
-            raw(3, "Tokio scheduler release", "hn", 0.8, vec![0.0, 1.0]),
-            raw(
-                4,
-                "Tokio runtime internals release",
-                "reddit",
-                0.7,
-                vec![0.0, 1.0],
-            ),
-        ];
-        let edge_list = vec![edge(1, 2, 0.9), edge(3, 4, 0.9)];
-
-        let mut clusters = clustering::compute_clusters(&items, &edge_list);
-        clustering::assign_cluster_labels(&items, &mut clusters);
-
-        for cluster in &clusters {
-            let first = cluster.label.split(" · ").next().unwrap_or("");
-            assert_ne!(
-                first, "release",
-                "shared term must not lead a label; got '{}'",
-                cluster.label
-            );
-        }
-    }
-
-    #[test]
-    fn test_sparsify_keeps_backbone_connectivity() {
-        // A 10-node clique: sparsify must keep every node reachable and cut
-        // well below the full 45 edges.
-        let mut edge_list = Vec::new();
-        for i in 1..=10i64 {
-            for j in (i + 1)..=10 {
-                edge_list.push(edge(i, j, 0.8 + (i as f32) * 0.001));
-            }
-        }
-        edges::sparsify_edges(&mut edge_list, 3);
-
-        assert!(
-            edge_list.len() < 45,
-            "clique should shrink, kept {}",
-            edge_list.len()
-        );
-        // Connectivity: union everything and confirm one component.
-        let mut parent: std::collections::HashMap<i64, i64> = (1..=10).map(|i| (i, i)).collect();
-        fn find(parent: &std::collections::HashMap<i64, i64>, mut x: i64) -> i64 {
-            while parent[&x] != x {
-                x = parent[&x];
-            }
-            x
-        }
-        for e in &edge_list {
-            let (a, b) = (find(&parent, e.source), find(&parent, e.target));
-            if a != b {
-                parent.insert(a.max(b), a.min(b));
-            }
-        }
-        let roots: std::collections::HashSet<i64> = (1..=10).map(|i| find(&parent, i)).collect();
-        assert_eq!(roots.len(), 1, "sparsified graph must stay connected");
-    }
-
-    #[test]
-    fn test_sparsify_leaves_sparse_graphs_alone() {
-        let mut edge_list = vec![edge(1, 2, 0.9), edge(2, 3, 0.8)];
-        edges::sparsify_edges(&mut edge_list, 4);
-        assert_eq!(edge_list.len(), 2);
-    }
-
-    #[test]
-    fn test_title_word_overlap_high() {
-        // 0.5 = STORY_OVERLAP_MIN in story.rs, title_word_overlap's only consumer.
-        let overlap = edges::title_word_overlap(
-            "React 19 server components released",
-            "React 19 server components update",
-        );
-        assert!(
-            overlap > 0.5,
-            "similar titles should overlap >0.5, got {overlap}"
-        );
-    }
-
-    #[test]
-    fn test_title_word_overlap_low() {
-        let overlap = edges::title_word_overlap("Rust async runtime", "Python web framework");
-        assert!(overlap < 0.5);
-    }
-
-    #[test]
-    fn test_louvain_cuts_hub_chains() {
-        // Two dense themes bridged by one promiscuous hub. Connected
-        // components fused all 9 nodes into one cluster (the live 23-node
-        // crates blob); modularity must keep the themes separate.
-        let items: Vec<RawItem> = (1..=9)
-            .map(|i| raw(i, "t", "src", 0.5, vec![1.0, 0.0]))
-            .collect();
-        let mut edge_list = Vec::new();
-        // Theme A: 1-2-3-4 clique.
-        for i in 1..=4i64 {
-            for j in (i + 1)..=4 {
-                edge_list.push(edge(i, j, 0.9));
-            }
-        }
-        // Theme B: 5-6-7-8 clique.
-        for i in 5..=8i64 {
-            for j in (i + 1)..=8 {
-                edge_list.push(edge(i, j, 0.9));
-            }
-        }
-        // Hub 9 weakly touches both themes.
-        edge_list.push(edge(9, 1, 0.6));
-        edge_list.push(edge(9, 5, 0.6));
-
-        let clusters = clustering::compute_clusters(&items, &edge_list);
-
-        let of = |id: i64| {
-            clusters
-                .iter()
-                .position(|c| c.node_ids.contains(&id))
-                .expect("clustered")
-        };
-        assert_eq!(of(1), of(4), "theme A stays together");
-        assert_eq!(of(5), of(8), "theme B stays together");
-        assert_ne!(of(1), of(5), "hub must not weld the two themes");
-    }
-
-    #[test]
-    fn test_louvain_deterministic() {
-        let build = || {
-            let items: Vec<RawItem> = (1..=12)
-                .map(|i| raw(i, "t", "src", 0.5, vec![1.0, 0.0]))
-                .collect();
-            let mut edge_list = Vec::new();
-            for i in 1..=6i64 {
-                for j in (i + 1)..=6 {
-                    edge_list.push(edge(i, j, 0.8));
-                }
-            }
-            for i in 7..=12i64 {
-                for j in (i + 1)..=12 {
-                    edge_list.push(edge(i, j, 0.8));
-                }
-            }
-            edge_list.push(edge(3, 9, 0.55));
-            clustering::compute_clusters(&items, &edge_list)
-                .into_iter()
-                .map(|c| c.node_ids)
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(build(), build());
-    }
-
-    #[test]
-    fn test_label_falls_back_to_source_digest_when_no_shared_topic() {
-        // Six crates.io releases with NOTHING in common except the source
-        // template — the live case whose label degenerated to
-        // "crates · agentmail-rs · alpacars". "crates" is source boilerplate
-        // (in 100% of titles) and no other term covers 30%, so the honest
-        // digest label must win.
-        let titles = [
-            "crates.io: agentmail-rs v0.2.0",
-            "crates.io: alpacars v0.3.0",
-            "crates.io: krb5-gss v0.1.0",
-            "crates.io: rust-ynab v0.5.6",
-            "crates.io: oganesson-rs v0.2.1",
-            "crates.io: nidus-sqs v1.0.12",
-        ];
-        let items: Vec<RawItem> = titles
-            .iter()
-            .enumerate()
-            .map(|(i, t)| raw(i as i64 + 1, t, "crates_io", 0.5, vec![1.0, 0.0]))
-            .collect();
-        let mut edge_list = Vec::new();
-        for i in 1..=6i64 {
-            for j in (i + 1)..=6 {
-                edge_list.push(edge(i, j, 0.8));
-            }
-        }
-
-        let mut clusters = clustering::compute_clusters(&items, &edge_list);
-        assert_eq!(clusters.len(), 1);
-        clustering::assign_cluster_labels(&items, &mut clusters);
-
-        assert_eq!(
-            clusters[0].label, "crates.io · assorted",
-            "template-only cohesion must get an honest digest label"
-        );
-    }
-
-    #[test]
-    fn test_label_uses_real_topic_despite_source_boilerplate() {
-        // Boilerplate-heavy source ("crates" in every title) plus a REAL
-        // shared theme inside compound names — the live tauri sub-theme. The
-        // item universe includes unrelated crates so "tauri" is a topic
-        // (5 of 11 items), not source boilerplate. Sub-token extraction must
-        // surface it and the label must not be the digest fallback.
-        let titles = [
-            "crates.io: tauri-browser v0.5.0",
-            "crates.io: tauri-plugin-syncular v0.3.1",
-            "crates.io: tauri-plugin-hdiff-update v0.3.0",
-            "crates.io: tauri-plugin-thermal-printer v2.1.0",
-            "crates.io: tauri-plugin-serialplugin v3.0.1",
-            "crates.io: agentmail-rs v0.2.0",
-            "crates.io: alpacars v0.3.0",
-            "crates.io: krb5-gss v0.1.0",
-            "crates.io: rust-ynab v0.5.6",
-            "crates.io: oganesson-rs v0.2.1",
-            "crates.io: nidus-sqs v1.0.12",
-        ];
-        let items: Vec<RawItem> = titles
-            .iter()
-            .enumerate()
-            .map(|(i, t)| raw(i as i64 + 1, t, "crates_io", 0.5, vec![1.0, 0.0]))
-            .collect();
-        // Only the five tauri crates form a cluster.
-        let mut edge_list = Vec::new();
-        for i in 1..=5i64 {
-            for j in (i + 1)..=5 {
-                edge_list.push(edge(i, j, 0.85));
-            }
-        }
-
-        let mut clusters = clustering::compute_clusters(&items, &edge_list);
-        assert_eq!(clusters.len(), 1);
-        clustering::assign_cluster_labels(&items, &mut clusters);
-
-        assert!(
-            clusters[0].label.split(" · ").any(|w| w == "tauri"),
-            "the shared 'tauri' theme must be labelable; got '{}'",
-            clusters[0].label
-        );
-        assert!(
-            !clusters[0].label.split(" · ").any(|w| w == "crates"),
-            "source boilerplate must not enter labels; got '{}'",
-            clusters[0].label
-        );
-    }
-
-    #[test]
-    fn test_extract_title_keywords() {
-        let keywords = clustering::extract_title_keywords("Show HN: A New Rust Web Framework");
-        assert!(keywords.contains(&"rust".to_string()));
-        assert!(keywords.contains(&"web".to_string()));
-        assert!(keywords.contains(&"framework".to_string()));
-        assert!(!keywords.contains(&"a".to_string()));
-        assert!(!keywords.contains(&"hn".to_string()));
-    }
-
-    #[test]
-    fn test_extract_title_keywords_drops_numeric_noise() {
-        // Two live label leaks: a mastodon status URL glued to text tokenized
-        // as "116885294589687234Here" (2026-07-16), and short version/count
-        // tokens crowning labels ("152", "8th", "191k", "160-post",
-        // 2026-07-19). Digit-dominated tokens never label; real names with
-        // incidental digits survive.
-        let keywords = clustering::extract_title_keywords(
-            "RE: fosstodon 116885294589687234Here TypeScript 7.0 released v5-9 8th 191k sqlite3",
-        );
-        assert!(!keywords.iter().any(|k| k.contains("116885294589687234")));
-        assert!(keywords.contains(&"typescript".to_string()));
-        assert!(
-            keywords.contains(&"sqlite3".to_string()),
-            "incidental digit stays"
-        );
-        for noise in ["v5-9", "8th", "191k"] {
-            assert!(
-                !keywords.contains(&noise.to_string()),
-                "digit-dominated token '{noise}' must not label"
-            );
-        }
-    }
-
-    #[test]
-    fn test_edge_count_per_node() {
-        let edge_list = vec![edge(1, 2, 0.9), edge(1, 3, 0.8)];
-
-        let counts = edges::count_edges_per_node(&edge_list);
-        assert_eq!(counts[&1], 2);
-        assert_eq!(counts[&2], 1);
-        assert_eq!(counts[&3], 1);
-    }
-
-    /// End-to-end determinism against a real migrated schema. HashMap
-    /// iteration order changes per instance (random hash seed), and any
-    /// order-sensitive f32 accumulation downstream diverges builds — live
-    /// measure 2026-07-19: 104 of 139 node positions differed between two
-    /// same-corpus builds until edge order was canonicalized.
-    ///
-    /// Scope honesty: exact-tie fixtures cannot reproduce the float leak
-    /// (summing EQUAL values is order-independent; the live divergence needs
-    /// corpus-scale near-ties in low-order bits), so this test guards the
-    /// structural pipeline determinism and the schema contract. The
-    /// float-order fix itself is proven by the live double-build acceptance
-    /// check (two `build_content_graph` calls must return identical output).
-    #[test]
-    fn test_build_graph_is_deterministic_end_to_end() {
-        use crate::test_utils::test_db;
-
-        let db = test_db();
-        let conn = db.conn.lock();
-
-        // Four groups of 6 on a cone: member = 0.894·axis + 0.447·ortho with
-        // orthonormal axes/orthos, so EVERY within-group pair sits at exactly
-        // cos 0.80 — massive ties (the ordering-leak trigger) while staying
-        // below the 0.92 story-collapse rule and above the kNN floor.
-        let names = ["alpha", "beta", "gamma", "delta"];
-        let mut id = 0i64;
-        for (gi, name) in names.iter().enumerate() {
-            for m in 0..6usize {
-                id += 1;
-                let mut emb = vec![0.0f32; 32];
-                emb[gi] = 0.894_427;
-                emb[4 + gi * 6 + m] = 0.447_214;
-                let source = if m % 2 == 0 { "crates_io" } else { "mastodon" };
-                let title = format!("crates.io: {name}-crate-{m} v0.{m}.0");
-                let blob = crate::db::embedding_to_blob(&emb);
-                conn.execute(
-                    "INSERT INTO source_items (id, source_type, source_id, title, content,
-                        content_hash, embedding, embedding_status, relevance_score, created_at)
-                     VALUES (?1, ?2, ?3, ?4, '', ?5, ?6, 'complete', ?7, datetime('now'))",
-                    rusqlite::params![
-                        id,
-                        source,
-                        format!("crate-{name}-{m}"),
-                        title,
-                        format!("hash{id}"),
-                        blob,
-                        0.9 - (gi as f64) * 0.01, // relevance ties within groups
-                    ],
-                )
-                .expect("insert item");
-            }
-        }
-
-        let sig = |g: &ContentGraph| {
-            let mut nodes: Vec<String> = g
-                .nodes
-                .iter()
-                .map(|n| format!("{}:{:.2}:{:.2}:{:?}", n.id, n.x, n.y, n.cluster_id))
-                .collect();
-            nodes.sort();
-            let mut edges: Vec<String> = g
-                .edges
-                .iter()
-                .map(|e| format!("{}-{}:{:?}", e.source, e.target, e.edge_type))
-                .collect();
-            edges.sort();
-            let clusters: Vec<String> = g
-                .clusters
-                .iter()
-                .map(|c| format!("{}:{}:{:?}", c.id, c.label, c.node_ids))
-                .collect();
-            (nodes, edges, clusters)
-        };
-
-        let a = build_graph(&conn, 7, 150).expect("first build");
-        let b = build_graph(&conn, 7, 150).expect("second build");
-        assert_eq!(a.nodes.len(), 24, "fixture loads fully");
-        assert_eq!(sig(&a), sig(&b), "two same-corpus builds must be identical");
-    }
-
-    /// Corpus parity (W4-5, Phase 95): the graph shows what the current
-    /// brain stands behind. Curated items load at any age in the window;
-    /// young not-yet-judged items load as an honest interim; judged-and-
-    /// rejected items and OLD never-judged items (stale-epoch scores — the
-    /// live war-news-at-0.94 class) never load.
-    #[test]
-    fn test_graph_corpus_selects_verdicts_first() {
-        use crate::test_utils::test_db;
-
-        let db = test_db();
-        let conn = db.conn.lock();
-
-        let mut insert = |id: i64, title: &str, age: &str, verdict: Option<i64>, score: f64| {
-            // Distinct (orthogonal) embeddings — near-dup story collapse
-            // would otherwise fold the fixture behind one representative.
-            let mut v = vec![0.0f32; 8];
-            v[id as usize] = 1.0;
-            let emb = crate::db::embedding_to_blob(&v);
-            conn.execute(
-                "INSERT INTO source_items (id, source_type, source_id, title, content,
-                    content_hash, embedding, embedding_status, relevance_score,
-                    created_at, feed_relevant)
-                 VALUES (?1, 'hackernews', ?2, ?3, '', ?4, ?5, 'complete', ?6,
-                    datetime('now', ?7), ?8)",
-                rusqlite::params![
-                    id,
-                    format!("hn{id}"),
-                    title,
-                    format!("h{id}"),
-                    emb,
-                    score,
-                    age,
-                    verdict
-                ],
-            )
-            .expect("insert");
-        };
-
-        insert(1, "curated but old", "-5 days", Some(1), 0.6);
-        insert(2, "curated and fresh", "-1 hours", Some(1), 0.7);
-        insert(3, "young, not yet judged", "-1 hours", None, 0.95);
-        insert(4, "old, never judged (stale epoch)", "-5 days", None, 0.94);
-        insert(5, "judged and rejected", "-1 hours", Some(0), 0.93);
-
-        let graph = build_graph(&conn, 7, 150).expect("build");
-        let ids: Vec<i64> = graph.nodes.iter().map(|n| n.id).collect();
-
-        assert!(ids.contains(&1), "old curated item belongs to the corpus");
-        assert!(ids.contains(&2), "fresh curated item belongs to the corpus");
-        assert!(
-            ids.contains(&3),
-            "young unjudged item loads as honest interim"
-        );
-        assert!(
-            !ids.contains(&4),
-            "old never-judged item (stale-epoch score) must not load"
-        );
-        assert!(!ids.contains(&5), "rejected item must not load");
-        assert_eq!(graph.meta.curated_items, 2, "curated count is honest");
-    }
-}
+#[path = "graph_tests.rs"]
+mod tests;
