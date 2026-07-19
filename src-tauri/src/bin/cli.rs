@@ -723,16 +723,29 @@ fn format_plan_human(json: &str) -> String {
         .and_then(|x| x.as_array())
         .cloned()
         .unwrap_or_default();
-    if items.is_empty() {
-        return format!(
-            "Upgrade Plan (generated {generated})\n\nNo upgrade actions right now — nothing version-confirmed and fixable."
-        );
+
+    // ASCII only — this prints to a terminal; a `—` mojibakes to `?` on the
+    // Windows console (observed live). Keep every fixed string 7-bit clean.
+    let mut out = if items.is_empty() {
+        format!(
+            "Upgrade Plan (generated {generated})\n\nNo upgrade actions right now - nothing version-confirmed and fixable."
+        )
+    } else {
+        format!(
+            "Upgrade Plan - {} step(s), generated {}",
+            items.len(),
+            generated
+        )
+    };
+
+    // Consume the envelope metadata (schema v2/v3): surface the honesty caveats
+    // right under the header so a human never acts on a stale or under-covered
+    // plan. Fields are absent on an older snapshot -> the caveat is simply skipped.
+    for line in plan_caveats(&v) {
+        out.push('\n');
+        out.push_str(&line);
     }
-    let mut out = format!(
-        "Upgrade Plan — {} step(s), generated {}\n",
-        items.len(),
-        generated
-    );
+
     use std::fmt::Write as _;
     for (i, item) in items.iter().enumerate() {
         let title = item
@@ -750,7 +763,64 @@ fn format_plan_human(json: &str) -> String {
         // String is infallible, so the Result is deliberately discarded.
         let _ = write!(out, "\n{:>2}.{} {}", i + 1, badge, title);
     }
+
+    // Provenance footer: tier at generation + the security-data freshness floor.
+    let mut ctx: Vec<String> = Vec::new();
+    if let Some(scope) = v
+        .get("entitlement_scope_at_generation")
+        .and_then(|x| x.as_str())
+    {
+        ctx.push(format!("tier={scope}"));
+    }
+    if let Some(fresh) = v.get("source_freshness").and_then(|x| x.as_str()) {
+        ctx.push(format!("security data as of {fresh} UTC"));
+    }
+    if !ctx.is_empty() {
+        out.push_str("\n\n");
+        out.push_str(&ctx.join(" | "));
+    }
     out
+}
+
+/// Honesty caveats derived from the persisted envelope, most-important first.
+/// Each is a plain-ASCII line the human should see before acting on the plan.
+fn plan_caveats(v: &serde_json::Value) -> Vec<String> {
+    let mut lines = Vec::new();
+    // Staleness: the app is the only writer that recomputes; if the freshness
+    // horizon has passed, say so loudly (string parse is tolerant of a missing
+    // or malformed field — no caveat rather than a wrong one).
+    if let Some(expires) = v.get("expires_at").and_then(|x| x.as_str()) {
+        if let Ok(exp) = chrono::DateTime::parse_from_rfc3339(expires) {
+            if chrono::Utc::now() > exp.with_timezone(&chrono::Utc) {
+                lines.push(format!(
+                    "[STALE] this plan is past its freshness horizon (expired {expires}). Open the 4DA app (Signal) to recompute."
+                ));
+            }
+        }
+    }
+    // Negative-verdict trust gate: not-affected / fixed-at facts are only stable
+    // when the multi-version inventory is populated.
+    if v.get("multi_version_coverage")
+        .and_then(serde_json::Value::as_bool)
+        == Some(false)
+    {
+        lines.push(
+            "[!] not-affected / negative verdicts are NOT trustworthy here - the multi-version dependency inventory is not populated."
+                .to_string(),
+        );
+    }
+    // Thin-plan canary.
+    if let Some(drops) = v
+        .get("validation_drop_count")
+        .and_then(serde_json::Value::as_u64)
+    {
+        if drops > 0 {
+            lines.push(format!(
+                "[!] {drops} step(s) were dropped in validation - the plan may under-report."
+            ));
+        }
+    }
+    lines
 }
 
 // ============================================================================
@@ -915,5 +985,62 @@ mod tests {
     fn human_mode_degrades_gracefully_on_unparseable_snapshot() {
         let out = format_plan_human("{ this is not json ");
         assert!(out.contains("unreadable"));
+    }
+
+    /// A schema-v3 envelope with the metadata fields populated.
+    fn v3(expires: &str, coverage: bool, drops: u32) -> String {
+        format!(
+            r#"{{"schema_version":3,"generated_at":"2026-07-17T00:00:00Z","expires_at":"{expires}","generator_version":"1.0.0","entitlement_scope_at_generation":"signal","multi_version_coverage":{coverage},"dependency_inventory_hash":"abc","validation_drop_count":{drops},"source_freshness":"2026-07-17 00:00:00","engine_run_id":7,"item_count":0,"items":[]}}"#
+        )
+    }
+
+    #[test]
+    fn human_mode_output_is_ascii_no_em_dash() {
+        let out = format_plan_human(&v3("2099-01-01T00:00:00Z", true, 0));
+        assert!(out.contains("Upgrade Plan (generated"));
+        // The `—` mojibakes to `?` on the Windows console — fixed strings stay 7-bit.
+        assert!(!out.contains('\u{2014}'), "fixed output must be ASCII");
+    }
+
+    #[test]
+    fn human_mode_flags_a_stale_plan() {
+        let out = format_plan_human(&v3("2020-01-01T00:00:00Z", true, 0));
+        assert!(out.contains("[STALE]"), "past expires_at -> stale caveat");
+        assert!(out.contains("expired 2020-01-01"));
+    }
+
+    #[test]
+    fn human_mode_has_no_stale_flag_when_fresh() {
+        let out = format_plan_human(&v3("2099-01-01T00:00:00Z", true, 0));
+        assert!(!out.contains("[STALE]"));
+    }
+
+    #[test]
+    fn human_mode_warns_when_coverage_gate_is_not_green() {
+        let out = format_plan_human(&v3("2099-01-01T00:00:00Z", false, 0));
+        assert!(out.contains("NOT trustworthy"));
+        assert!(out.contains("multi-version"));
+    }
+
+    #[test]
+    fn human_mode_warns_on_dropped_steps() {
+        let out = format_plan_human(&v3("2099-01-01T00:00:00Z", true, 3));
+        assert!(out.contains("3 step(s) were dropped"));
+    }
+
+    #[test]
+    fn human_mode_shows_tier_and_freshness_footer() {
+        let out = format_plan_human(&v3("2099-01-01T00:00:00Z", true, 0));
+        assert!(out.contains("tier=signal"));
+        assert!(out.contains("security data as of 2026-07-17"));
+    }
+
+    #[test]
+    fn human_mode_skips_caveats_on_legacy_snapshot_without_metadata() {
+        // SAMPLE is schema-1 (no expires_at / coverage / drops) -> no caveats, no panic.
+        let out = format_plan_human(SAMPLE);
+        assert!(!out.contains("[STALE]"));
+        assert!(!out.contains("not trustworthy"));
+        assert!(out.contains("2 step(s)"));
     }
 }
