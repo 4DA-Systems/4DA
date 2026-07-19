@@ -45,7 +45,7 @@ const PLAN_KV_KEY: &str = "upgrade_plan_snapshot";
 /// Persisted-shape version. Bump on an incompatible change to
 /// [`super::types::UpgradePlanSnapshot`] / the item JSON; a reader that sees a
 /// higher version treats the snapshot as absent (fail closed).
-const PLAN_SCHEMA_VERSION: u32 = 1;
+const PLAN_SCHEMA_VERSION: u32 = 2;
 
 /// Persist the ranked plan to `kv_store` (blueprint D-1, DB-as-interface) so it
 /// survives restart and is readable out-of-process (the MCP server; a future
@@ -53,11 +53,47 @@ const PLAN_SCHEMA_VERSION: u32 = 1;
 /// computed plan, including an empty one, so a reader can tell "evaluated,
 /// nothing to do" (fresh `generated_at`, 0 items) from "never computed" (no
 /// key). Best-effort: a write error is logged, never propagated into the feed.
-pub fn persist_upgrade_plan(db: &Database, items: &[EvidenceItem]) {
+pub fn persist_upgrade_plan(db: &Database, items: &[EvidenceItem], validation_drop_count: u32) {
+    let generated = chrono::Utc::now();
+    // Staleness horizon: the plan is only as fresh as the security data it read,
+    // and that data is refreshed on the OSV sync cadence. State that horizon so a
+    // reader judges staleness without knowing 4DA's policy.
+    let expires = generated + chrono::Duration::hours(crate::osv::sync::osv_sync_max_age_hours());
+    // The inventory the plan was computed from (already sorted by the query) —
+    // used for both the change-detection hash and the coverage gate.
+    let instances = db.get_all_dependency_instances().unwrap_or_default();
+    let dependency_inventory_hash = {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        // Volatile columns (row id, detected_at) are excluded on purpose — the
+        // hash tracks the identity set (project, ecosystem, package, version).
+        for r in &instances {
+            hasher.update(r.project_path.as_bytes());
+            hasher.update([0u8]);
+            hasher.update(r.ecosystem.as_bytes());
+            hasher.update([0u8]);
+            hasher.update(r.package_name.as_bytes());
+            hasher.update([0u8]);
+            hasher.update(r.version.as_bytes());
+            hasher.update([b'\n']);
+        }
+        hex::encode(hasher.finalize())
+    };
     let snapshot = super::types::UpgradePlanSnapshot {
         schema_version: PLAN_SCHEMA_VERSION,
-        generated_at: chrono::Utc::now().to_rfc3339(),
+        generated_at: generated.to_rfc3339(),
+        expires_at: expires.to_rfc3339(),
         generator_version: env!("CARGO_PKG_VERSION").to_string(),
+        entitlement_scope_at_generation: if crate::settings::is_signal() {
+            "signal".to_string()
+        } else {
+            "free".to_string()
+        },
+        // Green iff the multi-version inventory (Phase 92) is populated — a reader
+        // must not trust negative/close verdicts without it.
+        multi_version_coverage: !instances.is_empty(),
+        dependency_inventory_hash,
+        validation_drop_count,
         item_count: items.len(),
         items: items.to_vec(),
     };
@@ -96,17 +132,22 @@ pub fn read_upgrade_plan_snapshot(db: &Database) -> Option<super::types::Upgrade
 }
 
 /// Build the ranked dependency Upgrade Plan as validated [`EvidenceItem`]s,
-/// most-actionable first. Returns an empty vec on cold-start (no matches) or if
-/// the matcher errors — never breaks on a data quirk.
+/// most-actionable first, and the count of steps dropped because they failed
+/// `validate_item`. Returns `(empty, 0)` on cold-start (no matches) or if the
+/// matcher errors — never breaks on a data quirk.
 ///
 /// Consumed by `preemption::compute_preemption_evidence_feed` (the Signal-tier
-/// feed); the lens renders these items as the "Upgrade Plan" group.
-pub fn build_upgrade_plan(db: &Database) -> Vec<EvidenceItem> {
+/// feed) which renders the items as the "Upgrade Plan" group and persists the
+/// snapshot. The drop count is the snapshot's `validation_drop_count` — the
+/// "thin plan" canary (a silent drop in a release build once shipped a truncated
+/// citation as a dropped step; a reader that sees a non-zero count knows the
+/// plan may under-report).
+pub fn build_upgrade_plan_with_drops(db: &Database) -> (Vec<EvidenceItem>, u32) {
     let matches = match crate::osv::matching::get_matched_advisories(db) {
         Ok(m) => m,
         Err(e) => {
             tracing::warn!(target: "4da::upgrade_plan", error = %e, "matcher failed — empty plan");
-            return Vec::new();
+            return (Vec::new(), 0);
         }
     };
 
@@ -129,25 +170,25 @@ pub fn build_upgrade_plan(db: &Database) -> Vec<EvidenceItem> {
     groups.sort_by_key(PackageGroup::sort_key);
 
     let now = chrono::Utc::now().timestamp_millis();
-    groups
-        .into_iter()
-        .filter_map(|g| {
-            let item = g.into_evidence_item(now);
-            match super::validate::validate_item(&item) {
-                Ok(()) => Some(item),
-                Err(e) => {
-                    debug_assert!(false, "upgrade_plan emitted an invalid item: {e:?}");
-                    tracing::warn!(
-                        target: "4da::evidence::validate",
-                        id = %item.id,
-                        error = ?e,
-                        "dropped invalid upgrade-plan item"
-                    );
-                    None
-                }
+    let mut items = Vec::with_capacity(groups.len());
+    let mut drops = 0u32;
+    for g in groups {
+        let item = g.into_evidence_item(now);
+        match super::validate::validate_item(&item) {
+            Ok(()) => items.push(item),
+            Err(e) => {
+                debug_assert!(false, "upgrade_plan emitted an invalid item: {e:?}");
+                tracing::warn!(
+                    target: "4da::evidence::validate",
+                    id = %item.id,
+                    error = ?e,
+                    "dropped invalid upgrade-plan item"
+                );
+                drops += 1;
             }
-        })
-        .collect()
+        }
+    }
+    (items, drops)
 }
 
 /// One package's aggregated upgrade step.

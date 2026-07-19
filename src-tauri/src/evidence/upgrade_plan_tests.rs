@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tests for the Upgrade Plan ranking brain (extracted via #[path]).
 
-use super::build_upgrade_plan;
 use crate::db::Database;
-use crate::evidence::{validate_item, EvidenceKind, Urgency, ACTION_IDS};
+use crate::evidence::{validate_item, EvidenceItem, EvidenceKind, Urgency, ACTION_IDS};
 use crate::test_utils::test_db;
+
+/// Items-only build for the tests; production takes `build_upgrade_plan_with_drops`
+/// (which also surfaces the validation-drop canary the snapshot persists).
+fn build_upgrade_plan(db: &Database) -> Vec<EvidenceItem> {
+    super::build_upgrade_plan_with_drops(db).0
+}
 
 /// Store an advisory affecting `package < fixed` (a real SEMVER range), so a
 /// dep at a lower version becomes a version-CONFIRMED match.
@@ -395,7 +400,7 @@ fn persist_and_read_upgrade_plan_snapshot_round_trips() {
     advisory(&db, "GHSA-snap-1", "lodash", "npm", "4.17.21", 7.5);
     let plan = build_upgrade_plan(&db);
     assert_eq!(plan.len(), 1);
-    persist_upgrade_plan(&db, &plan);
+    persist_upgrade_plan(&db, &plan, 0);
 
     let snap = read_upgrade_plan_snapshot(&db).expect("snapshot present after persist");
     assert_eq!(snap.item_count, 1);
@@ -403,6 +408,28 @@ fn persist_and_read_upgrade_plan_snapshot_round_trips() {
     assert_eq!(snap.items[0].affected_deps, vec!["lodash"]);
     assert!(!snap.generated_at.is_empty());
     assert!(!snap.generator_version.is_empty());
+    // v2 envelope metadata.
+    assert!(!snap.expires_at.is_empty(), "staleness horizon is stamped");
+    assert_ne!(
+        snap.expires_at, snap.generated_at,
+        "expiry is offset from generation by the sync horizon"
+    );
+    assert!(
+        snap.entitlement_scope_at_generation == "signal"
+            || snap.entitlement_scope_at_generation == "free",
+        "tier scope is one of the two known values, got {:?}",
+        snap.entitlement_scope_at_generation
+    );
+    assert_eq!(snap.validation_drop_count, 0, "a valid plan drops nothing");
+    assert!(
+        !snap.dependency_inventory_hash.is_empty(),
+        "inventory hash is stamped even when the inventory is empty"
+    );
+    // This test seeds project_dependencies but no dependency_instances.
+    assert!(
+        !snap.multi_version_coverage,
+        "no multi-version inventory -> coverage gate is not green"
+    );
     // Items survive the JSON round-trip byte-for-byte.
     assert_eq!(snap.items, plan);
 }
@@ -413,7 +440,7 @@ fn persist_upgrade_plan_records_an_empty_plan() {
     // an empty plan still writes a snapshot with a fresh timestamp and 0 items.
     use super::{persist_upgrade_plan, read_upgrade_plan_snapshot};
     let db = test_db();
-    persist_upgrade_plan(&db, &[]);
+    persist_upgrade_plan(&db, &[], 0);
     let snap = read_upgrade_plan_snapshot(&db).expect("empty plan is still persisted");
     assert_eq!(snap.item_count, 0);
     assert!(snap.items.is_empty());
@@ -427,14 +454,81 @@ fn persist_upgrade_plan_is_latest_wins() {
     db.store_dependency("/proj/a", "lodash", Some("4.17.20"), "npm", false, None)
         .unwrap();
     advisory(&db, "GHSA-lw-1", "lodash", "npm", "4.17.21", 7.5);
-    persist_upgrade_plan(&db, &build_upgrade_plan(&db));
+    persist_upgrade_plan(&db, &build_upgrade_plan(&db), 0);
     // A later empty compute overwrites the single row.
-    persist_upgrade_plan(&db, &[]);
+    persist_upgrade_plan(&db, &[], 0);
     let snap = read_upgrade_plan_snapshot(&db).unwrap();
     assert_eq!(
         snap.item_count, 0,
         "latest-wins: the empty snapshot replaced the earlier one"
     );
+}
+
+#[test]
+fn envelope_metadata_reflects_inventory_coverage_and_hash() {
+    use super::{build_upgrade_plan_with_drops, persist_upgrade_plan, read_upgrade_plan_snapshot};
+    use crate::db::DependencyInstanceInput;
+    let db = test_db();
+    let mk = |name: &str, ver: &str| DependencyInstanceInput {
+        package_name: name.to_string(),
+        version: ver.to_string(),
+        is_direct: true,
+        is_dev: false,
+        scope: "runtime".to_string(),
+    };
+
+    // No multi-version inventory -> gate not green; hash of the empty set is a
+    // stable non-empty constant.
+    persist_upgrade_plan(&db, &[], 0);
+    let empty_hash = read_upgrade_plan_snapshot(&db)
+        .unwrap()
+        .dependency_inventory_hash;
+    assert!(!empty_hash.is_empty());
+
+    // Populate the inventory (two versions of one package = the multi-version case).
+    db.store_dependency_instances(
+        "/proj/a",
+        "javascript",
+        &[mk("lodash", "4.17.20"), mk("lodash", "4.17.21")],
+    )
+    .unwrap();
+    persist_upgrade_plan(&db, &[], 0);
+    let snap1 = read_upgrade_plan_snapshot(&db).unwrap();
+    assert!(
+        snap1.multi_version_coverage,
+        "instances present -> coverage gate green"
+    );
+    assert_ne!(
+        snap1.dependency_inventory_hash, empty_hash,
+        "hash reflects the populated inventory"
+    );
+
+    // Unchanged inventory -> identical hash (deterministic).
+    persist_upgrade_plan(&db, &[], 0);
+    assert_eq!(
+        read_upgrade_plan_snapshot(&db)
+            .unwrap()
+            .dependency_inventory_hash,
+        snap1.dependency_inventory_hash,
+        "hash is stable for an unchanged inventory"
+    );
+
+    // Changed inventory -> different hash (a reader can detect drift).
+    db.store_dependency_instances("/proj/a", "javascript", &[mk("lodash", "4.17.20")])
+        .unwrap();
+    persist_upgrade_plan(&db, &[], 0);
+    assert_ne!(
+        read_upgrade_plan_snapshot(&db)
+            .unwrap()
+            .dependency_inventory_hash,
+        snap1.dependency_inventory_hash,
+        "hash changes when the inventory changes"
+    );
+
+    // build_upgrade_plan_with_drops reports zero drops for a clean (empty) build.
+    let (items, drops) = build_upgrade_plan_with_drops(&db);
+    assert!(items.is_empty());
+    assert_eq!(drops, 0);
 }
 
 #[test]
