@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { PreemptionTierSection } from './PreemptionTierSection';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 
@@ -73,5 +73,59 @@ describe('PreemptionTierSection', () => {
   it('has correct aria-label', () => {
     render(<PreemptionTierSection {...defaultProps} />);
     expect(screen.getByRole('region', { name: 'Your Stack' })).toBeDefined();
+  });
+
+  it('caps to maxVisible and shows a "show more" control when over the cap', () => {
+    const items = Array.from({ length: 5 }, (_, i) => makeItem(`item-${i}`, `Upgrade ${i}`));
+    render(
+      <PreemptionTierSection
+        {...defaultProps}
+        items={items}
+        maxVisible={2}
+        showMoreLabel={n => `Show ${n} more`}
+      />,
+    );
+    expect(screen.getByText('Upgrade 0')).toBeDefined();
+    expect(screen.getByText('Upgrade 1')).toBeDefined();
+    expect(screen.queryByText('Upgrade 2')).toBeNull();
+    expect(screen.getByText('Show 3 more')).toBeDefined();
+  });
+
+  it('renders every item with no cap control when at or under maxVisible', () => {
+    const items = [makeItem('a', 'One'), makeItem('b', 'Two')];
+    render(
+      <PreemptionTierSection
+        {...defaultProps}
+        items={items}
+        maxVisible={5}
+        showMoreLabel={n => `Show ${n} more`}
+      />,
+    );
+    expect(screen.getByText('One')).toBeDefined();
+    expect(screen.getByText('Two')).toBeDefined();
+    expect(screen.queryByText(/Show .* more/)).toBeNull();
+  });
+
+  it('expands to show every item when the "show more" control is clicked', () => {
+    const items = Array.from({ length: 4 }, (_, i) => makeItem(`item-${i}`, `Upgrade ${i}`));
+    render(
+      <PreemptionTierSection
+        {...defaultProps}
+        items={items}
+        maxVisible={2}
+        showMoreLabel={n => `Show ${n} more`}
+      />,
+    );
+    expect(screen.queryByText('Upgrade 3')).toBeNull();
+    fireEvent.click(screen.getByText('Show 2 more'));
+    expect(screen.getByText('Upgrade 3')).toBeDefined();
+    expect(screen.queryByText(/Show .* more/)).toBeNull();
+  });
+
+  it('does not cap when maxVisible is unset (other tiers render all items)', () => {
+    const items = Array.from({ length: 4 }, (_, i) => makeItem(`item-${i}`, `Alert ${i}`));
+    render(<PreemptionTierSection {...defaultProps} items={items} />);
+    expect(screen.getByText('Alert 3')).toBeDefined();
+    expect(screen.queryByText(/Show .* more/)).toBeNull();
   });
 });

@@ -16,6 +16,13 @@ import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 const DISMISS_STORAGE_KEY = 'preemption_dismissed';
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+// The Upgrade Plan is a ranked list that can run to 100+ steps on a large stack.
+// Show the top-ranked steps that matter most; collapse the rest behind a "show
+// more" control so the human surface stays scannable (doctrine: which upgrades
+// MATTER, not an exhaustive wall). The full plan is never suppressed — every
+// step is in the persisted snapshot the `4da plan` CLI / MCP handoff read.
+const UPGRADE_PLAN_VISIBLE_CAP = 25;
+
 function loadPersistedDismissals(): Set<string> {
   try {
     const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
@@ -273,6 +280,8 @@ const PreemptionView = memo(function PreemptionView() {
               surfacedRef={surfacedRef}
               onDismiss={handleDismiss}
               emptyText={t('preemption.upgradePlan.empty')}
+              maxVisible={UPGRADE_PLAN_VISIBLE_CAP}
+              showMoreLabel={hidden => t('preemption.evidence.showMore', { count: hidden })}
             />
           )}
 
