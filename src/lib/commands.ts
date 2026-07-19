@@ -312,6 +312,7 @@ interface CommandMap {
   trigger_morning_briefing: { params: Record<string, never>; result: string };
   record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
   snooze_item: { params: { sourceItemId: number; days: number }; result: { success: boolean; snooze_days: number } };
+  snooze_items: { params: { sourceItemIds: number[]; days: number }; result: { success: boolean; snoozed: number } };
   get_snoozed_item_ids: { params: Record<string, never>; result: number[] };
   watch_item: { params: { sourceItemId: number; topic: string; title: string }; result: { success: boolean; topic: string } };
   unwatch_item: { params: { sourceItemId: number }; result: { success: boolean } };

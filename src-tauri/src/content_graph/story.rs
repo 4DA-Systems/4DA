@@ -215,10 +215,11 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
 
     if member_idxs.len() == 1 {
         return StoryItem {
-            item: clone_raw(rep),
             member_ids: vec![rep.id],
             member_count: 1,
             affects_you: rep.matched_package.is_some(),
+            curated_count: usize::from(rep.curated),
+            item: clone_raw(rep),
         };
     }
 
@@ -261,7 +262,11 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
         .iter()
         .any(|&idx| items[idx].matched_package.is_some());
 
-    let curated = member_idxs.iter().any(|&idx| items[idx].curated);
+    let curated_count = member_idxs
+        .iter()
+        .filter(|&&idx| items[idx].curated)
+        .count();
+    let reserved = member_idxs.iter().any(|&idx| items[idx].reserved);
 
     StoryItem {
         item: RawItem {
@@ -274,12 +279,14 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
             signal_priority,
             matched_package: rep.matched_package.clone(),
             created_at: rep.created_at.clone(),
-            curated,
+            curated: curated_count > 0,
+            reserved,
             embedding: centroid,
         },
         member_ids,
         member_count: member_idxs.len(),
         affects_you,
+        curated_count,
     }
 }
 
@@ -295,6 +302,7 @@ pub(super) fn clone_raw(item: &RawItem) -> RawItem {
         matched_package: item.matched_package.clone(),
         created_at: item.created_at.clone(),
         curated: item.curated,
+        reserved: item.reserved,
         embedding: item.embedding.clone(),
     }
 }
@@ -315,6 +323,7 @@ mod tests {
             matched_package: None,
             created_at: String::new(),
             curated: false,
+            reserved: false,
             embedding,
         }
     }

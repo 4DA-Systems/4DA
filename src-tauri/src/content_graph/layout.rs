@@ -62,6 +62,7 @@ pub(super) fn compute_layout(
     edges: &[GraphEdge],
     clusters: &mut [GraphCluster],
     satellites: &HashMap<i64, SatelliteAssign>,
+    anchor_seeds: &HashMap<String, (f32, f32)>,
 ) {
     if nodes.is_empty() {
         return;
@@ -121,7 +122,19 @@ pub(super) fn compute_layout(
         })
         .collect();
 
-    let centers = place_cluster_discs(clusters, &halo_radii, edges, &id_to_idx, &cluster_of);
+    let seeds_by_idx: HashMap<usize, (f32, f32)> = clusters
+        .iter()
+        .enumerate()
+        .filter_map(|(ci, c)| anchor_seeds.get(&c.id).map(|&p| (ci, p)))
+        .collect();
+    let centers = place_cluster_discs(
+        clusters,
+        &halo_radii,
+        edges,
+        &id_to_idx,
+        &cluster_of,
+        &seeds_by_idx,
+    );
 
     let degree = node_degrees(nodes.len(), edges, &id_to_idx);
 
@@ -257,15 +270,17 @@ fn resolve_collisions(nodes: &mut [GraphNode], pinned: &[usize]) {
     }
 }
 
-/// Phase 1: place cluster discs. Seed on a circle (largest disc central),
-/// then iterate attraction along aggregated inter-cluster edges + separation
-/// of overlapping halos.
+/// Phase 1: place cluster discs. Anchored clusters (P2.11: matched to a
+/// persisted position from a previous build) seed AT their anchor; the rest
+/// seed on the compact spiral. The attraction/separation pass then runs over
+/// all of them — anchors provide continuity, not frozen geometry.
 fn place_cluster_discs(
     clusters: &[GraphCluster],
     radii: &[f32],
     edges: &[GraphEdge],
     id_to_idx: &HashMap<i64, usize>,
     cluster_of: &HashMap<usize, usize>,
+    anchor_seeds: &HashMap<usize, (f32, f32)>,
 ) -> Vec<(f32, f32)> {
     let k = clusters.len();
     if k == 0 {
@@ -311,7 +326,14 @@ fn place_cluster_discs(
     let mean_halo = radii.iter().sum::<f32>() / k as f32;
     let spiral_step = (2.0 * mean_halo + CLUSTER_GAP) * 0.62;
     let mut centers = vec![CENTER; k];
-    for (slot, &ci) in order.iter().enumerate() {
+    // Anchored discs take their remembered position; only unanchored discs
+    // consume spiral slots (in size order, largest most central).
+    let mut slot = 0usize;
+    for &ci in &order {
+        if let Some(&seed) = anchor_seeds.get(&ci) {
+            centers[ci] = seed;
+            continue;
+        }
         if slot == 0 {
             centers[ci] = CENTER;
         } else {
@@ -319,6 +341,7 @@ fn place_cluster_discs(
             let theta = slot as f32 * GOLDEN_ANGLE;
             centers[ci] = (CENTER.0 + r * theta.cos(), CENTER.1 + r * theta.sin());
         }
+        slot += 1;
     }
 
     if k == 1 {
@@ -444,7 +467,13 @@ mod tests {
         let mut clusters = vec![cluster("a", (1..=12).collect())];
         let edges: Vec<GraphEdge> = (2..=12).map(|i| edge(1, i, 0.8)).collect();
 
-        compute_layout(&mut nodes, &edges, &mut clusters, &HashMap::new());
+        compute_layout(
+            &mut nodes,
+            &edges,
+            &mut clusters,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
 
         let r = disc_radius(12);
         let (cx, cy) = (clusters[0].centroid_x, clusters[0].centroid_y);
@@ -469,7 +498,13 @@ mod tests {
         ];
         let edges = vec![edge(1, 11, 0.9), edge(11, 21, 0.9), edge(1, 21, 0.9)];
 
-        compute_layout(&mut nodes, &edges, &mut clusters, &HashMap::new());
+        compute_layout(
+            &mut nodes,
+            &edges,
+            &mut clusters,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
 
         for a in 0..clusters.len() {
             for b in (a + 1)..clusters.len() {
@@ -492,7 +527,7 @@ mod tests {
         sats.insert(6i64, sat("a", 0.60));
         sats.insert(7i64, sat("a", 0.46)); // barely related → farthest
 
-        compute_layout(&mut nodes, &edges, &mut clusters, &sats);
+        compute_layout(&mut nodes, &edges, &mut clusters, &sats, &HashMap::new());
 
         let (cx, cy) = (clusters[0].centroid_x, clusters[0].centroid_y);
         let dist = |id: i64| {
@@ -519,7 +554,7 @@ mod tests {
         let mut sats = HashMap::new();
         sats.insert(5i64, sat("a", 0.6));
 
-        compute_layout(&mut nodes, &edges, &mut clusters, &sats);
+        compute_layout(&mut nodes, &edges, &mut clusters, &sats, &HashMap::new());
 
         let map_max_y = nodes
             .iter()
@@ -554,7 +589,7 @@ mod tests {
             sats.insert(id, sat("a", 0.6));
         }
 
-        compute_layout(&mut nodes, &edges, &mut clusters, &sats);
+        compute_layout(&mut nodes, &edges, &mut clusters, &sats, &HashMap::new());
 
         for a in 0..nodes.len() {
             for b in (a + 1)..nodes.len() {
@@ -582,7 +617,7 @@ mod tests {
             let mut sats = HashMap::new();
             sats.insert(13i64, sat("a", 0.7));
             sats.insert(14i64, sat("b", 0.5));
-            compute_layout(&mut nodes, &edges, &mut clusters, &sats);
+            compute_layout(&mut nodes, &edges, &mut clusters, &sats, &HashMap::new());
             nodes.iter().map(|n| (n.x, n.y)).collect::<Vec<_>>()
         };
         assert_eq!(build(), build());
@@ -603,7 +638,13 @@ mod tests {
         }
         edges.push(edge(27, 28, 0.8));
 
-        compute_layout(&mut nodes, &edges, &mut clusters, &HashMap::new());
+        compute_layout(
+            &mut nodes,
+            &edges,
+            &mut clusters,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
         for n in &nodes {
             assert!(
                 n.x.is_finite() && n.y.is_finite(),
@@ -617,6 +658,12 @@ mod tests {
     fn empty_graph_is_a_no_op() {
         let mut nodes: Vec<GraphNode> = Vec::new();
         let mut clusters: Vec<GraphCluster> = Vec::new();
-        compute_layout(&mut nodes, &[], &mut clusters, &HashMap::new());
+        compute_layout(
+            &mut nodes,
+            &[],
+            &mut clusters,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
     }
 }

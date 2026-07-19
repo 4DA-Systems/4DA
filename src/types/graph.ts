@@ -66,6 +66,10 @@ export interface GraphMeta {
   edge_threshold: string;
   /** Pair-count-weighted mean of per-cluster coherence (null = no clusters). */
   mean_cluster_coherence: number | null;
-  /** Nodes carrying a persisted feed-curation verdict (corpus-parity ramp). */
+  /** Member ITEMS on the map carrying a persisted feed-curation verdict —
+   *  item-level so story collapse can't inflate the ramp (P2.14). */
   curated_items: number;
+  /** True when curated verdicts older than 7d exist — the 7/14/30d toggle
+   *  would actually change the graph. False = toggle is inert and hidden. */
+  windows_differ: boolean;
 }

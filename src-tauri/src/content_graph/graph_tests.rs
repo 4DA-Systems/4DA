@@ -20,6 +20,7 @@ fn raw(id: i64, title: &str, source_type: &str, score: f32, embedding: Vec<f32>)
         matched_package: None,
         created_at: "2026-05-24".to_string(),
         curated: false,
+        reserved: false,
         embedding,
     }
 }
@@ -53,6 +54,7 @@ fn test_empty_graph() {
             edge_threshold: "mutual top-3 nearest neighbors".to_string(),
             mean_cluster_coherence: None,
             curated_items: 0,
+            windows_differ: false,
         },
     };
     assert_eq!(graph.nodes.len(), 0);
@@ -866,4 +868,379 @@ fn test_node_budget_truncates_post_collapse_with_honest_meta() {
     }
     assert_eq!(graph.meta.window_candidates, 8, "full window counted");
     assert_eq!(graph.meta.hidden_items, 3, "truncated items disclosed");
+}
+
+/// P2.14: the curation ramp counts ITEMS, not stories — a story with one
+/// curated member and one unjudged near-duplicate contributes exactly 1.
+#[test]
+fn test_curated_count_is_item_level() {
+    use crate::test_utils::test_db;
+
+    let db = test_db();
+    let conn = db.conn.lock();
+
+    // Same one-hot embedding → the two items collapse into one story.
+    insert_singleton(&conn, 1, 8, 0, 0.9, "-1 hours", Some(1));
+    insert_singleton(&conn, 2, 8, 0, 0.8, "-1 hours", None);
+    // Unrelated curated singleton.
+    insert_singleton(&conn, 3, 8, 1, 0.7, "-1 hours", Some(1));
+
+    let graph = build_graph(&conn, 7, 150).expect("build");
+    assert_eq!(graph.nodes.len(), 2, "two items collapsed + one singleton");
+    assert_eq!(
+        graph.meta.curated_items, 2,
+        "1 curated member in the story + 1 curated singleton; the unjudged near-dup must not launder in"
+    );
+}
+
+/// P2.12: the top security items of the window hold reserved slots — a
+/// relevance-first cap can no longer render a 130-advisory week as a map
+/// with zero security nodes.
+#[test]
+fn test_security_quota_reserves_map_slots() {
+    use crate::test_utils::test_db;
+
+    let db = test_db();
+    let conn = db.conn.lock();
+
+    let dims = 64;
+    // 45 high-scoring unjudged discussion singletons…
+    for i in 0..45usize {
+        insert_singleton(
+            &conn,
+            i as i64 + 1,
+            dims,
+            i,
+            0.9 - i as f64 * 0.001,
+            "-1 hours",
+            None,
+        );
+    }
+    // …and three bottom-scored CVE advisories.
+    for (j, id) in [(0usize, 100i64), (1, 101), (2, 102)] {
+        let mut v = vec![0.0f32; dims];
+        v[50 + j] = 1.0;
+        let emb = crate::db::embedding_to_blob(&v);
+        conn.execute(
+            "INSERT INTO source_items (id, source_type, source_id, title, content,
+                content_hash, embedding, embedding_status, relevance_score, created_at)
+             VALUES (?1, 'cve', ?2, ?3, '', ?4, ?5, 'complete', ?6, datetime('now', '-1 hours'))",
+            rusqlite::params![
+                id,
+                format!("cve{id}"),
+                format!("[CVE-2026-{id}] fixture advisory {id}"),
+                format!("ch{id}"),
+                emb,
+                0.05 + j as f64 * 0.01
+            ],
+        )
+        .expect("insert cve");
+    }
+
+    // Budget of 30 nodes: relevance-first would fill every slot with
+    // discussion items; the quota must keep the advisories on the map.
+    let graph = build_graph(&conn, 7, 30).expect("build");
+    let ids: Vec<i64> = graph.nodes.iter().map(|n| n.id).collect();
+    for id in [100i64, 101, 102] {
+        assert!(
+            ids.contains(&id),
+            "reserved security item {id} must survive the cap"
+        );
+    }
+    assert!(
+        graph.nodes.iter().any(|n| n.category == "security"),
+        "security category present on the map"
+    );
+}
+
+/// P2.15: the window toggle is inert until curated verdicts age past the
+/// shortest window — meta says so, and the UI hides the dead control.
+#[test]
+fn test_windows_differ_tracks_verdict_age() {
+    use crate::test_utils::test_db;
+
+    let db = test_db();
+    let conn = db.conn.lock();
+
+    insert_singleton(&conn, 1, 8, 0, 0.9, "-1 hours", Some(1));
+    let young_only = build_graph(&conn, 7, 150).expect("build");
+    assert!(
+        !young_only.meta.windows_differ,
+        "all verdicts young: windows identical, toggle inert"
+    );
+
+    insert_singleton(&conn, 2, 8, 1, 0.8, "-10 days", Some(1));
+    let with_old = build_graph(&conn, 7, 150).expect("build");
+    assert!(
+        with_old.meta.windows_differ,
+        "a verdict older than 7d makes the windows genuinely different"
+    );
+}
+
+/// P2.11: greedy anchor matching — best Jaccard wins, each anchor used once,
+/// sub-floor overlap never matches.
+#[test]
+fn test_match_anchors_greedy_and_floored() {
+    use std::collections::HashSet;
+
+    let clusters = vec![
+        ("cluster_a".to_string(), HashSet::from([1i64, 2, 3, 4])),
+        ("cluster_b".to_string(), HashSet::from([5i64, 6, 7, 8])),
+        ("cluster_c".to_string(), HashSet::from([100i64, 101])),
+    ];
+    let anchors = vec![
+        super::anchors::StoredAnchor {
+            x: 10.0,
+            y: 10.0,
+            member_ids: HashSet::from([1, 2, 3, 9]),
+        },
+        super::anchors::StoredAnchor {
+            x: 20.0,
+            y: 20.0,
+            member_ids: HashSet::from([5, 6, 7, 8]),
+        },
+        super::anchors::StoredAnchor {
+            x: 30.0,
+            y: 30.0,
+            member_ids: HashSet::from([200, 201]),
+        },
+    ];
+
+    let seeds = super::anchors::match_anchors(&clusters, &anchors);
+    assert_eq!(
+        seeds.get("cluster_a"),
+        Some(&(10.0, 10.0)),
+        "overlap 3/5 matches"
+    );
+    assert_eq!(seeds.get("cluster_b"), Some(&(20.0, 20.0)), "exact match");
+    assert!(
+        !seeds.contains_key("cluster_c"),
+        "zero overlap never matches"
+    );
+}
+
+/// P2.11 end-to-end: stored anchors invert the two clusters' default
+/// left-right arrangement, and persisting the built graph round-trips.
+#[test]
+fn test_layout_anchors_seed_and_roundtrip() {
+    use crate::test_utils::test_db;
+
+    let db = test_db();
+    let conn = db.conn.lock();
+
+    // Two tight 4-item themes on a cone (within-group cosine 0.80 — clusters,
+    // not stories), mirroring the determinism fixture's construction.
+    let mut id = 0i64;
+    for gi in 0..2usize {
+        for m in 0..4usize {
+            id += 1;
+            let mut emb = vec![0.0f32; 16];
+            emb[gi] = 0.894_427;
+            emb[2 + gi * 4 + m] = 0.447_214;
+            let blob = crate::db::embedding_to_blob(&emb);
+            conn.execute(
+                "INSERT INTO source_items (id, source_type, source_id, title, content,
+                    content_hash, embedding, embedding_status, relevance_score, created_at)
+                 VALUES (?1, 'hackernews', ?2, ?3, '', ?4, ?5, 'complete', ?6, datetime('now', '-1 hours'))",
+                rusqlite::params![
+                    id,
+                    format!("hn{id}"),
+                    format!("group{gi} item {m}"),
+                    format!("h{id}"),
+                    blob,
+                    0.9 - gi as f64 * 0.01
+                ],
+            )
+            .expect("insert");
+        }
+    }
+
+    // Baseline (no anchors): record the natural x-order of the two clusters.
+    let baseline = build_graph(&conn, 7, 150).expect("baseline build");
+    assert_eq!(baseline.clusters.len(), 2, "fixture forms two clusters");
+    let centroid_x = |g: &ContentGraph, members: &[i64]| -> f32 {
+        g.clusters
+            .iter()
+            .find(|c| {
+                members.iter().all(|m| {
+                    g.nodes
+                        .iter()
+                        .any(|n| n.member_ids.contains(m) && c.node_ids.contains(&n.id))
+                })
+            })
+            .map(|c| c.centroid_x)
+            .expect("cluster for members")
+    };
+    let base_a = centroid_x(&baseline, &[1, 2, 3, 4]);
+    let base_b = centroid_x(&baseline, &[5, 6, 7, 8]);
+
+    // Anchors deliberately INVERT that arrangement with a wide margin.
+    let (ax, bx) = if base_a <= base_b {
+        (3000.0, -2000.0)
+    } else {
+        (-2000.0, 3000.0)
+    };
+    conn.execute(
+        "INSERT INTO graph_layout_anchors (window_days, cluster_key, x, y, member_ids)
+         VALUES (7, 'k_a', ?1, 500.0, '[1,2,3,4]'), (7, 'k_b', ?2, 500.0, '[5,6,7,8]')",
+        rusqlite::params![ax, bx],
+    )
+    .expect("insert anchors");
+
+    let anchored = build_graph(&conn, 7, 150).expect("anchored build");
+    let anc_a = centroid_x(&anchored, &[1, 2, 3, 4]);
+    let anc_b = centroid_x(&anchored, &[5, 6, 7, 8]);
+    assert_eq!(
+        (anc_a > anc_b),
+        (ax > bx),
+        "anchored arrangement must follow the anchors, not the spiral (a={anc_a}, b={anc_b})"
+    );
+    assert_ne!(
+        (base_a > base_b),
+        (anc_a > anc_b),
+        "anchors genuinely inverted the baseline arrangement"
+    );
+
+    // Round-trip: persisting the anchored build and rebuilding keeps the
+    // arrangement (approximate stability, not frozen geometry).
+    super::anchors::persist_layout_anchors(&conn, 7, &anchored);
+    let rebuilt = build_graph(&conn, 7, 150).expect("rebuild");
+    let re_a = centroid_x(&rebuilt, &[1, 2, 3, 4]);
+    let re_b = centroid_x(&rebuilt, &[5, 6, 7, 8]);
+    assert_eq!(
+        (re_a > re_b),
+        (anc_a > anc_b),
+        "arrangement survives persist and rebuild"
+    );
+}
+
+/// P2.17: cross-process determinism. Same-process double builds share one
+/// HashMap seed; every canonical-ordering fix claims independence from it,
+/// and this is the test that would catch a regression: the same on-disk
+/// corpus built in two separate processes (fresh random hash seeds) must
+/// produce identical output. Child mode is selected via env var.
+#[test]
+fn test_build_graph_deterministic_across_processes() {
+    // ---- child: build against the given DB and print a signature ----
+    if let Ok(db_path) = std::env::var("FOURDA_GRAPH_DETERMINISM_DB") {
+        let conn = rusqlite::Connection::open(&db_path).expect("child open");
+        let graph = build_graph(&conn, 7, 150).expect("child build");
+        let mut sig = String::new();
+        for n in &graph.nodes {
+            sig.push_str(&format!(
+                "{}:{:.4}:{:.4}:{:?};",
+                n.id, n.x, n.y, n.cluster_id
+            ));
+        }
+        for e in &graph.edges {
+            sig.push_str(&format!("{}-{}:{:?};", e.source, e.target, e.edge_type));
+        }
+        for c in &graph.clusters {
+            sig.push_str(&format!("{}:{}:{:?};", c.id, c.label, c.node_ids));
+        }
+        println!("GRAPH_SIG_LEN:{} GRAPH_SIG:{}", sig.len(), sig);
+        return;
+    }
+
+    // ---- parent: corpus-scale near-tie fixture on disk ----
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("determinism.db");
+    {
+        let conn = rusqlite::Connection::open(&db_path).expect("create db");
+        conn.execute_batch(
+            "CREATE TABLE source_items (
+                 id INTEGER PRIMARY KEY, source_type TEXT NOT NULL, source_id TEXT,
+                 title TEXT NOT NULL, url TEXT, content TEXT, content_hash TEXT,
+                 embedding BLOB, embedding_status TEXT, relevance_score REAL,
+                 created_at TEXT NOT NULL, signal_type TEXT, signal_priority TEXT,
+                 feed_relevant INTEGER, feed_verdict_at TEXT
+             );
+             CREATE TABLE source_item_dependencies (
+                 id INTEGER PRIMARY KEY, source_item_id INTEGER NOT NULL,
+                 package_name TEXT NOT NULL, confidence REAL NOT NULL
+             );
+             CREATE TABLE snoozed_items (
+                 source_item_id INTEGER PRIMARY KEY, snooze_until TEXT NOT NULL,
+                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
+             );
+             CREATE TABLE graph_layout_anchors (
+                 window_days INTEGER NOT NULL, cluster_key TEXT NOT NULL,
+                 x REAL NOT NULL, y REAL NOT NULL, member_ids TEXT NOT NULL,
+                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                 PRIMARY KEY (window_days, cluster_key)
+             );
+             CREATE TABLE user_dependencies (
+                 id INTEGER PRIMARY KEY, package_name TEXT NOT NULL
+             );
+             CREATE TABLE project_dependencies (
+                 id INTEGER PRIMARY KEY, package_name TEXT NOT NULL
+             );",
+        )
+        .expect("schema");
+
+        // Four 6-member cone groups: every within-group pair at exactly
+        // cos 0.80 — massive float ties, the ordering-leak trigger.
+        let names = ["alpha", "beta", "gamma", "delta"];
+        let mut id = 0i64;
+        for (gi, name) in names.iter().enumerate() {
+            for m in 0..6usize {
+                id += 1;
+                let mut emb = vec![0.0f32; 32];
+                emb[gi] = 0.894_427;
+                emb[4 + gi * 6 + m] = 0.447_214;
+                let blob = crate::db::embedding_to_blob(&emb);
+                conn.execute(
+                    "INSERT INTO source_items (id, source_type, source_id, title, content,
+                        content_hash, embedding, embedding_status, relevance_score, created_at)
+                     VALUES (?1, ?2, ?3, ?4, '', ?5, ?6, 'complete', ?7, datetime('now', '-1 hours'))",
+                    rusqlite::params![
+                        id,
+                        if m % 2 == 0 { "crates_io" } else { "mastodon" },
+                        format!("crate-{name}-{m}"),
+                        format!("crates.io: {name}-crate-{m} v0.{m}.0"),
+                        format!("hash{id}"),
+                        blob,
+                        0.9 - (gi as f64) * 0.01,
+                    ],
+                )
+                .expect("insert item");
+            }
+        }
+    }
+
+    let exe = std::env::current_exe().expect("test exe");
+    let run_child = || -> String {
+        let out = std::process::Command::new(&exe)
+            .args([
+                "--exact",
+                "content_graph::tests::test_build_graph_deterministic_across_processes",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(
+                "FOURDA_GRAPH_DETERMINISM_DB",
+                db_path.to_string_lossy().to_string(),
+            )
+            .output()
+            .expect("spawn child");
+        assert!(
+            out.status.success(),
+            "child failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        stdout
+            .lines()
+            .find(|l| l.contains("GRAPH_SIG_LEN:"))
+            .expect("child printed signature")
+            .to_string()
+    };
+
+    let first = run_child();
+    let second = run_child();
+    assert!(first.contains("GRAPH_SIG:"), "signature captured");
+    assert_eq!(
+        first, second,
+        "two fresh processes must build identical graphs"
+    );
 }

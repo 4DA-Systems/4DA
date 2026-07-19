@@ -13,6 +13,7 @@
 //! Everything is computed deterministically in Rust; the frontend renders
 //! positioned nodes without any JS layout.
 
+mod anchors;
 mod category;
 mod clustering;
 mod detail;
@@ -66,8 +67,11 @@ pub fn build_graph(
     days: u32,
     max_nodes: usize,
 ) -> Result<ContentGraph> {
-    let (items, window_candidates) =
-        loading::load_scored_items(conn, days, max_nodes * RAW_LOAD_FACTOR)?;
+    let loading::LoadedWindow {
+        items,
+        window_candidates,
+        windows_differ,
+    } = loading::load_scored_items(conn, days, max_nodes * RAW_LOAD_FACTOR)?;
     if items.is_empty() {
         return Ok(ContentGraph {
             nodes: Vec::new(),
@@ -85,6 +89,7 @@ pub fn build_graph(
                 edge_threshold: format!("mutual top-{KNN_K} nearest neighbors"),
                 mean_cluster_coherence: None,
                 curated_items: 0,
+                windows_differ,
             },
         });
     }
@@ -92,12 +97,12 @@ pub fn build_graph(
     // Collapse near-duplicates into stories FIRST: redundancy becomes one
     // node instead of a rendered clique (86% of live edges before this).
     // The node budget then applies to STORIES (see RAW_LOAD_FACTOR) —
-    // curated stories outrank unjudged ones, matching the load order.
+    // curated and quota-reserved stories are exempt from truncation, the
+    // rest rank by relevance (matching the load order).
     let mut stories = story::collapse_stories(items);
     stories.sort_by(|a, b| {
-        b.item
-            .curated
-            .cmp(&a.item.curated)
+        (b.item.curated || b.item.reserved)
+            .cmp(&(a.item.curated || a.item.reserved))
             .then(
                 b.item
                     .relevance_score
@@ -132,16 +137,16 @@ pub fn build_graph(
 
     // Visibility: anything connected or aggregated appears; isolated plain
     // items appear as semantic satellites (or shelf) up to SINGLETON_CAP by
-    // relevance. Curated singletons are EXEMPT from the cap: they carry a
-    // persisted feed-curation verdict — the corpus the map claims to show —
-    // so they can never lose a slot to a not-yet-judged item (live
-    // 2026-07-19: both capped items were curated while ~104 unjudged showed).
+    // relevance. Curated singletons are EXEMPT from the cap (they carry a
+    // persisted feed-curation verdict — the corpus the map claims to show),
+    // as are quota-reserved category items (P2.12) — both would otherwise
+    // lose their slot to higher-scored not-yet-judged items.
     struct Vis {
         id: i64,
         relevance: f32,
         connected: bool,
         is_story: bool,
-        curated: bool,
+        exempt: bool,
     }
     let degree = edges::count_edges_per_node(&edge_list);
     let mut handles: Vec<Vis> = stories
@@ -151,7 +156,7 @@ pub fn build_graph(
             relevance: s.item.relevance_score,
             connected: degree.get(&s.item.id).copied().unwrap_or(0) > 0,
             is_story: s.member_count > 1,
-            curated: s.item.curated,
+            exempt: s.item.curated || s.item.reserved,
         })
         .collect();
     handles.sort_by(|a, b| {
@@ -163,7 +168,7 @@ pub fn build_graph(
     let mut visible_ids: HashSet<i64> = HashSet::new();
     let mut ring_candidates: Vec<&Vis> = Vec::new();
     for handle in &handles {
-        if handle.connected || handle.is_story || handle.curated {
+        if handle.connected || handle.is_story || handle.exempt {
             visible_ids.insert(handle.id);
         } else {
             ring_candidates.push(handle);
@@ -295,17 +300,46 @@ pub fn build_graph(
         }
     }
 
+    // Temporal layout anchors (P2.11): clusters overlapping a persisted
+    // anchor's member set seed at the remembered position, so day-over-day
+    // maps stay spatially recognizable. Read-only here — persisting is the
+    // Tauri command's side effect, keeping build_graph a pure function of
+    // (corpus, anchor state) and the determinism contract intact.
+    let stored_anchors = anchors::load_anchors(conn, days);
+    let cluster_members: Vec<(String, HashSet<i64>)> = clusters
+        .iter()
+        .map(|c| {
+            let members: HashSet<i64> = c
+                .node_ids
+                .iter()
+                .filter_map(|id| stories.iter().find(|s| s.item.id == *id))
+                .flat_map(|s| s.member_ids.iter().copied())
+                .collect();
+            (c.id.clone(), members)
+        })
+        .collect();
+    let anchor_seeds = anchors::match_anchors(&cluster_members, &stored_anchors);
+
     // Layout sees the full retained edge set (affinity fidelity); display
     // gets the sparsified backbone + top-K.
-    layout::compute_layout(&mut nodes, &edge_list, &mut clusters, &satellite_of);
+    layout::compute_layout(
+        &mut nodes,
+        &edge_list,
+        &mut clusters,
+        &satellite_of,
+        &anchor_seeds,
+    );
     edges::sparsify_edges(&mut edge_list, TOP_K_EDGES);
 
     let story_count = nodes.iter().filter(|n| n.member_count > 1).count();
     let collapsed_items: usize = nodes.iter().map(|n| n.member_count.saturating_sub(1)).sum();
-    let curated_items = stories
+    // Item-level count (P2.14): a story contributes its curated MEMBER count,
+    // so near-duplicate collapse can't launder unjudged items into the ramp.
+    let curated_items: usize = stories
         .iter()
-        .filter(|s| visible_ids.contains(&s.item.id) && s.item.curated)
-        .count();
+        .filter(|s| visible_ids.contains(&s.item.id))
+        .map(|s| s.curated_count)
+        .sum();
 
     let meta = GraphMeta {
         total_items: nodes.len(),
@@ -319,6 +353,7 @@ pub fn build_graph(
         edge_threshold: format!("mutual top-{KNN_K} nearest neighbors"),
         mean_cluster_coherence,
         curated_items,
+        windows_differ,
     };
 
     info!(
@@ -350,7 +385,11 @@ pub fn build_content_graph(days: Option<u32>, max_nodes: Option<usize>) -> Resul
     let conn = crate::open_db_connection()?;
     let d = days.unwrap_or(DEFAULT_DAYS);
     let m = max_nodes.unwrap_or(DEFAULT_MAX_NODES);
-    build_graph(&conn, d, m)
+    let graph = build_graph(&conn, d, m)?;
+    // Persist this build's cluster geometry as the next build's layout
+    // anchors (P2.11). Deliberately OUTSIDE build_graph: builds stay pure.
+    anchors::persist_layout_anchors(&conn, d, &graph);
+    Ok(graph)
 }
 
 /// Hydrate a selected node's members for the detail panel (keyed lookup of
