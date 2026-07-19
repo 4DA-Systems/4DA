@@ -7,11 +7,8 @@ export type GraphNode = { id: bigint, title: string, url: string | null, source_
  */
 member_count: number, 
 /**
- * Titles of the collapsed siblings (representative excluded), capped.
- */
-member_titles: Array<string>, 
-/**
- * Item ids of all members including the representative.
+ * Item ids of all members including the representative — the detail
+ * panel hydrates member rows from these via `get_graph_node_details`.
  */
 member_ids: Array<bigint>, 
 /**

@@ -74,6 +74,10 @@ pub struct GraphCluster {
     pub label: String,
     pub node_ids: Vec<i64>,
     pub source_count: usize,
+    /// Mean pairwise embedding cosine among members — how tight this theme
+    /// really is. Emitted so coherence is measurable on every corpus, not
+    /// asserted (Wave 4 self-measurement).
+    pub coherence: f32,
     pub centroid_x: f32,
     pub centroid_y: f32,
 }
@@ -92,6 +96,10 @@ pub struct GraphMeta {
     pub hidden_items: usize,
     pub time_window_days: u32,
     pub edge_threshold: String,
+    /// Pair-count-weighted mean of per-cluster coherence — the graph's own
+    /// quality gauge, comparable across corpora and windows. `None` when no
+    /// cluster has 2+ members.
+    pub mean_cluster_coherence: Option<f32>,
 }
 
 /// Internal raw item loaded from the database (not exported).

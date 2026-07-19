@@ -51,6 +51,15 @@ pub(crate) fn is_ambiguous_package_name(name: &str) -> bool {
             | "error"
             | "hash"
             | "ring"
+            // Live audit 2026-07-19: title-only matches on these three were
+            // 6/6 false in the 7-day window ("Defense Express" news outlet,
+            // "Tower Bridge"/"Tower of Hanoi", "Tracing the voyage of a
+            // plastic bottle cap") — they painted the gold "touches your
+            // stack" ring on war-news items. Registry/advisory-proofed
+            // matches still surface them.
+            | "tower"
+            | "express"
+            | "tracing"
             | "url"
             | "http"
             | "crypto"
