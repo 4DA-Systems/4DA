@@ -23,9 +23,11 @@
 //! - Cold-start silent: an empty match set yields an empty plan (nothing
 //!   renders).
 //!
-//! SILENT surface: nothing consumes these items yet — the Preemption "Upgrade
-//! Plan" group render + Signal-gating land in the next stone. This module is the
-//! tested brain behind that face.
+//! Consumers (all shipped): the Preemption "Upgrade Plan" group renders these
+//! items (Signal-gated by their `Heuristic` provenance); `persist_upgrade_plan`
+//! writes the snapshot to `kv_store` for out-of-process readers; the `4da plan`
+//! CLI and the headless engine's per-cycle refresh read/refresh it. This module
+//! is the ranking brain behind all of them.
 
 use crate::db::Database;
 use crate::osv::types::MatchedAdvisory;
@@ -48,11 +50,12 @@ const PLAN_KV_KEY: &str = "upgrade_plan_snapshot";
 const PLAN_SCHEMA_VERSION: u32 = 3;
 
 /// Persist the ranked plan to `kv_store` (blueprint D-1, DB-as-interface) so it
-/// survives restart and is readable out-of-process (the MCP server; a future
-/// `fourda-engine plan --json`). Called from the feed compute — persists EVERY
-/// computed plan, including an empty one, so a reader can tell "evaluated,
-/// nothing to do" (fresh `generated_at`, 0 items) from "never computed" (no
-/// key). Best-effort: a write error is logged, never propagated into the feed.
+/// survives restart and is readable out-of-process (the `4da plan` CLI reads
+/// this key; the MCP handoff reads it too). Called from BOTH the GUI feed compute
+/// and the headless engine cycle — persists EVERY computed plan, including an
+/// empty one, so a reader can tell "evaluated, nothing to do" (fresh
+/// `generated_at`, 0 items) from "never computed" (no key). Best-effort: a write
+/// error is logged, never propagated into the caller.
 pub fn persist_upgrade_plan(
     db: &Database,
     items: &[EvidenceItem],
@@ -127,9 +130,11 @@ pub fn persist_upgrade_plan(
 /// written by an incompatible schema version (fail closed — a reader must never
 /// act on a snapshot it cannot fully trust).
 ///
-/// Test-exercised; the in-process production reader is the operator-gated
-/// Phase-2a MCP/CLI handoff (the MCP also reads the `kv_store` key directly).
-#[allow(dead_code)] // REMOVE BY 2026-10-01 — wired by the Phase-2a plan reader
+/// Test-exercised only: the shipped `4da plan` CLI reads the `kv_store` key via
+/// raw SQL (it deliberately does not link `fourda_lib`), so it does NOT call this
+/// `Database`-based reader. This fn's production caller is the in-app Phase-2a
+/// reader (operator-gated), still pending.
+#[allow(dead_code)] // REMOVE BY 2026-10-01 — wired by the in-app Phase-2a reader
 pub fn read_upgrade_plan_snapshot(db: &Database) -> Option<super::types::UpgradePlanSnapshot> {
     let json = db.get_kv(PLAN_KV_KEY).ok().flatten()?;
     let snapshot: super::types::UpgradePlanSnapshot = serde_json::from_str(&json).ok()?;
