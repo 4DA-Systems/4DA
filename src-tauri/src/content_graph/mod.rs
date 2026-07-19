@@ -819,4 +819,83 @@ mod tests {
         assert_eq!(counts[&2], 1);
         assert_eq!(counts[&3], 1);
     }
+
+    /// End-to-end determinism against a real migrated schema. HashMap
+    /// iteration order changes per instance (random hash seed), and any
+    /// order-sensitive f32 accumulation downstream diverges builds — live
+    /// measure 2026-07-19: 104 of 139 node positions differed between two
+    /// same-corpus builds until edge order was canonicalized.
+    ///
+    /// Scope honesty: exact-tie fixtures cannot reproduce the float leak
+    /// (summing EQUAL values is order-independent; the live divergence needs
+    /// corpus-scale near-ties in low-order bits), so this test guards the
+    /// structural pipeline determinism and the schema contract. The
+    /// float-order fix itself is proven by the live double-build acceptance
+    /// check (two `build_content_graph` calls must return identical output).
+    #[test]
+    fn test_build_graph_is_deterministic_end_to_end() {
+        use crate::test_utils::test_db;
+
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        // Four groups of 6 on a cone: member = 0.894·axis + 0.447·ortho with
+        // orthonormal axes/orthos, so EVERY within-group pair sits at exactly
+        // cos 0.80 — massive ties (the ordering-leak trigger) while staying
+        // below the 0.92 story-collapse rule and above the kNN floor.
+        let names = ["alpha", "beta", "gamma", "delta"];
+        let mut id = 0i64;
+        for (gi, name) in names.iter().enumerate() {
+            for m in 0..6usize {
+                id += 1;
+                let mut emb = vec![0.0f32; 32];
+                emb[gi] = 0.894_427;
+                emb[4 + gi * 6 + m] = 0.447_214;
+                let source = if m % 2 == 0 { "crates_io" } else { "mastodon" };
+                let title = format!("crates.io: {name}-crate-{m} v0.{m}.0");
+                let blob = crate::db::embedding_to_blob(&emb);
+                conn.execute(
+                    "INSERT INTO source_items (id, source_type, source_id, title, content,
+                        content_hash, embedding, embedding_status, relevance_score, created_at)
+                     VALUES (?1, ?2, ?3, ?4, '', ?5, ?6, 'complete', ?7, datetime('now'))",
+                    rusqlite::params![
+                        id,
+                        source,
+                        format!("crate-{name}-{m}"),
+                        title,
+                        format!("hash{id}"),
+                        blob,
+                        0.9 - (gi as f64) * 0.01, // relevance ties within groups
+                    ],
+                )
+                .expect("insert item");
+            }
+        }
+
+        let sig = |g: &ContentGraph| {
+            let mut nodes: Vec<String> = g
+                .nodes
+                .iter()
+                .map(|n| format!("{}:{:.2}:{:.2}:{:?}", n.id, n.x, n.y, n.cluster_id))
+                .collect();
+            nodes.sort();
+            let mut edges: Vec<String> = g
+                .edges
+                .iter()
+                .map(|e| format!("{}-{}:{:?}", e.source, e.target, e.edge_type))
+                .collect();
+            edges.sort();
+            let clusters: Vec<String> = g
+                .clusters
+                .iter()
+                .map(|c| format!("{}:{}:{:?}", c.id, c.label, c.node_ids))
+                .collect();
+            (nodes, edges, clusters)
+        };
+
+        let a = build_graph(&conn, 7, 150).expect("first build");
+        let b = build_graph(&conn, 7, 150).expect("second build");
+        assert_eq!(a.nodes.len(), 24, "fixture loads fully");
+        assert_eq!(sig(&a), sig(&b), "two same-corpus builds must be identical");
+    }
 }

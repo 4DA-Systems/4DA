@@ -288,6 +288,11 @@ fn place_cluster_discs(
             *affinity.entry(key).or_insert(0.0) += edge.weight;
         }
     }
+    // Sorted iteration order: the force pass accumulates f32 displacements,
+    // and HashMap order would make positions run-dependent (same class of
+    // leak as merge_duplicate_edges — see its determinism note).
+    let mut affinity: Vec<((usize, usize), f32)> = affinity.into_iter().collect();
+    affinity.sort_by_key(|&(key, _)| key);
 
     // Deterministic seed: size order, largest central, the rest on a compact
     // golden-angle (sunflower) spiral. Community detection yields ~40 small
@@ -324,7 +329,7 @@ fn place_cluster_discs(
         let mut disp = vec![(0.0f32, 0.0f32); k];
 
         // Attraction: related discs drift toward touching distance.
-        for (&(ca, cb), &w) in &affinity {
+        for &((ca, cb), w) in &affinity {
             let dx = centers[cb].0 - centers[ca].0;
             let dy = centers[cb].1 - centers[ca].1;
             let dist = (dx * dx + dy * dy).sqrt().max(1.0);

@@ -257,11 +257,16 @@ fn detect_chains_from_items(
 
     chains.retain(|c| c.confidence >= 0.3);
 
-    // Sort by priority
+    // Sort by priority. The id tie-break matters: chains come out of a
+    // HashMap, and equal (priority, length) chains would otherwise keep
+    // hash-random relative order — truncate(10) below then picks different
+    // survivors per run (found via the content-graph determinism audit,
+    // 2026-07-19).
     chains.sort_by(|a, b| {
         priority_rank(&a.overall_priority)
             .cmp(&priority_rank(&b.overall_priority))
             .then(b.links.len().cmp(&a.links.len()))
+            .then_with(|| a.id.cmp(&b.id))
     });
 
     chains.truncate(10);
