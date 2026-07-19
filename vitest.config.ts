@@ -10,6 +10,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // The self-hosted CI runner shares a machine with the dev fleet; under CPU
+    // starvation the 5s default times out tests that pass in ~10ms isolated
+    // (SprintPhase #322, then SettingsModal.keyboard + 1 more on #335 — a
+    // class, not individual bad tests). 30s still catches real hangs. Local
+    // default stays 5s for fast feedback.
+    testTimeout: process.env.CI ? 30_000 : 5_000,
+    hookTimeout: process.env.CI ? 30_000 : 10_000,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'dist', 'src-tauri'],
