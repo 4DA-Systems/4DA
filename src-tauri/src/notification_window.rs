@@ -406,8 +406,14 @@ mod tests {
         assert_eq!(dismiss_duration_ms(""), 4000);
     }
 
+    // The two cancel_dismiss_timer tests mutate the process-global DISMISS_CANCEL
+    // in opposite directions; under parallel test execution they interleave and
+    // flake (observed on the loaded CI runner, 2026-07-19). Serialize them.
+    static DISMISS_TEST_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+
     #[test]
     fn cancel_dismiss_timer_sets_flag() {
+        let _serial = DISMISS_TEST_LOCK.lock();
         // Set up a flag
         let flag = Arc::new(AtomicBool::new(false));
         {
@@ -426,6 +432,7 @@ mod tests {
 
     #[test]
     fn cancel_dismiss_timer_no_op_when_empty() {
+        let _serial = DISMISS_TEST_LOCK.lock();
         // Ensure guard is empty
         {
             let mut guard = DISMISS_CANCEL.lock();
