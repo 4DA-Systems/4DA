@@ -15,6 +15,11 @@
   --color-accent-primary-hover: #E2E2E2;
   --color-accent-gold: #D4AF37;
   --color-accent-gold-hover: #C4A030;
+  /* Content-graph "touches your stack" beacon core. Dark: white — it glows
+     against matte black (additive bloom). Light gets a deep navy twin below;
+     on paper near-black read as a jarring hole, and the gold ring/halo already
+     carries the beacon, so the core can be a colour (founder tune 2026-07-20). */
+  --color-graph-stack-core: #FFFFFF;
   --color-border: #2A2A2A;
   --color-success: #22C55E;
   --color-error: #EF4444;
@@ -51,6 +56,11 @@
   --color-accent-primary-hover: #2B2925;
   --color-accent-gold: #8F7118;
   --color-accent-gold-hover: #7A5F12;
+  /* Deep navy stack-beacon core for paper (founder tune 2026-07-20): dark
+     enough to hold strong contrast on the warm background, but a colour rather
+     than the near-black ink that read as a hole. Deep + desaturated, so it
+     never collides with the bright saturated discussion sky-blue (#3B9EFF). */
+  --color-graph-stack-core: #2A4A7F;
   --color-border: #DDDAD2;
   --color-success: #15803D;
   --color-error: #B91C1C;
