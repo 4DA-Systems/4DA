@@ -11,7 +11,8 @@
     "dev": "eleventy --serve",
     "cf:dev": "wrangler pages dev",
     "cf:deploy": "wrangler pages deploy",
-    "verify:ed25519": "node scripts/verify-ed25519-equivalence.mjs"
+    "verify:ed25519": "node scripts/verify-ed25519-equivalence.mjs",
+    "test:lease": "node scripts/test-lease.mjs"
   },
   "dependencies": {
     "@noble/ed25519": "^2",

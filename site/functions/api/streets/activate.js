@@ -19,6 +19,7 @@
 
 import Stripe from 'stripe';
 import * as ed from '@noble/ed25519';
+import { generateRefreshKey } from '../../../lib/ed25519-license.js';
 
 // ---------------------------------------------------------------------------
 // Ed25519 on the Workers runtime.
@@ -176,6 +177,27 @@ async function resolveCustomerId(stripe, customerId, email) {
   return created.id;
 }
 
+// Lease model: ensure the customer has a STABLE, unguessable refresh credential
+// stored in metadata (generated once, reused forever). The desktop lease client
+// presents this to /api/license/refresh to mint short-lived entitlement tokens.
+// Idempotent — never regenerates an existing key (that would break the user's
+// stored credential). Additive: the legacy long-token flow is untouched.
+async function ensureRefreshKey(stripe, customerId) {
+  try {
+    const c = await stripe.customers.retrieve(customerId);
+    if (c.deleted) return null;
+    if (c.metadata?.refresh_key) return c.metadata.refresh_key;
+    const key = generateRefreshKey();
+    await stripe.customers.update(customerId, { metadata: { refresh_key: key } });
+    return key;
+  } catch (err) {
+    // Non-fatal: the legacy token was already issued; refresh_key can be
+    // back-filled on the next event. Never fail the webhook over this.
+    console.error('ensureRefreshKey failed (non-fatal):', err?.message);
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Webhook event handlers
 // ---------------------------------------------------------------------------
@@ -193,7 +215,10 @@ async function handleCheckoutCompleted(env, stripe, session) {
   }
 
   const { licenseKey } = await generateAndStoreLicense(env, stripe, customerId, email, tier, billingPeriod);
-  console.log('License generated:', email, 'tier:', tier, 'period:', billingPeriod, 'customer:', customerId, 'len:', licenseKey.length);
+  // Lease model: back the account with a stable refresh credential for the
+  // short-lived-token flow (additive; legacy long token above still delivered).
+  const refreshKey = await ensureRefreshKey(stripe, customerId);
+  console.log('License generated:', email, 'tier:', tier, 'period:', billingPeriod, 'customer:', customerId, 'len:', licenseKey.length, 'refresh_key:', refreshKey ? 'set' : 'none');
   return { license_generated: true };
 }
 
