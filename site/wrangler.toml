@@ -1,0 +1,13 @@
+# Cloudflare Pages configuration for 4da.ai
+#
+# - Static assets: Eleventy build output in _site (built via `npx @11ty/eleventy`)
+# - Functions: file-based routing from ./functions -> /api/*
+# - nodejs_compat: lets the Stripe SDK + Buffer/process run on the Workers runtime.
+#
+# Deploy:  npx wrangler pages deploy      (uses pages_build_output_dir)
+# Dev:     npx wrangler pages dev          (serves _site + ./functions locally)
+
+name = "4da-site"
+pages_build_output_dir = "_site"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]

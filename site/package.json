@@ -8,13 +8,18 @@
   },
   "scripts": {
     "build": "eleventy",
-    "dev": "eleventy --serve"
+    "dev": "eleventy --serve",
+    "cf:dev": "wrangler pages dev",
+    "cf:deploy": "wrangler pages deploy",
+    "verify:ed25519": "node scripts/verify-ed25519-equivalence.mjs"
   },
   "dependencies": {
+    "@noble/ed25519": "^2",
     "stripe": "^20.3.1"
   },
   "devDependencies": {
-    "@11ty/eleventy": "3"
+    "@11ty/eleventy": "3",
+    "wrangler": "^4"
   },
   "pnpm": {
     "overrides": {

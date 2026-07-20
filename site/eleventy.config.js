@@ -8,7 +8,13 @@ export default function(eleventyConfig) {
   eleventyConfig.addPassthroughCopy({ "media": "media" });
   eleventyConfig.addPassthroughCopy({ "merch-designs": "merch-designs" });
   eleventyConfig.addPassthroughCopy({ "merch-photos": "merch-photos" });
-  eleventyConfig.addPassthroughCopy({ "api": "api" });
+  // Cloudflare migration: the /api serverless functions are NOT copied to the
+  // static output. They run as Cloudflare Pages Functions from site/functions/.
+  // Copying the raw source into _site would expose it publicly AND collide with
+  // Functions routing. (On Vercel this passthrough was a no-op at best.)
+  // _redirects + _headers must live in the OUTPUT dir to take effect on Pages.
+  eleventyConfig.addPassthroughCopy({ "_redirects": "_redirects" });
+  eleventyConfig.addPassthroughCopy({ "_headers": "_headers" });
   eleventyConfig.addPassthroughCopy({ "shopify-theme.css": "shopify-theme.css" });
   eleventyConfig.addPassthroughCopy({ "test-e2e-stripe.mjs": "test-e2e-stripe.mjs" });
   // Stack Scan — self-contained static app (no analytics by design; must NOT go through

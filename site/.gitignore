@@ -2,3 +2,5 @@
 _site
 node_modules
 .env*.local
+.dev.vars
+.wrangler/

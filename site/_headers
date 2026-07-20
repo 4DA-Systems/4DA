@@ -1,0 +1,6 @@
+# Cloudflare Pages headers. Conservative, safe hardening only (behavior-preserving:
+# the previous Vercel site set no custom headers on static assets). API functions
+# set their own CORS headers in code.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
