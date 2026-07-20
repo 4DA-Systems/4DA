@@ -18,13 +18,8 @@ import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import { useTheme } from '../../lib/theme';
 import { useAppStore } from '../../store';
-import type {
-  ContentGraph,
-  GraphNode as ContentGraphNode,
-  GraphEdge as ContentGraphEdge,
-  GraphCluster,
-} from '../../types/graph';
-import ContentGraphNodeComponent, { CATEGORY_COLORS, type ContentNode } from './ContentGraphNode';
+import type { ContentGraph } from '../../types/graph';
+import ContentGraphNodeComponent, { type ContentNode } from './ContentGraphNode';
 import ContentGraphEdgeComponent from './ContentGraphEdge';
 import GraphDetailPanel from './GraphDetailPanel';
 import {
@@ -35,96 +30,14 @@ import {
   ErrorState,
   GraphLegend,
 } from './ContentGraphChrome';
-
-const LAST_VIEW_KEY = '4da:graph:lastViewedAt';
-
-/** Free space between a cluster's outermost member and its hull ring. */
-const HULL_PADDING = 60;
-
-function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): Node[] {
-  const lastViewed = localStorage.getItem(LAST_VIEW_KEY);
-  const lastViewedMs = lastViewed ? new Date(lastViewed).getTime() : 0;
-
-  const contentNodes: Node[] = graphNodes.map((n) => ({
-    id: String(n.id),
-    type: 'contentNode' as const,
-    position: { x: n.x, y: n.y },
-    data: {
-      title: n.title,
-      url: n.url,
-      source_type: n.source_type,
-      relevance_score: n.relevance_score,
-      signal_type: n.signal_type,
-      signal_priority: n.signal_priority,
-      primary_topic: n.primary_topic,
-      cluster_id: n.cluster_id,
-      member_count: n.member_count,
-      member_ids: n.member_ids,
-      category: n.category,
-      affects_you: n.affects_you,
-      isNew: n.created_at ? new Date(n.created_at).getTime() > lastViewedMs : false,
-    },
-  }));
-
-  // Hull discs render UNDER members (array order = paint order) so theme
-  // grouping is visible at fit zoom — proximity alone stops carrying it once
-  // clusters shrink to 2-5 members.
-  const positionOf = new Map(graphNodes.map((n) => [n.id, { x: n.x, y: n.y }]));
-  const hullNodes: Node[] = clusters.map((c) => {
-    let radius = 0;
-    for (const id of c.node_ids) {
-      const p = positionOf.get(id);
-      if (!p) continue;
-      const d = Math.hypot(p.x - c.centroid_x, p.y - c.centroid_y);
-      if (d > radius) radius = d;
-    }
-    radius += HULL_PADDING;
-    return {
-      id: `hull-${c.id}`,
-      type: 'clusterHull' as const,
-      position: { x: c.centroid_x - radius, y: c.centroid_y - radius },
-      data: { radius },
-      selectable: false,
-      draggable: false,
-      connectable: false,
-      focusable: false,
-      // On the WRAPPER, not just the inner div: otherwise the disc swallows
-      // pane clicks/drags across its whole area (deselect + panning break).
-      style: { pointerEvents: 'none' as const },
-    };
-  });
-
-  const clusterNodes: Node[] = clusters.map((c) => ({
-    id: `cluster-${c.id}`,
-    type: 'clusterLabel' as const,
-    position: { x: c.centroid_x, y: c.centroid_y - 30 },
-    // Show the cluster's ITEM count (node_ids), not source_count — the latter
-    // is almost always 1 (clusters form from same-source neighbours), so it
-    // read as a meaningless "(1)" on every label (doctrine rule 3: no vanity
-    // metrics). Item count tells the user how big the cluster actually is.
-    data: { label: c.label, count: c.node_ids.length },
-    selectable: false,
-    draggable: false,
-    connectable: false,
-  }));
-
-  return [...hullNodes, ...contentNodes, ...clusterNodes];
-}
-
-function toFlowEdges(graphEdges: ContentGraphEdge[]): Edge[] {
-  return graphEdges.map((e, i) => ({
-    id: `e-${e.source}-${e.target}-${i}`,
-    source: String(e.source),
-    target: String(e.target),
-    type: 'contentEdge' as const,
-    data: {
-      edge_type: e.edge_type,
-      weight: e.weight,
-      label: e.label,
-      methods: e.methods,
-    },
-  }));
-}
+import {
+  NON_STACK_OPACITY,
+  ZoomCssVar,
+  toFlowNodes,
+  toFlowEdges,
+  minimapNodeColor,
+  markGraphViewed,
+} from './ContentGraphFlowHelpers';
 
 const nodeTypes = {
   contentNode: ContentGraphNodeComponent,
@@ -133,14 +46,6 @@ const nodeTypes = {
 };
 const edgeTypes = { contentEdge: ContentGraphEdgeComponent };
 
-// Only content nodes appear in the minimap — label/hull helper nodes drew as
-// phantom gray dots (live audit 2026-07-19).
-function minimapNodeColor(node: Node): string {
-  if (node.type !== 'contentNode') return 'transparent';
-  const data = node.data as ContentNode['data'] | undefined;
-  if (!data?.category) return '#6B7280';
-  return CATEGORY_COLORS[data.category] ?? '#6B7280';
-}
 
 
 // Fixed legend order: most-urgent first. Category identity is color + shape
@@ -187,7 +92,7 @@ export default function ContentGraphView() {
         setBaseEdges(flowEdges);
         setMeta(graph.meta);
         builtAgainstRef.current = useAppStore.getState().appState.relevanceResults;
-        localStorage.setItem(LAST_VIEW_KEY, new Date().toISOString());
+        markGraphViewed();
       })
       .catch((err) => {
         if (cancelled) return;
@@ -225,16 +130,25 @@ export default function ContentGraphView() {
     }));
   }, [hoveredNodeId, baseEdges, setEdges]);
 
-  // Dim non-neighbors while hovering AND restore on unhover — the reset
-  // branch is load-bearing: an early return on null left 128/129 nodes stuck
-  // at 25% opacity after the first hover (live-verified 2026-07-19).
+  // Single source of node opacity. Resting state: stack nodes at 1, the rest
+  // at NON_STACK_OPACITY (figure-ground). Hovering: the hovered node and its
+  // neighbors go to full brightness — even non-stack ones, focus intent wins
+  // — and everything else drops to 0.25. The unhover reset branch is
+  // load-bearing: an early return on null left 128/129 nodes stuck at 25%
+  // after the first hover (live-verified 2026-07-19).
   useEffect(() => {
     setNodes((nds) => nds.map((n) => {
       if (n.type !== 'contentNode') return n;
-      const dimmed = hoveredNodeId !== null
-        && n.id !== hoveredNodeId
-        && !connectedNodeIds.has(n.id);
-      return { ...n, style: dimmed ? { opacity: 0.25, transition: 'opacity 200ms ease' } : { opacity: 1, transition: 'opacity 200ms ease' } };
+      const d = n.data as ContentNode['data'];
+      let opacity: number;
+      if (hoveredNodeId === null) {
+        opacity = d.affects_you ? 1 : NON_STACK_OPACITY;
+      } else if (n.id === hoveredNodeId || connectedNodeIds.has(n.id)) {
+        opacity = 1;
+      } else {
+        opacity = 0.25;
+      }
+      return { ...n, style: { opacity, transition: 'opacity 200ms ease' } };
     }));
   }, [hoveredNodeId, connectedNodeIds, setNodes]);
 
@@ -354,6 +268,7 @@ export default function ContentGraphView() {
         elementsSelectable
         style={{ flex: '1 1 0%', minHeight: 0 }}
       >
+        <ZoomCssVar />
         {legend.categories.length > 0 && (
           <Panel position="top-left">
             <GraphLegend

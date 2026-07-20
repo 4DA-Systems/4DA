@@ -4,7 +4,7 @@
 // view stays within size limits and owns only data flow + interactions.
 import { useTranslation } from 'react-i18next';
 
-import { CATEGORY_COLORS, CATEGORY_SHAPES, AFFECTS_GOLD } from './ContentGraphNode';
+import { CATEGORY_COLORS, CATEGORY_SHAPES } from './ContentGraphNode';
 
 export function ClusterLabelNode({ data }: { data: { label: string; count: number } }) {
   return (
@@ -194,12 +194,14 @@ export function GraphLegend({ categories, anyAffects, edgeTypes }: GraphLegendPr
             whiteSpace: 'nowrap',
           }}
         >
+          {/* Mirrors the node treatment: max-contrast core + gold ring. */}
           <span
             style={{
               width: 9,
               height: 9,
               borderRadius: '50%',
-              border: `2px solid ${AFFECTS_GOLD}`,
+              backgroundColor: 'var(--color-text-primary)',
+              border: '2px solid var(--color-accent-gold)',
               display: 'inline-block',
             }}
           />

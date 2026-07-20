@@ -44,8 +44,6 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 const DEFAULT_CATEGORY_COLOR = '#6B7280';
 
-/** Gold = "touches your declared stack" (reserved accent, never a category). */
-const AFFECTS_GOLD = '#D4AF37';
 
 interface CategoryShape {
   borderRadius: string;
@@ -64,7 +62,7 @@ const CATEGORY_SHAPES: Record<string, CategoryShape> = {
 };
 const DEFAULT_SHAPE: CategoryShape = CATEGORY_SHAPES.discussion!;
 
-export { CATEGORY_COLORS, AFFECTS_GOLD, CATEGORY_SHAPES };
+export { CATEGORY_COLORS, CATEGORY_SHAPES };
 
 function getGlowStyle(priority: string | null): string {
   if (priority === 'critical') return '0 0 12px 3px rgba(239, 68, 68, 0.5)';
@@ -114,17 +112,36 @@ const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: Node
   const label = cleanTitle(data.title);
   const extraCount = memberCount - 1;
 
-  // Gold ring = touches your declared stack; a 2px surface-color gap keeps
-  // the ring readable against every category fill (incl. the amber release).
-  const affectsRing = data.affects_you
-    ? `0 0 0 2px var(--color-bg-primary), 0 0 0 4px ${AFFECTS_GOLD}`
+  // "Touches your stack" is a FILL-level signal (founder decision 2026-07-20):
+  // an outline ring was invisible at fit zoom while category fills read at any
+  // distance. Stack nodes take the max-contrast core their theme allows —
+  // --color-text-primary is white on matte black, ink on paper — plus a gold
+  // ring and halo whose widths divide by the live zoom (--graph-zoom, written
+  // by ZoomCssVar in ContentGraphView) so they hold a CONSTANT on-screen size
+  // from fit view to close-up. All theme tokens, no hardcoded white: the light
+  // theme's print-twin gold (--color-accent-gold #8F7118) engages by itself.
+  // Category identity survives through the SHAPE channel on stack nodes.
+  const isStack = data.affects_you;
+  const fill = isStack ? 'var(--color-text-primary)' : color;
+  const borderColor = isStack ? 'var(--color-text-primary)' : brighten(color);
+  const stackRing = isStack
+    ? `0 0 0 calc(2px / var(--graph-zoom, 1)) var(--color-bg-primary), ` +
+      `0 0 0 calc(4px / var(--graph-zoom, 1)) var(--color-accent-gold)`
     : '';
-  // Selection ring (detail panel open) sits outside every other ring so it
-  // never collides with the gold stack ring.
+  const stackHalo = isStack
+    ? `0 0 calc(20px / var(--graph-zoom, 1)) calc(8px / var(--graph-zoom, 1)) ` +
+      `color-mix(in srgb, var(--color-accent-gold) 50%, transparent)`
+    : '';
+  // Selection ring (detail panel open) sits outside the gold stack ring; on a
+  // stack node its core color equals the ring color, so the bg-primary gap is
+  // what keeps it readable.
   const selectedRing = selected
-    ? `0 0 0 ${data.affects_you ? 6 : 2}px var(--color-bg-primary), 0 0 0 ${data.affects_you ? 8 : 4}px var(--color-text-primary)`
+    ? isStack
+      ? `0 0 0 calc(6px / var(--graph-zoom, 1)) var(--color-bg-primary), ` +
+        `0 0 0 calc(8px / var(--graph-zoom, 1)) var(--color-text-primary)`
+      : `0 0 0 2px var(--color-bg-primary), 0 0 0 4px var(--color-text-primary)`
     : '';
-  const boxShadow = [affectsRing, selectedRing, glow === 'none' ? '' : glow]
+  const boxShadow = [stackRing, selectedRing, stackHalo, glow === 'none' ? '' : glow]
     .filter(Boolean)
     .join(', ') || 'none';
   const shapeTransform = shape.rotate ? ' rotate(45deg)' : '';
@@ -166,8 +183,8 @@ const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: Node
           width: size,
           height: size,
           borderRadius: shape.borderRadius,
-          backgroundColor: color,
-          border: `2px solid ${brighten(color)}`,
+          backgroundColor: fill,
+          border: `2px solid ${borderColor}`,
           boxShadow,
           cursor: 'pointer',
           transition: 'transform 150ms ease',

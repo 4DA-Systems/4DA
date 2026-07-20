@@ -9,7 +9,7 @@ import { isSafeUrl } from '../../utils/sanitize-html';
 import { getSourceLabel } from '../../config/sources';
 import { getRelevancePresentation } from '../../utils/score';
 import type { SourceRelevance } from '../../types';
-import { CATEGORY_COLORS, AFFECTS_GOLD, type ContentNode } from './ContentGraphNode';
+import { CATEGORY_COLORS, type ContentNode } from './ContentGraphNode';
 
 interface GraphDetailPanelProps {
   nodeId: number;
@@ -181,7 +181,11 @@ export default function GraphDetailPanel({ nodeId, data, onClose }: GraphDetailP
           {data.affects_you && (
             <span
               className="px-1.5 py-0.5 text-[10px] rounded border shrink-0"
-              style={{ color: AFFECTS_GOLD, borderColor: `${AFFECTS_GOLD}66`, backgroundColor: `${AFFECTS_GOLD}1A` }}
+              style={{
+                color: 'var(--color-accent-gold)',
+                borderColor: 'color-mix(in srgb, var(--color-accent-gold) 40%, transparent)',
+                backgroundColor: 'color-mix(in srgb, var(--color-accent-gold) 10%, transparent)',
+              }}
             >
               {t('signals.graphAffectsYou')}
             </span>
