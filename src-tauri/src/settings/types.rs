@@ -430,9 +430,18 @@ pub struct LicenseConfig {
     /// Tier: "free", "signal", "team", or "enterprise" (legacy "pro" also accepted)
     #[serde(default = "default_license_tier")]
     pub tier: String,
-    /// License key (empty for free tier)
+    /// License key (empty for free tier). In the lease model this holds the
+    /// current short-lived, offline-verifiable entitlement token (a signed
+    /// `4DA-...` key); in the legacy model it holds the long-lived signed key
+    /// or a Keygen key. Verified locally by `verify.rs` either way.
     #[serde(default)]
     pub license_key: String,
+    /// Lease model: the STABLE, unguessable refresh credential (`4DA-LIC-...`).
+    /// Present only for lease-issued licenses. It is exchanged at
+    /// `/api/license/refresh` for fresh entitlement tokens (stored in
+    /// `license_key`). Treated as a secret — zeroized on drop.
+    #[serde(default)]
+    pub refresh_key: Option<String>,
     /// ISO timestamp when license was activated
     #[serde(default)]
     pub activated_at: Option<String>,
@@ -458,6 +467,10 @@ impl std::fmt::Debug for LicenseConfig {
                     "[REDACTED]"
                 },
             )
+            .field(
+                "refresh_key",
+                &self.refresh_key.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("activated_at", &self.activated_at)
             .field("trial_started_at", &self.trial_started_at)
             .field("dev_unlock_all", &self.dev_unlock_all)
@@ -468,6 +481,9 @@ impl std::fmt::Debug for LicenseConfig {
 impl Drop for LicenseConfig {
     fn drop(&mut self) {
         self.license_key.zeroize();
+        if let Some(k) = self.refresh_key.as_mut() {
+            k.zeroize();
+        }
     }
 }
 
@@ -476,6 +492,7 @@ impl Default for LicenseConfig {
         Self {
             tier: "free".to_string(),
             license_key: String::new(),
+            refresh_key: None,
             activated_at: None,
             trial_started_at: None,
             dev_unlock_all: false,

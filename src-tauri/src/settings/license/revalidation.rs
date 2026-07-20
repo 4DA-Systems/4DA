@@ -312,6 +312,7 @@ mod reconcile_tests {
         LicenseConfig {
             tier: tier.to_string(),
             license_key: key.to_string(),
+            refresh_key: None,
             activated_at: None,
             trial_started_at: None,
             dev_unlock_all: false,
