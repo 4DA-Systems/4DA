@@ -14,7 +14,11 @@
 import Stripe from 'stripe';
 import { signLicenseToken } from '../../../lib/ed25519-license.js';
 
-const TOKEN_TTL_DAYS = 7; // lease window; app refreshes at ~half this
+// Lease window. Aligned with the app's 30-day activation grace so an offline
+// user's token never expires *before* their grace does (avoids a confusing
+// "expired" badge while still entitled). Online apps refresh every 6h, so
+// revocation latency is bounded by the refresh interval, not this TTL.
+const TOKEN_TTL_DAYS = 30;
 const ENTITLING_SUB_STATUSES = ['active', 'trialing', 'past_due']; // past_due = dunning grace
 
 function normalizeTier(tier) {
