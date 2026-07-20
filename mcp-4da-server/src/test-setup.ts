@@ -13,6 +13,8 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const emptySettings = join(tmpdir(), `4da-test-empty-settings-${process.pid}.json`);
+// Fixed name, not per-pid: the content is always "{}", so concurrent runs overwrite each other
+// harmlessly — and %TEMP% holds one file forever instead of one per test process (554 had accumulated).
+const emptySettings = join(tmpdir(), "4da-test-empty-settings.json");
 writeFileSync(emptySettings, "{}");
 process.env.FOURDA_SETTINGS_PATH = emptySettings;
