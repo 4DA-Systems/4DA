@@ -114,16 +114,17 @@ const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: Node
 
   // "Touches your stack" is a FILL-level signal (founder decision 2026-07-20):
   // an outline ring was invisible at fit zoom while category fills read at any
-  // distance. Stack nodes take the max-contrast core their theme allows —
-  // --color-text-primary is white on matte black, ink on paper — plus a gold
-  // ring and halo whose widths divide by the live zoom (--graph-zoom, written
-  // by ZoomCssVar in ContentGraphView) so they hold a CONSTANT on-screen size
-  // from fit view to close-up. All theme tokens, no hardcoded white: the light
-  // theme's print-twin gold (--color-accent-gold #8F7118) engages by itself.
-  // Category identity survives through the SHAPE channel on stack nodes.
+  // distance. Stack nodes take a dedicated beacon core (--color-graph-stack-
+  // core: white on matte black where it glows, deep navy on paper where it
+  // reads as intentional colour not a hole) plus a gold ring and halo whose
+  // widths divide by the live zoom (--graph-zoom, written by ZoomCssVar in
+  // ContentGraphView) so they hold a CONSTANT on-screen size from fit view to
+  // close-up. All theme tokens, no hardcoded colours: the light theme's
+  // print-twin gold (--color-accent-gold #8F7118) engages by itself. Category
+  // identity survives through the SHAPE channel on stack nodes.
   const isStack = data.affects_you;
-  const fill = isStack ? 'var(--color-text-primary)' : color;
-  const borderColor = isStack ? 'var(--color-text-primary)' : brighten(color);
+  const fill = isStack ? 'var(--color-graph-stack-core)' : color;
+  const borderColor = isStack ? 'var(--color-graph-stack-core)' : brighten(color);
   const stackRing = isStack
     ? `0 0 0 calc(2px / var(--graph-zoom, 1)) var(--color-bg-primary), ` +
       `0 0 0 calc(4px / var(--graph-zoom, 1)) var(--color-accent-gold)`

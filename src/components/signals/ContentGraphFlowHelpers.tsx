@@ -16,11 +16,12 @@ const LAST_VIEW_KEY = '4da:graph:lastViewedAt';
 /** Free space between a cluster's outermost member and its hull ring. */
 const HULL_PADDING = 60;
 
-/** Resting opacity for nodes that do NOT touch the user's stack — the stack
- *  is the figure, everything else is ground (founder decision 2026-07-20:
- *  stack-relevance must read at any distance; luminance is the channel that
- *  survives far zoom). Categories keep their hues, just quieted. */
-export const NON_STACK_OPACITY = 0.42;
+/** Resting opacity for nodes that do NOT touch the user's stack. A gentle
+ *  quieting, not a heavy dim (founder tune 2026-07-20: 0.42 buried the rest of
+ *  the map). At 0.85 the surrounding themes stay fully legible — the gold
+ *  beacon carries stack-visibility on its own, the dim is only a soft accent.
+ *  Categories keep their hues. */
+export const NON_STACK_OPACITY = 0.85;
 
 /** Writes the live viewport zoom to a CSS variable on the React Flow wrapper.
  *  Stack ring/halo widths divide by it (calc(px / var(--graph-zoom))), so the

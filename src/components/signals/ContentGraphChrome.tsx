@@ -194,13 +194,13 @@ export function GraphLegend({ categories, anyAffects, edgeTypes }: GraphLegendPr
             whiteSpace: 'nowrap',
           }}
         >
-          {/* Mirrors the node treatment: max-contrast core + gold ring. */}
+          {/* Mirrors the node treatment: beacon core + gold ring. */}
           <span
             style={{
               width: 9,
               height: 9,
               borderRadius: '50%',
-              backgroundColor: 'var(--color-text-primary)',
+              backgroundColor: 'var(--color-graph-stack-core)',
               border: '2px solid var(--color-accent-gold)',
               display: 'inline-block',
             }}
