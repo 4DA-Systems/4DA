@@ -206,11 +206,15 @@ pub(super) fn collapse_stories(items: Vec<RawItem>) -> Vec<StoryItem> {
 }
 
 fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryItem {
-    // Representative: first index in load order. The loader orders curated
-    // items first, then by relevance — so a story containing any curated
-    // member fronts a curated representative (the item the feed stands
-    // behind), and pure-unjudged stories front their highest-relevance member.
-    let rep_idx = member_idxs[0];
+    // Representative: earliest load-order member whose title is the MODAL
+    // title of the story. Load order (curated first, then relevance) alone
+    // let one mangled copy front a clean story — live 2026-07-21: a 10-member
+    // cross-source story where 7 members carried "Claude Code uses Bun
+    // written in Rust now" was fronted by the hashtag-scarred "… now rust"
+    // Mastodon copy because that copy happened to score highest. Members are
+    // near-duplicates by construction, so the majority title is the honest
+    // one; ties resolve to load order, preserving curated-first.
+    let rep_idx = representative_idx(items, member_idxs);
     let rep = &items[rep_idx];
 
     if member_idxs.len() == 1 {
@@ -221,6 +225,34 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
             curated_count: usize::from(rep.curated),
             item: clone_raw(rep),
         };
+    }
+
+    fn normalize_title(t: &str) -> String {
+        t.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase()
+    }
+
+    /// Earliest load-order member carrying the story's most common
+    /// normalized title (first-seen order breaks frequency ties, so the
+    /// result is deterministic and curated-first-biased).
+    fn representative_idx(items: &[RawItem], member_idxs: &[usize]) -> usize {
+        if member_idxs.len() == 1 {
+            return member_idxs[0];
+        }
+        let mut counts: Vec<(String, usize, usize)> = Vec::new(); // (title, count, first_idx)
+        for &idx in member_idxs {
+            let norm = normalize_title(&items[idx].title);
+            match counts.iter_mut().find(|entry| entry.0 == norm) {
+                Some(entry) => entry.1 += 1,
+                None => counts.push((norm, 1, idx)),
+            }
+        }
+        counts
+            .iter()
+            .max_by(|a, b| a.1.cmp(&b.1).then(b.2.cmp(&a.2)))
+            .map_or(member_idxs[0], |(_, _, first_idx)| *first_idx)
     }
 
     // Story embedding: normalized member centroid, so story-level semantic

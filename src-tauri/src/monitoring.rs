@@ -321,10 +321,16 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
         }
 
         let mut interval = tokio::time::interval(Duration::from_mins(1)); // Check every minute
-        let mut last_wake_time = std::time::Instant::now();
         let scheduler_started_at = std::time::Instant::now();
 
         loop {
+            // Stamp BEFORE awaiting the timer so `elapsed_since_last` below
+            // measures only the awaited gap. The old placement (a loop-spanning
+            // reset after the wake check, before the inline jobs) counted job
+            // time toward the 2-minute sleep threshold — any tick whose jobs
+            // ran >2min made the NEXT tick read as a wake-from-sleep and
+            // re-degrade SourceFetching on a machine that never slept.
+            let last_wake_time = std::time::Instant::now();
             interval.tick().await;
 
             // ================================================================
@@ -358,14 +364,15 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 info!(target: "4da::monitor", elapsed_secs = elapsed_since_last.as_secs(), "Detected wake from sleep — staggering deferred jobs");
                 tokio::time::sleep(Duration::from_secs(10)).await;
 
-                // Report network capability as potentially stale after sleep
+                // Report network capability as potentially stale after sleep.
+                // Cleared by the next successful source fetch (both the cache
+                // fill and the deep-scan path call report_restored).
                 crate::capabilities::report_degraded(
                     crate::capabilities::Capability::SourceFetching,
                     "Network state uncertain after sleep/wake",
                     "Re-checking connectivity on next source fetch",
                 );
             }
-            last_wake_time = std::time::Instant::now();
 
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

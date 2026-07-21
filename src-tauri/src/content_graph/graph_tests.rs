@@ -1244,3 +1244,174 @@ fn test_build_graph_deterministic_across_processes() {
         "two fresh processes must build identical graphs"
     );
 }
+
+// ── Signal-quality remediation (2026-07-21 audit) ───────────────────────────
+
+#[test]
+fn test_story_representative_prefers_modal_title() {
+    // Live shape: a 10-member story where 7 members carried the clean title
+    // was fronted by a hashtag-scarred copy that happened to score highest.
+    let shared = vec![1.0f32, 0.0, 0.0, 0.0];
+    let items = vec![
+        raw(
+            1,
+            "Claude Code uses Bun written in Rust now rust",
+            "mastodon",
+            0.99,
+            shared.clone(),
+        ),
+        raw(
+            2,
+            "Claude Code uses Bun written in Rust now",
+            "hackernews",
+            0.90,
+            shared.clone(),
+        ),
+        raw(
+            3,
+            "Claude Code uses Bun written in Rust now",
+            "reddit",
+            0.89,
+            shared.clone(),
+        ),
+    ];
+    let stories = story::collapse_stories(items);
+    assert_eq!(stories.len(), 1, "near-duplicates collapse into one story");
+    let s = &stories[0];
+    assert_eq!(s.member_count, 3);
+    assert_eq!(
+        s.item.title, "Claude Code uses Bun written in Rust now",
+        "the modal title fronts the story, not the highest-scored mangle"
+    );
+    assert_eq!(
+        s.item.id, 2,
+        "representative is the earliest load-order member with the modal title"
+    );
+    assert!(
+        (s.item.relevance_score - 0.99).abs() < 1e-6,
+        "story relevance stays the member max"
+    );
+}
+
+#[test]
+fn test_cluster_label_terms_all_need_two_hits() {
+    // "rust · embedded · first" (live): the top term cleared the coverage
+    // floor and single-title riders padded the label. Every term must hit
+    // at least two member titles.
+    let e = |d: usize| {
+        let mut v = vec![0.0f32; 4];
+        v[d] = 1.0;
+        v
+    };
+    let items = vec![
+        raw(1, "Rust embedded runtime ships", "hackernews", 0.9, e(0)),
+        raw(2, "Rust embedded kernel patch", "reddit", 0.8, e(1)),
+        raw(3, "Rust embedded board support", "lemmy", 0.7, e(2)),
+        raw(4, "Rust first steps guide", "devto", 0.6, e(3)),
+    ];
+    let mut clusters = vec![GraphCluster {
+        id: "cluster_1".to_string(),
+        label: String::new(),
+        node_ids: vec![1, 2, 3, 4],
+        source_count: 4,
+        coherence: 0.0,
+        centroid_x: 0.0,
+        centroid_y: 0.0,
+    }];
+    clustering::assign_cluster_labels(&items, &mut clusters);
+    let label = &clusters[0].label;
+    assert!(label.contains("rust"), "shared term labels: {label}");
+    assert!(label.contains("embedded"), "3-hit term labels: {label}");
+    assert!(
+        !label.contains("first") && !label.contains("steps") && !label.contains("guide"),
+        "single-title riders must not decorate the label: {label}"
+    );
+}
+
+/// Inserts an unjudged/curated singleton with an arbitrary source_type
+/// (one-hot embedding — orthogonal, so no edges and no story collapse).
+fn insert_singleton_src(
+    conn: &rusqlite::Connection,
+    id: i64,
+    dims: usize,
+    dim: usize,
+    source_type: &str,
+    score: f64,
+    feed_relevant: Option<i64>,
+) {
+    let mut v = vec![0.0f32; dims];
+    v[dim] = 1.0;
+    let emb = crate::db::embedding_to_blob(&v);
+    conn.execute(
+        "INSERT INTO source_items (id, source_type, source_id, title, content,
+                content_hash, embedding, embedding_status, relevance_score,
+                created_at, feed_relevant)
+             VALUES (?1, ?2, ?3, ?4, '', ?5, ?6, 'complete', ?7,
+                datetime('now', '-1 hours'), ?8)",
+        rusqlite::params![
+            id,
+            source_type,
+            format!("s{id}"),
+            format!("item {id}"),
+            format!("h{id}"),
+            emb,
+            score,
+            feed_relevant
+        ],
+    )
+    .expect("insert");
+}
+
+#[test]
+fn test_source_cap_limits_unjudged_flood_but_exempts_curated() {
+    use crate::test_utils::test_db;
+
+    let db = test_db();
+    let conn = db.conn.lock();
+
+    // 10 unjudged crates releases outscore everything (the live firehose),
+    // plus 4 each of three other sources, plus 2 CURATED crates at low score.
+    let dims = 24;
+    let mut next = 0usize;
+    let mut id = 0i64;
+    let mut add = |conn: &rusqlite::Connection, src: &str, score: f64, verdict: Option<i64>| {
+        id += 1;
+        next += 1;
+        insert_singleton_src(conn, id, dims, next - 1, src, score, verdict);
+        id
+    };
+    let mut crates_unjudged = Vec::new();
+    for _ in 0..10 {
+        crates_unjudged.push(add(&conn, "crates_io", 0.9, None));
+    }
+    for _ in 0..4 {
+        add(&conn, "hackernews", 0.5, None);
+    }
+    for _ in 0..4 {
+        add(&conn, "reddit", 0.45, None);
+    }
+    for _ in 0..4 {
+        add(&conn, "devto", 0.42, None);
+    }
+    let curated_a = add(&conn, "crates_io", 0.30, Some(1));
+    let curated_b = add(&conn, "crates_io", 0.29, Some(1));
+
+    // max_nodes 12 → per-source cap = ceil(12 * 0.25) = 3 unjudged slots.
+    let graph = build_graph(&conn, 7, 12).expect("build");
+    let ids: Vec<i64> = graph.nodes.iter().map(|n| n.id).collect();
+
+    let unjudged_crates_shown = crates_unjudged.iter().filter(|i| ids.contains(i)).count();
+    assert_eq!(
+        unjudged_crates_shown, 3,
+        "unjudged flood capped at 25% of the budget: {ids:?}"
+    );
+    assert!(
+        ids.contains(&curated_a) && ids.contains(&curated_b),
+        "curated stories are exempt from the source cap (corpus parity)"
+    );
+    assert!(
+        graph.meta.hidden_items >= 7,
+        "capped stories count into hidden_items (got {})",
+        graph.meta.hidden_items
+    );
+}

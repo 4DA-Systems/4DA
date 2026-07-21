@@ -613,7 +613,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 97;
+        const TARGET_VERSION: i64 = 98;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3538,6 +3538,64 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Phase 97: graph_layout_anchors table created"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 98 is a data heal for two live pollution classes
+            // (2026-07-21 signal-quality audit):
+            //   1. Test-code grounding: ~25% of the grounding corpus was test
+            //      fixtures (adversarial strings BUILT to name deps) surfacing
+            //      as "Similar to your code" evidence. Clearing the reconcile
+            //      flag re-runs the (idempotent, no re-embed) startup
+            //      provenance reconcile, which now demotes test chunks to the
+            //      non-grounding `test_code` class.
+            //   2. Junk decision windows: dep-less adoption/migration windows
+            //      minted from bare keyword hits ("released", "better than")
+            //      — 85 open "Adoption:" rows incl. an Apple TV trailer — fed
+            //      "Relevant to open decision" evidence. The generator no
+            //      longer creates dep-less windows; this expires the backlog.
+            if current_version < 98 {
+                Self::run_versioned_migration(
+                    &conn,
+                    97,
+                    98,
+                    "Phase 98: re-arm provenance reconcile (test-code demotion) + expire dep-less decision windows",
+                    |c| {
+                        // Fresh databases may not have these tables yet (both
+                        // are created outside this migration chain) — a fresh
+                        // install has nothing to heal, so guard on existence.
+                        let table_exists = |c: &Connection, name: &str| -> SqliteResult<bool> {
+                            c.prepare(
+                                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                            )?
+                            .query_row([name], |r| r.get::<_, i64>(0))
+                            .map(|n| n > 0)
+                        };
+                        if table_exists(c, "kv_store")? {
+                            c.execute(
+                                "DELETE FROM kv_store WHERE key = 'context_provenance_reconcile_version'",
+                                [],
+                            )?;
+                        }
+                        let expired = if table_exists(c, "decision_windows")? {
+                            c.execute(
+                                "UPDATE decision_windows
+                                 SET status = 'expired', closed_at = datetime('now')
+                                 WHERE status = 'open'
+                                   AND dependency IS NULL
+                                   AND window_type IN ('adoption', 'migration')",
+                                [],
+                            )?
+                        } else {
+                            0
+                        };
+                        info!(
+                            target: "4da::db",
+                            expired_windows = expired,
+                            "Phase 98: reconcile re-armed, dep-less decision windows expired"
                         );
                         Ok(())
                     },

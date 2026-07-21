@@ -431,6 +431,16 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
 
     void_signal_cache_filled(app);
 
+    // Sources just fetched over the network, so the network works: clear any
+    // stale SourceFetching degradation. The sleep/wake detector reports
+    // degraded ("Network state uncertain after sleep/wake") but only the
+    // deep-scan path (`fetcher::fetch_all_sources`) ever restored — this
+    // everyday cache-fill path never did, so the flag stuck at degraded for
+    // days while every source fetched healthily (live 2026-07-21 audit).
+    if summary.succeeded > 0 {
+        crate::capabilities::report_restored(crate::capabilities::Capability::SourceFetching);
+    }
+
     info!(
         target: "4da::cache",
         succeeded = summary.succeeded,

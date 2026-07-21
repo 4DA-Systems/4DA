@@ -57,6 +57,15 @@ const KNN_FLOOR: f32 = 0.55;
 const SINGLETON_CAP: usize = 40;
 /// Per-node top-K edges kept for display (plus the spanning backbone).
 const TOP_K_EDGES: usize = 4;
+/// Per-source composition cap on NOT-yet-judged stories: no single
+/// source_type may fill more than this fraction of the node budget with
+/// unjudged items (live 2026-07-21: crates.io held 59 of 150 nodes — a
+/// registry firehose wallpapering the map). Curated and quota-reserved
+/// stories are EXEMPT — corpus parity means the map never overrules the
+/// persisted feed verdict; the cap governs only the interim fill, and it
+/// relaxes (backfills from the capped source) when nothing else exists so a
+/// genuinely single-source corpus still fills the map honestly.
+const SOURCE_CAP_FRACTION: f32 = 0.25;
 
 // ============================================================================
 // Graph Construction
@@ -111,7 +120,52 @@ pub fn build_graph(
             )
             .then(a.item.id.cmp(&b.item.id))
     });
-    let truncated_items: usize = stories.iter().skip(max_nodes).map(|s| s.member_count).sum();
+    // Per-source cap (see SOURCE_CAP_FRACTION): stable partition of the
+    // sorted stories into kept / same-source overflow, budget filled from
+    // kept first, then backfilled from overflow so the map never runs short
+    // while items exist. Every dropped story counts into hidden_items.
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    let source_cap = ((max_nodes as f32) * SOURCE_CAP_FRACTION).ceil() as usize;
+    let mut per_source: HashMap<String, usize> = HashMap::new();
+    let mut kept: Vec<types::StoryItem> = Vec::with_capacity(stories.len());
+    let mut overflow: Vec<types::StoryItem> = Vec::new();
+    for s in stories {
+        if s.item.curated || s.item.reserved {
+            kept.push(s);
+            continue;
+        }
+        let n = per_source.entry(s.item.source_type.clone()).or_insert(0);
+        if *n < source_cap {
+            *n += 1;
+            kept.push(s);
+        } else {
+            overflow.push(s);
+        }
+    }
+    if kept.len() < max_nodes {
+        let deficit = max_nodes - kept.len();
+        kept.extend(overflow.drain(..overflow.len().min(deficit)));
+        // Backfill breaks the global relevance order; restore it so the node
+        // budget still keeps the best stories (same key as the sort above).
+        kept.sort_by(|a, b| {
+            (b.item.curated || b.item.reserved)
+                .cmp(&(a.item.curated || a.item.reserved))
+                .then(
+                    b.item
+                        .relevance_score
+                        .partial_cmp(&a.item.relevance_score)
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                )
+                .then(a.item.id.cmp(&b.item.id))
+        });
+    }
+    let mut stories = kept;
+    let truncated_items: usize = stories
+        .iter()
+        .skip(max_nodes)
+        .map(|s| s.member_count)
+        .sum::<usize>()
+        + overflow.iter().map(|s| s.member_count).sum::<usize>();
     stories.truncate(max_nodes);
 
     let mut rep_of: HashMap<i64, i64> = HashMap::new();

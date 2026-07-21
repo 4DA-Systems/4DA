@@ -250,3 +250,125 @@ fn context_health_detects_a_collapse_against_the_recorded_baseline() {
     assert!(!health.healthy);
     assert!(health.issues.iter().any(|i| i.contains("COLLAPSED")));
 }
+
+// ── Test-code grounding exclusion (2026-07-21 fixture-grounding audit) ──────
+
+#[test]
+fn upsert_demotes_test_files_and_marker_chunks_to_test_code() {
+    let db = test_db();
+    // Test-named file: demoted by path signal.
+    db.upsert_context(
+        "version-resolution.test.ts",
+        "const resolved = resolve(dir);",
+        &seed_embedding("t1"),
+    )
+    .unwrap();
+    // Prod-named file, test-marker chunk: demoted by content signal (the
+    // live `context.rs` #[cfg(test)] fixture class).
+    db.upsert_context(
+        "context.rs",
+        "#[cfg(test)]\nmod tests { // Content carefully chosen }",
+        &seed_embedding("t2"),
+    )
+    .unwrap();
+    // Prod chunk stays code.
+    db.upsert_context(
+        "hardware_detect.rs",
+        "let gpu = detect_gpu();",
+        &seed_embedding("t3"),
+    )
+    .unwrap();
+
+    let conn = db.conn.lock();
+    let type_of = |file: &str| -> String {
+        conn.query_row(
+            "SELECT source_type FROM context_chunks WHERE source_file = ?1",
+            rusqlite::params![file],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(type_of("version-resolution.test.ts"), "test_code");
+    assert_eq!(type_of("context.rs"), "test_code");
+    assert_eq!(type_of("hardware_detect.rs"), "code");
+}
+
+#[test]
+fn grounding_reads_exclude_test_code() {
+    let db = test_db();
+    let text = "async fn run_query(pool: &Pool) {}";
+    // Same text in a prod file and (different hash via suffix) a test file.
+    db.upsert_context("src/query.rs", text, &seed_embedding(text))
+        .unwrap();
+    db.upsert_context(
+        "src/query.test.ts",
+        &format!("{text} // fixture copy"),
+        &seed_embedding(text),
+    )
+    .unwrap();
+    let results = db.find_similar_contexts(&seed_embedding(text), 5).unwrap();
+    assert!(
+        results.iter().any(|r| r.source_file == "src/query.rs"),
+        "prod chunk grounds"
+    );
+    assert!(
+        !results.iter().any(|r| r.source_file == "src/query.test.ts"),
+        "test chunk must never ground: {:?}",
+        results.iter().map(|r| &r.source_file).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn reconcile_demotes_legacy_test_chunks_including_file_majority() {
+    let db = test_db();
+    // Simulate the installed base: rows persisted as 'code' before the
+    // TestCode class existed. `stack_simulation.rs` is the live shape — a
+    // tests/-dir file stored as a BARE basename whose fixture chunks carry
+    // no marker; the file-majority rule must demote those too.
+    {
+        let conn = db.conn.lock();
+        let mut insert = |file: &str, text: &str| {
+            let emb = super::embedding_to_blob(&seed_embedding(text));
+            conn.execute(
+                "INSERT INTO context_chunks (source_file, content_hash, text, embedding, weight, source_type)
+                 VALUES (?1, ?2, ?3, ?4, 1.0, 'code')",
+                rusqlite::params![file, super::hash_content(text), text, emb],
+            )
+            .unwrap();
+        };
+        // 3 marker chunks + 1 bare fixture chunk = 75% majority.
+        insert("stack_simulation.rs", "#[tokio::test]\nasync fn a() {}");
+        insert("stack_simulation.rs", "#[test]\nfn b() {}");
+        insert("stack_simulation.rs", "#[cfg(test)]\nmod harness {}");
+        insert(
+            "stack_simulation.rs",
+            "// rust: must not match trust, frustrated, rustic, crusty\nlet rust = 1;",
+        );
+        // Prod file with one inline test chunk: only that chunk demotes.
+        insert("scanner.rs", "fn scan(dir: &Path) {}");
+        insert("scanner.rs", "fn walk(dir: &Path) {}");
+        insert("scanner.rs", "fn parse(dir: &Path) {}");
+        insert("scanner.rs", "#[cfg(test)]\nmod tests { use super::*; }");
+    }
+    db.reconcile_context_provenance().unwrap();
+    let conn = db.conn.lock();
+    let count = |file: &str, st: &str| -> i64 {
+        conn.query_row(
+            "SELECT COUNT(*) FROM context_chunks WHERE source_file = ?1 AND source_type = ?2",
+            rusqlite::params![file, st],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        count("stack_simulation.rs", "test_code"),
+        4,
+        "file-majority demotes the markerless fixture chunk too"
+    );
+    assert_eq!(count("scanner.rs", "code"), 3, "prod chunks keep grounding");
+    assert_eq!(
+        count("scanner.rs", "test_code"),
+        1,
+        "the inline test module chunk is demoted"
+    );
+}

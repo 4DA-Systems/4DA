@@ -48,6 +48,68 @@ fn test_deduplication_prevents_duplicates() {
 }
 
 #[test]
+fn test_depless_adoption_and_migration_items_open_no_window() {
+    // The 2026-07-21 junk fountain: keyword hits with NO dependency match
+    // ("released", "better than", "deprecated") must not mint windows —
+    // an Apple TV trailer is not an adoption decision.
+    let conn = db();
+    conn.execute("INSERT INTO project_dependencies (project_path, package_name, language) VALUES ('/app', 'react', 'js')", []).unwrap();
+    for title in [
+        "Apple TV's next action-comedy starring Ryan Reynolds gets first trailer released",
+        "Better than Reddit",
+        "Mumble: version 1.5.915 released",
+        "Old framework deprecated, end of life announced",
+    ] {
+        conn.execute(
+            "INSERT INTO source_items (source_type, title, content) VALUES ('hn', ?1, '')",
+            params![title],
+        )
+        .unwrap();
+    }
+    let wins = detect_decision_windows(&conn);
+    assert!(
+        !wins
+            .iter()
+            .any(|w| matches!(w.window_type.as_str(), "adoption" | "migration")),
+        "dep-less keyword hits must not open windows: {:?}",
+        wins.iter().map(|w| &w.title).collect::<Vec<_>>()
+    );
+    // A dep-matched adoption item still opens one.
+    conn.execute(
+        "INSERT INTO source_items (source_type, title, content) VALUES ('hn', 'React 20 released with compiler on by default', 'react release')",
+        [],
+    )
+    .unwrap();
+    let wins = detect_decision_windows(&conn);
+    let adoption = wins
+        .iter()
+        .find(|w| w.window_type == "adoption")
+        .expect("dep-matched adoption window");
+    assert_eq!(adoption.dependency.as_deref(), Some("react"));
+}
+
+#[test]
+fn test_intra_batch_duplicates_collapse() {
+    // Live: "kew 4.2.7" opened twice (ids 440/442) in ONE detection batch —
+    // the store-time dedup only checked rows already in the DB.
+    let conn = db();
+    conn.execute("INSERT INTO project_dependencies (project_path, package_name, language) VALUES ('/app', 'tokio', 'rust')", []).unwrap();
+    for _ in 0..2 {
+        conn.execute(
+            "INSERT INTO source_items (source_type, title, content) VALUES ('hn', 'tokio 2.0 released', 'tokio async runtime release')",
+            [],
+        )
+        .unwrap();
+    }
+    let wins = detect_decision_windows(&conn);
+    let adoption_count = wins.iter().filter(|w| w.window_type == "adoption").count();
+    assert_eq!(
+        adoption_count, 1,
+        "identical windows collapse within a batch"
+    );
+}
+
+#[test]
 fn test_transition_and_expire() {
     let conn = db();
     conn.execute("INSERT INTO decision_windows (window_type, title, status, opened_at, expires_at) VALUES ('security_patch', 'Stale', 'open', datetime('now', '-1 day'), datetime('now', '-1 hour'))", []).unwrap();
