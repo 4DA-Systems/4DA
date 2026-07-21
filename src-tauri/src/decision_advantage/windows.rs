@@ -201,13 +201,21 @@ pub(crate) fn expire_stale_windows(conn: &Connection) -> i64 {
 // Detection helpers
 // ============================================================================
 
-fn get_user_dependencies(conn: &Connection) -> Vec<String> {
-    let mut stmt =
-        match conn.prepare("SELECT DISTINCT LOWER(package_name) FROM project_dependencies") {
-            Ok(s) => s,
-            Err(_) => return Vec::new(),
-        };
-    stmt.query_map([], |r| r.get::<_, String>(0))
+/// User dependencies with the manifest languages that declare them. The
+/// language rides along so ambiguous names ("tracing", "image") can demand
+/// ecosystem-specific proof — the same dep name declared by several manifests
+/// carries every language, and a match through ANY of them counts.
+fn get_user_dependencies(conn: &Connection) -> Vec<(String, Vec<String>)> {
+    let mut stmt = match conn.prepare(
+        "SELECT LOWER(package_name), LOWER(COALESCE(language, ''))
+         FROM project_dependencies
+         GROUP BY LOWER(package_name), LOWER(COALESCE(language, ''))",
+    ) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let pairs: Vec<(String, String)> = stmt
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
         .ok()
         .map(|rows| {
             rows.filter_map(|r| match r {
@@ -219,7 +227,26 @@ fn get_user_dependencies(conn: &Connection) -> Vec<String> {
             })
             .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let mut by_name: Vec<(String, Vec<String>)> = Vec::new();
+    for (name, lang) in pairs {
+        match by_name.iter_mut().find(|(n, _)| *n == name) {
+            Some(entry) => {
+                if !lang.is_empty() && !entry.1.contains(&lang) {
+                    entry.1.push(lang);
+                }
+            }
+            None => {
+                let langs = if lang.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![lang]
+                };
+                by_name.push((name, langs));
+            }
+        }
+    }
+    by_name
 }
 
 fn query_items_with_keywords(
@@ -259,11 +286,32 @@ fn query_items_with_keywords(
         .unwrap_or_default()
 }
 
-fn find_matching_dep(title: &str, content: &str, deps: &[String]) -> Option<String> {
+fn find_matching_dep(title: &str, content: &str, deps: &[(String, Vec<String>)]) -> Option<String> {
     let (t, c) = (title.to_lowercase(), content.to_lowercase());
     deps.iter()
-        .find(|d| crate::package_ambiguity::dep_grounded_match(&t, &c, d))
-        .cloned()
+        .find(|(name, langs)| dep_matches_any_ecosystem(&t, &c, name, langs))
+        .map(|(name, _)| name.clone())
+}
+
+/// Grounded match through ANY of the manifests that declare this dep — with
+/// no recorded language, fall back to the generic (language-blind) matcher.
+fn dep_matches_any_ecosystem(
+    title_lower: &str,
+    content_lower: &str,
+    name: &str,
+    langs: &[String],
+) -> bool {
+    if langs.is_empty() {
+        return crate::package_ambiguity::dep_grounded_match(title_lower, content_lower, name);
+    }
+    langs.iter().any(|lang| {
+        crate::package_ambiguity::dep_grounded_match_for_ecosystem(
+            title_lower,
+            content_lower,
+            name,
+            Some(lang),
+        )
+    })
 }
 
 fn streets_engine_for(wtype: &str) -> Option<String> {
@@ -432,8 +480,8 @@ fn detect_chain_security_windows(conn: &Connection, windows: &mut Vec<DecisionWi
         let matched_dep = chain.links.iter().find_map(|link| {
             let lower_title = link.title.to_lowercase();
             deps.iter()
-                .find(|d| crate::package_ambiguity::dep_grounded_match(&lower_title, "", d))
-                .cloned()
+                .find(|(name, langs)| dep_matches_any_ecosystem(&lower_title, "", name, langs))
+                .map(|(name, _)| name.clone())
         });
 
         if let Some(dep) = matched_dep {

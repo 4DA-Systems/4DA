@@ -613,7 +613,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 98;
+        const TARGET_VERSION: i64 = 99;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3596,6 +3596,49 @@ impl Database {
                             target: "4da::db",
                             expired_windows = expired,
                             "Phase 98: reconcile re-armed, dep-less decision windows expired"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 99: expire the OPEN auto-minted decision-window backlog so
+            // it re-mints under ecosystem-aware dep matching. Live 2026-07-21:
+            // the user's CARGO crate `tracing` held 7 open "Security: tracing"
+            // windows minted from dd-trace-{java,py,go,js,rb,dotnet} advisories
+            // — ambiguous names passed on generic "library"/"package"
+            // vocabulary regardless of ecosystem. Windows are cheap DERIVED
+            // state re-detected every monitoring cycle: expiring the open set
+            // is a full heal (genuinely valid windows return within one cycle,
+            // wrong-ecosystem ones cannot), while 'acted' rows — the user's
+            // own decisions — are untouched.
+            if current_version < 99 {
+                Self::run_versioned_migration(
+                    &conn,
+                    98,
+                    99,
+                    "Phase 99: expire open decision windows for ecosystem-aware re-mint",
+                    |c| {
+                        let table_exists: bool = c
+                            .prepare(
+                                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='decision_windows'",
+                            )?
+                            .query_row([], |r| r.get::<_, i64>(0))
+                            .map(|n| n > 0)?;
+                        let expired = if table_exists {
+                            c.execute(
+                                "UPDATE decision_windows
+                                 SET status = 'expired', closed_at = datetime('now')
+                                 WHERE status = 'open'",
+                                [],
+                            )?
+                        } else {
+                            0
+                        };
+                        info!(
+                            target: "4da::db",
+                            expired_windows = expired,
+                            "Phase 99: open decision windows expired for ecosystem-aware re-mint"
                         );
                         Ok(())
                     },

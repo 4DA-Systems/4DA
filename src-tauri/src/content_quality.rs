@@ -36,6 +36,7 @@ pub fn compute_content_quality(title: &str, content: &str, url: Option<&str>) ->
     let keyword_penalty = keyword_concentration_penalty(title);
     let coherence_penalty = title_body_coherence_penalty(title, content);
     let diversity_penalty = title_diversity_penalty(title);
+    let fragment_penalty = serialized_fragment_penalty(title);
 
     // Combine: original weights preserved for calibration stability.
     // Info density acts as a bonus/penalty layer — dense titles get a small boost,
@@ -49,7 +50,8 @@ pub fn compute_content_quality(title: &str, content: &str, url: Option<&str>) ->
         + density_adjustment
         + keyword_penalty
         + coherence_penalty
-        + diversity_penalty)
+        + diversity_penalty
+        + fragment_penalty)
         .clamp(0.5, 1.2);
 
     ContentQuality {
@@ -468,6 +470,48 @@ fn title_diversity_penalty(title: &str) -> f32 {
     } else {
         0.0
     }
+}
+
+/// Penalize serialized micro-content fragments: mid-thread posts ("11/ then
+/// the wall…"), learning-diary installments ("Day 3 · Primitive Types 🦀"),
+/// and explicit thread markers. Live 2026-07-21: a "Day 3" Rust-diary toot
+/// held a CORE badge in the feed and a thread fragment scored 0.95 — an
+/// installment is not a standalone signal no matter how on-topic its
+/// keywords are. Conservative by construction: only leading `N/` / leading
+/// serial words with a following separator, or unambiguous thread markers.
+/// A title like "Day 3 was rough for the Rust team" (prose, no separator)
+/// is untouched.
+fn serialized_fragment_penalty(title: &str) -> f32 {
+    let trimmed = title.trim_start();
+    // Leading "N/" or "N/M" — tweet/toot thread numbering.
+    let mut chars = trimmed.chars();
+    let digits: String = chars.by_ref().take_while(char::is_ascii_digit).collect();
+    if !digits.is_empty() && digits.len() <= 3 {
+        if let Some(rest) = trimmed.strip_prefix(&digits) {
+            if rest.starts_with('/') {
+                return -0.25;
+            }
+        }
+    }
+    let lower = trimmed.to_lowercase();
+    // Leading serial word + number + separator: "day 3 ·", "part 2:", "week 1 —".
+    for word in ["day", "week", "part", "episode", "chapter", "lesson"] {
+        if let Some(rest) = lower.strip_prefix(word) {
+            let rest = rest.trim_start();
+            let num: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            if !num.is_empty() {
+                let after = rest[num.len()..].trim_start();
+                if after.starts_with(['·', ':', '-', '—', '–', '|', '/']) {
+                    return -0.25;
+                }
+            }
+        }
+    }
+    // Unambiguous thread markers anywhere in the title.
+    if trimmed.contains('\u{1F9F5}') || lower.contains("a thread") || lower.contains("(thread)") {
+        return -0.25;
+    }
+    0.0
 }
 
 #[cfg(test)]
