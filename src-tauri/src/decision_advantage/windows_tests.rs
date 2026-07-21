@@ -89,6 +89,46 @@ fn test_depless_adoption_and_migration_items_open_no_window() {
 }
 
 #[test]
+fn test_ambiguous_dep_needs_own_ecosystem_context() {
+    // Live 2026-07-21: the user's CARGO crate `tracing` held 7 open
+    // "Security: tracing" windows minted from dd-trace-{java,py,...} CVEs —
+    // generic "library" vocabulary satisfied the strict-proof context check
+    // regardless of ecosystem. An ambiguous name must be discussed in ITS
+    // manifest's vocabulary to mint a window.
+    let conn = db();
+    conn.execute("INSERT INTO project_dependencies (project_path, package_name, language) VALUES ('/app', 'tracing', 'rust')", []).unwrap();
+    conn.execute(
+        "INSERT INTO source_items (source_type, title, content) VALUES ('cve',
+         'CVE-2026-50270 dd-trace-java: security vulnerability in the distributed tracing library',
+         'the datadog tracing library for java improperly parses headers')",
+        [],
+    )
+    .unwrap();
+    let wins = detect_decision_windows(&conn);
+    assert!(
+        !wins
+            .iter()
+            .any(|w| w.dependency.as_deref() == Some("tracing")),
+        "wrong-ecosystem advisory must not bind the rust crate: {:?}",
+        wins.iter().map(|w| &w.title).collect::<Vec<_>>()
+    );
+    // Same dep, cargo-context advisory: window minted.
+    conn.execute(
+        "INSERT INTO source_items (source_type, title, content) VALUES ('cve',
+         'CVE-2026-9000 tracing: security vulnerability in span handling',
+         'the tracing crate for rust needs a cargo update')",
+        [],
+    )
+    .unwrap();
+    let wins = detect_decision_windows(&conn);
+    let sec = wins
+        .iter()
+        .find(|w| w.dependency.as_deref() == Some("tracing"))
+        .expect("own-ecosystem advisory still mints");
+    assert_eq!(sec.window_type, "security_patch");
+}
+
+#[test]
 fn test_intra_batch_duplicates_collapse() {
     // Live: "kew 4.2.7" opened twice (ids 440/442) in ONE detection batch —
     // the store-time dedup only checked rows already in the DB.
@@ -181,7 +221,7 @@ fn truncate_multibyte_utf8() {
 
 #[test]
 fn find_dep_in_title() {
-    let deps = vec!["lodash".to_string()];
+    let deps = vec![("lodash".to_string(), vec![])];
     assert_eq!(
         find_matching_dep("lodash vulnerability found", "details here", &deps),
         Some("lodash".to_string())
@@ -190,7 +230,7 @@ fn find_dep_in_title() {
 
 #[test]
 fn find_dep_in_content() {
-    let deps = vec!["fastify".to_string()];
+    let deps = vec![("fastify".to_string(), vec![])];
     assert_eq!(
         find_matching_dep("Security alert", "fastify has a CVE", &deps),
         Some("fastify".to_string())
@@ -203,7 +243,7 @@ fn find_dep_ambiguous_name_needs_title_plus_context() {
     // painted the gold ring live, 2026-07-19) — since then it is ambiguous:
     // a bare content mention must NOT ground, while a title mention with
     // ecosystem context must.
-    let deps = vec!["express".to_string()];
+    let deps = vec![("express".to_string(), vec![])];
     assert_eq!(
         find_matching_dep("Security alert", "express has a CVE", &deps),
         None
@@ -220,7 +260,7 @@ fn find_dep_ambiguous_name_needs_title_plus_context() {
 
 #[test]
 fn find_dep_no_match() {
-    let deps = vec!["lodash".to_string()];
+    let deps = vec![("lodash".to_string(), vec![])];
     assert_eq!(
         find_matching_dep("unrelated title", "unrelated content", &deps),
         None
@@ -235,7 +275,7 @@ fn find_dep_empty_deps() {
 #[test]
 fn find_dep_case_insensitive() {
     // title is lowered, so "lodash" should match "LODASH" in title
-    let deps = vec!["lodash".to_string()];
+    let deps = vec![("lodash".to_string(), vec![])];
     assert_eq!(
         find_matching_dep("LODASH update", "", &deps),
         Some("lodash".to_string())

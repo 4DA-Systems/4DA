@@ -205,6 +205,74 @@ pub(crate) fn dep_grounded_match(title_lower: &str, content_lower: &str, dep_low
     has_ecosystem_context(title_lower) || has_ecosystem_context(content_lower)
 }
 
+/// Ecosystem-SPECIFIC context tokens keyed by the dependency's manifest
+/// language (as recorded in `project_dependencies.language`). The generic
+/// [`ECOSYSTEM_CONTEXT_WORDS`] list proves "this text discusses a software
+/// package" — but for ambiguous names that is not enough: live 2026-07-21,
+/// the user's CARGO crate `tracing` minted 7 open "Security: tracing" windows
+/// from dd-trace-{java,py,go,js,rb,dotnet} advisories, because a Java tracing
+/// library legitimately says "library". An ambiguous name must be discussed
+/// in ITS OWN ecosystem's vocabulary to bind to the user's dependency.
+fn ecosystem_specific_context_words(language: &str) -> &'static [&'static str] {
+    match language {
+        "rust" => &["cargo", "crate", "crates", "crates.io", "rust"],
+        "javascript" | "typescript" | "node" => &[
+            "npm",
+            "node",
+            "javascript",
+            "typescript",
+            "yarn",
+            "pnpm",
+            "js",
+        ],
+        "python" => &["pip", "pypi", "python"],
+        "go" => &["golang", "go.mod", "go module", "go modules"],
+        "ruby" => &["gem", "rubygems", "ruby", "bundler"],
+        "java" | "kotlin" => &["maven", "gradle", "java", "kotlin"],
+        "csharp" | "dotnet" => &["nuget", "dotnet", ".net"],
+        _ => &[],
+    }
+}
+
+/// [`dep_grounded_match`] with the dependency's manifest language. For
+/// strict-proof names with a KNOWN language, the context requirement narrows
+/// from "any package vocabulary" to that ecosystem's own tokens (short tokens
+/// word-boundary matched, longer ones as substrings — same rule as the
+/// generic list). Unknown language, or any non-strict name, falls back to
+/// [`dep_grounded_match`] unchanged.
+pub(crate) fn dep_grounded_match_for_ecosystem(
+    title_lower: &str,
+    content_lower: &str,
+    dep_lower: &str,
+    language: Option<&str>,
+) -> bool {
+    if dep_lower.is_empty() {
+        return false;
+    }
+    if !requires_strict_proof(dep_lower) {
+        return dep_grounded_match(title_lower, content_lower, dep_lower);
+    }
+    let words = language
+        .map(|l| ecosystem_specific_context_words(&l.to_lowercase()))
+        .unwrap_or(&[]);
+    if words.is_empty() {
+        return dep_grounded_match(title_lower, content_lower, dep_lower);
+    }
+    if !has_word_boundary_match(title_lower, dep_lower) {
+        return false;
+    }
+    let has_specific = |text: &str| {
+        words.iter().any(|w| {
+            if w.len() <= 4 {
+                has_word_boundary_match(text, w)
+            } else {
+                text.contains(w)
+            }
+        })
+    };
+    has_specific(title_lower) || has_specific(content_lower)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -329,5 +397,79 @@ mod tests {
         assert!(!has_ecosystem_context("final judgement rendered")); // "gem" embedded
         assert!(has_ecosystem_context("all packages updated")); // substring of plural
         assert!(!has_ecosystem_context("nothing relevant here"));
+    }
+
+    // -- dep_grounded_match_for_ecosystem --
+
+    #[test]
+    fn regression_rust_tracing_does_not_match_dd_trace_java_advisory() {
+        // Live 2026-07-21: 7 open "Security: tracing" windows minted from
+        // dd-trace-{java,py,go,js,rb,dotnet} CVEs against the user's CARGO
+        // `tracing` crate — "library"/"package" vocabulary passed the generic
+        // context check. Ecosystem-specific context must refuse them.
+        let title = "[cve-2026-50270] dd-trace-java: improper parsing of w3c \
+                     baggage headers in the distributed tracing library";
+        let content = "the datadog tracing library for java applications improperly parses headers";
+        // Generic matcher passes (title has word-boundary "tracing", content
+        // says "library") — the exact hole.
+        assert!(dep_grounded_match(title, content, "tracing"));
+        // Ecosystem-aware matcher with the dep's real language refuses.
+        assert!(!dep_grounded_match_for_ecosystem(
+            title,
+            content,
+            "tracing",
+            Some("rust")
+        ));
+    }
+
+    #[test]
+    fn rust_tracing_still_matches_cargo_context() {
+        let title = "tracing 0.2 released with structured spans";
+        let content = "the tracing crate for rust adds cargo feature flags";
+        assert!(dep_grounded_match_for_ecosystem(
+            title,
+            content,
+            "tracing",
+            Some("rust")
+        ));
+    }
+
+    #[test]
+    fn ecosystem_matcher_falls_back_when_language_unknown_or_name_distinct() {
+        // Unknown language → generic strict-proof behavior (unchanged).
+        let title = "tracing improvements in the new library";
+        assert!(dep_grounded_match_for_ecosystem(title, "", "tracing", None));
+        // Distinctive names never need ecosystem proof.
+        assert!(dep_grounded_match_for_ecosystem(
+            "axios 2.0 released",
+            "",
+            "axios",
+            Some("rust")
+        ));
+        // Empty dep never matches.
+        assert!(!dep_grounded_match_for_ecosystem(
+            "x",
+            "x",
+            "",
+            Some("rust")
+        ));
+    }
+
+    #[test]
+    fn npm_ambiguous_name_needs_js_context() {
+        // "image" (ambiguous) as a JS dep: a photography article must not
+        // bind; an npm-context article does.
+        assert!(!dep_grounded_match_for_ecosystem(
+            "image compression tips for photographers",
+            "shoot raw and edit later",
+            "image",
+            Some("javascript")
+        ));
+        assert!(dep_grounded_match_for_ecosystem(
+            "image package 3.0 on npm adds avif",
+            "install via npm",
+            "image",
+            Some("javascript")
+        ));
     }
 }
