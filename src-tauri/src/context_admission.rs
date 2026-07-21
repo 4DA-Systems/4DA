@@ -281,7 +281,10 @@ fn is_test_source(source_file: &str, name: &str) -> bool {
         || lower_name.ends_with("_test.rs")
         || lower_name.ends_with("_tests.rs")
         || lower_name == "conftest.py"
-        || (lower_name.starts_with("test_") && lower_name.ends_with(".py"))
+        || (lower_name.starts_with("test_")
+            && std::path::Path::new(&lower_name)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("py")))
     {
         return true;
     }
