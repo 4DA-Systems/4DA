@@ -348,3 +348,51 @@ fn test_gaming_multiplier_still_in_range() {
         q.multiplier
     );
 }
+
+// ── Serialized-fragment penalty (2026-07-21 sweep) ──────────────────────────
+
+#[test]
+fn test_thread_and_diary_fragments_are_penalized() {
+    // The two live offenders: a mid-thread numbered toot and a learning-diary
+    // installment, both of which held top-tier feed placement.
+    let baseline = compute_content_quality(
+        "Primitive types in Rust: i32, f64, bool explained",
+        "",
+        None,
+    );
+    for title in [
+        "11/ then the wall. the current tier is Rust doing AES-CBC",
+        "Day 3 · Primitive Types 🦀 In Python type hints are optional",
+        "Part 2: building the parser",
+        "Week 1 — learning Rust ownership",
+        "My Rust journey, a thread \u{1F9F5}",
+    ] {
+        let q = compute_content_quality(title, "", None);
+        assert!(
+            q.multiplier < baseline.multiplier,
+            "fragment must score below standalone content: {title} ({} vs {})",
+            q.multiplier,
+            baseline.multiplier
+        );
+    }
+}
+
+#[test]
+fn test_prose_with_serial_words_is_not_penalized() {
+    // Serial words WITHOUT the installment shape stay untouched.
+    for title in [
+        "Day 3 was rough for the Rust release team",
+        "The 3 parts of a good error message",
+        "A day in the life of a systems engineer",
+        "Rust 1.95 released with 3/4 of planned features",
+        "Threading in Rust: a practical guide",
+    ] {
+        assert_eq!(
+            super::serialized_fragment_penalty(title),
+            0.0,
+            "prose shape must not be penalized: {title}"
+        );
+    }
+    assert!(super::serialized_fragment_penalty("Day 3 · Primitive Types") < 0.0);
+    assert!(super::serialized_fragment_penalty("11/ then the wall") < 0.0);
+}
