@@ -649,6 +649,23 @@ impl SignalClassifier {
             priority = SignalPriority::Alert;
         }
 
+        // SecurityAlert ALERT gate: the same grounding rule one tier down. An
+        // alert-tier SECURITY signal must be anchored to the user's installed
+        // packages — keyword-matched security NEWS is not an alert. Without
+        // this, a DORA EU-banking-regulation Mastodon toot ("security",
+        // "regulation", "ICT risk") rode 2-source title corroboration to the
+        // page's single red Security ALERT, labeled "Inside your stack",
+        // directly under a hero saying no security item needed attention
+        // (live 2026-07-21 audit). Real advisories that DO touch a dependency
+        // keep Alert/Critical; ungrounded security news caps at Advisory and
+        // still surfaces — one tier down, without the klaxon.
+        if signal_type == SignalType::SecurityAlert
+            && priority > SignalPriority::Advisory
+            && !dependency_confirmed
+        {
+            priority = SignalPriority::Advisory;
+        }
+
         // Generate action text using ONLY declared tech match (prevents "python workflow" for Rust devs)
         let action = self.generate_action(
             &signal_type,
@@ -1461,11 +1478,68 @@ mod tests {
         let c = result.expect("Should still classify as a security signal");
         assert_eq!(c.signal_type, SignalType::SecurityAlert);
         assert!(
-            c.priority <= SignalPriority::Alert,
-            "ungrounded security news must not reach Critical, got {:?}",
+            c.priority <= SignalPriority::Advisory,
+            "ungrounded security news caps at Advisory (2026-07-21 gate), got {:?}",
             c.priority
         );
         assert!(!c.dependency_confirmed);
+    }
+
+    #[test]
+    fn test_regulation_news_toot_caps_at_advisory() {
+        // The live 2026-07-21 shape: a DORA EU-regulation Mastodon toot
+        // ("security", "regulation", "ICT risk management") with one related
+        // item rode 2-source corroboration to the page's single red Security
+        // ALERT. Security signals with no dependency edge cap at Advisory.
+        let classifier = SignalClassifier::new();
+        let result = classifier.classify(
+            "The Digital Operational Resilience Act (DORA) is an EU regulation",
+            "DORA establishes a binding, comprehensive ICT risk management and security framework. \
+             Financial entities must patch security vulnerabilities under the regulation.",
+            0.8,
+            &["rust".to_string()],
+            &[],
+            &CorroborationContext {
+                source_count: 2,
+                dependency_match: false,
+                chain_phase: None,
+            },
+        );
+        if let Some(c) = result {
+            if c.signal_type == SignalType::SecurityAlert {
+                assert!(
+                    c.priority <= SignalPriority::Advisory,
+                    "ungrounded regulation news must not be an ALERT, got {:?}",
+                    c.priority
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_grounded_security_keeps_alert_at_two_sources() {
+        // A real advisory touching an installed dependency keeps its urgency:
+        // the Advisory cap applies only to UNGROUNDED security signals.
+        let classifier = SignalClassifier::new();
+        let result = classifier.classify(
+            "Security vulnerability CVE-2026-8888 in tokio: patch released",
+            "A security fix addresses an exploit in the async runtime.",
+            0.85,
+            &["tokio".to_string()],
+            &["tokio".to_string()],
+            &CorroborationContext {
+                source_count: 2,
+                dependency_match: true,
+                chain_phase: None,
+            },
+        );
+        let c = result.expect("grounded advisory classifies");
+        assert_eq!(c.signal_type, SignalType::SecurityAlert);
+        assert!(
+            c.priority >= SignalPriority::Alert,
+            "grounded 2-source security advisory keeps Alert, got {:?}",
+            c.priority
+        );
     }
 
     #[test]
