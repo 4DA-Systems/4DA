@@ -66,6 +66,14 @@ pub enum ContextClass {
     /// cap, but NEVER feeds embedding grounding — prose embeddings match
     /// arbitrary news ("Nunca perca entregas de clientes" ↔ a Docker tool).
     Doc,
+    /// Test code: test files and `#[cfg(test)]` / `it(` / `describe(` chunks.
+    /// Admitted (tests describe the stack too) but NEVER grounding-eligible —
+    /// test fixtures are adversarial strings BUILT to name deps/crates/hardware
+    /// (`// rust: must not match trust, frustrated, rustic, crusty`), which made
+    /// them perfect embedding bait: a live 2026-07-21 audit found ~25% of the
+    /// grounding corpus was test code and the feed's top "Similar to your code"
+    /// evidence quoted matcher fixtures back at the user.
+    TestCode,
     /// Not context at all — binaries, data blobs, unusable content. Never stored.
     Reject,
 }
@@ -78,6 +86,7 @@ impl ContextClass {
             ContextClass::Code => "code",
             ContextClass::Config => "config",
             ContextClass::Doc => "doc",
+            ContextClass::TestCode => "test_code",
             ContextClass::Reject => "reject",
         }
     }
@@ -103,6 +112,7 @@ impl ContextClass {
             "code" => Some(ContextClass::Code),
             "config" => Some(ContextClass::Config),
             "doc" => Some(ContextClass::Doc),
+            "test_code" => Some(ContextClass::TestCode),
             "reject" => Some(ContextClass::Reject),
             _ => None,
         }
@@ -114,6 +124,7 @@ impl ContextClass {
             ContextClass::Code => 1.0,
             ContextClass::Config => 0.9,
             ContextClass::Doc => 0.5,
+            ContextClass::TestCode => 0.3,
             ContextClass::Reject => 0.0,
         }
     }
@@ -236,14 +247,91 @@ pub fn classify_source(source_file: &str) -> ContextClass {
     if let Some(c) = classify_by_bare_name(&name) {
         return c;
     }
-    match ext.as_deref() {
+    let class = match ext.as_deref() {
         Some(e) if CODE_EXTS.contains(&e) => ContextClass::Code,
         Some(e) if CONFIG_EXTS.contains(&e) => ContextClass::Config,
         Some(e) if DOC_EXTS.contains(&e) => ContextClass::Doc,
         // Unknown extension or none: treat as a doc (bounded, non-grounding).
         // Never promoted to Code — an unknown blob must not ground the feed.
         _ => ContextClass::Doc,
+    };
+    if class == ContextClass::Code && is_test_source(source_file, &name) {
+        return ContextClass::TestCode;
     }
+    class
+}
+
+/// Public path-only test check for indexers that want to skip test files
+/// before spending chunking/embedding work (the admission chokepoint would
+/// demote them anyway).
+pub fn is_test_path(source_file: &str) -> bool {
+    let (name, _) = split_name_ext(source_file);
+    is_test_source(source_file, &name)
+}
+
+/// Test-file detection from the source path. Works on both full paths (the
+/// indexer) and the bare basenames persisted in `context_chunks.source_file`
+/// (`stack_simulation.rs` was stored pathless — for those, the content markers
+/// in [`classify_source_with_content`] are the second layer).
+fn is_test_source(source_file: &str, name: &str) -> bool {
+    let lower_name = name.to_ascii_lowercase();
+    // Infix/suffix filename conventions across the stacks 4DA indexes.
+    if lower_name.contains(".test.")
+        || lower_name.contains(".spec.")
+        || lower_name.ends_with("_test.rs")
+        || lower_name.ends_with("_tests.rs")
+        || lower_name == "conftest.py"
+        || (lower_name.starts_with("test_") && lower_name.ends_with(".py"))
+    {
+        return true;
+    }
+    // Directory conventions — only visible when a path was stored.
+    let lower_path = source_file.to_ascii_lowercase().replace('\\', "/");
+    lower_path.contains("/__tests__/")
+        || lower_path.contains("/tests/")
+        || lower_path.contains("/test/")
+        || lower_path.contains("/spec/")
+}
+
+/// Unambiguous test markers a chunk of TEST code carries. Deliberately
+/// conservative: every marker is test-only syntax in its language. NOT here:
+/// `expect(` (prod Rust `.expect(`), `assert` (prod invariant checks), and
+/// `fn test_` (live prod commands `test_llm_connection` / `test_webhook_cmd`
+/// would false-positive — Rust test fns are caught by their `#[test]` attr).
+const TEST_MARKERS: &[&str] = &[
+    "#[test]",
+    "#[tokio::test]",
+    "#[cfg(test)]",
+    "#[rstest",
+    "mod tests {",
+    "mod tests;",
+    "it(\"",
+    "it('",
+    "describe(\"",
+    "describe('",
+    "test(\"",
+    "test('",
+    "beforeEach(",
+    "afterEach(",
+];
+
+/// Does this chunk text carry test-only syntax?
+pub fn has_test_markers(text: &str) -> bool {
+    TEST_MARKERS.iter().any(|m| text.contains(m))
+}
+
+/// Content-aware classification — the admission chokepoint uses this so a
+/// `#[cfg(test)]` module inside a PROD file (live: `context.rs`, whose fixture
+/// comment "Content carefully chosen to avoid substrings of dep names" was
+/// surfacing as feed evidence) is demoted even though its path looks like
+/// production code. Path signal first (whole test files), content markers
+/// second (test regions of prod files).
+pub fn classify_source_with_content(source_file: &str, text: &str) -> ContextClass {
+    let class = classify_source(source_file);
+    if class == ContextClass::Code && has_test_markers(text) {
+        return ContextClass::TestCode;
+    }
+    class
 }
 
 /// Log a rejected / capped source once per process, at admission time. Silent
@@ -499,6 +587,70 @@ mod tests {
     }
 
     #[test]
+    fn test_files_are_test_code_and_never_ground() {
+        // The exact provenance shapes from the live 2026-07-21 fixture-grounding
+        // audit: test-named files (any path form) must classify TestCode.
+        for f in [
+            "version-resolution.test.ts",
+            "Component.spec.tsx",
+            "pipeline_test.rs",
+            "explanation_tests.rs",
+            "test_scoring.py",
+            "conftest.py",
+            r"D:\4DA\src-tauri\tests\stack_simulation.rs",
+            "/proj/src/__tests__/store.ts",
+            "/proj/spec/models/user.rb",
+        ] {
+            let c = classify_source(f);
+            assert_eq!(c, ContextClass::TestCode, "{f} should be TestCode");
+            assert!(!c.grounding_eligible(), "{f} must NOT ground");
+            assert!(c.is_admitted(), "test code is admitted (capped weight)");
+            assert_eq!(c.source_type(), "test_code");
+        }
+        // Prod code with test-ish substrings in the NAME must stay Code.
+        for f in ["contest.rs", "attestation.ts", "latest_release.rs"] {
+            assert_eq!(classify_source(f), ContextClass::Code, "{f} must stay Code");
+        }
+    }
+
+    #[test]
+    fn test_marker_chunks_in_prod_files_are_demoted() {
+        // A #[cfg(test)] module inside a prod file (live: context.rs) — path
+        // says Code, content says test. Content wins.
+        for text in [
+            "#[cfg(test)]\nmod tests {\n    use super::*;",
+            "#[test]\n    fn hardware_info_serializes() { let info = HardwareInfo {",
+            "#[tokio::test]\nasync fn fetches() {}",
+            "it(\"does NOT resolve Rust crates from a directory without Cargo\", () => {",
+            "describe('scoring', () => { beforeEach(() => {}) })",
+        ] {
+            assert_eq!(
+                classify_source_with_content("anything.rs", text),
+                ContextClass::TestCode,
+                "marker chunk must demote: {text:.40}"
+            );
+        }
+        // Prod chunks — including `.expect(` and `assert!` — must NOT demote.
+        for text in [
+            "let gpu = detect_gpu();\ndebug!(target: \"4da::hardware\", \"gpu\");",
+            "let v = map.get(&k).expect(\"present\");",
+            "assert!(items.len() < cap, \"cap exceeded\");",
+            "// the latest protest data\nfn parse() {}",
+        ] {
+            assert_eq!(
+                classify_source_with_content("prod.rs", text),
+                ContextClass::Code,
+                "prod chunk must stay Code: {text:.40}"
+            );
+        }
+        // Content markers never PROMOTE: a doc quoting test syntax stays Doc.
+        assert_eq!(
+            classify_source_with_content("README.md", "#[test]\nfn example() {}"),
+            ContextClass::Doc
+        );
+    }
+
+    #[test]
     fn weights_and_grounding_types_are_consistent() {
         assert!(ContextClass::Code.weight_multiplier() > ContextClass::Doc.weight_multiplier());
         assert_eq!(ContextClass::Reject.weight_multiplier(), 0.0);
@@ -509,6 +661,7 @@ mod tests {
             ContextClass::Code,
             ContextClass::Config,
             ContextClass::Doc,
+            ContextClass::TestCode,
             ContextClass::Reject,
         ] {
             assert_eq!(ContextClass::from_source_type(c.source_type()), Some(c));

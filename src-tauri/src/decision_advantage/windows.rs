@@ -319,18 +319,19 @@ fn detect_security_windows(conn: &Connection, windows: &mut Vec<DecisionWindow>)
 fn detect_migration_windows(conn: &Connection, windows: &mut Vec<DecisionWindow>) {
     let deps = get_user_dependencies(conn);
     for (_id, title, content, _) in query_items_with_keywords(conn, MIGRATION_KEYWORDS) {
-        let dep = find_matching_dep(&title, &content, &deps);
-        let (urgency, relevance) = if dep.is_some() {
-            (0.70, 0.75)
-        } else {
-            (0.35, 0.40)
+        // A decision window without a dependency is not a decision: bare
+        // keyword hits ("deprecated", "end of life") on arbitrary feed items
+        // minted windows about content the user has no stake in. Dep-gated
+        // only — same bar the security detector already applies.
+        let Some(dep) = find_matching_dep(&title, &content, &deps) else {
+            continue;
         };
         windows.push(make_window(
             "migration",
-            dep,
+            Some(dep),
             &format!("Migration: {}", truncate(&title, 100)),
-            urgency,
-            relevance,
+            0.70,
+            0.75,
             Some("+30 days"),
         ));
     }
@@ -339,18 +340,21 @@ fn detect_migration_windows(conn: &Connection, windows: &mut Vec<DecisionWindow>
 fn detect_adoption_windows(conn: &Connection, windows: &mut Vec<DecisionWindow>) {
     let deps = get_user_dependencies(conn);
     for (_id, title, content, _) in query_items_with_keywords(conn, ADOPTION_KEYWORDS) {
-        let dep = find_matching_dep(&title, &content, &deps);
-        let (urgency, relevance) = if dep.is_some() {
-            (0.50, 0.70)
-        } else {
-            (0.25, 0.40)
+        // Dep-gated like migration above. The dep-less branch of this
+        // detector was the junk fountain of the 2026-07-21 audit: "released"
+        // / "better than" keyword hits opened 85 urgency-0.25 "Adoption:"
+        // windows — an Apple TV trailer among them — which then stamped
+        // "Relevant to open decision" evidence onto unrelated feed items via
+        // topic overlap with the junk titles.
+        let Some(dep) = find_matching_dep(&title, &content, &deps) else {
+            continue;
         };
         windows.push(make_window(
             "adoption",
-            dep,
+            Some(dep),
             &format!("Adoption: {}", truncate(&title, 100)),
-            urgency,
-            relevance,
+            0.50,
+            0.70,
             Some("+14 days"),
         ));
     }
@@ -496,6 +500,14 @@ fn deduplicate_and_store(conn: &Connection, windows: &mut Vec<DecisionWindow>) {
             .iter()
             .any(|(et, ed)| et == &w.window_type && ed.as_deref() == w.dependency.as_deref())
     });
+
+    // Intra-batch dedup: the retain above only checks rows ALREADY in the DB,
+    // so one detection pass could insert the same window twice (live: "kew
+    // 4.2.7" opened as ids 440 AND 442 in a single 16:11:03 batch). Same key
+    // as the DB-side check, plus title so distinct same-dep windows survive.
+    let mut seen: std::collections::HashSet<(String, Option<String>, String)> =
+        std::collections::HashSet::new();
+    windows.retain(|w| seen.insert((w.window_type.clone(), w.dependency.clone(), w.title.clone())));
 
     let sql = "INSERT INTO decision_windows (window_type, title, description, urgency, relevance, dependency, status, expires_at, streets_engine) \
                VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'open', CASE WHEN ?7 IS NOT NULL THEN datetime('now', ?7) ELSE NULL END, ?8)";

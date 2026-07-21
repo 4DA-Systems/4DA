@@ -336,22 +336,31 @@ pub(super) fn assign_cluster_labels(items: &[RawItem], clusters: &mut [GraphClus
         // clusters the old 30% floor let single-title words label the pair
         // ("bun · claude · now", live 2026-07-19), so the top term must
         // appear in at least two member titles.
+        let hits_of = |term: &str| {
+            cluster
+                .node_ids
+                .iter()
+                .filter(|id| keywords_of(**id).iter().any(|w| w == term))
+                .count()
+        };
         let (coverage, coverage_hits) = scored
             .first()
             .map(|(top, _)| {
-                let hits = cluster
-                    .node_ids
-                    .iter()
-                    .filter(|id| keywords_of(**id).iter().any(|w| w == top))
-                    .count();
+                let hits = hits_of(top);
                 (hits as f32 / cluster.node_ids.len().max(1) as f32, hits)
             })
             .unwrap_or((0.0, 0));
 
         cluster.label =
             if coverage >= LABEL_COVERAGE_MIN && coverage_hits >= 2 && !scored.is_empty() {
+                // Every label term must clear the same 2-hit floor as the top
+                // term. Gating only term #1 let single-title riders pad the
+                // label ("rust · embedded · first" — "first" appeared in one
+                // title, live 2026-07-21). Fewer honest terms beat three
+                // decorated ones.
                 scored
                     .iter()
+                    .filter(|(w, _)| hits_of(w) >= 2)
                     .take(3)
                     .map(|(w, _)| *w)
                     .collect::<Vec<_>>()

@@ -400,9 +400,13 @@ impl Database {
         embedding: &[f32],
         weight: f32,
     ) -> SqliteResult<i64> {
-        use crate::context_admission::{classify_source, ContextClass, MAX_DOC_CHUNKS_PER_SOURCE};
+        use crate::context_admission::{
+            classify_source_with_content, ContextClass, MAX_DOC_CHUNKS_PER_SOURCE,
+        };
 
-        let class = classify_source(source_file);
+        // Content-aware: a #[cfg(test)] region of a prod file is TestCode even
+        // though its path says Code — test fixtures must never ground the feed.
+        let class = classify_source_with_content(source_file, text);
         if !class.is_admitted() {
             crate::context_admission::log_admission_skip(source_file, "rejected-provenance");
             return Ok(0);
@@ -527,7 +531,8 @@ impl Database {
         entries: &[NewContextChunk],
     ) -> SqliteResult<ContextRebuildStats> {
         use crate::context_admission::{
-            classify_source, log_admission_skip, ContextClass, MAX_DOC_CHUNKS_PER_SOURCE,
+            classify_source_with_content, log_admission_skip, ContextClass,
+            MAX_DOC_CHUNKS_PER_SOURCE,
         };
         use std::collections::{HashMap, HashSet};
 
@@ -559,7 +564,7 @@ impl Database {
 
             for e in entries {
                 stats.attempted += 1;
-                let class = classify_source(&e.source_file);
+                let class = classify_source_with_content(&e.source_file, &e.text);
                 if !class.is_admitted() {
                     log_admission_skip(&e.source_file, "rejected-provenance");
                     stats.skipped_reject += 1;
@@ -710,28 +715,64 @@ impl Database {
     /// base) and the startup immune system (ongoing auto-quarantine). Idempotent:
     /// a second run reclassifies nothing and prunes nothing.
     pub fn reconcile_context_provenance(&self) -> SqliteResult<ContextReconcileStats> {
-        use crate::context_admission::{classify_source, ContextClass, MAX_DOC_CHUNKS_PER_SOURCE};
+        use crate::context_admission::{
+            classify_source_with_content, ContextClass, MAX_DOC_CHUNKS_PER_SOURCE,
+        };
         use std::collections::HashMap;
 
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_file, COALESCE(source_type, '') FROM context_chunks ORDER BY id",
+            "SELECT id, source_file, COALESCE(source_type, ''), text FROM context_chunks ORDER BY id",
         )?;
         struct Row {
             id: i64,
             source_file: String,
             source_type: String,
+            class: ContextClass,
         }
         let rows: Vec<Row> = stmt
             .query_map([], |r| {
+                let source_file: String = r.get(1)?;
+                let text: String = r.get(3)?;
+                // Classify inside the map so chunk text never accumulates in
+                // memory — only the verdict is kept.
+                let class = classify_source_with_content(&source_file, &text);
                 Ok(Row {
                     id: r.get(0)?,
-                    source_file: r.get(1)?,
+                    source_file,
                     source_type: r.get(2)?,
+                    class,
                 })
             })?
             .collect::<SqliteResult<Vec<_>>>()?;
         drop(stmt);
+
+        // File-majority rule: chunking splits a test file into many chunks and
+        // only some carry a marker (live: `stack_simulation.rs` fixture chunks
+        // held bare fixture strings, no `#[test]` in sight — and its stored
+        // source_file is a BARE basename, so the tests/-dir path signal is
+        // gone). When a strong majority of a Code file's chunks are test-
+        // classified, the FILE is a test file and every chunk of it is demoted.
+        // Prod files with an inline test module sit well under the threshold,
+        // so their production chunks keep grounding.
+        const TEST_FILE_MAJORITY: f64 = 0.6;
+        let mut per_file: HashMap<&str, (usize, usize)> = HashMap::new(); // (code+test, test)
+        for row in &rows {
+            if matches!(row.class, ContextClass::Code | ContextClass::TestCode) {
+                let e = per_file.entry(row.source_file.as_str()).or_insert((0, 0));
+                e.0 += 1;
+                if row.class == ContextClass::TestCode {
+                    e.1 += 1;
+                }
+            }
+        }
+        let test_majority_files: std::collections::HashSet<&str> = per_file
+            .iter()
+            .filter(|(_, counts)| {
+                counts.0 >= 3 && (counts.1 as f64 / counts.0 as f64) >= TEST_FILE_MAJORITY
+            })
+            .map(|(f, _)| *f)
+            .collect();
 
         let mut stats = ContextReconcileStats {
             scanned: rows.len(),
@@ -742,11 +783,15 @@ impl Database {
         let mut doc_counts: HashMap<String, usize> = HashMap::new();
 
         for row in &rows {
-            let class = classify_source(&row.source_file);
+            let mut class = row.class;
             if class == ContextClass::Reject {
                 delete_ids.push(row.id);
                 stats.pruned_reject += 1;
                 continue;
+            }
+            if class == ContextClass::Code && test_majority_files.contains(row.source_file.as_str())
+            {
+                class = ContextClass::TestCode;
             }
             if class == ContextClass::Doc {
                 let n = doc_counts.entry(row.source_file.clone()).or_insert(0);

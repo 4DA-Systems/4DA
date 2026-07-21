@@ -33,6 +33,16 @@ const SKIP_DIRS: &[&str] = &[
     "dev-tools",
     "ton-library",
     "test-context",
+    // Test trees never enter the grounding corpus: fixtures are adversarial
+    // strings BUILT to name deps/crates, i.e. embedding bait (2026-07-21
+    // audit: ~25% of the live grounding corpus was test code). The admission
+    // chokepoint (context_admission) is the structural guard; skipping here
+    // just avoids chunking+embedding work that would be demoted anyway.
+    "tests",
+    "test",
+    "__tests__",
+    "spec",
+    "fixtures",
 ];
 
 /// Files to skip — project meta-docs that pollute context with generic tech terms
@@ -88,6 +98,13 @@ fn collect_context_files(dir: &Path, files: &mut Vec<ContextFile>, depth: usize)
         // Skip meta-docs that pollute context
         if is_meta_doc(name) {
             debug!(target: "4da::context", file = name, "Skipping meta-doc");
+            continue;
+        }
+
+        // Skip test-named files living next to sources (*.test.ts, *_tests.rs)
+        // — same rationale as the test dirs in SKIP_DIRS above.
+        if crate::context_admission::is_test_path(&path.to_string_lossy()) {
+            debug!(target: "4da::context", file = name, "Skipping test file");
             continue;
         }
 
