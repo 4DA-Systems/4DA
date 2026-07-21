@@ -261,6 +261,28 @@ pub fn classify_source(source_file: &str) -> ContextClass {
     class
 }
 
+/// For languages with INLINE test regions (Rust's `#[cfg(test)] mod tests`
+/// tail convention), return the content truncated at the first test-region
+/// marker. Chunk-level markers under-detect here: chunking splits a long test
+/// module into many chunks and only the first carries `#[cfg(test)]` — the
+/// interior fixture chunks (the exact "Content carefully chosen to avoid
+/// substrings of dep names" bait from the 2026-07-21 audit) sail through as
+/// grounding-eligible code. Cutting at the region boundary BEFORE chunking
+/// closes that hole for the dominant convention (tests at file tail). A rare
+/// prod region after an inline test module loses grounding — accuracy-first
+/// prefers under-grounding to fixture bait. Non-Rust content passes through
+/// untouched (JS/TS tests live in separate files, already skipped by path).
+pub fn strip_inline_test_suffix<'a>(source_file: &str, content: &'a str) -> &'a str {
+    let (_, ext) = split_name_ext(source_file);
+    if ext.as_deref() != Some("rs") {
+        return content;
+    }
+    match content.find("#[cfg(test)]") {
+        Some(pos) => &content[..pos],
+        None => content,
+    }
+}
+
 /// Public path-only test check for indexers that want to skip test files
 /// before spending chunking/embedding work (the admission chokepoint would
 /// demote them anyway).
@@ -614,6 +636,26 @@ mod tests {
         for f in ["contest.rs", "attestation.ts", "latest_release.rs"] {
             assert_eq!(classify_source(f), ContextClass::Code, "{f} must stay Code");
         }
+    }
+
+    #[test]
+    fn strip_inline_test_suffix_cuts_rust_test_tails_only() {
+        let rust = "fn prod() {}\n\n#[cfg(test)]\nmod tests {\n    // Content carefully chosen\n}";
+        assert_eq!(
+            strip_inline_test_suffix("context.rs", rust),
+            "fn prod() {}\n\n",
+            "everything from the first #[cfg(test)] is dropped"
+        );
+        // No test region: untouched.
+        let clean = "fn prod() {}\nfn more() {}";
+        assert_eq!(strip_inline_test_suffix("lib.rs", clean), clean);
+        // Non-Rust content with the literal string: untouched (marker is
+        // Rust-specific syntax; a doc quoting it must not be truncated).
+        let md = "Rust uses #[cfg(test)] for test modules.";
+        assert_eq!(strip_inline_test_suffix("notes.md", md), md);
+        // TypeScript passes through (tests live in separate files by path).
+        let ts = "export const x = 1; // #[cfg(test)] in a comment";
+        assert_eq!(strip_inline_test_suffix("store.ts", ts), ts);
     }
 
     #[test]

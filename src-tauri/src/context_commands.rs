@@ -200,7 +200,11 @@ pub async fn index_context() -> Result<String> {
             .next_back()
             .and_then(|s| s.split('\\').next_back())
             .unwrap_or(&file.path);
-        let chunks = chunk_text(&file.content, filename);
+        // Drop inline test regions (Rust `#[cfg(test)]` tails) before chunking
+        // — interior fixture chunks carry no marker the admission chokepoint
+        // could see, and fixtures are grounding bait by construction.
+        let content = crate::context_admission::strip_inline_test_suffix(filename, &file.content);
+        let chunks = chunk_text(content, filename);
         debug!(target: "4da::context", file = filename, chunks = chunks.len(), "Chunked file");
         all_chunks.extend(chunks);
     }
