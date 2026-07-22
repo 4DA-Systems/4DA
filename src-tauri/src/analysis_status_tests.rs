@@ -138,4 +138,119 @@ mod tests {
             guard.started_at = None;
         }
     }
+
+    // ========================================================================
+    // Curation persistence (regression guard, 2026-07-22)
+    //
+    // The scheduled/background analysis path scored items every cycle but never
+    // persisted the curation VERDICT (`feed_relevant`) or the `scoring_events`
+    // telemetry row — only the foreground wrapper did. So tray-resident/headless
+    // runs SCORED without CURATING: `feed_relevant` froze and the content graph +
+    // calibration silently went stale (live 2026-07-22: 586 items unjudged across
+    // 14 scheduled cycles). `persist_cycle_results` is now the SINGLE persistence
+    // site reached by every path via `analyze_cached_content_inner`. This locks
+    // its contract so a future refactor can't silently drop the verdict again.
+    // ========================================================================
+
+    #[test]
+    fn persist_cycle_results_writes_verdict_scores_and_scoring_event() {
+        use crate::test_utils::{insert_test_item, test_db};
+        use crate::types::SourceRelevance;
+
+        let db = test_db();
+        let id_relevant = insert_test_item(&db, "hackernews", "hn_rel", "Relevant item", "body");
+        let id_noise = insert_test_item(&db, "hackernews", "hn_noise", "Noise item", "body");
+        let id_relevant2 = insert_test_item(&db, "crates_io", "cr_rel", "Relevant crate", "body");
+
+        // Build SourceRelevance via serde defaults — only id/title/url/top_score/
+        // matches/relevant are required; every other field defaults.
+        let make = |id: i64, top_score: f32, relevant: bool| -> SourceRelevance {
+            serde_json::from_value(serde_json::json!({
+                "id": id,
+                "title": format!("item {id}"),
+                "url": null,
+                "top_score": top_score,
+                "matches": [],
+                "relevant": relevant,
+            }))
+            .expect("construct SourceRelevance")
+        };
+
+        let results = vec![
+            make(id_relevant, 0.91, true),
+            make(id_noise, 0.0, false),
+            make(id_relevant2, 0.72, true),
+        ];
+
+        crate::analysis::persist_cycle_results(&db, &results);
+
+        let conn = db.conn.lock();
+        let verdict = |id: i64| -> (Option<i64>, Option<String>) {
+            conn.query_row(
+                "SELECT feed_relevant, feed_verdict_at FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<i64>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                },
+            )
+            .unwrap()
+        };
+        let (fr1, ts1) = verdict(id_relevant);
+        let (fr0, ts0) = verdict(id_noise);
+        let (fr2, ts2) = verdict(id_relevant2);
+        assert_eq!(fr1, Some(1), "relevant item curated into the corpus");
+        assert_eq!(
+            fr0,
+            Some(0),
+            "noise item judged NOT relevant (still stamped)"
+        );
+        assert_eq!(fr2, Some(1), "second relevant item curated");
+        assert!(
+            ts1.is_some() && ts0.is_some() && ts2.is_some(),
+            "every judged item gets a verdict timestamp"
+        );
+
+        // Pipeline version stamped for EVERY scored item (incl. top_score == 0 noise).
+        let versioned: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM source_items WHERE scored_pipeline_version = ?1",
+                rusqlite::params![crate::scoring::PIPELINE_VERSION],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            versioned, 3,
+            "all three items stamped at current pipeline version"
+        );
+
+        // Relevance scores persisted only for top_score > 0 items (noise skipped).
+        let scored: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM source_items WHERE relevance_score IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            scored, 2,
+            "only the two top_score>0 items get a persisted score"
+        );
+
+        // Scoring-event telemetry row written with correct counts.
+        let (total_scored, total_relevant): (i64, i64) = conn
+            .query_row(
+                "SELECT total_scored, total_relevant FROM scoring_events ORDER BY id DESC LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("a scoring_events row must exist after a cycle");
+        assert_eq!(total_scored, 3, "scoring_events records all judged items");
+        assert_eq!(
+            total_relevant, 2,
+            "scoring_events records the relevant count"
+        );
+    }
 }

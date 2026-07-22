@@ -260,37 +260,14 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
             receipt.items_scored = results.len();
             receipt.relevant_count = results.iter().filter(|r| r.relevant).count();
 
-            // Persist scores. The GUI path persists via the analysis_status completion
-            // handler, and the backfill scheduler stamps the rest — neither runs headless,
-            // so without this block a headless-only deployment computes scores every cycle
-            // and writes none of them (relevance_score stays NULL for every item; verified
-            // live on a fresh FOURDA_DATA_DIR). Mirrors analysis_status.rs exactly:
-            // scores for top_score > 0, a pipeline-version stamp for every scored item.
-            if let Ok(db) = crate::get_database() {
-                let score_data: Vec<(i64, f32, Option<String>, Option<String>)> = results
-                    .iter()
-                    .filter(|r| r.top_score > 0.0)
-                    .map(|r| {
-                        (
-                            r.id as i64,
-                            r.top_score,
-                            r.signal_type.clone(),
-                            r.signal_priority.clone(),
-                        )
-                    })
-                    .collect();
-                if !score_data.is_empty() {
-                    if let Err(e) = db.persist_analysis_scores(&score_data) {
-                        warn!(target: "4da::headless", error = %e, "Failed to persist relevance scores");
-                    }
-                }
-                let scored_ids: Vec<i64> = results.iter().map(|r| r.id as i64).collect();
-                if let Err(e) =
-                    db.mark_items_scored_version(&scored_ids, crate::scoring::PIPELINE_VERSION)
-                {
-                    warn!(target: "4da::headless", error = %e, "Failed to stamp scored pipeline version");
-                }
-            }
+            // Scores, pipeline-version stamps, feed verdicts, and the scoring-event
+            // row are now persisted once at the shared analysis boundary
+            // (analyze_cached_content_silent -> analyze_cached_content_inner ->
+            // persist_cycle_results), which this headless cycle already routes
+            // through. That also gives the headless daemon the curation VERDICT it
+            // previously never wrote — so a headless-only deployment now curates the
+            // corpus (feed_relevant), not just scores it. Do NOT re-add a local
+            // persist here.
 
             info!(
                 target: "4da::headless",

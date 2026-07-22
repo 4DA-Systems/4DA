@@ -82,69 +82,12 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 guard.completed = true; // Mark completed LAST — after all data is stored
                 drop(guard);
 
-                // Downstream operations all take &[SourceRelevance] — use references
-                // Persist relevance scores to DB for briefing fallback path
-                if let Ok(db) = get_database() {
-                    let score_data: Vec<(i64, f32, Option<String>, Option<String>)> = results
-                        .iter()
-                        .filter(|r| r.top_score > 0.0)
-                        .map(|r| {
-                            (
-                                r.id as i64,
-                                r.top_score,
-                                r.signal_type.clone(),
-                                r.signal_priority.clone(),
-                            )
-                        })
-                        .collect();
-                    if !score_data.is_empty() {
-                        if let Err(e) = db.persist_analysis_scores(&score_data) {
-                            tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist relevance scores");
-                        }
-                    }
-
-                    // Stamp the pipeline version for EVERY item scored this run —
-                    // including noise items (top_score == 0) that persist_analysis_scores
-                    // skips. Without this, zero-scoring stale items never leave the
-                    // stale set and the version-bump drain stalls on them forever.
-                    let scored_ids: Vec<i64> = results.iter().map(|r| r.id as i64).collect();
-                    if let Err(e) =
-                        db.mark_items_scored_version(&scored_ids, crate::scoring::PIPELINE_VERSION)
-                    {
-                        tracing::warn!(target: "4da::scoring", error = %e, "Failed to stamp scored pipeline version");
-                    }
-
-                    // Persist the curation VERDICT for every item judged this
-                    // run (relevant = in the curated corpus). Corpus-parity
-                    // surfaces (content graph) select on this instead of
-                    // re-deriving a corpus from raw cross-epoch scores.
-                    let verdicts: Vec<(i64, bool)> =
-                        results.iter().map(|r| (r.id as i64, r.relevant)).collect();
-                    if let Err(e) = db.persist_feed_verdicts(&verdicts) {
-                        tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist feed verdicts");
-                    }
-
-                    // Scoring event log — audit trail for debugging + recalibration
-                    let total_scored = results.len();
-                    let relevant_items: Vec<&SourceRelevance> =
-                        results.iter().filter(|r| r.relevant).collect();
-                    let scores: Vec<f32> = results.iter().map(|r| r.top_score).collect();
-                    let avg_score = if scores.is_empty() {
-                        0.0
-                    } else {
-                        scores.iter().sum::<f32>() / scores.len() as f32
-                    };
-                    let max_score = scores.iter().copied().fold(0.0f32, f32::max);
-                    let _ = db.record_scoring_event(
-                        total_scored,
-                        relevant_items.len(),
-                        avg_score,
-                        max_score,
-                        0, // gate_rejections — logged via ScoringTelemetry
-                        0, // commodity_caps — logged via ScoringTelemetry
-                        0, // briefing_items — filled on briefing build
-                    );
-                }
+                // Relevance scores, pipeline-version stamps, feed verdicts, and the
+                // scoring-event telemetry row are persisted once at the shared
+                // analysis boundary (analyze_cached_content_inner ->
+                // persist_cycle_results) so foreground, scheduled, and headless runs
+                // all curate the corpus identically. Do NOT re-add a per-wrapper
+                // persist here — that split is the regression this fix removed.
 
                 if let Err(e) = app.emit("analysis-complete", &results) {
                     tracing::warn!("Failed to emit 'analysis-complete': {e}");
@@ -340,7 +283,95 @@ pub(crate) async fn analyze_cached_content_silent(app: &AppHandle) -> Result<Vec
     analyze_cached_content_inner(app, true).await
 }
 
+/// Persist everything a completed analysis cycle owes the DB: relevance scores,
+/// pipeline-version stamps, the per-item curation VERDICT (`feed_relevant`), and
+/// the `scoring_events` telemetry row.
+///
+/// This is the SINGLE curation-persistence site for every real analysis path.
+/// Foreground (`run_cached_analysis`), scheduled (`run_scheduled_analysis`), and
+/// headless (`headless::run_cycle`) all reach the scorer through
+/// `analyze_cached_content_inner`, so persisting here guarantees all three curate
+/// the corpus identically. Previously each caller wrapper hand-copied this block
+/// and the scheduled wrapper omitted the verdict + scoring-event writes — so
+/// background / tray-resident / headless runs SCORED without ever CURATING:
+/// `feed_relevant` froze, and the content graph + calibration telemetry silently
+/// went stale (live 2026-07-22: 586 items unjudged across 14 scheduled cycles).
+/// Centralising here makes score-without-curate structurally impossible.
+pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceRelevance]) {
+    // Relevance scores — only items that scored > 0 (noise is version-stamped below).
+    let score_data: Vec<(i64, f32, Option<String>, Option<String>)> = results
+        .iter()
+        .filter(|r| r.top_score > 0.0)
+        .map(|r| {
+            (
+                r.id as i64,
+                r.top_score,
+                r.signal_type.clone(),
+                r.signal_priority.clone(),
+            )
+        })
+        .collect();
+    if !score_data.is_empty() {
+        if let Err(e) = db.persist_analysis_scores(&score_data) {
+            tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist relevance scores");
+        }
+    }
+
+    // Stamp the pipeline version for EVERY item scored this run — including noise
+    // items (top_score == 0) that persist_analysis_scores skips. Without this,
+    // zero-scoring stale items never leave the version-bump drain set.
+    let scored_ids: Vec<i64> = results.iter().map(|r| r.id as i64).collect();
+    if let Err(e) = db.mark_items_scored_version(&scored_ids, crate::scoring::PIPELINE_VERSION) {
+        tracing::warn!(target: "4da::scoring", error = %e, "Failed to stamp scored pipeline version");
+    }
+
+    // Persist the curation VERDICT for every item judged this run (relevant = in
+    // the curated corpus). Corpus-parity surfaces (content graph) select on this
+    // instead of re-deriving a corpus from raw cross-epoch scores.
+    let verdicts: Vec<(i64, bool)> = results.iter().map(|r| (r.id as i64, r.relevant)).collect();
+    if let Err(e) = db.persist_feed_verdicts(&verdicts) {
+        tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist feed verdicts");
+    }
+
+    // Scoring-event telemetry row — drives calibration + recalibration backtesting.
+    let total_scored = results.len();
+    let relevant_count = results.iter().filter(|r| r.relevant).count();
+    let scores: Vec<f32> = results.iter().map(|r| r.top_score).collect();
+    let avg_score = if scores.is_empty() {
+        0.0
+    } else {
+        scores.iter().sum::<f32>() / scores.len() as f32
+    };
+    let max_score = scores.iter().copied().fold(0.0f32, f32::max);
+    let _ = db.record_scoring_event(
+        total_scored,
+        relevant_count,
+        avg_score,
+        max_score,
+        0, // gate_rejections — logged via ScoringTelemetry
+        0, // commodity_caps — logged via ScoringTelemetry
+        0, // briefing_items — filled on briefing build
+    );
+}
+
+/// Persistence boundary over `analyze_cached_content_inner_impl`. EVERY analysis
+/// path (foreground / scheduled / headless) reaches the scorer through here, so
+/// persisting the cycle's results at this single point guarantees the curated
+/// corpus (`feed_relevant` + `scoring_events`) advances for all of them. Do NOT
+/// move persistence back into the individual caller wrappers — that split is the
+/// regression this consolidation fixed (see `persist_cycle_results`).
 async fn analyze_cached_content_inner(
+    app: &AppHandle,
+    silent: bool,
+) -> Result<Vec<SourceRelevance>> {
+    let results = analyze_cached_content_inner_impl(app, silent).await?;
+    if let Ok(db) = get_database() {
+        persist_cycle_results(db, &results);
+    }
+    Ok(results)
+}
+
+async fn analyze_cached_content_inner_impl(
     app: &AppHandle,
     silent: bool,
 ) -> Result<Vec<SourceRelevance>> {
