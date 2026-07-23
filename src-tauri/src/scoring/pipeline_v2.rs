@@ -803,6 +803,37 @@ fn extract_community_signal(source_type: &str, tags_json: Option<&str>, age_hour
                 _ => 0.30,
             }
         }
+        // Federated/microblog sources: previously fell through to the 0.50
+        // neutral arm — never penalized — so promotional posts and off-topic
+        // social noise rode embedding similarity into the feed unchecked
+        // (live 2026-07-23: mastodon promo at 0.91, lemmy "share your
+        // collection" at 0.61, all feed_relevant). No engagement metadata is
+        // ingested for these sources today (live DB: tags empty across the
+        // board), so the no-metadata default is LOW (0.25 — below the 0.30
+        // low_threshold, arming the UGC cap); if engagement tags appear
+        // (mastodon favourites/reblogs, lemmy score, bluesky likes), real
+        // community traction earns the score back.
+        "mastodon" | "lemmy" | "bluesky" | "twitter" => {
+            let engagement = tags
+                .get("score")
+                .and_then(|v| v.as_i64())
+                .or_else(|| tags.get("upvotes").and_then(|v| v.as_i64()))
+                .or_else(|| {
+                    let favs = tags.get("favourites").and_then(|v| v.as_i64());
+                    let boosts = tags.get("reblogs").and_then(|v| v.as_i64());
+                    match (favs, boosts) {
+                        (None, None) => None,
+                        (f, b) => Some(f.unwrap_or(0) + b.unwrap_or(0)),
+                    }
+                })
+                .or_else(|| tags.get("likes").and_then(|v| v.as_i64()));
+            match engagement {
+                Some(e) if e >= 50 => 0.85,
+                Some(e) if e >= 10 => 0.60,
+                Some(e) if e >= 3 => 0.40,
+                _ => 0.25,
+            }
+        }
         _ => 0.50,
     }
 }
@@ -823,6 +854,7 @@ fn compute_quality_composite(
     raw: &RawSignals,
     options: &ScoringOptions,
     db: &Database,
+    grounding: &dependencies::GroundingVerdict,
 ) -> (
     f32,
     f32,
@@ -1082,6 +1114,35 @@ fn compute_quality_composite(
         content_dna_mult
     };
 
+    // Registry release grounding (mirrors the SecurityAdvisory rule above).
+    // Every package-registry item is manifest-classified ReleaseNotes with an
+    // unconditional 1.15x boost, and crates.io sits in the Core tier for Rust
+    // users (1.05x) — so an unknown crate whose name/description merely
+    // RESEMBLES the user's stack ("axum-connect-rpc", "serde_v8",
+    // "forge-plugin-sdk-rust") rode embedding similarity into the feed.
+    // Live evidence 2026-07-23: ~81% of relevant items were crates and the
+    // top-scored crate (0.947) was not a dependency.
+    //
+    // Grounding = the released SUBJECT package is one of the user's
+    // dependencies — the canonical `compute_grounding_verdict` (registry
+    // items are judged by their source_id subject, never by text mentions:
+    // a description that name-drops tokio ("built on tokio and serde") is
+    // about a DIFFERENT package and must not ground).
+    let is_registry_release = crate::dep_linker::is_registry_source(input.source_type)
+        && matches!(
+            content_type,
+            crate::content_dna::ContentType::ReleaseNotes
+                | crate::content_dna::ContentType::BreakingChange
+        );
+    let registry_release_grounded = grounding.strong;
+    let content_dna_mult = if is_registry_release && !registry_release_grounded {
+        // Boost is unearned — neutralize it (don't penalize here; the hard
+        // suppression below handles relevance).
+        content_dna_mult.min(1.00)
+    } else {
+        content_dna_mult
+    };
+
     // Community quality signal: SO score, HN points, Reddit upvotes
     let age_hours_for_community = input.created_at.map_or(0.0, |ts| {
         (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
@@ -1180,16 +1241,33 @@ fn compute_quality_composite(
         quality_score
     };
 
+    // Ungrounded registry releases: hard suppression (analog of the CVE
+    // no-match tier above). A release of a package the user does NOT depend
+    // on is registry noise no matter how stack-shaped its name is — the
+    // registry signal this product sells is "releases of YOUR dependencies".
+    // Grounded releases (subject-corroborated, e.g. tokio/serde/sqlx) are
+    // untouched, as are security-classified items (governed by the security
+    // validation above — no double penalty).
+    let quality_score = if is_registry_release && !registry_release_grounded && !novelty.is_security
+    {
+        quality_score * scoring_config::REGISTRY_RELEASE_GROUNDING_UNGROUNDED_PENALTY
+    } else {
+        quality_score
+    };
+
     // Community signal gate for user-generated content sources.
     // Low-community-signal items from UGC platforms (dev.to, medium, hashnode,
     // reddit, stackoverflow) get hard-capped — prevents generic blog posts and
     // zero-upvote questions from riding keyword matches into the briefing.
     // Authoritative sources (CVE, RustSec, GitHub, crates.io, npm, PyPI) are exempt.
+    // Federated/microblog sources (mastodon, lemmy, bluesky, twitter) are UGC
+    // too — they were missing from this list, so no quality cap ever applied
+    // to them (the other half of the neutral-community-arm escape fixed in
+    // extract_community_signal).
     let quality_score = if community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD {
         match input.source_type {
-            "devto" | "medium" | "hashnode" | "reddit" | "stackoverflow" | "lobsters" => {
-                quality_score.min(0.50)
-            }
+            "devto" | "medium" | "hashnode" | "reddit" | "stackoverflow" | "lobsters"
+            | "mastodon" | "lemmy" | "bluesky" | "twitter" => quality_score.min(0.50),
             _ => quality_score,
         }
     } else {
@@ -1441,6 +1519,7 @@ fn apply_final_adjustments(
     sophistication_raw: f32,
     community_signal: f32,
     strongly_grounded: bool,
+    ungrounded_registry_release: bool,
 ) -> f32 {
     let meaningful_words = title.split_whitespace().filter(|w| w.len() >= 2).count();
     let score = if meaningful_words < 3 {
@@ -1459,6 +1538,7 @@ fn apply_final_adjustments(
         sophistication_raw,
         community_signal,
         strongly_grounded,
+        ungrounded_registry_release,
     )
 }
 
@@ -1485,6 +1565,7 @@ fn apply_commodity_ceiling(
     sophistication_raw: f32,
     community_signal: f32,
     strongly_grounded: bool,
+    ungrounded_registry_release: bool,
 ) -> f32 {
     use crate::content_dna::ContentType;
 
@@ -1509,6 +1590,19 @@ fn apply_commodity_ceiling(
     // pattern. In-stack advisories (strongly_grounded) fall through untouched.
     if matches!(content_type, ContentType::SecurityAdvisory) && !strongly_grounded {
         return score.min(scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED);
+    }
+
+    // Ungrounded registry release: a release/deprecation notice for a package
+    // the user does NOT depend on (canonical subject-grounding verdict). Like
+    // the off-stack advisory above, it is checked before every exemption:
+    // stack-token keyword hits, open-window intent matches, and skill-gap
+    // boosts all key on the look-alike NAME ("forge-plugin-sdk-RUST",
+    // "cobol_rust_SERDE"), so none of them may lift the cap — and a "deprecated
+    // vX" title for a non-dependency is still noise, so the version-conflict
+    // exemption must not apply either. Capped below the relevance threshold:
+    // visible in ranked lists, never feed-relevant.
+    if ungrounded_registry_release {
+        return score.min(scoring_config::COMMODITY_CEILING_REGISTRY_RELEASE_UNGROUNDED);
     }
 
     // Only applies to commodity types
@@ -2012,6 +2106,20 @@ pub(crate) fn score_item(
     // ── Phase 4: Compute base relevance ───────────────────────────────
     let relevance_score = compute_relevance(&cal, ctx, has_real_embedding);
 
+    // ── Canonical grounding verdict ───────────────────────────────────
+    // Computed ONCE and shared by every downstream consumer: the quality
+    // composite's registry-release grounding, the commodity bypass, the
+    // critical fast-path floors, the Critical trust gate, the necessity
+    // stack-update path, and the persisted breakdown (→ the evidence pool).
+    // Registry items are judged by their SUBJECT package (source_id), never
+    // by text mentions in another package's description.
+    let grounding = dependencies::compute_grounding_verdict(
+        input.source_type,
+        input.source_id,
+        &raw.matched_deps,
+        &ctx.ace_ctx,
+    );
+
     // ── Phase 5: Quality composite ────────────────────────────────────
     let (
         quality_score,
@@ -2029,7 +2137,7 @@ pub(crate) fn score_item(
         negative_stack_prior,
         sophistication_raw,
         community_signal,
-    ) = compute_quality_composite(relevance_score, input, ctx, &raw, options, db);
+    ) = compute_quality_composite(relevance_score, input, ctx, &raw, options, db, &grounding);
 
     // ── Phase 6: Boosts ───────────────────────────────────────────────
     let (
@@ -2105,17 +2213,19 @@ pub(crate) fn score_item(
     // ── Canonical grounding verdict ───────────────────────────────────
     // Computed ONCE and shared by every downstream consumer: the commodity
     // bypass, the critical fast-path floors, the Critical trust gate, the
-    // necessity stack-update path, and the persisted breakdown (→ the
-    // evidence pool). Registry items are judged by their SUBJECT package
-    // (source_id), never by text mentions in another package's description.
-    let grounding = dependencies::compute_grounding_verdict(
-        input.source_type,
-        input.source_id,
-        &raw.matched_deps,
-        &ctx.ace_ctx,
-    );
-
     // ── Phase 8: Final adjustments ────────────────────────────────────
+    // Ungrounded registry release: subject package is NOT one of the user's
+    // dependencies (canonical verdict above). Rides the same post-everything
+    // commodity-ceiling slot as off-stack advisories — no amount of
+    // intent/window/skill-gap boost may push a look-alike crate release back
+    // into the feed after the grounding penalty.
+    let ungrounded_registry_release = crate::dep_linker::is_registry_source(input.source_type)
+        && matches!(
+            content_type,
+            crate::content_dna::ContentType::ReleaseNotes
+                | crate::content_dna::ContentType::BreakingChange
+        )
+        && !grounding.strong;
     let combined_score = apply_final_adjustments(
         gated_score,
         input.title,
@@ -2125,6 +2235,7 @@ pub(crate) fn score_item(
         // Same grounding evidence the gate consumes — lets a dep-grounded
         // academic paper bypass its commodity ceiling.
         grounding.strong,
+        ungrounded_registry_release,
     );
 
     // ── Score offset normalization ────────────────────────────────────
@@ -2652,6 +2763,55 @@ fn count_affected_projects(db: &Database, matched_deps: &[String]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ========================================================================
+    // extract_community_signal — federated sources must not ride neutral
+    // ========================================================================
+
+    #[test]
+    fn federated_sources_without_engagement_score_low() {
+        // Pre-fix these hit the `_ => 0.50` neutral arm — never below the
+        // 0.30 low_threshold, so the UGC cap could never fire for them.
+        for source in ["mastodon", "lemmy", "bluesky", "twitter"] {
+            let signal = extract_community_signal(source, None, 8.0);
+            assert!(
+                signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD,
+                "{source} with no engagement metadata must arm the UGC cap \
+                 (got {signal}, threshold {})",
+                scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD
+            );
+        }
+    }
+
+    #[test]
+    fn federated_engagement_earns_score_back() {
+        // Real community traction (mastodon favourites+reblogs, lemmy score,
+        // bluesky likes) lifts the signal above the cap threshold.
+        let mastodon = extract_community_signal(
+            "mastodon",
+            Some(r#"{"favourites": 40, "reblogs": 15}"#),
+            8.0,
+        );
+        assert!(
+            mastodon >= 0.85,
+            "55 combined engagement → high ({mastodon})"
+        );
+        let lemmy = extract_community_signal("lemmy", Some(r#"{"score": 12}"#), 8.0);
+        assert!(lemmy >= 0.60, "12 upvotes → moderate ({lemmy})");
+        let bluesky = extract_community_signal("bluesky", Some(r#"{"likes": 4}"#), 8.0);
+        assert!(
+            (0.30..0.60).contains(&bluesky),
+            "4 likes → modest but uncapped ({bluesky})"
+        );
+    }
+
+    #[test]
+    fn federated_fresh_items_keep_neutral_grace() {
+        // The <6h fresh-item grace applies to federated sources too — the
+        // community hasn't had a chance to vote yet.
+        let signal = extract_community_signal("mastodon", None, 2.0);
+        assert!((signal - 0.50).abs() < f32::EPSILON);
+    }
 
     // ========================================================================
     // display_worthy_deps — the corroborated-evidence gate for the UI
@@ -3600,6 +3760,7 @@ mod tests {
             0.0,
             0.0,
             false,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             capped,
@@ -3616,7 +3777,8 @@ mod tests {
             &crate::content_dna::ContentType::AcademicPaper,
             0.0,
             0.0,
-            true, // strongly grounded in the user's dependencies
+            true,  // strongly grounded in the user's dependencies,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             score, 0.90,
@@ -3640,6 +3802,7 @@ mod tests {
             0.0,
             0.0,
             false,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             capped,
@@ -3659,6 +3822,7 @@ mod tests {
             0.9,
             1.0,
             true,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             capped,
@@ -3677,12 +3841,82 @@ mod tests {
             &crate::content_dna::ContentType::SecurityAdvisory,
             0.5,
             0.0,
-            false, // NOT in the user's dependency graph
+            false, // NOT in the user's dependency graph,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             capped,
             scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED,
             "off-stack advisory must be capped to the MATCH band"
+        );
+    }
+
+    // ========================================================================
+    // Ungrounded registry releases — capped below the relevance threshold.
+    // The look-alike-crate class (forge-plugin-sdk-rust 0.947, dep_links=0).
+    // ========================================================================
+
+    #[test]
+    fn ungrounded_registry_release_capped_below_relevance_threshold() {
+        // Boosts keyed on the look-alike NAME (keyword "rust", open-window
+        // intent, skill gaps) must not lift the cap — checked before every
+        // exemption, like the off-stack advisory.
+        let capped = apply_commodity_ceiling(
+            0.95,
+            "crates.io: forge-plugin-sdk-rust v1.0.7",
+            &crate::content_dna::ContentType::ReleaseNotes,
+            0.9, // sophistication bypass must NOT apply
+            1.0, // community bypass must NOT apply
+            false,
+            true, // ungrounded_registry_release
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_REGISTRY_RELEASE_UNGROUNDED,
+            "ungrounded registry release must be capped below the relevance threshold"
+        );
+        assert!(
+            scoring_config::COMMODITY_CEILING_REGISTRY_RELEASE_UNGROUNDED
+                < get_relevance_threshold(),
+            "the cap must sit below the relevance threshold or the gate can still pass it"
+        );
+    }
+
+    #[test]
+    fn ungrounded_registry_deprecation_notice_still_capped() {
+        // "deprecated vX" trips the version-conflict exemption for other
+        // classes — but a deprecation notice for a package the user does NOT
+        // depend on is still noise, so the cap must win.
+        let capped = apply_commodity_ceiling(
+            0.90,
+            "crates.io: some-crate v0.3.0 [deprecated]",
+            &crate::content_dna::ContentType::BreakingChange,
+            0.0,
+            0.0,
+            false,
+            true, // ungrounded_registry_release
+        );
+        assert_eq!(
+            capped,
+            scoring_config::COMMODITY_CEILING_REGISTRY_RELEASE_UNGROUNDED
+        );
+    }
+
+    #[test]
+    fn grounded_registry_release_not_capped() {
+        // A release of a real dependency (tokio) surfaces at full score.
+        let score = apply_commodity_ceiling(
+            0.90,
+            "crates.io: tokio v1.52.3",
+            &crate::content_dna::ContentType::ReleaseNotes,
+            0.0,
+            0.0,
+            true,  // strongly grounded (subject ∈ user deps)
+            false, // NOT ungrounded
+        );
+        assert_eq!(
+            score, 0.90,
+            "grounded dependency release must not be capped"
         );
     }
 
@@ -3696,7 +3930,8 @@ mod tests {
             &crate::content_dna::ContentType::SecurityAdvisory,
             0.5,
             0.0,
-            true, // strongly grounded — axios IS a dependency
+            true,  // strongly grounded — axios IS a dependency,
+            false, // ungrounded_registry_release
         );
         assert_eq!(score, 0.91, "in-stack advisory must NOT be capped");
     }
@@ -3712,6 +3947,7 @@ mod tests {
             0.9,
             0.0,
             false,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             capped,
@@ -3729,6 +3965,7 @@ mod tests {
             0.0,
             1.0,
             false,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             capped,
@@ -3747,6 +3984,7 @@ mod tests {
             0.0,
             0.0,
             false,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             score, 0.90,
@@ -3763,6 +4001,7 @@ mod tests {
             0.0,
             0.0,
             false,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             capped,
@@ -3780,6 +4019,7 @@ mod tests {
             0.0,
             scoring_config::COMMUNITY_SIGNAL_HIGH_THRESHOLD,
             false,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             score, 0.85,
@@ -3797,6 +4037,7 @@ mod tests {
             0.5,
             0.0,
             false,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             score, 0.85,
@@ -3815,6 +4056,7 @@ mod tests {
             0.0,
             0.0,
             true,
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             capped,
@@ -3833,6 +4075,7 @@ mod tests {
             0.0,
             0.0,
             false,
+            false, // ungrounded_registry_release
         );
         assert_eq!(score, 0.90, "non-commodity types must pass through");
     }

@@ -207,9 +207,45 @@ pub fn save_detected_stacks(
     Ok(())
 }
 
+/// Confidence floor for AUTO-detected stack profiles entering the scoring
+/// composition. Stale low-confidence auto-detections (live 2026-07-23:
+/// `java_enterprise` 0.18, `laravel`/`php_symfony` 0.30 from a month-old
+/// scan) contribute keyword boosts and tech sets at FULL strength —
+/// `compose_profiles` has no notion of confidence — which broadens matching
+/// onto stacks the user does not work in. Manual selections
+/// (`auto_detected = 0`) always compose, whatever their stored confidence.
+const AUTO_STACK_CONFIDENCE_FLOOR: f64 = 0.5;
+
+/// Load the stack IDs that should participate in SCORING: manual selections
+/// unconditionally, auto-detected ones only at/above the confidence floor.
+fn load_scoring_stacks(conn: &Connection) -> Vec<String> {
+    let mut stmt = match conn.prepare(
+        "SELECT profile_id FROM selected_stacks
+         WHERE auto_detected = 0 OR confidence >= ?1
+         ORDER BY id",
+    ) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let rows = match stmt.query_map([AUTO_STACK_CONFIDENCE_FLOOR], |row| row.get::<_, String>(0)) {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+    rows.filter_map(|r| match r {
+        Ok(v) => Some(v),
+        Err(e) => {
+            tracing::warn!("Row processing failed in stacks: {e}");
+            None
+        }
+    })
+    .collect()
+}
+
 /// Load selected stacks and compose them into a merged profile.
+/// Applies the auto-detected confidence floor — low-confidence stale
+/// detections must not broaden scoring (see `AUTO_STACK_CONFIDENCE_FLOOR`).
 pub fn load_composed_stack(conn: &Connection) -> ComposedStack {
-    let ids = load_selected_stacks(conn);
+    let ids = load_scoring_stacks(conn);
     compose_profiles(&ids)
 }
 
@@ -284,5 +320,73 @@ mod tests {
         assert!(get_profile("rust_systems").is_some());
         assert!(get_profile("nextjs_fullstack").is_some());
         assert!(get_profile("nonexistent").is_none());
+    }
+
+    // ========================================================================
+    // Auto-detected confidence floor (scoring composition)
+    // ========================================================================
+
+    fn stacks_test_conn() -> Connection {
+        let conn = Connection::open_in_memory().expect("in-memory DB");
+        conn.execute(
+            "CREATE TABLE selected_stacks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_id TEXT NOT NULL,
+                auto_detected INTEGER NOT NULL DEFAULT 0,
+                confidence REAL NOT NULL DEFAULT 1.0
+            )",
+            [],
+        )
+        .expect("create selected_stacks");
+        conn
+    }
+
+    #[test]
+    fn low_confidence_auto_stacks_do_not_compose() {
+        // The live failure mode (2026-07-23): month-old auto-detections
+        // (java_enterprise 0.18, laravel 0.30) composed at full strength
+        // alongside the real stack, broadening keyword matching.
+        let conn = stacks_test_conn();
+        let mut insert = conn
+            .prepare(
+                "INSERT INTO selected_stacks (profile_id, auto_detected, confidence)
+                 VALUES (?1, ?2, ?3)",
+            )
+            .unwrap();
+        insert.execute(params!["rust_systems", 1, 0.64]).unwrap();
+        insert.execute(params!["java_enterprise", 1, 0.18]).unwrap();
+        insert.execute(params!["laravel", 1, 0.30]).unwrap();
+        drop(insert);
+
+        let composed = load_composed_stack(&conn);
+        assert!(composed.active);
+        assert!(
+            composed.all_tech.contains("rust"),
+            "confident auto-detection must compose"
+        );
+        assert!(
+            !composed.all_tech.contains("java") && !composed.all_tech.contains("spring"),
+            "stale 0.18-confidence java_enterprise must NOT compose into scoring"
+        );
+        assert!(
+            !composed.all_tech.contains("laravel"),
+            "stale 0.30-confidence laravel must NOT compose into scoring"
+        );
+    }
+
+    #[test]
+    fn manual_selections_compose_regardless_of_confidence() {
+        // A stack the user explicitly selected is authoritative — the floor
+        // applies only to auto-detections.
+        let conn = stacks_test_conn();
+        conn.execute(
+            "INSERT INTO selected_stacks (profile_id, auto_detected, confidence)
+             VALUES ('java_enterprise', 0, 0.1)",
+            [],
+        )
+        .unwrap();
+        let composed = load_composed_stack(&conn);
+        assert!(composed.active);
+        assert!(composed.all_tech.contains("java"));
     }
 }
