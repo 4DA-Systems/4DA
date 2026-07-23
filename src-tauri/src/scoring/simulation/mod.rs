@@ -36,6 +36,8 @@ pub(super) mod persona_data;
 pub(super) mod personas;
 pub(super) mod quality_dashboard;
 pub(super) mod reality;
+#[cfg(test)]
+pub(super) mod registry_precision;
 pub(super) mod tier2_semantic;
 pub(super) mod tier3_rerank;
 pub(super) mod version_comparison;

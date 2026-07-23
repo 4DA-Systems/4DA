@@ -124,6 +124,19 @@ dependency_gate_bypass {
     direct_dep_ceiling: 0.72         # [0.50, 0.80]
 }
 
+# Registry release grounding — a package-registry release (ReleaseNotes /
+# BreakingChange from crates.io, npm, PyPI, …) only earns feed relevance when
+# the RELEASED package is one of the user's dependencies (registry-subject
+# corroborated). Without this, non-dependency look-alike crates
+# ("axum-connect-rpc", "serde_v8", "forge-plugin-sdk-rust") rode embedding
+# similarity + the unconditional ReleaseNotes 1.15x boost into the feed —
+# live evidence 2026-07-23: ~81% of relevant items were crates, and the
+# single top-scored crate (0.947) was NOT a dependency. Analog of
+# security_dep_validation's no-match tier.
+registry_release_grounding {
+    ungrounded_penalty: 0.35    # [0.20, 0.60]
+}
+
 quality_floor {
     min_signals: 2           # [1, 4]
     min_score: 0.70          # [0.40, 0.80]
@@ -296,6 +309,17 @@ commodity_ceiling {
     # band so it stays visible but never CORE. In-stack advisories
     # (strongly_grounded) are exempt and surface at full score.
     security_advisory_ungrounded: 0.44   # [0.30, 0.55]
+    # Registry releases whose SUBJECT package is not one of the user's
+    # dependencies (observed 2026-07-23: forge-plugin-sdk-rust 0.947,
+    # axum-connect-rpc 0.926 — dep_links=0 — out-scoring tokio/axum). The
+    # registry signal is releases of YOUR dependencies; a look-alike name is
+    # not intelligence. Capped BELOW the 0.40 relevance threshold: stays
+    # visible in ranked lists, never feed-relevant. Grounded releases
+    # (subject ∈ user deps) are exempt and surface at full score.
+    # NOTE: score-offset normalization adds ~+0.02 after this cap, so the top
+    # of the range stays 0.37 to keep capped items below the 0.40 relevance
+    # threshold (guarded by ungrounded_registry_release_capped_below_relevance_threshold).
+    registry_release_ungrounded: 0.35    # [0.20, 0.37]
 }
 
 # Community quality signal thresholds - extracted from source metadata

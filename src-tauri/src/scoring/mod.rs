@@ -202,7 +202,23 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // security-pattern exemption to CORE — now capped to the MATCH band (0.44) unless
 // strongly grounded in the user's dependency graph. The bump re-stamps the corpus
 // so the polluted CORE band re-scores clean.
-pub(crate) const PIPELINE_VERSION: i32 = 16;
+//
+// v17 (2026-07-23): signal-feed precision — registry-release grounding +
+// federated-social community caps + stack-confidence floor. Live evidence:
+// ~81% of relevant items were crates_io releases, with non-dependency
+// look-alike crates (forge-plugin-sdk-rust 0.947, axum-connect-rpc 0.926,
+// serde_v8 0.700 — all dep_links=0) out-scoring the user's real dependency
+// releases (axum 0.888, tokio 0.873), and mastodon/lemmy promo/social noise
+// (0.61–0.91) riding the neutral community-signal arm. Changes: (1)
+// ungrounded registry releases (subject NOT a user dependency) lose the
+// ReleaseNotes boost and take registry_release_grounding.ungrounded_penalty
+// (0.35) — the registry signal is releases of YOUR dependencies; (2)
+// mastodon/lemmy/bluesky/twitter join community-signal scoring (no-metadata
+// default 0.25) and the UGC low-community cap list; (3) auto-detected stack
+// profiles below confidence 0.5 (stale java_enterprise 0.18 etc.) no longer
+// compose into scoring. The bump re-stamps the corpus so the crates-flooded
+// relevant band re-scores clean.
+pub(crate) const PIPELINE_VERSION: i32 = 17;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
