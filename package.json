@@ -130,7 +130,7 @@
     "jest-axe": "^10.0.0",
     "jsdom": "^29.1.1",
     "knip": "^6.25.0",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.0",
     "size-limit": "^12.1.0",
     "tailwindcss": "^4.3.1",
     "typescript": "~5.9.3",
