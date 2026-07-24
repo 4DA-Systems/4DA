@@ -514,6 +514,94 @@ describe("4DA MCP Tool Handlers", () => {
       expect(byId.get(semantic)).toBe("semantic_only"); // no dependency edge
     });
 
+    it("deep 30-day fallback excludes stale-pipeline-version scores", () => {
+      // REGRESSION GUARD (scoring-drain elimination, Phase 1b completion): the
+      // 720h/zero-floor fallback reaches items whose stored scores come from an
+      // OLDER scoring pipeline after a version bump. Those must not be ranked —
+      // they are numbers the current brain doesn't stand behind. The guard keys
+      // on MAX(scored_pipeline_version) as the live version, so it needs no
+      // hardcoded constant.
+      seedUserContext(db);
+      const raw = db.getRawDb();
+      raw.exec("ALTER TABLE source_items ADD COLUMN relevance_score REAL");
+      raw.exec("ALTER TABLE source_items ADD COLUMN content_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_priority TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN scored_pipeline_version INTEGER DEFAULT 0");
+
+      // Both items live ONLY in the deep window (20 days old) so the 24h and
+      // 168h tiers come back empty and the 720h fallback fires.
+      const twentyDaysAgo = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .replace("T", " ")
+        .slice(0, 19);
+      const current = insertSourceItem(db, {
+        title: "current-brain item",
+        content: "rust",
+        created_at: twentyDaysAgo,
+      });
+      const stale = insertSourceItem(db, {
+        title: "stale-epoch item",
+        content: "rust",
+        created_at: twentyDaysAgo,
+      });
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.7, scored_pipeline_version = 17 WHERE id = ?")
+        .run(current);
+      // Stale item even scores HIGHER — exactly the case that must not win.
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.94, scored_pipeline_version = 16 WHERE id = ?")
+        .run(stale);
+
+      const result = executeGetRelevantContent(db, { min_score: 0.5, since_hours: 24, limit: 50 });
+      const ids = result.map((r) => r.id);
+      expect(ids).toContain(current);
+      expect(ids).not.toContain(stale);
+    });
+
+    it("deep-fallback actionable signals never trust stale-version stored signals", () => {
+      // get_actionable_signals trusts persisted signal_type/signal_priority at
+      // confidence 0.90 — on the deep fallback those columns MUST come from the
+      // current pipeline only.
+      seedUserContext(db);
+      const raw = db.getRawDb();
+      raw.exec("ALTER TABLE source_items ADD COLUMN relevance_score REAL");
+      raw.exec("ALTER TABLE source_items ADD COLUMN content_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_priority TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN scored_pipeline_version INTEGER DEFAULT 0");
+
+      const twentyDaysAgo = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .replace("T", " ")
+        .slice(0, 19);
+      const stale = insertSourceItem(db, {
+        title: "stale security alert",
+        content: "cve",
+        created_at: twentyDaysAgo,
+      });
+      const current = insertSourceItem(db, {
+        title: "current release item",
+        content: "release",
+        created_at: twentyDaysAgo,
+      });
+      raw
+        .prepare(
+          "UPDATE source_items SET relevance_score = 0.9, scored_pipeline_version = 16, signal_type = 'security_alert', signal_priority = 'critical' WHERE id = ?",
+        )
+        .run(stale);
+      raw
+        .prepare(
+          "UPDATE source_items SET relevance_score = 0.6, scored_pipeline_version = 17, signal_type = 'release', signal_priority = 'medium' WHERE id = ?",
+        )
+        .run(current);
+
+      const { signals } = executeGetActionableSignals(db, { since_hours: 24, limit: 50 });
+      const ids = signals.map((s) => s.id);
+      expect(ids).toContain(current);
+      expect(ids).not.toContain(stale);
+    });
+
     it("labels standalone keyword-scored items as keyword_heuristic", () => {
       seedUserContext(db);
       insertSourceItem(db, { title: "Rust async patterns", content: "async rust for developer tools" });

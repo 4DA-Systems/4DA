@@ -70,7 +70,10 @@ export function executeGetRelevantContent(
     items = db.getRelevantContent(minScore, params.source_type, limit, 168);
   }
   if (items.length === 0) {
-    items = db.getRelevantContent(0.0, params.source_type, limit, 720);
+    // Deep 30-day fallback at zero floor reaches the stale-epoch tail after a
+    // pipeline-version bump — require current-version scores so we never rank
+    // numbers the live scoring brain doesn't stand behind.
+    items = db.getRelevantContent(0.0, params.source_type, limit, 720, true);
   }
   return items;
 }

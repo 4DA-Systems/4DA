@@ -336,7 +336,11 @@ export function executeGetActionableSignals(
     items = db.getRelevantContent(0.1, undefined, 200, 168); // Try 7 days
   }
   if (items.length === 0) {
-    items = db.getRelevantContent(0.0, undefined, 200, 720); // Try 30 days, any score
+    // Deep 30-day/any-score fallback reaches the stale-epoch tail after a
+    // pipeline-version bump. This path trusts stored signal_type/signal_priority
+    // verbatim (confidence 0.90 below), so it MUST only see current-version
+    // rows — stale persisted signals are claims the live brain no longer makes.
+    items = db.getRelevantContent(0.0, undefined, 200, 720, true);
   }
 
   // Get user's detected tech for cross-referencing
