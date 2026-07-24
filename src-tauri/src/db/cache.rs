@@ -830,10 +830,21 @@ mod tests {
             "the recent visible-window item must re-score before the old cold-tail item"
         );
         if crate::settings::is_signal() {
-            assert_eq!(stale.len(), 2, "Signal drain still reaches the old item, just later");
-            assert_eq!(stale[1].id, old_high, "old high-score item drains after the recent window");
+            assert_eq!(
+                stale.len(),
+                2,
+                "Signal drain still reaches the old item, just later"
+            );
+            assert_eq!(
+                stale[1].id, old_high,
+                "old high-score item drains after the recent window"
+            );
         } else {
-            assert_eq!(stale.len(), 1, "free-tier 30-day bound excludes the 60-day-old item");
+            assert_eq!(
+                stale.len(),
+                1,
+                "free-tier 30-day bound excludes the 60-day-old item"
+            );
         }
     }
 

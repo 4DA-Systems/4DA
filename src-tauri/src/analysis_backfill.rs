@@ -36,6 +36,107 @@ pub(crate) struct BackfillProgress {
     pub done: bool,
 }
 
+/// Below this batch size, the thread-spawn overhead outweighs the win — score
+/// sequentially. The scheduled trickle (500/run) and the bulk drain (2000/chunk)
+/// both clear this comfortably; only tiny probe/tail batches fall through.
+const PARALLEL_SCORE_MIN_ITEMS: usize = 64;
+
+/// Score a batch of items through the cheap PASIFA pipeline, in parallel across
+/// up to `READ_POOL_SIZE` OS threads. Both backfill (never-scored) and the
+/// stale-version drain run this identical per-item loop; extracting it keeps
+/// them in lock-step and lets the drain use every core.
+///
+/// SAFETY / correctness: `score_item` is a pure function of the item plus
+/// read-only `ctx`/`db` access — it performs no DB writes and mutates no shared
+/// state, so scoring items concurrently changes only wall-clock, never the
+/// result. Each thread borrows its OWN pooled read connection for the per-item
+/// KNN (`read_conn` hands out a distinct reader via non-blocking try-lock), so
+/// threads don't serialize on a single reader; the cap at `READ_POOL_SIZE`
+/// keeps thread count matched to available readers (extras would fall back to
+/// the writer lock and serialize). Results are keyed by item id and merged
+/// order-independently. Rust's `Send`/`Sync` bounds on `thread::scope` prove the
+/// absence of data races at compile time. Returns (persistable scores, all
+/// scored ids) — the second is EVERY id (incl. re-scored-to-noise) so the caller
+/// can version-stamp them and the drain converges.
+fn score_chunk(
+    items: &[crate::db::StoredSourceItem],
+    ctx: &scoring::ScoringContext,
+    db: &crate::db::Database,
+    options: &ScoringOptions,
+    classifier: Option<&crate::signals::SignalClassifier>,
+) -> (Vec<(i64, f32, Option<String>, Option<String>)>, Vec<i64>) {
+    type Scored = (Option<(i64, f32, Option<String>, Option<String>)>, i64);
+    let score_one = |item: &crate::db::StoredSourceItem| -> Scored {
+        let r = scoring::score_item(
+            &ScoringInput {
+                id: item.id as u64,
+                title: &item.title,
+                url: item.url.as_deref(),
+                content: &item.content,
+                source_type: &item.source_type,
+                embedding: &item.embedding,
+                // Effective publication date: honest freshness (falls back to first-seen)
+                created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
+                detected_lang: &item.detected_lang,
+                source_tags: &[],
+                tags_json: item.tags.as_deref(),
+                feed_origin: item.feed_origin.as_deref(),
+                source_id: Some(&item.source_id),
+            },
+            ctx,
+            db,
+            options,
+            classifier,
+        );
+        // persist_analysis_scores only writes top_score > 0; the id is always
+        // returned so mark_items_scored_version stamps even re-scored noise.
+        let scored = (r.top_score > 0.0).then(|| {
+            (
+                item.id,
+                r.top_score,
+                r.signal_type.clone(),
+                r.signal_priority.clone(),
+            )
+        });
+        (scored, item.id)
+    };
+
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .saturating_sub(1) // leave a core for the foreground app / OS
+        .clamp(1, crate::db::READ_POOL_SIZE);
+
+    let collected: Vec<Scored> = if threads <= 1 || items.len() < PARALLEL_SCORE_MIN_ITEMS {
+        items.iter().map(score_one).collect()
+    } else {
+        let chunk_size = items.len().div_ceil(threads);
+        let score_one_ref = &score_one; // Sync fn shared read-only across threads
+        std::thread::scope(|s| {
+            let handles: Vec<_> = items
+                .chunks(chunk_size)
+                .map(|chunk| {
+                    s.spawn(move || chunk.iter().map(score_one_ref).collect::<Vec<Scored>>())
+                })
+                .collect();
+            handles
+                .into_iter()
+                .flat_map(|h| h.join().unwrap_or_default())
+                .collect()
+        })
+    };
+
+    let mut score_data = Vec::new();
+    let mut scored_ids = Vec::with_capacity(collected.len());
+    for (scored, id) in collected {
+        if let Some(s) = scored {
+            score_data.push(s);
+        }
+        scored_ids.push(id);
+    }
+    (score_data, scored_ids)
+}
+
 /// Score one chunk of the never-scored backlog (highest-priority items first),
 /// persist the results, and stamp the current pipeline version. Bounded by
 /// `chunk_size`; call repeatedly (scheduler or loop) to converge.
@@ -73,43 +174,11 @@ pub(crate) async fn backfill_unscored_cycle(chunk_size: usize) -> Result<Backfil
         trend_topics,
     };
 
-    let mut score_data: Vec<(i64, f32, Option<String>, Option<String>)> = Vec::new();
-    let mut scored_ids: Vec<i64> = Vec::with_capacity(items.len());
-    for item in &items {
-        let r = scoring::score_item(
-            &ScoringInput {
-                id: item.id as u64,
-                title: &item.title,
-                url: item.url.as_deref(),
-                content: &item.content,
-                source_type: &item.source_type,
-                embedding: &item.embedding,
-                // Effective publication date: honest freshness (falls back to first-seen)
-                created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
-                detected_lang: &item.detected_lang,
-                source_tags: &[],
-                tags_json: item.tags.as_deref(),
-                feed_origin: item.feed_origin.as_deref(),
-                source_id: Some(&item.source_id),
-            },
-            &ctx,
-            db,
-            &options,
-            Some(signal_classifier()),
-        );
-        // persist_analysis_scores only writes top_score > 0; mark_items_scored_version
-        // stamps EVERY scored item (including noise) so the item leaves the unscored
-        // backlog and never gets re-picked — same invariant as the analysis path.
-        if r.top_score > 0.0 {
-            score_data.push((
-                item.id,
-                r.top_score,
-                r.signal_type.clone(),
-                r.signal_priority.clone(),
-            ));
-        }
-        scored_ids.push(item.id);
-    }
+    // persist_analysis_scores only writes top_score > 0; mark_items_scored_version
+    // stamps EVERY scored id (including noise) so the item leaves the unscored
+    // backlog and never gets re-picked — same invariant as the analysis path.
+    let (score_data, scored_ids) =
+        score_chunk(&items, &ctx, db, &options, Some(signal_classifier()));
 
     let relevant_this_cycle = score_data.len();
     if !score_data.is_empty() {
@@ -143,6 +212,112 @@ pub(crate) async fn backfill_unscored_cycle(chunk_size: usize) -> Result<Backfil
 #[tauri::command]
 pub(crate) async fn run_backfill_cycle(chunk_size: Option<usize>) -> Result<BackfillProgress> {
     backfill_unscored_cycle(chunk_size.unwrap_or(500)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scoring::ScoringContext;
+
+    fn item(id: i64) -> crate::db::StoredSourceItem {
+        crate::db::StoredSourceItem {
+            id,
+            source_type: "hackernews".to_string(),
+            source_id: format!("hn-{id}"),
+            url: Some(format!("https://example.com/{id}")),
+            title: format!("Rust tauri async runtime item {id}"),
+            content: "A post about rust, tokio, and tauri IPC command handlers.".to_string(),
+            content_hash: format!("hash-{id}"),
+            // Non-zero embedding so the KNN path actually executes (concurrently).
+            embedding: crate::test_utils::seed_embedding(&format!("item-{id}")),
+            created_at: chrono::Utc::now(),
+            last_seen: chrono::Utc::now(),
+            detected_lang: "en".to_string(),
+            feed_origin: None,
+            tags: None,
+            published_at: None,
+        }
+    }
+
+    /// The parallel path (items >= PARALLEL_SCORE_MIN_ITEMS) must re-score EVERY
+    /// item exactly once — deadlock-free and complete — with each thread driving a
+    /// concurrent per-item KNN against the shared context store. Proves the
+    /// extracted `score_chunk` behaves identically to the old sequential loop on
+    /// its output contract (all ids stamped), just across cores.
+    #[test]
+    fn score_chunk_parallel_covers_every_item() {
+        let db = crate::test_utils::test_db();
+        // Seed a context chunk so cached_context_count > 0 and the KNN has rows to
+        // scan concurrently from multiple threads.
+        let ctx_vec = crate::test_utils::seed_embedding("rust tauri ipc context");
+        db.upsert_context(
+            "src/main.rs",
+            "rust tauri ipc command handler registering invoke handlers",
+            &ctx_vec,
+        )
+        .expect("seed context");
+
+        let scoring_ctx = ScoringContext::builder().cached_context_count(1).build();
+        let options = ScoringOptions {
+            apply_freshness: true,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        // Comfortably above PARALLEL_SCORE_MIN_ITEMS so the threaded branch runs.
+        let items: Vec<_> = (1..=200).map(item).collect();
+        let (score_data, scored_ids) = score_chunk(
+            &items,
+            &scoring_ctx,
+            &db,
+            &options,
+            Some(signal_classifier()),
+        );
+
+        assert_eq!(
+            scored_ids.len(),
+            200,
+            "every item must be stamped exactly once"
+        );
+        let unique: std::collections::HashSet<_> = scored_ids.iter().collect();
+        assert_eq!(
+            unique.len(),
+            200,
+            "no id duplicated or dropped across threads"
+        );
+        assert!(
+            score_data.len() <= scored_ids.len(),
+            "scored (>0) is a subset of all stamped ids"
+        );
+        // Every persisted score corresponds to a real item id.
+        let id_set: std::collections::HashSet<i64> = items.iter().map(|i| i.id).collect();
+        for (id, score, _, _) in &score_data {
+            assert!(id_set.contains(id), "score for a phantom id");
+            assert!(*score > 0.0, "persisted scores are strictly positive");
+        }
+    }
+
+    /// The small-batch branch (< PARALLEL_SCORE_MIN_ITEMS) takes the sequential
+    /// path and must produce the same complete coverage.
+    #[test]
+    fn score_chunk_small_batch_sequential_covers_every_item() {
+        let db = crate::test_utils::test_db();
+        let scoring_ctx = ScoringContext::builder().build();
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+        let items: Vec<_> = (1..=10).map(item).collect();
+        let (_score_data, scored_ids) = score_chunk(
+            &items,
+            &scoring_ctx,
+            &db,
+            &options,
+            Some(signal_classifier()),
+        );
+        assert_eq!(scored_ids.len(), 10, "sequential path stamps every item");
+    }
 }
 
 /// Re-score one chunk of items stamped at an OLDER `PIPELINE_VERSION`, persist the
@@ -188,40 +363,8 @@ pub(crate) async fn drain_stale_version_cycle(chunk_size: usize) -> Result<Backf
         trend_topics,
     };
 
-    let mut score_data: Vec<(i64, f32, Option<String>, Option<String>)> = Vec::new();
-    let mut scored_ids: Vec<i64> = Vec::with_capacity(items.len());
-    for item in &items {
-        let r = scoring::score_item(
-            &ScoringInput {
-                id: item.id as u64,
-                title: &item.title,
-                url: item.url.as_deref(),
-                content: &item.content,
-                source_type: &item.source_type,
-                embedding: &item.embedding,
-                // Effective publication date: honest freshness (falls back to first-seen)
-                created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
-                detected_lang: &item.detected_lang,
-                source_tags: &[],
-                tags_json: item.tags.as_deref(),
-                feed_origin: item.feed_origin.as_deref(),
-                source_id: Some(&item.source_id),
-            },
-            &ctx,
-            db,
-            &options,
-            Some(signal_classifier()),
-        );
-        if r.top_score > 0.0 {
-            score_data.push((
-                item.id,
-                r.top_score,
-                r.signal_type.clone(),
-                r.signal_priority.clone(),
-            ));
-        }
-        scored_ids.push(item.id);
-    }
+    let (score_data, scored_ids) =
+        score_chunk(&items, &ctx, db, &options, Some(signal_classifier()));
 
     let relevant_this_cycle = score_data.len();
     if !score_data.is_empty() {

@@ -813,7 +813,10 @@ mod tests {
         {
             let conn = db.conn.lock();
             conn.execute(
-                &format!("UPDATE source_items SET scored_pipeline_version={} WHERE id=?1", crate::scoring::PIPELINE_VERSION),
+                &format!(
+                    "UPDATE source_items SET scored_pipeline_version={} WHERE id=?1",
+                    crate::scoring::PIPELINE_VERSION
+                ),
                 rusqlite::params![id],
             )
             .unwrap();

@@ -157,9 +157,10 @@ pub struct Database {
     read_pool: Vec<Mutex<Connection>>,
 }
 
-/// Number of read-only connections in the pool.
-/// SQLite WAL mode allows concurrent readers, so this gives us parallelism.
-const READ_POOL_SIZE: usize = 3;
+/// Read-only pool size (WAL allows concurrent readers) — also the parallel-drain
+/// thread ceiling: each scoring thread borrows one reader for its per-item KNN
+/// (`analysis_backfill::score_chunk`), so more threads would serialize on the writer.
+pub(crate) const READ_POOL_SIZE: usize = 3;
 
 impl Database {
     /// Initialize database with sqlite-vec extension
