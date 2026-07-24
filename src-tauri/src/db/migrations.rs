@@ -613,7 +613,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 99;
+        const TARGET_VERSION: i64 = 100;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3640,6 +3640,33 @@ impl Database {
                             expired_windows = expired,
                             "Phase 99: open decision windows expired for ecosystem-aware re-mint"
                         );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 100: index scored_pipeline_version. Every scheduled analysis
+            // probes the stale-version backlog (`merge_stale_drain_batch`) and the
+            // never-scored backlog (`scored_pipeline_version = 0`); without an
+            // index both walk the relevance index checking the version row-by-row
+            // — measured ~700-800ms per probe on a 192k corpus EVEN WHEN ZERO
+            // items are stale, paid every 30-min cycle forever. With the index
+            // the empty/near-drained probe is ~0ms and shrinks with the backlog,
+            // while the full-stale bump-time chunk query is unchanged (planner
+            // correctly keeps the relevance index when the version range matches
+            // everything). Measured on a live-DB copy 2026-07-25; build ~700ms.
+            if current_version < 100 {
+                Self::run_versioned_migration(
+                    &conn,
+                    99,
+                    100,
+                    "Phase 100: scored_pipeline_version index for drain/backfill probes",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE INDEX IF NOT EXISTS idx_source_items_scored_version
+                                 ON source_items(scored_pipeline_version);",
+                        )?;
+                        info!(target: "4da::db", "Phase 100: scored_pipeline_version index created");
                         Ok(())
                     },
                 )?;

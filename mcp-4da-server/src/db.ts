@@ -761,7 +761,8 @@ export class FourDADatabase {
     minScore: number = 0.35,
     sourceType?: string,
     limit: number = 20,
-    sinceHours: number = 24
+    sinceHours: number = 24,
+    requireCurrentVersion: boolean = false
   ): RelevantItem[] {
     const sinceDate = new Date(Date.now() - sinceHours * 60 * 60 * 1000)
       .toISOString()
@@ -771,8 +772,15 @@ export class FourDADatabase {
     const hasRustScores = this.hasColumn("source_items", "relevance_score");
 
     if (hasRustScores) {
-      return this.getRelevantContentFromRust(minScore, sourceType, limit, sinceDate);
+      return this.getRelevantContentFromRust(
+        minScore,
+        sourceType,
+        limit,
+        sinceDate,
+        requireCurrentVersion
+      );
     }
+    // TypeScript fallback computes scores fresh per call — current by construction.
     return this.getRelevantContentFallback(minScore, sourceType, limit, sinceDate);
   }
 
@@ -872,6 +880,7 @@ export class FourDADatabase {
     sourceType: string | undefined,
     limit: number,
     sinceDate: string,
+    requireCurrentVersion: boolean = false,
   ): RelevantItem[] {
     // Grounding subquery — guarded: older/partial 4DA DBs may have relevance_score
     // (so the Rust path runs) but lack source_item_dependencies. Fall back to 0
@@ -879,6 +888,20 @@ export class FourDADatabase {
     const depCount = this.hasColumn("source_item_dependencies", "source_item_id")
       ? `(SELECT COUNT(*) FROM source_item_dependencies d WHERE d.source_item_id = source_items.id)`
       : `0`;
+    // Stale-epoch guard for deep-window fallbacks: when the caller widens to the
+    // 30-day window it reaches items whose stored score/signal columns may come
+    // from an OLDER scoring pipeline (a version bump makes the tail stale until
+    // the drain re-scores it). Ranking those raw scores against current ones —
+    // or trusting stale signal_type/signal_priority — produces claims the
+    // current pipeline doesn't stand behind. The MCP server can't import the
+    // Rust PIPELINE_VERSION constant, so the DB itself is the source of truth:
+    // MAX(scored_pipeline_version) IS the current brain's stamp (uncorrelated
+    // subquery, computed once per statement). Guarded on column existence for
+    // older desktop-app DBs.
+    const versionGuard =
+      requireCurrentVersion && this.hasColumn("source_items", "scored_pipeline_version")
+        ? ` AND scored_pipeline_version = (SELECT MAX(scored_pipeline_version) FROM source_items)`
+        : ``;
     let query = `
       SELECT id, source_type, source_id, url, title, content, content_hash,
              created_at, last_seen, relevance_score, content_type,
@@ -886,7 +909,7 @@ export class FourDADatabase {
              ${depCount} AS dep_match_count
       FROM source_items
       WHERE relevance_score >= ?
-        AND datetime(created_at) >= datetime(?)
+        AND datetime(created_at) >= datetime(?)${versionGuard}
     `;
     const params: (string | number)[] = [minScore, sinceDate];
 
