@@ -1613,12 +1613,23 @@ fn find_missed_signals(
     //
     // Title-keyword fallback for legacy items (NULL content_type): exclude items
     // whose titles contain security terminology that Preemption already captures.
+    // Version guard (Phase 1, scoring-drain elimination): the 0.5 threshold that
+    // decides "you would have missed this" MUST be the CURRENT pipeline's verdict.
+    // A stale-epoch score (e.g. war-news at 0.94 under a lenient v14 while the
+    // current pipeline scores fresh war news 0.07-0.40) would otherwise pass the
+    // gate and rank top — a false "missed signal." Requiring the live version
+    // means a mid-drain item simply isn't claimed until re-scored (honest
+    // under-claim), and the recency-first drain (get_stale_scored_items) re-scores
+    // this ≤30-day window in the first chunks, so the gap is brief. Compile-time
+    // constant — no injection risk.
+    let current_version = crate::scoring::PIPELINE_VERSION;
     let sql = format!(
         "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score,
                 si.created_at, si.content_type
          FROM source_items si
          LEFT JOIN interactions i ON i.item_id = si.id
          WHERE si.relevance_score > 0.5
+           AND si.scored_pipeline_version >= {current_version}
            AND si.created_at >= datetime('now', '-{days} days')
            AND si.created_at < datetime('now', '-{feed_window} days')
            AND i.item_id IS NULL
@@ -4153,7 +4164,12 @@ mod tests {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 content_hash TEXT,
                 last_seen TEXT,
-                content_type TEXT DEFAULT NULL
+                content_type TEXT DEFAULT NULL,
+                -- Mirrors the real column (find_missed_signals now version-gates the
+                -- 0.5 missed-signal threshold). Defaults to a high sentinel so any
+                -- fixture that does not set it explicitly is treated as current-brain
+                -- scored; the stale-version regression test sets it below current.
+                scored_pipeline_version INTEGER DEFAULT 1000000
             );
 
             CREATE TABLE project_dependencies (
@@ -4293,9 +4309,12 @@ mod tests {
     }
 
     fn insert_source_item(conn: &Connection, title: &str, score: f32, days_ago: i64) -> i64 {
+        // Stamp the CURRENT pipeline version: find_missed_signals now requires it
+        // (the 0.5 gate must be the live brain's verdict). These fixtures represent
+        // items the current pipeline scored.
         conn.execute(
-            "INSERT INTO source_items (title, source_type, content, relevance_score, created_at)
-             VALUES (?1, 'hackernews', 'content', ?2, datetime('now', ?3))",
+            &format!("INSERT INTO source_items (title, source_type, content, relevance_score, created_at, scored_pipeline_version)
+             VALUES (?1, 'hackernews', 'content', ?2, datetime('now', ?3), {})", crate::scoring::PIPELINE_VERSION),
             params![title, score, format!("-{} days", days_ago)],
         )
         .unwrap();
@@ -4311,8 +4330,8 @@ mod tests {
         days_ago: i64,
     ) -> i64 {
         conn.execute(
-            "INSERT INTO source_items (title, source_type, content, relevance_score, created_at, content_type)
-             VALUES (?1, ?2, 'content', ?3, datetime('now', ?4), ?5)",
+            &format!("INSERT INTO source_items (title, source_type, content, relevance_score, created_at, content_type, scored_pipeline_version)
+             VALUES (?1, ?2, 'content', ?3, datetime('now', ?4), ?5, {})", crate::scoring::PIPELINE_VERSION),
             params![title, source_type, score, format!("-{} days", days_ago), content_type],
         )
         .unwrap();
@@ -4752,6 +4771,36 @@ mod tests {
         assert!(
             signals.iter().any(|s| s.title == "older missed thing"),
             "items older than feed window must be surfaced"
+        );
+    }
+
+    /// REGRESSION GUARD (Phase 1, scoring-drain elimination): a high-scoring item
+    /// stamped at an OLDER pipeline version must NOT be surfaced as a "missed
+    /// signal." Its 0.94 could be a stale-epoch score the current pipeline no
+    /// longer stands behind (the live war-news case). It re-appears only once the
+    /// drain re-scores it at the current version AND it still clears 0.5.
+    #[test]
+    fn missed_signals_excludes_stale_version_scores() {
+        let conn = setup_test_db();
+        // Current-version item that clears the gate → surfaced.
+        insert_source_item(&conn, "current relevant thing", 0.9, 7);
+        // Old, high-score, but STALE version → filtered by the version guard.
+        conn.execute(
+            &format!("INSERT INTO source_items (title, source_type, content, relevance_score, created_at, scored_pipeline_version)
+                      VALUES ('stale war news', 'hackernews', 'content', 0.94, datetime('now','-7 days'), {})", crate::scoring::PIPELINE_VERSION - 1),
+            [],
+        )
+        .unwrap();
+        let stale_id = conn.last_insert_rowid();
+
+        let signals = find_missed_signals(&conn, 14, &[]).unwrap();
+        assert!(
+            signals.iter().any(|s| s.title == "current relevant thing"),
+            "current-version relevant item must surface"
+        );
+        assert!(
+            !signals.iter().any(|s| s.item_id == stale_id),
+            "a stale-version score must not pass the missed-signal gate"
         );
     }
 

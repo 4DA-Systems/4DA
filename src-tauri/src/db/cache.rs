@@ -262,6 +262,19 @@ impl Database {
     /// `release_notes` / `platform_update` items (the stack-update candidates, an
     /// indexed `content_type`) so they re-score in the first drain batches and
     /// EcosystemShift items surface promptly; everything else keeps relevance DESC.
+    ///
+    /// RECENCY-FIRST (Phase 1, scoring-drain elimination): the outermost sort key
+    /// is now "is this item inside the ≤30-day visible window?" Every user-facing
+    /// surface (Signal graph, Blind Spots, MCP, briefings) reads a recency-bounded
+    /// window; ordering the drain by score alone meant a fresh 2-day item waited
+    /// behind high-scoring 3-week-old items, so a version bump did NOT converge the
+    /// windows the user actually looks at until deep into the drain. Front-loading
+    /// the recent window means the visible surfaces re-score in the FIRST chunks
+    /// (correct within minutes) while the invisible cold tail — consumed only by
+    /// the drain itself, autophagy (now current-version-gated), and diagnostics —
+    /// re-stamps unwatched afterward. This preserves the stack-update intent: a
+    /// genuine stack update is a *recent* release, so it is in the recent window
+    /// AND a release_notes row, i.e. tier-0 on both keys — it still drains first.
     pub fn get_stale_scored_items(
         &self,
         current_version: i32,
@@ -293,6 +306,7 @@ impl Database {
              WHERE scored_pipeline_version < ?1
                AND relevance_score IS NOT NULL{time_clause}
              ORDER BY
+                 CASE WHEN created_at >= datetime('now', '-30 days') THEN 0 ELSE 1 END,
                  CASE WHEN content_type IN ('release_notes', 'platform_update') THEN 0 ELSE 1 END,
                  relevance_score DESC
              LIMIT ?2"
@@ -780,6 +794,47 @@ mod tests {
             stale[2].id, high_discussion,
             "high-relevance non-release drains only after the releases"
         );
+    }
+
+    /// RECENCY-FIRST (Phase 1, scoring-drain elimination): the drain must re-score
+    /// the ≤30-day visible window before the cold tail, so a version bump converges
+    /// the surfaces the user actually looks at first. A high-relevance OLD item must
+    /// therefore drain AFTER a low-relevance RECENT one — the inversion of pure
+    /// relevance-DESC ordering.
+    #[test]
+    fn test_stale_drain_prioritizes_recent_window() {
+        use crate::scoring::PIPELINE_VERSION;
+        let db = test_db();
+
+        let old_high = insert_test_item(&db, "hackernews", "old_hot", "ancient hot thread", "x");
+        let recent_low = insert_test_item(&db, "hackernews", "new_meh", "fresh mild thread", "x");
+        {
+            let conn = db.conn.lock();
+            // Old but high-scoring, far outside the 30-day window.
+            conn.execute(
+                "UPDATE source_items SET relevance_score=0.90, content_type='discussion', scored_pipeline_version=1, created_at=datetime('now','-60 days') WHERE id=?1",
+                rusqlite::params![old_high],
+            ).unwrap();
+            // Recent but low-scoring, inside the window.
+            conn.execute(
+                "UPDATE source_items SET relevance_score=0.10, content_type='discussion', scored_pipeline_version=1, created_at=datetime('now','-5 days') WHERE id=?1",
+                rusqlite::params![recent_low],
+            ).unwrap();
+        }
+
+        let stale = db.get_stale_scored_items(PIPELINE_VERSION, 10).unwrap();
+        // The recent item drains first in BOTH tiers: for Signal the old item follows;
+        // for Free the 30-day bound excludes the old item entirely.
+        assert_eq!(
+            stale[0].id, recent_low,
+            "the recent visible-window item must re-score before the old cold-tail item"
+        );
+        if crate::settings::is_signal() {
+            assert_eq!(stale.len(), 2, "Signal drain still reaches the old item, just later");
+            assert_eq!(stale[1].id, old_high, "old high-score item drains after the recent window");
+        } else {
+            assert_eq!(stale.len(), 1, "free-tier 30-day bound excludes the 60-day-old item");
+        }
     }
 
     /// Regression guard: a Signal user's stale-drain must reach items older than the
