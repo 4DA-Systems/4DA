@@ -204,11 +204,24 @@ impl Database {
 
     /// The shared WHERE clause for relevance-aware forgetting. Kept in one place so
     /// the dry-run count, the sample, and the actual delete can never diverge.
+    ///
+    /// **Only the CURRENT pipeline's verdict may condemn an item.** An item still
+    /// stamped at an older `PIPELINE_VERSION` has NOT been judged by the live
+    /// scoring logic — and a scoring change is precisely what triggers a version
+    /// bump. The change may *rescue* an item the old pipeline buried as noise
+    /// (e.g. `try_stack_update_path` lifting a release of the user's own
+    /// dependency that recency-decay had pinned near zero). Deleting it at its
+    /// stale score would silently destroy a rescuable item before the version
+    /// drain ever re-scores it. So the guard is `>= PIPELINE_VERSION` (i.e. scored
+    /// by the current brain), NOT `>= 1` (scored by *any* brain): the stale tail
+    /// becomes prune-eligible only after the drain reaches it and re-confirms it
+    /// as noise. The version constant is compile-time — no injection risk.
     fn noise_prune_predicate(noise_threshold: f64, min_age_days: i64) -> String {
+        let current_version = crate::scoring::PIPELINE_VERSION;
         format!(
             "relevance_score IS NOT NULL \
                AND relevance_score < {noise_threshold} \
-               AND scored_pipeline_version >= 1 \
+               AND scored_pipeline_version >= {current_version} \
                AND created_at < datetime('now', '-{min_age_days} days') \
                AND cve_ids IS NULL \
                AND (content_type IS NULL \
@@ -692,26 +705,30 @@ mod tests {
         let high_stakes = insert_test_item(&db, "cve", "cve1", "old advisory", "x");
         let recent_noise = insert_test_item(&db, "reddit", "noise2", "fresh junk", "x");
 
+        // Fixtures stamp the CURRENT pipeline version: the guard now requires it,
+        // and these items are meant to exercise the prune path (not the stale-tail
+        // protection, which has its own test below).
+        let v = crate::scoring::PIPELINE_VERSION;
         {
             let conn = db.conn.lock();
             // old, near-zero noise → PRUNABLE
             conn.execute(
-                "UPDATE source_items SET relevance_score=0.02, scored_pipeline_version=5, created_at=datetime('now','-120 days') WHERE id=?1",
+                &format!("UPDATE source_items SET relevance_score=0.02, scored_pipeline_version={v}, created_at=datetime('now','-120 days') WHERE id=?1"),
                 rusqlite::params![old_noise],
             ).unwrap();
             // old but RELEVANT → protected (score >= threshold)
             conn.execute(
-                "UPDATE source_items SET relevance_score=0.62, scored_pipeline_version=5, created_at=datetime('now','-120 days') WHERE id=?1",
+                &format!("UPDATE source_items SET relevance_score=0.62, scored_pipeline_version={v}, created_at=datetime('now','-120 days') WHERE id=?1"),
                 rusqlite::params![relevant],
             ).unwrap();
             // old, low score, but HIGH-STAKES → protected (content_type carve-out)
             conn.execute(
-                "UPDATE source_items SET relevance_score=0.02, scored_pipeline_version=5, content_type='security_advisory', created_at=datetime('now','-120 days') WHERE id=?1",
+                &format!("UPDATE source_items SET relevance_score=0.02, scored_pipeline_version={v}, content_type='security_advisory', created_at=datetime('now','-120 days') WHERE id=?1"),
                 rusqlite::params![high_stakes],
             ).unwrap();
             // low score but RECENT → protected (inside the age window)
             conn.execute(
-                "UPDATE source_items SET relevance_score=0.02, scored_pipeline_version=5, created_at=datetime('now','-10 days') WHERE id=?1",
+                &format!("UPDATE source_items SET relevance_score=0.02, scored_pipeline_version={v}, created_at=datetime('now','-10 days') WHERE id=?1"),
                 rusqlite::params![recent_noise],
             ).unwrap();
         }
@@ -744,7 +761,7 @@ mod tests {
         {
             let conn = db.conn.lock();
             conn.execute(
-                "UPDATE source_items SET relevance_score=0.02, scored_pipeline_version=5, created_at=datetime('now','-45 days') WHERE id=?1",
+                &format!("UPDATE source_items SET relevance_score=0.02, scored_pipeline_version={}, created_at=datetime('now','-45 days') WHERE id=?1", crate::scoring::PIPELINE_VERSION),
                 rusqlite::params![id],
             )
             .unwrap();
@@ -755,6 +772,60 @@ mod tests {
         assert_eq!(db.count_prunable_noise(0.05, 30).unwrap(), 1);
         assert_eq!(db.prune_noise(0.05, 30, 100).unwrap(), 1);
         assert_eq!(db.total_item_count().unwrap(), 0);
+    }
+
+    /// REGRESSION GUARD (Phase 0, scoring-drain elimination): an old, low-scoring
+    /// item stamped at an OLDER pipeline version must NOT be pruned — the current
+    /// brain has not judged it, and a scoring change may rescue it. It becomes
+    /// prune-eligible only once re-stamped at the current version. Before this fix
+    /// the predicate guarded on `scored_pipeline_version >= 1`, so a stale-version
+    /// item the new pipeline would rescue could be silently deleted first.
+    #[test]
+    fn test_noise_prune_protects_stale_version_items() {
+        let db = test_db();
+        let id = insert_test_item(&db, "crates_io", "stale1", "your stack release", "x");
+        let stale_version = crate::scoring::PIPELINE_VERSION - 1;
+        assert!(
+            stale_version >= 1,
+            "test presupposes at least two pipeline versions exist"
+        );
+        {
+            let conn = db.conn.lock();
+            // Old + low score + STALE version: a scoring change might rescue it.
+            conn.execute(
+                &format!("UPDATE source_items SET relevance_score=0.02, scored_pipeline_version={stale_version}, created_at=datetime('now','-120 days') WHERE id=?1"),
+                rusqlite::params![id],
+            )
+            .unwrap();
+        }
+
+        // Protected: the current brain has not scored it, so it is NOT prunable.
+        assert_eq!(
+            db.count_prunable_noise(0.05, 30).unwrap(),
+            0,
+            "a stale-version item must be protected from the noise prune"
+        );
+        assert_eq!(db.prune_noise(0.05, 30, 100).unwrap(), 0);
+        assert_eq!(db.total_item_count().unwrap(), 1, "item must survive");
+
+        // Once the drain re-scores it at the current version and it is STILL noise,
+        // it becomes prune-eligible — the prune couples to the drain, it isn't disabled.
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                &format!(
+                    "UPDATE source_items SET scored_pipeline_version={} WHERE id=?1",
+                    crate::scoring::PIPELINE_VERSION
+                ),
+                rusqlite::params![id],
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            db.count_prunable_noise(0.05, 30).unwrap(),
+            1,
+            "after re-scoring at the current version, confirmed noise is prunable"
+        );
     }
 
     /// reclaimable_bytes reports ~0 on a freshly-packed DB (no freelist pages), proving
