@@ -219,7 +219,24 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // profiles below confidence 0.5 (stale java_enterprise 0.18 etc.) no longer
 // compose into scoring. The bump re-stamps the corpus so the crates-flooded
 // relevant band re-scores clean.
-pub(crate) const PIPELINE_VERSION: i32 = 17;
+//
+// v18 (2026-07-26): look-alike registry releases become a CATEGORICAL
+// non-verdict. v17 capped them at 0.35, below the 0.40 relevance threshold —
+// but the ceiling is applied inside `apply_final_adjustments`, while
+// `normalize_score_offset` (+0.02) and the topic-attention-gap boost (+0.05)
+// run AFTER it. Live evidence (post-v17 drained corpus, 2026-07-26): 350
+// capped items piled at exactly 0.37 (ceiling+offset) and 84 at exactly 0.42
+// (ceiling+offset+full boost) — the 0.42 band cleared the threshold, and 26 of
+// those were already `feed_relevant = 1` (vvva_js, wasm4pm, polint, deppilot,
+// serde_v8 …) against a 436-item feed. Change: the `relevant` verdict is now
+// gated on `!ungrounded_registry_release`, making it score-independent so no
+// future post-ceiling boost can reopen the hole. Zero recall cost — the
+// critical security fast-path requires `grounding.strong`, which
+// `ungrounded_registry_release` negates, so the two are mutually exclusive by
+// construction. This bump IS registered in `scoring::epochs::SCOPED_EPOCHS`:
+// only registry-source items can change verdict, so the rest of the corpus is
+// promoted untouched instead of re-scored.
+pub(crate) const PIPELINE_VERSION: i32 = 18;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;

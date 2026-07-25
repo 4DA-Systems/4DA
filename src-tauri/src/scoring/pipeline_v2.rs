@@ -2338,10 +2338,25 @@ pub(crate) fn score_item(
     // The critical fast-path is score-independent, so it must also respect
     // the language gate: V1 never let a language-mismatched item be relevant,
     // and a 0.05-capped "relevant" item would be contradictory.
-    let relevant = (critical_fast_path && !lang_mismatch)  // Critical items always relevant
-        || (combined_score >= get_relevance_threshold()
-            && (signal_count >= min_signals
-                || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE));
+    //
+    // v18: look-alike registry releases are CATEGORICALLY never feed-relevant.
+    // The 0.35 commodity ceiling alone could not hold that line: the ceiling is
+    // applied inside `apply_final_adjustments`, but `normalize_score_offset`
+    // (+0.02) and the topic-attention-gap boost (+0.05) both run AFTER it, so a
+    // capped look-alike landed at exactly 0.42 — above the 0.40 threshold.
+    // Production evidence (2026-07-26, live corpus): 350 capped items piled at
+    // 0.37 (ceiling+offset) and 84 at exactly 0.42 (ceiling+offset+full boost),
+    // of which 26 were already `feed_relevant = 1`. Gating the VERDICT rather
+    // than the score makes the invariant score-independent, so no future
+    // post-ceiling boost can reopen it. `critical_fast_path` requires
+    // `grounding.strong`, which `ungrounded_registry_release` negates, so a
+    // genuine security fast-path is structurally unreachable here — the gate
+    // costs zero recall. The score keeps its capped value for ranking/display.
+    let relevant = !ungrounded_registry_release
+        && ((critical_fast_path && !lang_mismatch)  // Critical items always relevant
+            || (combined_score >= get_relevance_threshold()
+                && (signal_count >= min_signals
+                    || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE)));
 
     // ── Confidence ────────────────────────────────────────────────────
     let confidence = calculate_confidence(
