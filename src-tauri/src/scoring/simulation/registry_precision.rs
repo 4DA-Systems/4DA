@@ -184,6 +184,55 @@ fn lookalike_registry_releases_not_relevant() {
     );
 }
 
+/// v18 regression — the post-ceiling boost leak.
+///
+/// `lookalike_registry_releases_not_relevant` above passes with the 0.35
+/// ceiling alone because `enriched_rust_persona()` carries an EMPTY
+/// `topic_attention_gaps` map, so the +0.05 attention-gap boost never fires.
+/// That is the harness gap: in production the boost DOES fire, and because it
+/// (and `normalize_score_offset`'s +0.02) run AFTER `apply_final_adjustments`,
+/// a capped look-alike lands at 0.35 + 0.02 + 0.05 = 0.42 — over the 0.40
+/// relevance threshold. Live corpus 2026-07-26: 84 crates_io items sat at
+/// exactly 0.42, 26 of them already `feed_relevant = 1`.
+///
+/// This test drives the boost end-to-end by giving each fixture a maximal
+/// (168h) attention gap on its OWN extracted topics. It MUST fail before the
+/// categorical verdict gate and pass after.
+#[test]
+fn lookalike_not_relevant_even_with_attention_gap_boost() {
+    let mut ctx = enriched_rust_persona();
+    let mut failures = Vec::new();
+    for (i, fx) in LOOKALIKE_CRATES.iter().enumerate() {
+        // Derive topics exactly as the pipeline does, then mark every one of
+        // them maximally starved (168h >= the boost's saturation point) so the
+        // full +0.05 lands. Deriving rather than hard-coding keeps the test
+        // honest if topic extraction changes.
+        let title = format!("crates.io: {} v{}", fx.name, fx.version);
+        let topics = crate::extract_topics(&title, fx.description, &[]);
+        assert!(
+            !topics.is_empty(),
+            "{} produced no topics — the attention-gap boost could not fire, \
+             so this test would vacuously pass",
+            fx.name
+        );
+        ctx.topic_attention_gaps = topics.into_iter().map(|t| (t, 168.0_f32)).collect();
+
+        let r = score_registry_fixture(fx, &ctx, 10_701 + i as u64);
+        if r.relevant {
+            failures.push(format!(
+                "  {} v{} RELEVANT at {:.3} — a post-ceiling boost lifted a \
+                 non-dependency release back over the threshold",
+                fx.name, fx.version, r.top_score
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "post-ceiling boosts pushed look-alike registry releases into the feed:\n{}",
+        failures.join("\n")
+    );
+}
+
 /// Real direct-dependency releases MUST stay relevant (recall guard —
 /// suppressing these would destroy the product's core registry signal).
 #[test]

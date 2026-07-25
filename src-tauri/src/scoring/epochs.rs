@@ -66,10 +66,29 @@ use tracing::{info, warn};
 use crate::db::Database;
 
 /// Version → invalidation predicate registry. See the module docs for the
-/// registration contract. Currently empty: v17 (the live version) predates
-/// the mechanism and is fully drained; the next scoring bump is the first
-/// candidate to register.
-const SCOPED_EPOCHS: &[(i32, &str)] = &[];
+/// registration contract. v17 predates the mechanism and is fully drained, so
+/// it is deliberately absent (an unregistered step = full drain = old, safe
+/// behavior).
+///
+/// **v18 — look-alike registry-release categorical gate.** The only verdict
+/// v18 changes is `relevant` for an *ungrounded registry release*, and
+/// `pipeline_v2` computes that flag as
+/// `dep_linker::is_registry_source(source_type) && matches!(content_type,
+/// ReleaseNotes | BreakingChange) && !grounding.strong`. `is_registry_source`
+/// is therefore a NECESSARY condition, which makes the source_type list below
+/// a provable SUPERSET of the change's reach — it is that function's match arm
+/// transcribed exactly (keep the two in sync if a registry is ever added).
+///
+/// Deliberately NOT narrowed further with `content_type IN (...)`: the stored
+/// `content_type` column is a persisted classification while the flag uses the
+/// value computed at score time, so intersecting on it could under-cover — the
+/// one hazard the module contract names. Source type is assigned at ingest and
+/// never re-derived, so it is safe to key on.
+const SCOPED_EPOCHS: &[(i32, &str)] = &[(
+    18,
+    "source_type IN ('npm_registry','npm','crates_io','crates','pypi',\
+     'go_modules','go','maven','nuget','packagist','rubygems','cocoapods')",
+)];
 
 /// Promote stale items that the registered epoch predicates prove unaffected,
 /// re-stamping them at the version whose change cannot touch them. Returns
