@@ -18,6 +18,7 @@ mod context;
 pub(crate) mod cvss;
 mod dedup;
 mod dependencies;
+pub(crate) mod epochs;
 mod explanation;
 mod explanation_chain;
 mod gate;
