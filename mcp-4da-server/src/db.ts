@@ -902,6 +902,24 @@ export class FourDADatabase {
       requireCurrentVersion && this.hasColumn("source_items", "scored_pipeline_version")
         ? ` AND scored_pipeline_version = (SELECT MAX(scored_pipeline_version) FROM source_items)`
         : ``;
+    // Curation guard: never return an item the current pipeline EXPLICITLY
+    // rejected. `feed_relevant` is the analysis run's persisted verdict, and a
+    // score threshold alone does not respect it — the desktop content graph hit
+    // exactly this and adopted corpus parity in Phase 95 (W4-5).
+    //
+    // It matters because a verdict can be negative while the score stays above
+    // the threshold. v18's look-alike gate makes ungrounded registry releases
+    // categorically non-relevant while deliberately KEEPING their capped score
+    // (0.37 / 0.42) for ranking and display, so `relevance_score >= 0.35` alone
+    // still surfaces them. Live 2026-07-26: 30 crates_io items inside the
+    // 30-day window were already `feed_relevant = 0` and were still returned.
+    //
+    // NULL is KEPT, not excluded: an unjudged item is "not yet curated", not
+    // "rejected", and dropping it would blank the tool on a fresh corpus
+    // (cold-start doctrine). Guarded on column existence for older 4DA DBs.
+    const curationGuard = this.hasColumn("source_items", "feed_relevant")
+      ? ` AND (feed_relevant IS NULL OR feed_relevant = 1)`
+      : ``;
     let query = `
       SELECT id, source_type, source_id, url, title, content, content_hash,
              created_at, last_seen, relevance_score, content_type,
@@ -909,7 +927,7 @@ export class FourDADatabase {
              ${depCount} AS dep_match_count
       FROM source_items
       WHERE relevance_score >= ?
-        AND datetime(created_at) >= datetime(?)${versionGuard}
+        AND datetime(created_at) >= datetime(?)${versionGuard}${curationGuard}
     `;
     const params: (string | number)[] = [minScore, sinceDate];
 
