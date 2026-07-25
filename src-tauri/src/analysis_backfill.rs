@@ -333,6 +333,13 @@ mod tests {
 pub(crate) async fn drain_stale_version_cycle(chunk_size: usize) -> Result<BackfillProgress> {
     let db = get_database()?;
 
+    // Scoped-epoch promotion first: items the current version's registered
+    // predicate proves unaffected are re-stamped without re-scoring, so the
+    // drain below only works the slice the change could actually touch.
+    // ~0ms no-op when the registry is empty or the corpus is current;
+    // fail-open (a promotion error just means a full drain).
+    scoring::epochs::promote_unaffected_stale_logged(db);
+
     let items = db
         .get_stale_scored_items(scoring::PIPELINE_VERSION, chunk_size)
         .map_err(|e| format!("Failed to load stale-version backlog: {e}"))?;

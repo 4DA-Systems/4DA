@@ -251,6 +251,11 @@ fn merge_stale_drain_batch(
     db: &crate::db::Database,
     items: &mut Vec<crate::db::StoredSourceItem>,
 ) -> usize {
+    // Scoped-epoch promotion before pulling the batch: provably-unaffected
+    // items are re-stamped instead of re-scored, so the 500-item budget is
+    // spent only on the slice the version bump could actually change.
+    // ~0ms no-op when nothing is registered or the corpus is current.
+    scoring::epochs::promote_unaffected_stale_logged(db);
     let stale = db
         .get_stale_scored_items(scoring::PIPELINE_VERSION, 500)
         .unwrap_or_default();
