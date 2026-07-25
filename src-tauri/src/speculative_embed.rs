@@ -99,14 +99,38 @@ async fn run_speculative_batch(trigger_item_id: i64) -> crate::error::Result<()>
 
     for ((id, _, _), embedding) in candidates.iter().zip(embeddings.iter()) {
         let blob = crate::db::embedding_to_blob(embedding);
-        let _ = tx.execute(
+        if let Err(e) = tx.execute(
             "UPDATE source_items SET embedding = ?1 WHERE id = ?2",
             rusqlite::params![blob, id],
-        );
-        let _ = tx.execute(
-            "INSERT OR REPLACE INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
-            rusqlite::params![id, blob],
-        );
+        ) {
+            warn!(target: "4da::speculative", item_id = id, error = %e, "Speculative embed: source_items update failed");
+            continue;
+        }
+        // `source_vec` is a `vec0` VIRTUAL table and does NOT honour `OR REPLACE`
+        // — it raises "UNIQUE constraint failed on source_vec primary key" for an
+        // existing rowid (proven by the sources.rs regression test). Every item
+        // already has a source_vec row, so the previous `INSERT OR REPLACE` here
+        // always failed; combined with `let _ =` and a commit that ran anyway,
+        // that silently DIVERGED the KNN index from `source_items.embedding`.
+        // Use the same UPDATE-then-INSERT idiom as `upsert_source_item`.
+        let vec_result = tx
+            .execute(
+                "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
+                rusqlite::params![blob, id],
+            )
+            .and_then(|updated| {
+                if updated == 0 {
+                    tx.execute(
+                        "INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
+                        rusqlite::params![id, blob],
+                    )
+                } else {
+                    Ok(updated)
+                }
+            });
+        if let Err(e) = vec_result {
+            warn!(target: "4da::speculative", item_id = id, error = %e, "Speculative embed: source_vec write failed — KNN index would diverge");
+        }
     }
     tx.commit()
         .map_err(|e| crate::error::FourDaError::Internal(format!("speculative commit: {e}")))?;
