@@ -559,6 +559,47 @@ describe("4DA MCP Tool Handlers", () => {
       expect(ids).not.toContain(stale);
     });
 
+    it("never returns items the pipeline explicitly rejected (feed_relevant = 0)", () => {
+      // REGRESSION GUARD (v18 look-alike gate): the v18 categorical gate makes an
+      // ungrounded registry release non-relevant while deliberately KEEPING its
+      // capped score (0.37 / 0.42) for ranking and display. A score-only filter
+      // therefore STILL surfaces it — live 2026-07-26, 30 crates_io items inside
+      // the 30-day window carried feed_relevant = 0 and were returned anyway.
+      // Mirrors the desktop content graph's Phase-95 corpus parity: return what
+      // the current brain stands behind, not what merely clears a threshold.
+      seedUserContext(db);
+      const raw = db.getRawDb();
+      raw.exec("ALTER TABLE source_items ADD COLUMN relevance_score REAL");
+      raw.exec("ALTER TABLE source_items ADD COLUMN content_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_priority TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN feed_relevant INTEGER");
+
+      const curated = insertSourceItem(db, { title: "curated item", content: "rust" });
+      const unjudged = insertSourceItem(db, { title: "not yet judged", content: "rust" });
+      const rejected = insertSourceItem(db, {
+        title: "crates.io: vvva_js v2.0.1",
+        content: "rust",
+      });
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.5, feed_relevant = 1 WHERE id = ?")
+        .run(curated);
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.5, feed_relevant = NULL WHERE id = ?")
+        .run(unjudged);
+      // The rejected look-alike scores ABOVE the 0.35 default floor — the leak.
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.42, feed_relevant = 0 WHERE id = ?")
+        .run(rejected);
+
+      const result = executeGetRelevantContent(db, { min_score: 0.35, since_hours: 24, limit: 50 });
+      const ids = result.map((r) => r.id);
+      expect(ids).toContain(curated);
+      // Cold-start doctrine: unjudged is "not yet curated", NOT "rejected".
+      expect(ids).toContain(unjudged);
+      expect(ids).not.toContain(rejected);
+    });
+
     it("deep-fallback actionable signals never trust stale-version stored signals", () => {
       // get_actionable_signals trusts persisted signal_type/signal_priority at
       // confidence 0.90 — on the deep fallback those columns MUST come from the
