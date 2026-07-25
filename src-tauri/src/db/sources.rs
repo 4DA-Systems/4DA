@@ -378,10 +378,24 @@ impl Database {
             "UPDATE source_items SET embedding = ?1, embedding_status = 'complete', embed_text = NULL WHERE id = ?2",
             params![embedding_blob, id],
         )?;
-        tx.execute(
-            "INSERT OR REPLACE INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
-            params![id, embedding_blob],
+        // `source_vec` is a sqlite-vec `vec0` VIRTUAL table, which does NOT honour
+        // `OR REPLACE` conflict resolution — it raises "UNIQUE constraint failed on
+        // source_vec primary key" instead. Every item already has a source_vec row
+        // (created by `upsert_source_item`), so an `INSERT OR REPLACE` here failed
+        // on EVERY re-embed. The caller discards the result via `.is_ok()`, so the
+        // failure was completely silent: 624 retry cycles logged, 0 upgrades, 887
+        // items stranded `pending` since 2026-04-26 holding vectors of superseded
+        // content. Use the same UPDATE-then-INSERT idiom `upsert_source_item` uses.
+        let updated = tx.execute(
+            "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
+            params![embedding_blob, id],
         )?;
+        if updated == 0 {
+            tx.execute(
+                "INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
+                params![id, embedding_blob],
+            )?;
+        }
         tx.commit()?;
 
         Ok(())
@@ -1400,6 +1414,69 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use crate::test_utils::{insert_test_item, seed_embedding, test_db};
+
+    /// REGRESSION GUARD — the silent re-embed deadlock.
+    ///
+    /// `upgrade_pending_to_complete` used `INSERT OR REPLACE INTO source_vec`.
+    /// `source_vec` is a sqlite-vec `vec0` VIRTUAL table, which does not support
+    /// replace semantics — and every other write path in this file already knew
+    /// that: `upsert_source_item` uses `INSERT OR REPLACE` for the FTS5 table but
+    /// deliberately `UPDATE`/`INSERT` for `source_vec`, in the same transaction.
+    ///
+    /// Because the upsert already created a `source_vec` row for every item, the
+    /// re-embed path ALWAYS took the replace branch and ALWAYS failed — silently,
+    /// because the caller discards the result via `.is_ok()`.
+    ///
+    /// Live evidence (2026-07-26): 624 retry cycles logged, 0 upgrades ever; 887
+    /// items stuck `pending` since 2026-04-26, holding embeddings of superseded
+    /// content and excluded from the content graph. Content enrichment kept
+    /// feeding the queue (~15/day) so it grew monotonically.
+    ///
+    /// Must FAIL before the fix and pass after.
+    #[test]
+    fn upgrade_pending_to_complete_works_when_vec_row_already_exists() {
+        let db = test_db();
+        let original = seed_embedding("hn:reembed-original");
+        let id = db
+            .upsert_source_item(
+                "hackernews",
+                "reembed-1",
+                None,
+                "Title only",
+                "thin",
+                &original,
+            )
+            .expect("upsert");
+
+        // Enrichment path: content changed, so the item is queued for re-embed
+        // (mirrors `update_enriched_content`). The source_vec row already exists.
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET embedding_status = 'pending', embed_text = 'much richer body text' WHERE id = ?1",
+                rusqlite::params![id],
+            )
+            .expect("queue re-embed");
+        }
+
+        let refreshed = seed_embedding("hn:reembed-refreshed");
+        db.upgrade_pending_to_complete(id, &refreshed)
+            .expect("re-embed MUST complete for an item that already has a source_vec row");
+
+        let status: String = {
+            let conn = db.conn.lock();
+            conn.query_row(
+                "SELECT embedding_status FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
+            .expect("read status")
+        };
+        assert_eq!(
+            status, "complete",
+            "a successfully re-embedded item must leave the pending queue"
+        );
+    }
 
     #[test]
     fn test_upsert_source_item_insert_and_update() {

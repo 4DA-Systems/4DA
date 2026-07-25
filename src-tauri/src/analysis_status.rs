@@ -419,16 +419,41 @@ async fn analyze_cached_content_inner_impl(
                 0,
             );
             let texts: Vec<String> = pending.iter().map(|(_, _, _, t)| t.clone()).collect();
-            if let Ok(embeddings) = crate::embed_texts(&texts).await {
-                let mut upgraded = 0;
-                for ((id, _, _, _), embedding) in pending.iter().zip(embeddings.iter()) {
-                    let is_fallback = embedding.iter().all(|&v| v == 0.0);
-                    if !is_fallback && db.upgrade_pending_to_complete(*id, embedding).is_ok() {
-                        upgraded += 1;
+            match crate::embed_texts(&texts).await {
+                Ok(embeddings) => {
+                    let (mut upgraded, mut fallback, mut failed) = (0usize, 0usize, 0usize);
+                    let mut first_error: Option<String> = None;
+                    for ((id, _, _, _), embedding) in pending.iter().zip(embeddings.iter()) {
+                        if embedding.iter().all(|&v| v == 0.0) {
+                            fallback += 1;
+                            continue;
+                        }
+                        match db.upgrade_pending_to_complete(*id, embedding) {
+                            Ok(()) => upgraded += 1,
+                            Err(e) => {
+                                failed += 1;
+                                first_error.get_or_insert_with(|| e.to_string());
+                            }
+                        }
+                    }
+                    // ALWAYS report the outcome. A repair loop that upgrades nothing
+                    // must never again look identical to one that had no work to do:
+                    // the previous `if upgraded > 0` gate hid 624 consecutive total
+                    // failures for three months (vec0 rejecting `INSERT OR REPLACE`),
+                    // while 887 items accumulated stale embeddings.
+                    if upgraded > 0 {
+                        info!(target: "4da::analysis", upgraded, failed, fallback, total = pending.len(), "Re-embedded previously pending items");
+                    } else {
+                        warn!(
+                            target: "4da::analysis",
+                            total = pending.len(), failed, fallback,
+                            error = first_error.as_deref().unwrap_or("none"),
+                            "Re-embed cycle upgraded NOTHING — the repair pipeline is not making progress"
+                        );
                     }
                 }
-                if upgraded > 0 {
-                    info!(target: "4da::analysis", upgraded, total = pending.len(), "Re-embedded previously pending items");
+                Err(e) => {
+                    warn!(target: "4da::analysis", error = %e, count = pending.len(), "Re-embed batch could not be embedded");
                 }
             }
         }
