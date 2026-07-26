@@ -57,6 +57,22 @@ Living document of fragile areas, previous regressions, and "never again" lesson
 
 ---
 
+### `tauri dev` watcher dies on the relink lock and does NOT retry
+**Symptom.** You merge/pull Rust changes, the watcher prints `File … changed. Rebuilding application…`, then:
+```
+Caused by: Access is denied. (os error 5)
+ ELIFECYCLE  Command failed with exit code 101.
+```
+The whole `tauri dev` process exits — taking **vite (4444) and Victauri (7373) down with it** — while the OLD `fourda.exe` keeps running. Nothing retries, so the app silently stays on pre-merge code and any "activation" you believe happened did not.
+
+**Root cause.** The running `fourda.exe` holds `src-tauri/target/debug/fourda.exe`; the linker cannot overwrite it. Sometimes the watcher kills the app first and succeeds — sometimes it does not, and then it dies. Observed both outcomes on 2026-07-26.
+
+**Fix.** Just restart the dev loop: `pnpm run tauri dev`. Its `dev` script runs `scripts/kill-fourda.cjs` first, so it force-kills the stale app itself, restarts vite, and relinks with cached artifacts (~2–3 min). Force-killing skips `Drop`, so sweep any ghost tray icons afterwards with `pnpm run flush-tray-ghosts`.
+
+**Always verify activation by artifact, never by assumption.** Check `ls -la src-tauri/target/debug/fourda.exe` (mtime AND size) against the merge time before claiming a fix is live.
+
+---
+
 ## Data & database
 
 ### `cargo test` cannot run while dev server is running
@@ -83,6 +99,35 @@ Living document of fragile areas, previous regressions, and "never again" lesson
 **Symptom.** The `team_crypto` table has columns `our_private_key_enc` and `team_symmetric_key_enc`. Pre-Wave-16 builds wrote the bytes as plaintext despite the suffix.
 
 **Status: RESOLVED.** Both keys now live in the OS keychain (key names `team_privkey__<team_id>` and `team_symkey__<team_id>`). The DB columns remain as a fallback for hosts without a reliable keychain and are blanked to a zero-length BLOB on successful keychain round-trip. All five touchpoints (two INSERT paths in `team_sync_commands.rs`; three READ paths in `app_setup.rs` and `team_sync_scheduler.rs`) route through the `team_sync_crypto::persist_*` / `read_team_*` helpers. The helpers use write-then-read-back verification so a keyring that lies about the write (observed on some Windows Credential Manager setups) can never cause silent loss. Old rows lazy-migrate on the next read. See Wave 16 commit.
+
+---
+
+### sqlite-vec `vec0` tables reject `INSERT OR REPLACE` (cost: a 3-month silent outage)
+**Symptom.** A write to `source_vec` / `context_vec` / `topic_vec` fails with `UNIQUE constraint failed on <table> primary key` — but only for rowids that ALREADY exist. Inserts of new rowids succeed, so ingest looks healthy while every *update* path silently fails.
+
+**Root cause.** `vec0` virtual tables do not honour `OR REPLACE` conflict resolution. Discovered 2026-07-26: `upgrade_pending_to_complete` used `INSERT OR REPLACE INTO source_vec`, and because `upsert_source_item` gives every item a `source_vec` row, **every** re-embed failed. 624 consecutive retry cycles, 0 upgrades, 887 items stranded `embedding_status='pending'` since April holding vectors of superseded content. Fixed in #377.
+
+**The correct idiom** (already used everywhere else — `upsert_source_item` is the tell: it applies `INSERT OR REPLACE` to the FTS5 table but `UPDATE` to `source_vec` in the SAME transaction):
+```rust
+let updated = tx.execute("UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2", …)?;
+if updated == 0 {
+    tx.execute("INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)", …)?;
+}
+```
+`INSERT OR REPLACE` is only safe against a vec0 table when the row is *provably absent* (e.g. guarded by `NOT EXISTS`, as in `ace/topic_embeddings.rs`'s backfill).
+
+**Regression guard.** `db::sources::tests::upgrade_pending_to_complete_works_when_vec_row_already_exists` — verified to fail pre-fix with the exact constraint error.
+
+---
+
+### Silent repair loops (why the above survived 90 days)
+**Symptom.** A background repair/retry loop makes zero progress indefinitely and logs nothing that distinguishes it from having no work to do.
+
+**Root cause — two concealment patterns.** (1) The write result is discarded: `let _ = conn.execute(…)` or `…​.is_ok()`. This repo has been bitten at least three times (see the comments at `app_setup.rs:378` and `:1146`, plus #377). (2) The outcome log is gated on success: `if upgraded > 0 { info!(…) }`, so total failure prints *nothing* and reads as "idle".
+
+**Rule.** **Any loop whose job is to REPAIR state must report the ZERO case, not just the success case** — with a failure count and the first error. See the re-embed retry in `analysis_status.rs` for the shape (`upgraded` / `failed` / `fallback`).
+
+**Related.** A diagnostic that cannot be wrong is not a diagnostic: the startup "Embedding model" line hardcoded a model-name string literal regardless of the real provider, which is how an embedding-layer discrepancy stayed invisible (#378).
 
 ---
 
