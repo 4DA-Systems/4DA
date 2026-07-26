@@ -331,6 +331,19 @@
 - **Status:** Final
 - **Code:** `src-tauri/src/embeddings.rs` (`resolve_embedding_route`, `EmbeddingRoute`); `src-tauri/src/settings/types.rs` (`LLMProvider::allow_cloud_embeddings`); `src-tauri/src/reembed.rs` (`effective_embedding_identity`, `check_embedding_privacy_gate_migration`); `src-tauri/src/app_setup.rs` (startup wiring). Opt-in is config-only for now (`data/settings.json`); a settings-UI toggle is a deliberate follow-up.
 
+### AD-028: Signal Lifetime Plan — Included, Priced at 3× Annual ($299 AUD)
+- **Decision:** Sell a Signal Lifetime license: $299 AUD one-time (3.0× annual), alongside monthly ($12) and annual ($99). Lifetime = all Signal features and all future Signal updates for the lifetime of the 4DA product; the signed key verifies offline (2099 expiry), so the license keeps working even if 4DA is discontinued. Defined in TOS §4.1; 14-day money-back in TOS §5.3.
+- **Rationale:** 4DA has zero marginal cost per Signal user (BYOK + local-first + stateless Cloudflare licensing), so lifetime carries none of the hosted-SaaS liability. The "sharper every day" compounding is delivered by the user's own machine, not perpetual vendor labor — making a lifetime promise unusually honest here. The buyer psychographic (privacy-first, local-first developers) is the most subscription-averse segment in software; a buy-once option answers the "why does local software need rent?" objection that otherwise dominates launch threads. Priced at 3.0× annual (low end of the credible 3–5× band) rather than the un-decided $249 (2.5×) that had sat on the page since 2026-03-23, which over-cannibalized annual.
+- **Considered:**
+  - No lifetime (subscription only): Rejected — brand-dissonant for local-first; loses the anti-subscription buyer entirely.
+  - Keep $249 (2.5× annual): Rejected — below the credible ratio band; converts the highest-LTV cohort at a discount.
+  - Perpetual-license-plus-3-years-updates (Sublime/JetBrains model): Rejected — requires version-gated licensing that isn't built; current implementation (2099 expiry) already delivers honest full lifetime.
+  - Capped "founder seats": Deferred — can be applied operationally at any time by deactivating the Stripe price; no code needed.
+- **Context:** The lifetime toggle shipped 2026-03-23 inside an unrelated bulk commit with no decision record, and the Stripe price was never provisioned — the buy button 500'd until found by live E2E verification on 2026-07-26. This AD retroactively makes the call explicit.
+- **Date:** 2026-07-26
+- **Status:** Final
+- **Code:** `site/src/signal.njk` (plan toggle), `site/functions/api/signal/checkout.js` (payment mode), `site/functions/api/license/refresh.js` (lifetime entitlement), `site/functions/api/streets/activate.js` (2099 expiry), `site/setup-signal.mjs` (price provisioning), TOS §4.1/§4.2/§5.3.
+
 ---
 
 ## Rejected Alternatives (Reference)

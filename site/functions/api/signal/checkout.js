@@ -7,7 +7,7 @@
 //   STRIPE_SECRET_KEY     — Stripe secret key (sk_live_... or sk_test_...)
 //   SIGNAL_PRICE_MONTHLY  — Stripe price ID for Signal monthly ($12/mo AUD)
 //   SIGNAL_PRICE_ANNUAL   — Stripe price ID for Signal annual ($99/yr AUD)
-//   SIGNAL_PRICE_LIFETIME — Stripe price ID for Signal lifetime ($249 AUD one-time)
+//   SIGNAL_PRICE_LIFETIME — Stripe price ID for Signal lifetime ($299 AUD one-time)
 //   SITE_URL              — Base URL for redirects (e.g. https://4da.ai)
 //   ENVIRONMENT           — "production" in prod; anything else enables localhost CORS
 
