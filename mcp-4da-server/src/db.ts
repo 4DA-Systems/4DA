@@ -917,6 +917,19 @@ export class FourDADatabase {
     // NULL is KEPT, not excluded: an unjudged item is "not yet curated", not
     // "rejected", and dropping it would blank the tool on a fresh corpus
     // (cold-start doctrine). Guarded on column existence for older 4DA DBs.
+    //
+    // Deliberately NOT extended with `feed_verdict_version = <current>` even
+    // though Phase 101 added that stamp, and even though the 720h deep-fallback
+    // above DOES gate on `scored_pipeline_version`. The asymmetry is intentional:
+    // the version guard there narrows a last-resort widening, whereas this guard
+    // sits on the PRIMARY path, so excluding not-yet-reconciled verdicts would
+    // empty the tool after every pipeline bump until the reconciliation pass
+    // caught up (measured on the desktop: 94% of live graph nodes held a stale
+    // verdict immediately after the v18 bump). The reconciliation converging is
+    // the fix — see `analysis_backfill::reconcile_stale_verdicts_cycle`. This
+    // note exists because `check-mcp-server-sync.cjs` asks "do MCP queries need
+    // updating?" on every db-layer change; the answer for the verdict stamp is
+    // no, by design.
     const curationGuard = this.hasColumn("source_items", "feed_relevant")
       ? ` AND (feed_relevant IS NULL OR feed_relevant = 1)`
       : ``;
