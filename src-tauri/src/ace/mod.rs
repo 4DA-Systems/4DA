@@ -628,9 +628,23 @@ impl ACE {
 
         // Keep the topic_vec KNN index in sync with persisted topic embeddings.
         // Bounded batch, non-fatal, and a no-op when no embedder is configured
-        // (cold machines pay nothing). Without this the vec0 index only ever
-        // receives newly generated embeddings and semantic topic dedup misses
-        // every topic loaded from the DB cache.
+        // (cold machines pay nothing).
+        //
+        // ⚠ ACCURACY AUDIT 2026-07-26 — this comment used to claim that without
+        // the backfill "semantic topic dedup misses every topic loaded from the
+        // DB cache". That is NOT true today: the dedup path is
+        // `TopicEmbeddings::find_similar_topics`, which loads topic STRINGS via
+        // `get_active_topics()` and delegates to the embedding service — it
+        // never queries `topic_vec`. A repo-wide search finds no KNN read of
+        // `topic_vec` at all, so the index is currently WRITE-ONLY: backfilled,
+        // dimension-checked and rebuilt, but never searched (live: 930 index
+        // rows vs 844 embedded topics, i.e. 86 orphans that harm nothing
+        // because nothing reads them).
+        //
+        // Left in place deliberately rather than deleted: removing a vec0 table
+        // plus its migration is its own reviewed change, and a future KNN dedup
+        // is the obvious consumer. Recorded here so the next reader is not
+        // misled into believing this work is load-bearing.
         match self.populate_topic_vec(512) {
             Ok(n) if n > 0 => {
                 info!(target: "ace::detect", synced = n, "topic_vec index backfilled from persisted topic embeddings");
