@@ -258,6 +258,69 @@ fn find_most_recent_backup(dir: &Path, db_path: &Path) -> Option<PathBuf> {
 }
 
 #[cfg(test)]
+mod backup_prune_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    /// The pre-migration backup must SURVIVE its own prune.
+    ///
+    /// Regression: the prune sorted paths as strings, so once the schema
+    /// reached three digits `"…v100" < "…v98" < "…v99"` and the newest backup
+    /// sorted first — straight into the delete slice. Observed live on
+    /// 2026-07-26: Phase 101 wrote `4da.db.backup.v100` (2.45 GB) and deleted it
+    /// 216 ms later, leaving the migration with no rollback point while two
+    /// older backups survived.
+    #[test]
+    fn pre_migration_backup_survives_its_own_prune() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("4da.db");
+        let db = Database::new(&db_path).expect("open temp db");
+
+        // Two older backups already on disk — enough that the prune engages.
+        for v in [98, 99] {
+            std::fs::write(dir.path().join(format!("4da.db.backup.v{v}")), b"old").unwrap();
+        }
+
+        db.backup_before_migration(100);
+
+        let fresh = dir.path().join("4da.db.backup.v100");
+        assert!(
+            fresh.exists(),
+            "the backup just created was pruned — the migration has no rollback point"
+        );
+        // Keep-2 semantics, resolved on the VERSION axis: v99 + v100 survive,
+        // v98 (the genuinely oldest) is the one that goes.
+        assert!(
+            dir.path().join("4da.db.backup.v99").exists(),
+            "v99 is one of the two most recent and must be kept"
+        );
+        assert!(
+            !dir.path().join("4da.db.backup.v98").exists(),
+            "v98 is the oldest of three and should have been pruned"
+        );
+    }
+
+    /// A backup file whose suffix does not parse as a version is left alone
+    /// rather than sorted to an arbitrary slot where it could be deleted.
+    #[test]
+    fn unparseable_backup_names_are_never_pruned() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("4da.db");
+        let db = Database::new(&db_path).expect("open temp db");
+
+        let odd = dir.path().join("4da.db.backup.vOLD");
+        std::fs::write(&odd, b"manual").unwrap();
+        for v in [98, 99] {
+            std::fs::write(dir.path().join(format!("4da.db.backup.v{v}")), b"old").unwrap();
+        }
+
+        db.backup_before_migration(100);
+
+        assert!(odd.exists(), "unparseable backup name must not be deleted");
+    }
+}
+
+#[cfg(test)]
 mod recovery_tests {
     use super::*;
     use rusqlite::Connection;
@@ -398,10 +461,24 @@ impl Database {
                 tracing::warn!(target: "4da::db", error = %e, "Pre-migration backup failed (continuing anyway)");
             }
         }
-        // Prune old backups: keep only the 2 most recent
+        // Prune old backups: keep only the 2 most recent BY VERSION NUMBER.
+        //
+        // This sorted PATHS lexicographically, which is correct only while every
+        // version has the same digit count. As strings, "…v100" < "…v98" <
+        // "…v99", so from schema 100 onward the newest backup sorted FIRST and
+        // the prune deleted the very file it had just written, keeping two older
+        // ones. Live evidence (2026-07-26, Phase 101 on the 2.4 GB corpus): the
+        // log reads `Pre-migration backup created … v100 bytes=2451460096` and
+        // then `Pruned old backup … v100` 216 ms later — the migration ran with
+        // NO rollback point while v98 (4 days old) and v99 survived. Silent,
+        // because the two log lines never mention each other and the removal
+        // result was discarded.
+        //
+        // Two guards now: sort on the parsed integer, and never prune the backup
+        // this call just created, whatever the ordering says.
         if let Some(parent) = self.db_path.parent() {
             if let Ok(entries) = std::fs::read_dir(parent) {
-                let mut backups: Vec<PathBuf> = entries
+                let mut backups: Vec<(i64, PathBuf)> = entries
                     .filter_map(|e| match e {
                         Ok(v) => Some(v),
                         Err(e) => {
@@ -410,13 +487,35 @@ impl Database {
                         }
                     })
                     .map(|e| e.path())
-                    .filter(|p| p.to_string_lossy().contains(".db.backup.v"))
+                    .filter_map(|p| {
+                        // Keep only files we can place on the version axis. An
+                        // unparseable suffix is left ALONE rather than sorted to
+                        // an arbitrary position where it could be deleted.
+                        let name = p.file_name()?.to_string_lossy().into_owned();
+                        let version: i64 = name.rsplit_once(".db.backup.v")?.1.parse().ok()?;
+                        Some((version, p))
+                    })
                     .collect();
-                backups.sort();
+                backups.sort_by_key(|(version, _)| *version);
                 if backups.len() > 2 {
-                    for old in &backups[..backups.len() - 2] {
-                        let _ = std::fs::remove_file(old);
-                        info!(target: "4da::db", path = %old.display(), "Pruned old backup");
+                    let cutoff = backups.len() - 2;
+                    for (_, old) in &backups[..cutoff] {
+                        if *old == backup_path {
+                            continue; // never delete the backup we just wrote
+                        }
+                        match std::fs::remove_file(old) {
+                            Ok(()) => {
+                                info!(target: "4da::db", path = %old.display(), "Pruned old backup");
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    target: "4da::db",
+                                    path = %old.display(),
+                                    error = %e,
+                                    "Failed to prune old backup"
+                                );
+                            }
+                        }
                     }
                 }
             }
