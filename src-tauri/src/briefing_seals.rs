@@ -140,15 +140,25 @@ pub fn create_rollup_seal(
         return None;
     }
 
-    // Link child seals to parent
+    // Link child seals to parent. Do NOT discard this result: an unlinked child
+    // silently breaks the seal chain, and a rollup whose parentage cannot be
+    // walked is not a provenance record. `linked` is reported alongside the
+    // child count so a partial link shows up as a mismatch rather than as a
+    // confident-looking success line.
+    let mut linked = 0usize;
     for child_id in child_seal_ids {
-        let _ = conn.execute(
+        match conn.execute(
             "UPDATE briefing_seals SET parent_seal_id = ?1 WHERE seal_id = ?2",
             params![seal_id, child_id],
-        );
+        ) {
+            Ok(n) => linked += n,
+            Err(e) => {
+                debug!(target: "4da::seals", error = %e, child = %child_id, "Failed to link child seal to parent");
+            }
+        }
     }
 
-    info!(target: "4da::seals", level = prefix, date = date, children = child_seal_ids.len(), "Rollup seal created");
+    info!(target: "4da::seals", level = prefix, date = date, children = child_seal_ids.len(), linked, "Rollup seal created");
     Some(seal_id)
 }
 

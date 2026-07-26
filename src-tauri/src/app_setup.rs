@@ -285,7 +285,17 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
     }
 
     info!(target: "4da::startup", context_dir = ?get_context_dir(), "Context directory");
-    info!(target: "4da::startup", model = "snowflake-arctic-embed-m", dimensions = crate::EMBEDDING_DIMS, "Embedding model");
+    // Report the model actually configured, never a literal. This line used to
+    // hardcode "snowflake-arctic-embed-m" regardless of the real provider, so a
+    // box running Ollama/nomic-embed-text still logged snowflake — which is
+    // precisely why an embedding-layer discrepancy stayed invisible for months
+    // (audit 2026-07-26). A diagnostic that cannot be wrong is not a diagnostic.
+    info!(
+        target: "4da::startup",
+        model = %crate::reembed::effective_embedding_identity(),
+        dimensions = crate::EMBEDDING_DIMS,
+        "Embedding model"
+    );
 
     // Sovereign Cold Boot — verify sqlite-vec ONCE per process here, before any
     // other code opens a connection. This eliminates ~200 redundant verification

@@ -193,12 +193,24 @@ impl Database {
     }
 
     /// Persist the per-run feed curation VERDICT (Phase 95, W4-5 corpus
-    /// parity). The analysis pipeline decides `relevant` after dedup,
-    /// diversity, reranking, and brief-rejection demotions — that verdict is
-    /// the curated corpus, and it used to evaporate with the run. Persisting
-    /// it lets every surface (the content graph first) select "what the
-    /// current brain actually stands behind" instead of re-deriving a corpus
-    /// from raw cross-epoch scores.
+    /// parity). That verdict is the curated corpus, and it used to evaporate
+    /// with the run. Persisting it lets every surface (the content graph
+    /// first) select "what the current brain actually stands behind" instead
+    /// of re-deriving a corpus from raw cross-epoch scores.
+    ///
+    /// What the verdict actually is: `analysis_status::persist_cycle_results`
+    /// writes `SourceRelevance::relevant` DIRECTLY. Two things can shape that
+    /// value before it lands here — `analysis_rerank` may demote it to false,
+    /// and `analysis_deep_scan`'s serendipity injection may set it true for an
+    /// item `score_item` never scored. There is no dedup/diversity stage in
+    /// this path. (The previous wording claimed the verdict came "after dedup,
+    /// diversity, reranking, and brief-rejection demotions"; an audit on
+    /// 2026-07-26 traced the code and found that overstated. Corrected because
+    /// anyone reasoning about verdict staleness has to trust this comment.)
+    ///
+    /// NOTE: the verdict carries `feed_verdict_at` but NO pipeline version, so
+    /// consumers cannot tell a current verdict from one a superseded scoring
+    /// version wrote. See `.claude/plans/verdict-epochs-PLAN.md`.
     pub fn persist_feed_verdicts(&self, verdicts: &[(i64, bool)]) -> SqliteResult<usize> {
         if verdicts.is_empty() {
             return Ok(0);
