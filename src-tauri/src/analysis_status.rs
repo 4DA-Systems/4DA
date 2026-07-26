@@ -333,8 +333,26 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
     // Persist the curation VERDICT for every item judged this run (relevant = in
     // the curated corpus). Corpus-parity surfaces (content graph) select on this
     // instead of re-deriving a corpus from raw cross-epoch scores.
-    let verdicts: Vec<(i64, bool)> = results.iter().map(|r| (r.id as i64, r.relevant)).collect();
-    if let Err(e) = db.persist_feed_verdicts(&verdicts) {
+    //
+    // Stamped with the pipeline version AND the provenance of the decision
+    // (Phase 101). Provenance is read from `SourceRelevance::serendipity`, which
+    // BOTH anti-bubble paths already set — `compute_serendipity_candidates`
+    // (flips a scorer-rejected item to relevant) and the concept-graph injection
+    // (never scores the item at all). Reading the flag rather than inferring a
+    // signature matters: an inferred one ("top_score == 0.45") catches only the
+    // second path, and the first keeps its original score, so it is
+    // indistinguishable from a stale verdict by score alone.
+    let verdicts: Vec<(i64, bool, crate::db::VerdictSource)> = results
+        .iter()
+        .map(|r| {
+            (
+                r.id as i64,
+                r.relevant,
+                crate::db::VerdictSource::from_serendipity(r.serendipity),
+            )
+        })
+        .collect();
+    if let Err(e) = db.persist_feed_verdicts(&verdicts, crate::scoring::PIPELINE_VERSION) {
         tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist feed verdicts");
     }
 
@@ -373,6 +391,14 @@ async fn analyze_cached_content_inner(
     if let Ok(db) = get_database() {
         persist_cycle_results(db, &results);
     }
+    // Converge the verdicts this cycle did NOT touch. The cycle only re-judges
+    // what `get_items_tiered` selects, so an item that ages out of that window
+    // keeps whatever verdict a superseded pipeline version gave it — forever,
+    // and invisibly, because the drain only tracks stale SCORES. Running here
+    // (after persistence, on the single boundary every foreground / scheduled /
+    // headless path reaches) means the guard converges on end-user machines
+    // without an operator-run drain. No-op probe when nothing is stale.
+    crate::analysis_backfill::reconcile_stale_verdicts_logged().await;
     Ok(results)
 }
 

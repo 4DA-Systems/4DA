@@ -613,7 +613,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 100;
+        const TARGET_VERSION: i64 = 101;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3672,6 +3672,66 @@ impl Database {
                 )?;
             }
 
+            // Phase 101: verdict epochs. `feed_relevant` (Phase 95) is the
+            // value that decides what the user SEES, and it shipped with a
+            // timestamp but no pipeline version — so every PIPELINE_VERSION
+            // bump silently invalidated the whole curated corpus and nothing
+            // converged it back. Measured live 2026-07-26, AFTER the v18 drain
+            // had brought scores to 100% current: 399 of 426 curated items
+            // still held a pre-v18 verdict and 181 of those now score below
+            // the relevance threshold (156 of them the exact `crates_io`
+            // look-alike class v18 declared categorically never feed-relevant).
+            //
+            // Both columns are nullable with NO backfill: NULL means "written
+            // before provenance was recorded", which is the truth. The partial
+            // index covers only the curated set (hundreds of rows), so the
+            // per-cycle staleness probe is ~0ms — the Phase-100 lesson, that a
+            // probe paid every cycle forever must be indexed, applied up front.
+            if current_version < 101 {
+                Self::run_versioned_migration(
+                    &conn,
+                    100,
+                    101,
+                    "Phase 101: feed verdict epoch + provenance columns",
+                    |c| {
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when absent.
+                        let has_column: bool = c
+                            .prepare("SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name = 'feed_verdict_version'")?
+                            .query_row([], |r| r.get::<_, i64>(0))
+                            .map(|n| n > 0)?;
+                        if !has_column {
+                            c.execute_batch(
+                                "ALTER TABLE source_items ADD COLUMN feed_verdict_version INTEGER;
+                                 ALTER TABLE source_items ADD COLUMN feed_verdict_source TEXT;",
+                            )?;
+                        }
+                        // COVERING deliberately: both stamp columns are in the
+                        // index, so the per-cycle staleness probe is answered
+                        // without touching a table row. Measured on a copy of
+                        // the live 2.4 GB corpus (426 curated rows): indexing
+                        // `feed_verdict_version` ALONE left the planner on
+                        // `idx_si_feed_relevant` and 426 random row lookups —
+                        // 902 ms cold, every cycle, forever. Adding
+                        // `feed_verdict_source` flips it to
+                        // "SCAN … USING COVERING INDEX" at 3.7 ms cold. Same
+                        // trap Phase 100 was created to close; the partial
+                        // `WHERE feed_relevant = 1` keeps the index to the
+                        // curated set rather than the whole corpus.
+                        c.execute_batch(
+                            "CREATE INDEX IF NOT EXISTS idx_si_feed_verdict_version
+                                 ON source_items(feed_verdict_version, feed_verdict_source)
+                                 WHERE feed_relevant = 1;",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 101: feed verdict epoch columns added"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -4877,6 +4937,70 @@ mod tests {
     }
 
     /// Phase 95 adds the persisted feed-curation verdict (corpus parity).
+    /// Phase 101 lifts TARGET_VERSION to 101 and adds the verdict epoch guard.
+    /// Both columns must be nullable with NO backfill — an unstamped verdict is
+    /// genuinely of unknown provenance, and inventing a version for it would
+    /// make the reconciliation pass skip exactly the rows that need it.
+    #[test]
+    fn test_phase_101_verdict_epoch_columns() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        let mut stmt = conn
+            .prepare("SELECT name, \"notnull\", dflt_value FROM pragma_table_info('source_items')")
+            .unwrap();
+        let cols: Vec<(String, i64, Option<String>)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        for col in ["feed_verdict_version", "feed_verdict_source"] {
+            let found = cols.iter().find(|(name, _, _)| name == col);
+            let (_, notnull, default) = found
+                .unwrap_or_else(|| panic!("source_items column '{col}' missing after Phase 101"));
+            assert_eq!(*notnull, 0, "{col} must be nullable (NULL = unstamped)");
+            assert!(
+                default.is_none(),
+                "{col} must have no default — a default would backfill a claim the DB cannot support"
+            );
+        }
+
+        let idx_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master
+                 WHERE type='index' AND name='idx_si_feed_verdict_version'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            idx_exists,
+            "idx_si_feed_verdict_version missing — the staleness probe runs every \
+             analysis cycle forever and must not scan"
+        );
+
+        // The index must COVER the probe. Measured on the live corpus: with
+        // `feed_verdict_source` absent from the index the planner falls back to
+        // idx_si_feed_relevant + a row lookup per curated item — 902ms cold per
+        // cycle vs 3.7ms covered. Assert on the index columns so a future edit
+        // cannot quietly drop the covering property.
+        let indexed: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_index_info('idx_si_feed_verdict_version')")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        for col in ["feed_verdict_version", "feed_verdict_source"] {
+            assert!(
+                indexed.iter().any(|c| c == col),
+                "idx_si_feed_verdict_version must cover '{col}' or the probe stops \
+                 being index-only; got {indexed:?}"
+            );
+        }
+    }
+
     #[test]
     fn test_phase_95_feed_verdict_columns() {
         let db = test_db();
