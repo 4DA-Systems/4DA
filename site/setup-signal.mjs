@@ -10,7 +10,8 @@
 //   1. Creates "4DA Signal" product in Stripe
 //   2. Creates monthly price ($12 AUD/mo)
 //   3. Creates annual price ($99 AUD/yr)
-//   4. Outputs the env vars to set in Vercel
+//   4. Creates lifetime price ($299 AUD one-time)
+//   5. Outputs the env vars to set on Cloudflare Pages (project 4da-site)
 // =============================================================================
 
 const key = process.argv[2];
@@ -61,6 +62,9 @@ let monthlyPrice = existingPrices.data.find(
 let annualPrice = existingPrices.data.find(
   p => p.recurring?.interval === 'year' && p.unit_amount === 9900 && p.currency === 'aud'
 );
+let lifetimePrice = existingPrices.data.find(
+  p => !p.recurring && p.unit_amount === 29900 && p.currency === 'aud'
+);
 
 if (monthlyPrice) {
   console.log(`  Found existing monthly price: ${monthlyPrice.id}`);
@@ -86,6 +90,18 @@ if (annualPrice) {
     metadata: { plan: 'signal_annual' },
   });
   console.log(`  Created annual price: ${annualPrice.id} ($99/yr AUD)`);
+}
+
+if (lifetimePrice) {
+  console.log(`  Found existing lifetime price: ${lifetimePrice.id}`);
+} else {
+  lifetimePrice = await stripe.prices.create({
+    product: product.id,
+    unit_amount: 29900, // $299.00 AUD one-time
+    currency: 'aud',
+    metadata: { plan: 'signal_lifetime' },
+  });
+  console.log(`  Created lifetime price: ${lifetimePrice.id} ($299 AUD one-time)`);
 }
 
 // Check webhook endpoints
@@ -118,17 +134,21 @@ if (signalWebhook) {
 // Output
 console.log('\n================================================');
 console.log('SETUP COMPLETE\n');
-console.log('Add these environment variables to Vercel:\n');
+console.log('Set these environment variables on Cloudflare Pages (project 4da-site):\n');
 console.log(`  SIGNAL_PRICE_MONTHLY=${monthlyPrice.id}`);
 console.log(`  SIGNAL_PRICE_ANNUAL=${annualPrice.id}`);
-console.log('\nTo set them via Vercel CLI:');
-console.log(`  npx vercel env add SIGNAL_PRICE_MONTHLY production <<< "${monthlyPrice.id}"`);
-console.log(`  npx vercel env add SIGNAL_PRICE_ANNUAL production <<< "${annualPrice.id}"`);
-console.log('\nOr set them in Vercel Dashboard:');
-console.log('  https://vercel.com → Project → Settings → Environment Variables');
+console.log(`  SIGNAL_PRICE_LIFETIME=${lifetimePrice.id}`);
+console.log('\nVia wrangler (paste the value when prompted):');
+console.log('  npx wrangler pages secret put SIGNAL_PRICE_MONTHLY --project-name 4da-site');
+console.log('  npx wrangler pages secret put SIGNAL_PRICE_ANNUAL --project-name 4da-site');
+console.log('  npx wrangler pages secret put SIGNAL_PRICE_LIFETIME --project-name 4da-site');
+console.log('\nOr in the dashboard: dash.cloudflare.com → Pages → 4da-site → Settings → Environment variables');
+console.log('\nEnv changes need a redeploy to take effect:');
+console.log('  npx @11ty/eleventy && npx wrangler pages deploy _site --project-name 4da-site --branch main');
 console.log('\nAlready set (verify these exist):');
 console.log('  STRIPE_SECRET_KEY');
 console.log('  STRIPE_WEBHOOK_SECRET');
 console.log('  LICENSE_PRIVATE_KEY_HEX');
 console.log('  SITE_URL=https://4da.ai');
+console.log('  ENVIRONMENT=production');
 console.log('\n================================================');

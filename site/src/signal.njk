@@ -488,10 +488,10 @@ permalink: "/signal.html"
       document.getElementById('toggle-annual').className = plan === 'annual' ? 'active' : '';
       document.getElementById('toggle-lifetime').className = plan === 'lifetime' ? 'active' : '';
       if (plan === 'lifetime') {
-        document.getElementById('price-value').textContent = '249';
+        document.getElementById('price-value').textContent = '299';
         document.getElementById('price-period').textContent = '';
         document.getElementById('annual-note').innerHTML = 'One-time payment. Yours forever.';
-        document.getElementById('price-math').innerHTML = '<span>$249</span> once = <span>never think about it again</span>';
+        document.getElementById('price-math').innerHTML = '<span>$299</span> once = <span>never think about it again</span>';
         document.getElementById('checkout-btn').textContent = 'Buy Signal Lifetime';
       } else {
         document.getElementById('price-value').textContent = plan === 'monthly' ? '12' : '99';
