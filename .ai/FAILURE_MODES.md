@@ -131,6 +131,44 @@ if updated == 0 {
 
 ---
 
+### Materialized derived state needs BOTH an epoch stamp and a pass that converges it
+
+**Symptom.** A stored value that was computed by some version of the logic keeps being served long after that logic changed. The corpus reports "100% current" — because the thing being *measured* is current — while a second derived value sitting next to it is months stale and nothing is even looking at it.
+
+**Root cause.** Each derived value goes stale on its OWN clock. `relevance_score` got a `scored_pipeline_version` stamp, a drain, and scoped epochs (#372–#374). `feed_relevant` — the verdict that decides what the user actually SEES — got a timestamp and nothing else. Once the drain finished, every item was score-current and therefore **invisible to the drain**, while 399 of 430 curated items still held a verdict a superseded pipeline had decided (#380, measured live 2026-07-26). 219 of them the current pipeline outright rejected; 157 were the exact look-alike class v18 had banned three weeks earlier (#375).
+
+**Why it could not self-heal.** The write path only re-judges what its selection window returns (`get_items_tiered`), so anything that ages out of that window is frozen permanently. The tell in the data: every curated verdict shares one timestamp floor — the last corpus-wide pass. A stamp alone would not have fixed this; the converging pass is the other half.
+
+**Rules.**
+- If you materialize a value derived from versioned logic, stamp it with that version **and** ship the pass that re-derives stale ones. One without the other is a slow leak.
+- Put the pass where every path reaches it. #380's plan specified a call site reachable only from an operator-run drain command, which *also* returned early when no stale scores remained — i.e. it would never have run in the exact state that motivated it.
+- Prefer **demote-only** for a per-item pass. Removing something the current logic rejects needs no batch context; *promoting* does (dedup / diversity / rerank), so it isn't a per-item decision.
+- Do **not** make consumers filter on the stamp. Excluding stale rows empties the surface after every bump (94% of live graph nodes here) until the pass catches up. The pass converging IS the fix.
+
+---
+
+### Provenance must be read from the producer's flag, never inferred from a value signature
+
+**Symptom.** A cleanup/reconciliation pass is about to delete or demote records, and you need to know which ones a *different* code path created so you can spare them. The obvious move — recognise them by a distinctive value they carry — silently misses a whole class.
+
+**Root cause (#380).** Two paths write `feed_relevant = true` without the scorer agreeing. The concept-graph injection builds the item with a fixed `top_score: 0.45`, so a "score == 0.45" probe finds it. But `compute_serendipity_candidates` takes items the scorer **rejected** and flips the flag while keeping their **original** score — invisible to that probe, and sitting in exactly the band the pass was going to demote. The planning doc concluded "0 such items exist, a naive pass is safe today" on the strength of the 0.45 probe. That was a property of the probe, not of the corpus: the pass would have deleted live anti-bubble picks.
+
+**What it should have been (and now is).** `SourceRelevance::serendipity` — a boolean the producers already set at **both** sites — persisted as `feed_verdict_source`. Exact, not inferred.
+
+**Rules.** Before writing a heuristic to recognise records by shape, grep for a flag the producer already sets. When a claim rests on "we searched and found none", state the search's *coverage*, not just its result — enumerate the writers (grep every construction site of the type) rather than probing for one signature. Provenance that was never persisted is unrecoverable: `source_items` had no column recording it, so pre-Phase-101 rows are permanently unclassifiable and the pass accepts a bounded, self-healing one-time cost for them.
+
+---
+
+### A partial index that isn't COVERING still pays one row lookup per row
+
+**Symptom.** You add an index for a probe that runs every cycle, the query plan says it's using an index, and the probe is still slow on a cold process.
+
+**Root cause.** SQLite used the index to *find* the rows, then fetched each row from the table to evaluate the rest of the predicate. On the Phase-101 verdict probe, indexing `feed_verdict_version` alone left the planner on the older `idx_si_feed_relevant` and did 426 random row lookups: **902 ms cold, on every cycle, forever.** Adding the second predicate column (`feed_verdict_source`) made the index cover the whole query — `SCAN … USING COVERING INDEX` — at **3.7 ms**. This is the same cost class Phase 100 was created to eliminate (a 700–800 ms per-cycle probe), re-introduced by an index that looked correct.
+
+**Rules.** For any probe on a hot path, put **every** column the predicate touches into the index, and confirm with `EXPLAIN QUERY PLAN` that the plan says `COVERING INDEX` — "uses an index" is not the bar. Verify on a copy of the real corpus, not a test DB: the cost is in the row fetches, which a small table never shows. Assert the index's columns in a test (`pragma_index_info`) so a later edit can't quietly drop the covering property. Note that wrapping a column in `COALESCE(...)` makes the predicate non-sargable — the index can still be *scanned* (cheap when partial), but it can no longer be *seeked*.
+
+---
+
 ## IPC & command surface
 
 ### Ghost command silent failure
