@@ -85,6 +85,21 @@ describe('useResultFilters', () => {
       expect(result.current.filteredResults.map((r: { id: number; source_type?: string }) => r.source_type)).toEqual(['hackernews', 'arxiv']);
     });
 
+    it('does not hide all results when source metadata has not loaded', () => {
+      setMockStoreState({
+        appState: {
+          relevanceResults: [
+            makeItem(1, { source_type: 'hackernews' }),
+            makeItem(2, { source_type: 'arxiv' }),
+            makeItem(3, { source_type: 'reddit' }),
+          ],
+        },
+        sourceFilters: new Set<string>(),
+      });
+      const { result } = renderHook(() => useResultFilters());
+      expect(result.current.filteredResults).toHaveLength(3);
+    });
+
     it('hides items under an active snooze (Phase 96)', () => {
       setMockStoreState({
         appState: {
