@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use futures::FutureExt;
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
 
@@ -25,6 +25,19 @@ type FetchResult = std::result::Result<
     (String, String, Vec<crate::sources::SourceItem>),
     (String, super::RetryExhaustedError),
 >;
+
+fn fetched_recently(db: &Database, source_type: &str, cooldown_secs: i64) -> bool {
+    let Ok(Some(last_fetch_str)) = db.get_source_last_fetch(source_type) else {
+        return false;
+    };
+    let Ok(last_fetch) =
+        chrono::NaiveDateTime::parse_from_str(&last_fetch_str, "%Y-%m-%d %H:%M:%S")
+    else {
+        return false;
+    };
+    let elapsed = chrono::Utc::now().naive_utc() - last_fetch;
+    elapsed.num_seconds() < cooldown_secs
+}
 
 /// Fill the cache with items from all sources (background operation).
 /// Sources are fetched in parallel, bounded by the rate limiter's 6-permit
@@ -50,11 +63,26 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
     let source_count = all_sources.len();
     let cache_tracker = AdapterFailureTracker::new();
 
-    // Track how many sources have been skipped (disabled) up front
+    // Track how many sources have been skipped up front. This covers disabled
+    // sources, open source-level circuits, and very recent successful fetches.
     let mut enabled_sources = Vec::new();
     for source in all_sources {
         let st = source.source_type();
         if !db.is_source_enabled(st) {
+            summary.skipped_disabled += 1;
+        } else if db.is_circuit_open(st) {
+            info!(target: "4da::cache", source = st, "Skipping source with open circuit breaker");
+            let _ = app.emit(
+                "source-circuit-break",
+                serde_json::json!({
+                    "source": st,
+                    "status": "open",
+                    "message": "Temporarily disabled after repeated failures",
+                }),
+            );
+            summary.skipped_disabled += 1;
+        } else if fetched_recently(db, st, 300) {
+            info!(target: "4da::cache", source = st, "Skipping source fetched recently");
             summary.skipped_disabled += 1;
         } else {
             enabled_sources.push(source);

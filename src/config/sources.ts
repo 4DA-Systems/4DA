@@ -30,30 +30,46 @@ const COLOR_MAP: Record<string, string> = {
 const sourcesCache = new Map<string, SourceMeta>();
 const allIds = new Set<string>();
 
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /** Load source metadata from the Rust backend. Call once at startup. */
-export async function loadSourceMeta(): Promise<void> {
-  try {
-    const sources: Array<{
-      type: string;
-      name: string;
-      category: string;
-      label: string;
-      color_hint: string;
-    }> = await cmd('get_sources');
-    sourcesCache.clear();
-    allIds.clear();
-    for (const s of sources) {
-      sourcesCache.set(s.type, {
-        label: s.label,
-        fullName: s.name,
-        colorClass: COLOR_MAP[s.color_hint] ?? DEFAULT_COLOR,
-        category: s.category,
-      });
-      allIds.add(s.type);
+export async function loadSourceMeta(): Promise<boolean> {
+  const retryDelaysMs = [0, 500, 1500, 3000];
+  for (const retryDelay of retryDelaysMs) {
+    if (retryDelay > 0) await delay(retryDelay);
+    try {
+      const sources: Array<{
+        type: string;
+        name: string;
+        category: string;
+        label: string;
+        color_hint: string;
+      }> = await cmd('get_sources');
+      if (sources.length === 0) continue;
+
+      sourcesCache.clear();
+      allIds.clear();
+      for (const s of sources) {
+        sourcesCache.set(s.type, {
+          label: s.label,
+          fullName: s.name,
+          colorClass: COLOR_MAP[s.color_hint] ?? DEFAULT_COLOR,
+          category: s.category,
+        });
+        allIds.add(s.type);
+      }
+      return true;
+    } catch {
+      // Backend may still be warming up. Retry briefly; keep any existing cache.
     }
-  } catch {
-    // Backend not ready yet — use empty cache, will retry
   }
+  return allIds.size > 0;
+}
+
+export function isSourcesLoaded(): boolean {
+  return allIds.size > 0;
 }
 
 // Keep backward-compatible exports

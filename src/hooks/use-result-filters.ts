@@ -131,13 +131,18 @@ export const useResultFilters = () => {
 
   const filteredResults = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
+    const sourceFilteringActive = sourceFilters.size > 0;
 
     // Step 1: Filter by snooze, source, relevance, saved, and search query
     const filtered = relevanceResults.filter(item => {
       // Snoozed = deferred, not rejected: hidden until the snooze expires.
       if (snoozedItemIds.has(item.id)) return false;
       const source = item.source_type || 'hackernews';
-      if (!sourceFilters.has(source)) return false;
+      // Fail open while source metadata is unavailable. At cold start
+      // ALL_SOURCE_IDS is populated asynchronously; if that load fails once,
+      // sourceFilters can be an empty Set. Treating that as "exclude every
+      // source" black-holed valid analysis results under an empty Sources bar.
+      if (sourceFilteringActive && !sourceFilters.has(source)) return false;
       if (showOnlyRelevant && !profileEmpty && !item.relevant) return false;
       if (showSavedOnly && feedbackGiven[item.id] !== 'save') return false;
       // Search filter: match against title, explanation, source type

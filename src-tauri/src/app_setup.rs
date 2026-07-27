@@ -2133,11 +2133,29 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
         }
     }
 
-    // Step 2: Analyze cached content (INSTANT).
+    // A scheduled cycle may start first, spend ~30-120s fetching, and then enter
+    // scoring after the user has manually started a foreground analysis. The
+    // event-level guard above only catches jobs that start after the foreground
+    // run is already marked running; this second guard prevents the older
+    // scheduled job from racing the shared analysis state and emitting a later
+    // `analysis-complete` over the user's manual run.
+    if crate::get_analysis_state().lock().running {
+        info!(
+            target: "4da::monitor",
+            "Scheduled analysis skipped — foreground analysis started during scheduled fetch"
+        );
+        let state = get_monitoring_state();
+        state
+            .is_checking
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        return;
+    }
+
+    // Step 2: Analyze cached content.
     // Use the SILENT variant so a background/scheduled refresh does not hijack
-    // the user's visible progress bar — the work and the terminal
-    // `analysis-complete`/`background-results` events still fire, only the
-    // intermediate `emit_progress`/`emit_narration` surface events are suppressed.
+    // the user's visible progress bar. Terminal UI delivery uses
+    // `background-results`, not `analysis-complete`, so a scheduled result can
+    // update the feed without clearing a foreground manual analysis state.
     info!(target: "4da::monitor", "Step 2: Analyzing cached content (silent)...");
     match analysis::analyze_cached_content_silent(&handle).await {
         Ok(results) => {
@@ -2181,9 +2199,13 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
                 _ => {}
             }
 
-            // Emit results to frontend if window is visible
+            // Emit background results to the frontend if a window is visible.
+            // Scheduled checks must not impersonate a foreground manual
+            // completion: `analysis-complete` clears the manual loading state
+            // and rewrites the status line, while `background-results` merges
+            // fresh intelligence quietly.
             events::void_signal_analysis_complete(&handle, &results);
-            let _ = handle.emit("analysis-complete", results);
+            let _ = handle.emit("background-results", results);
 
             // Auto-render stale channels after each monitoring cycle
             tauri::async_runtime::spawn(async move {
