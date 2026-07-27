@@ -31,6 +31,9 @@ fn is_aborted() -> bool {
 #[path = "analysis_deep_scan.rs"]
 mod analysis_deep_scan;
 
+#[path = "analysis_fast_path.rs"]
+mod analysis_fast_path;
+
 #[path = "analysis_status.rs"]
 mod analysis_status;
 pub(crate) use analysis_status::*;
