@@ -54,7 +54,7 @@ import { useUpdateCheck } from './hooks/use-update-check';
 import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
 import { useAppListeners } from './hooks/use-app-listeners';
-import { loadSourceMeta } from './config/sources';
+import { ALL_SOURCE_IDS, loadSourceMeta } from './config/sources';
 import { runWhenIdle } from './lib/defer';
 
 function App() {
@@ -239,8 +239,10 @@ function App() {
     const cancelIdle = runWhenIdle(() => {
       // Source metadata populates the dynamic source registry + resets filters
       // (only visible in the relevance view, never the default Brief view).
-      void loadSourceMeta().then(() => {
-        useAppStore.getState().resetSourceFilters();
+      void loadSourceMeta().then((loaded) => {
+        if (loaded || ALL_SOURCE_IDS.size > 0) {
+          useAppStore.getState().resetSourceFilters();
+        }
       });
       void loadSourceHealth();
       // Pure maintenance — has no business on the critical mount path.

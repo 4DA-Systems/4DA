@@ -2133,6 +2133,24 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
         }
     }
 
+    // A scheduled cycle may start first, spend ~30-120s fetching, and then enter
+    // scoring after the user has manually started a foreground analysis. The
+    // event-level guard above only catches jobs that start after the foreground
+    // run is already marked running; this second guard prevents the older
+    // scheduled job from racing the shared analysis state and emitting a later
+    // `analysis-complete` over the user's manual run.
+    if crate::get_analysis_state().lock().running {
+        info!(
+            target: "4da::monitor",
+            "Scheduled analysis skipped — foreground analysis started during scheduled fetch"
+        );
+        let state = get_monitoring_state();
+        state
+            .is_checking
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        return;
+    }
+
     // Step 2: Analyze cached content (INSTANT).
     // Use the SILENT variant so a background/scheduled refresh does not hijack
     // the user's visible progress bar — the work and the terminal
