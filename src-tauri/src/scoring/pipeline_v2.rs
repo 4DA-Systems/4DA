@@ -691,6 +691,19 @@ fn extract_signals(
         &ctx.composed_stack,
     );
 
+    // Registry-release discipline: embedding proximity to local code is not,
+    // by itself, evidence that an arbitrary package-registry release matters.
+    // For registry releases whose subject is not a corroborated dependency,
+    // dampen the context axis so package feed noise cannot ride language-level
+    // similarity into the user's "relevant" set.
+    let raw_context = if crate::dep_linker::is_registry_source(input.source_type)
+        && !matched_deps.iter().any(|d| d.corroborated)
+    {
+        raw_context * 0.3
+    } else {
+        raw_context
+    };
+
     RawSignals {
         context: raw_context,
         interest: raw_interest,
@@ -2170,8 +2183,11 @@ pub(crate) fn score_item(
         matched_skill_gaps,
     ) = compute_boosts(quality_score, input, ctx, &raw);
 
-    // Trend topic boost (temporal clustering signal)
-    let trend_boost = if !options.trend_topics.is_empty()
+    // Trend topic boost (temporal clustering signal). Raw trend detection is
+    // corpus-wide; require domain relevance so off-domain repeated feed noise
+    // cannot earn a developer-facing trend boost.
+    let trend_boost = if raw.domain_relevance >= 0.5
+        && !options.trend_topics.is_empty()
         && raw.topics.iter().any(|t| options.trend_topics.contains(t))
     {
         0.08
@@ -3041,6 +3057,117 @@ mod tests {
             empty_lang.top_score > 0.05,
             "Empty detected_lang must not be capped, got {}",
             empty_lang.top_score
+        );
+    }
+
+    #[test]
+    fn v2_ungrounded_registry_release_dampens_context_axis() {
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let input = ScoringInput {
+            id: 1,
+            title: "crates.io: rand v0.9.0",
+            url: Some("https://crates.io/crates/rand"),
+            content: "A new rand release is available",
+            source_type: "crates_io",
+            embedding: &zero,
+            created_at: None,
+            detected_lang: "",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+            source_id: Some("crate-rand"),
+        };
+        let matches = vec![RelevanceMatch {
+            source_file: "src/lib.rs".to_string(),
+            matched_text: "rust async runtime dependency code".to_string(),
+            similarity: 0.90,
+        }];
+
+        let ungrounded = extract_signals(
+            &input,
+            &crate::scoring::ScoringContext::builder().build(),
+            &matches,
+        );
+        assert!(
+            (ungrounded.context - 0.27).abs() < 1e-6,
+            "ungrounded registry release must dampen KNN context 0.90 -> 0.27, got {}",
+            ungrounded.context
+        );
+
+        let grounded_ctx = fastpath_ctx(&[("rand", "rust")]);
+        let grounded = extract_signals(&input, &grounded_ctx, &matches);
+        assert!(
+            (grounded.context - 0.90).abs() < 1e-6,
+            "registry release for a corroborated dependency must keep raw context, got {}",
+            grounded.context
+        );
+    }
+
+    #[test]
+    fn v2_trend_boost_requires_domain_relevance() {
+        let db = crate::test_utils::test_db();
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let mut profile = crate::domain_profile::DomainProfile::default();
+        profile.primary_stack.insert("rust".to_string());
+        profile.all_tech.insert("rust".to_string());
+        let ctx = crate::scoring::ScoringContext::builder()
+            .domain_profile(profile)
+            .build();
+
+        let sports_tags = vec!["sports".to_string()];
+        let sports_input = ScoringInput {
+            id: 1,
+            title: "Sports analytics startup raises new funding",
+            url: Some("https://example.com/sports"),
+            content: "Sports media rights and football growth",
+            source_type: "rss",
+            embedding: &zero,
+            created_at: None,
+            detected_lang: "",
+            source_tags: &sports_tags,
+            tags_json: None,
+            feed_origin: None,
+            source_id: None,
+        };
+        let no_trend = score_item(&sports_input, &ctx, &db, &fastpath_options(), None);
+        let sports_options = ScoringOptions {
+            trend_topics: vec!["sports".to_string()],
+            ..fastpath_options()
+        };
+        let with_trend = score_item(&sports_input, &ctx, &db, &sports_options, None);
+        assert!(
+            (with_trend.top_score - no_trend.top_score).abs() < f32::EPSILON,
+            "off-domain repeated feed topic must not get trend boost: base={}, trend={}",
+            no_trend.top_score,
+            with_trend.top_score
+        );
+
+        let rust_tags = vec!["rust".to_string()];
+        let rust_input = ScoringInput {
+            id: 2,
+            title: "Rust async runtime performance update",
+            url: Some("https://example.com/rust"),
+            content: "Rust async runtime benchmark notes",
+            source_type: "rss",
+            embedding: &zero,
+            created_at: None,
+            detected_lang: "",
+            source_tags: &rust_tags,
+            tags_json: None,
+            feed_origin: None,
+            source_id: None,
+        };
+        let rust_no_trend = score_item(&rust_input, &ctx, &db, &fastpath_options(), None);
+        let rust_options = ScoringOptions {
+            trend_topics: vec!["rust".to_string()],
+            ..fastpath_options()
+        };
+        let rust_with_trend = score_item(&rust_input, &ctx, &db, &rust_options, None);
+        assert!(
+            rust_with_trend.top_score > rust_no_trend.top_score,
+            "in-domain trend should still boost: base={}, trend={}",
+            rust_no_trend.top_score,
+            rust_with_trend.top_score
         );
     }
 
