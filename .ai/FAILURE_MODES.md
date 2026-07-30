@@ -235,12 +235,25 @@ if updated == 0 {
 
 ## Release & CI
 
+### Desktop updater channel hijacked by non-desktop GitHub releases
+**Symptom.** Installed desktop clients stay on an old binary even though newer code exists. The app may open a newer local database with an older schema reader and report `Database schema version N is newer than this version of 4DA supports (max M)`.
+
+**Root cause.** The updater endpoint used GitHub's global `/releases/latest/download/latest.json`. Any non-desktop release, especially `mcp-v*`, can become GitHub's "latest" release. If that release lacks `latest.json`, the frontend updater check fails and older clients remain stale. If app semver is not bumped, even a generated manifest can be invisible to the updater.
+
+**Guards in place (2026-07-29).**
+- `tauri.conf.json` points at `releases/download/desktop-latest/latest.json`, a desktop-only updater manifest pointer.
+- `.github/workflows/release.yml` requires `latest.json` before publishing and uploads it to the `desktop-latest` release.
+- `.github/workflows/build-mcpb-extensions.yml` marks MCP bundle releases as prereleases so future MCP tags cannot become GitHub's global latest.
+- `scripts/check-release-channel.cjs` runs in pre-commit, CI, and `pnpm run validate` to enforce endpoint, manifest, prerelease, and app-version consistency.
+
+**If it happens.** Check the installed exe path and mtime, then inspect the configured updater URL. `https://github.com/4DA-Systems/4DA/releases/latest` is not a valid desktop updater authority; only the `desktop-latest` manifest pointer is.
+
 ### SSL.com CodeSignTool download can return a landing HTML page instead of a ZIP
 **Symptom.** Windows release build fails at signing, OR worse, ships an unsigned exe that SmartScreen flags. `Expand-Archive` succeeds but extracts nothing usable.
 
 **Root cause.** The `Invoke-WebRequest` hits `ssl.com/download/codesigntool-for-windows/` which can redirect to a landing page rather than the versioned ZIP.
 
-**Guards in place (2026-04-19 Wave 5, updated 2026-05-13).** Release workflow computes SHA-256 of the downloaded zip and hard-fails on mismatch. SHA is pinned (`033b55dc...`). Post-build step verifies Authenticode signature on every .exe/.msi before upload. EV cert issued 2026-05-12, eSigner active, all GitHub secrets set.
+**Guards in place (2026-04-19 Wave 5, updated 2026-07-30).** Release workflow computes SHA-256 of the downloaded zip and hard-fails on mismatch. SHA is pinned (`317d429b...`). Post-build step verifies Authenticode signature on every .exe/.msi before upload. EV cert issued 2026-05-12, eSigner active, all GitHub secrets set.
 
 ---
 

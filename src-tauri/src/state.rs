@@ -326,6 +326,15 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
         let db = match Database::new(&db_path) {
             Ok(db) => db,
             Err(e) => {
+                if is_database_lock_contention(&e) {
+                    tracing::warn!(
+                        target: "4da::db",
+                        error = %e,
+                        "Database open blocked by another process — not running corrupt-db fallback"
+                    );
+                    return Err(format!("Database locked by another 4DA process: {e}"));
+                }
+
                 // Last-resort recovery — Database::new() still failed even after
                 // the preemptive pass. Rename the offending file to the legacy
                 // single-slot `.db.corrupt` name and create a fresh DB. This
@@ -380,6 +389,13 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
     });
 
     Ok(db)
+}
+
+fn is_database_lock_contention(e: &rusqlite::Error) -> bool {
+    matches!(
+        e.sqlite_error_code(),
+        Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked)
+    )
 }
 
 // ============================================================================

@@ -407,6 +407,9 @@ data/engine_receipt_pubkey.hex
 .*-log.jsonl
 .*-log.jsonl.head
 .*-board.*
+.*-log.jsonl.judges/
+verdict-anchors/
+verdict-receipts.jsonl
 .mcp.json.bak*
 .mcp.local.json
 

@@ -222,22 +222,33 @@ pub(crate) const SUPPORTED_EXTENSIONS: &[&str] = &["md", "txt", "rs", "ts", "js"
 /// Adjusted daily based on user engagement rate (see `compute_threshold_adjustment`).
 static RELEVANCE_THRESHOLD_BITS: AtomicU32 = AtomicU32::new(0);
 
-/// Get the current relevance threshold (thread-safe).
-/// Returns the auto-tuned value, or 0.35 default if not yet initialized.
-/// Targets ~5-10% pass rate for genuinely relevant items.
-pub(crate) fn get_relevance_threshold() -> f32 {
-    let bits = RELEVANCE_THRESHOLD_BITS.load(Ordering::Relaxed);
+const DEFAULT_RELEVANCE_THRESHOLD: f32 = 0.40;
+
+fn relevance_threshold_from_bits(bits: u32) -> f32 {
     if bits == 0 {
-        0.40 // Default: tightened from 0.35 to cut borderline items and produce a more curated stream
+        DEFAULT_RELEVANCE_THRESHOLD
     } else {
         f32::from_bits(bits)
     }
 }
 
+fn normalize_relevance_threshold(value: f32) -> f32 {
+    value.clamp(0.30, 0.70)
+}
+
+/// Get the current relevance threshold (thread-safe).
+/// Returns the auto-tuned value, or 0.40 default if not yet initialized.
+/// Targets ~5-10% pass rate for genuinely relevant items.
+pub(crate) fn get_relevance_threshold() -> f32 {
+    relevance_threshold_from_bits(RELEVANCE_THRESHOLD_BITS.load(Ordering::Relaxed))
+}
+
 /// Set the relevance threshold (thread-safe, clamped to [0.30, 0.70]).
 pub(crate) fn set_relevance_threshold(value: f32) {
-    let clamped = value.clamp(0.30, 0.70);
-    RELEVANCE_THRESHOLD_BITS.store(clamped.to_bits(), Ordering::Relaxed);
+    RELEVANCE_THRESHOLD_BITS.store(
+        normalize_relevance_threshold(value).to_bits(),
+        Ordering::Relaxed,
+    );
 }
 
 #[cfg(test)]
@@ -275,24 +286,19 @@ mod tests {
 
     #[test]
     fn test_relevance_threshold_default() {
-        RELEVANCE_THRESHOLD_BITS.store(0, Ordering::Relaxed);
-        assert!((get_relevance_threshold() - 0.40).abs() < f32::EPSILON);
+        assert!((relevance_threshold_from_bits(0) - 0.40).abs() < f32::EPSILON);
     }
 
     #[test]
-    fn test_set_and_get_relevance_threshold() {
-        set_relevance_threshold(0.50);
-        assert!((get_relevance_threshold() - 0.50).abs() < f32::EPSILON);
-        RELEVANCE_THRESHOLD_BITS.store(0, Ordering::Relaxed);
+    fn test_relevance_threshold_bits_roundtrip() {
+        let bits = normalize_relevance_threshold(0.50).to_bits();
+        assert!((relevance_threshold_from_bits(bits) - 0.50).abs() < f32::EPSILON);
     }
 
     #[test]
     fn test_relevance_threshold_clamps_to_bounds() {
-        set_relevance_threshold(0.10);
-        assert!((get_relevance_threshold() - 0.30).abs() < f32::EPSILON);
-        set_relevance_threshold(0.95);
-        assert!((get_relevance_threshold() - 0.70).abs() < f32::EPSILON);
-        RELEVANCE_THRESHOLD_BITS.store(0, Ordering::Relaxed);
+        assert!((normalize_relevance_threshold(0.10) - 0.30).abs() < f32::EPSILON);
+        assert!((normalize_relevance_threshold(0.95) - 0.70).abs() < f32::EPSILON);
     }
 
     #[test]

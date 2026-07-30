@@ -85,12 +85,11 @@ pub enum CorruptionRecovery {
 ///    will then create an empty DB at the original path and run all
 ///    migrations from scratch.
 ///
-/// **This function is intentionally unwired in the cold-boot path as of
-/// 2026-04-11.** Wiring it requires touching the bootstrap site (likely
-/// `lib.rs` or `state.rs::open_db_connection`) which is currently
-/// claimed by another terminal's read-only sweep. Wire it after the next
-/// commit lock release by calling it once at the start of the database
-/// initialization path, before `Database::new(db_path)`.
+/// **Cold-boot contract:** this function is safe to run before
+/// `Database::new(db_path)` only because the integrity probe uses a short
+/// busy timeout and treats lock contention as transient, not corruption. A
+/// running GUI/headless engine must never make startup wait indefinitely or
+/// quarantine a merely-locked database.
 ///
 /// All file operations are infallible at the API level — failures are
 /// captured into `CorruptionRecovery::RecoveryFailed` so the caller can
@@ -113,6 +112,14 @@ pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
     //    crash loops) without scanning every row.
     let healthy = match Connection::open(db_path) {
         Ok(conn) => {
+            if let Err(e) = conn.busy_timeout(std::time::Duration::from_millis(250)) {
+                tracing::warn!(
+                    target: "4da::db::recovery",
+                    path = %db_path.display(),
+                    error = %e,
+                    "Could not set DB recovery busy timeout"
+                );
+            }
             let pragma_result: rusqlite::Result<String> =
                 conn.query_row("PRAGMA quick_check", [], |row| row.get(0));
             match pragma_result {
@@ -126,6 +133,17 @@ pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
                     );
                     false
                 }
+                Err(e) if is_lock_contention(&e) => {
+                    tracing::warn!(
+                        target: "4da::db::recovery",
+                        path = %db_path.display(),
+                        error = %e,
+                        "DB recovery quick_check skipped because database is locked"
+                    );
+                    return CorruptionRecovery::RecoveryFailed {
+                        reason: format!("database locked during recovery quick_check: {e}"),
+                    };
+                }
                 Err(e) => {
                     tracing::error!(
                         target: "4da::db::recovery",
@@ -136,6 +154,17 @@ pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
                     false
                 }
             }
+        }
+        Err(e) if is_lock_contention(&e) => {
+            tracing::warn!(
+                target: "4da::db::recovery",
+                path = %db_path.display(),
+                error = %e,
+                "DB recovery skipped because database is locked"
+            );
+            return CorruptionRecovery::RecoveryFailed {
+                reason: format!("database locked during recovery open: {e}"),
+            };
         }
         Err(e) => {
             tracing::error!(
@@ -222,6 +251,13 @@ pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
     CorruptionRecovery::RestoredFromBackup {
         restored_from: restore_from,
     }
+}
+
+fn is_lock_contention(e: &rusqlite::Error) -> bool {
+    matches!(
+        e.sqlite_error_code(),
+        Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked)
+    )
 }
 
 /// Scan the directory for files matching `<stem>.db.backup.vN` siblings of
@@ -352,6 +388,51 @@ mod recovery_tests {
         );
         // Original file untouched.
         assert!(path.exists());
+    }
+
+    #[test]
+    fn locked_db_returns_recovery_failed_without_quarantine() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("locked.db");
+        let locker = Connection::open(&path).unwrap();
+        locker
+            .execute_batch(
+                "
+                PRAGMA journal_mode = DELETE;
+                CREATE TABLE t (x INTEGER);
+                INSERT INTO t VALUES (1);
+                BEGIN EXCLUSIVE;
+                INSERT INTO t VALUES (2);
+                ",
+            )
+            .unwrap();
+
+        let started = std::time::Instant::now();
+        let result = recover_corrupt_db_if_needed(&path);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "locked DB recovery must return quickly, elapsed {:?}",
+            started.elapsed()
+        );
+
+        match result {
+            CorruptionRecovery::RecoveryFailed { reason } => {
+                assert!(reason.contains("locked"), "unexpected reason: {reason}");
+            }
+            other => panic!("expected RecoveryFailed for locked DB, got {other:?}"),
+        }
+        assert!(path.exists(), "locked DB must not be moved");
+        let quarantine_files: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().contains("corrupt-"))
+            .collect();
+        assert!(
+            quarantine_files.is_empty(),
+            "locked DB must not be quarantined"
+        );
+
+        let _ = locker.execute_batch("ROLLBACK;");
     }
 
     #[test]

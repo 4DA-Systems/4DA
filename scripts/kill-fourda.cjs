@@ -26,58 +26,75 @@
 const { execSync } = require('child_process');
 const path = require('path');
 
-if (process.platform !== 'win32') {
-  // No-op on macOS/Linux — Unix replaces running binaries cleanly.
-  process.exit(0);
+// The tree this dev launch runs from (package.json lives next to scripts/).
+const treeRoot = path.resolve(__dirname, '..');
+
+function isPathInsideTree(candidatePath, rootPath = treeRoot) {
+  if (typeof candidatePath !== 'string' || candidatePath.trim() === '') {
+    return false;
+  }
+  const relative = path.relative(path.resolve(rootPath), path.resolve(candidatePath));
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
-// The tree this dev launch runs from (package.json lives next to scripts/).
-const treeRoot = path.resolve(__dirname, '..').toLowerCase();
-
-try {
-  // ExecutablePath per PID — tasklist can't provide paths. -EncodedCommand
-  // sidesteps cmd.exe quoting entirely (a plain -c string gets its `$(...)`
-  // mangled by the shell — caught live before shipping).
-  const psScript =
-    'Get-CimInstance Win32_Process -Filter "Name=\'fourda.exe\'" | ' +
-    'ForEach-Object { "$($_.ProcessId)|$($_.ExecutablePath)" }';
-  const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
-  const output = execSync(`powershell -nop -EncodedCommand ${encoded}`, {
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-
-  const pids = [];
-  for (const line of output.trim().split('\n')) {
-    const [pid, exePath] = line.trim().split('|');
-    if (!pid || !/^\d+$/.test(pid)) continue;
-    const p = (exePath || '').toLowerCase();
-    if (p.startsWith(treeRoot)) {
-      pids.push(pid);
-    } else if (p) {
-      console.log(
-        `Leaving fourda.exe PID ${pid} alone — built from another tree (${exePath})`,
-      );
-    }
-  }
-
-  if (pids.length === 0) {
-    // No fourda.exe from this tree — clean start, nothing to kill
+function main() {
+  if (process.platform !== 'win32') {
+    // No-op on macOS/Linux — Unix replaces running binaries cleanly.
     return;
   }
 
-  for (const pid of pids) {
-    try {
-      execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe' });
-      console.log(`Killed stale fourda.exe (PID ${pid}) — prevents file-lock on rebuild`);
-    } catch {
-      // Process may have exited between listing and kill — safe to ignore
-    }
-  }
+  try {
+    // ExecutablePath per PID — tasklist can't provide paths. -EncodedCommand
+    // sidesteps cmd.exe quoting entirely (a plain -c string gets its `$(...)`
+    // mangled by the shell — caught live before shipping).
+    const psScript =
+      'Get-CimInstance Win32_Process -Filter "Name=\'fourda.exe\'" | ' +
+      'ForEach-Object { "$($_.ProcessId)|$($_.ExecutablePath)" }';
+    const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
+    const output = execSync(`powershell -nop -EncodedCommand ${encoded}`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
 
-  // Brief pause to let the OS release the file handle before cargo tries to write
-  // 250ms is enough in practice; reduces "Access is denied" race conditions
-  execSync('powershell -nop -c "Start-Sleep -Milliseconds 250"', { stdio: 'pipe' });
-} catch {
-  // Process listing failed — likely no matching process, safe to proceed
+    const pids = [];
+    for (const line of output.trim().split('\n')) {
+      const [pid, exePath] = line.trim().split('|');
+      if (!pid || !/^\d+$/.test(pid)) continue;
+      if (isPathInsideTree(exePath)) {
+        pids.push(pid);
+      } else if (exePath) {
+        console.log(
+          `Leaving fourda.exe PID ${pid} alone — built from another tree (${exePath})`,
+        );
+      }
+    }
+
+    if (pids.length === 0) {
+      // No fourda.exe from this tree — clean start, nothing to kill
+      return;
+    }
+
+    for (const pid of pids) {
+      try {
+        execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe' });
+        console.log(`Killed stale fourda.exe (PID ${pid}) — prevents file-lock on rebuild`);
+      } catch {
+        // Process may have exited between listing and kill — safe to ignore
+      }
+    }
+
+    // Brief pause to let the OS release the file handle before cargo tries to write
+    // 250ms is enough in practice; reduces "Access is denied" race conditions
+    execSync('powershell -nop -c "Start-Sleep -Milliseconds 250"', { stdio: 'pipe' });
+  } catch {
+    // Process listing failed — likely no matching process, safe to proceed
+  }
 }
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  isPathInsideTree,
+};

@@ -275,7 +275,13 @@ pub static HASKELL_FP: StackProfile = StackProfile {
     competing: &[],
     pain_points: &[
         PainPoint {
-            keywords: &["ghc", "upgrade", "breaking", "version", "migration"],
+            keywords: &[
+                "ghc",
+                "ghc upgrade",
+                "ghc version",
+                "package bounds",
+                "breaking changes",
+            ],
             severity: 0.12,
             description: "GHC version upgrades",
         },
@@ -364,9 +370,9 @@ pub static HASKELL_FP: StackProfile = StackProfile {
 pub static BOOTSTRAP_WEBDEV: StackProfile = StackProfile {
     id: "bootstrap_webdev",
     name: "General Web Development",
-    core_tech: &["typescript", "javascript", "react", "nodejs"],
+    core_tech: &["typescript", "javascript", "nodejs"],
     companions: &[
-        "css", "html", "vite", "webpack", "eslint", "prettier", "npm",
+        "react", "css", "html", "vite", "webpack", "eslint", "prettier", "npm",
     ],
     competing: &[],
     pain_points: &[
@@ -392,7 +398,12 @@ pub static BOOTSTRAP_WEBDEV: StackProfile = StackProfile {
         keywords: &["vite", "vite migration", "webpack to vite"],
         boost: 1.10,
     }],
-    keyword_boosts: &[("typescript", 0.10), ("javascript", 0.06)],
+    keyword_boosts: &[
+        ("typescript", 0.10),
+        ("javascript", 0.06),
+        ("node.js", 0.08),
+        ("server components", 0.08),
+    ],
     source_preferences: &[("hackernews", 0.05)],
     detection_markers: &[
         "typescript",

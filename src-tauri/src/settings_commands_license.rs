@@ -12,9 +12,11 @@ use super::validate_input_length;
 /// Get current license tier and feature availability
 #[tauri::command]
 pub async fn get_license_tier() -> Result<serde_json::Value> {
-    let manager = get_settings_manager();
-    let guard = manager.lock();
-    let license = &guard.get().license;
+    let license = {
+        let manager = get_settings_manager();
+        let guard = manager.lock();
+        guard.get().license.clone()
+    };
 
     let dev_unlock = cfg!(debug_assertions) && license.dev_unlock_all;
 
@@ -153,10 +155,12 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
 /// Get trial status
 #[tauri::command]
 pub async fn get_trial_status() -> Result<serde_json::Value> {
-    let manager = get_settings_manager();
-    let guard = manager.lock();
-    let settings = guard.get();
-    let status = crate::settings::get_trial_status(&settings.license);
+    let license = {
+        let manager = get_settings_manager();
+        let guard = manager.lock();
+        guard.get().license.clone()
+    };
+    let status = crate::settings::get_trial_status(&license);
 
     Ok(serde_json::json!({
         "active": status.active,

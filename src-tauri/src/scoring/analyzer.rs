@@ -163,7 +163,7 @@ pub(crate) async fn score_items_full(
                 app,
                 "relevance",
                 progress,
-                &format!("[{}] {}", &item.source_type, truncated_title),
+                &format!("[{}] {}", item.source_type, truncated_title),
                 idx + 1,
                 total_cached,
             );

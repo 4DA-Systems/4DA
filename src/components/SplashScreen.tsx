@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cmd } from '../lib/commands';
-import { reportError } from '../lib/error-reporter';
 import sunLogo from '../assets/sun-logo.webp';
 import sunLogoLight from '../assets/sun-logo-light.webp';
 import { useTheme } from '../lib/theme';
-import { translateError } from '../utils/error-messages';
 import {
   type InitStage,
   stageKeys,
@@ -22,25 +19,27 @@ import {
   progressTrackStyle,
   progressFillStyle,
   miniSpinnerStyle,
-  retryButtonStyle,
   versionStyle,
   refreshButtonStyle,
 } from './splash/splash-styles';
 
 interface SplashScreenProps {
   onComplete: () => void;
+  backendReady?: boolean;
   minimumDisplayTime?: number;
 }
 
-export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScreenProps) {
+export function SplashScreen({
+  onComplete,
+  backendReady = true,
+  minimumDisplayTime = 800,
+}: SplashScreenProps) {
   const { t } = useTranslation();
   const { isLight } = useTheme();
   const [fadeOut, setFadeOut] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const [stage, setStage] = useState<InitStage>('starting');
-  const [backendReady, setBackendReady] = useState(false);
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const stage: InitStage = backendReady ? 'ready' : 'database';
 
   // Minimum display time
   useEffect(() => {
@@ -50,82 +49,10 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
     return () => clearTimeout(timer);
   }, [minimumDisplayTime]);
 
-  // NOTE: frontend-ready is emitted from main.tsx BEFORE React mounts,
-  // which is ~300-500ms faster than a useEffect here. No duplicate emit needed.
-
-  // Check backend readiness
-  useEffect(() => {
-    let cancelled = false;
-
-    const checkBackend = async () => {
-      try {
-        // Stage 1: Database — must succeed before proceeding.
-        // The backend can take far longer than a single command timeout to
-        // become IPC-responsive on a cold or loaded start (dev: Vite transform
-        // + heavy startup ingestion; prod: a busy machine) — a one-shot
-        // get_settings then hard-fails and blocks the app on the splash. Retry
-        // with backoff for up to ~90s so the splash rides out a slow backend
-        // instead of giving up; a normal start still succeeds on the first try.
-        setStage('database');
-        {
-          // VITEST: single attempt (fail fast) so the error-path test doesn't
-          // wait out the retry window. Runtime: retry for up to ~90s.
-          const readyDeadline = Date.now() + (import.meta.env.VITEST ? 0 : 90_000);
-          let lastErr: unknown;
-          let settingsOk = false;
-          do {
-            try {
-              await cmd('get_settings');
-              settingsOk = true;
-              break;
-            } catch (e) {
-              lastErr = e;
-              if (Date.now() >= readyDeadline) break;
-              await new Promise((r) => setTimeout(r, 2000));
-            }
-          } while (!cancelled);
-          if (cancelled) return;
-          if (!settingsOk) throw lastErr ?? new Error('backend not ready');
-        }
-
-        // Stages 2-4: Parallel non-critical probes with animated stage advancement
-        setStage('embeddings');
-        await Promise.allSettled([
-          cmd('get_context_stats'),
-          cmd('get_sources'),
-        ]);
-        if (cancelled) return;
-
-        // Stage 5: Ready
-        setStage('ready');
-        setBackendReady(true);
-
-      } catch (e) {
-        reportError('SplashScreen.backendCheck', e);
-        // Detect browser mode: if Tauri internals are missing, show specific message
-        const isBrowser = !('__TAURI_INTERNALS__' in window);
-        if (isBrowser) {
-          // In real browsers, redirect to Signal Terminal (skip in test/JSDOM)
-          if (!import.meta.env.VITEST) {
-            const terminalPort = import.meta.env.DEV ? 4447 : 4446;
-            window.location.href = `http://localhost:${terminalPort}/`;
-            return;
-          }
-          setError('Desktop app required — open through Tauri window');
-        } else {
-          setError(translateError(e));
-        }
-        // Do NOT mark as ready — block the app on database failure.
-        // The user can use the refresh button to retry.
-      }
-    };
-
-    void checkBackend();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // NOTE: frontend-ready is emitted from main.tsx BEFORE React mounts. The
+  // splash must not issue its own command IPC; App/settings-slice owns backend
+  // bootstrap and flips `settingsLoaded` on success or failure so boot cannot
+  // strand users behind a duplicated readiness probe.
 
   // Transition to app when both conditions are met
   useEffect(() => {
@@ -141,7 +68,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
   return (
     <div
       role="status"
-      aria-label={error ? t('splash.error') : t(stageKeys[stage])}
+      aria-label={t(stageKeys[stage])}
       aria-busy={stage !== 'ready'}
       style={containerStyle(fadeOut)}
     >
@@ -197,7 +124,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
       </div>
 
       {/* Spacer — no time estimate (progress bar and stages are sufficient context) */}
-      {stage !== 'ready' && !error && (
+      {stage !== 'ready' && (
         <div style={{ height: '0.75rem' }} />
       )}
 
@@ -214,42 +141,29 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
           alignItems: 'center',
           gap: '0.75rem',
         }}>
-        {stage !== 'ready' && !error && (
+        {stage !== 'ready' && (
           <div style={miniSpinnerStyle} />
         )}
-        {stage === 'ready' && !error && (
+        {stage === 'ready' && (
           // eslint-disable-next-line i18next/no-literal-string
           <span style={{ color: 'var(--color-success)', fontSize: '1rem' }}>✓</span>
         )}
-        {error && (
-          <span style={{ color: 'var(--color-error)', fontSize: '1rem' }}>⚠</span>
-        )}
         <span style={{
           fontSize: '0.875rem',
-          color: error ? 'var(--color-error)' : stage === 'ready' ? 'var(--color-success)' : 'var(--color-text-secondary)',
+          color: stage === 'ready' ? 'var(--color-success)' : 'var(--color-text-secondary)',
           transition: 'color 300ms',
         }}>
-          {error || t(stageKeys[stage])}
+          {t(stageKeys[stage])}
         </span>
         </div>
         {/* Stage explanation subtitle */}
-        {!error && (
-          <span style={{
-            fontSize: '0.6875rem',
-            color: 'var(--color-text-muted)',
-            transition: 'opacity 300ms',
-          }}>
-            {t(`splash.stageExplanation.${stage}`, stageExplanations[stage])}
-          </span>
-        )}
-        {error && (
-          <button
-            onClick={() => window.location.reload()}
-            style={retryButtonStyle}
-          >
-            {t('action.retry')}
-          </button>
-        )}
+        <span style={{
+          fontSize: '0.6875rem',
+          color: 'var(--color-text-muted)',
+          transition: 'opacity 300ms',
+        }}>
+          {t(`splash.stageExplanation.${stage}`, stageExplanations[stage])}
+        </span>
       </div>
 
       {/* Stage indicators */}

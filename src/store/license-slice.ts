@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
+import { isPlainBrowserRuntime } from '../lib/tauri-runtime';
 import type { AppStore, LicenseSlice, TrialStatus } from './types';
 
 export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = (set, get) => ({
@@ -21,6 +22,19 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
   licenseLoadError: null,
 
   loadLicense: async () => {
+    if (isPlainBrowserRuntime()) {
+      set({
+        tier: 'free',
+        expiresAt: null,
+        daysRemaining: 0,
+        expired: false,
+        wasDowngraded: false,
+        licenseLoaded: true,
+        licenseLoadError: null,
+      });
+      return;
+    }
+
     try {
       const result = await cmd('get_license_tier');
       const downgraded = (result as Record<string, unknown>).was_downgraded === true;
@@ -110,6 +124,11 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
   },
 
   loadTrialStatus: async () => {
+    if (isPlainBrowserRuntime()) {
+      set({ trialStatus: null });
+      return;
+    }
+
     try {
       const status = await cmd('get_trial_status') as unknown as TrialStatus;
       set({ trialStatus: status });

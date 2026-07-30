@@ -11,7 +11,7 @@ use tauri::{Emitter, Listener, Manager};
 use tracing::{debug, error, info, warn};
 
 use crate::state::{
-    get_ace_engine, get_context_dirs, get_database, get_monitoring_state, get_settings_manager,
+    get_context_dirs, get_database, get_monitoring_state, get_settings_manager,
     set_relevance_threshold,
 };
 use crate::{
@@ -117,7 +117,41 @@ fn install_console_ctrl_handler() {
     // Unix: Tauri's signal handlers are sufficient.
 }
 
-/// Pre-Tauri initialization: logging, threshold, database, context engine, source registry.
+#[cfg(debug_assertions)]
+fn purge_dev_webview_service_worker_cache() {
+    let Ok(local_app_data) = std::env::var("LOCALAPPDATA") else {
+        return;
+    };
+
+    let service_worker_dir = std::path::PathBuf::from(local_app_data)
+        .join("com.4da.app")
+        .join("EBWebView")
+        .join("Default")
+        .join("Service Worker");
+
+    if !service_worker_dir.exists() {
+        return;
+    }
+
+    match std::fs::remove_dir_all(&service_worker_dir) {
+        Ok(()) => info!(
+            target: "4da::startup",
+            path = %service_worker_dir.display(),
+            "Purged dev WebView2 service-worker cache"
+        ),
+        Err(e) => warn!(
+            target: "4da::startup",
+            path = %service_worker_dir.display(),
+            error = %e,
+            "Failed to purge dev WebView2 service-worker cache"
+        ),
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn purge_dev_webview_service_worker_cache() {}
+
+/// Pre-Tauri initialization: logging, database, context engine, source registry.
 ///
 /// Must be called before `tauri::Builder` is constructed.
 ///
@@ -216,6 +250,8 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
         acquire_instance_and_detect_crash_loop();
     }
 
+    purge_dev_webview_service_worker_cache();
+
     // Verify binary integrity (code signature, size sanity, permissions).
     // Runs after crash guard so any panics are handled. Logs only — never blocks.
     crate::integrity::verify_integrity();
@@ -303,19 +339,17 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
     // open_db_connection across 83 files / 224 callsites).
     crate::verify_sqlite_vec_once();
 
-    // Initialize relevance threshold from ACE storage or default
-    if let Ok(ace) = get_ace_engine() {
-        if let Some(stored) = ace.get_stored_threshold() {
-            set_relevance_threshold(stored);
-            info!(target: "4da::startup", threshold = get_relevance_threshold(), "Loaded stored relevance threshold");
-        } else {
-            set_relevance_threshold(0.40);
-            info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default)");
-        }
-    } else {
-        set_relevance_threshold(0.40);
-        info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default, ACE unavailable)");
-    }
+    // Keep ACE off the pre-Tauri critical path. Loading the stored threshold
+    // initializes ACE, and on large local DBs its migration/integrity pass can
+    // take long enough that Victauri/Tauri never register until the user has
+    // already waited. Start with the atomic default; ACE hydrates the stored
+    // value from its background first-light-safe warmup.
+    set_relevance_threshold(0.40);
+    info!(
+        target: "4da::startup",
+        threshold = get_relevance_threshold(),
+        "Relevance threshold defaulted; ACE storage will hydrate after first-light"
+    );
 
     // Initialize database early
     match get_database() {
@@ -378,8 +412,8 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
     // Ensure plugins directory exists for Source Plugin API
     crate::plugins::loader::ensure_plugins_dir();
 
-    // Run startup health self-check (fast, offline, infallible)
-    let _startup_issues = crate::startup_health::run_startup_health_check();
+    // Run and cache startup health once before the frontend can ask for it.
+    let _startup_issues = crate::startup_health::initialize_startup_health_cache();
 }
 
 /// Persist a one-time-migration flag through the mutex-serialized writer
@@ -418,6 +452,36 @@ async fn persist_one_time_flag(db: &crate::db::Database, key: &str, version: &st
     }
 }
 
+async fn warm_preemption_cache_after_first_light(reason: &'static str) {
+    const WAIT_FOR_FRONTEND: std::time::Duration = std::time::Duration::from_secs(90);
+
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(
+            target: "4da::preemption",
+            reason,
+            "Victauri E2E active - skipping startup Preemption cache warm"
+        );
+        return;
+    }
+
+    info!(
+        target: "4da::preemption",
+        reason,
+        "Queued startup Preemption cache warm until after first-light"
+    );
+
+    if !crate::startup_frontend::wait_until_frontend_ready(WAIT_FOR_FRONTEND).await {
+        warn!(
+            target: "4da::preemption",
+            reason,
+            "Frontend readiness did not arrive before Preemption warm gate; delaying anyway"
+        );
+    }
+
+    tokio::time::sleep(crate::startup_frontend::heavy_startup_work_grace_after_first_light()).await;
+    crate::preemption::warm_preemption_cache().await;
+}
+
 /// Tauri `setup()` callback body.
 ///
 /// Handles tray, monitoring, event listeners, background tasks, and ACE initialization.
@@ -440,6 +504,8 @@ async fn persist_one_time_flag(db: &crate::db::Database, key: &str, version: &st
 /// marker so the next launch can surface the regression.
 pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let setup_began = std::time::Instant::now();
+    let app_handle = app.handle().clone();
+    crate::startup_frontend::start_frontend_readiness_gate(app_handle.clone());
     info!(target: "4da::startup", "setup_app: phase 0 (essential services) begin");
 
     // Record app start time for diagnostics uptime tracking
@@ -611,7 +677,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     }
 
     // Start background scheduler
-    let app_handle = app.handle().clone();
     monitoring::start_scheduler(app_handle.clone(), monitoring_state.clone());
 
     // Sovereign Cold Boot — Phase 0 (essential services) complete.
@@ -727,81 +792,88 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // the decision corpus with personal priors. Non-blocking, best-effort.
     // The curated corpus (Phase 8) is already compiled into the binary and
     // available via load_corpus() without a startup step.
-    tauri::async_runtime::spawn(async {
-        let repos = crate::get_context_dirs();
-        if repos.is_empty() {
-            info!(target: "4da::startup", "Git decision miner: no context dirs configured — skipping auto-seed");
-            return;
-        }
-        let (decisions, summary) = crate::git_decision_miner::mine_many(&repos, 5, 200);
-        if summary.decisions_found > 0 {
-            info!(
-                target: "4da::startup",
-                repos = summary.repos_scanned,
-                decisions = summary.decisions_found,
-                confirmed = summary.confirmed,
-                "Git decision miner: auto-seed complete"
-            );
-            let jsonl_path = std::env::temp_dir().join("4da_git_seeded.jsonl");
-            let lines: Vec<String> = decisions
-                .iter()
-                .filter_map(|d| serde_json::to_string(d).ok())
-                .collect();
-            let _ = std::fs::write(&jsonl_path, lines.join("\n"));
-        } else {
-            info!(target: "4da::startup", "Git decision miner: no decisions found in {} repos", summary.repos_scanned);
-        }
-    });
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::startup", "Victauri E2E active - skipping startup intelligence auto-seed");
+    } else {
+        tauri::async_runtime::spawn(async {
+            let repos = crate::get_context_dirs();
+            if repos.is_empty() {
+                info!(target: "4da::startup", "Git decision miner: no context dirs configured — skipping auto-seed");
+                return;
+            }
+            let (decisions, summary) = crate::git_decision_miner::mine_many(&repos, 5, 200);
+            if summary.decisions_found > 0 {
+                info!(
+                    target: "4da::startup",
+                    repos = summary.repos_scanned,
+                    decisions = summary.decisions_found,
+                    confirmed = summary.confirmed,
+                    "Git decision miner: auto-seed complete"
+                );
+                let jsonl_path = std::env::temp_dir().join("4da_git_seeded.jsonl");
+                let lines: Vec<String> = decisions
+                    .iter()
+                    .filter_map(|d| serde_json::to_string(d).ok())
+                    .collect();
+                let _ = std::fs::write(&jsonl_path, lines.join("\n"));
+            } else {
+                info!(target: "4da::startup", "Git decision miner: no decisions found in {} repos", summary.repos_scanned);
+            }
+        });
 
-    tauri::async_runtime::spawn(async {
-        if let Ok(conn) = crate::open_db_connection() {
-            // Purge interest facets that predate the display-worthy gate
-            let purged = crate::stability_detector::purge_non_display_worthy_interests(&conn);
-            if purged > 0 {
-                info!(target: "4da::startup", purged, "Purged non-display-worthy interest facets");
+        tauri::async_runtime::spawn(async {
+            if let Ok(conn) = crate::open_db_connection() {
+                // Purge interest facets that predate the display-worthy gate.
+                let purged = crate::stability_detector::purge_non_display_worthy_interests(&conn);
+                if purged > 0 {
+                    info!(target: "4da::startup", purged, "Purged non-display-worthy interest facets");
+                }
+                let seeded = crate::stability_detector::seed_from_ace(&conn);
+                if seeded > 0 {
+                    info!(target: "4da::startup", seeded, "Stability detector cold-start seeded from ACE");
+                }
             }
-            let seeded = crate::stability_detector::seed_from_ace(&conn);
-            if seeded > 0 {
-                info!(target: "4da::startup", seeded, "Stability detector cold-start seeded from ACE");
-            }
-        }
-    });
+        });
+    }
 
     // One-time startup data cleanup: purge bloated tables that accumulate dead rows.
     // Non-blocking, non-fatal — runs in background to avoid slowing startup.
-    tauri::async_runtime::spawn(async {
-        if let Ok(conn) = crate::open_db_connection() {
-            let mut total_deleted: usize = 0;
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::startup", "Victauri E2E active - skipping startup data cleanup");
+    } else {
+        tauri::async_runtime::spawn(async {
+            if let Ok(conn) = crate::open_db_connection() {
+                let mut total_deleted: usize = 0;
 
-            // Purge ALL .claude/ paths from project_dependencies.
-            // The .claude/ tree is Claude Code agent infrastructure — agent
-            // worktrees (.claude/worktrees/agent-*, ephemeral repo copies) AND
-            // scratch fixtures (.claude/plans/ledger-fixtures/*, throwaway
-            // multi-ecosystem test projects). Neither is a real user project.
-            // Before the scanner was taught to exclude the whole .claude/ tree it
-            // ingested these as real projects, surfacing foreign stacks (flutter,
-            // laravel, spring, csharp) as the user's and corrupting the "Affects
-            // You" grounding pool. Paths are stored lowercased with forward
-            // slashes (see migration 67), so '%/.claude/%' matches every install;
-            // the backslash variant is belt-and-suspenders for any un-normalized row.
-            match conn.execute(
-                "DELETE FROM project_dependencies \
+                // Purge ALL .claude/ paths from project_dependencies.
+                // The .claude/ tree is Claude Code agent infrastructure — agent
+                // worktrees (.claude/worktrees/agent-*, ephemeral repo copies) AND
+                // scratch fixtures (.claude/plans/ledger-fixtures/*, throwaway
+                // multi-ecosystem test projects). Neither is a real user project.
+                // Before the scanner was taught to exclude the whole .claude/ tree it
+                // ingested these as real projects, surfacing foreign stacks (flutter,
+                // laravel, spring, csharp) as the user's and corrupting the "Affects
+                // You" grounding pool. Paths are stored lowercased with forward
+                // slashes (see migration 67), so '%/.claude/%' matches every install;
+                // the backslash variant is belt-and-suspenders for any un-normalized row.
+                match conn.execute(
+                    "DELETE FROM project_dependencies \
                  WHERE project_path LIKE '%/.claude/%' OR project_path LIKE '%\\.claude\\%'",
-                [],
-            ) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: .claude/ agent-infra project dependencies (worktrees + fixtures)");
+                    [],
+                ) {
+                    Ok(n) => {
+                        total_deleted += n;
+                        if n > 0 {
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: .claude/ agent-infra project dependencies (worktrees + fixtures)");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: .claude deps failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: .claude deps failed");
-                }
-            }
 
-            // Purge superseded intelligence older than 7 days (98.7% are useless dead rows)
-            match conn.execute(
+                // Purge superseded intelligence older than 7 days (98.7% are useless dead rows)
+                match conn.execute(
                 "DELETE FROM digested_intelligence WHERE superseded_by IS NOT NULL AND created_at < datetime('now', '-7 days')",
                 [],
             ) {
@@ -809,40 +881,40 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: digested_intelligence failed"); }
             }
 
-            // Purge temporal_events older than 30 days
-            match conn.execute(
-                "DELETE FROM temporal_events WHERE created_at < datetime('now', '-30 days')",
-                [],
-            ) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old temporal_events");
+                // Purge temporal_events older than 30 days
+                match conn.execute(
+                    "DELETE FROM temporal_events WHERE created_at < datetime('now', '-30 days')",
+                    [],
+                ) {
+                    Ok(n) => {
+                        total_deleted += n;
+                        if n > 0 {
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: old temporal_events");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: temporal_events failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: temporal_events failed");
-                }
-            }
 
-            // Purge file_signals older than 7 days
-            match conn.execute(
-                "DELETE FROM file_signals WHERE timestamp < datetime('now', '-7 days')",
-                [],
-            ) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old file_signals");
+                // Purge file_signals older than 7 days
+                match conn.execute(
+                    "DELETE FROM file_signals WHERE timestamp < datetime('now', '-7 days')",
+                    [],
+                ) {
+                    Ok(n) => {
+                        total_deleted += n;
+                        if n > 0 {
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: old file_signals");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: file_signals failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: file_signals failed");
-                }
-            }
 
-            // Keep only the most recent 500 sun_runs
-            match conn.execute(
+                // Keep only the most recent 500 sun_runs
+                match conn.execute(
                 "DELETE FROM sun_runs WHERE id NOT IN (SELECT id FROM sun_runs ORDER BY created_at DESC LIMIT 500)",
                 [],
             ) {
@@ -850,94 +922,94 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: sun_runs failed"); }
             }
 
-            // Self-heal user_dependencies + dependency_snapshots: purge ALL
-            // .claude/ + .codex/ agent-infrastructure rows (worktrees AND
-            // scratch fixtures like .claude/plans/ledger-fixtures/*, which
-            // put phantom Ruby/PHP CVEs on the Preemption Radar), collapse
-            // slash-style/case duplicate identities left behind when
-            // write-time path canonicalization landed without a backfill,
-            // and rewrite survivors onto the canonical key. Same precedent
-            // as the project_dependencies purge above; details in
-            // db::dependencies::purge_agent_infra_dependencies.
-            match crate::db::purge_agent_infra_dependencies(&conn) {
-                Ok(counts) => {
-                    total_deleted += counts.total();
-                    if counts.total() > 0 || counts.canonicalized > 0 {
-                        info!(
-                            target: "4da::startup",
-                            user_deps = counts.user_dependencies,
-                            snapshots = counts.dependency_snapshots,
-                            duplicates = counts.duplicates,
-                            canonicalized = counts.canonicalized,
-                            "Startup cleanup: agent-infra dependency purge + dedup"
-                        );
+                // Self-heal user_dependencies + dependency_snapshots: purge ALL
+                // .claude/ + .codex/ agent-infrastructure rows (worktrees AND
+                // scratch fixtures like .claude/plans/ledger-fixtures/*, which
+                // put phantom Ruby/PHP CVEs on the Preemption Radar), collapse
+                // slash-style/case duplicate identities left behind when
+                // write-time path canonicalization landed without a backfill,
+                // and rewrite survivors onto the canonical key. Same precedent
+                // as the project_dependencies purge above; details in
+                // db::dependencies::purge_agent_infra_dependencies.
+                match crate::db::purge_agent_infra_dependencies(&conn) {
+                    Ok(counts) => {
+                        total_deleted += counts.total();
+                        if counts.total() > 0 || counts.canonicalized > 0 {
+                            info!(
+                                target: "4da::startup",
+                                user_deps = counts.user_dependencies,
+                                snapshots = counts.dependency_snapshots,
+                                duplicates = counts.duplicates,
+                                canonicalized = counts.canonicalized,
+                                "Startup cleanup: agent-infra dependency purge + dedup"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: agent-infra dependency purge failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: agent-infra dependency purge failed");
-                }
-            }
 
-            // Self-heal the FULL project-inclusion policy (canonical predicate
-            // in project_inclusion): tier-1 agent-infra AND tier-2 non-project
-            // scaffolding (fixture trees, -placeholder dirs) across EVERY
-            // path-keyed intelligence table — including detected_projects,
-            // which the June 2026 pollution fix missed (five stale
-            // .claude/plans/ledger-fixtures/* rows kept surfacing in the
-            // "Your Stack" list) — plus detected_tech evidence hygiene.
-            // Strict-manifest (ledger) mode waives tier 2, so ledger data
-            // dirs keep their fixture stacks.
-            match crate::db::purge_non_project_intelligence(&conn) {
-                Ok(c) => {
-                    total_deleted += c.total();
-                    if c.total() > 0 || c.detected_tech_rewritten > 0 {
-                        info!(
-                            target: "4da::startup",
-                            detected_projects = c.detected_projects,
-                            project_deps = c.project_dependencies,
-                            user_deps = c.user_dependencies,
-                            snapshots = c.dependency_snapshots,
-                            tech_deleted = c.detected_tech_deleted,
-                            tech_rewritten = c.detected_tech_rewritten,
-                            "Startup cleanup: non-project intelligence purge"
-                        );
+                // Self-heal the FULL project-inclusion policy (canonical predicate
+                // in project_inclusion): tier-1 agent-infra AND tier-2 non-project
+                // scaffolding (fixture trees, -placeholder dirs) across EVERY
+                // path-keyed intelligence table — including detected_projects,
+                // which the June 2026 pollution fix missed (five stale
+                // .claude/plans/ledger-fixtures/* rows kept surfacing in the
+                // "Your Stack" list) — plus detected_tech evidence hygiene.
+                // Strict-manifest (ledger) mode waives tier 2, so ledger data
+                // dirs keep their fixture stacks.
+                match crate::db::purge_non_project_intelligence(&conn) {
+                    Ok(c) => {
+                        total_deleted += c.total();
+                        if c.total() > 0 || c.detected_tech_rewritten > 0 {
+                            info!(
+                                target: "4da::startup",
+                                detected_projects = c.detected_projects,
+                                project_deps = c.project_dependencies,
+                                user_deps = c.user_dependencies,
+                                snapshots = c.dependency_snapshots,
+                                tech_deleted = c.detected_tech_deleted,
+                                tech_rewritten = c.detected_tech_rewritten,
+                                "Startup cleanup: non-project intelligence purge"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: non-project intelligence purge failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: non-project intelligence purge failed");
-                }
-            }
 
-            // Self-heal import-scraped BUILTIN modules (Node fs/path/http/...,
-            // Python os/json/...) persisted as version-less direct deps before
-            // the scanner learned to skip them. One of these ("http") minted a
-            // phantom "Security: http" decision window. Versioned rows (npm
-            // polyfills like buffer@5.7.1), lockfile transitives, and every
-            // non-js/py ecosystem (the Rust http/url CRATES) are untouched;
-            // stale builtin decision windows with no surviving versioned dep
-            // are closed. Same precedent as the Wave-5/6 purges above.
-            match crate::db::purge_builtin_import_dependencies(&conn) {
-                Ok(c) => {
-                    total_deleted += c.total();
-                    if c.total() > 0 || c.windows_closed > 0 {
-                        info!(
-                            target: "4da::startup",
-                            user_deps = c.user_dependencies,
-                            project_deps = c.project_dependencies,
-                            snapshots = c.dependency_snapshots,
-                            windows_closed = c.windows_closed,
-                            "Startup cleanup: import-scraped builtin-module purge"
-                        );
+                // Self-heal import-scraped BUILTIN modules (Node fs/path/http/...,
+                // Python os/json/...) persisted as version-less direct deps before
+                // the scanner learned to skip them. One of these ("http") minted a
+                // phantom "Security: http" decision window. Versioned rows (npm
+                // polyfills like buffer@5.7.1), lockfile transitives, and every
+                // non-js/py ecosystem (the Rust http/url CRATES) are untouched;
+                // stale builtin decision windows with no surviving versioned dep
+                // are closed. Same precedent as the Wave-5/6 purges above.
+                match crate::db::purge_builtin_import_dependencies(&conn) {
+                    Ok(c) => {
+                        total_deleted += c.total();
+                        if c.total() > 0 || c.windows_closed > 0 {
+                            info!(
+                                target: "4da::startup",
+                                user_deps = c.user_dependencies,
+                                project_deps = c.project_dependencies,
+                                snapshots = c.dependency_snapshots,
+                                windows_closed = c.windows_closed,
+                                "Startup cleanup: import-scraped builtin-module purge"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: builtin-module purge failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: builtin-module purge failed");
-                }
-            }
 
-            // Purge user_dependencies with clearly ephemeral project paths (temp dirs).
-            // Filesystem checks would block the async runtime, so we pattern-match instead.
-            match conn.execute(
+                // Purge user_dependencies with clearly ephemeral project paths (temp dirs).
+                // Filesystem checks would block the async runtime, so we pattern-match instead.
+                match conn.execute(
                 "DELETE FROM user_dependencies WHERE project_path LIKE '%/tmp/%' OR project_path LIKE '%\\tmp\\%' OR project_path LIKE '%AppData%Local%Temp%'",
                 [],
             ) {
@@ -952,87 +1024,87 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 }
             }
 
-            // Self-heal active_topics: delete generic tokens (canonical predicate
-            // scoring::is_generic_topic_token — "http", "rest", "api", class-name
-            // fragments <=3 chars) plus legacy 'commit-*' rows. These rows fed the
-            // grounding-sensitive axes phantom corroboration before v12's strict
-            // topic_grounds; post-v12 they can't ground, but pruning them heals
-            // existing installs (live DB carried 3,600+ polluted rows) and keeps
-            // display surfaces honest. Same precedent as the Wave-5 purges above.
-            match crate::ace::db::purge_generic_active_topics(&conn) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: generic + legacy commit-* active_topics");
+                // Self-heal active_topics: delete generic tokens (canonical predicate
+                // scoring::is_generic_topic_token — "http", "rest", "api", class-name
+                // fragments <=3 chars) plus legacy 'commit-*' rows. These rows fed the
+                // grounding-sensitive axes phantom corroboration before v12's strict
+                // topic_grounds; post-v12 they can't ground, but pruning them heals
+                // existing installs (live DB carried 3,600+ polluted rows) and keeps
+                // display surfaces honest. Same precedent as the Wave-5 purges above.
+                match crate::ace::db::purge_generic_active_topics(&conn) {
+                    Ok(n) => {
+                        total_deleted += n;
+                        if n > 0 {
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: generic + legacy commit-* active_topics");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: active_topics generic prune failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: active_topics generic prune failed");
-                }
-            }
 
-            // ── Append-only telemetry / audit / learning tables ──────────────
-            // These accumulate one row per scoring cycle / AI artifact / trust
-            // event and previously had NO retention (unbounded growth). Windows
-            // are deliberately generous and consumer-verified so compound-learning
-            // data is never pruned before it is consumed. All non-fatal.
+                // ── Append-only telemetry / audit / learning tables ──────────────
+                // These accumulate one row per scoring cycle / AI artifact / trust
+                // event and previously had NO retention (unbounded growth). Windows
+                // are deliberately generous and consumer-verified so compound-learning
+                // data is never pruned before it is consumed. All non-fatal.
 
-            // scoring_events: per-cycle scoring telemetry. 90 days of trend history.
-            match conn.execute(
-                "DELETE FROM scoring_events WHERE cycle_ts < datetime('now', '-90 days')",
-                [],
-            ) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old scoring_events");
+                // scoring_events: per-cycle scoring telemetry. 90 days of trend history.
+                match conn.execute(
+                    "DELETE FROM scoring_events WHERE cycle_ts < datetime('now', '-90 days')",
+                    [],
+                ) {
+                    Ok(n) => {
+                        total_deleted += n;
+                        if n > 0 {
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: old scoring_events");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: scoring_events failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: scoring_events failed");
-                }
-            }
 
-            // glyph_audit: GEP debug/audit envelopes — debug-only, 14 days.
-            match conn.execute(
-                "DELETE FROM glyph_audit WHERE created_at < datetime('now', '-14 days')",
-                [],
-            ) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old glyph_audit");
+                // glyph_audit: GEP debug/audit envelopes — debug-only, 14 days.
+                match conn.execute(
+                    "DELETE FROM glyph_audit WHERE created_at < datetime('now', '-14 days')",
+                    [],
+                ) {
+                    Ok(n) => {
+                        total_deleted += n;
+                        if n > 0 {
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: old glyph_audit");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: glyph_audit failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: glyph_audit failed");
-                }
-            }
 
-            // provenance: AI-artifact traceability. 90 days — exceeds the longest
-            // realistic unprocessed-calibration age, so the fitter's LEFT JOIN to
-            // provenance for provider/model labels is never starved.
-            match conn.execute(
-                "DELETE FROM provenance WHERE created_at < datetime('now', '-90 days')",
-                [],
-            ) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old provenance");
+                // provenance: AI-artifact traceability. 90 days — exceeds the longest
+                // realistic unprocessed-calibration age, so the fitter's LEFT JOIN to
+                // provenance for provider/model labels is never starved.
+                match conn.execute(
+                    "DELETE FROM provenance WHERE created_at < datetime('now', '-90 days')",
+                    [],
+                ) {
+                    Ok(n) => {
+                        total_deleted += n;
+                        if n > 0 {
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: old provenance");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: provenance failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: provenance failed");
-                }
-            }
 
-            // calibration_samples: ML calibration training data. ONLY prune rows
-            // already folded into a curve (processed_at IS NOT NULL). The fitter
-            // reads exclusively `processed_at IS NULL`, so pruning by time alone
-            // would silently delete samples still awaiting labels and break
-            // calibration. 90-day window on processed rows keeps curve audits intact.
-            match conn.execute(
+                // calibration_samples: ML calibration training data. ONLY prune rows
+                // already folded into a curve (processed_at IS NOT NULL). The fitter
+                // reads exclusively `processed_at IS NULL`, so pruning by time alone
+                // would silently delete samples still awaiting labels and break
+                // calibration. 90-day window on processed rows keeps curve audits intact.
+                match conn.execute(
                 "DELETE FROM calibration_samples WHERE processed_at IS NOT NULL AND created_at < datetime('now', '-90 days')",
                 [],
             ) {
@@ -1040,89 +1112,94 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: calibration_samples failed"); }
             }
 
-            // trust_events: trust ledger. Every consumer reads <=30-day windows and
-            // weekly precision is pre-aggregated into precision_stats, so raw events
-            // older than 180 days feed nothing downstream.
-            match conn.execute(
-                "DELETE FROM trust_events WHERE created_at < datetime('now', '-180 days')",
-                [],
-            ) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old trust_events");
+                // trust_events: trust ledger. Every consumer reads <=30-day windows and
+                // weekly precision is pre-aggregated into precision_stats, so raw events
+                // older than 180 days feed nothing downstream.
+                match conn.execute(
+                    "DELETE FROM trust_events WHERE created_at < datetime('now', '-180 days')",
+                    [],
+                ) {
+                    Ok(n) => {
+                        total_deleted += n;
+                        if n > 0 {
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: old trust_events");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: trust_events failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: trust_events failed");
-                }
-            }
 
-            // accuracy_history: one row per period (UNIQUE), so growth is already
-            // slow — cap at a year of period rows for tidiness.
-            match conn.execute(
-                "DELETE FROM accuracy_history WHERE created_at < datetime('now', '-365 days')",
-                [],
-            ) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old accuracy_history");
+                // accuracy_history: one row per period (UNIQUE), so growth is already
+                // slow — cap at a year of period rows for tidiness.
+                match conn.execute(
+                    "DELETE FROM accuracy_history WHERE created_at < datetime('now', '-365 days')",
+                    [],
+                ) {
+                    Ok(n) => {
+                        total_deleted += n;
+                        if n > 0 {
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: old accuracy_history");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: accuracy_history failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: accuracy_history failed");
-                }
-            }
 
-            if total_deleted > 0 {
-                info!(target: "4da::startup", total_deleted, "Startup data cleanup complete");
-                // Checkpoint WAL to reclaim space. TRUNCATE for substantial deletes,
-                // PASSIVE (non-blocking) for small cleanups. Previous threshold of 1000
-                // was too high — even 100 deleted rows can produce meaningful WAL bloat.
-                if total_deleted > 100 {
-                    let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
-                    info!(target: "4da::startup", "WAL TRUNCATE checkpoint after startup cleanup");
-                } else {
-                    let _ = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);");
+                if total_deleted > 0 {
+                    info!(target: "4da::startup", total_deleted, "Startup data cleanup complete");
+                    // Checkpoint WAL to reclaim space. TRUNCATE for substantial deletes,
+                    // PASSIVE (non-blocking) for small cleanups. Previous threshold of 1000
+                    // was too high — even 100 deleted rows can produce meaningful WAL bloat.
+                    if total_deleted > 100 {
+                        let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+                        info!(target: "4da::startup", "WAL TRUNCATE checkpoint after startup cleanup");
+                    } else {
+                        let _ = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);");
+                    }
                 }
             }
-        }
-    });
+        });
+    }
 
     // Backfill/reconcile source_item_dependencies, prune stale links created
     // by older matchers, then repair missing evidence/source URLs.
-    tauri::async_runtime::spawn(async {
-        if let Ok(db) = crate::get_database() {
-            match crate::dep_linker::backfill_if_empty(&db) {
-                Ok(n) if n > 0 => {
-                    info!(target: "4da::startup", linked = n, "Backfilled source_item_dependencies");
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::startup", "Victauri E2E active - skipping startup dep-linker repair");
+    } else {
+        tauri::async_runtime::spawn(async {
+            if let Ok(db) = crate::get_database() {
+                match crate::dep_linker::backfill_if_empty(&db) {
+                    Ok(n) if n > 0 => {
+                        info!(target: "4da::startup", linked = n, "Backfilled source_item_dependencies");
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "dep_linker backfill failed");
+                    }
+                    _ => {}
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "dep_linker backfill failed");
+                match crate::dep_linker::prune_invalid_links(&db) {
+                    Ok(n) if n > 0 => {
+                        info!(target: "4da::startup", pruned = n, "Pruned stale dep links");
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "dep_linker prune_invalid_links failed");
+                    }
+                    _ => {}
                 }
-                _ => {}
+                match crate::dep_linker::repair_evidence(&db) {
+                    Ok(n) if n > 0 => {
+                        info!(target: "4da::startup", repaired = n, "Repaired dep link evidence");
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "dep_linker repair_evidence failed");
+                    }
+                    _ => {}
+                }
             }
-            match crate::dep_linker::prune_invalid_links(&db) {
-                Ok(n) if n > 0 => {
-                    info!(target: "4da::startup", pruned = n, "Pruned stale dep links");
-                }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "dep_linker prune_invalid_links failed");
-                }
-                _ => {}
-            }
-            match crate::dep_linker::repair_evidence(&db) {
-                Ok(n) if n > 0 => {
-                    info!(target: "4da::startup", repaired = n, "Repaired dep link evidence");
-                }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "dep_linker repair_evidence failed");
-                }
-                _ => {}
-            }
-        }
-    });
+        });
+    }
 
     // Context-corpus maintenance runs as ONE sequential task (reconcile ->
     // hygiene rebuild -> health check) — see the block after the dep-linker
@@ -1155,190 +1232,195 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // Both one-time passes version-flag through persist_one_time_flag — the
     // old `let _ = conn.execute(...)` pattern silently lost the flag write
     // four boots in a row, turning "one-time" into an every-boot corpus wipe.
-    tauri::async_runtime::spawn(async {
-        const RECONCILE_KEY: &str = "context_provenance_reconcile_version";
-        const RECONCILE_VERSION: &str = "1";
-        const HYGIENE_KEY: &str = "context_index_hygiene_version";
-        const HYGIENE_VERSION: &str = "2";
-        let db = match crate::get_database() {
-            Ok(db) => db,
-            Err(_) => return,
-        };
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::startup", "Victauri E2E active - skipping startup context corpus maintenance");
+    } else {
+        tauri::async_runtime::spawn(async {
+            const RECONCILE_KEY: &str = "context_provenance_reconcile_version";
+            const RECONCILE_VERSION: &str = "1";
+            const HYGIENE_KEY: &str = "context_index_hygiene_version";
+            const HYGIENE_VERSION: &str = "2";
+            let db = match crate::get_database() {
+                Ok(db) => db,
+                Err(_) => return,
+            };
 
-        // 1. Provenance reconcile (one-time).
-        let already = db.get_kv(RECONCILE_KEY).ok().flatten();
-        if already.as_deref() != Some(RECONCILE_VERSION) {
-            match db.reconcile_context_provenance() {
-                Ok(stats) => {
-                    info!(
-                        target: "4da::startup",
-                        scanned = stats.scanned,
-                        reclassified = stats.reclassified,
-                        pruned_reject = stats.pruned_reject,
-                        pruned_over_cap = stats.pruned_over_cap,
-                        "Context provenance reconcile complete"
-                    );
-                    persist_one_time_flag(db.as_ref(), RECONCILE_KEY, RECONCILE_VERSION).await;
-                }
-                Err(e) => {
-                    // Leave the flag unset so the reconcile retries next launch.
-                    warn!(target: "4da::startup", error = %e, "Context provenance reconcile failed (will retry next launch)");
-                }
-            }
-        }
-
-        // 2. Hygiene rebuild (one-time).
-        let already = db.get_kv(HYGIENE_KEY).ok().flatten();
-        if already.as_deref() != Some(HYGIENE_VERSION) {
-            let has_chunks = db.context_count().unwrap_or(0) > 0;
-            let mut rebuild_ok = true;
-            if has_chunks {
-                match crate::context_commands::index_context().await {
-                    Ok(msg) => {
-                        info!(target: "4da::startup", %msg, "Context index hygiene rebuild complete");
+            // 1. Provenance reconcile (one-time).
+            let already = db.get_kv(RECONCILE_KEY).ok().flatten();
+            if already.as_deref() != Some(RECONCILE_VERSION) {
+                match db.reconcile_context_provenance() {
+                    Ok(stats) => {
+                        info!(
+                            target: "4da::startup",
+                            scanned = stats.scanned,
+                            reclassified = stats.reclassified,
+                            pruned_reject = stats.pruned_reject,
+                            pruned_over_cap = stats.pruned_over_cap,
+                            "Context provenance reconcile complete"
+                        );
+                        persist_one_time_flag(db.as_ref(), RECONCILE_KEY, RECONCILE_VERSION).await;
                     }
                     Err(e) => {
-                        // Leave the flag unset so the rebuild retries next launch.
-                        rebuild_ok = false;
-                        warn!(target: "4da::startup", error = %e, "Context index hygiene rebuild failed");
+                        // Leave the flag unset so the reconcile retries next launch.
+                        warn!(target: "4da::startup", error = %e, "Context provenance reconcile failed (will retry next launch)");
                     }
                 }
             }
-            if rebuild_ok {
-                persist_one_time_flag(db.as_ref(), HYGIENE_KEY, HYGIENE_VERSION).await;
-            }
-        }
 
-        // 3. Immune system — assessed every boot, after any maintenance above.
-        match db.context_health() {
-            Ok(health) if health.healthy => {
-                if health.grounding_chunks == 0 {
-                    // Composition is fine but there is nothing to ground on —
-                    // every scoring run is ungrounded until a reindex. Normal
-                    // for a first boot before onboarding; loud on purpose.
+            // 2. Hygiene rebuild (one-time).
+            let already = db.get_kv(HYGIENE_KEY).ok().flatten();
+            if already.as_deref() != Some(HYGIENE_VERSION) {
+                let has_chunks = db.context_count().unwrap_or(0) > 0;
+                let mut rebuild_ok = true;
+                if has_chunks {
+                    match crate::context_commands::index_context().await {
+                        Ok(msg) => {
+                            info!(target: "4da::startup", %msg, "Context index hygiene rebuild complete");
+                        }
+                        Err(e) => {
+                            // Leave the flag unset so the rebuild retries next launch.
+                            rebuild_ok = false;
+                            warn!(target: "4da::startup", error = %e, "Context index hygiene rebuild failed");
+                        }
+                    }
+                }
+                if rebuild_ok {
+                    persist_one_time_flag(db.as_ref(), HYGIENE_KEY, HYGIENE_VERSION).await;
+                }
+            }
+
+            // 3. Immune system — assessed every boot, after any maintenance above.
+            match db.context_health() {
+                Ok(health) if health.healthy => {
+                    if health.grounding_chunks == 0 {
+                        // Composition is fine but there is nothing to ground on —
+                        // every scoring run is ungrounded until a reindex. Normal
+                        // for a first boot before onboarding; loud on purpose.
+                        warn!(
+                            target: "4da::startup",
+                            total = health.total,
+                            "Grounding corpus has ZERO code/config chunks — context scoring is dead until a reindex"
+                        );
+                    } else {
+                        info!(
+                            target: "4da::startup",
+                            total = health.total,
+                            grounding = health.grounding_chunks,
+                            doc_pct = format!("{:.1}", health.doc_fraction * 100.0),
+                            "Context grounding corpus healthy"
+                        );
+                        // Advance the collapse-detection baseline only from a
+                        // sound state (healthy AND grounded).
+                        if let Err(e) = db.record_corpus_baseline(&health) {
+                            warn!(target: "4da::startup", error = %e, "Failed to record corpus baseline");
+                        }
+                    }
+                }
+                Ok(health) if health.collapsed => {
+                    // Quarantine cannot fix a collapse — there is nothing to
+                    // prune. This needs a reindex (Settings, or the engine's
+                    // cold-start self-heal on its next cycle).
                     warn!(
                         target: "4da::startup",
                         total = health.total,
-                        "Grounding corpus has ZERO code/config chunks — context scoring is dead until a reindex"
+                        issues = ?health.issues,
+                        "Context grounding corpus COLLAPSED — a wipe or failed rebuild; reindex needed"
                     );
-                } else {
-                    info!(
+                }
+                Ok(health) => {
+                    warn!(
                         target: "4da::startup",
                         total = health.total,
-                        grounding = health.grounding_chunks,
-                        doc_pct = format!("{:.1}", health.doc_fraction * 100.0),
-                        "Context grounding corpus healthy"
+                        issues = ?health.issues,
+                        "Context grounding corpus UNHEALTHY — auto-quarantining pathological sources"
                     );
-                    // Advance the collapse-detection baseline only from a
-                    // sound state (healthy AND grounded).
-                    if let Err(e) = db.record_corpus_baseline(&health) {
-                        warn!(target: "4da::startup", error = %e, "Failed to record corpus baseline");
+                    match db.reconcile_context_provenance() {
+                        Ok(stats) => warn!(
+                            target: "4da::startup",
+                            pruned = stats.total_pruned(),
+                            "Auto-quarantine pruned pathological context sources"
+                        ),
+                        Err(e) => {
+                            warn!(target: "4da::startup", error = %e, "Auto-quarantine failed")
+                        }
                     }
                 }
-            }
-            Ok(health) if health.collapsed => {
-                // Quarantine cannot fix a collapse — there is nothing to
-                // prune. This needs a reindex (Settings, or the engine's
-                // cold-start self-heal on its next cycle).
-                warn!(
-                    target: "4da::startup",
-                    total = health.total,
-                    issues = ?health.issues,
-                    "Context grounding corpus COLLAPSED — a wipe or failed rebuild; reindex needed"
-                );
-            }
-            Ok(health) => {
-                warn!(
-                    target: "4da::startup",
-                    total = health.total,
-                    issues = ?health.issues,
-                    "Context grounding corpus UNHEALTHY — auto-quarantining pathological sources"
-                );
-                match db.reconcile_context_provenance() {
-                    Ok(stats) => warn!(
-                        target: "4da::startup",
-                        pruned = stats.total_pruned(),
-                        "Auto-quarantine pruned pathological context sources"
-                    ),
-                    Err(e) => warn!(target: "4da::startup", error = %e, "Auto-quarantine failed"),
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Context health check failed");
                 }
             }
-            Err(e) => {
-                warn!(target: "4da::startup", error = %e, "Context health check failed");
-            }
-        }
-    });
+        });
+    }
 
     // Background OSV advisory sync — keeps the local mirror fresh.
     // Only runs if deps exist and last sync > 6 hours ago (or never synced).
-    tauri::async_runtime::spawn(async {
-        let db = match crate::get_database() {
-            Ok(db) => db,
-            Err(_) => return,
-        };
-        let dependency_count = db
-            .get_auditable_user_dependencies()
-            .map_or(0, |deps| deps.len())
-            + db.get_auditable_scanned_dependencies()
-                .map_or(0, |deps| deps.len());
-        if dependency_count == 0 {
-            return;
-        }
-        let needs_sync =
-            crate::osv::sync::needs_sync(&db, crate::osv::sync::DEFAULT_SYNC_MAX_AGE_HOURS)
-                .unwrap_or(true);
-        if !needs_sync {
-            info!(target: "4da::osv", "OSV mirror synced recently — skipping startup sync");
-            // Data is already current — warm the Preemption feed cache now so the
-            // tab's first paint is served from cache instead of a 30-40s recompute
-            // (live OSV matching + adversarial LLM deliberation).
-            crate::preemption::warm_preemption_cache().await;
-            return;
-        }
-        info!(target: "4da::osv", deps = dependency_count, "Starting background OSV sync");
-        match crate::osv::sync::sync(&db).await {
-            Ok(result) => {
-                info!(
-                    target: "4da::osv",
-                    stored = result.advisories_stored,
-                    matched = result.advisories_matched,
-                    duration_ms = result.duration_ms,
-                    "Background OSV sync complete"
-                );
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::osv", "Victauri E2E active - skipping startup OSV sync and Preemption cache warm");
+    } else {
+        tauri::async_runtime::spawn(async {
+            let db = match crate::get_database() {
+                Ok(db) => db,
+                Err(_) => return,
+            };
+            let dependency_count = db
+                .get_auditable_user_dependencies()
+                .map_or(0, |deps| deps.len())
+                + db.get_auditable_scanned_dependencies()
+                    .map_or(0, |deps| deps.len());
+            if dependency_count == 0 {
+                return;
             }
-            Err(e) => {
-                warn!(target: "4da::osv", error = %e, "Background OSV sync failed (will retry next launch)");
+            let needs_sync =
+                crate::osv::sync::needs_sync(&db, crate::osv::sync::DEFAULT_SYNC_MAX_AGE_HOURS)
+                    .unwrap_or(true);
+            if !needs_sync {
+                info!(target: "4da::osv", "OSV mirror synced recently — skipping startup sync");
+                // Data is already current. Warm the Preemption feed cache only after
+                // first-light; the recompute is CPU-heavy and must not starve the
+                // webview, frontend IPC, or Victauri during boot.
+                warm_preemption_cache_after_first_light("osv-recently-synced").await;
+                return;
             }
-        }
-
-        // Update offline cache ZIPs in the background (runs after API sync).
-        // Stale checks are cheap (HTTP HEAD), downloads only when ETags differ.
-        match crate::osv::cache::update_all_caches(&db).await {
-            Ok(result) => {
-                if !result.ecosystems_updated.is_empty() {
+            info!(target: "4da::osv", deps = dependency_count, "Starting background OSV sync");
+            match crate::osv::sync::sync(&db).await {
+                Ok(result) => {
                     info!(
-                        target: "4da::osv::cache",
-                        updated = ?result.ecosystems_updated,
-                        advisories = result.total_advisories,
-                        "Background cache update complete"
+                        target: "4da::osv",
+                        stored = result.advisories_stored,
+                        matched = result.advisories_matched,
+                        duration_ms = result.duration_ms,
+                        "Background OSV sync complete"
                     );
                 }
+                Err(e) => {
+                    warn!(target: "4da::osv", error = %e, "Background OSV sync failed (will retry next launch)");
+                }
             }
-            Err(e) => {
-                warn!(target: "4da::osv::cache", error = %e, "Background cache update failed");
-            }
-        }
 
-        // The sync stored fresh advisories + recomputed matches — warm the
-        // Preemption feed cache against the fresh data so the tab paints from
-        // cache (30-40s recompute -> instant) and reflects this sync rather than
-        // a pre-sync snapshot. Runs once per boot, after the data is current (the
-        // recently-synced branch above warms eagerly and returns). get_preemption_alerts
-        // otherwise recomputes live OSV matching + an adversarial LLM deliberation
-        // (one call per Medium/Watch item) on every call, so without this the tab —
-        // our strongest surface — paints blank when a returning user opens it.
-        crate::preemption::warm_preemption_cache().await;
-    });
+            // Update offline cache ZIPs in the background (runs after API sync).
+            // Stale checks are cheap (HTTP HEAD), downloads only when ETags differ.
+            match crate::osv::cache::update_all_caches(&db).await {
+                Ok(result) => {
+                    if !result.ecosystems_updated.is_empty() {
+                        info!(
+                            target: "4da::osv::cache",
+                            updated = ?result.ecosystems_updated,
+                            advisories = result.total_advisories,
+                            "Background cache update complete"
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::osv::cache", error = %e, "Background cache update failed");
+                }
+            }
+
+            // The sync stored fresh advisories + recomputed matches. Warm the
+            // Preemption feed cache against fresh data after first-light so the tab
+            // eventually paints from cache without turning startup into a CPU spike.
+            warm_preemption_cache_after_first_light("osv-sync-complete").await;
+        });
+    }
 
     // Pre-warm the custom notification window (hidden, ready for instant show)
     if let Err(e) = crate::notification_window::init_notification_window(app.handle()) {
@@ -1402,7 +1484,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     info!(target: "4da::tray", "System tray and monitoring initialized");
 
     // Ensure Ollama models are available and warm on startup
-    {
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::ollama", "Victauri E2E active - skipping startup Ollama warmup");
+    } else {
         let settings = get_settings_manager().lock();
         let llm = &settings.get().llm;
         if llm.provider == "ollama" && !llm.model.is_empty() {
@@ -1419,7 +1503,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     }
 
     // Validate license key against Keygen API (fire-and-forget, non-blocking)
-    {
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::license", "Victauri E2E active - skipping startup online license revalidation");
+    } else {
         let license_key = {
             let settings = get_settings_manager().lock();
             settings.get().license.license_key.clone()
@@ -1476,11 +1562,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     }
 
     // Refresh model registry (fire-and-forget, <=1x/24h)
-    tauri::async_runtime::spawn(async {
-        if let Err(e) = crate::model_registry::refresh_registry().await {
-            debug!(target: "4da::registry", error = %e, "Model registry refresh failed (using cached/bundled)");
-        }
-    });
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::registry", "Victauri E2E active - skipping startup model registry refresh");
+    } else {
+        tauri::async_runtime::spawn(async {
+            if let Err(e) = crate::model_registry::refresh_registry().await {
+                debug!(target: "4da::registry", error = %e, "Model registry refresh failed (using cached/bundled)");
+            }
+        });
+    }
 
     // Emit initial void signal (shows current state to heartbeat)
     if let Ok(db) = get_database() {
@@ -1491,18 +1581,22 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
     // Staleness timer: update void signal once per minute
     // This is the ONLY timer in the void engine - everything else is change-driven
-    let app_handle_staleness = app_handle.clone();
-    tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_mins(1));
-        loop {
-            interval.tick().await;
-            if let Ok(db) = get_database() {
-                let mon = get_monitoring_state();
-                let signal = void_engine::tick_staleness(db, mon);
-                void_engine::emit_if_changed(&app_handle_staleness, signal);
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::void", "Victauri E2E active - skipping staleness heartbeat timer");
+    } else {
+        let app_handle_staleness = app_handle.clone();
+        tauri::async_runtime::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_mins(1));
+            loop {
+                interval.tick().await;
+                if let Ok(db) = get_database() {
+                    let mon = get_monitoring_state();
+                    let signal = void_engine::tick_staleness(db, mon);
+                    void_engine::emit_if_changed(&app_handle_staleness, signal);
+                }
             }
-        }
-    });
+        });
+    }
 
     // Initialize ACE with configured directories (runs async in background)
     initialize_ace_on_startup(app.handle().clone());
@@ -1515,7 +1609,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // Fire an immediate check 3 seconds after startup (gives the briefing
     // window time to pre-warm its JS listener). This runs the same logic as
     // the scheduler tick: check → notify → synthesize.
-    {
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::briefing", "Victauri E2E active - skipping immediate morning briefing check");
+    } else {
         let briefing_handle = app_handle.clone();
         let briefing_state = get_monitoring_state().clone();
         tauri::async_runtime::spawn(async move {
@@ -1608,242 +1704,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         });
     }
 
-    // ========================================================================
-    // Frontend Readiness Gate
-    // ========================================================================
-    // The main window starts hidden (visible: false in tauri.conf.json).
-    //
-    // Problem: In dev mode, the Vite dev server may not be ready when the
-    // webview first navigates to devUrl, causing a "can't reach this page"
-    // error. The React SplashScreen never mounts, so there's no recovery.
-    //
-    // Solution (3-layer defense):
-    //  1. Window stays hidden until we KNOW the frontend loaded
-    //  2. Frontend emits "frontend-ready" on mount → Rust shows window
-    //  3. Dev-mode watchdog polls the dev server, force-reloads webview
-    //     once it responds, then shows window as fallback
-    //  4. Production: show window immediately (frontend is bundled)
-    //
-    // This guarantees the user never sees a broken error page on startup.
-    // ========================================================================
-
-    #[cfg(not(debug_assertions))]
-    {
-        // Production: frontend is bundled in the binary — always available.
-        // Show the window immediately; the SplashScreen provides visual
-        // feedback while backend initialization completes.
-        if let Some(w) = app_handle.get_webview_window("main") {
-            let _ = w.show();
-            let _ = w.set_focus();
-        }
-        info!(target: "4da::startup", "Main window shown (production mode)");
-        // Sovereign Cold Boot — Phase 0 (first-light) is complete as soon
-        // as the window is visible. Logs elapsed time and triggers the
-        // stalled-marker write if we exceeded the budget.
-        crate::startup_watchdog::mark_phase0_complete();
-    }
-
-    #[cfg(debug_assertions)]
-    {
-        use std::sync::atomic::{AtomicBool, Ordering};
-        use std::sync::Arc;
-
-        let shown = Arc::new(AtomicBool::new(false));
-
-        // Durable frontend-ready flag — registered ONCE here, before any
-        // navigate, so a `frontend-ready` emitted at ANY point (Phase A or B)
-        // is captured. (Findings #2: Phase B previously registered its own
-        // listener only AFTER Phase A had navigated, missing early signals and
-        // then re-navigating the webview every 3s for 5 minutes.)
-        let frontend_ready_flag = Arc::new(AtomicBool::new(false));
-
-        // Layer 1: Frontend signals readiness via event (happy path)
-        {
-            let show_handle = app_handle.clone();
-            let shown_event = shown.clone();
-            let ready_flag = frontend_ready_flag.clone();
-            app.listen("frontend-ready", move |_| {
-                ready_flag.store(true, Ordering::SeqCst);
-                if !shown_event.swap(true, Ordering::SeqCst) {
-                    if let Some(w) = show_handle.get_webview_window("main") {
-                        let _ = w.show();
-                        let _ = w.set_focus();
-                    }
-                    info!(target: "4da::startup", "Main window shown (frontend-ready signal)");
-                    // Sovereign Cold Boot — Phase 0 complete on first window-visible.
-                    crate::startup_watchdog::mark_phase0_complete();
-                }
-            });
-        }
-
-        // Layer 2: Dev server poll + webview navigate (recovery path)
-        //
-        // Why navigate() instead of eval("reload")?
-        // WebView2 error pages (edge://network-error/) block JS execution.
-        // Tauri's navigate() operates at the engine level — works regardless
-        // of what the webview is currently displaying.
-        //
-        // Wave 7 enhancement: this loop now KEEPS RUNNING after the initial
-        // navigation, polling the dev server periodically. If the user sees
-        // a stale error page because the dev server was briefly unreachable
-        // when the webview first tried to load, we re-navigate as soon as
-        // the dev server responds. The previous behavior was to give up
-        // after 30s, which left the user staring at a broken page forever.
-        {
-            let ready_handle = app_handle.clone();
-            let shown_poll = shown.clone();
-            let ready_flag = frontend_ready_flag.clone();
-            tauri::async_runtime::spawn(async move {
-                let client = reqwest::Client::builder()
-                    .timeout(std::time::Duration::from_secs(2))
-                    .no_proxy()
-                    .build()
-                    .unwrap_or_default();
-
-                // Use the CONFIGURED dev URL, not a hardcoded port: with the
-                // standard port-bump workflow (isolated worktree verify on
-                // :4448) a hardcoded 4444 makes this recovery loop HIJACK the
-                // webview onto whatever other process serves 4444 — live
-                // 2026-07-19, a peer lane's vite — wedging the app on a
-                // foreign frontend. Fall back to 4444 only when no dev URL is
-                // configured.
-                let dev_url = ready_handle
-                    .config()
-                    .build
-                    .dev_url
-                    .clone()
-                    .unwrap_or_else(|| {
-                        url::Url::parse("http://localhost:4444/")
-                            .expect("hardcoded dev URL is valid")
-                    });
-
-                let mut window_shown_locally = false;
-
-                // Phase A: aggressive poll every 500ms for the first 30s.
-                // Most cold boots resolve here (dev server is up within ~5s).
-                for attempt in 1..=60u32 {
-                    if shown_poll.load(Ordering::SeqCst) || ready_flag.load(Ordering::SeqCst) {
-                        // Frontend-ready fired. The window is visible AND React
-                        // mounted successfully — we're done with phase A.
-                        window_shown_locally = true;
-                        break;
-                    }
-                    if let Ok(r) = client.get(dev_url.as_str()).send().await {
-                        if r.status().is_success() {
-                            info!(target: "4da::startup", attempt, "Dev server ready — navigating webview");
-                            if let Some(w) = ready_handle.get_webview_window("main") {
-                                let _ = w.navigate(dev_url.clone());
-                            }
-                            // Give the navigation time to trigger frontend-ready.
-                            // main.tsx emits it before React mounts, but on a COLD
-                            // dev start Vite transforms the whole module graph on the
-                            // first request (~15-20s) before main.tsx even executes.
-                            // A fixed 2s wait expires mid-transform, Phase B then
-                            // re-navigates and RESETS the transform — looping forever
-                            // until it gives up (findings #1/#3). Poll the durable
-                            // ready flag for up to 40s instead: a warm start breaks in
-                            // ~1s, a cold one is never prematurely re-navigated.
-                            for _ in 0..160u32 {
-                                if ready_flag.load(Ordering::SeqCst) {
-                                    break;
-                                }
-                                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                            }
-                            break;
-                        }
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                }
-
-                // Phase A fallback: show window regardless (better than invisible forever)
-                if !shown_poll.swap(true, Ordering::SeqCst) {
-                    if let Some(w) = ready_handle.get_webview_window("main") {
-                        let _ = w.show();
-                        let _ = w.set_focus();
-                    }
-                    warn!(target: "4da::startup", "Main window shown (dev server poll fallback)");
-                    crate::startup_watchdog::mark_phase0_complete();
-                    window_shown_locally = true;
-                }
-
-                // Phase B: persistent recovery loop (Wave 7).
-                // The window is visible but `frontend-ready` may not have fired
-                // — webview could be on an error page. Poll the dev server every
-                // 3s for the next 5 minutes. Whenever we successfully reach the
-                // dev server AND the frontend still hasn't signaled ready, force
-                // a navigate. This rescues users from the "stale error page"
-                // scenario in screenshot 1900.
-                if window_shown_locally {
-                    // Phase B: BOUNDED recovery (findings #2). Uses the durable
-                    // frontend_ready_flag (registered before any navigate), a
-                    // positive page probe that self-heals a loaded-but-event-
-                    // missed page, and exponential backoff capped at a small
-                    // number of navigates — instead of thrashing the webview
-                    // every 3s for 5 minutes.
-                    let recovery_began = std::time::Instant::now();
-                    let recovery_max = std::time::Duration::from_mins(2);
-                    let max_navigates = 4_u32;
-                    let mut consecutive_navigates = 0_u32;
-                    let mut backoff = std::time::Duration::from_secs(3);
-
-                    while recovery_began.elapsed() < recovery_max
-                        && consecutive_navigates < max_navigates
-                    {
-                        tokio::time::sleep(backoff).await;
-                        if ready_flag.load(Ordering::SeqCst) {
-                            debug!(target: "4da::startup", "Recovery loop: frontend-ready fired, exiting");
-                            break;
-                        }
-
-                        // Positive readiness probe: if the page actually loaded
-                        // (React mounted into #root) but the event was missed,
-                        // self-heal by re-emitting frontend-ready. eval is
-                        // fire-and-forget; the durable Layer-1 listener catches it.
-                        if let Some(w) = ready_handle.get_webview_window("main") {
-                            let _ = w.eval(
-                                "if(document.querySelector('#root')?.childElementCount>0){try{window.__TAURI__&&window.__TAURI__.event&&window.__TAURI__.event.emit('frontend-ready')}catch(e){}}",
-                            );
-                        }
-                        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-                        if ready_flag.load(Ordering::SeqCst) {
-                            debug!(target: "4da::startup", "Recovery loop: page already loaded (probe), exiting");
-                            break;
-                        }
-
-                        // Genuinely not ready — re-navigate if the dev server is up.
-                        let server_up = client
-                            .get(dev_url.as_str())
-                            .send()
-                            .await
-                            .map(|r| r.status().is_success())
-                            .unwrap_or(false);
-                        if server_up {
-                            consecutive_navigates += 1;
-                            warn!(
-                                target: "4da::startup",
-                                consecutive_navigates,
-                                "Recovery: dev server reachable but frontend not ready — re-navigating webview"
-                            );
-                            if let Some(w) = ready_handle.get_webview_window("main") {
-                                let _ = w.navigate(dev_url.clone());
-                            }
-                            // Exponential backoff, capped — stop thrashing the webview.
-                            backoff = (backoff * 2).min(std::time::Duration::from_secs(24));
-                        }
-                    }
-                    if consecutive_navigates >= max_navigates {
-                        warn!(
-                            target: "4da::startup",
-                            max_navigates,
-                            "Recovery: gave up re-navigating — frontend likely broken (see findings #1/#3)"
-                        );
-                    }
-                    debug!(target: "4da::startup", "Recovery loop exited");
-                }
-            });
-        }
-    }
-
     // Sovereign Cold Boot — start the steady-state heartbeat writer.
     // Writes data/.healthy every 60s so the frontend can detect a frozen
     // backend via a future IPC command. Also write one immediately so the
@@ -1874,7 +1734,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // scheduler logs the zero-curve outcome at debug and moves on.
     // There's no separate "is it worth running?" pre-check because
     // fit_calibration_curves_now already self-gates cheaply.
-    {
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::calibration", "Victauri E2E active - skipping scheduled calibration fitter");
+    } else {
         let app_for_cal = app_handle.clone();
         tauri::async_runtime::spawn(async move {
             // Boot grace: let the rest of startup finish before spinning
@@ -2326,6 +2188,11 @@ fn build_signal_summary(results: &[crate::SourceRelevance]) -> Option<monitoring
 ///
 /// This is the core of ACE AUTONOMY -- the system discovers context without manual configuration.
 fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::startup", "Victauri E2E active - skipping startup ACE initialization");
+        return;
+    }
+
     // Check if auto-discovery is needed (first run with no context dirs)
     let (needs_discovery, onboarding_done) = {
         let settings = get_settings_manager().lock();
@@ -2414,8 +2281,19 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
 
     // Spawn async task for ACE initialization
     tauri::async_runtime::spawn(async move {
-        // Small delay to let the app fully initialize
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        // ACE full scans are valuable but expensive. Give the hidden webview
+        // the first chance to load and report readiness before walking project
+        // trees, parsing lockfiles, and analyzing git history.
+        if !crate::startup_frontend::wait_until_frontend_ready(std::time::Duration::from_mins(1))
+            .await
+        {
+            warn!(
+                target: "4da::startup",
+                "Frontend did not report ready before ACE warmup; continuing in background"
+            );
+        }
+        tokio::time::sleep(crate::startup_frontend::heavy_startup_work_grace_after_first_light())
+            .await;
 
         let paths: Vec<String> = context_dirs
             .iter()

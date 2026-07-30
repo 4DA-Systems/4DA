@@ -100,7 +100,7 @@ impl Database {
 
     /// List all active channels as lightweight summaries.
     pub fn list_channels(&self) -> SqliteResult<Vec<ChannelSummary>> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn();
         let mut stmt = conn.prepare(
             "SELECT id, slug, title, description, source_count, render_count, last_rendered_at
              FROM channels WHERE status = 'active' ORDER BY id",

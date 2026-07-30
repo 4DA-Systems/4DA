@@ -117,6 +117,9 @@ jobs:
       - name: No console-window-flashing spawns (INV-043)
         run: node scripts/check-no-window-spawns.cjs
 
+      - name: Release channel integrity
+        run: node scripts/check-release-channel.cjs
+
       - name: TypeScript type check
         run: pnpm run typecheck
 

@@ -25,6 +25,8 @@
  *       inside `open_db_connection`
  *     • src-tauri/src/app_setup.rs calls `verify_sqlite_vec_once` from
  *       `initialize_pre_tauri`
+ *     • `initialize_pre_tauri` does not initialize ACE
+ *     • preemptive DB recovery treats locks as transient and uses a short timeout
  *
  *   Wave 1 — persisted scheduler timestamps
  *     • src-tauri/src/scheduler_state.rs exists
@@ -45,7 +47,16 @@
  *     • The `ollama-needs-models` event is emitted instead
  *
  *   Wave 3 — frontend instant paint
- *     • src/main.tsx fetches `get_briefing_snapshot` before React mounts
+ *     • src/main.tsx paints a boot shell before importing the full App graph
+ *     • src/main.tsx does not statically import App
+ *     • src/main.tsx keeps Tailwind/font CSS off the first-paint module graph
+ *     • src/main.tsx signals Rust readiness before optional snapshot IPC
+ *     • useAnalysis does not recursively load context files on app mount
+ *     • get_context_files runs recursive filesystem reads on a blocking worker
+ *     • debug startup purges stale WebView2 service workers before webview creation
+ *     • optional snapshot IPC has a strict startup timeout
+ *     • src/main.tsx renders React before optional snapshot hydration starts
+ *     • src/main.tsx has no top-level await before React mounts
  *     • The instantSnapshot field exists in store/types.ts
  *
  *   Wave 4 — boot context detection
@@ -54,14 +65,20 @@
  *
  *   Wave 5 — universal startup watchdog
  *     • src-tauri/src/startup_watchdog.rs exists
- *     • app_setup.rs calls `begin_startup_watch`, `mark_phase0_complete`,
+ *     • app_setup.rs calls `begin_startup_watch`, starts the frontend gate,
  *       `start_heartbeat`, and `mark_clean_shutdown`
+ *     • startup_frontend.rs calls `mark_phase0_complete` when showing the window
  *
  *   Wave 6 — phased startup instrumentation
  *     • app_setup.rs logs `phase = 0` elapsed milliseconds
+ *     • ACE warmup waits for frontend readiness and first-light grace before expensive scans
+ *     • scheduler background jobs wait for frontend readiness and first-light grace before health checks
+ *     • startup Preemption cache warm waits for frontend readiness
+ *     • Victauri dogfood mode uses a longer heavy-startup grace and disables auto-start work
+ *     • Startup settings reads do not hydrate keychain secrets while holding the settings lock
  *
  *   Wave 7 — webview navigation recovery
- *     • app_setup.rs has the persistent recovery loop ("Phase B")
+ *     • startup_frontend.rs has the persistent recovery loop
  *
  * Usage:
  *   node scripts/benchmark-cold-boot.cjs           # full check
@@ -158,6 +175,27 @@ function extractFnBody(src, fnName) {
   return src.slice(idx, end + 1);
 }
 
+function hasTopLevelAwaitBefore(src, marker) {
+  const end = src.indexOf(marker);
+  if (end === -1) return true;
+  const lines = src.slice(0, end).split(/\r?\n/);
+  let depth = 0;
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\/\/.*$/, '');
+    if (depth === 0 && /\bawait\b/.test(line)) {
+      return true;
+    }
+
+    for (const ch of line) {
+      if (ch === '{') depth += 1;
+      if (ch === '}') depth = Math.max(0, depth - 1);
+    }
+  }
+
+  return false;
+}
+
 const openDbBody = extractFnBody(stateRs, 'open_db_connection');
 check(
   'open_db_connection no longer logs "sqlite-vec verified"',
@@ -170,6 +208,12 @@ check(
   'app_setup.rs calls verify_sqlite_vec_once from initialize_pre_tauri',
   /verify_sqlite_vec_once\(\)/.test(appSetupRs),
   'wire verify_sqlite_vec_once into initialize_pre_tauri'
+);
+const preTauriBody = extractFnBody(appSetupRs, 'initialize_pre_tauri');
+check(
+  'initialize_pre_tauri keeps ACE off the critical path',
+  preTauriBody.length > 0 && !/get_ace_engine\s*\(/.test(preTauriBody),
+  'ACE initialization belongs after first-light, not before Tauri/Victauri registration'
 );
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -206,6 +250,15 @@ check(
   'migration TARGET_VERSION is at least 51',
   targetVersionMatch && parseInt(targetVersionMatch[1], 10) >= 51,
   'TARGET_VERSION must include Phase 51 (scheduler_state)'
+);
+check(
+  'preemptive DB recovery is lock-bounded',
+  /busy_timeout\(std::time::Duration::from_millis\(250\)\)/.test(migrationsRs) &&
+    /is_lock_contention/.test(migrationsRs) &&
+    /database locked during recovery quick_check/.test(migrationsRs) &&
+    /locked_db_returns_recovery_failed_without_quarantine/.test(migrationsRs) &&
+    /is_database_lock_contention/.test(stateRs),
+  'cold-boot DB recovery must return quickly on SQLITE_BUSY/LOCKED and must never quarantine a merely locked DB'
 );
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -267,6 +320,8 @@ check(
   'the IPC validator requires the entry on a single line'
 );
 
+const defaultCapabilityJson = read('src-tauri/capabilities/default.json') ?? '';
+
 // ──────────────────────────────────────────────────────────────────────────
 // Wave 2 — Ollama auto-pull is dead
 // ──────────────────────────────────────────────────────────────────────────
@@ -300,10 +355,78 @@ check(
 section('Wave 3 — frontend instant paint');
 
 const mainTsx = read('src/main.tsx') ?? '';
+const useAnalysisTs = read('src/hooks/use-analysis.ts') ?? '';
+const useAppListenersTs = read('src/hooks/use-app-listeners.ts') ?? '';
+const briefingViewTsx = read('src/components/BriefingView.tsx') ?? '';
+const briefingWarmupStateTsx = read('src/components/BriefingWarmupState.tsx') ?? '';
+const startupRuntimeTs = read('src/lib/startup-runtime.ts') ?? '';
+const contextCommandsRs = read('src-tauri/src/context_commands.rs') ?? '';
+const settingsCommandsRs = read('src-tauri/src/settings_commands.rs') ?? '';
+const settingsCommandsLicenseRs = read('src-tauri/src/settings_commands_license.rs') ?? '';
+const startupHealthRs = read('src-tauri/src/startup_health.rs') ?? '';
 check(
-  'main.tsx fetches get_briefing_snapshot before React mounts',
-  /get_briefing_snapshot/.test(mainTsx) && mainTsx.indexOf('get_briefing_snapshot') < mainTsx.indexOf('createRoot'),
-  'snapshot must be loaded BEFORE React mounts for sub-200ms first paint'
+  'main.tsx does not statically import the full App graph',
+  !/import\s+App\s+from\s+['"]\.\/App['"]/.test(mainTsx),
+  'the full App graph must be loaded after first paint, not before main.tsx can execute'
+);
+check(
+  'main.tsx keeps CSS/font imports off the first-paint graph',
+  !/import\s+['"]\.\/App\.css['"]/.test(mainTsx) &&
+    !/import\s+['"]@fontsource-variable\//.test(mainTsx),
+  'Tailwind scanning and font CSS must stay behind the dynamic App import'
+);
+check(
+  'main.tsx paints BootShell before importing App',
+  /function\s+BootShell/.test(mainTsx) &&
+    /root\.render\([\s\S]*<BootShell\s*\/>[\s\S]*\);/.test(mainTsx) &&
+    mainTsx.indexOf('<BootShell />') < mainTsx.indexOf("import('./App')"),
+  'the hidden webview must get a real root child before the heavy app module graph loads'
+);
+check(
+  'main.tsx signals frontend readiness before snapshot IPC',
+  /frontend-ready/.test(mainTsx)
+    && /mark_frontend_ready/.test(mainTsx)
+    && /get_briefing_snapshot/.test(mainTsx)
+    && mainTsx.indexOf('void signalFrontendReady()') < mainTsx.indexOf('void hydrateStartupSnapshot()'),
+  'first-light readiness must not wait behind optional snapshot hydration'
+);
+check(
+  'main window capability allows frontend-ready event emission',
+  /core:event:default/.test(defaultCapabilityJson),
+  'main window must be allowed to emit frontend-ready before any command IPC'
+);
+check(
+  'use-analysis does not load context files on app mount',
+  !/useEffect\(\s*\(\)\s*=>\s*\{[\s\S]{0,120}loadContextFiles\(\)/.test(useAnalysisTs),
+  'recursive context file reads belong behind the Results context panel, not the default app mount'
+);
+check(
+  'get_context_files runs recursive file reads on a blocking worker',
+  /spawn_blocking/.test(contextCommandsRs) && /collect_context_files/.test(contextCommandsRs),
+  'recursive project file reads must not occupy the async runtime used by IPC'
+);
+check(
+  'app_setup.rs purges stale dev WebView2 service workers',
+  /purge_dev_webview_service_worker_cache/.test(appSetupRs) &&
+    /Service Worker/.test(appSetupRs) &&
+    /EBWebView/.test(appSetupRs),
+  'stale localhost service workers must not be able to hijack the dev app shell'
+);
+check(
+  'main.tsx bounds optional snapshot IPC wait',
+  /STARTUP_SNAPSHOT_TIMEOUT_MS/.test(mainTsx) && /withStartupTimeout/.test(mainTsx),
+  'snapshot hydration is optional; an IPC stall must not block createRoot'
+);
+check(
+  'main.tsx renders React before optional snapshot hydration starts',
+  /void hydrateStartupSnapshot\(\)/.test(mainTsx) &&
+    mainTsx.indexOf('<BootShell />') < mainTsx.indexOf('void hydrateStartupSnapshot()'),
+  'React first render must never wait behind optional snapshot hydration'
+);
+check(
+  'main.tsx has no top-level await before React mounts',
+  !hasTopLevelAwaitBefore(mainTsx, '<BootShell />'),
+  'move startup async work into non-blocking background tasks'
 );
 check(
   'main.tsx stashes snapshot on window.__4DA_INSTANT_SNAPSHOT__',
@@ -368,6 +491,7 @@ check(
 );
 
 const watchdogRs = read('src-tauri/src/startup_watchdog.rs') ?? '';
+const startupFrontendRs = read('src-tauri/src/startup_frontend.rs') ?? '';
 check(
   'startup_watchdog.rs exposes begin_startup_watch',
   /pub fn begin_startup_watch\b/.test(watchdogRs),
@@ -395,8 +519,18 @@ check(
   'watchdog must initialize in initialize_pre_tauri'
 );
 check(
-  'app_setup.rs calls mark_phase0_complete on window-show',
-  /mark_phase0_complete\(\)/.test(appSetupRs),
+  'startup_frontend.rs exists',
+  fileExists('src-tauri/src/startup_frontend.rs'),
+  'startup_frontend.rs owns the hidden-window first-light gate'
+);
+check(
+  'app_setup.rs starts the frontend readiness gate',
+  /start_frontend_readiness_gate\(\s*app_handle\.clone\(\)\s*\)/.test(appSetupRs),
+  'setup_app must start the frontend gate as soon as it has an AppHandle'
+);
+check(
+  'startup_frontend.rs calls mark_phase0_complete on window-show',
+  /mark_phase0_complete\(\)/.test(startupFrontendRs),
   'every code path that shows the window must mark phase 0 complete'
 );
 check(
@@ -425,6 +559,92 @@ check(
   /setup_began\s*=\s*std::time::Instant::now/.test(appSetupRs),
   'setup_began is the clock used by phase markers'
 );
+check(
+  'startup_frontend.rs defines debug-aware first-light background grace',
+    /background_grace_after_first_light/.test(startupFrontendRs) &&
+    /debug_assertions/.test(startupFrontendRs) &&
+    /victauri_e2e_active/.test(startupFrontendRs) &&
+    /from_mins\(5\)/.test(startupFrontendRs) &&
+    /from_secs\(90\)/.test(startupFrontendRs) &&
+    /from_secs\(20\)/.test(startupFrontendRs),
+  'dev/Victauri boots need a longer Vite/Tailwind grace while release keeps the shorter delay'
+);
+check(
+  'startup_frontend.rs defines longer heavy-startup grace for dogfood/dev',
+    /heavy_startup_work_grace_after_first_light/.test(startupFrontendRs) &&
+    /victauri_e2e_active/.test(startupFrontendRs) &&
+    /from_mins\(5\)/.test(startupFrontendRs) &&
+    /from_mins\(3\)/.test(startupFrontendRs) &&
+    /from_secs\(20\)/.test(startupFrontendRs),
+  'ACE/Preemption scans need a separate heavy-work grace so live dogfood does not race background CPU spikes'
+);
+check(
+  'app_setup.rs defers ACE warmup until after first-light grace',
+  /wait_until_frontend_ready/.test(appSetupRs) &&
+    /heavy_startup_work_grace_after_first_light\(\)\)\s*\.await[\s\S]{0,700}Running AUTONOMOUS ACE context scan/.test(appSetupRs),
+  'ACE project scans must not compete with the hidden webview first-light or full-app import path'
+);
+check(
+  'monitoring.rs defers scheduler jobs until after first-light grace',
+  /wait_until_frontend_ready/.test(monitoringRs) &&
+    /Frontend did not report ready before scheduler start/.test(monitoringRs) &&
+    /background_grace_after_first_light\(\)\)\.await[\s\S]{0,700}last_check/.test(monitoringRs),
+  'scheduler maintenance must not initialize background work before first-light and full-app import'
+);
+check(
+  'app_setup.rs defers Preemption cache warm until frontend readiness',
+  /warm_preemption_cache_after_first_light/.test(appSetupRs) &&
+    /wait_until_frontend_ready/.test(appSetupRs) &&
+    /heavy_startup_work_grace_after_first_light/.test(appSetupRs) &&
+    !/OSV mirror synced recently[\s\S]{0,260}preemption::warm_preemption_cache\(\)\.await/.test(appSetupRs),
+  'Preemption cache recompute is CPU-heavy and must not run on the first-light path'
+);
+check(
+  'all frontend auto-analysis paths are disabled during Victauri dogfood startup',
+  /get_startup_runtime_flags/.test(startupRuntimeTs) &&
+    /victauriE2e/.test(startupRuntimeTs) &&
+    /isVictauriDogfoodMode/.test(useAppListenersTs) &&
+    /isVictauriDogfoodMode/.test(briefingViewTsx) &&
+    /isVictauriDogfoodMode/.test(briefingWarmupStateTsx),
+  'Victauri smoke verification must not trigger foreground analysis from mount, snapshot freshen, or warmup empty-state paths'
+);
+check(
+  'backend auto-start jobs are disabled during Victauri dogfood startup',
+  /Victauri E2E active - skipping startup OSV sync and Preemption cache warm/.test(appSetupRs) &&
+    /Victauri E2E active - skipping startup ACE initialization/.test(appSetupRs) &&
+    /Victauri E2E active - skipping startup data cleanup/.test(appSetupRs) &&
+    /Victauri E2E active - skipping startup dep-linker repair/.test(appSetupRs) &&
+    /Victauri E2E active - skipping startup context corpus maintenance/.test(appSetupRs) &&
+    /Victauri E2E active - skipping startup model registry refresh/.test(appSetupRs) &&
+    /Victauri E2E active - skipping immediate morning briefing check/.test(appSetupRs) &&
+    /Victauri E2E active - background scheduler disabled for live verification/.test(monitoringRs),
+  'Victauri smoke verification should measure the shell and IPC without startup schedulers, DB cleanup, OSV, Preemption, ACE, registry, or briefing jobs competing for runtime threads'
+);
+check(
+  'startup get_settings does not hydrate keychain secrets under the settings lock',
+  /pub async fn get_settings/.test(settingsCommandsRs) &&
+    !/pub async fn get_settings[\s\S]{0,260}ensure_keys_hydrated/.test(settingsCommandsRs),
+  'get_settings is on the startup paint path; keychain recovery belongs in save/key-consuming paths, not in this IPC response'
+);
+check(
+  'license and trial reads clone settings before local work',
+  /guard\.get\(\)\.license\.clone\(\)/.test(settingsCommandsLicenseRs) &&
+    /get_trial_status[\s\S]{0,220}guard\.get\(\)\.license\.clone\(\)/.test(settingsCommandsLicenseRs),
+  'license badge reads must not hold the global settings lock while doing expiry or cache work'
+);
+check(
+  'startup health is cached before frontend mount',
+  /initialize_startup_health_cache\(\)/.test(appSetupRs) &&
+    /pub\(crate\) fn initialize_startup_health_cache/.test(startupHealthRs) &&
+    /pub\(crate\) fn get_startup_health\(\) -> Vec<HealthIssue>[\s\S]{0,180}initialize_startup_health_cache\(\)/.test(startupHealthRs),
+  'HealthBanner must not recompute startup health, keychain, or DB probes after the webview mounts'
+);
+check(
+  'startup health IPC path does not hydrate keychain secrets',
+  !/pub\(crate\) fn get_startup_health[\s\S]{0,500}ensure_keys_hydrated/.test(startupHealthRs) &&
+    /Victauri E2E active - skipping startup health keychain probe/.test(startupHealthRs),
+  'startup health must remain cached and dogfood-safe; keychain hydration belongs in key-consuming paths'
+);
 
 // ──────────────────────────────────────────────────────────────────────────
 // Wave 7 — webview navigation recovery
@@ -432,14 +652,19 @@ check(
 section('Wave 7 — webview navigation recovery');
 
 check(
-  'app_setup.rs has a persistent recovery loop',
-  /Phase B|recovery loop|recovery_began/.test(appSetupRs),
+  'startup_frontend.rs has a persistent recovery loop',
+  /recovery loop|recovery_began/.test(startupFrontendRs),
   'the dev-mode recovery loop must keep running, not give up after 30s'
 );
 check(
-  'app_setup.rs re-navigates webview when dev server returns',
-  /consecutive_navigates/.test(appSetupRs),
+  'startup_frontend.rs re-navigates webview when dev server returns',
+  /consecutive_navigates/.test(startupFrontendRs),
   'recovery loop must re-navigate, not just probe'
+);
+check(
+  'startup_frontend.rs recovery can mark a rendered root ready',
+  /__TAURI__\?\.core\?\.invoke/.test(startupFrontendRs) && /mark_frontend_ready/.test(startupFrontendRs),
+  'recovery must use the public Tauri v2 invoke path when the React root is present'
 );
 
 // ──────────────────────────────────────────────────────────────────────────

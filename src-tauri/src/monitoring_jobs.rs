@@ -421,7 +421,7 @@ pub fn maybe_notify_escalating_chains<R: Runtime>(app: &AppHandle<R>) {
         Err(_) => return,
     };
 
-    let chains = match crate::signal_chains::detect_chains(&conn) {
+    let chains = match crate::signal_chains::detect_and_record_chains(&conn) {
         Ok(c) => c,
         Err(e) => {
             warn!(target: "4da::jobs", error = %e, "Chain detection failed for notifications");

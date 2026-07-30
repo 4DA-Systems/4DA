@@ -678,7 +678,7 @@ fn test_graph_corpus_selects_verdicts_first() {
     let db = test_db();
     let conn = db.conn.lock();
 
-    let mut insert = |id: i64, title: &str, age: &str, verdict: Option<i64>, score: f64| {
+    let insert = |id: i64, title: &str, age: &str, verdict: Option<i64>, score: f64| {
         // Distinct (orthogonal) embeddings — near-dup story collapse
         // would otherwise fold the fixture behind one representative.
         let mut v = vec![0.0f32; 8];

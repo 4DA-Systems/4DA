@@ -45,10 +45,15 @@ pub(crate) enum HealthSeverity {
 pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
     let mut issues = Vec::new();
     let data_dir = get_data_dir();
+    let allow_keychain_probe = !crate::startup_frontend::victauri_e2e_active();
 
     check_database(&data_dir, &mut issues);
     check_settings(&data_dir, &mut issues);
-    check_embedding_provider(&data_dir, &mut issues);
+    if allow_keychain_probe {
+        check_embedding_provider(&data_dir, &mut issues);
+    } else {
+        check_embedding_provider_inner(&data_dir, &mut issues, false);
+    }
     check_source_adapters(&mut issues);
     check_disk_write(&data_dir, &mut issues);
     check_disk_space(&data_dir, &mut issues);
@@ -74,7 +79,11 @@ pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
     }
 
     // Cross-platform keychain probe — log-only, not user-facing.
-    check_keychain_functional();
+    if allow_keychain_probe {
+        check_keychain_functional();
+    } else {
+        info!(target: "4da::startup", "Victauri E2E active - skipping startup health keychain probe");
+    }
 
     // Cross-platform cloud-sync detection (OneDrive/Google Drive/Dropbox).
     // iCloud is handled inside check_icloud_interference on macOS.
@@ -106,6 +115,16 @@ pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
     }
 
     issues
+}
+
+pub(crate) fn initialize_startup_health_cache() -> Vec<HealthIssue> {
+    STARTUP_HEALTH_CACHE
+        .get_or_init(|| {
+            let mut issues = run_startup_health_check();
+            suppress_in_memory_api_key_false_positive(&mut issues);
+            issues
+        })
+        .clone()
 }
 
 // ============================================================================
@@ -619,28 +638,17 @@ fn check_keychain_functional() {
 /// reload loop.
 #[tauri::command]
 pub(crate) fn get_startup_health() -> Vec<HealthIssue> {
-    STARTUP_HEALTH_CACHE
-        .get_or_init(|| {
-            let mut issues = run_startup_health_check();
+    initialize_startup_health_cache()
+}
 
-            // Filter out false-positive "API key is empty" when the in-memory settings
-            // (hydrated from keychain on startup) DO have the key. The disk-based check
-            // reads settings.json directly, which has keys stripped after keychain
-            // migration. Use lock() instead of try_lock() — this is a non-hot path
-            // called once on mount, and try_lock() was silently failing during startup
-            // when another thread held the mutex, letting the false-positive through.
-            {
-                let mut guard = crate::get_settings_manager().lock();
-                guard.ensure_keys_hydrated();
-                let has_key = !guard.get().llm.api_key.is_empty();
-                if has_key {
-                    issues.retain(|i| {
-                        !(i.component == "embedding" && i.message.contains("API key is empty"))
-                    });
-                }
-            }
-
-            issues
-        })
-        .clone()
+fn suppress_in_memory_api_key_false_positive(issues: &mut Vec<HealthIssue>) {
+    let Some(manager) = crate::state::try_get_settings_manager() else {
+        return;
+    };
+    let Some(guard) = manager.try_lock() else {
+        return;
+    };
+    if !guard.get().llm.api_key.is_empty() {
+        issues.retain(|i| !(i.component == "embedding" && i.message.contains("API key is empty")));
+    }
 }

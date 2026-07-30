@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
+import { isPlainBrowserRuntime } from '../lib/tauri-runtime';
 import type { AppStore, AnalysisSlice, AppState } from './types';
 import { translateError } from '../utils/error-messages';
 
@@ -20,7 +21,7 @@ const initialAppState: AppState = {
 export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> = (set, get) => ({
   appState: { ...initialAppState },
   expandedItem: null,
-  isBrowserMode: false,
+  isBrowserMode: isPlainBrowserRuntime(),
 
   setExpandedItem: (id) => set({ expandedItem: id }),
 
@@ -39,9 +40,20 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
   },
 
   startAnalysis: async () => {
-    const { addToast, appState } = get();
+    const { addToast, appState, isBrowserMode } = get();
     if (appState.loading) {
       addToast('info', 'Analysis already running');
+      return;
+    }
+    if (isBrowserMode) {
+      set(state => ({
+        appState: {
+          ...state.appState,
+          status: 'Cannot analyze in browser mode. Open through Tauri window.',
+          loading: false,
+        },
+      }));
+      addToast('error', 'Cannot analyze in browser mode');
       return;
     }
     set(state => ({

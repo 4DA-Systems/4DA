@@ -304,7 +304,20 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
         "Background job intervals configured"
     );
 
+    if crate::startup_frontend::victauri_e2e_active() {
+        info!(target: "4da::monitor", "Victauri E2E active - background scheduler disabled for live verification");
+        return;
+    }
+
     tauri::async_runtime::spawn(async move {
+        if !crate::startup_frontend::wait_until_frontend_ready(Duration::from_mins(1)).await {
+            warn!(
+                target: "4da::monitor",
+                "Frontend did not report ready before scheduler start; enabling background jobs"
+            );
+        }
+        tokio::time::sleep(crate::startup_frontend::background_grace_after_first_light()).await;
+
         // Seed `last_check` to "now" so the first *regular interval* analysis
         // waits a full interval instead of firing almost immediately. The field
         // defaults to 0, which would make the very first tick after the

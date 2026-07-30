@@ -58,6 +58,12 @@ node scripts/check-llm-gate-honesty.cjs || exit 1
 echo "Checking for vanity metrics..."
 node scripts/check-vanity-metrics.cjs || exit 1
 
+# Release-channel integrity (fast check, <1s) - always runs
+# Blocks updater endpoint drift, missing latest.json release gates, and MCP
+# releases becoming GitHub's global latest release.
+echo "Checking release channel integrity..."
+node scripts/check-release-channel.cjs || exit 1
+
 # Dead code expiry enforcement — #[allow(dead_code)] must have a REMOVE BY date
 # Ghost command detection — commands in Rust with no frontend caller
 STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.rs$' || true)

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../../lib/commands';
+import { safeListen } from '../../lib/tauri-events';
 import { useAppStore } from '../../store';
 import type { CalibrationResult, Recommendation } from '../../types/calibration';
 
@@ -80,7 +80,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    void listen<PullProgress>('ollama-pull-progress', (event) => {
+    void safeListen<PullProgress>('ollama-pull-progress', (event) => {
       setPullProgress(event.payload);
       if (event.payload.done) {
         setActionInProgress(null);

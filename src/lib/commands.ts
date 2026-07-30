@@ -261,6 +261,8 @@ interface CommandMap {
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
   export_diagnostics: { params: Record<string, never>; result: { report: string; saved_path: string } };
   log_frontend_error: { params: { context: string; message: string }; result: void };
+  mark_frontend_ready: { params: Record<string, never>; result: void };
+  get_startup_runtime_flags: { params: Record<string, never>; result: { victauriE2e: boolean; debugBuild: boolean; backgroundGraceSecs: number; heavyStartupGraceSecs: number } };
 
   // -- Settings & Configuration --
   get_privacy_config: { params: Record<string, never>; result: { llm_content_level: string; proxy_url: string | null; cloud_llm_disclosure_accepted: boolean; activity_tracking_opt_in: boolean } };

@@ -150,22 +150,49 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
 
     info!(target: "4da::ace", paths = scan_paths.len(), "Starting full scan");
 
-    // Phase 1 & 2: Manifest scanning and Git analysis (scoped to release ACE lock)
-    let (manifest_context, git_signals) = {
-        let ace = get_ace_engine()?;
-        let manifest_context = ace.detect_context(&scan_paths)?;
-        let git_signals = ace.analyze_git_repos(&scan_paths)?;
-        (manifest_context, git_signals)
-    }; // ACE lock is dropped here
+    // Phase 1 & 2: Manifest scanning and Git analysis.
+    //
+    // These are synchronous filesystem/git walks and database writes. Running
+    // them directly in this async command can monopolize a Tokio worker during
+    // startup, which in turn starves Tauri/Victauri IPC. Keep the ACE lock
+    // scoped inside a blocking worker and return only the scan products.
+    let scan_paths_for_detect = scan_paths.clone();
+    let (manifest_context, git_signals) = tauri::async_runtime::spawn_blocking(
+        move || -> std::result::Result<(ace::AutonomousContext, Vec<ace::GitSignal>), String> {
+            let ace = get_ace_engine().map_err(|e| e.to_string())?;
+            if let Some(stored) = ace.get_stored_threshold() {
+                crate::set_relevance_threshold(stored);
+                info!(
+                    target: "4da::startup",
+                    threshold = stored,
+                    "Loaded stored relevance threshold during ACE warmup"
+                );
+            }
+            let manifest_context = ace
+                .detect_context(&scan_paths_for_detect)
+                .map_err(|e| e.to_string())?;
+            let git_signals = ace
+                .analyze_git_repos(&scan_paths_for_detect)
+                .map_err(|e| e.to_string())?;
+            Ok((manifest_context, git_signals))
+        },
+    )
+    .await
+    .map_err(|e| format!("ACE manifest/git scan worker failed: {e}"))?
+    .map_err(|e| format!("ACE manifest/git scan failed: {e}"))?;
 
     // Phase 1a: Store discovered dependencies in user_dependencies table
-    if let Ok(db) = crate::get_database() {
-        super::dependencies::store_direct_dependencies(db);
-    }
-
-    // Phase 1a-lockfiles: Parse lockfiles for transitive dependency discovery
-    if let Ok(db) = crate::get_database() {
-        super::dependencies::store_lockfile_dependencies(db, &scan_paths);
+    // Phase 1a-lockfiles: Parse lockfiles for transitive dependency discovery.
+    let dependency_scan_paths = scan_paths.clone();
+    if let Err(e) = tauri::async_runtime::spawn_blocking(move || {
+        if let Ok(db) = crate::get_database() {
+            super::dependencies::store_direct_dependencies(db);
+            super::dependencies::store_lockfile_dependencies(db, &dependency_scan_paths);
+        }
+    })
+    .await
+    {
+        warn!(target: "4da::ace", error = %e, "Dependency storage task failed");
     }
 
     // Phase 1a-reconcile: prune dependency rows of projects DELETED or MOVED
@@ -208,15 +235,21 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
     }
 
     // Phase 1b: Learning trajectory detection
-    let mut learning_topics: Vec<String> = Vec::new();
-    for path in &scan_paths {
-        let signals = crate::ace::scanner::detect_learning_directories(path);
-        for signal in signals {
-            if !learning_topics.contains(&signal.topic) {
-                learning_topics.push(signal.topic);
+    let learning_scan_paths = scan_paths.clone();
+    let learning_topics: Vec<String> = tauri::async_runtime::spawn_blocking(move || {
+        let mut learning_topics: Vec<String> = Vec::new();
+        for path in &learning_scan_paths {
+            let signals = crate::ace::scanner::detect_learning_directories(path);
+            for signal in signals {
+                if !learning_topics.contains(&signal.topic) {
+                    learning_topics.push(signal.topic);
+                }
             }
         }
-    }
+        learning_topics
+    })
+    .await
+    .map_err(|e| format!("Learning trajectory scan worker failed: {e}"))?;
     if !learning_topics.is_empty() {
         info!(target: "4da::ace", topics = learning_topics.len(), "Detected learning trajectory topics");
         // Store learning topics as active topics with learning_trajectory source tag

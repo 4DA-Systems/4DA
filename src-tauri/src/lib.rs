@@ -344,6 +344,7 @@ pub(crate) mod stability_detector;
 mod standing_queries;
 mod standing_queries_evaluation;
 mod standing_queries_suggestions;
+mod startup_frontend;
 mod startup_health;
 mod synthesis_schema;
 pub(crate) mod topic_hotness;
@@ -796,7 +797,7 @@ pub fn run() {
                     .collect();
             victauri_plugin::VictauriBuilder::new()
                 .commands(&commands)
-                .auth_disabled()
+                .auth_enabled()
                 // 4DA stores its SQLite DB in the project `data/` dir, not the OS
                 // app-data dir. The app runs from `src-tauri/`, so the DB lives at
                 // `../data`. Register both that and an absolute fallback so
@@ -1088,6 +1089,8 @@ pub fn run() {
             commands::get_diagnostics,
             commands::export_diagnostics,
             commands::log_frontend_error,
+            startup_frontend::mark_frontend_ready,
+            startup_frontend::get_startup_runtime_flags,
             startup_health::get_startup_health,
             // Capability Health (Graceful Degradation Framework)
             capabilities::get_capability_states,

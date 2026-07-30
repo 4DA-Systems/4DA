@@ -333,7 +333,7 @@ pub(crate) async fn fetch_all_sources(
                                     app,
                                     "scrape",
                                     0.3,
-                                    &format!("Scraping: {}", &truncate_utf8(&item.title, 30)),
+                                    &format!("Scraping: {}", truncate_utf8(&item.title, 30)),
                                     idx,
                                     effective_cap,
                                 );

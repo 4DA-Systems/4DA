@@ -2,9 +2,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAppStore } from '../index';
 import { invoke } from '@tauri-apps/api/core';
+import { isPlainBrowserRuntime } from '../../lib/tauri-runtime';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
+}));
+
+vi.mock('../../lib/tauri-runtime', () => ({
+  isPlainBrowserRuntime: vi.fn(() => false),
 }));
 
 const initialState = useAppStore.getState();
@@ -13,6 +18,7 @@ describe('license-slice', () => {
   beforeEach(() => {
     useAppStore.setState(initialState, true);
     vi.mocked(invoke).mockReset();
+    vi.mocked(isPlainBrowserRuntime).mockReturnValue(false);
   });
 
   // ---------------------------------------------------------------------------
@@ -128,6 +134,17 @@ describe('license-slice', () => {
       expect(useAppStore.getState().licenseLoaded).toBe(true);
       expect(useAppStore.getState().licenseLoadError).toBeNull();
     });
+
+    it('uses a quiet confirmed-free state in plain browser mode', async () => {
+      vi.mocked(isPlainBrowserRuntime).mockReturnValueOnce(true);
+
+      await useAppStore.getState().loadLicense();
+
+      expect(invoke).not.toHaveBeenCalled();
+      expect(useAppStore.getState().tier).toBe('free');
+      expect(useAppStore.getState().licenseLoaded).toBe(true);
+      expect(useAppStore.getState().licenseLoadError).toBeNull();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -189,6 +206,18 @@ describe('license-slice', () => {
 
       await useAppStore.getState().loadTrialStatus();
 
+      expect(useAppStore.getState().trialStatus).toBeNull();
+    });
+
+    it('does not call the backend in plain browser mode', async () => {
+      vi.mocked(isPlainBrowserRuntime).mockReturnValueOnce(true);
+      useAppStore.setState({
+        trialStatus: { active: true, days_remaining: 10, started_at: '2026-01-01', has_license: false },
+      });
+
+      await useAppStore.getState().loadTrialStatus();
+
+      expect(invoke).not.toHaveBeenCalled();
       expect(useAppStore.getState().trialStatus).toBeNull();
     });
   });

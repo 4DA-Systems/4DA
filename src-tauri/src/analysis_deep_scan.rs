@@ -171,11 +171,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
                 app,
                 "relevance",
                 progress,
-                &format!(
-                    "[{}] {}",
-                    &item.source_type,
-                    &truncate_utf8(&item.title, 30)
-                ),
+                &format!("[{}] {}", item.source_type, truncate_utf8(&item.title, 30)),
                 idx + 1,
                 all_items.len(),
             );

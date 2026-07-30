@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { isVictauriDogfoodMode } from '../lib/startup-runtime';
 import { useAppStore } from '../store';
 import { AmbientGlow } from './AmbientGlow';
 
@@ -47,13 +48,25 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
       setAutoStartPending(false);
       return;
     }
-    const timer = setTimeout(() => {
-      fired.current = true;
-      setAutoStartPending(false);
-      window.sessionStorage.setItem('4da-last-auto-analysis', String(Date.now()));
-      onAnalyze();
-    }, 3000);
-    return () => clearTimeout(timer);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+    void isVictauriDogfoodMode().then((dogfoodMode) => {
+      if (cancelled) return;
+      if (dogfoodMode) {
+        setAutoStartPending(false);
+        return;
+      }
+      timer = setTimeout(() => {
+        fired.current = true;
+        setAutoStartPending(false);
+        window.sessionStorage.setItem('4da-last-auto-analysis', String(Date.now()));
+        onAnalyze();
+      }, 3000);
+    });
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [onAnalyze, isBrowserMode]);
 
   // Gather detected info

@@ -146,8 +146,13 @@ pub async fn get_context_files() -> Result<Vec<ContextFile>> {
         return Ok(vec![]);
     }
 
-    let mut files = Vec::new();
-    collect_context_files(&context_dir, &mut files, 0);
+    let files = tauri::async_runtime::spawn_blocking(move || {
+        let mut files = Vec::new();
+        collect_context_files(&context_dir, &mut files, 0);
+        files
+    })
+    .await
+    .map_err(|e| format!("Context file scan worker failed: {e}"))?;
 
     info!(target: "4da::context", count = files.len(), "Total context files loaded (recursive)");
     Ok(files)

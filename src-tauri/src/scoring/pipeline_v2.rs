@@ -599,6 +599,25 @@ fn extract_signals(
         // with the registry-subject verdict below.
         dependencies::align_registry_corroboration(input.source_type, input.source_id, &mut deps);
 
+        // Kill PHANTOM dep matches for non-security items: align dep_match_score
+        // with the evidence the user actually sees. match_dependencies sums
+        // confidence over ALL matches (its own comment: corroboration is "NOT a
+        // confidence input"), but display_worthy_deps shows only CORROBORATED
+        // deps. So an item could carry dep_match_score 0.595 while matched_deps
+        // rendered EMPTY — a phantom "in your stack" score with no package behind
+        // it (a Portabase Docker discussion won the hero this way; a live audit
+        // found 33 such items in one feed). Credit only corroborated matches, so
+        // the score and the evidence can never disagree. CVE/OSV already recompute
+        // above from their strict advisory post-filter, so leave those untouched.
+        if !matches!(input.source_type, "cve" | "osv") {
+            let corroborated_confidence: f32 = deps
+                .iter()
+                .filter(|d| d.corroborated)
+                .map(|d| d.confidence)
+                .sum();
+            score = (corroborated_confidence / 2.0).min(1.0);
+        }
+
         (deps, score)
     };
 
@@ -3173,16 +3192,14 @@ mod tests {
         };
         let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
 
-        // Sanity: the raw dep matching DID reach fast-path-level aggregate
-        // strength — this is exactly the configuration that previously
-        // inflated. (Since Wave 8, `matched_deps` carries only display-worthy
-        // corroborated evidence, so the ambiguous `log` hit is correctly
-        // ABSENT from it — asserted below — while its raw scoring effect is
-        // still visible through dep_match_score.)
+        // Sanity: stricter package ambiguity proof now stops this fixture even
+        // before aggregate dep-match strength reaches the fast-path threshold.
+        // `matched_deps` carries only display-worthy corroborated evidence, so
+        // the ambiguous `log` hit is correctly ABSENT from it as well.
         let bd = result.score_breakdown.as_ref().expect("breakdown");
         assert!(
-            bd.dep_match_score >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD,
-            "fixture must clear the aggregate fast-path threshold (got {})",
+            bd.dep_match_score < scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD,
+            "ambiguous low-grounding fixture must not clear the aggregate fast-path threshold (got {})",
             bd.dep_match_score
         );
         assert!(

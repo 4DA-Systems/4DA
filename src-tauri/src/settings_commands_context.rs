@@ -546,6 +546,9 @@ pub async fn set_locale(country: String, language: String, currency: String) -> 
 pub async fn set_language(language: String) -> Result<()> {
     let manager = get_settings_manager();
     let mut guard = manager.lock();
+    if guard.get().locale.language == language {
+        return Ok(());
+    }
     guard.get_mut().locale.language = language;
     guard
         .save()

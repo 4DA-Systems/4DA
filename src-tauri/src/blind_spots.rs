@@ -5693,7 +5693,22 @@ mod tests {
         // These require ecosystem-qualified proof (exact_registry / advisory)
         // to surface — title heuristic alone is not enough.
         let should_be_ambiguous = [
-            "image", "base", "core", "test", "data", "utils", "log", "error", "config",
+            "image",
+            "base",
+            "core",
+            "test",
+            "data",
+            "utils",
+            "log",
+            "error",
+            "config",
+            "router",
+            "clone",
+            "read",
+            "windows",
+            "next",
+            "motion",
+            "profiling",
         ];
         for name in &should_be_ambiguous {
             assert!(
@@ -5705,7 +5720,7 @@ mod tests {
 
         // Specific package names that are NOT common English words.
         // These should pass through the ambiguity filter.
-        let should_not_be_ambiguous = ["tokio", "react", "axios", "serde", "next"];
+        let should_not_be_ambiguous = ["tokio", "react", "axios", "serde"];
         for name in &should_not_be_ambiguous {
             assert!(
                 !is_ambiguous_package_name(name),
@@ -6230,7 +6245,7 @@ mod tests {
             projects: vec!["/proj/a".to_string()],
         }];
 
-        let (uncovered, _weak) = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        let (_uncovered, _weak) = find_uncovered_deps(&conn, &deps, 14).unwrap();
 
         // The dep may or may not appear in uncovered (depending on interaction state),
         // but if it does, its available_signal_count should include both items

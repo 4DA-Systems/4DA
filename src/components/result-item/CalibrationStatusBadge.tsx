@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../../lib/commands';
+import { safeListen } from '../../lib/tauri-events';
 import type { CurveStatus } from '../../types/calibration';
 
 interface CalibrationStatusBadgeProps {
@@ -109,7 +109,7 @@ export const CalibrationStatusBadge = memo(function CalibrationStatusBadge({
     // Live refresh: when a scheduled or manual refit lands, refetch
     // so the "fit 2d ago" text doesn't go stale and the "recalibrating"
     // tag clears.
-    const unlistenPromise = listen('calibration-curves-updated', () => {
+    const unlistenPromise = safeListen('calibration-curves-updated', () => {
       if (!cancelled) void fetchStatus();
     });
 

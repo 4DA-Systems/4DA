@@ -2379,7 +2379,7 @@ fn detect_escalating_chains() -> Vec<ChainSummary> {
         Err(_) => return vec![],
     };
 
-    match crate::signal_chains::detect_chains(&conn) {
+    match crate::signal_chains::detect_and_record_chains(&conn) {
         Ok(chains) => {
             chains
                 .into_iter()

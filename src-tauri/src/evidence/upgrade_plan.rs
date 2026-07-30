@@ -90,7 +90,7 @@ pub fn persist_upgrade_plan(
             hasher.update(r.package_name.as_bytes());
             hasher.update([0u8]);
             hasher.update(r.version.as_bytes());
-            hasher.update([b'\n']);
+            hasher.update(*b"\n");
         }
         hex::encode(hasher.finalize())
     };

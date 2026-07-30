@@ -36,8 +36,7 @@ pub(crate) fn validate_input_length(value: &str, field: &str, max_len: usize) ->
 #[tauri::command]
 pub async fn get_settings() -> Result<serde_json::Value> {
     let manager = get_settings_manager();
-    let mut guard = manager.lock();
-    guard.ensure_keys_hydrated();
+    let guard = manager.lock();
     let settings = guard.get();
 
     Ok(serde_json::json!({
