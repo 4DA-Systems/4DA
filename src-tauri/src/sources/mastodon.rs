@@ -101,17 +101,37 @@ struct MastodonTag {
 /// `pub(crate)`: the Phase 93 migration re-derives stored titles with this
 /// same function so historical rows heal identically to fresh ingest.
 pub(crate) fn derive_title(html: &str) -> String {
+    // Strip tags, capturing each tag's text so `<span class="invisible">`
+    // content is skipped entirely. Mastodon wraps the parts of a long URL it
+    // does NOT display (the "https://" prefix and the severed tail after the
+    // ellipsis span) in invisible spans; keeping that text planted mid-word
+    // fragments no downstream heuristic can tell from prose — live corpus
+    // 2026-07-27: "…tip jar are ay Code for", where "ay" is the invisible
+    // tail of "sketch-a-day". What the reader can't see, the title must not
+    // contain.
     let mut text = String::with_capacity(html.len());
+    let mut tag = String::new();
     let mut in_tag = false;
+    let mut invisible = false;
     for c in html.chars() {
         match c {
             '<' => {
                 in_tag = true;
+                tag.clear();
                 // A tag boundary is a word boundary — never weld adjacent runs.
                 text.push(' ');
             }
-            '>' => in_tag = false,
-            _ if !in_tag => text.push(c),
+            '>' => {
+                in_tag = false;
+                let t = tag.to_ascii_lowercase();
+                if t.starts_with("span") && t.contains("invisible") {
+                    invisible = true;
+                } else if invisible && t.starts_with("/span") {
+                    invisible = false;
+                }
+            }
+            _ if in_tag => tag.push(c),
+            _ if !invisible => text.push(c),
             _ => {}
         }
     }
@@ -684,6 +704,35 @@ mod tests {
         assert_eq!(
             derive_title("<p>see <a>https://example.com/docs</a> rocks anyway</p>"),
             "see rocks anyway"
+        );
+    }
+
+    #[test]
+    fn invisible_span_content_never_reaches_the_title() {
+        // Exact live-corpus HTML (2026-07-27, pynews.com.br/@villares): the
+        // invisible tail of "sketch-a-day" is purely alphabetic ("ay"), so the
+        // is_url_tail digit/path heuristic can NOT catch it — it must die at
+        // the span level. Old output: "The sketch-a-day archives and tip jar
+        // are ay Code for".
+        let live = "<p>The sketch-a-day archives and tip jar are at: <a href=\"https://abav.lugaralgum.com/sketch-a-day\" rel=\"nofollow noopener\" translate=\"no\" target=\"_blank\"><span class=\"invisible\">https://</span><span class=\"ellipsis\">abav.lugaralgum.com/sketch-a-d</span><span class=\"invisible\">ay</span></a> Code for this: <a href=\"https://github.com/villares/sketch-a-day/tree/main/2026/sketch_2026_06_10\" rel=\"nofollow noopener\" translate=\"no\" target=\"_blank\"><span class=\"invisible\">https://</span><span class=\"ellipsis\">github.com/villares/sketch-a-d</span><span class=\"invisible\">ay/tree/main/2026/sketch_2026_06_10</span></a> <a href=\"https://pynews.com.br/tags/Processing\" class=\"mention hashtag\" rel=\"nofollow noopener\" target=\"_blank\">#<span>Processing</span></a> <a href=\"https://pynews.com.br/tags/py5\" class=\"mention hashtag\" rel=\"nofollow noopener\" target=\"_blank\">#<span>py5</span></a></p>";
+        let title = derive_title(live);
+        assert!(
+            !title.contains(" ay ") && !title.ends_with(" ay"),
+            "invisible URL tail leaked into title: {title}"
+        );
+        assert!(
+            title.starts_with("The sketch-a-day archives and tip jar"),
+            "prose head lost: {title}"
+        );
+        assert!(!title.contains("https"), "scheme leaked: {title}");
+
+        // The invisible flag must reset at the span close — prose after a
+        // link stays visible.
+        assert_eq!(
+            derive_title(
+                "<p>Ship it <a><span class=\"invisible\">https://</span><span class=\"ellipsis\">example.com/x</span><span class=\"invisible\">yz</span></a> today</p>"
+            ),
+            "Ship it today"
         );
     }
 

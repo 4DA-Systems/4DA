@@ -434,24 +434,39 @@ pub fn build_graph(
 // Tauri Command
 // ============================================================================
 
+/// Async so the build runs on a blocking-pool thread, never the main thread —
+/// a non-async Tauri command executes ON the main thread, and a corpus-scale
+/// build (60s+ on a multi-GB DB while an analysis run competes for I/O) froze
+/// the entire webview and stalled every other sync command behind it.
 #[tauri::command]
-pub fn build_content_graph(days: Option<u32>, max_nodes: Option<usize>) -> Result<ContentGraph> {
-    let conn = crate::open_db_connection()?;
-    let d = days.unwrap_or(DEFAULT_DAYS);
-    let m = max_nodes.unwrap_or(DEFAULT_MAX_NODES);
-    let graph = build_graph(&conn, d, m)?;
-    // Persist this build's cluster geometry as the next build's layout
-    // anchors (P2.11). Deliberately OUTSIDE build_graph: builds stay pure.
-    anchors::persist_layout_anchors(&conn, d, &graph);
-    Ok(graph)
+pub async fn build_content_graph(
+    days: Option<u32>,
+    max_nodes: Option<usize>,
+) -> Result<ContentGraph> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = crate::open_db_connection()?;
+        let d = days.unwrap_or(DEFAULT_DAYS);
+        let m = max_nodes.unwrap_or(DEFAULT_MAX_NODES);
+        let graph = build_graph(&conn, d, m)?;
+        // Persist this build's cluster geometry as the next build's layout
+        // anchors (P2.11). Deliberately OUTSIDE build_graph: builds stay pure.
+        anchors::persist_layout_anchors(&conn, d, &graph);
+        Ok(graph)
+    })
+    .await
+    .map_err(|e| crate::error::FourDaError::Internal(format!("graph build task failed: {e}")))?
 }
 
 /// Hydrate a selected node's members for the detail panel (keyed lookup of
 /// items already surfaced by `build_content_graph` — not a ranked feed).
 #[tauri::command]
-pub fn get_graph_node_details(item_ids: Vec<i64>) -> Result<Vec<GraphNodeDetail>> {
-    let conn = crate::open_db_connection()?;
-    detail::fetch_node_details(&conn, &item_ids)
+pub async fn get_graph_node_details(item_ids: Vec<i64>) -> Result<Vec<GraphNodeDetail>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = crate::open_db_connection()?;
+        detail::fetch_node_details(&conn, &item_ids)
+    })
+    .await
+    .map_err(|e| crate::error::FourDaError::Internal(format!("node detail task failed: {e}")))?
 }
 
 // ============================================================================

@@ -793,7 +793,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 101;
+        const TARGET_VERSION: i64 = 102;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3912,6 +3912,53 @@ impl Database {
                 )?;
             }
 
+            // Phase 102: third mastodon-title heal. derive_title now skips
+            // `<span class="invisible">` content — Mastodon wraps the
+            // non-displayed parts of a long URL (scheme prefix, severed tail)
+            // in invisible spans, and a purely-alphabetic tail ("ay", the end
+            // of "sketch-a-day") passed every Phase-94 heuristic and landed
+            // mid-title ("…tip jar are ay Code for", live corpus 2026-07-27).
+            // Same shape as Phases 93/94: re-derive every stored mastodon
+            // title from the raw body with the fixed function; rows that
+            // re-derive to empty (URL-only toots) keep their old title.
+            if current_version < 102 {
+                Self::run_versioned_migration(
+                    &conn,
+                    101,
+                    102,
+                    "Phase 102: re-derive mastodon titles (invisible-span tails)",
+                    |c| {
+                        let mut stmt = c.prepare(
+                            "SELECT id, content FROM source_items
+                             WHERE source_type = 'mastodon'
+                               AND content IS NOT NULL AND content != ''",
+                        )?;
+                        let rows: Vec<(i64, String)> = stmt
+                            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                            .collect::<std::result::Result<_, _>>()?;
+                        drop(stmt);
+
+                        let mut healed = 0usize;
+                        for (id, content) in rows {
+                            let title = crate::sources::mastodon::derive_title(&content);
+                            if !title.is_empty() {
+                                c.execute(
+                                    "UPDATE source_items SET title = ?1 WHERE id = ?2",
+                                    rusqlite::params![title, id],
+                                )?;
+                                healed += 1;
+                            }
+                        }
+                        info!(
+                            target: "4da::db",
+                            healed,
+                            "Phase 102: re-derived mastodon titles (invisible-span tails)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -4975,6 +5022,51 @@ mod tests {
             )
             .unwrap();
         assert_eq!(healed, "SQLite editions");
+    }
+
+    /// Phase 102 lifts TARGET_VERSION to 102 and re-heals mastodon titles
+    /// with the invisible-span-aware derive_title (a purely-alphabetic
+    /// severed URL tail like "ay" passed every earlier heuristic). Wind back
+    /// to 101, seed the corrupted row, re-run, assert clean.
+    #[test]
+    fn test_phase_102_heals_invisible_span_tails() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 102,
+            "schema_version should be >= 102 after migration; got {version}"
+        );
+
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, url, content_hash, embedding)
+             VALUES ('mastodon', 'tag:test-102', 'The archives and tip jar are ay Code for',
+                     '<p>The archives and tip jar are at: <a href=\"https://example.com/sketch-a-day\"><span class=\"invisible\">https://</span><span class=\"ellipsis\">example.com/sketch-a-d</span><span class=\"invisible\">ay</span></a> Code for this</p>',
+                     'https://example.com/2', 'hash-test-102', X'00');
+             UPDATE schema_version SET version = 101;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v101");
+
+        let conn = db.conn.lock();
+        let healed: String = conn
+            .query_row(
+                "SELECT title FROM source_items WHERE source_id = 'tag:test-102'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            !healed.contains(" ay ") && !healed.ends_with(" ay"),
+            "invisible tail survived the heal: {healed}"
+        );
+        assert!(
+            healed.starts_with("The archives and tip jar"),
+            "prose head lost: {healed}"
+        );
     }
 
     /// Phase 94 re-heals with derive_title v3 (scheme-less URLs, severed

@@ -1340,6 +1340,8 @@ fn find_uncovered_deps(
 
     let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
 
+    drop_bare_shadows(&mut uncovered);
+
     uncovered.sort_by(|a, b| {
         risk_ord(&a.risk_level)
             .cmp(&risk_ord(&b.risk_level))
@@ -1347,6 +1349,22 @@ fn find_uncovered_deps(
     });
 
     Ok((uncovered, weak_match_deps))
+}
+
+/// The same package can enter the uncovered list twice — ecosystem-qualified
+/// from a manifest/lockfile scan ("react (npm)") and bare from a
+/// provenance-less dependency row whose ecosystem is empty ("react"). Live
+/// corpus 2026-07-27: both rendered as separate Uncovered rows. The qualified
+/// entry is strictly more informative; drop the bare shadow.
+fn drop_bare_shadows(uncovered: &mut Vec<UncoveredDep>) {
+    let qualified: std::collections::HashSet<String> = uncovered
+        .iter()
+        .filter(|d| d.name != bare_package_name(&d.name))
+        .map(|d| bare_package_name(&d.name).to_lowercase())
+        .collect();
+    uncovered.retain(|d| {
+        d.name != bare_package_name(&d.name) || !qualified.contains(&d.name.to_lowercase())
+    });
 }
 
 /// Common runtime built-in modules that generate false blind spots.
@@ -3610,8 +3628,8 @@ fn parse_dep_assessments(response: &str, deps: &[(String, String, bool)]) -> Vec
 /// drops the in-flight `assess_blind_spots_with_ai` callback and the result
 /// would vanish). `None` when nothing has been assessed this process.
 #[tauri::command]
-pub fn get_cached_blind_spot_assessment() -> std::result::Result<Option<BlindSpotAssessment>, String>
-{
+pub async fn get_cached_blind_spot_assessment(
+) -> std::result::Result<Option<BlindSpotAssessment>, String> {
     crate::settings::require_signal_feature("get_cached_blind_spot_assessment")
         .map_err(|e| e.to_string())?;
     let cached = BS_ASSESSMENT_CACHE.lock().ok().and_then(|g| {
@@ -3632,30 +3650,37 @@ pub fn get_cached_blind_spot_assessment() -> std::result::Result<Option<BlindSpo
 /// legacy coverage score carried on `feed.score`. Internal
 /// `generate_blind_spot_report` still produces the legacy struct (shared
 /// with telemetry code paths) and converts at the boundary.
+/// Async + blocking-pool: the report generation is corpus-scale work (coverage
+/// over thousands of deps + advisory matching). As a sync command it ran on
+/// the main thread and froze the webview for its full duration.
 #[tauri::command]
-pub fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
+pub async fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
     crate::settings::require_signal_feature("get_blind_spots").map_err(|e| e.to_string())?;
-    let report = generate_blind_spot_report().map_err(|e| e.to_string())?;
-    let mut feed = blind_spot_report_to_feed(&report);
+    tauri::async_runtime::spawn_blocking(|| {
+        let report = generate_blind_spot_report().map_err(|e| e.to_string())?;
+        let mut feed = blind_spot_report_to_feed(&report);
 
-    // Attach total tracked dep count so the UI can show accurate denominator
-    if let Ok(conn) = crate::open_db_connection() {
-        if let Ok(deps) = get_dependency_coverage(&conn) {
-            feed.total_tracked = Some(deps.len());
+        // Attach total tracked dep count so the UI can show accurate denominator
+        if let Ok(conn) = crate::open_db_connection() {
+            if let Ok(deps) = get_dependency_coverage(&conn) {
+                feed.total_tracked = Some(deps.len());
+            }
         }
-    }
 
-    // Tier 2: inject LLM-judged blind spot items (missed signals the user hasn't seen)
-    feed.items.extend(llm_judged_blind_spot_items());
+        // Tier 2: inject LLM-judged blind spot items (missed signals the user hasn't seen)
+        feed.items.extend(llm_judged_blind_spot_items());
 
-    let total_tracked = feed.total_tracked;
-    let weak_match_count = feed.weak_match_count;
-    let data_freshness = feed.data_freshness.clone();
-    let mut final_feed = build_feed_with_existing_score(feed.items, feed.score);
-    final_feed.total_tracked = total_tracked;
-    final_feed.weak_match_count = weak_match_count;
-    final_feed.data_freshness = data_freshness;
-    Ok(final_feed)
+        let total_tracked = feed.total_tracked;
+        let weak_match_count = feed.weak_match_count;
+        let data_freshness = feed.data_freshness.clone();
+        let mut final_feed = build_feed_with_existing_score(feed.items, feed.score);
+        final_feed.total_tracked = total_tracked;
+        final_feed.weak_match_count = weak_match_count;
+        final_feed.data_freshness = data_freshness;
+        Ok(final_feed)
+    })
+    .await
+    .map_err(|e| format!("blind spot task failed: {e}"))?
 }
 
 /// Free-tier teaser for the Blind Spots lens: real aggregate counts only,
@@ -4109,6 +4134,29 @@ mod tests {
             generated_at: "2026-06-12T00:00:00Z".to_string(),
             data_freshness: None,
         }
+    }
+
+    #[test]
+    fn bare_shadow_of_qualified_dep_is_dropped() {
+        let mk = |name: &str, eco: &str| UncoveredDep {
+            name: name.to_string(),
+            dep_type: eco.to_string(),
+            projects_using: vec![],
+            days_since_last_signal: 10,
+            available_signal_count: 1,
+            risk_level: "medium".to_string(),
+            match_type: "exact_registry".to_string(),
+            coverage_reason: None,
+            adapters_searched: vec![],
+            platform_active: true,
+        };
+        // "react" (empty-ecosystem shadow) duplicates "react (npm)" — dropped.
+        // "zustand" is bare with NO qualified twin — kept (a real entry from
+        // an ecosystem the display formatter has no label for must survive).
+        let mut deps = vec![mk("react (npm)", "npm"), mk("react", ""), mk("zustand", "")];
+        drop_bare_shadows(&mut deps);
+        let names: Vec<&str> = deps.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(names, vec!["react (npm)", "zustand"]);
     }
 
     #[test]
