@@ -222,6 +222,7 @@ mod clock_skew_tests {
         LicenseConfig {
             tier: "free".to_string(),
             license_key: String::new(),
+            refresh_key: None,
             activated_at: None,
             trial_started_at: Some(started.to_string()),
             dev_unlock_all: false,

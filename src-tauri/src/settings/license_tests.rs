@@ -42,6 +42,7 @@ mod tests {
         let license = LicenseConfig {
             tier: "free".to_string(),
             license_key: String::new(),
+            refresh_key: None,
             activated_at: None,
             trial_started_at: None,
             dev_unlock_all: false,
@@ -55,6 +56,7 @@ mod tests {
         let license = LicenseConfig {
             tier: "free".to_string(),
             license_key: String::new(),
+            refresh_key: None,
             activated_at: None,
             trial_started_at: Some(chrono::Utc::now().to_rfc3339()),
             dev_unlock_all: false,
@@ -69,6 +71,7 @@ mod tests {
         let license = LicenseConfig {
             tier: "free".to_string(),
             license_key: String::new(),
+            refresh_key: None,
             activated_at: None,
             trial_started_at: Some(expired.to_rfc3339()),
             dev_unlock_all: false,
@@ -84,6 +87,7 @@ mod tests {
         let free = LicenseConfig {
             tier: "free".to_string(),
             license_key: String::new(),
+            refresh_key: None,
             activated_at: None,
             trial_started_at: None,
             dev_unlock_all: false,
@@ -95,6 +99,7 @@ mod tests {
         let signal = LicenseConfig {
             tier: "signal".to_string(),
             license_key: String::new(),
+            refresh_key: None,
             activated_at: None,
             trial_started_at: None,
             dev_unlock_all: false,
@@ -105,6 +110,7 @@ mod tests {
         let legacy_pro = LicenseConfig {
             tier: "pro".to_string(),
             license_key: String::new(),
+            refresh_key: None,
             activated_at: None,
             trial_started_at: None,
             dev_unlock_all: false,
@@ -120,6 +126,7 @@ mod tests {
         let free = LicenseConfig {
             tier: "free".to_string(),
             license_key: String::new(),
+            refresh_key: None,
             activated_at: None,
             trial_started_at: None,
             dev_unlock_all: false,
@@ -140,6 +147,7 @@ mod tests {
         let license = LicenseConfig {
             tier: "free".to_string(),
             license_key: String::new(),
+            refresh_key: None,
             activated_at: None,
             trial_started_at: None,
             dev_unlock_all: true,
@@ -177,6 +185,7 @@ mod tests {
         let original = LicenseConfig {
             tier: "pro".to_string(),
             license_key: "4DA-test-key-abc123".to_string(),
+            refresh_key: None,
             activated_at: Some(activated.clone()),
             trial_started_at: None,
             dev_unlock_all: false,

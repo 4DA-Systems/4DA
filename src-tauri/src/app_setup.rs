@@ -544,6 +544,18 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // Validate license integrity (reset tier if no key present)
     crate::settings::validate_license_on_startup();
 
+    // Lease model: refresh the entitlement token on startup and every 6h. This
+    // propagates revocation (a cancel/refund reflected LIVE in Stripe) to online
+    // users within the interval, while offline users keep working until the
+    // current token's embedded expiry. No-op for non-lease licenses.
+    tauri::async_runtime::spawn(async {
+        let mut interval = tokio::time::interval(std::time::Duration::from_hours(6));
+        loop {
+            interval.tick().await; // fires immediately on first tick, then every 6h
+            crate::settings::maybe_refresh_lease().await;
+        }
+    });
+
     // Initialize embedding calibration — adapts sigmoid parameters to the
     // current model's similarity distribution. Must run BEFORE first analysis.
     // Check if embedding model has changed — trigger background re-embed if needed.
