@@ -234,7 +234,7 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
             priority: "P1".into(),
             title: "Use feedback buttons".into(),
             description: format!(
-                "You've given {} feedback interactions. The engine learns from your thumbs up/down — 10+ interactions significantly improve accuracy.",
+                "You've given {} feedback interactions. Your thumbs up/down train judge calibration and your preference profile — 10+ labels give calibration real data to fit against.",
                 ctx.feedback_interaction_count
             ),
             action: None,

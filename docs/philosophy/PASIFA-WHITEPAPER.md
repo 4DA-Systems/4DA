@@ -10,7 +10,7 @@
 
 ## Abstract
 
-PASIFA is a multi-axis scoring methodology designed to determine whether a piece of content is relevant to a specific software developer, using only signals that exist locally on that developer's machine. It addresses the fundamental failure of single-axis recommendation systems by evaluating content across five independent axes — Context, Interest, ACE, Learned, and Dependency — and requiring confirmation from at least two axes before surfacing any item. This **confirmation gate** is the key innovation: it enforces precision over recall, eliminating the single-axis flukes that plague conventional scoring. Tested across 9 simulated developer personas with 215 labeled items (1,997 total evaluations), PASIFA achieves 92% overall rejection with 98% noise accuracy (true negative rate: 97.8%), 77% precision, and 36% recall — conservative by design, as the system prioritizes showing less but being right. PASIFA operates through an eight-phase pipeline that extracts, calibrates, combines, gates, and thresholds signals in a structured sequence. All scoring computation runs locally, on signals that already exist on your machine (a cloud LLM, if you configure one, sees only the snippets it is asked to judge). The system compounds accuracy over time through feedback integration, autophagy calibration, and taste embedding — creating a personal relevance model that cannot be replicated by cloning the code.
+PASIFA is a multi-axis scoring methodology designed to determine whether a piece of content is relevant to a specific software developer, using only signals that exist locally on that developer's machine. It addresses the fundamental failure of single-axis recommendation systems by evaluating content across five independent axes — Context, Interest, ACE, Learned, and Dependency — and requiring confirmation from at least two axes before surfacing any item. This **confirmation gate** is the key innovation: it enforces precision over recall, eliminating the single-axis flukes that plague conventional scoring. Tested across 9 simulated developer personas with 215 labeled items (1,997 total evaluations), PASIFA achieves 92% overall rejection with 98% noise accuracy (true negative rate: 97.8%), 77% precision, and 36% recall — conservative by design, as the system prioritizes showing less but being right. PASIFA operates through an eight-phase pipeline that extracts, calibrates, combines, gates, and thresholds signals in a structured sequence. All scoring computation runs locally, on signals that already exist on your machine (a cloud LLM, if you configure one, sees only the snippets it is asked to judge). The system compounds accuracy over time by re-judging its stored corpus as the pipeline improves and by calibrating its LLM judge against explicit feedback labels. Behavioural score weighting (feedback integration, autophagy calibration, taste embedding) is reserved as of v19 (AD-029, 2026-08-11) pending validation — see §2.4 and §5.
 
 ---
 
@@ -99,19 +99,11 @@ The ACE axis confirms through any of three paths:
 
 **Question:** Has the developer's past behaviour indicated that this kind of content is valuable?
 
-**Signal source:** Two sub-signals:
+**Status: RESERVED as of v19 (AD-029, 2026-08-11).** The Learned axis remains part of the five-axis architecture — it appears in score breakdowns and the gate table — but it carries weight 0 and never confirms. Behavioural weighting was removed from scoring authority after documented incidents in which engagement-derived signals moved scores without earning that authority: a feedback-capture layer running three incompatible strength scales, a self-reinforcing loop in which passive scroll noise drove a user's own stack to strong negative affinity, and a degenerate calibration curve that remapped honest low judgments upward while re-recording its own output as training data. A confirming Learned axis can flip an item from one signal to two — multiplying its score ceiling 2.5× — making it the highest-leverage lever in the system; that lever was held by the least trustworthy data. Accuracy first: an axis that cannot be validated does not score.
 
-1. **Feedback boost:** Explicit signals (save, dismiss, mark irrelevant) and implicit signals (time spent, clicks) are aggregated per topic with a 30-day half-life. Topic-level feedback scores are looked up for the content's extracted topics, averaged, scaled by `FEEDBACK_SCALE` (0.30), and capped to [-0.20, +0.20].
+**Designed signal source** (retained for re-enablement): explicit signals (save, dismiss, mark irrelevant) and implicit signals (time spent, clicks) aggregated per topic with a 30-day half-life, plus learned topic affinities stored as `(score, confidence)` pairs. The capture pipeline still runs — it builds the user-visible Learned Preferences profile (pin / forget / reset) and powers Brief rejections — it just no longer moves relevance scores.
 
-2. **Affinity multiplier** (`compute_affinity_multiplier()`): Computed from learned topic affinities stored in the ACE context. Each affinity is a `(score, confidence)` pair, where score ranges from -1.0 (strong dislike) to +1.0 (strong preference). The multiplier formula is:
-
-```
-multiplier = (1.0 + avg_effect * 0.7).clamp(0.3, 1.7)
-```
-
-where `avg_effect` is the confidence-weighted average of matching topic affinities.
-
-**Confirmation threshold:** Feedback boost > `0.05` OR affinity multiplier >= `1.15`.
+**Re-enable criteria (AD-029, all required, briefly):** a single trustworthy capture scale with no positive-valued negative gestures; a calibration-harness-measured lift over the neutral baseline on labeled data; degeneracy guards on every fitted artifact at save and load, with raw pre-transform values persisted; fitted state bound to the corpus it was fit on; and a user-visible off switch.
 
 **Independence:** The Learned axis derives entirely from historical user behaviour. It does not reference the current codebase state, declared interests, or dependency manifests.
 
@@ -150,6 +142,8 @@ The gate table defines the relationship between confirmation count and score tre
 
 These values are defined as `V2_GATE` in `pipeline_v2.rs`.
 
+> **Note (v19, AD-029, 2026-08-11):** with the Learned axis reserved (§2.4), the practical maximum is 4 confirming axes. The 5-axis row remains defined for re-enablement.
+
 ### 3.3 Why 2-of-5 Is the Minimum
 
 The critical property of the gate table is that **no content with fewer than two confirming axes can reach the relevance threshold.** With one signal, the ceiling is 0.28 — below the 0.35 default relevance threshold. With zero signals, the ceiling is 0.20.
@@ -162,7 +156,7 @@ This design choice trades recall for precision. Some genuinely relevant content 
 
 2. **Independent confirmation is statistically robust.** If two unrelated signal sources agree that content is relevant, the probability of coincidental agreement is the product of the individual false-positive rates. With five axes, 2-of-5 agreement substantially reduces false positives while maintaining sensitivity to genuinely multi-dimensional relevance.
 
-3. **Bootstrap mode provides a safe exception.** For new users with fewer than 10 feedback interactions, the minimum signal requirement relaxes to 1, preventing the cold-start problem from making the system appear broken. As the user provides feedback, the full 2-of-5 requirement engages.
+3. **The ceiling, not a counter, enforces the minimum.** *(Revised v19, AD-029, 2026-08-11.)* The former bootstrap mode relaxed the minimum-signal floor to 1 for users with fewer than 10 feedback interactions, graduating to 2 as feedback accumulated. That graduation was removed with the behavioural demotion: the floor is a fixed 1, and no scoring behaviour depends on engagement counts. The two-axis minimum is enforced by the ceiling table itself — a one-signal ceiling of 0.28 sits below the 0.35 relevance threshold regardless of any floor.
 
 ### 3.4 The Ceiling Mechanism
 
@@ -338,13 +332,15 @@ Two final adjustments:
 
 2. **Relevance threshold:** The gated score is compared against the auto-tuning relevance threshold (default: 0.35). Items at or above the threshold are marked relevant. Items below are rejected.
 
-An additional quality floor applies: items must have at least `min_signals` confirming axes (2 in normal mode, 1 in bootstrap mode) OR a score above 0.70 to be marked relevant. This prevents high-scoring items with zero signal confirmation from slipping through.
+An additional quality floor applies: items must have at least one confirming axis OR a score above 0.70 to be marked relevant. This prevents high-scoring items with zero signal confirmation from slipping through. *(Revised v19, AD-029, 2026-08-11: `min_signals` is a fixed 1 — the former bootstrap graduation tied to feedback counts was removed with the behavioural demotion. The two-axis minimum is enforced by the gate ceilings, not this floor; see §3.3.)*
 
 ---
 
 ## 5. Calibration and Learning
 
 PASIFA is not a static scoring system. Four mechanisms enable it to compound accuracy for each individual user over time.
+
+> **Status note (v19, AD-029, 2026-08-11):** feedback-derived signals no longer enter the scoring pipeline. Topic feedback boosts (§5.1), autophagy calibration deltas (§5.2), and the taste boost (§5.3) are demoted from scoring authority pending the AD-029 re-enable criteria (§2.4); the capture and profile layers they describe still run and remain user-visible (Learned Preferences, engagement dashboards, Brief rejections). The subsections below document the designed mechanism, retained for re-enablement. Judge calibration — fitting curves from explicit feedback labels — remains active, with new guards added 2026-08-11: calibration samples persist the raw pre-transform score, and degenerate fitted curves are refused at both save and load.
 
 ### 5.1 Feedback Integration
 

@@ -85,16 +85,22 @@ if confidence < 0.3 {
 - Embedding model changes MUST trigger full re-embedding
 - **Verification:** Determinism tests
 
-### INV-023: Three-Layer Context Weights
+### INV-023: Three-Layer Context Weights (amended by AD-029, 2026-08-11)
 - Static Identity weight: 1.0 (explicit user input)
 - Active Context weight: 0.8 (real-time detection)
-- Learned Behavior weight: 0.6 (implicit learning)
+- Learned Behavior weight: **0.0 — demoted from scoring authority** (AD-029)
 - These weights are CANONICAL and MUST NOT be changed without spec update
+- The learned layer's non-zero weight may ONLY be restored via the AD-029
+  re-enable criteria: a single unified capture strength scale, a
+  calibration-harness-proven lift over the neutral baseline, degeneracy
+  guards on every fitted artifact, and a user-visible off switch. Until
+  then, learned behavior feeds ONLY user-facing surfaces (Learned
+  Preferences panel, engagement dashboard) — never scores or verdicts.
 - **Code Pattern:**
 ```rust
 const STATIC_LAYER_WEIGHT: f32 = 1.0;
 const ACTIVE_LAYER_WEIGHT: f32 = 0.8;
-const LEARNED_LAYER_WEIGHT: f32 = 0.6;
+const LEARNED_LAYER_WEIGHT: f32 = 0.0; // AD-029: demoted; see re-enable criteria
 ```
 
 ---

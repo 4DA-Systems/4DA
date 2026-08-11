@@ -268,6 +268,26 @@ if updated == 0 {
 
 ---
 
+## Learned state & scoring
+
+### Fitted artifact outlives the data it was fit on
+**Symptom.** A "learned" transform (calibration curve, cached embedding, tuned threshold) behaves absurdly while all its training tables look empty/healthy. 2026-08-11 incident: after the 07-31 DB reset, `data/calibrations/{hash}/judge.json` (fit 06-19 from 50 mislabeled samples, every bucket → 1.0) kept loading — the model's honest 1/5 judgments were remapped to 5/5, the reconciler added +0.15 to 48 items/cycle, and every remapped 1.0 was re-persisted as a "raw" sample for the next fit.
+
+**Root cause class.** Learned state persisted OUTSIDE the DB (files, kv, caches) with identity keyed on model/prompt but NOT on the corpus/data epoch it was fit from. A reset wipes the evidence but not the conclusion. Same class one layer down: `embedding_cache` stored the model name but never filtered on it (fixed v19 — model now in the lookup key); the tuned `relevance_threshold` in kv_store was re-installed on every ACE warmup (removed v19).
+
+**Guards in place (v19).** Degenerate curves refused at save AND load (`CalibrationCurve::degeneracy_reason`); rerank uniformity circuit-breaker (all-identical scores → pass discarded); calibration samples persist the RAW pre-transform score; Phase 103 purged the 3,028 poisoned samples; embedding cache lookups require model match. Residual: fitted artifacts are still not stamped with a corpus epoch — AD-029 re-enable criterion (4).
+
+**If it happens.** Quarantine (move, don't delete) the artifact directory; no-curve/no-cache is a documented-safe pass-through everywhere. Then live-verify the next cycle's telemetry (`agreed/skeptical/enthusiastic` in the rerank log line).
+
+### Post-pipeline score writers bypass categorical caps
+**Symptom.** Items the pipeline capped (commodity ceiling, UGC caps) rank at the top of the feed anyway; score signatures cluster at writer-specific values (e.g. three items tied at 0.948).
+
+**Root cause class.** `score_item`'s caps are applied INSIDE the pipeline, but cross-encoder rerank (0.4/0.6 blend), dedup cluster boost (+0.09), source-tier percentile normalization, and the LLM reconciler (±0.15, clamped at 1.0 not the 0.92 knee) all overwrite `top_score` AFTER it. v18 made the VERDICT categorical; the SCORE still ranked the feed.
+
+**Guards in place (v19).** `ScoreBreakdown::score_ceiling` set at cap time and re-asserted in `finalize_scores` — the one pass that already runs after every writer (`scoring/analyzer.rs`). Frontend score-sort honors the ceiling too (`use-result-filters.ts`). Any NEW post-pipeline score writer must run before `finalize_scores` or re-assert ceilings itself.
+
+---
+
 ## When to add to this file
 
 - You hit a bug that took more than an hour to track down.
