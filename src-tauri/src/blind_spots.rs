@@ -2146,25 +2146,12 @@ fn load_user_direct_deps() -> Option<std::collections::HashSet<String>> {
 fn build_negative_stack_from_deps(
     deps: &std::collections::HashSet<String>,
 ) -> Option<crate::stacks::negative_stack::NegativeStackContext> {
-    let conn = crate::open_db_connection().ok()?;
-
-    let anti_topics: Vec<(String, f32)> = match conn
-        .prepare("SELECT topic, confidence FROM anti_topics WHERE rejection_count >= 2")
-    {
-        Ok(mut stmt) => stmt
-            .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, f32>(1)?))
-            })
-            .ok()
-            .map(|rows| rows.flatten().collect())
-            .unwrap_or_default(),
-        Err(_) => Vec::new(),
-    };
-
+    // v19.1 (AD-029/AD-030): dismissal-derived anti-topics no longer feed
+    // the negative stack (they were the last behavioral scoring input);
+    // only competing-tech inference from the dependency graph remains.
     Some(crate::stacks::negative_stack::build_negative_stack(
         deps,
         crate::competing_tech::COMPETING_TECH,
-        &anti_topics,
     ))
 }
 

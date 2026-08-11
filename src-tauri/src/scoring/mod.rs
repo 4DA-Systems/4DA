@@ -264,6 +264,14 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 //     curated feed vs 8% configured).
 // (e) Threshold auto-tuners frozen (two conflicting tuners + a kv
 //     resurrection path); threshold is the fixed default.
+//
+// NO bump for the 2026-08-12 negative-stack change (AD-030 arc): the
+// auto-detected anti-topic input to `build_negative_stack` was removed —
+// the last behavioral scoring path after v19. Checked against the live
+// corpus by read-only probe: `anti_topics` has 0 rows, so the priors the
+// builder produces are byte-identical with and without the input; stored
+// scores cannot differ and a corpus re-stamp would be a no-op. If a
+// corpus with populated anti_topics ever needs converging, bump then.
 pub(crate) const PIPELINE_VERSION: i32 = 19;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1

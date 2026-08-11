@@ -74,21 +74,13 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
             .map(|(name, _)| name.to_lowercase())
             .collect();
 
-        let anti_topic_pairs: Vec<(String, f32)> = ace_ctx
-            .anti_topics
-            .iter()
-            .filter_map(|t| {
-                ace_ctx
-                    .anti_topic_confidence
-                    .get(t)
-                    .map(|&conf| (t.clone(), conf))
-            })
-            .collect();
-
+        // v19.1 (AD-029/AD-030): auto-detected anti-topics no longer feed the
+        // negative stack — that was the last behavioral scoring path (a
+        // dismissal-count-derived 0.30 suppression prior). Competing-tech
+        // inference from the user's actual dependency graph remains.
         ace_ctx.negative_stack = crate::stacks::negative_stack::build_negative_stack(
             &direct_dep_names,
             crate::competing_tech::COMPETING_TECH,
-            &anti_topic_pairs,
         );
 
         if !ace_ctx.negative_stack.priors.is_empty() {
