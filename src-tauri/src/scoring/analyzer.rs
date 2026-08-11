@@ -158,7 +158,7 @@ pub(crate) async fn score_items_full(
 
         if idx % 50 == 0 {
             let progress = 0.2 + (0.75 * (idx as f32 / total_cached as f32));
-            let truncated_title: String = item.title.chars().take(30).collect();
+            let truncated_title = crate::utils::truncate_display(&item.title, 30);
             emit_progress(
                 app,
                 "relevance",

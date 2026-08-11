@@ -8,8 +8,65 @@
 
 /// Safely truncate a string to a maximum number of characters (UTF-8 aware)
 /// This avoids panics when slicing multi-byte characters like Cyrillic, Chinese, etc.
+///
+/// This is the *machine* truncator — a hard character cap for embedding text,
+/// LLM prompt budgets and log lines, where a mid-word cut costs nothing. Never
+/// use it for a string a human will read: use [`truncate_display`] instead.
 pub(crate) fn truncate_utf8(s: &str, max_chars: usize) -> String {
     s.chars().take(max_chars).collect()
+}
+
+/// Characters that must never be the last thing before an ellipsis — cutting
+/// after them reads as a broken sentence ("…the PRs with their,…").
+const DANGLING: &[char] = &[
+    ' ', '\t', '\n', ',', ';', ':', '.', '-', '–', '—', '(', '[', '{', '/', '&', '+', '·', '|',
+    '\u{2026}',
+];
+
+/// Truncate a string for **display** to at most `max_chars` characters,
+/// breaking on a word boundary and marking the cut with a single ellipsis.
+///
+/// The invariant every caller depends on: the returned string is never longer
+/// than `max_chars` *including* the ellipsis, so schema caps (`EvidenceItem`
+/// title ≤ 120, `relevance_note` ≤ 200) hold without the caller doing arithmetic.
+///
+/// Rules:
+/// - Short enough already → returned untouched, with no ellipsis added. A title
+///   the source already ellipsised ("…Attack A large-scale…") keeps its single
+///   marker rather than gaining a second.
+/// - Otherwise cut at the last whitespace inside the budget, strip any dangling
+///   punctuation, and append `…` (U+2026, one char — not three ASCII dots).
+/// - No whitespace in the budget → hard cut at the boundary. Scripts that do
+///   not space their words (Chinese, Japanese, Thai) have no word boundary to
+///   find, and a locale that renders 12 translated strings must not degenerate
+///   to a lone ellipsis. The same fallback covers a single unbroken token.
+///
+/// Origin: 2026-08-12. `signals.rs` cut headlines at a flat 60 chars mid-word,
+/// so the Key Signals card read "…Infects More Than 400 npm Pa" — 58% of the
+/// live corpus was long enough to hit it.
+pub(crate) fn truncate_display(s: &str, max_chars: usize) -> String {
+    if s.chars().count() <= max_chars {
+        return s.to_string();
+    }
+    if max_chars == 0 {
+        return String::new();
+    }
+    // Reserve one char for the ellipsis so the result honours the caller's cap.
+    let budget = max_chars - 1;
+    let head: String = s.chars().take(budget).collect();
+
+    // `rfind` returns a byte offset at a real char boundary (whitespace is
+    // single-byte ASCII here), so the slice below cannot split a code point.
+    let cut = match head.rfind(char::is_whitespace) {
+        Some(i) if i > 0 => &head[..i],
+        _ => head.as_str(),
+    };
+    let trimmed = cut.trim_end_matches(DANGLING);
+    // An all-punctuation head would trim to nothing — keep the hard cut instead
+    // of returning a bare ellipsis.
+    let body = if trimmed.is_empty() { cut } else { trimmed };
+
+    format!("{body}\u{2026}")
 }
 
 /// Decode common HTML entities that sources may include in titles/content.
@@ -268,6 +325,106 @@ mod tests {
     #[test]
     fn test_truncate_utf8_exact_length() {
         assert_eq!(truncate_utf8("hello", 5), "hello");
+    }
+
+    // ------------------------------------------------------------------
+    // truncate_display — the human-facing truncator
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn truncate_display_leaves_short_strings_alone() {
+        assert_eq!(truncate_display("hello world", 20), "hello world");
+        assert_eq!(truncate_display("hello", 5), "hello");
+        assert_eq!(truncate_display("", 10), "");
+    }
+
+    #[test]
+    fn truncate_display_never_cuts_mid_word() {
+        // The live regression: a flat 60-char cut produced "…400 npm Pa".
+        let title = "Self-Propagating ChainDrop Worm Infects More Than 400 npm Packages in Major Software Supply Chain Attack";
+        let out = truncate_display(title, 60);
+        assert_eq!(
+            out,
+            "Self-Propagating ChainDrop Worm Infects More Than 400 npm…"
+        );
+        assert!(!out.contains("Pa\u{2026}"), "cut mid-word: {out}");
+    }
+
+    #[test]
+    fn truncate_display_honours_the_cap_including_the_ellipsis() {
+        // EvidenceItem title ≤ 120 / relevance_note ≤ 200 are schema-enforced;
+        // the ellipsis must fit *inside* the budget, never push past it.
+        for max in [1, 2, 8, 30, 60, 119, 120, 200] {
+            let long = "alpha beta gamma delta epsilon zeta eta theta iota kappa ".repeat(12);
+            let out = truncate_display(&long, max);
+            assert!(
+                out.chars().count() <= max,
+                "max={max} produced {} chars: {out:?}",
+                out.chars().count()
+            );
+        }
+    }
+
+    #[test]
+    fn truncate_display_strips_dangling_punctuation() {
+        // "…with their," / "…numbers:" read as broken sentences.
+        assert_eq!(
+            truncate_display("alpha beta, gamma", 13),
+            "alpha beta\u{2026}"
+        );
+        assert_eq!(
+            truncate_display("alpha beta: gamma", 13),
+            "alpha beta\u{2026}"
+        );
+        assert_eq!(
+            truncate_display("alpha beta - gamma", 14),
+            "alpha beta\u{2026}"
+        );
+    }
+
+    #[test]
+    fn truncate_display_does_not_double_ellipsis() {
+        // 3,401 live rows already end with an ellipsis from upstream truncation.
+        let already = "Supply Chain Attack A large-scale\u{2026}";
+        assert_eq!(truncate_display(already, 120), already);
+        assert_eq!(already.matches('\u{2026}').count(), 1);
+        // And when we *do* cut such a string, the old marker goes with the tail.
+        let out = truncate_display(already, 20);
+        assert_eq!(out.matches('\u{2026}').count(), 1, "{out}");
+    }
+
+    #[test]
+    fn truncate_display_handles_unspaced_scripts() {
+        // Chinese has no word boundary to find — hard cut beats a bare ellipsis.
+        let chinese = "你好世界你好世界你好世界";
+        let out = truncate_display(chinese, 5);
+        assert_eq!(out, "你好世界\u{2026}");
+        assert_eq!(out.chars().count(), 5);
+    }
+
+    #[test]
+    fn truncate_display_handles_one_giant_token() {
+        let token = "a".repeat(200);
+        let out = truncate_display(&token, 10);
+        assert_eq!(out, format!("{}\u{2026}", "a".repeat(9)));
+    }
+
+    #[test]
+    fn truncate_display_is_multibyte_safe() {
+        // Cyrillic (2 bytes/char) and emoji (4 bytes) must not panic or split.
+        let out = truncate_display("Привет мир как дела сегодня", 12);
+        assert!(out.ends_with('\u{2026}'), "{out}");
+        assert!(out.chars().count() <= 12);
+        let emoji = truncate_display("🦀 Rust 🦀 systems 🦀 programming", 12);
+        assert!(emoji.chars().count() <= 12, "{emoji}");
+    }
+
+    #[test]
+    fn truncate_display_never_returns_a_bare_ellipsis() {
+        // An all-punctuation head would trim to nothing.
+        let out = truncate_display("--------- tail", 6);
+        assert_ne!(out, "\u{2026}");
+        assert!(out.chars().count() <= 6);
     }
 
     #[test]

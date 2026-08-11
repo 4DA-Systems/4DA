@@ -591,14 +591,7 @@ fn deduplicate_and_store(conn: &Connection, windows: &mut Vec<DecisionWindow>) {
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
-        return s.to_string();
-    }
-    let mut end = max;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    format!("{}...", &s[..end])
+    crate::utils::truncate_display(s, max)
 }
 
 fn row_to_window(row: &rusqlite::Row<'_>) -> rusqlite::Result<DecisionWindow> {

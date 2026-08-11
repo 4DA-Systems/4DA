@@ -44,8 +44,13 @@ export const SignalRow = ({ signal }: { signal: SignalItem }) => {
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          {/* Top row: action text */}
-          <p className={`text-sm font-medium ${config.color} leading-snug`}>
+          {/* Top row: action text. Clamped to two lines so a long headline
+              cannot grow a ragged four-line card on a narrow window; the full
+              string stays reachable on hover. */}
+          <p
+            className={`text-sm font-medium ${config.color} leading-snug line-clamp-2`}
+            title={signal.signal_action}
+          >
             {signal.signal_action}
           </p>
 

@@ -2565,13 +2565,14 @@ fn priority_to_urgency(priority: &str) -> Urgency {
 }
 
 fn truncate_title(s: &str) -> String {
-    // Schema: ≤ 120 chars, no trailing period.
-    s.trim_end_matches('.').chars().take(120).collect()
+    // Schema: ≤ 120 chars, no trailing period. `truncate_display` counts its
+    // ellipsis against the budget, so the cap still holds.
+    crate::utils::truncate_display(s.trim_end_matches('.'), 120)
 }
 
 fn truncate_note(s: &str) -> String {
     // Citation relevance_note schema cap: 200 chars.
-    s.chars().take(200).collect()
+    crate::utils::truncate_display(s, 200)
 }
 
 /// Parse the true unreviewed-signal count out of a dep's `why` string. That

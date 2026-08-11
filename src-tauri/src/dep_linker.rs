@@ -494,12 +494,10 @@ fn build_evidence_text(match_type: &str, item: &UnlinkedItem, dep_name: &str) ->
     }
 }
 
-fn truncate_title(title: &str, max_len: usize) -> &str {
-    if title.len() <= max_len {
-        title
-    } else {
-        &title[..title.floor_char_boundary(max_len)]
-    }
+fn truncate_title(title: &str, max_len: usize) -> String {
+    // These strings are the user-facing "why this dependency matched" reason —
+    // a mid-word cut with no ellipsis read as if the sentence had been lost.
+    crate::utils::truncate_display(title, max_len)
 }
 
 // ============================================================================
