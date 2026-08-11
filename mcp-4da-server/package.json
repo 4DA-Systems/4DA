@@ -80,7 +80,7 @@
     "url": "https://github.com/4DA-Systems/4DA/issues"
   },
   "dependencies": {
-    "better-sqlite3": "^12.9.0",
+    "better-sqlite3": "^13.0.3",
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "hono": "^4.12.34"
