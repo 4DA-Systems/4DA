@@ -150,9 +150,9 @@ Because the cost of false positives (irrelevant content shown) is asymmetrically
 **Why local-only signals?**
 Because any signal that requires sending data externally introduces a privacy dependency that cannot be architecturally guaranteed. PASIFA uses only data that exists on the developer's machine — project files, git history, declared interests, feedback signals. This is not a limitation; it is the design.
 
-### 2.6 Calibration and Compound Learning
+### 2.6 Calibration (Learned Axis Reserved)
 
-PASIFA is not static. Three mechanisms enable the system to improve over time for each individual user:
+The learned axis is currently **reserved**: engagement-derived signals are held out of scoring until their lift can be validated against explicit user feedback. Scoring improves through engine updates — and each update re-judges the corpus the system already holds. The following mechanisms are documented for re-enablement; they do not currently move scores:
 
 1. **Feedback Integration:** Explicit signals (save, dismiss, mark irrelevant) and implicit signals (time spent, link clicks) adjust affinity scores for topics and sources. These adjustments have a 30-day half-life (INV-070) to prevent stale preferences from dominating.
 
@@ -160,7 +160,7 @@ PASIFA is not static. Three mechanisms enable the system to improve over time fo
 
 3. **Taste Embedding:** A 384-dimensional vector representing the user's holistic preferences, computed as a weighted centroid of topic affinity embeddings. This enables semantic similarity scoring against the user's overall taste, not just individual topic matches.
 
-All three mechanisms operate locally. No calibration data is transmitted externally. The result is a system that becomes more accurate for its specific user over time — a compound knowledge advantage that cannot be replicated by cloning the code.
+All three mechanisms are local by design; no calibration data is ever transmitted externally. What cannot be replicated by cloning the code is the operator's data: the scored corpus, the decision records, and the configuration are personal and local.
 
 ---
 
@@ -321,7 +321,7 @@ Health checks run at three frequencies:
 - **Session:** Sovereignty delta, overdue cadences, escalation queue, immune scan
 - **Daily:** Source health, build validation, test suite, file sizes, sovereignty score
 - **Weekly:** Strategic drift detection, codebase metabolism, decision propagation, pre-launch checks
-- **Monthly:** Decision replay, full invariant audit, wisdom crystallisation, dependency assessment, compound intelligence score
+- **Monthly:** Decision replay, full invariant audit, wisdom crystallisation, dependency assessment, outcome metrics score
 
 ### 4.5 The Immune System
 
@@ -337,11 +337,11 @@ Antibody Format:
 
 When an antibody is created, it scans: (1) the module containing the fix, (2) all files importing from the fixed module, (3) all files in the same language. This creates a spreading immune response — each bug fix makes the system more resistant to the entire class of bug, not just the specific instance.
 
-### 4.6 Compound Intelligence
+### 4.6 Outcome Metrics
 
-AOS tracks whether the system is getting smarter over time through six metrics:
+AOS tracks realized outcomes through six weighted metrics:
 
-| Component | Weight | What "Smarter" Means |
+| Component | Weight | What Improvement Looks Like |
 |-----------|--------|---------------------|
 | Memory Utilisation | 20% | Stored decisions are actually referenced in future work |
 | Immune Effectiveness | 20% | Antibodies prevent repeat bugs |
@@ -350,7 +350,7 @@ AOS tracks whether the system is getting smarter over time through six metrics:
 | Rework Trend | 15% | Rework rate is declining |
 | Session Productivity | 10% | Each session produces more sovereignty improvement |
 
-If the compound score increases month-over-month, the system is learning. If it decreases, something is degrading — and the specific component tells you what.
+If the composite score increases month-over-month, the process is improving on measured outcomes. If it decreases, something is degrading — and the specific component tells you what.
 
 ---
 
@@ -417,15 +417,15 @@ Cloud recommendation systems improve by aggregating data across users. This crea
 
 ### 7.2 Why Local Systems Compound
 
-A local system that learns from one user's behaviour — their codebase, their feedback, their reading patterns, their git activity — develops an increasingly precise model of that individual's relevance function.
+A local system accumulates what a cloud system never holds for you: a scored corpus grounded in your codebase, a record of your decisions, and a configuration shaped to your stack.
 
-This precision compounds:
+This accumulation compounds:
 - **Month 1:** The system knows your declared interests
-- **Month 3:** The system has learned your feedback patterns and adjusted scoring
-- **Month 6:** The system has a taste embedding that captures your holistic preferences
-- **Month 12:** The system's calibration deltas have corrected systematic biases specific to your domain
+- **Month 3:** The corpus spans whole narratives — connected items, watch history, gaps identified and closed
+- **Month 6:** Half a year of scored coverage, decision records, and configuration shaped to your stack
+- **Month 12:** Engine updates have re-judged the full corpus — yesterday's noise reclassified as today's signal
 
-A competitor who clones the code gets the algorithm but not the calibration. A cloud competitor who aggregates across users gets breadth but not depth. The compound advantage is personal and non-transferable.
+A competitor who clones the code gets the algorithm, not your data: the scored corpus, the decision records, and the configuration are personal and local. A cloud competitor who aggregates across users gets breadth but not depth. The advantage is personal and non-transferable.
 
 ### 7.3 The Network Extension
 
@@ -454,7 +454,7 @@ The 4DA Framework is published openly. These principles guide adoption:
 
 4. **Measure, don't assume.** System health is not "it works" or "it doesn't." It is a score with components. When the score drops, the components tell you why.
 
-5. **Compound, don't aggregate.** Individual depth beats collective breadth for personal relevance. Build systems that get smarter for one user, not systems that get average across many.
+5. **Compound, don't aggregate.** Individual depth beats collective breadth for personal relevance. Build systems that deepen for one user, not systems that average across many.
 
 ### 8.2 For Organisations
 

@@ -15,13 +15,13 @@
 
 ---
 
-**4DA reads the internet for developers — privately, locally — and gets sharper every day.**
+**4DA reads the internet for developers — privately, locally. Your codebase decides what's relevant.**
 
 It scans your codebase — `Cargo.toml`, `package.json`, `go.mod`, Git history — and scores every article, advisory, and release from 20+ sources against what you actually build. An item needs 2+ independent signals to survive. Everything else is rejected.
 
 Tested across 9 developer personas: **92% of content is filtered as noise, 98% of actual noise is correctly rejected.** Your real rejection rate — computed from your own data — is shown in the Evidence tab.
 
-It learns from how you engage with what it shows you. Saves and dismissals build a preference profile you can inspect, pin, or forget — and teach the Brief what to stop showing you. Relevance scoring itself stays grounded in your actual stack. Yesterday's noise becomes tomorrow's signal.
+Saves and dismissals build a preference profile you can inspect, pin, or forget — and teach the Brief what to stop showing you. Relevance scoring itself stays grounded in your actual stack. And when the engine improves, it re-judges everything it already holds: yesterday's noise becomes tomorrow's signal.
 
 ### The fastest way to try it
 
@@ -48,7 +48,7 @@ This scans your project, detects your stack, and gives your AI assistant live vu
 | Axis | What it measures |
 |------|-----------------|
 | **Context** | Semantic similarity to your active codebase |
-| **Interest** | Alignment with your declared and learned topics |
+| **Interest** | Alignment with your declared topics |
 | **ACE** | Real-time signals from your Git commits and file edits |
 | **Dependency** | Direct matches against your installed packages |
 | **Learned** | Reserved — held out of scoring until it can be validated against your explicit feedback |
@@ -203,12 +203,12 @@ Your Codebase                    External Sources
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), behavior learning, MCP server (14 tools), CLI
+- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), Learned Preferences, MCP server (14 tools), CLI
 
 **Signal** — $12/month or $99/year (14-day free trial).
 - Everything in Free, plus: Signal tab intelligence (Key Signals + analytics), Score Autopsy (5-axis breakdown), Developer DNA profiling, signal chain analysis, knowledge gap detection, semantic shift tracking, attention analytics, standing queries, project health radar
 
-Free is not a demo. It's the full scoring engine, all sources, behavior learning, and MCP integration.
+Free is not a demo. It's the full scoring engine, all sources, Learned Preferences, and MCP integration.
 
 The [STREETS Playbook](https://4da.ai/streets) — 7 modules on turning developer skills into independent income — is free on the open web. No download, no email.
 

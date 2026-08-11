@@ -45,7 +45,8 @@
 │          │                              │  ACE Context Engine     │ │
 │          │                              │  - Scanner              │ │
 │          │                              │  - Watcher              │ │
-│          │                              │  - Behavior Learning    │ │
+│          │                              │  - Learned Preferences  │ │
+│          │                              │   (display+Brief filter)│ │
 │          │                              └─────────────────────────┘ │
 │          │                                         │                 │
 │          │                                         ▼                 │

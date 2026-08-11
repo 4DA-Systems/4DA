@@ -41,7 +41,7 @@ Your codebase                     20+ sources
 
 ## The confirmation gate
 
-Every item is scored on **five independent axes** — semantic context, your interests, real-time signals from your Git activity, direct dependency matches, and what you've learned to save or dismiss. An item must pass **2 or more** to surface.
+Every item is scored on **five independent axes** — semantic context, your interests, real-time signals from your Git activity, direct dependency matches, and a learned axis that is currently reserved (held out of scoring). An item must pass **2 or more** to surface.
 
 Single-axis matches are hard-capped at **28%**. No matter how strong one signal is, it cannot pass alone. This is what makes the feed hard to game: keyword-stuffing hits one axis, and without matching your codebase, your installed packages, *and* your recent work, the gate rejects it. Your `Cargo.lock` doesn't lie.
 

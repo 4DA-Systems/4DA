@@ -265,18 +265,18 @@ After removal, scoring and Developer DNA reflect the corrected stack from the ne
 
 ## Intelligence System
 
-4DA learns from your interactions to improve over time.
+4DA records your interactions to build a preference profile you can inspect and control. Relevance scoring stays grounded in your codebase; your actions shape what the Brief shows you.
 
-### How Learning Works
+### How Your Actions Are Used
 
 Every time you interact with a result, 4DA records a signal:
 
 | Action | Signal | Effect |
 |--------|--------|--------|
-| **Save** | Strong positive | Boosts similar content |
-| **Click / Read** | Mild positive | Slightly boosts topic |
-| **Dismiss** | Mild negative | Slightly reduces topic |
-| **Mark Irrelevant** | Strong negative | Reduces topic, may create anti-topic |
+| **Save** | Strong positive | Bookmarks the item; builds your preference profile |
+| **Click / Read** | Mild positive | Recorded in your activity view |
+| **Dismiss** | Mild negative | Tells the Brief to stop showing similar items |
+| **Mark Irrelevant** | Strong negative | Strong Brief suppression; builds your filter |
 
 ### Learning Indicator
 
@@ -300,7 +300,7 @@ Click **"Intelligence Metrics"** on the Briefing view to expand detailed analyti
 - **Engagement Pulse**: Your interaction patterns
 - **Intelligence Pulse**: Calibration accuracy, source quality, anti-patterns
 - **Scoring Delta**: How scores are shifting over time
-- **Compound Advantage**: Your overall intelligence advantage score
+- **Advantage Score**: Realized outcomes — response rate, lead time, gaps closed
 
 ### Calibration
 

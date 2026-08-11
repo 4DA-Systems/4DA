@@ -12,7 +12,7 @@ interface UseViewTrackingOptions {
   enabled?: boolean;
   /** Whether the user has given explicit feedback (save/dismiss/click) */
   hasExplicitFeedback?: boolean;
-  /** Content topics for behavior learning */
+  /** Content topics for the preference profile */
   itemTopics?: string[];
   /** Zero-based index of this item in the result list (for scroll depth calculation) */
   itemIndex?: number;
@@ -26,7 +26,7 @@ const IGNORE_THRESHOLD_SECONDS = 5;
 /**
  * Track view-time for a content item using IntersectionObserver.
  * When the element is visible for `threshold` seconds, emits a passive
- * 'scroll' interaction to the backend for behavior learning.
+ * 'scroll' interaction to the backend for the preference profile.
  *
  * When visible for 5+ seconds with no explicit feedback, also emits an
  * 'ignore' signal — the user saw it and chose not to interact.

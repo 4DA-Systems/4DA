@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../../types';
 import { getContentTypeBadge } from '../../config/content-types';
-import { useAppStore } from '../../store';
 import { JudgesSplitBadge } from './JudgesSplitBadge';
 
 interface BadgeRowProps {
@@ -12,30 +11,13 @@ interface BadgeRowProps {
 
 export const BadgeRow = memo(function BadgeRow({ item }: BadgeRowProps) {
   const { t } = useTranslation();
-  const rawAffinities = useAppStore(s => s.learnedAffinities);
-  const learnedAffinities = useMemo(() => rawAffinities ?? [], [rawAffinities]);
-
-  // Find which learned topic matches this item (for tooltip)
-  const matchedAffinityTopic = useMemo(() => {
-    if (!item.score_breakdown || item.score_breakdown.affinity_mult <= 1.0) return null;
-    const titleLower = item.title.toLowerCase();
-    const positiveAffinities = learnedAffinities.filter(a => a.affinity_score > 0);
-    for (const a of positiveAffinities) {
-      if (titleLower.includes(a.topic.toLowerCase())) return a.topic;
-    }
-    return positiveAffinities[0]?.topic || null;
-  }, [item.score_breakdown, item.title, learnedAffinities]);
+  // The "Learned" affinity badge was removed in AD-030: affinity no longer
+  // moves scores (AD-029, affinity_mult is always 1.0), so the badge could
+  // never render honestly — and its tooltip claimed a boost that no longer
+  // exists.
 
   return (
     <>
-      {matchedAffinityTopic && (
-        <span
-          className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-accent-gold/10 text-accent-gold"
-          title={t('results.affinityBoost', { topic: matchedAffinityTopic })}
-        >
-          {t('results.learnedBadge')}
-        </span>
-      )}
       {item.decision_window_match && (
         <span
           className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"

@@ -172,7 +172,7 @@ The MCP server works without the desktop app. On first run it creates a local da
 | Agent memory (cross-session) | Yes | Yes |
 | Scored content feed (20+ sources) | -- | Yes |
 | Actionable signals + knowledge gaps | -- | Yes |
-| Compound intelligence (learns over time) | -- | Yes |
+| The analysis layer (Signal Chains, Knowledge Gaps, temporal analysis) | -- | Yes |
 
 > **[Download 4DA](https://github.com/4DA-Systems/4DA/releases/latest)** for the full experience.
 
@@ -211,7 +211,7 @@ npx @4da/mcp-server --version    # Print version
 No. The server sends package names and versions to public APIs ([OSV.dev](https://osv.dev), npm registry, crates.io, PyPI, Go proxy) and generic tech keywords to [HN Algolia](https://hn.algolia.com/api). The same public data visible in your `package.json`. No source code, no file paths, no personal data. Set `FOURDA_OFFLINE=true` to disable all network calls. (The sole exception is opt-in OpenAI embeddings — see the network note above.)
 
 **Do I need the 4DA desktop app?**
-No. 9 tools work standalone: vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, project context, decision memory, alignment checking, and agent memory. The desktop app adds scored content from 20+ sources that compounds over time.
+No. 9 tools work standalone: vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, project context, decision memory, alignment checking, and agent memory. The desktop app adds a scored content feed from 20+ sources, graded against your actual stack.
 
 **Which AI tools does this work with?**
 Any tool that supports [MCP](https://modelcontextprotocol.io): Claude Code, Claude Desktop, Cursor, Windsurf, VS Code (Copilot), and any custom MCP client.

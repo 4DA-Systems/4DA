@@ -369,7 +369,7 @@ The architecture is for **mechanical silent failures** — broken integrations, 
 
 ## Why this matters specifically for 4DA
 
-4DA is an **intelligence system that depends on correctness to be trusted.** If an external tool returns garbage because the CLI silently failed, the user has no way to know the intelligence is compromised. The feedback loop is broken. Compound intelligence cannot compound when the input signal is silently contaminated.
+4DA is an **intelligence system that depends on correctness to be trusted.** If an external tool returns garbage because the CLI silently failed, the user has no way to know the intelligence is compromised. The feedback loop is broken. Analysis built on silently contaminated input is worse than no analysis at all.
 
 Every silent failure in 4DA isn't just a bug — it's a **trust erosion event.** Users relying on proactive intelligence need to trust that when 4DA says "here's what matters," the underlying pipelines actually ran correctly. Silent failures are structurally incompatible with the product promise.
 

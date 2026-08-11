@@ -741,8 +741,8 @@ permalink: "/framework.html"
     <p><strong>Why local-only signals?</strong></p>
     <p>Because any signal that requires sending data externally introduces a privacy dependency that cannot be architecturally guaranteed. PASIFA uses only data that exists on the developer's machine &mdash; project files, git history, declared interests, feedback signals. This is not a limitation; it is the design.</p>
 
-    <h3>2.6 Calibration and Compound Learning</h3>
-    <p>PASIFA is not static. Three mechanisms enable the system to improve over time for each individual user:</p>
+    <h3>2.6 Calibration (Learned Axis Reserved)</h3>
+    <p>The learned axis is currently <strong>reserved</strong>: engagement-derived signals are held out of scoring until their lift can be validated against explicit user feedback. Scoring improves through engine updates &mdash; and each update re-judges the corpus the system already holds. The following mechanisms are documented for re-enablement; they do not currently move scores:</p>
 
     <ol>
       <li><strong>Feedback Integration:</strong> Explicit signals (save, dismiss, mark irrelevant) and implicit signals (time spent, link clicks) adjust affinity scores for topics and sources. These adjustments have a 30-day half-life to prevent stale preferences from dominating.</li>
@@ -750,7 +750,7 @@ permalink: "/framework.html"
       <li><strong>Taste Embedding:</strong> A 384-dimensional vector representing the user's holistic preferences, computed as a weighted centroid of topic affinity embeddings. This enables semantic similarity scoring against the user's overall taste, not just individual topic matches.</li>
     </ol>
 
-    <p>All three mechanisms operate locally. No calibration data is transmitted externally. The result is a system that becomes more accurate for its specific user over time &mdash; a compound knowledge advantage that cannot be replicated by cloning the code.</p>
+    <p>All three mechanisms are local by design; no calibration data is ever transmitted externally. What cannot be replicated by cloning the code is the operator's data: the scored corpus, the decision records, and the configuration are personal and local.</p>
 
     <!-- Section 3: Authority Stack -->
     <h2 id="authority-stack">3. The Authority Stack</h2>
@@ -1009,7 +1009,7 @@ permalink: "/framework.html"
       <li><strong>Session:</strong> Sovereignty delta, overdue cadences, escalation queue, immune scan</li>
       <li><strong>Daily:</strong> Source health, build validation, test suite, file sizes, sovereignty score</li>
       <li><strong>Weekly:</strong> Strategic drift detection, codebase metabolism, decision propagation, pre-launch checks</li>
-      <li><strong>Monthly:</strong> Decision replay, full invariant audit, wisdom crystallisation, dependency assessment, compound intelligence score</li>
+      <li><strong>Monthly:</strong> Decision replay, full invariant audit, wisdom crystallisation, dependency assessment, outcome metrics score</li>
     </ul>
 
     <h3>4.5 The Immune System</h3>
@@ -1022,12 +1022,12 @@ permalink: "/framework.html"
 
     <p>When an antibody is created, it scans: (1) the module containing the fix, (2) all files importing from the fixed module, (3) all files in the same language. This creates a spreading immune response &mdash; each bug fix makes the system more resistant to the entire class of bug, not just the specific instance.</p>
 
-    <h3>4.6 Compound Intelligence</h3>
-    <p>AOS tracks whether the system is getting smarter over time through six metrics:</p>
+    <h3>4.6 Outcome Metrics</h3>
+    <p>AOS tracks realized outcomes through six weighted metrics:</p>
 
     <table>
       <thead>
-        <tr><th>Component</th><th>Weight</th><th>What "Smarter" Means</th></tr>
+        <tr><th>Component</th><th>Weight</th><th>What Improvement Looks Like</th></tr>
       </thead>
       <tbody>
         <tr><td>Memory Utilisation</td><td>20%</td><td>Stored decisions are actually referenced in future work</td></tr>
@@ -1039,7 +1039,7 @@ permalink: "/framework.html"
       </tbody>
     </table>
 
-    <p>If the compound score increases month-over-month, the system is learning. If it decreases, something is degrading &mdash; and the specific component tells you what.</p>
+    <p>If the composite score increases month-over-month, the process is improving on measured outcomes. If it decreases, something is degrading &mdash; and the specific component tells you what.</p>
 
     <!-- Section 5: Triad in Practice -->
     <h2 id="triad">5. The Triad in Practice</h2>
@@ -1116,8 +1116,8 @@ permalink: "/framework.html"
     <p>Cloud recommendation systems improve by aggregating data across users. This creates a cold-start problem (new users get generic recommendations) and a convergence problem (all users eventually see similar content). The system converges toward the average user, not the individual.</p>
 
     <h3>7.2 Why Local Systems Compound</h3>
-    <p>A local system that learns from one user's behaviour &mdash; their codebase, their feedback, their reading patterns, their git activity &mdash; develops an increasingly precise model of that individual's relevance function.</p>
-    <p>This precision compounds:</p>
+    <p>A local system accumulates what a cloud system never holds for you: a scored corpus grounded in your codebase, a record of your decisions, and a configuration shaped to your stack.</p>
+    <p>This accumulation compounds:</p>
 
     <div class="fw-timeline">
       <div class="fw-timeline-item">
@@ -1126,19 +1126,19 @@ permalink: "/framework.html"
       </div>
       <div class="fw-timeline-item">
         <div class="fw-timeline-label">Month 3</div>
-        <div class="fw-timeline-text">The system has learned your feedback patterns and adjusted scoring</div>
+        <div class="fw-timeline-text">The corpus spans whole narratives &mdash; connected items, watch history, gaps identified and closed</div>
       </div>
       <div class="fw-timeline-item">
         <div class="fw-timeline-label">Month 6</div>
-        <div class="fw-timeline-text">The system has a taste embedding that captures your holistic preferences</div>
+        <div class="fw-timeline-text">Half a year of scored coverage, decision records, and configuration shaped to your stack</div>
       </div>
       <div class="fw-timeline-item">
         <div class="fw-timeline-label">Month 12</div>
-        <div class="fw-timeline-text">The system's calibration deltas have corrected systematic biases specific to your domain</div>
+        <div class="fw-timeline-text">Engine updates have re-judged the full corpus &mdash; yesterday's noise reclassified as today's signal</div>
       </div>
     </div>
 
-    <p>A competitor who clones the code gets the algorithm but not the calibration. A cloud competitor who aggregates across users gets breadth but not depth. The compound advantage is personal and non-transferable.</p>
+    <p>A competitor who clones the code gets the algorithm, not your data: the scored corpus, the decision records, and the configuration are personal and local. A cloud competitor who aggregates across users gets breadth but not depth. The advantage is personal and non-transferable.</p>
 
     <h3>7.3 The Network Extension</h3>
     <p>The compound thesis extends to teams through encrypted metadata sharing:</p>
@@ -1161,7 +1161,7 @@ permalink: "/framework.html"
       <li><strong>Gate, don't threshold.</strong> A simple score threshold allows single-axis flukes. A confirmation gate requires independent agreement. This is the difference between a heuristic and a methodology.</li>
       <li><strong>Govern, don't document.</strong> Documentation describes. Governance constrains. An invariant is not a "best practice" &mdash; it is a structural guarantee with a violation protocol.</li>
       <li><strong>Measure, don't assume.</strong> System health is not "it works" or "it doesn't." It is a score with components. When the score drops, the components tell you why.</li>
-      <li><strong>Compound, don't aggregate.</strong> Individual depth beats collective breadth for personal relevance. Build systems that get smarter for one user, not systems that get average across many.</li>
+      <li><strong>Compound, don't aggregate.</strong> Individual depth beats collective breadth for personal relevance. Build systems that deepen for one user, not systems that average across many.</li>
     </ol>
 
     <h3>For Organisations</h3>

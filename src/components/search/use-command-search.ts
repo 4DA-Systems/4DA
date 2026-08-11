@@ -141,7 +141,7 @@ export function useCommandSearch(deps: ProviderDeps): UseCommandSearch {
 
   const results = useMemo(() => {
     // Apply the frecency boost before ordering so frequently/recently chosen
-    // results float up within their group — the palette learns your habits.
+    // results float up within their group — frequently-used commands rank first.
     const merged = [...syncResults, ...asyncResults].map(r => ({
       ...r,
       score: r.score + frecencyBoost(r.id),

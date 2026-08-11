@@ -336,9 +336,9 @@ An additional quality floor applies: items must have at least one confirming axi
 
 ---
 
-## 5. Calibration and Learning
+## 5. Calibration and Learning (Reserved — See AD-029)
 
-PASIFA is not a static scoring system. Four mechanisms enable it to compound accuracy for each individual user over time.
+This section documents PASIFA's four calibration mechanisms. They are retained for re-enablement: as of v19 (AD-029), only judge calibration and corpus re-judging are active in scoring; the feedback-derived mechanisms are reserved.
 
 > **Status note (v19, AD-029, 2026-08-11):** feedback-derived signals no longer enter the scoring pipeline. Topic feedback boosts (§5.1), autophagy calibration deltas (§5.2), and the taste boost (§5.3) are demoted from scoring authority pending the AD-029 re-enable criteria (§2.4); the capture and profile layers they describe still run and remain user-visible (Learned Preferences, engagement dashboards, Brief rejections). The subsections below document the designed mechanism, retained for re-enablement. Judge calibration — fitting curves from explicit feedback labels — remains active, with new guards added 2026-08-11: calibration samples persist the raw pre-transform score, and degenerate fitted curves are refused at both save and load.
 

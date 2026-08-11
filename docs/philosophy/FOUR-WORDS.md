@@ -68,7 +68,7 @@ Three letters. Short for *development*. The mode where nothing is final.
 
 But `dev` carries a deeper meaning. When you run in `dev` mode, you are making a statement about the nature of the thing you are building: *this is not done yet.* Production is a photograph — a frozen instant. `dev` is the darkroom. The living process. The state where the creator and the creation are still in dialogue.
 
-For 4DA, `dev` is arguably the permanent condition. Even after release, the sovereignty score is tracking, the wisdom engine is accumulating decisions, the PASIFA scoring algorithm is auto-tuning its thresholds through autophagy. The user's intelligence profile compounds daily. A shipped version of 4DA is not finished — it is a living system that adapts to its operator. In the deepest sense, 4DA never leaves `dev`.
+For 4DA, `dev` is arguably the permanent condition. Even after release, the sovereignty score is tracking, the wisdom engine is accumulating decisions, and the engine keeps working its own corpus — ACE rescans the codebase as it changes, and each engine update opens a new verdict epoch that re-judges everything already held. A shipped version of 4DA is not finished — it is a living system grounded in its operator's codebase. In the deepest sense, 4DA never leaves `dev`.
 
 **Alone, `dev` is the admission that creation is never finished — and the commitment to keep creating anyway.**
 
@@ -138,7 +138,7 @@ Resolution, frontend compilation, backend compilation, ignition
 Source gate (domain profile), seed gate (ACE auto-detection), render gate (personalization context), startup self-healing (content integrity)
 
 **Four stages of the developer experience:**
-Install, configure, run, compound
+Install, configure, run, refine
 
 **Four documents that govern the codebase:**
 INVARIANTS (what cannot change), WISDOM (how decisions are made), DECISIONS (what was decided), FAILURE_MODES (what has broken before)
@@ -155,9 +155,9 @@ These four words are typed into a **terminal**. The same interface — a cursor 
 
 The developer's terminal births the application. The application's terminal delivers the signal. The signal informs the developer's next decision. That decision becomes code. The code is compiled by the same four words.
 
-This is not circular. It is compounding. Each cycle through the loop — build, use, learn, build again — adds accumulated context. The PASIFA scoring model gets sharper. The ACE context engine discovers new project dependencies. The wisdom engine records better decisions. The developer becomes more informed. The code becomes more precise. The next `pnpm run tauri dev` starts a slightly better version of the same application.
+This is not circular. It is compounding. Each cycle through the loop — build, use, refine, build again — adds accumulated context. Each engine update re-judges the corpus the last one scored. The ACE context engine discovers new project dependencies. The wisdom engine records better decisions. The developer becomes more informed. The code becomes more precise. The next `pnpm run tauri dev` starts a slightly better version of the same application.
 
-`pnpm run tauri dev` is not a command. It is the ignition sequence for a compounding system — four dimensions of developer autonomy, initiated by four words, in a tool that feeds its own evolution.
+`pnpm run tauri dev` is not a command. It is the ignition sequence for a system that accumulates — four dimensions of developer autonomy, initiated by four words, in a tool that feeds its own evolution.
 
 ---
 

@@ -132,7 +132,7 @@ fn signal_feature_label(feature: &str) -> &'static str {
 }
 
 /// Trial duration in days. Reverse trial: auto-starts on first launch,
-/// giving users enough time for compound intelligence effects to demonstrate value.
+/// giving users enough time for the analysis layer (chains, gaps, temporal views) to demonstrate value.
 const TRIAL_DURATION_DAYS: i64 = 14;
 
 /// Check if the free trial is still active (14 days from trial_started_at)

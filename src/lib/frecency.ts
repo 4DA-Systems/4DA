@@ -5,7 +5,7 @@
 /**
  * Frecency — frequency + recency ranking for command-search picks.
  *
- * Persisted to localStorage so the palette "gets sharper every day": the more
+ * Persisted to localStorage so the palette ranks by your habits: the more
  * (and more recently) you choose a result, the higher it ranks. This is the
  * product thesis applied to the app's own navigation — typing "b" floats the
  * view you actually open, because you've opened it before.

@@ -10,7 +10,7 @@ This guide covers how to activate a 4DA Signal or Team license. If you are using
 | **Signal** | Yes | Everything in Free + Developer DNA, Signal Chains, Knowledge Gaps, Semantic Shifts, Natural Language Search, Score Autopsy, Project Health, Standing Queries, Attention Report, Decision Signals |
 | **Team** | Yes | Everything in Signal + team-scoped context sharing, centralized configuration |
 
-The free tier is fully functional and includes AI briefings. Signal and Team unlock the intelligence analysis layer for users who want compound insights from their content.
+The free tier is fully functional and includes AI briefings. Signal and Team unlock the analysis layer — Developer DNA, Signal Chains, Knowledge Gaps — for users who want more than the scored feed.
 
 ## Getting Your License Key
 
