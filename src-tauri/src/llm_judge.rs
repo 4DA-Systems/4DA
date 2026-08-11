@@ -228,6 +228,7 @@ Output JSON array (one per article):
                 item_id: id,
                 relevant,
                 confidence,
+                raw_confidence: None,
                 reasoning,
                 key_connections,
             });
@@ -240,6 +241,7 @@ Output JSON array (one per article):
                     item_id: id.clone(),
                     relevant: false,
                     confidence: 0.0,
+                    raw_confidence: None,
                     reasoning: "No judgment provided by LLM".to_string(),
                     key_connections: vec![],
                 });

@@ -225,6 +225,30 @@ pub fn load_current_curve_detailed(
             drift: Some(drift),
         };
     }
+    // Degeneracy gate at LOAD as well as save: legacy files written before
+    // the save-side guard existed (e.g. the quarantined 2026-06-19 curve
+    // with every bucket at observed_positive_rate=1.0) must never be
+    // applied. Treated as drift so the UI can surface the invalidation.
+    if let Some(reason) = curve.degeneracy_reason() {
+        warn!(
+            target: "4da::calibration_store",
+            curve_id = %curve.curve_id,
+            reason = reason,
+            "Calibration curve is degenerate — ignoring (pass-through until a discriminating refit)"
+        );
+        let drift = CurveDrift {
+            curve_id: curve.curve_id.clone(),
+            task: task.to_string(),
+            model_identity_hash: identity_hash.to_string(),
+            stored_prompt_version: curve.prompt_version.clone(),
+            current_prompt_version: current_prompt_version.to_string(),
+            reason: format!("degenerate_curve_{reason}"),
+        };
+        return CurveLoad {
+            curve: None,
+            drift: Some(drift),
+        };
+    }
     CurveLoad {
         curve: Some(curve),
         drift: None,
@@ -236,6 +260,19 @@ pub fn load_current_curve_detailed(
 /// previous file — on most filesystems this is atomic, so a crash
 /// mid-write leaves the previous curve intact.
 pub fn save_curve(curve: &CalibrationCurve) -> Result<()> {
+    // Refuse to persist a curve that cannot discriminate — the 2026-08-11
+    // incident curve (all buckets = 1.0, fit from mislabeled pairings)
+    // flattened every judge score to certainty and inflated the feed for
+    // weeks. A degenerate fit means the LABELS are broken; saving it would
+    // institutionalize the breakage. Pass-through (no curve) is the honest
+    // state until labels improve.
+    if let Some(reason) = curve.degeneracy_reason() {
+        return Err(format!(
+            "refusing to save degenerate calibration curve ({reason}): {}",
+            curve.curve_id
+        )
+        .into());
+    }
     let path = path_for(&curve.model_identity_hash, &curve.task);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -393,6 +430,63 @@ mod tests {
             // with a warn log — verify the underlying serde behavior.
             assert!(result.is_err());
         });
+    }
+
+    /// 2026-08-11 incident fixture: the quarantined production curve mapped
+    /// EVERY bucket to observed_positive_rate = 1.0 (fit from 50 mislabeled
+    /// samples). Applying it turned honest 1/5 judgments into 5/5 MUST-READs.
+    /// Such a curve must be refused at save — and never reach disk.
+    #[test]
+    fn save_refuses_degenerate_all_certain_curve() {
+        let mut curve = test_curve("degen_hash_incident_2026_08_11", "judge");
+        for b in &mut curve.buckets {
+            b.observed_positive_rate = 1.0;
+        }
+        let err = save_curve(&curve).expect_err("degenerate curve must be refused at save");
+        assert!(
+            err.to_string().contains("degenerate"),
+            "error should name the refusal reason, got: {err}"
+        );
+        assert!(
+            load_curve("degen_hash_incident_2026_08_11", "judge").is_none(),
+            "nothing may be written for a refused curve"
+        );
+    }
+
+    #[test]
+    fn degeneracy_reason_classifies_curves() {
+        // Healthy fixture (0.20 / 0.70 spread) is NOT degenerate.
+        assert_eq!(test_curve("h", "judge").degeneracy_reason(), None);
+
+        // All buckets certain-positive (the incident shape).
+        let mut all_pos = test_curve("h", "judge");
+        for b in &mut all_pos.buckets {
+            b.observed_positive_rate = 1.0;
+        }
+        assert_eq!(
+            all_pos.degeneracy_reason(),
+            Some("all_buckets_certain_positive")
+        );
+
+        // No spread across buckets (flat 0.5 everywhere).
+        let mut flat = test_curve("h", "judge");
+        for b in &mut flat.buckets {
+            b.observed_positive_rate = 0.5;
+        }
+        assert_eq!(
+            flat.degeneracy_reason(),
+            Some("no_discrimination_across_buckets")
+        );
+
+        // ECE above ceiling (the sibling quarantined curve carried 0.699).
+        let mut bad_ece = test_curve("h", "judge");
+        bad_ece.ece = 0.699;
+        assert_eq!(bad_ece.degeneracy_reason(), Some("ece_above_ceiling"));
+
+        // Fewer than 2 buckets cannot interpolate.
+        let mut one_bucket = test_curve("h", "judge");
+        one_bucket.buckets.truncate(1);
+        assert_eq!(one_bucket.degeneracy_reason(), Some("fewer_than_2_buckets"));
     }
 
     #[test]

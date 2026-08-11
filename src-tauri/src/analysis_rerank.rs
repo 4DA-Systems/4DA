@@ -321,6 +321,22 @@ pub(crate) async fn apply_llm_reranking(
         return None;
     }
 
+    // Circuit breaker (2026-08-11 incident): a judge whose scores are ALL
+    // identical across a full pass is not discriminating — either the model
+    // output is broken or a transform (e.g. a degenerate calibration curve)
+    // flattened it. Applying ±0.15 adjustments from a non-discriminating
+    // advisor moves the whole feed uniformly, and persisting its samples
+    // poisons the next curve fit. Discard the pass entirely.
+    if rerank_pass_is_uniform(&all_judgments) {
+        warn!(
+            target: "4da::rerank",
+            judged = all_judgments.len(),
+            uniform_confidence = all_judgments[0].confidence,
+            "LLM judge returned one identical score for every item — discarding rerank pass (non-discriminating advisor)"
+        );
+        return None;
+    }
+
     // Legacy-path counters (reconciler_enabled=false): judgment.relevant
     // hard-accepts/hard-rejects. Zero in the reconciler path.
     let mut confirmed = 0usize;
@@ -368,8 +384,12 @@ pub(crate) async fn apply_llm_reranking(
                 model: advisor_identity.model.clone(),
                 identity_hash: Some(identity_hash.clone()),
                 task: "judge".to_string(),
-                raw_score: judgment.confidence,
-                normalized_score: judgment.confidence, // No calibration yet (Phase 5)
+                // raw_score must be the model's PRE-curve confidence: the
+                // fitter pairs raw_score with outcomes to fit the NEXT
+                // curve, and feeding it post-curve values trains the curve
+                // on its own output (2026-08-11 incident).
+                raw_score: judgment.raw_confidence.unwrap_or(judgment.confidence),
+                normalized_score: judgment.confidence,
                 confidence: judgment.confidence,
                 reason: if judgment.reasoning.is_empty() {
                     None
@@ -656,5 +676,64 @@ pub(crate) fn maybe_save_digest(results: &[SourceRelevance]) {
         Err(e) => {
             warn!(target: "4da::digest", error = %e, "Failed to save digest");
         }
+    }
+}
+
+/// True when a full rerank pass produced one identical confidence for every
+/// judgment — a non-discriminating advisor. 2026-08-11 incident: a degenerate
+/// calibration curve flattened every honest judge score to 1.0; the
+/// reconciler then inflated all 48 judged items by +0.15 every cycle and the
+/// pass re-persisted its own output as training samples. Small passes (< 8)
+/// are exempt: genuine uniformity is plausible there.
+pub(crate) fn rerank_pass_is_uniform(judgments: &[crate::llm::RelevanceJudgment]) -> bool {
+    if judgments.len() < 8 {
+        return false;
+    }
+    let mut lo = f32::MAX;
+    let mut hi = f32::MIN;
+    for j in judgments {
+        lo = lo.min(j.confidence);
+        hi = hi.max(j.confidence);
+    }
+    (hi - lo) < 1e-6
+}
+
+#[cfg(test)]
+mod rerank_breaker_tests {
+    use super::rerank_pass_is_uniform;
+    use crate::llm::RelevanceJudgment;
+
+    fn j(confidence: f32) -> RelevanceJudgment {
+        RelevanceJudgment {
+            item_id: "x".to_string(),
+            relevant: confidence >= 0.6,
+            confidence,
+            raw_confidence: None,
+            reasoning: String::new(),
+            key_connections: vec![],
+        }
+    }
+
+    #[test]
+    fn uniform_full_pass_trips_the_breaker() {
+        // The incident signature: 48 judgments, every confidence 1.0.
+        let judgments: Vec<_> = (0..48).map(|_| j(1.0)).collect();
+        assert!(rerank_pass_is_uniform(&judgments));
+    }
+
+    #[test]
+    fn discriminating_pass_does_not_trip() {
+        let mut judgments: Vec<_> = (0..47).map(|_| j(0.2)).collect();
+        judgments.push(j(0.8));
+        assert!(!rerank_pass_is_uniform(&judgments));
+    }
+
+    #[test]
+    fn small_pass_is_exempt() {
+        let judgments: Vec<_> = (0..7).map(|_| j(1.0)).collect();
+        assert!(
+            !rerank_pass_is_uniform(&judgments),
+            "fewer than 8 judgments cannot prove non-discrimination"
+        );
     }
 }

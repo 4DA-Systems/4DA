@@ -833,6 +833,11 @@ mod tests {
             let conn = test_conn();
             for i in 0..50 {
                 let raw = if i < 25 { 0.2 } else { 0.8 };
+                // Labels must DISCRIMINATE (low bucket negative, high bucket
+                // positive) — an all-positive label set fits the incident-
+                // shaped all-certain curve, which save_curve now refuses
+                // (see fit_refuses_to_save_degenerate_all_positive_curve).
+                let relevant = i32::from(i >= 25);
                 conn.execute(
                     "INSERT INTO calibration_samples
                         (source_item_id, model_identity_hash, task, prompt_version,
@@ -842,8 +847,8 @@ mod tests {
                 )
                 .unwrap();
                 conn.execute(
-                    "INSERT INTO feedback (source_item_id, relevant) VALUES (?1, 1)",
-                    params![i + 1],
+                    "INSERT INTO feedback (source_item_id, relevant) VALUES (?1, ?2)",
+                    params![i + 1, relevant],
                 )
                 .unwrap();
             }
@@ -875,6 +880,41 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(unprocessed, 0);
+        });
+    }
+
+    /// 2026-08-11 incident guard, fitter level: an all-positive label set
+    /// (exactly what broken pairing produced) fits a curve that maps every
+    /// bucket to certainty. `save_curve` refuses it, `fit_and_save` surfaces
+    /// the error, and the samples stay unprocessed so the cohort refits when
+    /// discriminating labels eventually arrive.
+    #[test]
+    fn fit_refuses_to_save_degenerate_all_positive_curve() {
+        with_unique_identity(|identity_hash| {
+            let conn = test_conn();
+            for i in 0..50 {
+                let raw = if i < 25 { 0.2 } else { 0.8 };
+                conn.execute(
+                    "INSERT INTO calibration_samples
+                        (source_item_id, model_identity_hash, task, prompt_version,
+                         raw_score, confidence, created_at)
+                     VALUES (?1, ?2, 'judge', 'p', ?3, ?3, datetime('now', '-25 hours'))",
+                    params![i + 1, identity_hash, raw],
+                )
+                .unwrap();
+                conn.execute(
+                    "INSERT INTO feedback (source_item_id, relevant) VALUES (?1, 1)",
+                    params![i + 1],
+                )
+                .unwrap();
+            }
+
+            let err = fit_and_save(&conn, identity_hash, "judge", "p")
+                .expect_err("an all-certain fit must be refused, not persisted");
+            assert!(
+                err.to_string().contains("degenerate"),
+                "refusal should name degeneracy, got: {err}"
+            );
         });
     }
 
@@ -1048,6 +1088,7 @@ mod tests {
                                 item_id: "x".into(),
                                 relevant: true,
                                 confidence: 0.2, // lands in bucket 1 (0.2-0.4)
+                                raw_confidence: None,
                                 reasoning: String::new(),
                                 key_connections: vec![],
                             }],

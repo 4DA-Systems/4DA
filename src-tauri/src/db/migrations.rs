@@ -793,7 +793,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 102;
+        const TARGET_VERSION: i64 = 103;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3953,6 +3953,41 @@ impl Database {
                             target: "4da::db",
                             healed,
                             "Phase 102: re-derived mastodon titles (invisible-span tails)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 103 {
+                Self::run_versioned_migration(
+                    &conn,
+                    102,
+                    103,
+                    "Phase 103: purge poisoned calibration samples + orphaned tuner threshold",
+                    |c| {
+                        // Every pre-v19 calibration sample recorded the
+                        // POST-curve confidence under `raw_score`
+                        // (analysis_rerank persisted judgment.confidence after
+                        // CalibratedCore had already applied the curve). With
+                        // the 2026-06-19 degenerate curve live, that meant
+                        // 3,028 rows of literal 1.0/1.0 — fitting the next
+                        // curve from them would reproduce the poison. v19
+                        // persists the true pre-curve raw score; the legacy
+                        // rows are unusable for fitting and are removed.
+                        let purged = c.execute("DELETE FROM calibration_samples", [])?;
+                        // The frozen auto-tuners' persisted threshold could
+                        // otherwise linger forever (its reinstall path is
+                        // gone, but dead state invites resurrection bugs).
+                        let kv = c.execute(
+                            "DELETE FROM kv_store WHERE key = 'relevance_threshold'",
+                            [],
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            purged,
+                            kv_removed = kv,
+                            "Phase 103: poisoned calibration samples + tuner threshold purged (AD-029)"
                         );
                         Ok(())
                     },

@@ -99,6 +99,13 @@ pub struct RelevanceJudgment {
     pub item_id: String,
     pub relevant: bool,
     pub confidence: f32, // 0.0 - 1.0
+    /// The model's confidence BEFORE any calibration curve was applied.
+    /// `None` means no transform ran (confidence IS the raw value).
+    /// Calibration samples must persist THIS value — persisting the
+    /// post-curve value feeds the curve's own output back into the next
+    /// fit (2026-08-11 incident: a degenerate curve remapped every raw
+    /// judgment to 1.0 and 3,028 samples recorded 1.0 as "raw").
+    pub raw_confidence: Option<f32>,
     pub reasoning: String,
     pub key_connections: Vec<String>,
 }
