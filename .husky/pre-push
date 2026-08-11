@@ -114,13 +114,41 @@ REMOTE="$1"
 URL="$2"
 while read LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
     if [ "$LOCAL_SHA" != "0000000000000000000000000000000000000000" ]; then
+        # Scan exactly the commits this push contributes — no more, no less.
+        #
+        # `--not origin/main` is what bounds it. Commits already on origin/main
+        # are published; this hook cannot unpublish them, and judging them only
+        # blocks legitimate pushes. Without the exclusion the range silently
+        # widens after a rebase — the old remote tip stops being an ancestor, so
+        # `$REMOTE_SHA..$LOCAL_SHA` pulls in main's whole history since the
+        # branch forked. Measured on a 2026-07-15 branch rebased onto today's
+        # main: 85 commits scanned instead of 1, and the private-asset guard
+        # below then blocked the force-push on findings that live in main's own
+        # commit messages. A stale branch could not be updated at all.
+        if git rev-parse -q --verify origin/main >/dev/null 2>&1; then
+            EXCLUDE_PUBLISHED="--not origin/main"
+        else
+            # No origin/main to compare against (fresh clone, fork, first push):
+            # fall back to scanning everything rather than scanning nothing.
+            EXCLUDE_PUBLISHED=""
+        fi
         if [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
-            # New branch — check all commits
+            # New branch — every commit not already published.
             RANGE="$LOCAL_SHA"
         else
             RANGE="$REMOTE_SHA..$LOCAL_SHA"
         fi
-        SECRETS=$(git diff "$RANGE" -- ':!site/src/contact.njk' ':!site/src/privacy.njk' ':!site/src/terms.njk' 2>/dev/null | grep -E '^\+' | grep -oE \
+        # `git log -p` walks the pushed COMMITS. The previous `git diff "$RANGE"`
+        # was wrong in both directions: with a single-SHA range it is not a range
+        # at all — `git diff <commit>` compares that commit to the WORKING TREE,
+        # so on the normal path (clean tree, pushing the branch you are standing
+        # on) it produced an empty diff and the secret scan inspected 0 bytes on
+        # every new-branch push; and when pushing a branch that is not checked
+        # out it scanned a large unrelated diff instead. Walking commits also
+        # catches a secret that was added and later removed in the same push,
+        # which a net diff misses entirely.
+        # shellcheck disable=SC2086 # RANGE/EXCLUDE_PUBLISHED must word-split into git args
+        SECRETS=$(git log -p -n 2000 --no-color $RANGE $EXCLUDE_PUBLISHED -- ':!site/src/contact.njk' ':!site/src/privacy.njk' ':!site/src/terms.njk' 2>/dev/null | grep -E '^\+' | grep -oE \
             "$SECRET_PATTERNS" \
             2>/dev/null || true)
         if [ -n "$SECRETS" ]; then
@@ -142,13 +170,11 @@ while read LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
         # name lives in this hook). FAIL-OPEN on any tool error — never brick the fleet's ability to push; block
         # ONLY on a positive detection. Bypass (emergencies only): git push --no-verify.
         if command -v node > /dev/null 2>&1 && [ -f scripts/private-asset-guard.cjs ]; then
-            if [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
-                AR=$(git rev-parse -q --verify origin/main 2>/dev/null) && AR="$AR..$LOCAL_SHA" || AR="$LOCAL_SHA"
-            else
-                AR="$REMOTE_SHA..$LOCAL_SHA"
-            fi
+            # Same bounded range as the secret scan above: only this push's own
+            # commits. See the comment there for why `--not origin/main` matters.
             # strip the leading diff marker (+/-) so a line-leading addition doesn't glue to a flagged name
-            git log -p -n 2000 --no-color "$AR" 2>/dev/null | sed 's/^[-+]//' | node -e 'try{const {scanText}=require("./scripts/private-asset-guard.cjs");let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{process.exit(scanText(s)?1:0)}catch(e){process.exit(0)}})}catch(e){process.exit(0)}'
+            # shellcheck disable=SC2086 # RANGE/EXCLUDE_PUBLISHED must word-split into git args
+            git log -p -n 2000 --no-color $RANGE $EXCLUDE_PUBLISHED 2>/dev/null | sed 's/^[-+]//' | node -e 'try{const {scanText}=require("./scripts/private-asset-guard.cjs");let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{process.exit(scanText(s)?1:0)}catch(e){process.exit(0)}})}catch(e){process.exit(0)}'
             if [ $? -ne 0 ]; then
                 echo ""
                 echo "============================================================"
