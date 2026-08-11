@@ -68,6 +68,47 @@ jobs:
             mcp:
               - 'mcp-4da-server/**'
 
+  # ─────────────────────────────────────────────────────────────────────
+  # Closes the squash-merge leak path.
+  #
+  # `.husky/commit-msg` guards locally authored messages and `.husky/pre-push`
+  # guards outgoing commits — but GitHub composes a SQUASH MERGE message
+  # server-side from the PR title/body, where no local hook runs. Two commits
+  # already on public main (`d5df9e34` #409, `053e5813` #362) carry the private
+  # external-verifier name in their messages because of exactly this gap;
+  # removing them now would require a public-history rewrite.
+  #
+  # This is the only place the check can run BEFORE the merge button, so it is
+  # unconditional (no `needs: changes` path filter) and wired into
+  # Validate Success below.
+  # ─────────────────────────────────────────────────────────────────────
+  pr-metadata:
+    name: PR metadata scan
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+        with:
+          # Full history so the base..head commit range is resolvable.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: '22'
+
+      - name: Scan PR title, body and commit messages
+        # Title and body go through the ENVIRONMENT, never `${{ }}` inlined into
+        # the run block — PR text is attacker-controlled and inlining it is a
+        # script-injection primitive.
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/check-pr-metadata.cjs
+
   frontend:
     name: Frontend
     needs: changes
@@ -337,7 +378,10 @@ jobs:
     if: always()
     # Includes `changes` so a failure in the path-detector itself is caught.
     # Path-filtered legs report "skipped", which the check below treats as pass.
-    needs: [changes, frontend, mcp-server, rust]
+    # `pr-metadata` is included so the squash-merge guard actually gates the
+    # merge — it is already a required check via this job, so no branch-
+    # protection change is needed to enforce it.
+    needs: [changes, pr-metadata, frontend, mcp-server, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
