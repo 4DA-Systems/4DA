@@ -801,7 +801,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 info!(target: "4da::startup", "Git decision miner: no context dirs configured — skipping auto-seed");
                 return;
             }
-            let (decisions, summary) = crate::git_decision_miner::mine_many(&repos, 5, 200);
+            let (_decisions, summary) = crate::git_decision_miner::mine_many(&repos, 5, 200);
             if summary.decisions_found > 0 {
                 info!(
                     target: "4da::startup",
@@ -810,12 +810,12 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     confirmed = summary.confirmed,
                     "Git decision miner: auto-seed complete"
                 );
-                let jsonl_path = std::env::temp_dir().join("4da_git_seeded.jsonl");
-                let lines: Vec<String> = decisions
-                    .iter()
-                    .filter_map(|d| serde_json::to_string(d).ok())
-                    .collect();
-                let _ = std::fs::write(&jsonl_path, lines.join("\n"));
+                // v19: the %TEMP%\4da_git_seeded.jsonl write that lived here
+                // was a dead end — nothing anywhere read it back, and it
+                // leaked mined commit/decision data into the system temp dir
+                // on every startup. Wiring the miner's output into the
+                // intelligence pipeline (Cold Start Layer 1) remains an open
+                // design task; until then the summary log is the output.
             } else {
                 info!(target: "4da::startup", "Git decision miner: no decisions found in {} repos", summary.repos_scanned);
             }
@@ -2122,52 +2122,36 @@ fn build_signal_summary(results: &[crate::SourceRelevance]) -> Option<monitoring
         .iter()
         .filter(|r| r.signal_priority.as_deref() == Some("alert"))
         .count();
-    let top_signal = results
+    // ONE ranking pass for both top_signal and top_item_id. These were two
+    // near-identical max_by blocks with DIFFERENT priority ladders
+    // ("critical/alert/advisory" vs "critical/high/medium"), so the
+    // notification's top_item_id could point at a different item than the
+    // top_signal it claimed to describe. The classifier emits
+    // critical/alert/advisory (see signals.rs), so that ladder is the
+    // correct one.
+    let priority_rank = |p: Option<&str>| -> u8 {
+        match p {
+            Some("critical") => 4,
+            Some("alert") => 3,
+            Some("advisory") => 2,
+            _ => 1,
+        }
+    };
+    let top_item = results
         .iter()
         .filter(|r| r.signal_type.is_some())
         .max_by(|a, b| {
-            let pa = match a.signal_priority.as_deref() {
-                Some("critical") => 4u8,
-                Some("alert") => 3,
-                Some("advisory") => 2,
-                _ => 1,
-            };
-            let pb = match b.signal_priority.as_deref() {
-                Some("critical") => 4u8,
-                Some("alert") => 3,
-                Some("advisory") => 2,
-                _ => 1,
-            };
-            pa.cmp(&pb).then_with(|| {
-                a.top_score
-                    .partial_cmp(&b.top_score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-        })
-        .and_then(|r| Some((r.signal_type.clone()?, r.signal_action.clone()?)));
-    let top_item_id = results
-        .iter()
-        .filter(|r| r.signal_type.is_some())
-        .max_by(|a, b| {
-            let pa = match a.signal_priority.as_deref() {
-                Some("critical") => 4u8,
-                Some("high") => 3,
-                Some("medium") => 2,
-                _ => 1,
-            };
-            let pb = match b.signal_priority.as_deref() {
-                Some("critical") => 4u8,
-                Some("high") => 3,
-                Some("medium") => 2,
-                _ => 1,
-            };
-            pa.cmp(&pb).then_with(|| {
-                a.top_score
-                    .partial_cmp(&b.top_score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-        })
-        .map(|r| r.id as i64);
+            priority_rank(a.signal_priority.as_deref())
+                .cmp(&priority_rank(b.signal_priority.as_deref()))
+                .then_with(|| {
+                    a.top_score
+                        .partial_cmp(&b.top_score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+        });
+    let top_signal =
+        top_item.and_then(|r| Some((r.signal_type.clone()?, r.signal_action.clone()?)));
+    let top_item_id = top_item.map(|r| r.id as i64);
     if critical_count > 0 || high_count > 0 {
         Some(monitoring::SignalSummary {
             critical_count,
