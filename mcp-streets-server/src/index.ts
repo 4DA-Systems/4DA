@@ -3,29 +3,16 @@
 /**
  * STREETS MCP Server
  *
- * MCP server for the STREETS Developer Income Playbook. Provides tools for
- * accessing playbook content, analyzing projects for revenue engine fit,
- * and tracking lesson progress.
+ * Serves the STREETS Developer Income Playbook over MCP: playbook content,
+ * project analysis, and progress tracking. 9 tools across three groups
+ * (course content, analysis, progress).
  *
- * 9 Tools:
- * - get_module: Retrieve a course module with all lessons
- * - get_template: Retrieve a worksheet template
- * - search_course: Full-text search across all modules
- * - get_engine: Get details for a specific revenue engine
- * - recommend_engines: Analyze project and recommend revenue engines
- * - assess_readiness: Score against the Sovereign Setup checklist
- * - get_progress: Track completion state across modules
- * - mark_complete: Mark a lesson as complete
- * - get_next_step: Recommend what to work on next
+ * Protocol: MCP TypeScript SDK v2, served via `serveStdio` — 2025-era hosts
+ * (classic `initialize` handshake) and 2026-07-28 hosts (stateless
+ * `server/discover`) are both supported on the same stdio endpoint.
  */
-
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { Server } from "@modelcontextprotocol/server";
 import { ContentLoader } from "./content.js";
 import { ProgressStore } from "./progress.js";
 
@@ -73,18 +60,6 @@ import type {
 // Server Setup
 // =============================================================================
 
-const server = new Server(
-  {
-    name: "streets-server",
-    version: "1.0.0",
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
-  }
-);
-
 // Lazy-initialized instances
 let content: ContentLoader | null = null;
 let progress: ProgressStore | null = null;
@@ -110,192 +85,215 @@ function getProgressStore(): ProgressStore {
 }
 
 // =============================================================================
-// Tool Handlers
+// Server Factory
 // =============================================================================
 
 /**
- * List available tools
+ * Build a Server instance with the tool handlers registered. `serveStdio`
+ * takes a factory and pins one instance per connection; handlers close over
+ * the module-level content/progress singletons.
  */
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      getModuleTool,
-      getTemplateTool,
-      searchCourseTool,
-      getEngineTool,
-      recommendEnginesTool,
-      assessReadinessTool,
-      getProgressTool,
-      markCompleteTool,
-      getNextStepTool,
-    ],
-  };
-});
-
-/**
- * Execute a tool
- */
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-
-  try {
-    const contentLoader = getContentLoader();
-
-    switch (name) {
-      // =====================================================================
-      // Course Content Tools
-      // =====================================================================
-
-      case "get_module": {
-        const params = (args || {}) as unknown as GetModuleParams;
-        const result = executeGetModule(contentLoader, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "get_template": {
-        const params = (args || {}) as unknown as GetTemplateParams;
-        const result = executeGetTemplate(contentLoader, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "search_course": {
-        const params = (args || {}) as unknown as SearchCourseParams;
-        const result = executeSearchCourse(contentLoader, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "get_engine": {
-        const params = (args || {}) as unknown as GetEngineParams;
-        const result = executeGetEngine(contentLoader, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      // =====================================================================
-      // Analysis Tools
-      // =====================================================================
-
-      case "recommend_engines": {
-        const params = (args || {}) as unknown as RecommendEnginesParams;
-        const result = executeRecommendEngines(params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "assess_readiness": {
-        const params = (args || {}) as unknown as AssessReadinessParams;
-        const result = executeAssessReadiness(params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      // =====================================================================
-      // Progress Tools
-      // =====================================================================
-
-      case "get_progress": {
-        const progressStore = getProgressStore();
-        const result = executeGetProgress(contentLoader, progressStore);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "mark_complete": {
-        const params = (args || {}) as unknown as MarkCompleteParams;
-        const progressStore = getProgressStore();
-        const result = executeMarkComplete(contentLoader, progressStore, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "get_next_step": {
-        const progressStore = getProgressStore();
-        const result = executeGetNextStep(contentLoader, progressStore);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      default:
-        throw new Error(`Unknown tool: ${name}`);
+function buildServer(): Server {
+  const server = new Server(
+    {
+      name: "streets-server",
+      version: "2.0.0",
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
     }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+  );
+
+  // List available tools
+  server.setRequestHandler("tools/list", async () => {
     return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ error: errorMessage }, null, 2),
-        },
+      tools: [
+        getModuleTool,
+        getTemplateTool,
+        searchCourseTool,
+        getEngineTool,
+        recommendEnginesTool,
+        assessReadinessTool,
+        getProgressTool,
+        markCompleteTool,
+        getNextStepTool,
       ],
-      isError: true,
     };
-  }
-});
+  });
+
+  // Execute a tool
+  server.setRequestHandler("tools/call", async (request) => {
+    const { name, arguments: args } = request.params;
+
+    try {
+      const contentLoader = getContentLoader();
+
+      switch (name) {
+        // ===================================================================
+        // Course Content Tools
+        // ===================================================================
+
+        case "get_module": {
+          const params = (args || {}) as unknown as GetModuleParams;
+          const result = executeGetModule(contentLoader, params);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "get_template": {
+          const params = (args || {}) as unknown as GetTemplateParams;
+          const result = executeGetTemplate(contentLoader, params);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "search_course": {
+          const params = (args || {}) as unknown as SearchCourseParams;
+          const result = executeSearchCourse(contentLoader, params);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "get_engine": {
+          const params = (args || {}) as unknown as GetEngineParams;
+          const result = executeGetEngine(contentLoader, params);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        // ===================================================================
+        // Analysis Tools
+        // ===================================================================
+
+        case "recommend_engines": {
+          const params = (args || {}) as unknown as RecommendEnginesParams;
+          const result = executeRecommendEngines(params);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "assess_readiness": {
+          const params = (args || {}) as unknown as AssessReadinessParams;
+          const result = executeAssessReadiness(params);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        // ===================================================================
+        // Progress Tools
+        // ===================================================================
+
+        case "get_progress": {
+          const progressStore = getProgressStore();
+          const result = executeGetProgress(contentLoader, progressStore);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "mark_complete": {
+          const params = (args || {}) as unknown as MarkCompleteParams;
+          const progressStore = getProgressStore();
+          const result = executeMarkComplete(contentLoader, progressStore, params);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "get_next_step": {
+          const progressStore = getProgressStore();
+          const result = executeGetNextStep(contentLoader, progressStore);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        default:
+          throw new Error(`Unknown tool: ${name}`);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ error: errorMessage }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  });
+
+  return server;
+}
 
 // =============================================================================
 // Server Lifecycle
 // =============================================================================
 
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+function main() {
+  // `serveStdio` owns the era decision per connection: a 2025-era
+  // `initialize` opening is served exactly as before; a 2026-07-28
+  // `server/discover` opening gets the stateless modern protocol.
+  serveStdio(buildServer, {
+    onerror: (error) => {
+      console.error(`[STREETS] stdio serving error: ${error.message}`);
+    },
+  });
 
   // Handle graceful shutdown
   process.on("SIGINT", () => {
@@ -310,10 +308,7 @@ async function main() {
     process.exit(0);
   });
 
-  console.error("STREETS MCP Server v1.0 started — 9 tools, stdio transport");
+  console.error("STREETS MCP Server v2.0 started — 9 tools, stdio transport");
 }
 
-main().catch((error) => {
-  console.error("Fatal error:", error);
-  process.exit(1);
-});
+main();

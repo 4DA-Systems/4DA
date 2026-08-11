@@ -6,6 +6,8 @@
  * Adding a new tool = add to this map + schema-registry + barrel export.
  */
 
+import type { CallToolResult } from "@modelcontextprotocol/server";
+
 import type { FourDADatabase } from "./db.js";
 
 import {
@@ -84,7 +86,7 @@ export async function dispatchTool(
   name: string,
   db: FourDADatabase,
   args: Record<string, unknown> | undefined,
-): Promise<{ content: Array<{ type: string; text: string }> }> {
+): Promise<CallToolResult> {
   const executor = DISPATCH_MAP[name];
   if (!executor) {
     throw new Error(`Unknown tool: ${name}`);

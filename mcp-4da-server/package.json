@@ -1,6 +1,6 @@
 {
   "name": "@4da/mcp-server",
-  "version": "4.6.7",
+  "version": "5.0.0",
   "mcpName": "io.github.4DA-Systems/4da-mcp-server",
   "description": "Dependency intelligence for AI coding agents. Live CVE scanning, dependency health, upgrade planning, ecosystem news, decision memory — zero config, privacy-first. 9 tools standalone, 14 total with desktop app.",
   "type": "module",
@@ -80,8 +80,9 @@
     "url": "https://github.com/4DA-Systems/4DA/issues"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "better-sqlite3": "^12.9.0"
+    "better-sqlite3": "^12.9.0",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
@@ -91,7 +92,7 @@
     "vitest": "^4.1.5"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
