@@ -28,7 +28,7 @@ pub use crate::monitoring_notifications::{
 
 /// A notification that was below the quality threshold and batched for the next briefing
 #[derive(Debug, Clone)]
-// REMOVE BY 2026-08-01
+// REMOVE BY 2026-09-15 — extended 2026-08-11 in the AD-029 PR (file touched for the tuner freeze): struct is production-live, only signal_priority is test-only; owner to trim the field
 #[allow(dead_code)] // Reason: signal_priority field only read in tests; other fields used in production
 pub struct BatchedNotification {
     pub title: String,
@@ -1012,56 +1012,29 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             }
                         }
 
-                        // ── Threshold auto-tuning ──────────────────────────────
-                        // After autophagy + accuracy bridging, use calibration deltas
-                        // to nudge the global relevance threshold.
-                        //
-                        // Guards: requires 50+ feedback signals and 2+ autophagy cycles
-                        // to avoid premature adjustments. Clamps to [0.15, 0.65].
-                        // Step size capped at ±0.03 per cycle to prevent oscillation.
+                        // ── Threshold auto-tuning: FROZEN (v19, AD-029) ────────
+                        // This was one of TWO independent tuners writing the same
+                        // global threshold (the other: ace::compute_threshold_
+                        // adjustment, driven by click-rate) with CONFLICTING
+                        // clamps ([0.15,0.65] here vs [0.30,0.50] there vs the
+                        // setter's [0.30,0.70]) — they could walk the pass/fail
+                        // line across a third of its range in days, anchored to
+                        // nothing. The threshold is now fixed at its default
+                        // (0.40); the delta computation is kept as observability
+                        // so a future re-enable has evidence to argue from.
                         {
-                            let cycle_count: i64 = daily_conn
-                                .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |r| {
-                                    r.get(0)
-                                })
-                                .unwrap_or(0);
-                            let feedback_count: i64 = daily_conn
-                                .query_row("SELECT COUNT(*) FROM feedback", [], |r| r.get(0))
-                                .unwrap_or(0);
-
-                            if cycle_count >= 2 && feedback_count >= 50 {
-                                let deltas = crate::autophagy::load_calibration_deltas(&daily_conn);
-                                if !deltas.is_empty() {
-                                    // Weighted mean of deltas: positive = under-scoring (lower threshold),
-                                    // negative = over-scoring (raise threshold)
-                                    let total_weight: f32 = deltas.len() as f32;
-                                    let weighted_sum: f32 = deltas.values().sum();
-                                    let mean_delta = weighted_sum / total_weight;
-
-                                    // Scale: each 0.1 mean delta shifts threshold by 0.01
-                                    let adjustment = (mean_delta * 0.1).clamp(-0.03, 0.03);
-
-                                    if adjustment.abs() > 0.001 {
-                                        let current = crate::get_relevance_threshold();
-                                        let new_threshold =
-                                            (current + adjustment).clamp(0.15, 0.65);
-
-                                        if (new_threshold - current).abs() > 0.001 {
-                                            crate::set_relevance_threshold(new_threshold);
-                                            if let Ok(ace) = crate::state::get_ace_engine() {
-                                                ace.store_threshold(new_threshold);
-                                            }
-                                            info!(
-                                                target: "4da::monitor",
-                                                old = format!("{:.3}", current),
-                                                new = format!("{:.3}", new_threshold),
-                                                mean_delta = format!("{:.4}", mean_delta),
-                                                deltas = deltas.len(),
-                                                feedback_count,
-                                                "Relevance threshold auto-tuned"
-                                            );
-                                        }
-                                    }
+                            let deltas = crate::autophagy::load_calibration_deltas(&daily_conn);
+                            if !deltas.is_empty() {
+                                let mean_delta = deltas.values().sum::<f32>() / deltas.len() as f32;
+                                let would_be = (mean_delta * 0.1).clamp(-0.03, 0.03);
+                                if would_be.abs() > 0.001 {
+                                    info!(
+                                        target: "4da::monitor",
+                                        mean_delta = format!("{:.4}", mean_delta),
+                                        would_be_adjustment = format!("{:+.3}", would_be),
+                                        deltas = deltas.len(),
+                                        "Threshold auto-tune FROZEN — logging what it would have done (AD-029)"
+                                    );
                                 }
                             }
                         }

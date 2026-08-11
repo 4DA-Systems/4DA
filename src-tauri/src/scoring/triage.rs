@@ -52,20 +52,13 @@ use super::ScoringContext;
 /// Phase 0's recall measurement against the live corpus confirms or tightens them.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct TriageThresholds {
-    /// Minimum raw cosine to the user's taste centroid to keep an item.
-    /// `compute_taste_boost` treats ~0.4 as "typical background similarity", so a
-    /// keep threshold a touch above background errs toward recall.
-    pub taste_min: f32,
     /// Minimum raw cosine to ANY single tracked-topic embedding to keep an item.
     pub topic_min: f32,
 }
 
 impl Default for TriageThresholds {
     fn default() -> Self {
-        Self {
-            taste_min: 0.45,
-            topic_min: 0.55,
-        }
+        Self { topic_min: 0.55 }
     }
 }
 
@@ -77,8 +70,6 @@ pub(crate) enum TriageReason {
     HighStakes,
     /// Matched the user's dependency graph (their actual stack).
     DepMatch,
-    /// Close to the user's holistic taste centroid.
-    TasteSimilar,
     /// Close to a specific tracked topic.
     TopicSimilar,
     /// No usable (non-zero) embedding — kept (fail-open: never drop what we couldn't judge).
@@ -113,7 +104,7 @@ impl TriageVerdict {
 /// Evaluated in priority order; first match wins:
 /// 1. High-stakes carve-out (never gated)
 /// 2. Dependency-graph match (your stack)
-/// 3. Semantic similarity to taste centroid, then to any tracked topic
+/// 3. Semantic similarity to any tracked topic
 /// 4. Otherwise defer
 pub(crate) fn triage_item(
     embedding: &[f32],
@@ -153,12 +144,10 @@ pub(crate) fn triage_item(
         return TriageVerdict::keep(TriageReason::NoEmbedding, 0.0);
     }
 
-    if let Some(taste) = ctx.taste_embedding.as_deref() {
-        let sim = cosine_similarity(embedding, taste);
-        if sim >= thresholds.taste_min {
-            return TriageVerdict::keep(TriageReason::TasteSimilar, sim);
-        }
-    }
+    // Taste-embedding keep-verdict removed in v19 (AD-029): the taste
+    // vector was a behavioral aggregate (affinity-weighted centroid) and
+    // no longer exists in the scoring context. Topic similarity below
+    // covers the semantic keep path from stack/context evidence.
 
     let mut best_topic = 0.0f32;
     for emb in ctx.topic_embeddings.values() {

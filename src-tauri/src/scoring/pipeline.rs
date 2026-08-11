@@ -58,9 +58,9 @@ pub(crate) fn score_item(
 ) -> SourceRelevance {
     let topics = extract_topics(input.title, input.content, input.source_tags);
 
-    // Check exclusions
-    let excluded_by = check_exclusions(&topics, &ctx.exclusions)
-        .or_else(|| check_ace_exclusions(&topics, &ctx.ace_ctx));
+    // Check exclusions (ACE anti-topic auto-exclusions removed in v19 —
+    // AD-029; user-authored exclusions remain the suppression path)
+    let excluded_by = check_exclusions(&topics, &ctx.exclusions);
 
     if let Some(exclusion) = excluded_by {
         return pipeline_signals::build_excluded_result(input, exclusion);
@@ -218,22 +218,8 @@ pub(crate) fn score_item(
     };
     let base_score = (base_score * freshness).clamp(0.0, 1.0);
 
-    let attention_gap_boost = if !ctx.topic_attention_gaps.is_empty() && !topics.is_empty() {
-        let matching_gaps: Vec<f32> = topics
-            .iter()
-            .filter_map(|t| ctx.topic_attention_gaps.get(t.as_str()).copied())
-            .filter(|&h| h > 48.0)
-            .collect();
-        if matching_gaps.is_empty() {
-            0.0
-        } else {
-            let avg_gap = matching_gaps.iter().sum::<f32>() / matching_gaps.len() as f32;
-            ((avg_gap - 48.0) / (168.0 - 48.0)).clamp(0.0, 1.0) * 0.05
-        }
-    } else {
-        0.0
-    };
-    let base_score = (base_score + attention_gap_boost).min(1.0);
+    // Attention-gap boost removed in v19 (AD-029): engagement-derived
+    // additive term, the v18 incident's mechanism. See pipeline_v2.
 
     // Source quality boost from learned preferences (capped +/-10%)
     let source_quality_boost =
@@ -466,8 +452,9 @@ pub(crate) fn score_item(
         &ctx.composed_stack,
     );
 
-    // Multi-signal confirmation gate: require 2+ independent axes to pass
-    let affinity_mult = compute_affinity_multiplier(&topics, &ctx.ace_ctx);
+    // Multi-signal confirmation gate: require 2+ independent axes to pass.
+    // Affinity neutral as of v19 (AD-029 behavioral demotion).
+    let affinity_mult = 1.0_f32;
     let (gated_score, signal_count, confirmation_mult, confirmed_signals) = apply_confirmation_gate(
         base_score,
         context_score,
@@ -538,7 +525,8 @@ pub(crate) fn score_item(
         && (signal_count >= min_signals
             || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE);
 
-    let anti_penalty = compute_anti_penalty(&topics, &ctx.ace_ctx);
+    // Anti-topic penalty neutral as of v19 (AD-029 behavioral demotion).
+    let anti_penalty = 0.0_f32;
 
     // Explanation
     let explanation = if relevant || combined_score >= 0.3 {
@@ -592,6 +580,7 @@ pub(crate) fn score_item(
         context_score,
         interest_score,
         keyword_score,
+        score_ceiling: None,
         ace_boost: semantic_boost,
         affinity_mult,
         anti_penalty,

@@ -97,24 +97,6 @@ fn dependency_match_kept() {
 }
 
 #[test]
-fn taste_similar_kept() {
-    // Item embedding identical to taste centroid → cosine 1.0 ≥ taste_min.
-    let ctx = ctx_with_taste(3);
-    let v = triage_item(
-        &axis_vec(3),
-        "Something the user likes",
-        "body",
-        None,
-        None,
-        &ctx,
-        &TriageThresholds::default(),
-    );
-    assert!(v.keep);
-    assert_eq!(v.reason, TriageReason::TasteSimilar);
-    assert!(v.similarity > 0.99);
-}
-
-#[test]
 fn topic_similar_kept_without_taste() {
     // No taste centroid, but the item matches a tracked topic embedding.
     let mut topic_embeddings = std::collections::HashMap::new();
@@ -169,27 +151,4 @@ fn zero_embedding_fails_open() {
     );
     assert!(v.keep, "no-embedding items must fail open (high recall)");
     assert_eq!(v.reason, TriageReason::NoEmbedding);
-}
-
-#[test]
-fn threshold_controls_taste_keep() {
-    // Construct a partial-similarity item and show the threshold gates it.
-    let mut taste = axis_vec(0);
-    // Blend two axes so cosine to pure-axis-0 item is ~0.7.
-    taste[1] = 1.0;
-    let ctx = ScoringContext::builder()
-        .taste_embedding(Some(taste))
-        .build();
-    let item = axis_vec(0); // cosine to the blended taste ≈ 1/sqrt(2) ≈ 0.707
-
-    let loose = TriageThresholds {
-        taste_min: 0.5,
-        topic_min: 0.55,
-    };
-    let strict = TriageThresholds {
-        taste_min: 0.9,
-        topic_min: 0.55,
-    };
-    assert!(triage_item(&item, "t", "b", None, None, &ctx, &loose).keep);
-    assert!(!triage_item(&item, "t", "b", None, None, &ctx, &strict).keep);
 }

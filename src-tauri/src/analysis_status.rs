@@ -110,12 +110,12 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 // Run post-analysis innovation hooks (non-blocking)
                 scoring::run_post_analysis_hooks(&results);
 
-                // Cold-start: seed topic affinities from high-scoring items so
-                // the learned 5th axis fires immediately instead of waiting for
-                // manual engagement. Idempotent — no-ops once affinities exist.
-                if let Err(e) = crate::ace_commands::seed_topic_affinities_from_analysis(&results) {
-                    tracing::debug!(target: "4da::analysis", error = %e, "Topic affinity seeding skipped");
-                }
+                // Synthetic topic-affinity seeding removed in v19 (AD-029):
+                // it fabricated engagement rows (positive_signals=3) that
+                // the learned axis could not distinguish from real behavior.
+                // With behavioral learning demoted from scoring authority,
+                // the seed served no purpose and only polluted the
+                // preferences/radar surfaces that still read affinities.
 
                 // Manual analysis is now genuinely cache-first: finish scoring
                 // visible cached data before touching the network. Refresh sources

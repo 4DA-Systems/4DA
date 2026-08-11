@@ -269,49 +269,6 @@ pub(crate) fn get_ace_context() -> ACEContext {
     ctx
 }
 
-/// Compute per-topic attention gaps (hours since last interaction).
-/// Returns only topics with positive affinity and a parseable last_interaction.
-pub(crate) fn compute_topic_attention_gaps(ace: &crate::ace::ACE) -> HashMap<String, f32> {
-    let mut gaps = HashMap::new();
-    let now = chrono::Utc::now().naive_utc();
-    let affinities = match ace.get_topic_affinities() {
-        Ok(a) => a,
-        Err(_) => return gaps,
-    };
-    for aff in affinities {
-        if aff.affinity_score <= 0.0 {
-            continue;
-        }
-        if let Ok(last) =
-            chrono::NaiveDateTime::parse_from_str(&aff.last_interaction, "%Y-%m-%d %H:%M:%S")
-        {
-            let hours = (now - last).num_minutes() as f32 / 60.0;
-            if hours > 0.0 {
-                gaps.insert(aff.topic.to_lowercase(), hours);
-            }
-        }
-    }
-    gaps
-}
-
-/// Check if item should be excluded by ACE anti-topics.
-/// Uses word-boundary matching to prevent "test" blocking "testing" or "contest".
-pub(crate) fn check_ace_exclusions(topics: &[String], ace_ctx: &ACEContext) -> Option<String> {
-    // Both topics (from extract_topics) and anti_topics are already lowercase
-    for topic in topics {
-        let topic_words: std::collections::HashSet<&str> = topic.split_whitespace().collect();
-        for anti_topic in &ace_ctx.anti_topics {
-            let anti_words: Vec<&str> = anti_topic.split_whitespace().collect();
-            // All words in the anti-topic must appear as whole words in the topic
-            let all_match = anti_words.iter().all(|aw| topic_words.contains(aw));
-            if all_match && !anti_words.is_empty() {
-                return Some(format!("ACE anti-topic: {anti_topic}"));
-            }
-        }
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -323,72 +280,6 @@ mod tests {
         assert!(ctx.detected_tech.is_empty());
         assert!(ctx.anti_topics.is_empty());
         assert!(ctx.topic_affinities.is_empty());
-    }
-
-    #[test]
-    fn test_check_ace_exclusions_no_anti_topics() {
-        let ctx = ACEContext::default();
-        let topics = vec!["rust".to_string(), "tauri".to_string()];
-        assert!(check_ace_exclusions(&topics, &ctx).is_none());
-    }
-
-    #[test]
-    fn test_check_ace_exclusions_match() {
-        let mut ctx = ACEContext::default();
-        ctx.anti_topics.push("crypto".to_string());
-        // "crypto" as a whole word in the topic should match
-        let topics = vec!["crypto trading".to_string()];
-        let result = check_ace_exclusions(&topics, &ctx);
-        assert!(result.is_some());
-        assert!(result.unwrap().contains("crypto"));
-    }
-
-    #[test]
-    fn test_check_ace_exclusions_no_substring_match() {
-        // "crypto" should NOT match "cryptocurrency" (word boundary enforcement)
-        let mut ctx = ACEContext::default();
-        ctx.anti_topics.push("crypto".to_string());
-        let topics = vec!["cryptocurrency".to_string()];
-        let result = check_ace_exclusions(&topics, &ctx);
-        assert!(
-            result.is_none(),
-            "Substring 'crypto' should not match 'cryptocurrency'"
-        );
-    }
-
-    #[test]
-    fn test_check_ace_exclusions_multi_word_anti_topic() {
-        let mut ctx = ACEContext::default();
-        ctx.anti_topics.push("machine learning".to_string());
-        let topics = vec!["machine learning ops".to_string()];
-        let result = check_ace_exclusions(&topics, &ctx);
-        assert!(result.is_some());
-    }
-
-    #[test]
-    fn test_check_ace_exclusions_no_match() {
-        let mut ctx = ACEContext::default();
-        ctx.anti_topics.push("crypto".to_string());
-        let topics = vec!["rust".to_string(), "tauri".to_string()];
-        assert!(check_ace_exclusions(&topics, &ctx).is_none());
-    }
-
-    #[test]
-    fn test_check_ace_exclusions_empty_topics() {
-        let mut ctx = ACEContext::default();
-        ctx.anti_topics.push("crypto".to_string());
-        let topics: Vec<String> = vec![];
-        assert!(check_ace_exclusions(&topics, &ctx).is_none());
-    }
-
-    #[test]
-    fn test_check_ace_exclusions_multiple_anti_topics() {
-        let mut ctx = ACEContext::default();
-        ctx.anti_topics.push("crypto".to_string());
-        ctx.anti_topics.push("nft".to_string());
-        let topics = vec!["nft".to_string()];
-        let result = check_ace_exclusions(&topics, &ctx);
-        assert!(result.is_some());
     }
 
     #[test]

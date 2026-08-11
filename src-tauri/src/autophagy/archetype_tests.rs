@@ -298,46 +298,6 @@ fn test_store_archetypes_supersedes_previous() {
 }
 
 #[test]
-fn test_load_archetype_penalties_empty() {
-    let conn = setup_test_db();
-    let loaded = load_archetype_penalties(&conn);
-    assert!(loaded.is_empty());
-}
-
-#[test]
-fn test_load_archetype_penalties_roundtrip() {
-    let conn = setup_test_db();
-    let archetypes = vec![
-        DismissalArchetype {
-            archetype_id: "kubernetes:hackernews:security_advisory".to_string(),
-            description: "test".to_string(),
-            topic: "kubernetes".to_string(),
-            source_type: "hackernews".to_string(),
-            content_type: "security_advisory".to_string(),
-            dismissal_rate: 0.9,
-            sample_size: 20,
-            suggested_penalty: 0.2,
-        },
-        DismissalArchetype {
-            archetype_id: "docker:reddit:discussion".to_string(),
-            description: "test".to_string(),
-            topic: "docker".to_string(),
-            source_type: "reddit".to_string(),
-            content_type: "discussion".to_string(),
-            dismissal_rate: 0.75,
-            sample_size: 12,
-            suggested_penalty: 0.125,
-        },
-    ];
-    store_archetypes(&conn, &archetypes).expect("store");
-    let loaded = load_archetype_penalties(&conn);
-
-    assert_eq!(loaded.len(), 2);
-    assert!((loaded["kubernetes:hackernews:security_advisory"] - 0.2).abs() < 0.01);
-    assert!((loaded["docker:reddit:discussion"] - 0.125).abs() < 0.01);
-}
-
-#[test]
 fn test_archetype_penalty_for_item_match() {
     let mut penalties = HashMap::new();
     penalties.insert(
@@ -430,7 +390,7 @@ fn test_suggested_penalty_capped() {
 }
 
 #[test]
-fn test_detect_and_load_integration() {
+fn test_detect_and_apply_integration() {
     let conn = setup_test_db();
 
     for i in 0..12 {
@@ -451,8 +411,11 @@ fn test_detect_and_load_integration() {
 
     store_archetypes(&conn, &archetypes).expect("store");
 
-    let penalties = load_archetype_penalties(&conn);
-    assert!(!penalties.is_empty(), "Should load stored penalties");
+    let penalties: HashMap<String, f32> = archetypes
+        .iter()
+        .map(|a| (a.archetype_id.clone(), a.suggested_penalty))
+        .collect();
+    assert!(!penalties.is_empty(), "Should produce penalties");
 
     let penalty = archetype_penalty_for_item(
         &penalties,

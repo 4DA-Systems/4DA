@@ -421,11 +421,19 @@ impl ContextEngine {
             InteractionType::Ignore => "ignore",
         };
 
+        // v19: unified onto the canonical ACE strength scale
+        // (ace/behavior/types.rs). The old values here recorded a Dismiss
+        // as +0.3 and an Ignore as +0.1 — POSITIVE signals for negative
+        // gestures — one of the three incompatible scales that poisoned
+        // every consumer aggregating `interactions.signal_strength`
+        // (including the calibration fitter labels behind the 2026-08-11
+        // degenerate-curve incident). Unified now, while the interactions
+        // table is empty, so no mixed-scale rows need migrating.
         let signal_strength = match action {
-            InteractionType::Save => 0.9,
-            InteractionType::Click => 0.6,
-            InteractionType::Dismiss => 0.3,
-            InteractionType::Ignore => 0.1,
+            InteractionType::Save => 1.0,
+            InteractionType::Click => 0.55,
+            InteractionType::Dismiss => -0.8,
+            InteractionType::Ignore => -0.1,
         };
 
         let (item_source, item_topics) = conn

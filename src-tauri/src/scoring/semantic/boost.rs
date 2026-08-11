@@ -60,26 +60,16 @@ pub(crate) fn compute_semantic_ace_boost(
     // Compute weighted average similarity
     let avg_similarity = weighted_sum / weight_total;
 
-    // Apply learned affinities as multiplier with confidence weighting
-    let mut affinity_mult: f32 = 1.0;
-    for (topic, &(affinity, confidence)) in &ace_ctx.topic_affinities {
-        if let Some(topic_emb) = topic_embeddings.get(topic) {
-            let sim = crate::cosine_similarity_with_norm(item_embedding, item_norm, topic_emb);
-            if sim > 0.5 {
-                // Item is similar to a topic we have affinity data for
-                // Scale by both similarity and confidence
-                affinity_mult += affinity * confidence * 0.3 * sim;
-            }
-        }
-    }
-    affinity_mult = affinity_mult.clamp(0.5, 1.5);
-
+    // The learned-affinity multiplier that scaled this boost (±50% from
+    // `topic_affinities` similarity) was REMOVED in v19 (AD-029) — the
+    // semantic ACE boost is now purely stack/context similarity.
+    //
     // Convert similarity (0-1) to boost (-0.3 to 0.5) range
     // High similarity (>0.7) = positive boost
     // Low similarity (<0.3) = negative boost
     let base_boost = (avg_similarity - 0.5) * 1.0; // Center around 0.5
 
-    Some((base_boost * affinity_mult).clamp(-0.3, 0.5))
+    Some(base_boost.clamp(-0.3, 0.5))
 }
 
 /// Keyword-based ACE boost fallback when embeddings unavailable

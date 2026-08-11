@@ -5,12 +5,6 @@ use super::*;
 use crate::test_utils::seed_embedding;
 use std::collections::HashMap;
 
-/// Helper: cosine similarity via the crate's norm-based function
-fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
-    let a_norm = crate::vector_norm(a);
-    crate::cosine_similarity_with_norm(a, a_norm, b)
-}
-
 /// Helper: build a minimal ACEContext with active topics and confidence
 fn ace_ctx_with_topics(topics: &[(&str, f32)]) -> super::super::ace_context::ACEContext {
     let mut ctx = super::super::ace_context::ACEContext::default();
@@ -96,94 +90,8 @@ fn test_orthogonal_embeddings_produce_zero_boost() {
 }
 
 // ====================================================================
-// Taste Embedding Tests
+// Taste Boost Tests
 // ====================================================================
-
-#[test]
-fn test_compute_taste_embedding_empty() {
-    let affinities: Vec<(String, f32, f32)> = vec![];
-    let topic_embs: HashMap<String, Vec<f32>> = HashMap::new();
-    assert!(compute_taste_embedding(&affinities, &topic_embs).is_none());
-}
-
-#[test]
-fn test_compute_taste_embedding_single_topic() {
-    let emb = seed_embedding("rust");
-    let affinities = vec![("rust".to_string(), 0.8, 0.9)];
-    let mut topic_embs = HashMap::new();
-    topic_embs.insert("rust".to_string(), emb.clone());
-
-    let taste = compute_taste_embedding(&affinities, &topic_embs);
-    assert!(taste.is_some());
-    let taste = taste.unwrap();
-    assert_eq!(taste.len(), crate::EMBEDDING_DIMS);
-
-    // Should be unit normalized
-    let norm = crate::vector_norm(&taste);
-    assert!(
-        (norm - 1.0).abs() < 0.01,
-        "Taste embedding should be unit normalized, got {}",
-        norm
-    );
-
-    // Should be highly similar to the input embedding
-    let sim = cosine_sim(&taste, &emb);
-    assert!(
-        sim > 0.99,
-        "Single-topic taste should be nearly identical, got {}",
-        sim
-    );
-}
-
-#[test]
-fn test_compute_taste_embedding_blends_topics() {
-    let emb_a = seed_embedding("rust");
-    let emb_b = seed_embedding("python");
-    let affinities = vec![
-        ("rust".to_string(), 0.8, 1.0),
-        ("python".to_string(), 0.4, 1.0),
-    ];
-    let mut topic_embs = HashMap::new();
-    topic_embs.insert("rust".to_string(), emb_a.clone());
-    topic_embs.insert("python".to_string(), emb_b.clone());
-
-    let taste = compute_taste_embedding(&affinities, &topic_embs).unwrap();
-
-    // Should be more similar to rust (higher weight) than python
-    let sim_rust = cosine_sim(&taste, &emb_a);
-    let sim_python = cosine_sim(&taste, &emb_b);
-    assert!(
-        sim_rust > sim_python,
-        "Taste should be more similar to higher-weighted topic: rust={:.3} python={:.3}",
-        sim_rust,
-        sim_python
-    );
-}
-
-#[test]
-fn test_compute_taste_embedding_negative_affinities() {
-    let emb_a = seed_embedding("rust");
-    let emb_b = seed_embedding("career advice");
-    let affinities = vec![
-        ("rust".to_string(), 0.9, 1.0),
-        ("career advice".to_string(), -0.8, 1.0),
-    ];
-    let mut topic_embs = HashMap::new();
-    topic_embs.insert("rust".to_string(), emb_a.clone());
-    topic_embs.insert("career advice".to_string(), emb_b.clone());
-
-    let taste = compute_taste_embedding(&affinities, &topic_embs).unwrap();
-
-    // Taste should be more similar to liked topic than disliked
-    let sim_rust = cosine_sim(&taste, &emb_a);
-    let sim_career = cosine_sim(&taste, &emb_b);
-    assert!(
-        sim_rust > sim_career,
-        "Taste should prefer liked over disliked: rust={:.3} career={:.3}",
-        sim_rust,
-        sim_career
-    );
-}
 
 #[test]
 fn test_taste_boost_identical() {

@@ -160,14 +160,12 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
     let (manifest_context, git_signals) = tauri::async_runtime::spawn_blocking(
         move || -> std::result::Result<(ace::AutonomousContext, Vec<ace::GitSignal>), String> {
             let ace = get_ace_engine().map_err(|e| e.to_string())?;
-            if let Some(stored) = ace.get_stored_threshold() {
-                crate::set_relevance_threshold(stored);
-                info!(
-                    target: "4da::startup",
-                    threshold = stored,
-                    "Loaded stored relevance threshold during ACE warmup"
-                );
-            }
+            // The stored-threshold reinstall that lived here was REMOVED in
+            // v19 (AD-029): it re-applied any persisted (possibly tuner-
+            // poisoned) threshold from kv_store on every ACE warmup,
+            // overriding the boot default. The threshold is now fixed at
+            // its default; see monitoring.rs / commands.rs for the frozen
+            // tuners.
             let manifest_context = ace
                 .detect_context(&scan_paths_for_detect)
                 .map_err(|e| e.to_string())?;

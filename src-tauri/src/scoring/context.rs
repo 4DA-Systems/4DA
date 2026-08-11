@@ -6,9 +6,8 @@ use tracing::info;
 
 use crate::db::Database;
 use crate::error::{Result, ResultExt};
-use crate::taste_test::continuous;
 
-use super::{compute_taste_embedding, get_ace_context, get_topic_embeddings, ScoringContext};
+use super::{get_ace_context, get_topic_embeddings, ScoringContext};
 
 static SCORING_CONTEXT_CACHE: LazyLock<Mutex<Option<(ScoringContext, Instant)>>> =
     LazyLock::new(|| Mutex::new(None));
@@ -120,22 +119,13 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     crate::diagnostics::log_rss("ctx:after_topic_embeddings");
 
     // Load feedback-derived topic boosts (Phase 9: feedback learning loop)
-    let mut feedback_boosts: HashMap<String, f64> = db
-        .get_feedback_topic_summary()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|f| (f.topic, f.net_score))
-        .collect();
-
-    // Load source quality preferences from ACE behavior learning
-    let source_quality: HashMap<String, f32> = match crate::get_ace_engine() {
-        Ok(ace) => ace
-            .get_source_preferences()
-            .unwrap_or_default()
-            .into_iter()
-            .collect(),
-        Err(_) => HashMap::new(),
-    };
+    // Behavioral scoring inputs DEMOTED in v19 (AD-029): feedback-derived
+    // topic boosts and learned per-source quality no longer enter scoring.
+    // The capture pipeline keeps writing (preferences UI, engagement
+    // dashboard); the scoring context simply stops consuming it. Re-enable
+    // criteria live in AD-029.
+    let feedback_boosts: HashMap<String, f64> = HashMap::new();
+    let source_quality: HashMap<String, f32> = HashMap::new();
 
     // Open a single shared connection for all DB queries in context building
     let shared_conn = crate::open_db_connection()?;
@@ -147,28 +137,28 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         open_windows,
         calibration_deltas,
         topic_half_lives,
-        source_autopsies,
-        feed_autopsies,
         anti_pattern_penalties,
         archetype_penalties,
         sovereign_profile,
     ) = {
         let dp = crate::domain_profile::build_domain_profile(&shared_conn);
         let cs = crate::stacks::load_composed_stack(&shared_conn);
-        // Intelligence metabolism: load decision windows and autophagy calibrations
         let ow = crate::decision_advantage::get_open_windows(&shared_conn);
-        let cd = crate::autophagy::load_calibration_deltas(&shared_conn);
-        let thl = crate::autophagy::load_topic_decay_profiles(&shared_conn);
-        // Autophagy intelligence: per-source engagement rates and anti-pattern penalties
-        let sa = crate::autophagy::load_source_autopsies(&shared_conn);
-        let fa = crate::autophagy::load_feed_autopsies(&shared_conn);
-        let ap = crate::autophagy::load_anti_patterns(&shared_conn);
-        let arch = crate::autophagy::load_archetype_penalties(&shared_conn);
+        // Autophagy engagement-derived corrections (calibration deltas,
+        // topic-decay half-lives, source/feed autopsies, anti-patterns,
+        // dismissal archetypes) DEMOTED in v19 (AD-029): they were digested
+        // from the same untrustworthy capture layer as the rest of the
+        // behavioral stack. The autophagy producers keep running for
+        // observability surfaces; scoring stops consuming them.
+        let cd = HashMap::new();
+        let thl = HashMap::new();
+        let ap = HashMap::new();
+        let arch = HashMap::new();
         // Unified profile (non-fatal if assembly fails)
         let sp = Some(crate::sovereign_developer_profile::assemble_profile(
             &shared_conn,
         ));
-        (dp, cs, ow, cd, thl, sa, fa, ap, arch, sp)
+        (dp, cs, ow, cd, thl, ap, arch, sp)
     };
 
     // ── ACE Auto-Enrichment: promote high-confidence detected tech into domain profile ──
@@ -239,49 +229,12 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         }
     }
 
-    // Compute taste embedding from topic affinities + topic embeddings
-    // In bootstrap mode, use lower exposure threshold for faster learning
-    let affinity_min_exposures = if effective_feedback_count < 10 { 1 } else { 3 };
-    let taste_embedding = {
-        let affinities: Vec<(String, f32, f32)> = match crate::get_ace_engine() {
-            Ok(ace) => ace
-                .get_topic_affinities_min(affinity_min_exposures)
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|a| a.confidence > 0.05)
-                .map(|a| (a.topic, a.affinity_score, a.confidence))
-                .collect(),
-            Err(_) => vec![],
-        };
-        compute_taste_embedding(&affinities, &topic_embeddings)
-    };
-
-    // Load persona posterior and inject persona-derived topic boosts
-    let dominant_persona = {
-        let (weights, update_count) = continuous::load_posterior(&shared_conn).unwrap_or_default();
-        if update_count > 0 {
-            let (idx, &max_w) = weights
-                .iter()
-                .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                .unwrap_or((0, &0.0));
-            // Above uniform threshold (1/9 ~ 0.11) with margin
-            if max_w > 0.2 {
-                let persona_boosts = continuous::get_persona_topic_boosts(idx, max_w as f32);
-                for (topic, boost) in persona_boosts {
-                    feedback_boosts
-                        .entry(topic)
-                        .and_modify(|v| *v += boost as f64)
-                        .or_insert(boost as f64);
-                }
-                Some((idx, max_w as f32))
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    };
+    // Taste embedding + persona-posterior boosts DEMOTED in v19 (AD-029):
+    // both were behavioral aggregates injected into scoring (taste ±0.08 +
+    // triage keep-verdict; persona boosts merged into feedback_boosts).
+    // The persona posterior itself keeps updating (taste-test UX); scoring
+    // no longer reads it.
+    let taste_embedding: Option<Vec<f32>> = None;
 
     // Detect contradicted topics (both high affinity AND anti-topic).
     // Lightweight query — just topic names for necessity scoring.
@@ -307,50 +260,16 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         stack_active = composed_stack.active,
         has_active_work,
         has_taste_embedding = taste_embedding.is_some(),
-        has_dominant_persona = dominant_persona.is_some(),
         "ACE context loaded for scoring"
     );
 
-    // ── Apply learned topic affinities to keyword interest weights ──
-    {
-        let affinities: HashMap<String, f32> = match crate::get_ace_engine() {
-            Ok(ace) => ace
-                .get_topic_affinities_min(affinity_min_exposures)
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|a| a.confidence > 0.3)
-                .map(|a| (a.topic.to_lowercase(), a.affinity_score))
-                .collect(),
-            Err(_) => HashMap::new(),
-        };
-        apply_affinity_adjustments(&mut interests, &affinities);
-    }
-
-    // Stability Detector — merge active/provisional facets into scoring signals
-    {
-        let facets = crate::stability_detector::get_active_and_provisional(&shared_conn);
-        for facet in &facets {
-            let weight = match facet.state {
-                crate::stability_detector::FacetState::Active => 1.0,
-                crate::stability_detector::FacetState::Provisional => 0.5,
-                _ => 0.0,
-            };
-            match facet.class {
-                crate::stability_detector::FacetClass::Interest
-                | crate::stability_detector::FacetClass::TopicAffinity => {
-                    let boost = 0.15 * weight * (facet.stability / 2.0).min(1.0);
-                    feedback_boosts
-                        .entry(facet.key.clone())
-                        .and_modify(|v| *v = (*v + boost).min(1.0))
-                        .or_insert(boost);
-                }
-                crate::stability_detector::FacetClass::Veto => {
-                    feedback_boosts.insert(facet.key.clone(), -1.0);
-                }
-                _ => {}
-            }
-        }
-    }
+    // Learned-affinity interest reweighting and stability-facet score
+    // injections (incl. the Veto hard −1.0) DEMOTED in v19 (AD-029). The
+    // stability detector keeps its full lifecycle — it powers the Learned
+    // Preferences panel (pin/forget/reset), which is the user-visible,
+    // user-controllable home of behavioral learning. Explicit topic
+    // suppression still works through `exclusions` (the suppress-topic
+    // button), which is user-authored, not inferred.
 
     if effective_feedback_count < 10 {
         info!(target: "4da::scoring",
@@ -360,11 +279,6 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
             "Bootstrap mode: relaxed 1-signal gate for new user"
         );
     }
-
-    let topic_attention_gaps = match crate::get_ace_engine() {
-        Ok(ace) => super::ace_context::compute_topic_attention_gaps(&ace),
-        Err(_) => HashMap::new(),
-    };
 
     let context = ScoringContext {
         cached_context_count,
@@ -384,14 +298,10 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         calibration_deltas,
         taste_embedding,
         topic_half_lives,
-        source_autopsies,
-        feed_autopsies,
         anti_pattern_penalties,
         archetype_penalties,
-        topic_attention_gaps,
         contradicted_topics,
         sovereign_profile,
-        dominant_persona,
         user_role,
         experience_level,
     };
@@ -571,31 +481,6 @@ pub(crate) fn synthesize_ace_interests(
     }
     if dep_synth > 0 {
         tracing::info!(target: "4da::scoring", dep_synth, "ACE auto-enrichment: synthesized interests from direct dependencies");
-    }
-}
-
-/// Apply learned topic affinities to keyword interest weights.
-/// Positive affinity (+1.0) boosts weight by up to +0.2, negative (-1.0) reduces by up to -0.2.
-pub(crate) fn apply_affinity_adjustments(
-    interests: &mut [crate::context_engine::Interest],
-    affinities: &HashMap<String, f32>,
-) {
-    if affinities.is_empty() {
-        return;
-    }
-    let mut adjusted = 0usize;
-    for interest in interests.iter_mut() {
-        if let Some(&affinity) = affinities.get(&interest.topic.to_lowercase()) {
-            let adjustment = affinity * 0.2;
-            let new_weight = (interest.weight + adjustment).clamp(0.1, 1.0);
-            if (new_weight - interest.weight).abs() > 0.01 {
-                interest.weight = new_weight;
-                adjusted += 1;
-            }
-        }
-    }
-    if adjusted > 0 {
-        tracing::debug!(target: "4da::scoring", adjusted, "Applied topic affinity adjustments to keyword interest weights");
     }
 }
 
@@ -890,85 +775,6 @@ mod tests {
         );
     }
 
-    // ── Affinity adjustments ──
-
-    #[test]
-    fn test_positive_affinity_boosts_weight() {
-        let mut interests = vec![make_interest("Rust", 0.6)];
-        let mut affinities = HashMap::new();
-        affinities.insert("rust".to_string(), 0.8); // strong positive
-
-        apply_affinity_adjustments(&mut interests, &affinities);
-
-        // 0.6 + 0.8 * 0.2 = 0.6 + 0.16 = 0.76
-        assert!(
-            (interests[0].weight - 0.76).abs() < 0.01,
-            "weight should be ~0.76, got {}",
-            interests[0].weight
-        );
-    }
-
-    #[test]
-    fn test_negative_affinity_reduces_weight() {
-        let mut interests = vec![make_interest("Java", 0.6)];
-        let mut affinities = HashMap::new();
-        affinities.insert("java".to_string(), -1.0); // strong negative
-
-        apply_affinity_adjustments(&mut interests, &affinities);
-
-        // 0.6 + (-1.0) * 0.2 = 0.6 - 0.2 = 0.4
-        assert!(
-            (interests[0].weight - 0.4).abs() < 0.01,
-            "weight should be ~0.4, got {}",
-            interests[0].weight
-        );
-    }
-
-    #[test]
-    fn test_affinity_clamps_to_minimum() {
-        let mut interests = vec![make_interest("Cobol", 0.15)];
-        let mut affinities = HashMap::new();
-        affinities.insert("cobol".to_string(), -1.0);
-
-        apply_affinity_adjustments(&mut interests, &affinities);
-
-        // 0.15 - 0.2 = -0.05 → clamped to 0.1
-        assert!(
-            (interests[0].weight - 0.1).abs() < 0.01,
-            "weight should clamp to 0.1, got {}",
-            interests[0].weight
-        );
-    }
-
-    #[test]
-    fn test_affinity_clamps_to_maximum() {
-        let mut interests = vec![make_interest("Rust", 0.95)];
-        let mut affinities = HashMap::new();
-        affinities.insert("rust".to_string(), 1.0);
-
-        apply_affinity_adjustments(&mut interests, &affinities);
-
-        // 0.95 + 0.2 = 1.15 → clamped to 1.0
-        assert!(
-            (interests[0].weight - 1.0).abs() < 0.01,
-            "weight should clamp to 1.0, got {}",
-            interests[0].weight
-        );
-    }
-
-    #[test]
-    fn test_no_affinity_leaves_weight_unchanged() {
-        let mut interests = vec![make_interest("Rust", 0.7)];
-        let affinities = HashMap::new(); // empty
-
-        apply_affinity_adjustments(&mut interests, &affinities);
-
-        assert!(
-            (interests[0].weight - 0.7).abs() < 0.001,
-            "weight should be unchanged"
-        );
-    }
-
     // ── End-to-end: ACE synthesis → keyword scoring ──
 
     #[test]
@@ -1033,36 +839,6 @@ mod tests {
         assert!(
             score > 0.2,
             "content about a direct dependency should score, got {score:.3}"
-        );
-    }
-
-    #[test]
-    fn test_e2e_affinity_changes_keyword_ranking() {
-        use crate::scoring::keywords::compute_keyword_interest_score;
-
-        let mut interests = vec![make_interest("Rust", 0.5), make_interest("Python", 0.5)];
-
-        // User engages heavily with Rust, dismisses Python
-        let mut affinities = HashMap::new();
-        affinities.insert("rust".to_string(), 0.9);
-        affinities.insert("python".to_string(), -0.8);
-        apply_affinity_adjustments(&mut interests, &affinities);
-
-        let rust_score = compute_keyword_interest_score(
-            "Advanced Rust async patterns",
-            "Exploring async Rust with tokio and futures",
-            &interests,
-        );
-        let python_score = compute_keyword_interest_score(
-            "Advanced Python async patterns",
-            "Exploring async Python with asyncio and aiohttp",
-            &interests,
-        );
-
-        assert!(
-            rust_score > python_score,
-            "Rust (positive affinity) should rank higher than Python (negative): \
-             rust={rust_score:.3}, python={python_score:.3}"
         );
     }
 
@@ -1473,47 +1249,6 @@ mod tests {
     }
 
     #[test]
-    fn test_affinity_adjusted_weight_ordering() {
-        use crate::scoring::keywords::compute_keyword_interest_score;
-
-        let mut interests = vec![make_interest("Rust", 0.5), make_interest("Python", 0.5)];
-
-        // Positive affinity on Rust, negative on Python
-        let mut affinities = HashMap::new();
-        affinities.insert("rust".to_string(), 0.9); // +0.9 * 0.2 = +0.18 → 0.68
-        affinities.insert("python".to_string(), -0.8); // -0.8 * 0.2 = -0.16 → 0.34
-        apply_affinity_adjustments(&mut interests, &affinities);
-
-        let rust_interest = interests.iter().find(|i| i.topic == "Rust").unwrap();
-        let python_interest = interests.iter().find(|i| i.topic == "Python").unwrap();
-
-        assert!(
-            rust_interest.weight > python_interest.weight,
-            "positive affinity must raise Rust above Python; \
-             rust_w={:.3}, python_w={:.3}",
-            rust_interest.weight,
-            python_interest.weight
-        );
-
-        let rust_score = compute_keyword_interest_score(
-            "Rust async patterns",
-            "Exploring async Rust programming with tokio",
-            &interests,
-        );
-        let python_score = compute_keyword_interest_score(
-            "Python async patterns",
-            "Exploring async Python programming with asyncio",
-            &interests,
-        );
-
-        assert!(
-            rust_score > python_score,
-            "Rust content must outscore Python content after affinity adjustment; \
-             rust={rust_score:.3}, python={python_score:.3}"
-        );
-    }
-
-    #[test]
     fn test_phase_weight_formula_correctness() {
         // Phase 2 formula: weight = 0.5 + (conf - 0.65) * 0.7
         // Test at boundary values
@@ -1916,58 +1651,6 @@ mod tests {
         assert_eq!(
             score_unrelated, 0.0,
             "ACE-synthesized interests must not match unrelated content; got {score_unrelated:.3}"
-        );
-    }
-
-    #[test]
-    fn test_affinity_reversal_changes_ranking() {
-        use crate::scoring::keywords::compute_keyword_interest_score;
-
-        let mut interests = vec![make_interest("Rust", 0.5), make_interest("Go", 0.5)];
-
-        // Before affinity: both equal weight
-        let rust_before = compute_keyword_interest_score(
-            "Rust systems programming",
-            "Build high-performance systems with Rust and its ownership model.",
-            &interests,
-        );
-        let go_before = compute_keyword_interest_score(
-            "Go systems programming",
-            "Build high-performance systems with Go and its goroutine model.",
-            &interests,
-        );
-
-        // After affinity: Rust boosted, Go suppressed
-        let mut affinities = HashMap::new();
-        affinities.insert("rust".to_string(), 1.0); // +0.2 → 0.7
-        affinities.insert("go".to_string(), -1.0); // -0.2 → 0.3
-        apply_affinity_adjustments(&mut interests, &affinities);
-
-        let rust_after = compute_keyword_interest_score(
-            "Rust systems programming",
-            "Build high-performance systems with Rust and its ownership model.",
-            &interests,
-        );
-        let go_after = compute_keyword_interest_score(
-            "Go systems programming",
-            "Build high-performance systems with Go and its goroutine model.",
-            &interests,
-        );
-
-        assert!(
-            rust_after > go_after,
-            "after affinity reversal, Rust must outscore Go; \
-             rust_after={rust_after:.3}, go_after={go_after:.3}"
-        );
-        assert!(
-            rust_after > rust_before,
-            "positive affinity must increase Rust score; \
-             before={rust_before:.3}, after={rust_after:.3}"
-        );
-        assert!(
-            go_after < go_before,
-            "negative affinity must decrease Go score; \
-             before={go_before:.3}, after={go_after:.3}"
         );
     }
 

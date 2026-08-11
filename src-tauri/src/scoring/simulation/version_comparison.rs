@@ -219,11 +219,19 @@ fn enriched_reality_niche_specialist() {
     let personas = all_personas_enriched();
     let m = run_persona_simulation(8, &personas[8]);
     info!("{}", m.format_report("enriched_niche_specialist"));
-    // Enriched niche has aggressive anti-topics (javascript, python, java) and
-    // exclusions (javascript, web development, career) that broadly match many
-    // corpus items. This causes higher FP rate in the exclusion-counting logic.
-    // Thresholds relaxed to reflect the anti-topic/exclusion interaction.
-    m.assert_quality("enriched_niche_specialist", 0.15, 0.20, 0.18);
+    // v19 (AD-029) recall bar: this persona's enrichment is dominated by
+    // BEHAVIORAL data (affinities 0.7-0.9, anti-topics, taste embedding,
+    // calibration deltas) — pristine, perfectly-labeled inputs that the
+    // production capture layer never actually produced (three incompatible
+    // strength scales; the 2026-07-13 doom loop). With behavioral signals
+    // demoted from scoring authority, the items only reachable through
+    // that enrichment are unreachable BY DESIGN, and measured quality is
+    // P=1.000 R=0.143 (every surfaced item correct; weak-relevance recall
+    // gone). The recall bar drops to the measured static-only baseline.
+    // Restoring it to 0.20+ is an explicit AD-029 re-enable criterion —
+    // if learning earns its way back, THIS bar is where the lift must
+    // show up first.
+    m.assert_quality("enriched_niche_specialist", 0.15, 0.12, 0.18);
 }
 
 #[test]

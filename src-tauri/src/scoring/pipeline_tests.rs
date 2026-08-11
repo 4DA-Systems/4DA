@@ -94,7 +94,12 @@ mod tests {
     #[test]
     fn test_score_item_two_signals_can_pass() {
         let db = test_db();
-        let ace_ctx = ACEContext::default();
+        // v19 (AD-029): the learned axis never confirms, so the second
+        // independent signal comes from ACE active topics instead of the
+        // old feedback-boost fixture.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        ace_ctx.topic_confidence.insert("rust".to_string(), 0.9);
 
         let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![context_engine::Interest {
@@ -105,15 +110,10 @@ mod tests {
             source: context_engine::InterestSource::Explicit,
         }];
 
-        // Two genuinely independent signals: interest (via embedding) + learned (via feedback)
-        let mut feedback_boosts = std::collections::HashMap::new();
-        feedback_boosts.insert("performance".to_string(), 0.50); // net_score * FEEDBACK_SCALE must exceed FEEDBACK_THRESHOLD (0.05)
-
         let ctx = ScoringContext::builder()
             .interest_count(1)
             .interests(interests)
             .ace_ctx(ace_ctx)
-            .feedback_boosts(feedback_boosts)
             .build();
 
         // Use same embedding as interest so interest_score is high
@@ -135,7 +135,7 @@ mod tests {
             .expect("should have breakdown");
 
         // Interest confirmed (high interest_score via same embedding)
-        // Learned confirmed (feedback_boost > 0.05 via "async" topic match)
+        // ACE confirmed (active topic "rust" grounds the title topic)
         assert!(
             breakdown.signal_count >= 2,
             "Expected 2+ confirmed signals, got {} ({:?})",
@@ -502,8 +502,12 @@ mod tests {
     fn test_pipeline_new_user_still_requires_two_signals() {
         // Even with zero feedback interactions, the quality floor still requires 2 signals.
         // Previously "bootstrap mode" relaxed this to 1, causing false positives.
+        // v19 (AD-029): the learned axis never confirms, so the second signal
+        // comes from ACE active topics instead of the old feedback fixture.
         let db = test_db();
-        let ace_ctx = ACEContext::default();
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        ace_ctx.topic_confidence.insert("rust".to_string(), 0.9);
 
         let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![context_engine::Interest {
@@ -514,16 +518,11 @@ mod tests {
             source: context_engine::InterestSource::Explicit,
         }];
 
-        // Two genuinely independent signals: interest (embedding) + learned (feedback)
-        let mut feedback_boosts = std::collections::HashMap::new();
-        feedback_boosts.insert("performance".to_string(), 0.50);
-
         // New user: feedback_interaction_count = 0
         let ctx = ScoringContext::builder()
             .interest_count(1)
             .interests(interests)
             .ace_ctx(ace_ctx)
-            .feedback_boosts(feedback_boosts)
             .feedback_interaction_count(0)
             .build();
 
@@ -544,7 +543,7 @@ mod tests {
             .as_ref()
             .expect("should have breakdown");
 
-        // With 2+ independent signals (interest + learned), score should pass
+        // With 2+ independent signals (interest + ACE), score should pass
         assert!(
             bd.signal_count >= 2,
             "Expected 2+ signals even for new user, got {} ({:?})",

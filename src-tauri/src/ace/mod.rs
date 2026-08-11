@@ -803,29 +803,11 @@ impl ACE {
         None // No adjustment needed
     }
 
-    /// Load stored threshold from ACE kv_store
-    pub fn get_stored_threshold(&self) -> Option<f32> {
-        let conn = self.conn.lock();
-        conn.query_row(
-            "SELECT value FROM kv_store WHERE key = 'relevance_threshold'",
-            [],
-            |row| row.get::<_, f64>(0),
-        )
-        .ok()
-        .map(|v| v as f32)
-    }
-
-    /// Persist threshold to ACE kv_store
-    pub fn store_threshold(&self, threshold: f32) {
-        let conn = self.conn.lock();
-        if let Err(e) = conn.execute(
-            "INSERT OR REPLACE INTO kv_store (key, value, updated_at)
-             VALUES ('relevance_threshold', ?1, datetime('now'))",
-            [threshold as f64],
-        ) {
-            tracing::warn!(target: "4da::ace", error = %e, threshold, "Failed to persist relevance threshold");
-        }
-    }
+    // Threshold persistence (get_stored_threshold / store_threshold) was
+    // REMOVED in v19 (AD-029): a persisted tuner-written threshold was
+    // re-installed on every ACE warmup, so a poisoned value survived
+    // restarts indefinitely. The threshold is a fixed default now; the
+    // orphaned kv_store key is deleted by the v19 migration.
 
     // ========================================================================
     // Watcher Persistence Methods
@@ -1363,30 +1345,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_stored_threshold_roundtrip() {
-        let ace = create_test_ace();
-
-        assert!(
-            ace.get_stored_threshold().is_none(),
-            "Fresh DB should have no stored threshold"
-        );
-
-        ace.store_threshold(0.42);
-        let loaded = ace.get_stored_threshold();
-        assert!(loaded.is_some(), "Should load stored threshold");
-        assert!(
-            (loaded.unwrap() - 0.42).abs() < 0.001,
-            "Stored threshold should roundtrip: got {}",
-            loaded.unwrap()
-        );
-
-        ace.store_threshold(0.18);
-        let loaded2 = ace.get_stored_threshold();
-        assert!(
-            (loaded2.unwrap() - 0.18).abs() < 0.001,
-            "Updated threshold should persist: got {}",
-            loaded2.unwrap()
-        );
-    }
+    // test_stored_threshold_roundtrip removed in v19 (AD-029) along with
+    // threshold persistence itself — a persisted tuner value must never
+    // resurrect across restarts.
 }

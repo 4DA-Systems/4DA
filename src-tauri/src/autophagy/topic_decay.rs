@@ -206,50 +206,6 @@ pub(crate) fn store_decay_profiles(
     Ok(())
 }
 
-/// Load topic decay profiles for the scoring pipeline.
-///
-/// Returns a map of topic -> half_life_hours. Topics not in the map should use
-/// the default half-life of 72 hours.
-pub(crate) fn load_topic_decay_profiles(conn: &Connection) -> HashMap<String, f32> {
-    let mut result = HashMap::new();
-
-    let mut stmt = match conn.prepare(
-        "SELECT subject, data FROM digested_intelligence
-         WHERE digest_type = 'topic_decay' AND superseded_by IS NULL
-         ORDER BY created_at DESC",
-    ) {
-        Ok(s) => s,
-        Err(e) => {
-            warn!(target: "4da::autophagy", error = %e, "Failed to load topic decay profiles");
-            return result;
-        }
-    };
-
-    let rows = match stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    }) {
-        Ok(r) => r,
-        Err(e) => {
-            warn!(target: "4da::autophagy", error = %e, "Failed to iterate decay profile rows");
-            return result;
-        }
-    };
-
-    for row in rows.flatten() {
-        if let Ok(data) = serde_json::from_str::<serde_json::Value>(&row.1) {
-            if let Some(hl) = data
-                .get("half_life_hours")
-                .and_then(serde_json::Value::as_f64)
-            {
-                result.insert(row.0, hl as f32);
-            }
-        }
-    }
-
-    debug!(target: "4da::autophagy", count = result.len(), "Loaded topic decay profiles");
-    result
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -322,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn test_store_and_load_decay_profiles() {
+    fn test_store_decay_profiles() {
         let conn = setup_test_db();
 
         let profiles = vec![
@@ -340,10 +296,15 @@ mod tests {
 
         store_decay_profiles(&conn, &profiles).expect("store");
 
-        let loaded = load_topic_decay_profiles(&conn);
-        assert_eq!(loaded.len(), 2);
-        assert!((loaded["hackernews"] - 24.0).abs() < 0.01);
-        assert!((loaded["arxiv"] - 168.0).abs() < 0.01);
+        let stored: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM digested_intelligence
+                 WHERE digest_type = 'topic_decay' AND superseded_by IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count");
+        assert_eq!(stored, 2);
     }
 
     #[test]
