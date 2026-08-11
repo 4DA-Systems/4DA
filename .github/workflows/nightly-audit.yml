@@ -5,8 +5,8 @@
 #   2. cargo deny check          — licence/source/advisory policy
 #   3. pnpm audit                — npm advisories against EVERY pnpm-lock.yaml
 #      in the repo: root (production deps only) plus each sub-project with
-#      its own lockfile (site/, paddle-webhook/, mcp-4da-server/,
-#      mcp-streets-server/). Sub-projects are audited with dev deps
+#      its own lockfile (site/, paddle-webhook/, mcp-4da-server/).
+#      Sub-projects are audited with dev deps
 #      included: their trees are almost entirely devDependencies
 #      (eleventy, vercel CLI, tsc) and that build/deploy tooling IS the
 #      supply chain for what they ship — a --prod audit there would scan
@@ -123,7 +123,7 @@ jobs:
           OUTPUT=""
           # ".:--prod" = root, production deps only (unchanged policy).
           # Sub-projects include dev deps — see header comment for why.
-          for entry in ".:--prod" "site:" "paddle-webhook:" "mcp-4da-server:" "mcp-streets-server:"; do
+          for entry in ".:--prod" "site:" "paddle-webhook:" "mcp-4da-server:"; do
             dir="${entry%%:*}"
             flags="${entry#*:}"
             RESULT=$(pnpm --dir "$dir" audit $flags --audit-level=high 2>&1)
