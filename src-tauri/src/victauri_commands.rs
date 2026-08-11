@@ -224,6 +224,8 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "toolkit_score_sandbox",
     "toolkit_generate_export_pack",
     "get_diagnostics",
+    "mark_frontend_ready",
+    "get_startup_runtime_flags",
     "get_startup_health",
     "get_capability_states",
     "get_capability_summary",

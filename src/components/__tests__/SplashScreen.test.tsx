@@ -69,8 +69,7 @@ describe('SplashScreen', () => {
   });
 
   it('starts with aria-busy true', async () => {
-    mockInvoke.mockImplementation(() => new Promise(() => {})); // hang
-    const { unmount } = render(<SplashScreen onComplete={vi.fn()} minimumDisplayTime={999999} />);
+    const { unmount } = render(<SplashScreen backendReady={false} onComplete={vi.fn()} minimumDisplayTime={999999} />);
     expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
     unmount();
   });
@@ -96,9 +95,8 @@ describe('SplashScreen', () => {
     unmount();
   });
 
-  it('calls onComplete after backend ready and min time elapsed', async () => {
+  it('calls onComplete after observed backend readiness and min time elapsed', async () => {
     const onComplete = vi.fn();
-    mockInvoke.mockResolvedValue({});
 
     render(<SplashScreen onComplete={onComplete} minimumDisplayTime={0} />);
 
@@ -108,9 +106,7 @@ describe('SplashScreen', () => {
     }, { timeout: 3000 });
   });
 
-  it('shows ready state after backend initialization completes', async () => {
-    mockInvoke.mockResolvedValue({});
-
+  it('shows ready state after observed backend readiness', async () => {
     const { unmount } = render(<SplashScreen onComplete={vi.fn()} minimumDisplayTime={0} />);
 
     await waitFor(() => {
@@ -120,30 +116,21 @@ describe('SplashScreen', () => {
     unmount();
   });
 
-  it('invokes get_settings during initialization', async () => {
-    mockInvoke.mockResolvedValue({});
-
+  it('does not invoke command IPC during initialization', async () => {
     const { unmount } = render(<SplashScreen onComplete={vi.fn()} minimumDisplayTime={0} />);
 
-    await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('get_settings', {});
-    }, { timeout: 3000 });
+    expect(mockInvoke).not.toHaveBeenCalled();
 
     unmount();
   });
 
-  it('handles backend errors gracefully and shows error state', async () => {
+  it('waits without error while backend readiness is still unresolved', async () => {
     const onComplete = vi.fn();
-    mockInvoke.mockRejectedValue(new Error('Backend unavailable'));
 
-    render(<SplashScreen onComplete={onComplete} minimumDisplayTime={0} />);
+    render(<SplashScreen backendReady={false} onComplete={onComplete} minimumDisplayTime={0} />);
 
-    // Should show error label (stays in error state with retry/refresh)
-    await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'splash.error');
-    }, { timeout: 3000 });
-
-    // Should NOT auto-complete — user must retry or refresh
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryByText('action.retry')).not.toBeInTheDocument();
     expect(onComplete).not.toHaveBeenCalled();
   });
 

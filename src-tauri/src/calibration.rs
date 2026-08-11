@@ -158,6 +158,41 @@ impl CalibrationCurve {
         // Unreachable under the invariant, but defensive: fall through to raw.
         raw_score.clamp(0.0, 1.0)
     }
+
+    /// A curve that maps every input to (near-)certainty, or shows no
+    /// spread across its buckets, cannot discriminate — applying it
+    /// destroys the judge's signal instead of calibrating it.
+    ///
+    /// Incident 2026-08-11: a curve fit from 50 mislabeled samples mapped
+    /// ALL buckets to observed_positive_rate=1.0. Every honest 1/5
+    /// judgment became a 5/5 MUST-READ, the reconciler inflated 48 items
+    /// per cycle by +0.15, and 3,028 calibration samples recorded the
+    /// curve's own output as "raw". Degenerate curves are refused at save
+    /// AND treated as missing at load (legacy files on disk included).
+    pub fn degeneracy_reason(&self) -> Option<&'static str> {
+        if self.buckets.len() < 2 {
+            return Some("fewer_than_2_buckets");
+        }
+        let mut lo = f32::MAX;
+        let mut hi = f32::MIN;
+        for b in &self.buckets {
+            lo = lo.min(b.observed_positive_rate);
+            hi = hi.max(b.observed_positive_rate);
+        }
+        if lo >= 0.95 {
+            return Some("all_buckets_certain_positive");
+        }
+        if hi <= 0.05 {
+            return Some("all_buckets_certain_negative");
+        }
+        if (hi - lo) < 0.10 {
+            return Some("no_discrimination_across_buckets");
+        }
+        if self.ece > 0.35 {
+            return Some("ece_above_ceiling");
+        }
+        None
+    }
 }
 
 /// Brier score: mean squared error between predicted probability and
@@ -262,6 +297,10 @@ impl IntelligenceCore for CalibratedCore {
 
         if let Some(curve) = &self.curve {
             for judgment in validated.value.judgments.iter_mut() {
+                // Preserve the model's own confidence before the curve
+                // transforms it — calibration samples must record the raw
+                // value or the next fit trains on this curve's output.
+                judgment.raw_confidence = Some(judgment.confidence);
                 judgment.confidence = curve.apply(judgment.confidence);
             }
             // Re-stamp the wrapper's calibration_id on the returned Validated
@@ -496,6 +535,7 @@ mod tests {
                 item_id: "a".to_string(),
                 relevant: true,
                 confidence: c,
+                raw_confidence: None,
                 reasoning: "because".to_string(),
                 key_connections: vec![],
             }],
@@ -530,6 +570,32 @@ mod tests {
             "expected ~0.50, got {}",
             v.value.judgments[0].confidence
         );
+    }
+
+    /// 2026-08-11 incident guard: calibration samples must record the
+    /// model's PRE-curve confidence. When the curve transforms a judgment,
+    /// the original value is preserved in `raw_confidence`; persisting the
+    /// post-curve value instead would train the next fit on this curve's
+    /// own output (the self-poisoning loop behind the degenerate curve).
+    #[tokio::test]
+    async fn calibrated_core_preserves_raw_confidence() {
+        let inner = Box::new(stub_with_confidence(0.9));
+        let wrapped = CalibratedCore::new(inner, Some(sample_curve()));
+        let v = wrapped.judge(req()).await.unwrap();
+        let j = &v.value.judgments[0];
+        assert_eq!(
+            j.raw_confidence,
+            Some(0.9),
+            "the pre-curve model confidence must survive the transform"
+        );
+        assert!((j.confidence - 0.50).abs() < 1e-4);
+
+        // Pass-through (no curve): raw_confidence stays None — confidence
+        // IS the raw value and samples should fall back to it.
+        let inner_b = Box::new(stub_with_confidence(0.73));
+        let plain = CalibratedCore::new(inner_b, None);
+        let vb = plain.judge(req()).await.unwrap();
+        assert_eq!(vb.value.judgments[0].raw_confidence, None);
     }
 
     #[tokio::test]

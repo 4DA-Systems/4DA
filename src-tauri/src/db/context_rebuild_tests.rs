@@ -327,7 +327,7 @@ fn reconcile_demotes_legacy_test_chunks_including_file_majority() {
     // no marker; the file-majority rule must demote those too.
     {
         let conn = db.conn.lock();
-        let mut insert = |file: &str, text: &str| {
+        let insert = |file: &str, text: &str| {
             let emb = super::embedding_to_blob(&seed_embedding(text));
             conn.execute(
                 "INSERT INTO context_chunks (source_file, content_hash, text, embedding, weight, source_type)

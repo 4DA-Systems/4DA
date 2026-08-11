@@ -131,13 +131,18 @@ export const useResultFilters = () => {
 
   const filteredResults = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
+    const sourceFilteringActive = sourceFilters.size > 0;
 
     // Step 1: Filter by snooze, source, relevance, saved, and search query
     const filtered = relevanceResults.filter(item => {
       // Snoozed = deferred, not rejected: hidden until the snooze expires.
       if (snoozedItemIds.has(item.id)) return false;
       const source = item.source_type || 'hackernews';
-      if (!sourceFilters.has(source)) return false;
+      // Fail open while source metadata is unavailable. At cold start
+      // ALL_SOURCE_IDS is populated asynchronously; if that load fails once,
+      // sourceFilters can be an empty Set. Treating that as "exclude every
+      // source" black-holed valid analysis results under an empty Sources bar.
+      if (sourceFilteringActive && !sourceFilters.has(source)) return false;
       if (showOnlyRelevant && !profileEmpty && !item.relevant) return false;
       if (showSavedOnly && feedbackGiven[item.id] !== 'save') return false;
       // Search filter: match against title, explanation, source type
@@ -214,11 +219,21 @@ export const useResultFilters = () => {
         return bFresh - aFresh;
       }
       if (sortBy === 'score') {
-        const aN = a.score_breakdown?.necessity_score ?? 0;
-        const bN = b.score_breakdown?.necessity_score ?? 0;
-        const aComposite = a.top_score + aN * 0.4;
-        const bComposite = b.top_score + bN * 0.4;
-        return bComposite - aComposite;
+        // v19: the display composite (top_score + necessity*0.4) must honor
+        // the pipeline's categorical ceilings. Before this, a commodity-
+        // capped item (e.g. an ungrounded registry release held at 0.37)
+        // could ride a high necessity_score past genuinely relevant items
+        // in DISPLAY order — the exact cap-bypass class v19 closes on the
+        // backend (`ScoreBreakdown::score_ceiling`). A ceiling-capped item
+        // sorts by its capped score alone; uncapped items keep the
+        // necessity blend, clamped to sane range.
+        const composite = (r: typeof a) => {
+          const ceiling = r.score_breakdown?.score_ceiling;
+          if (ceiling != null) return Math.min(r.top_score, ceiling);
+          const n = Math.min(r.score_breakdown?.necessity_score ?? 0, 1);
+          return Math.min(r.top_score + n * 0.4, 1.4);
+        };
+        return composite(b) - composite(a);
       }
       if (sortBy === 'priority') {
         const aPrio = priorityOrder[a.signal_priority ?? 'watch'] ?? 4;

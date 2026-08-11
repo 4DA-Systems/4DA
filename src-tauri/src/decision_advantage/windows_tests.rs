@@ -250,7 +250,7 @@ fn find_dep_ambiguous_name_needs_title_plus_context() {
     );
     assert_eq!(
         find_matching_dep(
-            "express middleware vulnerability",
+            "express package middleware vulnerability",
             "patch your npm dependencies",
             &deps
         ),

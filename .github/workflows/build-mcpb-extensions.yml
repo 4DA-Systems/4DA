@@ -80,5 +80,7 @@ jobs:
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
               --title "@4da/mcp-server ${TAG#mcp-v}" \
-              --notes "MCP server release. Desktop extension bundles (.mcpb) attached — one per platform (Claude Desktop: Settings → Extensions → install from file). Also on npm: https://www.npmjs.com/package/@4da/mcp-server"
+              --notes "MCP server release. Desktop extension bundles (.mcpb) attached - one per platform (Claude Desktop: Settings -> Extensions -> install from file). Also on npm: https://www.npmjs.com/package/@4da/mcp-server" \
+              --prerelease
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease
           gh release upload "$TAG" bundles/*.mcpb --repo "$GITHUB_REPOSITORY" --clobber

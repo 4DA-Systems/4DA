@@ -1282,28 +1282,19 @@ export class FourDADatabase {
           0.05
       : 0;
 
-    const learnedScore = context.learned
-      ? context.learned.topic_affinities
-          .filter(
-            (ta) =>
-              ta.affinity_score > 0 && itemTopics.some((t) => this.topicMatches(t, ta.topic))
-          )
-          .reduce((sum, ta) => sum + ta.affinity_score * 0.1 * ta.confidence, 0)
-      : 0;
+    // Learned affinity score DEMOTED in v19 (AD-029) — must mirror
+    // computeRelevanceScore so the explanation matches what actually
+    // scored (the two previously diverged on the anti-penalty weight too:
+    // scorer used *0.3, this explanation used *0.5).
+    const learnedScore = 0;
 
-    // Anti-penalty from exclusions and anti-topics
+    // Anti-penalty from user-authored exclusions only (learned anti-topics
+    // demoted with the rest of the behavioral stack, AD-029).
     let antiPenalty = 0;
     for (const exclusion of context.exclusions) {
       if (itemTopics.some((t) => this.topicMatches(t, exclusion))) {
         antiPenalty = 1.0; // Hard exclusion
         break;
-      }
-    }
-    if (antiPenalty === 0 && context.learned) {
-      for (const antiTopic of context.learned.anti_topics) {
-        if (itemTopics.some((t) => this.topicMatches(t, antiTopic.topic))) {
-          antiPenalty = Math.max(antiPenalty, antiTopic.confidence * 0.5);
-        }
       }
     }
 
@@ -1386,12 +1377,17 @@ export class FourDADatabase {
       };
     }
 
-    // Map action to signal strength
+    // Map action to signal strength — v19: unified onto the canonical ACE
+    // scale (src-tauri/src/ace/behavior/types.rs). The old MCP-only scale
+    // (click 0.3 / save 0.8 / dismiss -0.2 / mark_irrelevant -0.5) meant an
+    // agent-recorded rejection never crossed the Rust side's explicit-
+    // negative (-0.8) or anti-topic (-0.5 exclusive) thresholds, so agent
+    // feedback could never register a real rejection.
     const signalStrength: Record<FeedbackAction, number> = {
-      click: 0.3,
-      save: 0.8,
-      dismiss: -0.2,
-      mark_irrelevant: -0.5,
+      click: 0.55,
+      save: 1.0,
+      dismiss: -0.8,
+      mark_irrelevant: -1.0,
     };
 
     try {
@@ -1683,24 +1679,12 @@ export class FourDADatabase {
       }
     }
 
-    // Learned affinities
-    if (context.learned) {
-      for (const affinity of context.learned.topic_affinities) {
-        if (
-          affinity.affinity_score > 0 &&
-          itemTopics.some((t) => this.topicMatches(t, affinity.topic))
-        ) {
-          score += affinity.affinity_score * 0.1 * affinity.confidence;
-        }
-      }
-
-      // Anti-topics penalty
-      for (const antiTopic of context.learned.anti_topics) {
-        if (itemTopics.some((t) => this.topicMatches(t, antiTopic.topic))) {
-          score -= antiTopic.confidence * 0.3;
-        }
-      }
-    }
+    // Learned affinity/anti-topic weighting DEMOTED in v19 (AD-029) to
+    // mirror the Rust pipeline: this TypeScript fallback scorer applied
+    // its own behavioral weights (+affinity*0.1*confidence,
+    // -anti_confidence*0.3) whenever Rust scores were absent — a second,
+    // uncalibrated ranking regime fed by the same untrusted capture layer.
+    // Static identity + ACE stack matching above remain the scoring basis.
 
     return Math.max(0, Math.min(1, score));
   }

@@ -253,38 +253,6 @@ pub(crate) fn store_archetypes(conn: &Connection, archetypes: &[DismissalArchety
     Ok(())
 }
 
-/// Load current archetype penalties from `digested_intelligence`.
-///
-/// Returns a map of archetype_id -> suggested_penalty for all non-superseded
-/// dismissal archetypes. Returns an empty map if no data exists or on query failure.
-pub(crate) fn load_archetype_penalties(conn: &Connection) -> HashMap<String, f32> {
-    let mut result = HashMap::new();
-
-    let Ok(mut stmt) = conn.prepare(
-        "SELECT subject, data FROM digested_intelligence
-         WHERE digest_type = 'dismissal_archetype' AND superseded_by IS NULL",
-    ) else {
-        return result;
-    };
-
-    let Ok(rows) = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    }) else {
-        return result;
-    };
-
-    for row in rows.flatten() {
-        let (subject, data) = row;
-        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
-            if let Some(penalty) = parsed.get("suggested_penalty").and_then(|v| v.as_f64()) {
-                result.insert(subject, penalty as f32);
-            }
-        }
-    }
-
-    result
-}
-
 /// Compute the archetype penalty for a specific item.
 ///
 /// Given loaded archetype penalties and an item's attributes, finds the maximum

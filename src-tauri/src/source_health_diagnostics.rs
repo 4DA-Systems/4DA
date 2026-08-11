@@ -173,9 +173,13 @@ pub fn get_source_health_summary(conn: &Connection) -> Result<SourceHealthSummar
 // ============================================================================
 
 #[tauri::command]
-pub fn get_source_health() -> std::result::Result<SourceHealthSummary, String> {
-    let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
-    get_source_health_summary(&conn).map_err(|e| e.to_string())
+pub async fn get_source_health() -> std::result::Result<SourceHealthSummary, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
+        get_source_health_summary(&conn).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("source health task failed: {e}"))?
 }
 
 // ============================================================================

@@ -155,57 +155,9 @@ pub fn on_dismiss(conn: &Connection, source_item_id: i64, category: Option<&str>
     debug!(target: "4da::telemetry", source = %ctx.source_type, item = source_item_id, "Dismiss evidence recorded");
 }
 
-// ============================================================================
-// Explicit Feedback → Evidence
-// ============================================================================
-
-/// Record evidence from explicit relevance feedback (thumbs up/down).
-/// Note: `ace_commands::record_item_feedback` has its own stability wiring.
-/// This function exists for any other feedback paths that bypass that command.
-#[allow(dead_code)] // REMOVE BY 2026-08-01 — will be wired when feedback paths unify
-pub fn on_feedback(conn: &Connection, source_item_id: i64, relevant: bool) {
-    let Some(ctx) = lookup_item_context(conn, source_item_id) else {
-        return;
-    };
-
-    let confidence = if relevant { 0.9 } else { 0.1 };
-
-    stability_detector::record_evidence(
-        conn,
-        FacetClass::SourcePref,
-        &ctx.source_type,
-        if relevant { "endorsed" } else { "rejected" },
-        CueFamily::Explicit,
-        "feedback",
-        confidence,
-    );
-
-    for tag in extract_tags(&ctx.tags) {
-        if relevant {
-            stability_detector::record_evidence(
-                conn,
-                FacetClass::TopicAffinity,
-                tag,
-                "endorsed",
-                CueFamily::Explicit,
-                "feedback_positive",
-                0.9,
-            );
-        } else {
-            stability_detector::record_evidence(
-                conn,
-                FacetClass::Veto,
-                tag,
-                "rejected",
-                CueFamily::Explicit,
-                "feedback_negative",
-                0.7,
-            );
-        }
-    }
-
-    debug!(target: "4da::telemetry", relevant, source = %ctx.source_type, item = source_item_id, "Feedback evidence recorded");
-}
+// on_feedback removed at its 2026-08-01 deadline: never wired
+// (ace_commands::record_item_feedback carries the stability wiring for the
+// explicit-feedback path).
 
 // ============================================================================
 // Blind Spot Dismissal → Evidence
@@ -234,11 +186,18 @@ pub fn on_blind_spot_dismiss(conn: &Connection, topic: &str) {
 /// Rebuild stability scores after new evidence has accumulated.
 /// Call this after analysis cycles to update facet states.
 pub fn rebuild_if_needed(conn: &Connection) {
+    // v19 fix: this read/write targeted a table named `kv` that has NEVER
+    // existed in production (it appears only in test fixtures). The query
+    // failed to prepare, `.unwrap_or(0)` masked it, `0 < 3` early-returned,
+    // and the write was swallowed by `let _ =` — so the incremental
+    // stability rebuild NEVER ran in production; only the daily full
+    // rebuild did. The real table is `kv_store` (key, value, updated_at).
     let evidence_since_last: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM facet_evidence
              WHERE observed_at > COALESCE(
-                 (SELECT value FROM kv WHERE key = 'stability_last_rebuild'), 0
+                 (SELECT CAST(value AS INTEGER) FROM kv_store
+                  WHERE key = 'stability_last_rebuild'), 0
              )",
             [],
             |row| row.get(0),
@@ -252,10 +211,13 @@ pub fn rebuild_if_needed(conn: &Connection) {
     let updated = stability_detector::rebuild_all(conn);
 
     let now = stability_detector::now_unix_pub();
-    let _ = conn.execute(
-        "INSERT OR REPLACE INTO kv (key, value) VALUES ('stability_last_rebuild', ?1)",
-        params![now.to_string()],
-    );
+    if let Err(e) = conn.execute(
+        "INSERT OR REPLACE INTO kv_store (key, value, updated_at)
+         VALUES ('stability_last_rebuild', ?1, datetime('now'))",
+        params![now],
+    ) {
+        debug!(target: "4da::telemetry", error = %e, "Failed to persist stability rebuild watermark");
+    }
 
     if updated > 0 {
         debug!(target: "4da::telemetry", updated, "Stability rebuild completed after new evidence");
@@ -446,20 +408,19 @@ mod tests {
     }
 
     #[test]
-    fn feedback_positive_records_explicit_evidence() {
+    fn save_records_explicit_source_evidence() {
+        // (on_feedback was removed at its 2026-08-01 deadline — the explicit
+        // feedback path's stability wiring lives in
+        // ace_commands::record_item_feedback. Saves still record evidence.)
         let conn = setup_db();
         insert_test_item(&conn, 4, "github", "New TypeScript compiler", "typescript");
 
-        on_feedback(&conn, 4, true);
+        on_save(&conn, 4);
 
-        let explicit_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM facet_evidence WHERE cue_family = 'explicit'",
-                [],
-                |row| row.get(0),
-            )
+        let evidence_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM facet_evidence", [], |row| row.get(0))
             .unwrap();
-        assert!(explicit_count >= 2); // source + topic
+        assert!(evidence_count >= 1);
     }
 
     #[test]
@@ -468,7 +429,6 @@ mod tests {
         on_click(&conn, 999);
         on_save(&conn, 999);
         on_dismiss(&conn, 999, None);
-        on_feedback(&conn, 999, true);
         // No panic, no evidence recorded
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM facet_evidence", [], |row| row.get(0))

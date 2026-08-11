@@ -135,6 +135,10 @@ export interface ScoreBreakdown {
   matched_window_id?: number;
   /** Skill gap boost from sovereign profile intelligence (0.0-0.20) */
   skill_gap_boost?: number;
+  /** Categorical score ceiling (v19): set when a commodity cap applied in
+   *  the pipeline; survives every post-pipeline score writer and bounds
+   *  display-order composites too. null/absent = no categorical cap. */
+  score_ceiling?: number | null;
   /** Necessity score: "what you'd regret missing" (0.0-1.0) */
   necessity_score?: number;
   /** One-line explanation of why this item is necessary */

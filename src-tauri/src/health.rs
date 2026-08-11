@@ -121,22 +121,25 @@ pub struct SourceQualityReport {
 /// Returns sources that have been fetched, with their relevance ratios.
 /// Sources below 5% relevance are flagged for potential replacement.
 pub fn compute_source_quality(conn: &Connection, lookback_days: i64) -> Vec<SourceQualityReport> {
+    // v19 fix: this query previously read the threshold from a table named
+    // `settings_kv` that has never existed — prepare() failed on every call
+    // and the warn-and-return-empty arm below meant this report had NEVER
+    // produced a single row. The live threshold is now bound as a
+    // parameter (it is a fixed default since AD-029 froze the tuners).
     let query = r"
         SELECT
             source_type,
             COUNT(*) as total,
-            SUM(CASE WHEN relevance_score >= COALESCE(
-                (SELECT CAST(value AS REAL) FROM settings_kv WHERE key = 'relevance_threshold'),
-                0.35
-            ) THEN 1 ELSE 0 END) as relevant
+            SUM(CASE WHEN relevance_score >= ?2 THEN 1 ELSE 0 END) as relevant
         FROM source_items
-        WHERE last_seen >= datetime('now', ? || ' days')
+        WHERE last_seen >= datetime('now', ?1 || ' days')
         GROUP BY source_type
         HAVING total >= 5
         ORDER BY relevant * 1.0 / total ASC
     ";
 
     let lookback = format!("-{lookback_days}");
+    let threshold = crate::get_relevance_threshold() as f64;
     let mut stmt = match conn.prepare(query) {
         Ok(s) => s,
         Err(e) => {
@@ -145,7 +148,7 @@ pub fn compute_source_quality(conn: &Connection, lookback_days: i64) -> Vec<Sour
         }
     };
 
-    let rows = match stmt.query_map([&lookback], |row| {
+    let rows = match stmt.query_map(rusqlite::params![&lookback, threshold], |row| {
         let source_type: String = row.get(0)?;
         let total: i64 = row.get(1)?;
         let relevant: i64 = row.get(2)?;

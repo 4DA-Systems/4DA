@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Compute the SHA-256 of the current SSL.com CodeSignTool release and
-# write it into .github/workflows/release.yml in place of the
-# PLACEHOLDER_SHA256_FILL_IN sentinel. Also flips the commented-out
-# verification `if` to active.
+# refresh the pinned hash in .github/workflows/release.yml.
 #
 # Why this exists: SSL.com ships CodeSignTool over HTTPS but does not
 # publish a companion checksum — the safe posture is to pin the hash
@@ -63,18 +61,16 @@ if [ "$DRY_RUN" = true ]; then
     exit 0
 fi
 
-if ! grep -q "PLACEHOLDER_SHA256_FILL_IN" "$WORKFLOW"; then
-    echo "WARNING: $WORKFLOW no longer has a PLACEHOLDER_SHA256_FILL_IN sentinel."
-    echo "         It may already be pinned. If you want to update the pin,"
-    echo "         edit the workflow manually."
-    exit 0
+if ! grep -Eq '\$expected = "[0-9a-fA-F]{64}"' "$WORKFLOW"; then
+    echo "ERROR: could not find the pinned CodeSignTool SHA-256 in $WORKFLOW" >&2
+    echo "       Expected a line like: \$expected = \"<64 hex chars>\"" >&2
+    exit 1
 fi
 
-# Replace placeholder + un-comment the verification `if`.
+# Replace the existing pinned hash.
 # Use a portable sed invocation (works on Linux + macOS + Git Bash).
 sed -i.bak \
-    -e "s|\$expected = \"PLACEHOLDER_SHA256_FILL_IN\"|\$expected = \"$SHA_LC\"|" \
-    -e 's|# if (\$expected -ne "PLACEHOLDER_SHA256_FILL_IN" -and |if (|' \
+    -E "s|\\\$expected = \"[0-9a-fA-F]{64}\"|\\\$expected = \"$SHA_LC\"|" \
     "$WORKFLOW"
 rm -f "$WORKFLOW.bak"
 

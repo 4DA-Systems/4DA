@@ -35,6 +35,16 @@ matched_deps: Array<string>,
  */
 strongly_grounded: boolean, 
 /**
+ * Categorical score ceiling that must survive every post-pipeline
+ * score writer (cross-encoder rerank, dedup cluster boost, source-tier
+ * normalization, LLM reconciler). Set when a commodity cap applied
+ * inside `score_item` (e.g. ungrounded registry release → 0.37 =
+ * ceiling + score offset); `analyzer::reassert_score_ceilings`
+ * re-applies it as the FINAL pass so no downstream writer can
+ * re-inflate a capped item (the v18 bug class, score side).
+ */
+score_ceiling: number | null, 
+/**
  * Domain relevance (0.15 off-domain to 1.0 primary stack match)
  */
 domain_relevance: number, 

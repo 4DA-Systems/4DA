@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useRef, useMemo, useCallback, useEffect } from 'react';
+import { useRef, useMemo, useCallback, useEffect, type SyntheticEvent } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
@@ -52,6 +52,13 @@ export function ResultsView({
   const handleToggleExpand = useCallback((itemId: number) => {
     setExpandedItem(useAppStore.getState().expandedItem === itemId ? null : itemId);
   }, [setExpandedItem]);
+
+  const contextPanelLoadedRef = useRef(false);
+  const handleContextPanelToggle = useCallback((event: SyntheticEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.open || contextPanelLoadedRef.current) return;
+    contextPanelLoadedRef.current = true;
+    void loadContextFiles();
+  }, [loadContextFiles]);
 
   const {
     sourceFilters,
@@ -154,7 +161,10 @@ export function ResultsView({
   return (
     <div className="space-y-6">
       {/* Context Files Panel (collapsible) */}
-      <details className="bg-bg-secondary rounded-lg border border-border">
+      <details
+        className="bg-bg-secondary rounded-lg border border-border"
+        onToggle={handleContextPanelToggle}
+      >
         {/* eslint-disable i18next/no-literal-string */}
         <summary className="px-5 py-3 text-xs text-text-muted cursor-pointer hover:text-text-secondary">
           Context Files ({state.contextFiles.length} files)

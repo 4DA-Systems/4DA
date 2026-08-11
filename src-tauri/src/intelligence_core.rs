@@ -232,6 +232,7 @@ mod tests {
             item_id: id.to_string(),
             relevant,
             confidence,
+            raw_confidence: None,
             reasoning: format!("mock reason for {id}"),
             key_connections: Vec::new(),
         }

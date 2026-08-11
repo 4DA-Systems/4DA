@@ -9,15 +9,21 @@ function item(partial: {
   signal_type?: string | null;
   content_type?: string | null;
   dep_match_score?: number;
+  matched_deps?: string[];
+  strongly_grounded?: boolean;
+  is_critical_alert?: boolean;
   top_score?: number;
 }): SourceRelevance {
   return {
     title: 'x',
     top_score: partial.top_score ?? 0.9,
+    is_critical_alert: partial.is_critical_alert,
     signal_type: partial.signal_type ?? null,
     score_breakdown: {
       content_type: partial.content_type ?? null,
       dep_match_score: partial.dep_match_score ?? 0,
+      matched_deps: partial.matched_deps ?? [],
+      strongly_grounded: partial.strongly_grounded ?? false,
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any as SourceRelevance;
@@ -72,17 +78,40 @@ describe('findMostCriticalSave hero selection', () => {
     // Real CVEs arrive as content_type="security_advisory" with signal_type unset.
     // The old chooser compared the signal-vocab string against both fields, so it
     // skipped this at the security tier and a Show HN won the hero card (bug_001).
-    const cve = item({ content_type: 'security_advisory', signal_type: null, dep_match_score: 0.4, top_score: 0.72 });
+    const cve = item({
+      content_type: 'security_advisory',
+      signal_type: null,
+      dep_match_score: 0.4,
+      matched_deps: ['react'],
+      strongly_grounded: true,
+      top_score: 0.72,
+    });
     const showHn = item({ signal_type: 'tool_discovery', content_type: 'show_and_tell', dep_match_score: 0, top_score: 0.55 });
     expect(findMostCriticalSave([showHn, cve])).toBe(cve);
   });
 
-  it('still requires dependency confirmation for security items', () => {
+  it('still requires backend grounding for security items', () => {
     // A security advisory with no dep match must NOT be hero'd just for being
     // security — an irrelevant CVE as hero card destroys trust. It loses to a
-    // (dep-unconstrained) tool item in the priority walk.
+    // backend-grounded tool item in the priority walk.
     const irrelevantCve = item({ content_type: 'security_advisory', dep_match_score: 0, top_score: 0.9 });
-    const tool = item({ signal_type: 'tool_discovery', dep_match_score: 0, top_score: 0.5 });
+    const tool = item({
+      signal_type: 'tool_discovery',
+      dep_match_score: 0.5,
+      matched_deps: ['vite'],
+      strongly_grounded: true,
+      top_score: 0.5,
+    });
     expect(findMostCriticalSave([irrelevantCve, tool])).toBe(tool);
+  });
+
+  it('returns null instead of trusting matched_deps without strong grounding', () => {
+    const phantom = item({
+      content_type: 'security_advisory',
+      dep_match_score: 0.9,
+      matched_deps: ['windows'],
+      strongly_grounded: false,
+    });
+    expect(findMostCriticalSave([phantom])).toBeNull();
   });
 });

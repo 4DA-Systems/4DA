@@ -2,7 +2,7 @@
 //! ACE Context Validation Tests
 //!
 //! Isolates the ACE axis contributions to scoring:
-//! - Anti-topic exclusion (check_ace_exclusions)
+//! - Anti-topic exclusion (compute_anti_penalty)
 //! - Dependency matching (match_dependencies)
 //! - Detected tech influence
 //! - Topic affinity amplification (compute_semantic_ace_boost)

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useCallback, useState, useEffect, useRef, memo } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
@@ -14,6 +13,8 @@ import { BriefingLoadingState, BriefingReadyState } from './BriefingEmptyStates'
 import { BriefingWarmupState } from './BriefingWarmupState';
 import { useLicense } from '../hooks/use-license';
 import { useBriefingDerived } from '../hooks/use-briefing-derived';
+import { isVictauriDogfoodMode } from '../lib/startup-runtime';
+import { safeListen } from '../lib/tauri-events';
 import type { SourceRelevance } from '../types';
 
 export const BriefingView = memo(function BriefingView() {
@@ -77,7 +78,7 @@ export const BriefingView = memo(function BriefingView() {
 
   // Listen for standing query matches
   useEffect(() => {
-    const unlisten = listen<Array<{ query_id: number; query_text: string; new_matches: number; example_title: string | null }>>(
+    const unlisten = safeListen<Array<{ query_id: number; query_text: string; new_matches: number; example_title: string | null }>>(
       'standing-query-matches',
       (event) => {
         const alerts = event.payload.filter(a => a.new_matches > 0);
@@ -110,17 +111,34 @@ export const BriefingView = memo(function BriefingView() {
   const coldBootFreshenedRef = useRef(false);
   useEffect(() => {
     if (
-      !coldBootFreshenedRef.current &&
-      instantSnapshot &&
-      results.length === 0 &&
-      !analysisComplete &&
-      !isLoading &&
-      !isFirstRun
+      coldBootFreshenedRef.current ||
+      !instantSnapshot ||
+      results.length > 0 ||
+      analysisComplete ||
+      isLoading ||
+      isFirstRun
     ) {
-      coldBootFreshenedRef.current = true;
-      void startAnalysis();
+      return;
     }
-  }, [instantSnapshot, results.length, analysisComplete, isLoading, isFirstRun, startAnalysis]);
+    coldBootFreshenedRef.current = true;
+    let cancelled = false;
+    void isVictauriDogfoodMode().then((dogfoodMode) => {
+      if (cancelled || dogfoodMode) return;
+      const latest = useAppStore.getState();
+      if (
+        latest.instantSnapshot &&
+        latest.appState.relevanceResults.length === 0 &&
+        !latest.appState.analysisComplete &&
+        !latest.appState.loading &&
+        !latest.isFirstRun
+      ) {
+        void latest.startAnalysis();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [instantSnapshot, results.length, analysisComplete, isLoading, isFirstRun]);
 
   const { signalItems, topItems } =
     useBriefingDerived(results, sourceHealth, briefing, lastBackgroundResultsAt);

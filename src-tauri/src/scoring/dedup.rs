@@ -394,9 +394,19 @@ pub(crate) fn compute_serendipity_candidates(
     results: &[SourceRelevance],
     budget_percent: u8,
 ) -> Vec<SourceRelevance> {
-    // Budget: how many serendipity items to include
+    // Budget: how many serendipity items to include. Budget-true, rounding
+    // DOWN, capped at 5. The previous formula seeded the count with
+    // `total_relevant.max(5)` and then `.clamp(1, 5)` — forcing at least one
+    // scorer-REJECTED item into the feed every cycle regardless of the
+    // configured budget. On a small feed (~4 relevant/cycle) those forced
+    // injections accumulated to 17.6% of the curated set against a
+    // configured 8% (measured live 2026-08-11). A budget of 8% on 4
+    // relevant items is 0 injections, and that is what it must produce.
     let total_relevant = results.iter().filter(|r| r.relevant && !r.excluded).count();
-    let budget = ((total_relevant.max(5) * budget_percent as usize) / 100).clamp(1, 5);
+    let budget = ((total_relevant * budget_percent as usize) / 100).min(5);
+    if budget == 0 {
+        return Vec::new();
+    }
 
     // Find items that failed the gate but had some signal
     let mut candidates: Vec<SourceRelevance> = results

@@ -96,15 +96,27 @@ pub(super) async fn check_synthesis_capability_impl() -> Result<serde_json::Valu
 
 /// Implementation for run_model_eval command.
 pub(super) async fn run_model_eval_impl() -> Result<serde_json::Value> {
+    use crate::error::FourDaError;
+
+    const MODEL_EVAL_COMMAND_TIMEOUT_SECS: u64 = 25;
+
     let llm_settings = {
         let mut guard = crate::get_settings_manager().lock();
         guard.ensure_keys_hydrated();
         guard.get().llm.clone()
     };
 
-    let summary = crate::model_eval::run_eval(&llm_settings.model, &llm_settings.provider)
-        .await
-        .map_err(|e| e.to_string())?;
+    let summary = tokio::time::timeout(
+        std::time::Duration::from_secs(MODEL_EVAL_COMMAND_TIMEOUT_SECS),
+        crate::model_eval::run_eval(&llm_settings.model, &llm_settings.provider),
+    )
+    .await
+    .map_err(|_| {
+        FourDaError::Llm(format!(
+            "Provider model eval timed out after {MODEL_EVAL_COMMAND_TIMEOUT_SECS}s; check provider responsiveness"
+        ))
+    })?
+    .map_err(|e| FourDaError::Llm(e.to_string()))?;
 
     serde_json::to_value(&summary).map_err(|e| e.to_string().into())
 }

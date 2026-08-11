@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
+
 import { useAppStore } from '../index';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -7,9 +9,42 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 const initialState = useAppStore.getState();
+const mockInvoke = vi.mocked(invoke);
+
+const loadedSettings = {
+  llm: {
+    provider: 'openai',
+    model: 'gpt-5.2',
+    has_api_key: true,
+    base_url: null,
+  },
+  rerank: {
+    enabled: true,
+    max_items_per_batch: 48,
+    min_embedding_score: 0.25,
+    daily_token_limit: 100000,
+    daily_cost_limit_cents: 50,
+  },
+  usage: {
+    tokens_today: 0,
+    cost_today_cents: 0,
+    tokens_total: 0,
+    items_reranked: 0,
+  },
+  embedding_threshold: 0.2,
+  auto_assess_blind_spots: true,
+  license: {
+    tier: 'signal',
+    has_key: true,
+    activated_at: '2026-01-01T00:00:00.000Z',
+  },
+  onboarding_complete: true,
+};
 
 describe('settings-slice', () => {
   beforeEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
     useAppStore.setState(initialState, true);
   });
 
@@ -168,6 +203,44 @@ describe('settings-slice', () => {
       useAppStore.getState().setShowOnboarding(true);
       useAppStore.getState().setShowOnboarding(false);
       expect(useAppStore.getState().showOnboarding).toBe(false);
+    });
+  });
+
+  describe('loadSettings', () => {
+    it('lifts settingsLoaded after bootstrap timeout and applies late settings', async () => {
+      vi.useFakeTimers();
+
+      let resolveSettings: (value: typeof loadedSettings) => void = () => {};
+      mockInvoke.mockImplementation((command) => {
+        if (command === 'get_settings') {
+          return new Promise((resolve) => {
+            resolveSettings = resolve;
+          });
+        }
+        if (command === 'get_model_registry') {
+          return Promise.resolve({ providers: [] });
+        }
+        return Promise.resolve({});
+      });
+
+      try {
+        const loadPromise = useAppStore.getState().loadSettings();
+        await vi.advanceTimersByTimeAsync(5_001);
+        await loadPromise;
+
+        expect(useAppStore.getState().settingsLoaded).toBe(true);
+        expect(useAppStore.getState().settings).toBeNull();
+
+        resolveSettings(loadedSettings);
+        await vi.advanceTimersByTimeAsync(0);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(useAppStore.getState().settings?.llm.provider).toBe('openai');
+        expect(useAppStore.getState().settingsForm.provider).toBe('openai');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

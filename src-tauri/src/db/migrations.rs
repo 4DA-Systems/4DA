@@ -85,12 +85,11 @@ pub enum CorruptionRecovery {
 ///    will then create an empty DB at the original path and run all
 ///    migrations from scratch.
 ///
-/// **This function is intentionally unwired in the cold-boot path as of
-/// 2026-04-11.** Wiring it requires touching the bootstrap site (likely
-/// `lib.rs` or `state.rs::open_db_connection`) which is currently
-/// claimed by another terminal's read-only sweep. Wire it after the next
-/// commit lock release by calling it once at the start of the database
-/// initialization path, before `Database::new(db_path)`.
+/// **Cold-boot contract:** this function is safe to run before
+/// `Database::new(db_path)` only because the integrity probe uses a short
+/// busy timeout and treats lock contention as transient, not corruption. A
+/// running GUI/headless engine must never make startup wait indefinitely or
+/// quarantine a merely-locked database.
 ///
 /// All file operations are infallible at the API level — failures are
 /// captured into `CorruptionRecovery::RecoveryFailed` so the caller can
@@ -113,6 +112,14 @@ pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
     //    crash loops) without scanning every row.
     let healthy = match Connection::open(db_path) {
         Ok(conn) => {
+            if let Err(e) = conn.busy_timeout(std::time::Duration::from_millis(250)) {
+                tracing::warn!(
+                    target: "4da::db::recovery",
+                    path = %db_path.display(),
+                    error = %e,
+                    "Could not set DB recovery busy timeout"
+                );
+            }
             let pragma_result: rusqlite::Result<String> =
                 conn.query_row("PRAGMA quick_check", [], |row| row.get(0));
             match pragma_result {
@@ -126,6 +133,17 @@ pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
                     );
                     false
                 }
+                Err(e) if is_lock_contention(&e) => {
+                    tracing::warn!(
+                        target: "4da::db::recovery",
+                        path = %db_path.display(),
+                        error = %e,
+                        "DB recovery quick_check skipped because database is locked"
+                    );
+                    return CorruptionRecovery::RecoveryFailed {
+                        reason: format!("database locked during recovery quick_check: {e}"),
+                    };
+                }
                 Err(e) => {
                     tracing::error!(
                         target: "4da::db::recovery",
@@ -136,6 +154,17 @@ pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
                     false
                 }
             }
+        }
+        Err(e) if is_lock_contention(&e) => {
+            tracing::warn!(
+                target: "4da::db::recovery",
+                path = %db_path.display(),
+                error = %e,
+                "DB recovery skipped because database is locked"
+            );
+            return CorruptionRecovery::RecoveryFailed {
+                reason: format!("database locked during recovery open: {e}"),
+            };
         }
         Err(e) => {
             tracing::error!(
@@ -222,6 +251,13 @@ pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
     CorruptionRecovery::RestoredFromBackup {
         restored_from: restore_from,
     }
+}
+
+fn is_lock_contention(e: &rusqlite::Error) -> bool {
+    matches!(
+        e.sqlite_error_code(),
+        Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked)
+    )
 }
 
 /// Scan the directory for files matching `<stem>.db.backup.vN` siblings of
@@ -352,6 +388,51 @@ mod recovery_tests {
         );
         // Original file untouched.
         assert!(path.exists());
+    }
+
+    #[test]
+    fn locked_db_returns_recovery_failed_without_quarantine() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("locked.db");
+        let locker = Connection::open(&path).unwrap();
+        locker
+            .execute_batch(
+                "
+                PRAGMA journal_mode = DELETE;
+                CREATE TABLE t (x INTEGER);
+                INSERT INTO t VALUES (1);
+                BEGIN EXCLUSIVE;
+                INSERT INTO t VALUES (2);
+                ",
+            )
+            .unwrap();
+
+        let started = std::time::Instant::now();
+        let result = recover_corrupt_db_if_needed(&path);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "locked DB recovery must return quickly, elapsed {:?}",
+            started.elapsed()
+        );
+
+        match result {
+            CorruptionRecovery::RecoveryFailed { reason } => {
+                assert!(reason.contains("locked"), "unexpected reason: {reason}");
+            }
+            other => panic!("expected RecoveryFailed for locked DB, got {other:?}"),
+        }
+        assert!(path.exists(), "locked DB must not be moved");
+        let quarantine_files: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().contains("corrupt-"))
+            .collect();
+        assert!(
+            quarantine_files.is_empty(),
+            "locked DB must not be quarantined"
+        );
+
+        let _ = locker.execute_batch("ROLLBACK;");
     }
 
     #[test]
@@ -712,7 +793,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 101;
+        const TARGET_VERSION: i64 = 103;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3831,6 +3912,88 @@ impl Database {
                 )?;
             }
 
+            // Phase 102: third mastodon-title heal. derive_title now skips
+            // `<span class="invisible">` content — Mastodon wraps the
+            // non-displayed parts of a long URL (scheme prefix, severed tail)
+            // in invisible spans, and a purely-alphabetic tail ("ay", the end
+            // of "sketch-a-day") passed every Phase-94 heuristic and landed
+            // mid-title ("…tip jar are ay Code for", live corpus 2026-07-27).
+            // Same shape as Phases 93/94: re-derive every stored mastodon
+            // title from the raw body with the fixed function; rows that
+            // re-derive to empty (URL-only toots) keep their old title.
+            if current_version < 102 {
+                Self::run_versioned_migration(
+                    &conn,
+                    101,
+                    102,
+                    "Phase 102: re-derive mastodon titles (invisible-span tails)",
+                    |c| {
+                        let mut stmt = c.prepare(
+                            "SELECT id, content FROM source_items
+                             WHERE source_type = 'mastodon'
+                               AND content IS NOT NULL AND content != ''",
+                        )?;
+                        let rows: Vec<(i64, String)> = stmt
+                            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                            .collect::<std::result::Result<_, _>>()?;
+                        drop(stmt);
+
+                        let mut healed = 0usize;
+                        for (id, content) in rows {
+                            let title = crate::sources::mastodon::derive_title(&content);
+                            if !title.is_empty() {
+                                c.execute(
+                                    "UPDATE source_items SET title = ?1 WHERE id = ?2",
+                                    rusqlite::params![title, id],
+                                )?;
+                                healed += 1;
+                            }
+                        }
+                        info!(
+                            target: "4da::db",
+                            healed,
+                            "Phase 102: re-derived mastodon titles (invisible-span tails)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 103 {
+                Self::run_versioned_migration(
+                    &conn,
+                    102,
+                    103,
+                    "Phase 103: purge poisoned calibration samples + orphaned tuner threshold",
+                    |c| {
+                        // Every pre-v19 calibration sample recorded the
+                        // POST-curve confidence under `raw_score`
+                        // (analysis_rerank persisted judgment.confidence after
+                        // CalibratedCore had already applied the curve). With
+                        // the 2026-06-19 degenerate curve live, that meant
+                        // 3,028 rows of literal 1.0/1.0 — fitting the next
+                        // curve from them would reproduce the poison. v19
+                        // persists the true pre-curve raw score; the legacy
+                        // rows are unusable for fitting and are removed.
+                        let purged = c.execute("DELETE FROM calibration_samples", [])?;
+                        // The frozen auto-tuners' persisted threshold could
+                        // otherwise linger forever (its reinstall path is
+                        // gone, but dead state invites resurrection bugs).
+                        let kv = c.execute(
+                            "DELETE FROM kv_store WHERE key = 'relevance_threshold'",
+                            [],
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            purged,
+                            kv_removed = kv,
+                            "Phase 103: poisoned calibration samples + tuner threshold purged (AD-029)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -4894,6 +5057,51 @@ mod tests {
             )
             .unwrap();
         assert_eq!(healed, "SQLite editions");
+    }
+
+    /// Phase 102 lifts TARGET_VERSION to 102 and re-heals mastodon titles
+    /// with the invisible-span-aware derive_title (a purely-alphabetic
+    /// severed URL tail like "ay" passed every earlier heuristic). Wind back
+    /// to 101, seed the corrupted row, re-run, assert clean.
+    #[test]
+    fn test_phase_102_heals_invisible_span_tails() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 102,
+            "schema_version should be >= 102 after migration; got {version}"
+        );
+
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, url, content_hash, embedding)
+             VALUES ('mastodon', 'tag:test-102', 'The archives and tip jar are ay Code for',
+                     '<p>The archives and tip jar are at: <a href=\"https://example.com/sketch-a-day\"><span class=\"invisible\">https://</span><span class=\"ellipsis\">example.com/sketch-a-d</span><span class=\"invisible\">ay</span></a> Code for this</p>',
+                     'https://example.com/2', 'hash-test-102', X'00');
+             UPDATE schema_version SET version = 101;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v101");
+
+        let conn = db.conn.lock();
+        let healed: String = conn
+            .query_row(
+                "SELECT title FROM source_items WHERE source_id = 'tag:test-102'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            !healed.contains(" ay ") && !healed.ends_with(" ay"),
+            "invisible tail survived the heal: {healed}"
+        );
+        assert!(
+            healed.starts_with("The archives and tip jar"),
+            "prose head lost: {healed}"
+        );
     }
 
     /// Phase 94 re-heals with derive_title v3 (scheme-less URLs, severed

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState, useEffect, useRef } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import type { VoidSignal } from '../types';
 import { cmd } from '../lib/commands';
+import { safeListen } from '../lib/tauri-events';
 
 const IDLE_SIGNAL: VoidSignal = {
   pulse: 0,
@@ -54,7 +54,7 @@ export function useVoidSignals() {
   useEffect(() => {
     let cancelled = false;
     const setup = async () => {
-      const unlisten = await listen<VoidSignal>('void-signal', (event) => {
+      const unlisten = await safeListen<VoidSignal>('void-signal', (event) => {
         if (!cancelled && event.payload) {
           targetRef.current = event.payload;
         }

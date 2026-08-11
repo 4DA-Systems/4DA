@@ -17,8 +17,9 @@ use crate::stacks::{EcosystemShift, PainPoint, SeedItem, StackProfile};
 pub static JAVA_ENTERPRISE: StackProfile = StackProfile {
     id: "java_enterprise",
     name: "Java / Spring",
-    core_tech: &["java", "spring", "spring-boot", "kotlin"],
+    core_tech: &["java", "spring", "spring-boot"],
     companions: &[
+        "kotlin",
         "hibernate",
         "maven",
         "gradle",
@@ -28,7 +29,9 @@ pub static JAVA_ENTERPRISE: StackProfile = StackProfile {
         "quarkus",
         "micronaut",
     ],
-    competing: &["dotnet", "csharp", "node", "django", "rails", "go"],
+    competing: &[
+        "dotnet", "csharp", "node", "django", "rails", "go", "laravel", "php", "symfony",
+    ],
     pain_points: &[
         PainPoint {
             keywords: &[
@@ -165,7 +168,9 @@ pub static DOTNET: StackProfile = StackProfile {
         "dapper",
         "serilog",
     ],
-    competing: &["java", "spring", "node", "django", "rails", "go"],
+    competing: &[
+        "java", "spring", "node", "django", "rails", "go", "laravel", "php", "symfony",
+    ],
     pain_points: &[
         PainPoint {
             keywords: &[
@@ -520,7 +525,7 @@ pub static MOBILE_NATIVE: StackProfile = StackProfile {
         "core data",
         "room",
     ],
-    competing: &["react-native", "ionic", "cordova"],
+    competing: &["react-native", "react native", "ionic", "cordova"],
     pain_points: &[
         PainPoint {
             keywords: &[
@@ -557,10 +562,10 @@ pub static MOBILE_NATIVE: StackProfile = StackProfile {
         },
         PainPoint {
             keywords: &[
-                "build time",
-                "xcode",
+                "xcode build",
                 "gradle build",
-                "compile time",
+                "android studio build",
+                "archive build",
                 "ci build",
             ],
             severity: 0.08,

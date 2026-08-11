@@ -83,6 +83,24 @@ pub(crate) fn is_ambiguous_package_name(name: &str) -> bool {
             | "utils"
             | "proc_macro2"
             | "proc-macro2"
+            // Live signal-chain audit 2026-07-28: these exact dependency
+            // names are real packages in local manifests, but bare topic
+            // matches produced personal critical chains from generic prose
+            // ("arbitrary code execution", router hardware/networking,
+            // testing discourse, async articles, clone/read verbs). Later live
+            // signal-chain probes also caught "next" as ordinary English, motion
+            // sensors, and profiling articles binding to transitive packages. They
+            // remain valid when package-adjacent ecosystem proof exists.
+            | "arbitrary"
+            | "router"
+            | "testing"
+            | "async"
+            | "clone"
+            | "read"
+            | "windows"
+            | "next"
+            | "motion"
+            | "profiling"
     )
 }
 
@@ -163,9 +181,13 @@ const ECOSYSTEM_CONTEXT_WORDS: &[&str] = &[
     "nuget",
     "composer",
     "package",
+    "packages",
     "library",
+    "libraries",
     "dependency",
+    "dependencies",
     "module",
+    "modules",
     "sbom",
     "lockfile",
 ];
@@ -173,6 +195,7 @@ const ECOSYSTEM_CONTEXT_WORDS: &[&str] = &[
 /// Whether the (lowercased) text contains at least one ecosystem context word.
 /// Short terms use word-boundary matching ("gem" must not fire on "judgement");
 /// longer terms match as substrings so plurals like "packages" still count.
+#[cfg(test)]
 fn has_ecosystem_context(text: &str) -> bool {
     ECOSYSTEM_CONTEXT_WORDS.iter().any(|w| {
         if w.len() <= 4 {
@@ -183,14 +206,45 @@ fn has_ecosystem_context(text: &str) -> bool {
     })
 }
 
+fn has_context_phrase(text: &str, dep_lower: &str, context_word: &str) -> bool {
+    for separator in [" ", "-", "/", "."] {
+        let dep_first = format!("{dep_lower}{separator}{context_word}");
+        if has_word_boundary_match(text, &dep_first) {
+            return true;
+        }
+        let context_first = format!("{context_word}{separator}{dep_lower}");
+        if has_word_boundary_match(text, &context_first) {
+            return true;
+        }
+    }
+    false
+}
+
+fn has_adjacent_ecosystem_context(text: &str, dep_lower: &str, context_words: &[&str]) -> bool {
+    context_words
+        .iter()
+        .any(|word| has_context_phrase(text, dep_lower, word))
+}
+
+fn has_strict_dep_context(
+    title_lower: &str,
+    content_lower: &str,
+    dep_lower: &str,
+    context_words: &[&str],
+) -> bool {
+    has_word_boundary_match(title_lower, dep_lower)
+        && (has_adjacent_ecosystem_context(title_lower, dep_lower, context_words)
+            || has_adjacent_ecosystem_context(content_lower, dep_lower, context_words))
+}
+
 /// Decide whether an item (lowercased title + content) is genuinely about the
 /// given (lowercased) dependency.
 ///
 /// Policy:
 /// - Normal names: word-boundary match in title OR content.
 /// - Strict-proof names (ambiguous or <4 chars): word-boundary match in the
-///   TITLE (content alone never qualifies) AND at least one ecosystem context
-///   word anywhere in title+content.
+///   TITLE (content alone never qualifies) AND package/ecosystem context adjacent
+///   to the dependency name in title or content.
 pub(crate) fn dep_grounded_match(title_lower: &str, content_lower: &str, dep_lower: &str) -> bool {
     if dep_lower.is_empty() {
         return false;
@@ -199,10 +253,12 @@ pub(crate) fn dep_grounded_match(title_lower: &str, content_lower: &str, dep_low
         return has_word_boundary_match(title_lower, dep_lower)
             || has_word_boundary_match(content_lower, dep_lower);
     }
-    if !has_word_boundary_match(title_lower, dep_lower) {
-        return false;
-    }
-    has_ecosystem_context(title_lower) || has_ecosystem_context(content_lower)
+    has_strict_dep_context(
+        title_lower,
+        content_lower,
+        dep_lower,
+        ECOSYSTEM_CONTEXT_WORDS,
+    )
 }
 
 /// Ecosystem-SPECIFIC context tokens keyed by the dependency's manifest
@@ -218,12 +274,17 @@ fn ecosystem_specific_context_words(language: &str) -> &'static [&'static str] {
         "rust" => &["cargo", "crate", "crates", "crates.io", "rust"],
         "javascript" | "typescript" | "node" => &[
             "npm",
-            "node",
             "javascript",
             "typescript",
             "yarn",
             "pnpm",
             "js",
+            "package",
+            "packages",
+            "dependency",
+            "dependencies",
+            "module",
+            "modules",
         ],
         "python" => &["pip", "pypi", "python"],
         "go" => &["golang", "go.mod", "go module", "go modules"],
@@ -258,19 +319,7 @@ pub(crate) fn dep_grounded_match_for_ecosystem(
     if words.is_empty() {
         return dep_grounded_match(title_lower, content_lower, dep_lower);
     }
-    if !has_word_boundary_match(title_lower, dep_lower) {
-        return false;
-    }
-    let has_specific = |text: &str| {
-        words.iter().any(|w| {
-            if w.len() <= 4 {
-                has_word_boundary_match(text, w)
-            } else {
-                text.contains(w)
-            }
-        })
-    };
-    has_specific(title_lower) || has_specific(content_lower)
+    has_strict_dep_context(title_lower, content_lower, dep_lower, words)
 }
 
 #[cfg(test)]
@@ -303,6 +352,10 @@ mod tests {
         // Generic English words that are also real package names.
         assert!(requires_strict_proof("path"));
         assert!(requires_strict_proof("open"));
+        assert!(requires_strict_proof("router"));
+        assert!(requires_strict_proof("clone"));
+        assert!(requires_strict_proof("read"));
+        assert!(requires_strict_proof("windows"));
         // Distinctive names need no extra proof.
         assert!(!requires_strict_proof("axios"));
         assert!(!requires_strict_proof("lodash"));
@@ -436,9 +489,20 @@ mod tests {
 
     #[test]
     fn ecosystem_matcher_falls_back_when_language_unknown_or_name_distinct() {
-        // Unknown language → generic strict-proof behavior (unchanged).
-        let title = "tracing improvements in the new library";
-        assert!(dep_grounded_match_for_ecosystem(title, "", "tracing", None));
+        // Unknown language → generic strict-proof behavior, still requiring
+        // package context adjacent to the ambiguous dependency name.
+        assert!(!dep_grounded_match_for_ecosystem(
+            "tracing improvements in the new library",
+            "",
+            "tracing",
+            None
+        ));
+        assert!(dep_grounded_match_for_ecosystem(
+            "tracing library improvements",
+            "",
+            "tracing",
+            None
+        ));
         // Distinctive names never need ecosystem proof.
         assert!(dep_grounded_match_for_ecosystem(
             "axios 2.0 released",
@@ -470,6 +534,85 @@ mod tests {
             "install via npm",
             "image",
             Some("javascript")
+        ));
+    }
+
+    #[test]
+    fn javascript_router_does_not_match_nextjs_app_router_context() {
+        let title =
+            "[ghsa-m99w-x7hq-7vfj] next.js: denial of service in app router using server actions";
+        let content = "vulnerable package next on npm";
+        assert!(!dep_grounded_match_for_ecosystem(
+            title,
+            content,
+            "router",
+            Some("javascript")
+        ));
+    }
+
+    #[test]
+    fn javascript_clone_does_not_match_git_clone_node_context() {
+        let title = "[cve-2026-65598] n8n: race condition in git clone node allows rce";
+        let content = "the affected package is n8n, not clone";
+        assert!(!dep_grounded_match_for_ecosystem(
+            title,
+            content,
+            "clone",
+            Some("javascript")
+        ));
+    }
+
+    #[test]
+    fn javascript_next_matches_nextjs_but_not_plain_english_next() {
+        assert!(!dep_grounded_match_for_ecosystem(
+            "what comes next for web apps",
+            "javascript developers discuss future architecture",
+            "next",
+            Some("javascript")
+        ));
+        assert!(dep_grounded_match_for_ecosystem(
+            "next.js 16 released",
+            "next.js package update on npm",
+            "next",
+            Some("javascript")
+        ));
+    }
+
+    #[test]
+    fn javascript_motion_does_not_match_motion_sensor_articles() {
+        assert!(!dep_grounded_match_for_ecosystem(
+            "motion sensors and home security gadgets",
+            "home automation hardware with no npm package context",
+            "motion",
+            Some("javascript")
+        ));
+    }
+
+    #[test]
+    fn rust_profiling_needs_crate_context() {
+        assert!(!dep_grounded_match_for_ecosystem(
+            "python 3.15 ultra-low overhead interpreter profiling mode",
+            "profiling mode for cpython",
+            "profiling",
+            Some("rust")
+        ));
+        assert!(dep_grounded_match_for_ecosystem(
+            "profiling crate released",
+            "the profiling crate for rust adds cargo features",
+            "profiling",
+            Some("rust")
+        ));
+    }
+
+    #[test]
+    fn rust_windows_does_not_match_linux_rust_article() {
+        let title = "linux-native tui written in rust";
+        let content = "mentions windows only as an operating system comparison";
+        assert!(!dep_grounded_match_for_ecosystem(
+            title,
+            content,
+            "windows",
+            Some("rust")
         ));
     }
 }

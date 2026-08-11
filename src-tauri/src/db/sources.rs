@@ -1145,7 +1145,7 @@ impl Database {
 
     /// Get all feed health records for a source type (for UI listing).
     pub fn get_all_feed_health(&self, source_type: &str) -> Vec<FeedHealth> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn();
         let mut stmt = match conn.prepare(
             "SELECT feed_origin, source_type, consecutive_failures, total_successes, total_failures, last_success_at, last_failure_at, last_error, circuit_open
              FROM feed_health WHERE source_type = ?1 ORDER BY feed_origin",

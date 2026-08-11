@@ -60,6 +60,12 @@ pub static NEXTJS_FULLSTACK: StackProfile = StackProfile {
     ],
     ecosystem_shifts: &[
         EcosystemShift {
+            from: "prisma",
+            to: "drizzle",
+            keywords: &["drizzle", "prisma", "drizzle-orm"],
+            boost: 1.12,
+        },
+        EcosystemShift {
             from: "eslint",
             to: "biome",
             keywords: &["biome", "eslint alternative", "biome formatter", "biomejs"],
@@ -418,7 +424,9 @@ pub static GO_BACKEND: StackProfile = StackProfile {
         "nats",
         "redis",
     ],
-    competing: &["rust", "java", "node", "python"],
+    competing: &[
+        "rust", "java", "spring", "node", "django", "fastapi", "flask", "dotnet", "csharp",
+    ],
     pain_points: &[
         PainPoint {
             keywords: &[

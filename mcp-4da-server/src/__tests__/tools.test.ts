@@ -945,7 +945,10 @@ describe("4DA MCP Tool Handlers", () => {
 
       expect(row).toBeDefined();
       expect(row!.action_type).toBe("save");
-      expect(row!.signal_strength).toBe(0.8); // "save" has 0.8 signal strength
+      // v19: unified onto the canonical ACE strength scale — Save is 1.0
+      // (the old MCP-only 0.8 was one of three incompatible scales that
+      // poisoned every consumer aggregating signal_strength).
+      expect(row!.signal_strength).toBe(1.0);
     });
   });
 

@@ -17,6 +17,12 @@ use tracing::{debug, info, warn};
 static ACTIVE_CENTER: AtomicU32 = AtomicU32::new(0);
 static ACTIVE_SCALE: AtomicU32 = AtomicU32::new(0);
 
+#[cfg(test)]
+thread_local! {
+    static TEST_ACTIVE_PARAMS: std::cell::Cell<Option<(f32, f32)>> =
+        const { std::cell::Cell::new(None) };
+}
+
 const KNOWN_MODELS: &[(&str, f32, f32)] = &[
     ("snowflake-arctic-embed-m", 0.44, 12.5),
     ("snowflake-arctic-embed-l", 0.45, 12.0),
@@ -38,6 +44,11 @@ const DEFAULT_SCALE: f32 = 13.0;
 const MIN_SAMPLES_FOR_AUTO: usize = 50;
 
 pub(crate) fn get_sigmoid_center() -> f32 {
+    #[cfg(test)]
+    if let Some((center, _)) = TEST_ACTIVE_PARAMS.with(std::cell::Cell::get) {
+        return center;
+    }
+
     let bits = ACTIVE_CENTER.load(Ordering::Relaxed);
     if bits == 0 {
         DEFAULT_CENTER
@@ -47,6 +58,11 @@ pub(crate) fn get_sigmoid_center() -> f32 {
 }
 
 pub(crate) fn get_sigmoid_scale() -> f32 {
+    #[cfg(test)]
+    if let Some((_, scale)) = TEST_ACTIVE_PARAMS.with(std::cell::Cell::get) {
+        return scale;
+    }
+
     let bits = ACTIVE_SCALE.load(Ordering::Relaxed);
     if bits == 0 {
         DEFAULT_SCALE
@@ -56,13 +72,25 @@ pub(crate) fn get_sigmoid_scale() -> f32 {
 }
 
 pub(crate) fn set_active_params(center: f32, scale: f32) {
-    ACTIVE_CENTER.store(center.to_bits(), Ordering::Relaxed);
-    ACTIVE_SCALE.store(scale.to_bits(), Ordering::Relaxed);
+    #[cfg(test)]
+    TEST_ACTIVE_PARAMS.with(|params| params.set(Some((center, scale))));
+
+    #[cfg(not(test))]
+    {
+        ACTIVE_CENTER.store(center.to_bits(), Ordering::Relaxed);
+        ACTIVE_SCALE.store(scale.to_bits(), Ordering::Relaxed);
+    }
+
     info!(
         center = format!("{:.3}", center),
         scale = format!("{:.1}", scale),
         "Embedding calibration parameters updated"
     );
+}
+
+#[cfg(test)]
+fn clear_active_params_for_current_test_thread() {
+    TEST_ACTIVE_PARAMS.with(|params| params.set(None));
 }
 
 pub(crate) fn lookup_known_model(model_name: &str) -> Option<(f32, f32)> {
@@ -246,9 +274,7 @@ mod tests {
         set_active_params(0.42, 14.0);
         assert!((get_sigmoid_center() - 0.42).abs() < 0.001);
         assert!((get_sigmoid_scale() - 14.0).abs() < 0.1);
-        // Reset
-        ACTIVE_CENTER.store(0, Ordering::Relaxed);
-        ACTIVE_SCALE.store(0, Ordering::Relaxed);
+        clear_active_params_for_current_test_thread();
     }
 
     #[test]

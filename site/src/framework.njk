@@ -659,10 +659,10 @@ permalink: "/framework.html"
       </thead>
       <tbody>
         <tr><td>Context</td><td>Does this relate to what I'm working on right now?</td><td>Local project scanning (languages, frameworks, recent git activity)</td></tr>
-        <tr><td>Interest</td><td>Does this match my declared or inferred interests?</td><td>User-declared topics + learned affinities from feedback</td></tr>
+        <tr><td>Interest</td><td>Does this match my declared interests?</td><td>User-declared topics (embedding + keyword match)</td></tr>
         <tr><td>ACE</td><td>Does my codebase use this technology?</td><td>Autonomous Context Engine (dependency analysis, file patterns, git history)</td></tr>
         <tr><td>Dependency</td><td>Is this about a library I actually depend on?</td><td>Package manifest analysis (Cargo.toml, package.json, requirements.txt, etc.)</td></tr>
-        <tr><td>Learned</td><td>Has my past behaviour indicated this is valuable?</td><td>Feedback signals (saves, dismissals, clicks, time-on-content)</td></tr>
+        <tr><td>Learned</td><td>Has my past behaviour indicated this is valuable?</td><td>Reserved &mdash; held out of scoring until it can be validated against your explicit feedback</td></tr>
       </tbody>
     </table>
 

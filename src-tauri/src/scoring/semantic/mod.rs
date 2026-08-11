@@ -14,4 +14,4 @@ pub(crate) use embeddings::get_topic_embeddings;
 // enrich_topic_for_embedding is pub(crate) for future external use + test access via `super::*`
 #[allow(unused_imports)]
 pub(crate) use enrichment::enrich_topic_for_embedding;
-pub(crate) use taste::{compute_taste_boost, compute_taste_embedding};
+pub(crate) use taste::compute_taste_boost;

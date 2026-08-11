@@ -616,7 +616,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 format!(
                     "{pkg}@{ver}: {count} known {vuln_word}",
                     pkg = first.package_name,
-                    ver = &version_str,
+                    ver = version_str,
                     count = advisory_count,
                     vuln_word = vuln_word,
                 )
@@ -641,7 +641,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 count = advisory_count,
                 vuln_word = vuln_word,
                 pkg = first.package_name,
-                ver = &version_str,
+                ver = version_str,
                 projects = project_display,
                 scope = scope_label,
                 fix = fix_str,
@@ -911,7 +911,7 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
     alerts.extend(tier2);
 
     // ─── 1. Signal chain predictions (single call, bounded LIMIT 200) ────
-    match crate::signal_chains::detect_chains(&conn) {
+    match crate::signal_chains::detect_and_record_chains(&conn) {
         Ok(chains) => {
             for chain in &chains {
                 let prediction = crate::signal_chains::predict_chain_lifecycle(chain);

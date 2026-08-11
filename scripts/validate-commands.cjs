@@ -70,7 +70,7 @@ function parseRustCommands() {
         // Look ahead for the fn declaration
         for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
           const fnMatch = lines[j].match(
-            /^\s*(?:pub\s+)?(?:async\s+)?fn\s+([a-z_][a-z0-9_]*)/
+            /^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([a-z_][a-z0-9_]*)/
           );
           if (fnMatch) {
             commands.add(fnMatch[1]);

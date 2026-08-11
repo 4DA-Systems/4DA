@@ -43,7 +43,6 @@ pub(crate) struct TriageAuditReport {
     /// genuinely fine to defer (or to tune thresholds). Capped at 25.
     pub dropped_relevant_samples: Vec<DroppedSample>,
 
-    pub taste_min: f32,
     pub topic_min: f32,
     pub has_taste_embedding: bool,
     pub topic_embedding_count: usize,
@@ -158,7 +157,6 @@ fn reason_label(r: TriageReason) -> &'static str {
     match r {
         TriageReason::HighStakes => "high_stakes",
         TriageReason::DepMatch => "dep_match",
-        TriageReason::TasteSimilar => "taste_similar",
         TriageReason::TopicSimilar => "topic_similar",
         TriageReason::NoEmbedding => "no_embedding",
         TriageReason::Deferred => "deferred",
@@ -174,19 +172,17 @@ fn reason_label(r: TriageReason) -> &'static str {
 pub(crate) async fn measure_triage_recall(
     relevant_threshold: f64,
     sample_limit: i64,
-    taste_min: Option<f32>,
     topic_min: Option<f32>,
 ) -> Result<TriageAuditReport> {
     let db = get_database()?;
 
-    // Build the same scoring context the real pipeline uses, so taste/topic/dep
+    // Build the same scoring context the real pipeline uses, so topic/dep
     // signals are identical to production.
     let ctx = scoring::build_scoring_context(db)
         .await
         .map_err(|e| format!("Failed to build scoring context: {e}"))?;
     let defaults = TriageThresholds::default();
     let th = TriageThresholds {
-        taste_min: taste_min.unwrap_or(defaults.taste_min),
         topic_min: topic_min.unwrap_or(defaults.topic_min),
     };
 
@@ -297,7 +293,6 @@ pub(crate) async fn measure_triage_recall(
         relevant_dropped,
         false_negative_rate,
         dropped_relevant_samples,
-        taste_min: th.taste_min,
         topic_min: th.topic_min,
         has_taste_embedding: ctx.taste_embedding.is_some(),
         topic_embedding_count: ctx.topic_embeddings.len(),

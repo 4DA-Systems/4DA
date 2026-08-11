@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../lib/commands';
+import { safeListen } from '../lib/tauri-events';
 
 // ============================================================================
 // Types
@@ -107,7 +107,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
   useEffect(() => {
     if (provider !== 'ollama') return;
 
-    const unlisten = listen<OllamaStatusPayload>('ollama-status', (event) => {
+    const unlisten = safeListen<OllamaStatusPayload>('ollama-status', (event) => {
       const { phase, error } = event.payload;
       setStatus(mapPhaseToStatus(phase));
       setErrorMsg(error ?? null);

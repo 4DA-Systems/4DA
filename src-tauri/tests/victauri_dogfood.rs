@@ -8,12 +8,147 @@
 use victauri_test::visual::{MaskRegion, ThresholdPreset, VisualOptions};
 use victauri_test::VictauriClient;
 
+fn configured_victauri_port() -> u16 {
+    std::env::var("VICTAURI_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port != 0)
+        .unwrap_or(7373)
+}
+
+fn current_victauri_token_for_port(port: u16) -> Option<String> {
+    let explicit = std::env::var("VICTAURI_AUTH_TOKEN")
+        .ok()
+        .map(|token| token.trim().to_string())
+        .filter(|token| !token.is_empty());
+    if explicit.is_some() {
+        return explicit;
+    }
+
+    let base = std::env::temp_dir().join("victauri");
+    let entries = std::fs::read_dir(base).ok()?;
+    let mut newest: Option<(std::time::SystemTime, String)> = None;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let port_matches = std::fs::read_to_string(path.join("port"))
+            .ok()
+            .and_then(|value| value.trim().parse::<u16>().ok())
+            == Some(port);
+        if !port_matches {
+            continue;
+        }
+
+        let metadata = std::fs::read_to_string(path.join("metadata.json")).unwrap_or_default();
+        if !metadata.contains("\"identifier\":\"com.4da.app\"") {
+            continue;
+        }
+
+        let Some(token) = std::fs::read_to_string(path.join("token"))
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+
+        let modified = std::fs::metadata(path.join("token"))
+            .and_then(|m| m.modified())
+            .or_else(|_| std::fs::metadata(&path).and_then(|m| m.modified()))
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+        if newest
+            .as_ref()
+            .map_or(true, |(current_modified, _)| modified > *current_modified)
+        {
+            newest = Some((modified, token));
+        }
+    }
+
+    newest.map(|(_, token)| token)
+}
+
+async fn connect_victauri() -> Result<VictauriClient, victauri_test::TestError> {
+    let port = configured_victauri_port();
+    let token = current_victauri_token_for_port(port);
+    VictauriClient::connect_with_token(port, token.as_deref()).await
+}
+
 fn skip_unless_e2e() -> bool {
     if !victauri_test::is_e2e() {
         eprintln!("Skipping: set VICTAURI_E2E=1 with 4DA dev server running");
         return true;
     }
     false
+}
+
+fn ipc_call_command(call: &serde_json::Value) -> Option<&str> {
+    call.get("command").and_then(serde_json::Value::as_str)
+}
+
+fn ipc_call_status(call: &serde_json::Value) -> Option<&str> {
+    call.get("status").and_then(serde_json::Value::as_str)
+}
+
+fn ipc_call_error_text(call: &serde_json::Value) -> String {
+    serde_json::to_string(call.get("error").unwrap_or(call)).unwrap_or_else(|_| call.to_string())
+}
+
+async fn assert_scoped_ipc_round_trip_healthy(client: &mut VictauriClient, command: &str) {
+    let checkpoint = client
+        .create_ipc_checkpoint()
+        .await
+        .expect("create IPC checkpoint");
+    let result = client.invoke_command(command, None).await;
+    assert!(
+        result.is_ok(),
+        "canary command '{command}' should complete: {:?}",
+        result.err()
+    );
+
+    let calls = client
+        .get_ipc_calls_since(checkpoint)
+        .await
+        .expect("read IPC calls since checkpoint");
+    let matching: Vec<&serde_json::Value> = calls
+        .iter()
+        .filter(|call| ipc_call_command(call) == Some(command))
+        .collect();
+    assert!(
+        !matching.is_empty(),
+        "IPC log should capture scoped canary '{command}', calls since checkpoint: {calls:?}"
+    );
+    assert!(
+        matching
+            .iter()
+            .any(|call| ipc_call_status(call) == Some("ok")),
+        "scoped canary '{command}' should have an ok IPC result, matching calls: {matching:?}"
+    );
+    assert!(
+        matching
+            .iter()
+            .all(|call| ipc_call_status(call) != Some("pending")),
+        "scoped canary '{command}' should not remain pending, matching calls: {matching:?}"
+    );
+    assert!(
+        matching
+            .iter()
+            .all(|call| ipc_call_status(call) != Some("error")),
+        "scoped canary '{command}' should not error, matching calls: {matching:?}"
+    );
+}
+
+async fn latest_ipc_error_for(client: &mut VictauriClient, command: &str) -> Option<String> {
+    let calls = client.get_ipc_calls_for(command).await.ok()?;
+    calls
+        .into_iter()
+        .rev()
+        .find(|call| ipc_call_status(call) == Some("error"))
+        .map(|call| ipc_call_error_text(&call))
 }
 
 // ── Phase 1: Smoke Tests ─────────────────────────────────────────────────────
@@ -24,7 +159,7 @@ async fn connect_and_get_plugin_info() {
         return;
     }
 
-    let mut client = VictauriClient::discover()
+    let mut client = connect_victauri()
         .await
         .expect("Failed to connect — is 4DA dev server running?");
 
@@ -45,7 +180,7 @@ async fn screenshot_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client.screenshot().await.unwrap();
 
     let has_image = result.get("image").is_some()
@@ -65,7 +200,7 @@ async fn dom_snapshot_has_elements() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let snapshot = client.dom_snapshot().await.unwrap();
 
     let has_tree = snapshot.get("tree").is_some()
@@ -81,7 +216,7 @@ async fn memory_stats_reports_rss() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let stats = client.get_memory_stats().await.unwrap();
 
     assert!(
@@ -99,7 +234,7 @@ async fn window_state_reports_main() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let windows = client.list_windows().await.unwrap();
 
     let has_windows = windows.as_array().is_some()
@@ -123,7 +258,7 @@ async fn main_navigation_tabs_exist() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let expected_tabs = ["Brief", "Preemption", "Blind Spots", "Signal"];
     let snapshot = client.dom_snapshot().await.unwrap();
@@ -152,7 +287,7 @@ async fn eval_js_returns_document_title() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let title = client.eval_js("document.title").await.unwrap();
 
     let title_str = title.as_str().unwrap_or("");
@@ -168,7 +303,7 @@ async fn settings_command_round_trip() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let settings = client.invoke_command("get_settings", None).await.unwrap();
 
     assert!(
@@ -183,7 +318,7 @@ async fn console_logs_accessible() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Generate a console log entry we can verify
     let _ = client.eval_js("console.log('victauri-test-marker')").await;
@@ -202,7 +337,7 @@ async fn ghost_command_detection_works() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let ghosts = client.detect_ghost_commands().await.unwrap();
 
     // 4DA doesn't use #[inspectable], so ghost detection should find
@@ -238,7 +373,7 @@ async fn ipc_integrity_check() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let health = client.check_ipc_integrity().await.unwrap();
 
     let has_status = health.get("healthy").is_some()
@@ -254,7 +389,7 @@ async fn ipc_log_captures_commands() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let checkpoint = client.create_ipc_checkpoint().await.unwrap();
 
@@ -273,7 +408,7 @@ async fn accessibility_audit_returns_results() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let audit = client.audit_accessibility().await.unwrap();
 
     assert!(
@@ -288,7 +423,7 @@ async fn performance_metrics_baseline() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let metrics = client.get_performance_metrics().await.unwrap();
 
     assert!(
@@ -305,7 +440,7 @@ async fn full_verification_chain() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let report = client
         .verify()
@@ -334,7 +469,7 @@ async fn visual_regression_baseline() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let snapshot_dir = std::env::temp_dir().join("victauri-4da-snapshots");
     std::fs::create_dir_all(&snapshot_dir).ok();
@@ -372,7 +507,7 @@ async fn ipc_coverage_via_log_analysis() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Trigger several different commands to build up IPC log
     let _ = client.invoke_command("get_settings", None).await;
@@ -404,7 +539,7 @@ async fn recording_captures_events() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let start = client.start_recording(Some("dogfood-test")).await.unwrap();
     assert!(
@@ -443,7 +578,7 @@ async fn wait_for_text_finds_content() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // "Brief" tab label is always rendered in the DOM
     let result = client
@@ -463,7 +598,7 @@ async fn verification_chain_with_state_match() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let report = client
         .verify()
@@ -496,7 +631,7 @@ async fn navigate_all_five_views() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Skip Brief first (it's already selected), navigate the others, then back to Brief
     let tabs = ["Preemption", "Blind Spots", "Signal", "Brief"];
@@ -531,7 +666,7 @@ async fn settings_modal_open_close() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Clear any existing modal state
     let _ = client.press_key("Escape").await;
@@ -585,7 +720,7 @@ async fn keyboard_shortcuts_modal() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let _ = client.press_key("Escape").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -613,7 +748,7 @@ async fn all_three_windows_reported() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let windows = client.list_windows().await.unwrap();
 
     let labels: Vec<&str> = windows
@@ -637,7 +772,7 @@ async fn main_window_state_details() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let state = client.get_window_state(Some("main")).await.unwrap();
 
     let main = state
@@ -661,7 +796,7 @@ async fn window_resize_and_restore() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let resize = client
         .call_tool(
@@ -696,7 +831,7 @@ async fn verify_state_title_match() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client
         .verify_state(
             "({title: document.title})",
@@ -714,7 +849,7 @@ async fn verify_state_detects_mismatch() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client
         .verify_state(
             "({title: document.title})",
@@ -742,7 +877,7 @@ async fn semantic_assert_equals() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client
         .assert_semantic(
             "document.title",
@@ -768,7 +903,7 @@ async fn semantic_assert_truthy() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client
         .assert_semantic(
             "document.querySelectorAll('nav').length",
@@ -796,7 +931,7 @@ async fn css_style_inspection() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let snapshot = client.dom_snapshot().await.unwrap();
     let tree = snapshot.get("tree").and_then(|t| t.as_str()).unwrap_or("");
 
@@ -829,7 +964,7 @@ async fn accessibility_has_no_critical_violations() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let audit = client.audit_accessibility().await.unwrap();
 
     let critical = audit
@@ -851,7 +986,7 @@ async fn performance_metrics_within_budget() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let metrics = client.get_performance_metrics().await.unwrap();
 
     let dom_complete = metrics
@@ -877,7 +1012,7 @@ async fn highlight_and_clear() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let tabs = client
         .find_elements(serde_json::json!({"role": "tab"}))
@@ -918,7 +1053,7 @@ async fn invoke_settings_returns_valid_config() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let settings = client.invoke_command("get_settings", None).await.unwrap();
 
     assert!(settings.is_object(), "settings should be object");
@@ -938,7 +1073,7 @@ async fn invoke_monitoring_returns_status() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let status = client
         .invoke_command("get_monitoring_status", None)
         .await
@@ -960,7 +1095,7 @@ async fn invoke_developer_dna_returns_stack() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let dna = client
         .invoke_command("get_developer_dna", None)
         .await
@@ -979,7 +1114,7 @@ async fn invoke_channels_returns_list() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let channels = client.invoke_command("list_channels", None).await.unwrap();
 
     assert!(channels.is_array(), "channels should be array");
@@ -993,10 +1128,8 @@ async fn ipc_integrity_healthy() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
-    let integrity = client.check_ipc_integrity().await.unwrap();
-
-    victauri_test::assert_ipc_healthy(&integrity);
+    let mut client = connect_victauri().await.unwrap();
+    assert_scoped_ipc_round_trip_healthy(&mut client, "get_settings").await;
 }
 
 // ── Phase 11: Time-Travel Recording ──────────────────────────────────────────
@@ -1007,7 +1140,7 @@ async fn recording_lifecycle() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let start = client
         .start_recording(Some("lifecycle-test"))
@@ -1048,7 +1181,7 @@ async fn network_log_captured() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Trigger network activity via IPC
     let _ = client.invoke_command("get_settings", None).await;
@@ -1064,7 +1197,7 @@ async fn slow_ipc_detection() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let slow = client
         .call_tool(
             "logs",
@@ -1086,7 +1219,7 @@ async fn navigation_history_tracked() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let history = client.logs("navigation", None).await.unwrap();
 
     let entries = history.as_array().map_or(0, |a| a.len());
@@ -1111,7 +1244,7 @@ async fn rapid_eval_burst() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let start = std::time::Instant::now();
     for i in 0..10 {
@@ -1140,7 +1273,7 @@ async fn health_endpoint_does_not_leak_internals() {
         return;
     }
 
-    let client = VictauriClient::discover().await.unwrap();
+    let client = connect_victauri().await.unwrap();
     let resp = reqwest::get(format!("{}/health", client.base_url()))
         .await
         .unwrap();
@@ -1168,7 +1301,7 @@ async fn bad_auth_token_rejected() {
         return;
     }
 
-    let port = VictauriClient::discover().await.unwrap();
+    let port = connect_victauri().await.unwrap();
     let base_url = port.base_url().to_string();
 
     let http = reqwest::Client::new();
@@ -1204,7 +1337,7 @@ async fn missing_auth_token_rejected() {
         return;
     }
 
-    let port = VictauriClient::discover().await.unwrap();
+    let port = connect_victauri().await.unwrap();
     let base_url = port.base_url().to_string();
 
     let http = reqwest::Client::new();
@@ -1242,7 +1375,7 @@ async fn parallel_ipc_burst() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let commands = [
         "get_settings",
@@ -1252,6 +1385,10 @@ async fn parallel_ipc_burst() {
         "get_analysis_status",
     ];
 
+    let checkpoint = client
+        .create_ipc_checkpoint()
+        .await
+        .expect("create IPC checkpoint before burst");
     let start = std::time::Instant::now();
     for round in 0..5 {
         for cmd in &commands {
@@ -1270,8 +1407,31 @@ async fn parallel_ipc_burst() {
         "25 IPC calls should complete within 60s: {elapsed:?}"
     );
 
-    let integrity = client.check_ipc_integrity().await.unwrap();
-    victauri_test::assert_ipc_healthy(&integrity);
+    let calls = client
+        .get_ipc_calls_since(checkpoint)
+        .await
+        .expect("read IPC calls since burst checkpoint");
+    for cmd in &commands {
+        let matching: Vec<&serde_json::Value> = calls
+            .iter()
+            .filter(|call| ipc_call_command(call) == Some(*cmd))
+            .collect();
+        assert_eq!(
+            matching
+                .iter()
+                .filter(|call| ipc_call_status(call) == Some("ok"))
+                .count(),
+            5,
+            "burst command '{cmd}' should have five ok IPC completions, matching calls: {matching:?}"
+        );
+        assert!(
+            matching
+                .iter()
+                .all(|call| ipc_call_status(call) != Some("pending")
+                    && ipc_call_status(call) != Some("error")),
+            "burst command '{cmd}' should have no pending/error calls, matching calls: {matching:?}"
+        );
+    }
 }
 
 // ── Phase 16: Multi-Window Snapshots ────────────────────────────────────────
@@ -1282,7 +1442,7 @@ async fn snapshot_each_window() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let windows = client.list_windows().await.unwrap();
 
     let labels: Vec<&str> = windows
@@ -1324,7 +1484,7 @@ async fn is_alive_returns_true() {
         return;
     }
 
-    let client = VictauriClient::discover().await.unwrap();
+    let client = connect_victauri().await.unwrap();
     assert!(
         client.is_alive().await,
         "running server should report alive"
@@ -1339,7 +1499,7 @@ async fn ipc_wait_for_capture_returns_complete_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let _ = client.invoke_command("get_settings", None).await;
 
@@ -1378,7 +1538,7 @@ async fn blind_spots_data_dump() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client
         .invoke_command("get_blind_spots", None)
         .await
@@ -1426,7 +1586,7 @@ async fn blind_spots_ipc_returns_evidence_feed() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client
         .invoke_command("get_blind_spots", None)
         .await
@@ -1475,7 +1635,7 @@ async fn blind_spots_score_is_valid() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client
         .invoke_command("get_blind_spots", None)
         .await
@@ -1502,7 +1662,7 @@ async fn blind_spots_no_template_explanations() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client
         .invoke_command("get_blind_spots", None)
         .await
@@ -1537,7 +1697,7 @@ async fn blind_spots_items_have_valid_evidence() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client
         .invoke_command("get_blind_spots", None)
         .await
@@ -1586,7 +1746,7 @@ async fn blind_spots_tab_renders_without_errors() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Navigate to Blind Spots tab
     let elements = client
@@ -1641,7 +1801,7 @@ async fn blind_spots_tab_has_score_bar() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Navigate to Blind Spots tab
     let elements = client
@@ -1681,7 +1841,7 @@ async fn blind_spots_tab_has_tier_sections() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Navigate to Blind Spots
     let elements = client
@@ -1747,7 +1907,7 @@ async fn blind_spots_accessibility_audit() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Navigate to Blind Spots
     let elements = client
@@ -1792,7 +1952,7 @@ async fn blind_spots_clean_state_shows_positive_ux() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let result = client
         .invoke_command("get_blind_spots", None)
@@ -1846,7 +2006,7 @@ async fn blind_spots_no_vanity_metrics() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Navigate to Blind Spots
     let elements = client
@@ -1896,7 +2056,7 @@ async fn blind_spots_score_shows_coverage_not_problems() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let result = client
         .invoke_command("get_blind_spots", None)
@@ -1954,7 +2114,7 @@ async fn blind_spots_covered_section_has_compact_view() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let result = client
         .invoke_command("get_blind_spots", None)
@@ -2026,7 +2186,7 @@ async fn content_graph_command_returns_valid_structure() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let graph = client
         .invoke_command(
             "build_content_graph",
@@ -2072,7 +2232,7 @@ async fn content_graph_nodes_have_required_fields() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let graph = client
         .invoke_command(
             "build_content_graph",
@@ -2122,7 +2282,7 @@ async fn content_graph_edges_have_valid_types() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let graph = client
         .invoke_command(
             "build_content_graph",
@@ -2192,7 +2352,7 @@ async fn content_graph_clusters_are_consistent() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let graph = client
         .invoke_command(
             "build_content_graph",
@@ -2254,7 +2414,7 @@ async fn content_graph_meta_counts_are_consistent() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let graph = client
         .invoke_command(
             "build_content_graph",
@@ -2294,7 +2454,7 @@ async fn content_graph_different_time_windows() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let graph_7 = client
         .invoke_command(
@@ -2332,7 +2492,7 @@ async fn content_graph_no_duplicate_edges() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let graph = client
         .invoke_command(
             "build_content_graph",
@@ -2359,7 +2519,7 @@ async fn content_graph_layout_positions_are_finite() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let graph = client
         .invoke_command(
             "build_content_graph",
@@ -2397,7 +2557,7 @@ async fn content_graph_ui_toggle_exists() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Clear any modal/overlay left by prior tests
     let _ = client.press_key("Escape").await;
@@ -2479,7 +2639,7 @@ async fn content_graph_ui_renders_on_toggle() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Clear any modal/overlay left by prior tests
     let _ = client.press_key("Escape").await;
@@ -2583,7 +2743,7 @@ async fn content_graph_edge_provenance_is_non_empty() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let graph = client
         .invoke_command(
             "build_content_graph",
@@ -2620,7 +2780,7 @@ async fn briefing_snapshot_returns_structured_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let snapshot = client
         .invoke_command("get_briefing_snapshot", None)
         .await
@@ -2651,7 +2811,7 @@ async fn latest_briefing_returns_value() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let briefing = client
         .invoke_command("get_latest_briefing", None)
         .await
@@ -2670,7 +2830,7 @@ async fn brief_tab_renders_content_in_dom() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Navigate to Brief tab
     let buttons = client
@@ -2716,7 +2876,7 @@ async fn briefing_snapshot_content_is_not_placeholder() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let snapshot = client
         .invoke_command("get_briefing_snapshot", None)
         .await
@@ -2755,7 +2915,7 @@ async fn scoring_stats_returns_aggregate() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let stats = client
         .invoke_command("get_scoring_stats", None)
         .await
@@ -2787,7 +2947,7 @@ async fn analysis_status_reports_state() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let status = client
         .invoke_command("get_analysis_status", None)
         .await
@@ -2815,7 +2975,7 @@ async fn signal_tab_renders_items_or_empty_state() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Navigate to Signal tab
     let buttons = client
@@ -2860,7 +3020,7 @@ async fn signal_items_have_titles_when_present() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Navigate to Signal tab
     let buttons = client
@@ -2919,7 +3079,7 @@ async fn get_settings_returns_valid_config() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let settings = client.invoke_command("get_settings", None).await.unwrap();
 
     assert!(
@@ -2944,7 +3104,7 @@ async fn settings_no_api_keys_in_response() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let settings = client.invoke_command("get_settings", None).await.unwrap();
 
     let settings_str = serde_json::to_string(&settings).unwrap();
@@ -2964,7 +3124,7 @@ async fn mark_onboarding_complete_succeeds() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // This is idempotent — safe to call repeatedly
     let result = client
@@ -2997,7 +3157,7 @@ async fn settings_round_trip_preserves_structure() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Read settings twice — structure must be identical
     let first = client.invoke_command("get_settings", None).await.unwrap();
@@ -3026,7 +3186,7 @@ async fn preemption_alerts_returns_evidence_feed() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let alerts = client
         .invoke_command("get_preemption_alerts", None)
         .await
@@ -3049,7 +3209,7 @@ async fn preemption_alerts_items_have_required_fields() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let alerts = client
         .invoke_command("get_preemption_alerts", None)
         .await
@@ -3081,7 +3241,7 @@ async fn preemption_tab_renders_in_dom() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Navigate to Preemption tab
     let buttons = client
@@ -3124,7 +3284,7 @@ async fn monitoring_status_returns_valid_state() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let status = client
         .invoke_command("get_monitoring_status", None)
         .await
@@ -3152,7 +3312,7 @@ async fn cold_start_no_blank_screens() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Visit each of the four tabs — none should render blank
     let tab_names = ["Brief", "Preemption", "Blind Spots", "Signal"];
@@ -3191,7 +3351,7 @@ async fn all_tabs_have_no_console_errors() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let tab_names = ["Brief", "Signal", "Preemption", "Blind Spots"];
 
@@ -3231,7 +3391,7 @@ async fn ipc_commands_never_panic() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let commands = [
         "get_briefing_snapshot",
@@ -3293,7 +3453,7 @@ async fn tech_stack_add_remove_round_trip() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let marker = "victauri-test-lang-xyz";
 
@@ -3352,7 +3512,7 @@ async fn interest_add_remove_round_trip() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let marker = "victauri-test-topic-xyz";
 
@@ -3404,7 +3564,7 @@ async fn monitoring_toggle_round_trip() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Read current state
     let before = client
@@ -3458,7 +3618,7 @@ async fn rss_feeds_read_write_round_trip() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Read current feeds
     let original = client.invoke_command("get_rss_feeds", None).await.unwrap();
@@ -3514,7 +3674,7 @@ async fn user_role_set_and_verify() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Read original
     let ctx_before = client
@@ -3566,7 +3726,7 @@ async fn playbook_modules_returns_non_empty_list() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let modules = client
         .invoke_command("get_playbook_modules", None)
         .await
@@ -3594,7 +3754,7 @@ async fn playbook_content_returns_lessons() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Get first module ID
     let modules = client
@@ -3647,7 +3807,7 @@ async fn playbook_progress_returns_state() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let progress = client
         .invoke_command("get_playbook_progress", None)
         .await
@@ -3667,7 +3827,7 @@ async fn tech_radar_returns_valid_structure() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let radar = client.invoke_command("get_tech_radar", None).await.unwrap();
 
     assert!(
@@ -3682,7 +3842,7 @@ async fn knowledge_gaps_returns_evidence_feed() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let gaps = client
         .invoke_command("get_knowledge_gaps", None)
         .await
@@ -3702,7 +3862,7 @@ async fn void_signal_returns_heartbeat() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let signal = client
         .invoke_command("get_void_signal", None)
         .await
@@ -3720,7 +3880,7 @@ async fn capability_states_returns_map() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let states = client
         .invoke_command("get_capability_states", None)
         .await
@@ -3744,7 +3904,7 @@ async fn capability_summary_returns_counts() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let summary = client
         .invoke_command("get_capability_summary", None)
         .await
@@ -3762,7 +3922,7 @@ async fn source_health_returns_summary() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let health = client
         .invoke_command("get_source_health", None)
         .await
@@ -3780,7 +3940,7 @@ async fn learned_preferences_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let prefs = client
         .invoke_command("get_learned_preferences", None)
         .await
@@ -3798,7 +3958,7 @@ async fn trust_dashboard_returns_summary() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let trust = client
         .invoke_command("get_trust_dashboard", None)
         .await
@@ -3816,7 +3976,7 @@ async fn intelligence_metrics_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let metrics = client
         .invoke_command("get_intelligence_metrics", None)
         .await
@@ -3834,7 +3994,7 @@ async fn attention_report_returns_structure() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let report = client
         .invoke_command("get_attention_report", None)
         .await
@@ -3854,7 +4014,7 @@ async fn startup_health_returns_issues_array() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let health = client
         .invoke_command("get_startup_health", None)
         .await
@@ -3872,7 +4032,7 @@ async fn diagnostics_snapshot_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let diag = client
         .invoke_command("get_diagnostics", None)
         .await
@@ -3890,7 +4050,7 @@ async fn autophagy_status_returns_state() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let status = client
         .invoke_command("get_autophagy_status", None)
         .await
@@ -3908,7 +4068,7 @@ async fn data_health_returns_report() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let health = client
         .invoke_command("get_data_health", None)
         .await
@@ -3926,7 +4086,7 @@ async fn intelligence_pulse_returns_snapshot() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let pulse = client
         .invoke_command("get_intelligence_pulse", None)
         .await
@@ -3946,7 +4106,7 @@ async fn ace_detected_tech_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let tech = client
         .invoke_command("ace_get_detected_tech", None)
         .await
@@ -3964,7 +4124,7 @@ async fn ace_active_topics_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let topics = client
         .invoke_command("ace_get_active_topics", None)
         .await
@@ -3982,7 +4142,7 @@ async fn achievement_state_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let state = client
         .invoke_command("get_achievement_state", None)
         .await
@@ -4000,7 +4160,7 @@ async fn achievements_list_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let achievements = client
         .invoke_command("get_achievements", None)
         .await
@@ -4018,7 +4178,7 @@ async fn sovereign_profile_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let profile = client
         .invoke_command("get_sovereign_profile", None)
         .await
@@ -4036,7 +4196,7 @@ async fn intelligence_growth_returns_history() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let growth = client
         .invoke_command("get_intelligence_growth", None)
         .await
@@ -4054,7 +4214,7 @@ async fn engagement_summary_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let summary = client
         .invoke_command("get_engagement_summary", None)
         .await
@@ -4072,7 +4232,7 @@ async fn decision_windows_returns_array() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let windows = client
         .invoke_command("get_decision_windows", None)
         .await
@@ -4090,7 +4250,7 @@ async fn indexed_stats_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let stats = client
         .invoke_command("get_indexed_stats", None)
         .await
@@ -4108,7 +4268,7 @@ async fn stack_health_returns_report() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let health = client
         .invoke_command("get_stack_health", None)
         .await
@@ -4126,7 +4286,7 @@ async fn user_context_returns_profile() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let ctx = client
         .invoke_command("get_user_context", None)
         .await
@@ -4146,7 +4306,7 @@ async fn channels_list_has_content() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let channels = client.invoke_command("list_channels", None).await.unwrap();
     let arr = channels.as_array().expect("channels is array");
 
@@ -4168,7 +4328,7 @@ async fn channel_content_returns_render_for_first_channel() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let channels = client.invoke_command("list_channels", None).await.unwrap();
     let first_id = channels
         .as_array()
@@ -4180,7 +4340,7 @@ async fn channel_content_returns_render_for_first_channel() {
     let content = client
         .invoke_command(
             "get_channel_content",
-            Some(serde_json::json!({"channel_id": first_id})),
+            Some(serde_json::json!({"channelId": first_id})),
         )
         .await
         .unwrap();
@@ -4204,7 +4364,7 @@ async fn synthesis_capability_returns_hardware_info() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client
         .invoke_command("check_synthesis_capability", None)
         .await
@@ -4258,7 +4418,7 @@ async fn synthesis_capability_flags_unverified_providers() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let result = client
         .invoke_command("check_synthesis_capability", None)
         .await
@@ -4295,7 +4455,7 @@ async fn model_eval_returns_structured_verdict() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Check if synthesis is configured — eval needs a working LLM
     let cap = client
@@ -4317,49 +4477,53 @@ async fn model_eval_returns_structured_verdict() {
         Ok(summary) => {
             assert!(
                 summary.get("verdict").and_then(|v| v.as_str()).is_some(),
-                "eval summary must have 'verdict' (pass/warnings/fail)"
+                "eval summary must have 'verdict' (Pass/PassWithWarnings/Fail)"
             );
             let verdict = summary["verdict"].as_str().unwrap();
             assert!(
-                ["pass", "warnings", "fail"].contains(&verdict),
-                "verdict must be pass/warnings/fail, got: {verdict}"
+                ["Pass", "PassWithWarnings", "Fail"].contains(&verdict),
+                "verdict must be Pass/PassWithWarnings/Fail, got: {verdict}"
             );
 
             assert!(
                 summary
-                    .get("fixtures_run")
+                    .get("total_fixtures")
                     .and_then(|v| v.as_u64())
                     .is_some(),
-                "must report fixtures_run count"
+                "must report total_fixtures count"
             );
             assert!(
-                summary
-                    .get("fixtures_passed")
-                    .and_then(|v| v.as_u64())
-                    .is_some(),
-                "must report fixtures_passed count"
+                summary.get("passed").and_then(|v| v.as_u64()).is_some(),
+                "must report passed count"
             );
 
-            if let Some(results) = summary.get("results").and_then(|v| v.as_array()) {
-                for (i, r) in results.iter().enumerate() {
-                    assert!(
-                        r.get("fixture_name").and_then(|v| v.as_str()).is_some(),
-                        "result[{i}] must have 'fixture_name'"
-                    );
-                    assert!(
-                        r.get("passed").and_then(|v| v.as_bool()).is_some(),
-                        "result[{i}] must have 'passed' boolean"
-                    );
-                }
+            let reports = summary
+                .get("reports")
+                .and_then(|v| v.as_array())
+                .expect("must report per-fixture reports array");
+            for (i, r) in reports.iter().enumerate() {
+                assert!(
+                    r.get("fixture_name").and_then(|v| v.as_str()).is_some(),
+                    "report[{i}] must have 'fixture_name'"
+                );
+                assert!(
+                    r.get("passed").and_then(|v| v.as_bool()).is_some(),
+                    "report[{i}] must have 'passed' boolean"
+                );
             }
         }
         Err(e) => {
             let err_str = format!("{e:?}");
+            let ipc_error = latest_ipc_error_for(&mut client, "run_model_eval")
+                .await
+                .unwrap_or_default();
+            let error_context = format!("{err_str}\n{ipc_error}");
             assert!(
-                err_str.contains("API")
-                    || err_str.contains("connection")
-                    || err_str.contains("provider"),
-                "eval failure must be a connection/provider issue, not a crash: {err_str}"
+                error_context.contains("API")
+                    || error_context.contains("connection")
+                    || error_context.contains("provider")
+                    || error_context.contains("AI provider"),
+                "eval failure must be a connection/provider issue, not a crash: {error_context}"
             );
         }
     }
@@ -4371,7 +4535,7 @@ async fn briefing_snapshot_has_synthesis_fields() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let snapshot = client
         .invoke_command("get_briefing_snapshot", None)
         .await
@@ -4422,7 +4586,7 @@ async fn trigger_briefing_returns_status() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     let result = client
         .invoke_command("trigger_morning_briefing", None)
@@ -4453,13 +4617,9 @@ async fn ipc_commands_include_llm_infrastructure() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
-    let required_commands = [
-        "check_synthesis_capability",
-        "run_model_eval",
-        "trigger_morning_briefing",
-    ];
+    let required_commands = ["check_synthesis_capability", "trigger_morning_briefing"];
 
     for cmd_name in &required_commands {
         let result = client.invoke_command(cmd_name, None).await;
@@ -4486,7 +4646,7 @@ async fn source_health_returns_structured_summary() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let health = client
         .invoke_command("get_source_health", None)
         .await
@@ -4512,7 +4672,7 @@ async fn available_sources_returns_source_list() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let sources = client.invoke_command("get_sources", None).await.unwrap();
 
     assert!(
@@ -4538,7 +4698,7 @@ async fn source_health_status_returns_per_source_records() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let status = client
         .invoke_command("get_source_health_status", None)
         .await
@@ -4565,7 +4725,7 @@ async fn rss_feeds_returns_array() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let feeds = client.invoke_command("get_rss_feeds", None).await.unwrap();
 
     assert!(
@@ -4589,7 +4749,7 @@ async fn twitter_handles_returns_array() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let handles = client
         .invoke_command("get_twitter_handles", None)
         .await
@@ -4616,19 +4776,20 @@ async fn default_rss_feeds_returns_curated_list() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let defaults = client
         .invoke_command("get_default_rss_feeds", None)
         .await
         .unwrap();
 
-    assert!(
-        defaults.is_array(),
-        "get_default_rss_feeds must return an array, got: {defaults}"
-    );
+    let feeds = defaults
+        .get("feeds")
+        .and_then(|v| v.as_array())
+        .expect("get_default_rss_feeds must return { feeds: string[] }");
 
     // Default feeds should be non-empty — 4DA ships with curated sources
-    if let Some(arr) = defaults.as_array() {
+    {
+        let arr = feeds;
         assert!(
             !arr.is_empty(),
             "default RSS feeds should include curated sources for onboarding"
@@ -4642,7 +4803,7 @@ async fn curated_feeds_returns_structured_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let curated = client
         .invoke_command("get_curated_feeds", None)
         .await
@@ -4660,9 +4821,12 @@ async fn feed_health_status_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let health = client
-        .invoke_command("get_feed_health_status", None)
+        .invoke_command(
+            "get_feed_health_status",
+            Some(serde_json::json!({"sourceType": "rss"})),
+        )
         .await
         .unwrap();
 
@@ -4680,7 +4844,7 @@ async fn saved_items_returns_array() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let items = client
         .invoke_command("get_saved_items", None)
         .await
@@ -4707,7 +4871,7 @@ async fn engagement_summary_returns_reading_metrics() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let summary = client
         .invoke_command("get_engagement_summary", None)
         .await
@@ -4725,7 +4889,7 @@ async fn watched_items_returns_array() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let watched = client
         .invoke_command("get_watched_items", None)
         .await
@@ -4752,7 +4916,7 @@ async fn learned_preferences_returns_structured_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let prefs = client
         .invoke_command("get_learned_preferences", None)
         .await
@@ -4772,7 +4936,7 @@ async fn digest_config_returns_settings_object() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let config = client
         .invoke_command("get_digest_config", None)
         .await
@@ -4790,7 +4954,7 @@ async fn briefing_snapshot_returns_structured_briefing() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let snapshot = client
         .invoke_command("get_briefing_snapshot", None)
         .await
@@ -4823,7 +4987,7 @@ async fn latest_briefing_returns_briefing_or_null() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let briefing = client
         .invoke_command("get_latest_briefing", None)
         .await
@@ -4841,7 +5005,7 @@ async fn morning_briefing_config_returns_schedule() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let config = client
         .invoke_command("get_morning_briefing_config", None)
         .await
@@ -4861,7 +5025,7 @@ async fn decision_windows_returns_actionable_array() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let windows = client
         .invoke_command("get_decision_windows", None)
         .await
@@ -4888,7 +5052,7 @@ async fn trust_dashboard_returns_calibration_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let dashboard = client
         .invoke_command("get_trust_dashboard", None)
         .await
@@ -4906,7 +5070,7 @@ async fn accuracy_report_returns_metrics() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let report = client
         .invoke_command("get_accuracy_report", None)
         .await
@@ -4924,7 +5088,7 @@ async fn ace_accuracy_metrics_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let metrics = client
         .invoke_command("ace_get_accuracy_metrics", None)
         .await
@@ -4942,7 +5106,7 @@ async fn advantage_history_returns_timeline() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let history = client
         .invoke_command("get_advantage_history", None)
         .await
@@ -4960,7 +5124,7 @@ async fn domain_precision_report_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let report = client
         .invoke_command("get_domain_precision_report", None)
         .await
@@ -4978,7 +5142,7 @@ async fn false_positive_analysis_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let analysis = client
         .invoke_command("get_false_positive_analysis", None)
         .await
@@ -4998,7 +5162,7 @@ async fn privacy_config_returns_privacy_fields() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let config = client
         .invoke_command("get_privacy_config", None)
         .await
@@ -5016,7 +5180,7 @@ async fn usage_analytics_returns_telemetry_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let analytics = client
         .invoke_command("get_usage_analytics", None)
         .await
@@ -5034,7 +5198,7 @@ async fn diagnostics_returns_system_snapshot() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let diag = client
         .invoke_command("get_diagnostics", None)
         .await
@@ -5057,7 +5221,7 @@ async fn error_telemetry_returns_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let errors = client
         .invoke_command("get_error_telemetry", None)
         .await
@@ -5075,7 +5239,7 @@ async fn error_summary_returns_aggregated_data() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let summary = client
         .invoke_command("get_error_summary_cmd", None)
         .await
@@ -5087,13 +5251,14 @@ async fn error_summary_returns_aggregated_data() {
     );
 }
 
+#[cfg(feature = "enterprise")]
 #[tokio::test]
 async fn audit_log_returns_security_events() {
     if skip_unless_e2e() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let log = client.invoke_command("get_audit_log", None).await.unwrap();
 
     assert!(
@@ -5102,13 +5267,14 @@ async fn audit_log_returns_security_events() {
     );
 }
 
+#[cfg(feature = "enterprise")]
 #[tokio::test]
 async fn audit_summary_returns_overview() {
     if skip_unless_e2e() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
     let summary = client
         .invoke_command("get_audit_summary_cmd", None)
         .await
@@ -5128,58 +5294,64 @@ async fn expanded_panic_guard_30_plus_commands() {
         return;
     }
 
-    let mut client = VictauriClient::discover().await.unwrap();
+    let mut client = connect_victauri().await.unwrap();
 
     // Broad set of read-only commands covering source management, content,
     // digest, trust, privacy, intelligence, and operational surfaces.
     // Every command here is verified to exist in REGISTERED_COMMANDS.
-    let commands = [
-        "get_source_health",
-        "get_sources",
-        "get_source_health_status",
-        "get_rss_feeds",
-        "get_twitter_handles",
-        "get_saved_items",
-        "get_engagement_summary",
-        "get_digest_config",
-        "get_decision_windows",
-        "get_trust_dashboard",
-        "get_privacy_config",
-        "get_usage_analytics",
-        "get_temporal_snapshot",
-        "get_tech_convergence",
-        "list_standing_queries",
-        "get_learned_preferences",
-        "get_notification_summary",
-        "get_ai_usage_summary",
-        "get_sovereign_profile",
-        "get_knowledge_gaps",
-        "get_intelligence_pulse",
-        "get_accuracy_report",
-        "get_intelligence_growth",
-        "get_indexed_stats",
-        "get_stack_health",
-        "get_watched_items",
-        "get_default_rss_feeds",
-        "get_curated_feeds",
-        "get_feed_health_status",
-        "get_morning_briefing_config",
-        "get_advantage_history",
-        "get_domain_precision_report",
-        "get_false_positive_analysis",
-        "get_error_telemetry",
-        "get_error_summary_cmd",
-        "get_audit_log",
-        "get_audit_summary_cmd",
-        "get_capability_states",
-        "get_capability_summary",
-        "ace_get_accuracy_metrics",
-        "get_data_health",
-        "get_autophagy_status",
+    let commands: Vec<(&str, Option<serde_json::Value>)> = vec![
+        ("get_source_health", None),
+        ("get_sources", None),
+        ("get_source_health_status", None),
+        ("get_rss_feeds", None),
+        ("get_twitter_handles", None),
+        ("get_saved_items", None),
+        ("get_engagement_summary", None),
+        ("get_digest_config", None),
+        ("get_decision_windows", None),
+        ("get_trust_dashboard", None),
+        ("get_privacy_config", None),
+        ("get_usage_analytics", None),
+        ("get_temporal_snapshot", None),
+        ("get_tech_convergence", None),
+        ("list_standing_queries", None),
+        ("get_learned_preferences", None),
+        ("get_ai_usage_summary", None),
+        ("get_sovereign_profile", None),
+        ("get_knowledge_gaps", None),
+        ("get_intelligence_pulse", None),
+        ("get_accuracy_report", None),
+        ("get_intelligence_growth", None),
+        ("get_indexed_stats", None),
+        ("get_stack_health", None),
+        ("get_watched_items", None),
+        ("get_default_rss_feeds", None),
+        ("get_curated_feeds", None),
+        (
+            "get_feed_health_status",
+            Some(serde_json::json!({"sourceType": "rss"})),
+        ),
+        ("get_morning_briefing_config", None),
+        ("get_advantage_history", None),
+        ("get_domain_precision_report", None),
+        ("get_false_positive_analysis", None),
+        ("get_error_telemetry", None),
+        ("get_error_summary_cmd", None),
+        ("get_capability_states", None),
+        ("get_capability_summary", None),
+        ("ace_get_accuracy_metrics", None),
+        ("get_data_health", None),
+        ("get_autophagy_status", None),
+        #[cfg(feature = "team-sync")]
+        ("get_notification_summary", None),
+        #[cfg(feature = "enterprise")]
+        ("get_audit_log", None),
+        #[cfg(feature = "enterprise")]
+        ("get_audit_summary_cmd", None),
     ];
 
-    for (i, cmd) in commands.iter().enumerate() {
-        let result = client.invoke_command(cmd, None).await;
+    for (i, (cmd, args)) in commands.iter().enumerate() {
+        let result = client.invoke_command(cmd, args.clone()).await;
         assert!(
             result.is_ok(),
             "IPC command #{} '{cmd}' panicked or errored: {:?}",

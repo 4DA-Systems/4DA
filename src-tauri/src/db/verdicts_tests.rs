@@ -181,11 +181,14 @@ fn reconcile_leaves_never_judged_items_untouched() {
     );
 }
 
-/// Serendipity verdicts survive reconciliation by rule. The current pipeline
-/// rejecting an anti-bubble pick is that feature working as designed, and this
-/// exclusion is what stops the pass from silently deleting it.
+/// Serendipity verdicts survive reconciliation WHILE FRESH. The current
+/// pipeline rejecting an anti-bubble pick is that feature working as designed
+/// — but only for `SERENDIPITY_VERDICT_TTL_DAYS`. v19: an expired pick
+/// re-enters the working set so anti-bubble slots ROTATE instead of squatting
+/// (measured live 2026-08-11: immune-forever picks had accumulated to 17.6%
+/// of the curated feed against an 8% budget).
 #[test]
-fn serendipity_verdicts_are_never_reconcilable() {
+fn serendipity_verdicts_immune_while_fresh_reconcilable_after_ttl() {
     let db = test_db();
     let lucky = insert_test_item(&db, "lemmy", "sr1", "Anti-bubble pick", "body");
     db.persist_feed_verdicts(&[(lucky, true, VerdictSource::Serendipity)], 1)
@@ -194,10 +197,37 @@ fn serendipity_verdicts_are_never_reconcilable() {
     assert_eq!(
         db.count_stale_verdicts(18).unwrap(),
         0,
-        "a serendipity verdict is never stale for reconciliation purposes"
+        "a FRESH serendipity verdict is never stale for reconciliation purposes"
     );
     assert!(db.get_stale_verdict_items(18, 10).unwrap().is_empty());
     assert_eq!(verdict_of(&db, lucky).0, Some(1));
+
+    // Age the verdict past the TTL — it becomes reconcilable like any other.
+    // (Derived from the const so the SQL literal and the documented TTL can
+    // never drift apart silently.)
+    {
+        let conn = db.conn.lock();
+        conn.execute(
+            &format!(
+                "UPDATE source_items SET feed_verdict_at = datetime('now', '-{} days') WHERE id = ?1",
+                super::SERENDIPITY_VERDICT_TTL_DAYS + 1
+            ),
+            rusqlite::params![lucky],
+        )
+        .unwrap();
+    }
+    assert_eq!(
+        db.count_stale_verdicts(18).unwrap(),
+        1,
+        "an EXPIRED serendipity verdict re-enters the reconciliation working set"
+    );
+    let ids: Vec<i64> = db
+        .get_stale_verdict_items(18, 10)
+        .unwrap()
+        .iter()
+        .map(|i| i.id)
+        .collect();
+    assert_eq!(ids, vec![lucky]);
 }
 
 /// Running the pass twice must be a no-op the second time.

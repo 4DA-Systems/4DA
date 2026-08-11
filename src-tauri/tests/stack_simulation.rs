@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 //! Stack Intelligence — Master Simulation Harness
 //!
-//! Eleven tiers of validation:
+//! Twelve tiers of validation:
 //!
 //! Tier 1: Frozen real-world corpus — real article titles with per-profile labels
 //! Tier 2: Adversarial battery — items designed to exploit word-boundary weaknesses
@@ -42,8 +42,9 @@ enum L {
 struct CorpusItem {
     title: &'static str,
     content: &'static str,
-    /// Labels per profile: [nextjs, rust, python_ml, go, react_native, laravel, django, vue, devops_sre, haskell, bootstrap_webdev]
-    labels: [L; 11],
+    /// Labels per profile in PROFILE_IDS order. Shorter historical rows are
+    /// treated as neutral for profiles added later.
+    labels: &'static [L],
 }
 
 /// Generate topics from title+content (matches real pipeline behavior).
@@ -67,8 +68,13 @@ const VU: usize = 7; // vue_frontend
 const DO: usize = 8; // devops_sre
 const HA: usize = 9; // haskell
 const BS: usize = 10; // bootstrap_webdev
+const JV: usize = 11; // java_enterprise
+const DN: usize = 12; // dotnet
+const RB: usize = 13; // ruby_rails
+const SF: usize = 14; // php_symfony
+const MN: usize = 15; // mobile_native
 
-static PROFILE_IDS: [&str; 11] = [
+static PROFILE_IDS: [&str; 16] = [
     "nextjs_fullstack",
     "rust_systems",
     "python_ml",
@@ -80,474 +86,489 @@ static PROFILE_IDS: [&str; 11] = [
     "devops_sre",
     "haskell",
     "bootstrap_webdev",
+    "java_enterprise",
+    "dotnet",
+    "ruby_rails",
+    "php_symfony",
+    "mobile_native",
 ];
 
-//                                                NX  RS  PY  GO  RN  LA  DJ  VU  DO  HA  BS
+fn label(item: &CorpusItem, profile_idx: usize) -> L {
+    item.labels.get(profile_idx).copied().unwrap_or(L::N)
+}
+
+//                                                NX  RS  PY  GO  RN  LA  DJ  VU  DO  HA  BS  JV  DN  RB  SF  MN
 static CORPUS: &[CorpusItem] = &[
     // --- Next.js ecosystem ---
     CorpusItem {
         title: "Migrating from Pages Router to App Router in Next.js 14",
         content: "app router migration pages router next 14 breaking changes patterns",
-        labels: [L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
+        labels: &[L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Server Components vs Client Components: Where to Draw the Line",
         content: "server component client component use client rsc boundary directive",
-        labels: [L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Next.js ISR Cache Invalidation Is Broken (And How to Fix It)",
         content: "isr revalidate cache stale incremental static regeneration nextjs",
-        labels: [L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Why We Migrated from Prisma to Drizzle ORM",
         content: "drizzle prisma alternative orm migration drizzle-orm performance",
-        labels: [L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Biome: Drop ESLint and Prettier for One Tool",
         content: "biome eslint alternative biome formatter biomejs linter migration fast",
-        labels: [L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "TurboPack: Next.js Build Performance Deep Dive",
         content: "turbopack nextjs build performance bundler webpack comparison",
-        labels: [L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
+        labels: &[L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
     },
     CorpusItem {
         title: "Vercel Edge Functions and Middleware Patterns",
         content: "vercel edge runtime nextjs middleware deployment strategies",
-        labels: [L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Edge Runtime Cold Starts Are Killing Our Middleware Performance",
         content: "our nextjs edge runtime middleware functions take 500ms on cold start which degrades \
             user experience significantly. investigating workarounds for edge function initialization \
             overhead in production deployments including warming strategies and code splitting",
-        labels: [L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Next.js Server Actions: Type-Safe Data Mutations Without API Routes",
         content: "server action pattern in nextjs lets you handle form submissions directly from react \
             server components. no need to build separate api routes when you can colocate your data \
             mutation logic with your component using the new server action directive",
-        labels: [L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     // --- Rust ecosystem ---
     CorpusItem {
         title: "Understanding Pin, Send, and Async Lifetimes in Rust",
         content: "async pin send lifetime future tokio complexity annotations",
-        labels: [L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Reducing Rust Compile Times: A Practical Guide",
         content: "compile time build time incremental compilation cargo build optimization",
-        labels: [L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "When the Borrow Checker Fights Back: Ownership Patterns",
         content: "borrow checker ownership move semantics lifetime annotation tips",
-        labels: [L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Async Fn in Trait Is Finally Stable",
         content: "native async trait async fn in trait return position impl trait stabilization",
-        labels: [L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Const Generics Stabilization: No More Feature Gates",
         content: "const generics generic const stabilization feature gate stable rust nightly",
-        labels: [L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Tokio 1.40: What's New in the Async Runtime",
         content: "tokio runtime async executor improvements performance rust",
-        labels: [L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Building a REST API with Axum and SQLx",
         content: "axum sqlx rust tokio web api server serde database postgresql",
-        labels: [L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Auditing Unsafe Rust Code for Soundness Violations with Miri",
         content: "running miri on our codebase found several soundness holes in unsafe blocks that \
             could lead to undefined behavior. practical guidelines for auditing ffi boundaries and \
             raw pointer arithmetic to ensure memory safety guarantees hold",
-        labels: [L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Tauri 2.0: Build Cross-Platform Desktop Apps with Rust and Web Tech",
         content: "tauri desktop application framework combines a rust backend with web frontend \
             through a secure invoke bridge. building native apps with smaller bundles than electron \
             while leveraging the rust ecosystem for performance critical operations",
-        labels: [L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     // --- Python ML ecosystem ---
     CorpusItem {
         title: "CUDA Version Conflicts: A Complete Troubleshooting Guide",
         content: "cuda version driver nvcc nvidia gpu compatibility toolkit installation",
-        labels: [L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Fixing GPU Out of Memory Errors in PyTorch Training",
         content: "gpu oom out of memory vram memory allocation batch size gradient",
-        labels: [L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "GGUF Quantization: Running LLMs Locally with llama.cpp",
         content: "gguf ggml quantization format llama.cpp local inference efficient",
-        labels: [L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Local LLM Inference with Ollama: Privacy-First AI",
         content: "local llm ollama self-hosted on-device edge inference privacy",
-        labels: [L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Fine-Tuning LLaMA with LoRA and Hugging Face",
         content: "llm fine-tuning lora peft huggingface transformers pytorch training",
-        labels: [L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Python Dependency Hell: When pip and Conda Fight Over Packages",
         content: "spent three days debugging why pytorch would not install because conda and pip had \
             conflicting numpy versions in the same virtual environment. the dependency resolution \
             between these package managers creates reproducibility nightmares across machines",
-        labels: [L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
+        labels: &[L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
     },
     CorpusItem {
         title: "ONNX Model Serving: Reducing Inference Latency in Production",
         content: "converting our transformer model to onnx format reduced inference latency by sixty \
             percent compared to raw pytorch model serving with torchserve. optimizing the deployment \
             pipeline for real-time predictions requires careful batch sizing and hardware selection",
-        labels: [L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Building RAG Pipelines with LangChain and Hugging Face Transformers",
         content: "implementing a production rag retrieval augmented pipeline that chunks documents \
             stores embeddings in a vector database and retrieves relevant context before prompting. \
             using huggingface transformers for embeddings and langchain for orchestration workflow",
-        labels: [L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     // --- Go ecosystem ---
     CorpusItem {
         title: "Go Error Handling: The if err != nil Debate Continues",
         content: "error handling if err != nil error wrapping errors.Is golang patterns",
-        labels: [L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Go Generics: Type Parameter Constraints in Practice",
         content: "generics type parameter type constraint interface{} golang limitations",
-        labels: [L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Slog: Structured Logging Comes to Go Standard Library",
         content: "slog structured logging log/slog slog handler golang standard library",
-        labels: [L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Range Over Func: Go 1.23 Iterator Pattern with iter.Seq",
         content: "range over func iterator iter.Seq go 1.23 golang sequence",
-        labels: [L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Building gRPC Microservices in Go with Protobuf",
         content: "grpc golang protobuf service api microservice kubernetes deployment",
-        labels: [L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
     },
     CorpusItem {
         title: "Go Context Propagation: Timeout, Cancellation, and Deadline Patterns",
         content: "context propagation in golang requires careful handling of context.withtimeout and \
             cancellation signals across goroutine boundaries. common mistakes include losing the \
             parent ctx reference and creating context leaks in long running server handlers",
-        labels: [L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Building Kubernetes Operators in Go with Custom Controllers",
         content: "kubernetes operator development in golang using client-go and controller-runtime. \
             implement custom resource definitions and reconciliation loops to manage complex stateful \
             applications on k8s clusters with proper leader election and health checks",
-        labels: [L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
     },
     // --- React Native ecosystem ---
     CorpusItem {
         title: "React Native New Architecture: Fabric and TurboModules Guide",
         content: "new architecture fabric turbo module bridgeless react-native jsi",
-        labels: [L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Hermes Engine Quirks Every RN Developer Should Know",
         content: "hermes engine jsc javascript core hermes quirk compatibility issues",
-        labels: [L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::K],
+        labels: &[L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::K],
     },
     CorpusItem {
         title: "Expo Router: File-Based Routing for React Native Apps",
         content: "expo router file-based routing expo-router react-native navigation mobile",
-        labels: [L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "React Native New Architecture: Fabric Renderer and TurboModules",
         content: "new architecture fabric turbo module bridgeless migration react-native",
-        labels: [L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Expo SDK 52: What's New in Managed Workflow",
         content: "expo sdk mobile development react-native eas build managed workflow",
-        labels: [L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "React Native JS Thread Performance: Eliminating Frame Drops and Jank",
         content: "profiling revealed the js thread was causing performance degradation and frame drop \
             issues during list scrolling in our react native app. moving heavy computations to native \
             modules and using reanimated for ui thread animations eliminated the jank entirely",
-        labels: [L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "EAS Update: Reliable Over-the-Air Deployments for Expo Apps",
         content: "ota updates with eas update let you push javascript bundle changes to expo apps \
             without going through app store review. configuring update channels and rollback \
             strategies ensures reliable over the air deployment for production mobile applications",
-        labels: [L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::K, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
     },
     CorpusItem {
         title: "Building Production Mobile Apps with React Native and Expo",
         content: "react native combined with expo provides a powerful mobile app development platform. \
             from eas build for compilation to expo go for development previews the complete toolchain \
             handles everything from initial development through final app store submission",
-        labels: [L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     // --- Laravel ecosystem ---
     CorpusItem {
         title: "Laravel Queue Jobs Keep Failing: Debugging Horizon Workers",
         content: "queue job failed retry horizon worker laravel reliability debugging",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "N+1 Query Problem in Eloquent: Eager Loading Done Right",
         content: "n+1 eager loading query eloquent performance lazy loading optimization",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::P, L::N],
     },
     CorpusItem {
         title: "Livewire 3 Migration: wire:navigate and Breaking Changes",
         content: "livewire 3 livewire v3 livewire upgrade wire:navigate alpine morphing",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Filament V3: Building Admin Panels in Laravel",
         content: "filament filament admin filament v3 filament panel laravel admin dashboard",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Laravel 11 Release: Slimmer Skeleton and New Features",
         content: "laravel release features improvements php framework routes",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Upgrading to PHP 8.3: Breaking Changes and Compatibility Guide",
         content: "php version upgrade from php 7 to php 8 requires careful attention to php \
             compatibility issues including deprecated functions and type system changes. this guide \
             covers every breaking change and provides tested strategies for large codebases",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::P, L::P],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::P, L::N],
     },
     CorpusItem {
         title: "Eloquent Performance: Advanced Query Optimization in Laravel",
         content: "eloquent orm provides elegant syntax but can generate inefficient sql without \
             careful optimization. this deep dive covers indexing strategies query analysis with \
             telescope and advanced laravel patterns for high traffic applications",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N],
     },
     // --- Django ecosystem ---
     CorpusItem {
         title: "Django ORM N+1: select_related vs prefetch_related",
         content: "orm queryset n+1 select_related prefetch_related django performance",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Django Async Views: ASGI and Channels Deep Dive",
         content: "async asgi channels async view django async support python httptools",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Django Ninja: FastAPI-Style APIs with Pydantic Validation",
         content: "django-ninja ninja api pydantic django ninja fast type-safe",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::C, L::C, L::C, L::C, L::N],
     },
     CorpusItem {
         title: "HTMX with Django: Hypermedia-Driven Development",
         content: "htmx hypermedia hx-get hx-post html over the wire django templates",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Django REST Framework: Serializer Performance Tips",
         content: "drf django rest framework serializer viewset performance python api",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Django Migration Conflicts: Squashing and Resolving in Team Projects",
         content: "migration conflict resolution in django when multiple developers create migrations \
             simultaneously. learn when to squash migrations using makemigrations and how to resolve \
             merge conflicts in the migration graph without losing data or corrupting schema state",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Wagtail CMS: Building Content-Managed Sites with Django",
         content: "wagtail provides a powerful content management system built on top of django. \
             create custom page types streamfields and rich content editing experiences while \
             leveraging the full django ecosystem for your backend logic and administration",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N],
     },
     // --- Vue ecosystem ---
     CorpusItem {
         title: "Composition API Migration: From Options to Script Setup",
         content: "composition api options api migration setup script setup vue patterns",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Nuxt SSR Hydration Mismatch: Common Causes and Fixes",
         content: "ssr hydration mismatch nuxt ssr server render client mismatch errors",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Vue Vapor Mode: Compile-Time Reactivity Without Virtual DOM",
         content: "vue vapor vapor mode compile-time no virtual dom performance benchmark",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Nuxt 4 Migration Guide: Breaking Changes and Upgrade Path",
         content: "nuxt 4 nuxt upgrade nuxt migration nuxt next improvements breaking",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Pinia Store Patterns: Composable State Management in Vue",
         content: "pinia state management vue store composable reactive getters actions",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Vue TypeScript Integration: defineComponent and Type-Safe Props",
         content: "typescript integration in vue 3 requires understanding definecomponent for proper \
             type inference. learn how to type your props emits and composables with vue typescript \
             patterns that provide full ide support and compile time checking for your components",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::K],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::K],
     },
     CorpusItem {
         title: "Migrating from Vuex to Pinia: State Management Evolution",
         content: "vuex to pinia migration involves restructuring your state management from mutation \
             based patterns to a more intuitive store composition api. pinia provides better \
             typescript support and devtools integration making state management more pleasant",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Vue 3.5 Composition API: Practical Patterns with VueUse",
         content: "composition api patterns in vue using vueuse composables for common tasks like \
             reactive local storage intersection observers and data fetching. combining vue reactive \
             primitives with utility composables for cleaner component logic throughout your app",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N],
     },
     // --- DevOps & SRE ecosystem ---
     CorpusItem {
         title: "Kubernetes Cluster Lifecycle: etcd Data Loss and Control Plane Recovery",
         content: "cluster etcd lost data during control plane failover. recovering the cluster \
             required manual snapshot restoration and careful etcd quorum procedures",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
     },
     CorpusItem {
         title: "OpenTelemetry Observability: Unified Metrics, Tracing, and Logging",
         content: "implementing opentelemetry for unified observability across metrics tracing and \
             logging pipelines. replacing fragmented monitoring with a single standards-based approach",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
     },
     CorpusItem {
         title: "Terraform State Drift: When Your Infrastructure Doesn't Match Your Code",
         content: "terraform state drift detection revealed plan differences after manual changes. \
             applying terraform plan failed because state file was out of sync with actual resources",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
     },
     CorpusItem {
         title: "CI/CD Pipeline Reliability: Canary Deployments and Automated Rollback",
         content: "our ci cd pipeline now supports canary deploy with automated rollback when error \
             rates exceed thresholds. progressive delivery ensures production stability",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
     },
     CorpusItem {
         title: "Migrating from Helm to Kustomize for Kubernetes Manifests",
         content: "kustomize provides a simpler approach to helm to kustomize manifest management. \
             kustomization overlays reduce template complexity for kubernetes deployments",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N],
     },
     CorpusItem {
         title: "GitHub Actions Replaces Jenkins: Modern CI/CD Pipeline Migration",
         content: "github actions workflow replaced our aging jenkins migration with declarative yaml \
             pipelines. faster builds and better integration with pull request workflows",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N],
     },
     CorpusItem {
         title: "Docker Container Orchestration with Kubernetes and Helm Charts",
         content: "docker containers deployed to kubernetes clusters using helm charts for \
             configuration management. scaling microservices with k8s horizontal pod autoscaler",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
     },
     CorpusItem {
         title: "Prometheus and Grafana Monitoring Stack for Production Systems",
         content: "prometheus metrics collection paired with grafana dashboards provides comprehensive \
             monitoring. alertmanager handles alert routing for sre on-call teams",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
     },
     CorpusItem {
         title: "Heroku Is Dead: Why Platform Teams Are Moving to Kubernetes",
         content: "heroku simplified deployment but teams outgrow it. migrating to kubernetes \
             provides more control over infrastructure and scaling",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
     },
     CorpusItem {
         title: "Railway.app: The New Heroku for Quick Deployments",
         content: "railway provides heroku-like simplicity for deploying applications without \
             managing infrastructure. push to deploy with automatic scaling",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Render Blueprints for Push-to-Deploy Web Services",
+        content: "render blueprints offer simple application hosting with automatic previews and \
+            managed deploys for small product teams",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N],
     },
     // --- Haskell & FP ecosystem ---
     CorpusItem {
         title: "GHC 9.10 Upgrade Breaks Our Build: Migration Guide for Breaking Changes",
         content: "ghc upgrade to version 9.10 introduced breaking changes that required migration \
             of several packages. incompatible type class instances needed manual fixes",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
     },
     CorpusItem {
         title: "Cabal vs Stack: Build Tool Fragmentation in the Haskell Ecosystem",
         content: "choosing between cabal and stack for haskell dependency management and build \
             tooling. resolver conflicts and build reproducibility across environments",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
     },
     CorpusItem {
         title: "Monad Transformer Stacks Are Getting Out of Hand",
         content: "our monad transformer stack has five layers of mtl classes wrapped in io. effect \
             system alternatives promise simpler composition for complex applications",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
     },
     CorpusItem {
         title: "Effectful: A Modern Effect System Replacing MTL in Haskell",
         content: "effectful provides a cleaner effect system as an mtl alternative for haskell. \
             better performance and simpler type signatures for effectful computations",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N],
     },
     CorpusItem {
         title: "Nix Flakes for Haskell Development: Reproducible Builds with haskell.nix",
         content: "using nix flake and haskell.nix for reproducible haskell builds. cabal2nix \
             bridges the gap between cabal packages and nix derivations",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N],
     },
     CorpusItem {
         title: "Category Theory for Programmers: Functors and Natural Transformations",
         content: "category theory concepts applied to functional programming with haskell examples. \
             understanding functors monads and algebraic structures for better abstractions",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N],
     },
     CorpusItem {
         title: "PureScript and Haskell: Comparing Functional Web Development",
         content: "purescript brings haskell-inspired functional programming to the browser. type \
             theory concepts and algebraic data types for building robust web applications",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N],
     },
     // NOTE: Haskell has no competing list (competing: &[]) so C labels are not applicable.
     // --- General Web Development (Bootstrap) ecosystem ---
@@ -555,160 +576,370 @@ static CORPUS: &[CorpusItem] = &[
         title: "NPM Package Churn: How to Survive Constant Dependency Updates",
         content: "dependency management with npm gets painful during major package update cycles. \
             breaking change in popular libraries requires careful planning across npm projects",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
     },
     CorpusItem {
         title: "Webpack to Vite Migration: Faster Builds for Modern Projects",
         content: "migrating from webpack to vite dramatically improved build times and development \
             experience. vite config is simpler and hot module replacement works instantly",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
     },
     CorpusItem {
         title: "TypeScript Strict Mode: Fixing Type Inference Issues Across Your Codebase",
         content: "enabling typescript strict mode revealed hundreds of type inference issues. \
             eliminating any types and adding proper type annotations improved code quality",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
     },
     CorpusItem {
         title: "Vite 6: The Build Tool That Replaced Webpack",
         content: "vite migration from webpack to vite transforms the development experience with \
             instant hot module replacement and faster production builds",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S],
     },
     CorpusItem {
         title: "From Create React App to Next.js: Migration Guide",
         content: "nextjs replaces create-react-app with better performance and app router support. \
             cra migration to modern framework improves developer experience",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S],
     },
     CorpusItem {
         title: "TypeScript 5.5: New Features for JavaScript Developers",
         content: "typescript brings improved type inference and new javascript features to modern \
             web development. better tooling integration with existing projects",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
     },
     CorpusItem {
         title: "JavaScript Performance: Event Loop and Async Patterns",
         content: "javascript async patterns and event loop optimization for responsive web \
             applications. understanding promises and typescript for better code quality",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
     },
     // NOTE: bootstrap_webdev has no competing list (competing: &[]) so C labels are not applicable.
+    // --- Java / Spring ecosystem ---
+    CorpusItem {
+        title: "JVM GC Pauses: Heap Tuning Under Production Load",
+        content: "jvm garbage collection heap pressure caused gc pause latency and out of memory incidents",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Maven and Gradle Dependency Conflicts in Multi-Module Services",
+        content: "maven gradle dependency classpath version conflict transitive resolution destabilized a spring service",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "GraalVM Native Image Startup Time for Spring Services",
+        content: "startup time cold start native image graalvm boot time tradeoffs for spring applications",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Spring Boot 3 and Spring Framework 6 Migration Notes",
+        content: "spring boot 3 upgrade requires spring 6 changes across starters and dependency management",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Jakarta EE Migration: javax Packages Meet Spring Boot",
+        content: "jakarta ee namespace changes turn every javax migration into a compatibility audit for enterprise java apps",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Hibernate Query Plans for Spring Applications",
+        content: "hibernate batching and spring transaction boundaries improve persistence behavior in a java domain model",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Quarkus Extensions for Fast JVM Microservices",
+        content: "quarkus and java services share dependency injection patterns while reducing container startup overhead",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Dotnet Minimal APIs for Backend Services",
+        content: "minimal apis route handlers provide a compact backend style without monolithic infrastructure",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::S, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Go Backend Services with gRPC and Kubernetes",
+        content: "go backend services rely on grpc and kubernetes for scalable infrastructure",
+        labels: &[L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::C, L::N, L::N, L::N, L::N],
+    },
+    // --- .NET / C# ecosystem ---
+    CorpusItem {
+        title: ".NET Framework to .NET Core Migration on net 8",
+        content: "framework migration from .net framework to .net core and net 8 requires project cleanup",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Async Await Deadlocks from ConfigureAwait and Synchronization Context",
+        content: "async await deadlock analysis shows configureawait and synchronization context behavior still matters",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "EF Core Query Performance and Tracking in Entity Framework",
+        content: "entity framework ef core query performance suffers when tracking remains enabled",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: ".NET 9 and .NET 8 Runtime Upgrade Checklist",
+        content: ".net 8 applications moving toward .net 9 need net core migration testing",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "System.Text.Json After a Newtonsoft Migration",
+        content: "system.text.json changes can replace newtonsoft migration work when serializers need predictable performance",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Blazor SignalR Dashboards for Internal Tools",
+        content: "blazor components with signalr updates provide responsive internal admin dashboards for csharp teams",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Dapper and EF Core in High-Throughput C# Services",
+        content: "dapper can sit beside ef core when csharp services need raw query control in hot paths",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Spring Framework Request Mapping Patterns",
+        content: "spring request mapping conventions organize controllers without extra middleware",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::C, L::C, L::C, L::N],
+    },
+    CorpusItem {
+        title: "Ruby on Rails Controller Patterns for SaaS Apps",
+        content: "rails controllers and ruby conventions move quickly without heavy enterprise infrastructure",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::C, L::C, L::K, L::C, L::N],
+    },
+    // --- Ruby on Rails ecosystem ---
+    CorpusItem {
+        title: "Rails 8 Upgrade Deprecation and Version Migration Guide",
+        content: "rails 8 deprecation warnings create version migration work before large production deployments",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
+    },
+    CorpusItem {
+        title: "ActiveRecord N+1 Queries: Eager Loading with Includes",
+        content: "activerecord n+1 query behavior improves with eager loading and includes in high traffic rails endpoints",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::P, L::N],
+    },
+    CorpusItem {
+        title: "Sprockets to Propshaft: Asset Pipeline Bundling Changes",
+        content: "asset pipeline migration touches sprockets importmap propshaft and bundling choices in modern rails apps",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Hotwire Turbo Stimulus Patterns for Rails",
+        content: "hotwire turbo frames and stimulus controllers replace heavier frontend glue in server-rendered rails applications",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Kamal Deploy Replaces Capistrano and MRSK Scripts",
+        content: "kamal deploy evolved from mrsk and replaces older capistrano workflows for containerized rails services",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Sidekiq Reliability Patterns for Background Jobs",
+        content: "sidekiq retries and queue isolation help ruby services keep background processing predictable",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Rails ViewComponent Patterns for Large Teams",
+        content: "ruby teams use rails conventions and component boundaries to keep product surfaces maintainable",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
+    },
+    // --- Symfony / modern PHP ecosystem ---
+    CorpusItem {
+        title: "PHP 8 Upgrade Deprecations in Long-Lived Services",
+        content: "php 8 and php upgrade work exposes php version compatibility issues and deprecation cleanup",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
+    },
+    CorpusItem {
+        title: "PHPStan and Psalm Static Analysis for Runtime Coercion",
+        content: "phpstan psalm and static analysis prevent coercion bugs before production",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
+    },
+    CorpusItem {
+        title: "Composer Autoload and PSR-4 Version Constraint Pitfalls",
+        content: "composer dependency autoload version constraint and psr-4 rules can break deployments after vendor updates",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
+    },
+    CorpusItem {
+        title: "PHP 8.4 Enums, Readonly Classes, and Fibers",
+        content: "php 8.4 language changes expand enums readonly support and fibers for modern async php code",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N],
+    },
+    CorpusItem {
+        title: "Pest PHP Testing for Symfony Applications",
+        content: "pest php and pest testing can replace phpunit style tests while keeping expressive assertions",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N],
+    },
+    CorpusItem {
+        title: "Doctrine DBAL Transaction Boundaries",
+        content: "doctrine dbal services keep persistence explicit without tying every handler to the orm",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N],
+    },
+    CorpusItem {
+        title: "Twig Templates and Composer Packages",
+        content: "twig templates and composer packages remain central to view rendering",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N],
+    },
+    // --- Native mobile ecosystem ---
+    CorpusItem {
+        title: "App Store Review Rejection After a Privacy Guideline Change",
+        content: "app store review rejection and app review guideline updates delayed an ios release by a week",
+        labels: &[L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
+    },
+    CorpusItem {
+        title: "SwiftUI State Recomposition and Rebuild Pitfalls",
+        content: "state management with swiftui state can trigger recomposition and rebuild loops in complex screens",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
+    },
+    CorpusItem {
+        title: "Xcode Build and Gradle Build Failures in Mobile CI",
+        content: "xcode build gradle build archive build and ci build failures slow release trains for mobile teams",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
+    },
+    CorpusItem {
+        title: "SwiftUI and Swift UI After a UIKit Migration",
+        content: "swiftui replaced old controllers during a uikit migration and forced teams to rethink navigation",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S],
+    },
+    CorpusItem {
+        title: "Jetpack Compose Multiplatform Replaces XML Layouts",
+        content: "jetpack compose and compose multiplatform reduce xml layout boilerplate for android feature teams",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S],
+    },
+    CorpusItem {
+        title: "Flutter Packages for Offline Mobile Experiences",
+        content: "flutter and dart plugins help android and ios applications keep data available without a network connection",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
+    },
+    CorpusItem {
+        title: "Dart and Android Interop for Kotlin Teams",
+        content: "dart integration with android tooling helps kotlin teams share mobile release infrastructure",
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::K],
+    },
+    CorpusItem {
+        title: "React Native Expo Router for Cross-Platform Apps",
+        content: "react-native expo router and file-based routing simplify javascript mobile app navigation",
+        labels: &[L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C],
+    },
+    CorpusItem {
+        title: "Ionic Capacitor Plugins for Hybrid Mobile Releases",
+        content: "ionic capacitor plugins package web applications for stores without platform-specific screens",
+        labels: &[L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C],
+    },
     // --- Competing tech items (C labels) ---
     CorpusItem {
         title: "SvelteKit 2.0: The Full-Stack Framework Gets Even Better",
         content: "sveltekit svelte framework release features routing server load",
-        labels: [L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Remix Framework: Data Loading Done Right",
         content: "remix framework performance routing loader actions nested routes",
-        labels: [L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Go 1.23 Performance Improvements for Backend Services",
         content: "go golang backend services performance goroutine scheduling",
-        labels: [L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Zig Build System: Comptime and Memory Safety Without GC",
         content: "zig programming language build system comptime safety allocation",
-        labels: [L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "TensorFlow 2.17: Keras Integration and Model Garden",
         content: "tensorflow keras deep learning model training optimization google",
-        labels: [L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Rust for Backend: Why We Switched from Go to Axum",
         content: "rust backend web services axum systems programming performance",
-        labels: [L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Java Spring Boot 4.0: Enterprise Microservices",
         content: "java spring boot microservices cloud native enterprise jpa",
-        labels: [L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Flutter 3.24: Material Design and Cross-Platform Widgets",
         content: "flutter dart mobile cross-platform widgets material design ios android",
-        labels: [L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Symfony 7 Components: Enterprise Framework Guide",
         content: "symfony framework components bundles enterprise architecture hexagonal",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "FastAPI Performance: Async API Framework Benchmark",
         content: "fastapi async api performance starlette uvicorn benchmark pydantic",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "React 19 Server Components: Concurrent Rendering Deep Dive",
         content: "react concurrent rendering suspense transitions server components",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::K],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::K],
     },
     CorpusItem {
         title: "Angular 18 Signals: Zoneless Change Detection",
         content: "angular standalone components signals zoneless change detection",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "JAX for Scientific Computing: Functional Approach to Machine Learning",
         content: "jax brings functional programming and automatic differentiation to scientific \
             computing with hardware acceleration on tpu. researchers prefer its composable \
             transformations over imperative frameworks for numerical methods and simulations",
-        labels: [L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Node.js 22: Performance Improvements and Event Loop Changes",
         content: "node.js runtime gets significant performance improvements including faster startup \
             times and improved event loop handling for backend services and real-time applications",
-        labels: [L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
+        labels: &[L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
     },
     CorpusItem {
         title: "Kotlin Multiplatform: Share Code Between Android and iOS Natively",
         content: "kotlin multiplatform mobile enables sharing business logic between android and ios \
             apps using a single codebase with native ui rendering on each platform for truly native \
             mobile experiences without compromising platform specific behavior",
-        labels: [L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Ruby on Rails 8: Modern Web Development with Convention over Configuration",
         content: "rails brings modern web development patterns with hotwire turbo and stimulus. \
             convention over configuration approach enables rapid application prototyping and \
             deployment with minimal boilerplate and strong community support",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Flask 3.0: Lightweight Web Framework Gets Native Async Support",
         content: "flask micro framework adds native async request handling in version 3. blueprint \
             improvements and better extension ecosystem for building lightweight web apis and \
             microservices quickly without heavyweight abstractions or complex configuration",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N],
     },
     // --- Neutral items (off-domain for all) ---
     CorpusItem {
         title: "PostgreSQL 17: Incremental Backup and Logical Replication",
         content: "postgresql database incremental backup logical replication slots",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "How We Scaled Our Startup to 10M Users",
         content: "startup scaling users growth product market fit team hiring",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "The State of CSS 2025: Container Queries and Cascade Layers",
         content: "css container queries cascade layers has selector nesting",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
     CorpusItem {
         title: "Figma Plugins for Design Systems",
         content: "figma design system tokens components auto-layout constraints",
-        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+        labels: &[L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
 ];
 
@@ -730,7 +961,7 @@ macro_rules! corpus_test {
                 let s = stack();
                 let pain_items: Vec<_> = CORPUS
                     .iter()
-                    .filter(|c| c.labels[$profile_idx] == L::P)
+                    .filter(|c| label(c, $profile_idx) == L::P)
                     .collect();
                 assert!(
                     !pain_items.is_empty(),
@@ -758,7 +989,7 @@ macro_rules! corpus_test {
                 let s = stack();
                 let kw_items: Vec<_> = CORPUS
                     .iter()
-                    .filter(|c| c.labels[$profile_idx] == L::K)
+                    .filter(|c| label(c, $profile_idx) == L::K)
                     .collect();
                 assert!(
                     !kw_items.is_empty(),
@@ -787,7 +1018,7 @@ macro_rules! corpus_test {
                 let s = stack();
                 let shift_items: Vec<_> = CORPUS
                     .iter()
-                    .filter(|c| c.labels[$profile_idx] == L::S)
+                    .filter(|c| label(c, $profile_idx) == L::S)
                     .collect();
                 assert!(
                     !shift_items.is_empty(),
@@ -815,9 +1046,13 @@ macro_rules! corpus_test {
             #[test]
             fn competing_precision() {
                 let s = stack();
+                let profile = stacks::get_profile($profile_id).unwrap();
+                if profile.competing.is_empty() {
+                    return;
+                }
                 let comp_items: Vec<_> = CORPUS
                     .iter()
-                    .filter(|c| c.labels[$profile_idx] == L::C)
+                    .filter(|c| label(c, $profile_idx) == L::C)
                     .collect();
                 assert!(
                     !comp_items.is_empty(),
@@ -846,7 +1081,7 @@ macro_rules! corpus_test {
                 let s = stack();
                 let neutral_items: Vec<_> = CORPUS
                     .iter()
-                    .filter(|c| c.labels[$profile_idx] == L::N)
+                    .filter(|c| label(c, $profile_idx) == L::N)
                     .collect();
 
                 let mut false_boosts = Vec::new();
@@ -881,6 +1116,14 @@ corpus_test!(corpus_react_native, RN, "react_native");
 corpus_test!(corpus_laravel, LA, "laravel");
 corpus_test!(corpus_django, DJ, "django");
 corpus_test!(corpus_vue, VU, "vue_frontend");
+corpus_test!(corpus_devops_sre, DO, "devops_sre");
+corpus_test!(corpus_haskell, HA, "haskell");
+corpus_test!(corpus_bootstrap_webdev, BS, "bootstrap_webdev");
+corpus_test!(corpus_java_enterprise, JV, "java_enterprise");
+corpus_test!(corpus_dotnet, DN, "dotnet");
+corpus_test!(corpus_ruby_rails, RB, "ruby_rails");
+corpus_test!(corpus_php_symfony, SF, "php_symfony");
+corpus_test!(corpus_mobile_native, MN, "mobile_native");
 
 // ============================================================================
 // Tier 2: Adversarial Battery
@@ -1241,12 +1484,12 @@ fn property_pain_beats_keyword() {
 
         let pain_boosts: Vec<f32> = CORPUS
             .iter()
-            .filter(|c| c.labels[idx] == L::P)
+            .filter(|c| label(c, idx) == L::P)
             .map(|c| scoring::compute_stack_boost(c.title, c.content, &stack))
             .collect();
         let kw_boosts: Vec<f32> = CORPUS
             .iter()
-            .filter(|c| c.labels[idx] == L::K)
+            .filter(|c| label(c, idx) == L::K)
             .map(|c| scoring::compute_stack_boost(c.title, c.content, &stack))
             .collect();
 
@@ -1382,7 +1625,13 @@ fn integrity_unique_ids() {
             profile.id
         );
     }
-    assert_eq!(seen.len(), 11, "Expected 11 profiles, got {}", seen.len());
+    assert_eq!(
+        seen.len(),
+        PROFILE_IDS.len(),
+        "Expected {} profiles, got {}",
+        PROFILE_IDS.len(),
+        seen.len()
+    );
 }
 
 #[test]
@@ -1525,14 +1774,14 @@ fn composition_empty_is_neutral() {
 }
 
 #[test]
-fn composition_all_eleven_scales() {
+fn composition_all_profiles_scales() {
     let all_ids: Vec<String> = PROFILE_IDS.iter().map(|s| s.to_string()).collect();
     let composed = stacks::compose_profiles(&all_ids);
     assert!(composed.active);
-    // 11 profiles with 3-5 pain points each = 40+ total
+    // 16 profiles with 3-5 pain points each = 60+ total
     assert!(
-        composed.pain_points.len() >= 40,
-        "11 profiles should give 40+ pain points, got {}",
+        composed.pain_points.len() >= 60,
+        "16 profiles should give 60+ pain points, got {}",
         composed.pain_points.len()
     );
     // Should have techs from all stacks
@@ -1545,6 +1794,11 @@ fn composition_all_eleven_scales() {
     assert!(composed.all_tech.contains("kubernetes"));
     assert!(composed.all_tech.contains("haskell"));
     assert!(composed.all_tech.contains("typescript"));
+    assert!(composed.all_tech.contains("spring"));
+    assert!(composed.all_tech.contains("dotnet"));
+    assert!(composed.all_tech.contains("rails"));
+    assert!(composed.all_tech.contains("symfony"));
+    assert!(composed.all_tech.contains("swift"));
 }
 
 #[test]
@@ -1572,11 +1826,11 @@ fn composition_mixed_content_no_penalty() {
 fn corpus_coverage_minimum() {
     // Verify the corpus has enough items per label type per profile
     for (idx, &profile_id) in PROFILE_IDS.iter().enumerate() {
-        let p_count = CORPUS.iter().filter(|c| c.labels[idx] == L::P).count();
-        let k_count = CORPUS.iter().filter(|c| c.labels[idx] == L::K).count();
-        let s_count = CORPUS.iter().filter(|c| c.labels[idx] == L::S).count();
-        let c_count = CORPUS.iter().filter(|c| c.labels[idx] == L::C).count();
-        let n_count = CORPUS.iter().filter(|c| c.labels[idx] == L::N).count();
+        let p_count = CORPUS.iter().filter(|c| label(c, idx) == L::P).count();
+        let k_count = CORPUS.iter().filter(|c| label(c, idx) == L::K).count();
+        let s_count = CORPUS.iter().filter(|c| label(c, idx) == L::S).count();
+        let c_count = CORPUS.iter().filter(|c| label(c, idx) == L::C).count();
+        let n_count = CORPUS.iter().filter(|c| label(c, idx) == L::N).count();
 
         assert!(
             p_count >= 3,
@@ -1631,7 +1885,7 @@ fn contamination_pain_points_isolated() {
     let mut violations = Vec::new();
 
     for (idx, &profile_id) in PROFILE_IDS.iter().enumerate() {
-        let pain_items: Vec<_> = CORPUS.iter().filter(|c| c.labels[idx] == L::P).collect();
+        let pain_items: Vec<_> = CORPUS.iter().filter(|c| label(c, idx) == L::P).collect();
 
         for (other_idx, &other_id) in PROFILE_IDS.iter().enumerate() {
             if other_idx == idx {
@@ -1641,7 +1895,7 @@ fn contamination_pain_points_isolated() {
 
             for item in &pain_items {
                 // Skip items that are explicitly labeled for the other profile too
-                if item.labels[other_idx] != L::N {
+                if label(item, other_idx) != L::N {
                     continue;
                 }
                 if scoring::has_pain_point_match(item.title, item.content, &other_stack) {
@@ -1669,7 +1923,7 @@ fn contamination_keyword_boost_isolation() {
     let mut violations = Vec::new();
 
     for (idx, &profile_id) in PROFILE_IDS.iter().enumerate() {
-        let kw_items: Vec<_> = CORPUS.iter().filter(|c| c.labels[idx] == L::K).collect();
+        let kw_items: Vec<_> = CORPUS.iter().filter(|c| label(c, idx) == L::K).collect();
 
         for (other_idx, &other_id) in PROFILE_IDS.iter().enumerate() {
             if other_idx == idx {
@@ -1679,7 +1933,7 @@ fn contamination_keyword_boost_isolation() {
 
             for item in &kw_items {
                 // Only check items labeled N for the other profile
-                if item.labels[other_idx] != L::N {
+                if label(item, other_idx) != L::N {
                     continue;
                 }
                 let boost = scoring::compute_stack_boost(item.title, item.content, &other_stack);
@@ -2102,7 +2356,7 @@ fn snapshot_scoring_checksum() {
 
     // UPDATE THIS VALUE when scoring logic or profile data intentionally changes.
     // Set to 0 to discover initial value (test will print it).
-    const EXPECTED: u64 = 636005154604832770;
+    const EXPECTED: u64 = 1752093566451751323;
 
     if EXPECTED == 0 {
         eprintln!(

@@ -355,10 +355,8 @@ mod devto_resilience {
     struct DevtoArticle {
         id: u64,
         title: String,
-        url: String,
         #[serde(default)]
         description: String,
-        published_at: Option<String>,
         positive_reactions_count: Option<i32>,
         comments_count: Option<i32>,
         #[serde(default)]
@@ -370,7 +368,6 @@ mod devto_resilience {
 
     #[derive(Debug, Deserialize)]
     struct DevtoUser {
-        name: String,
         #[serde(default)]
         username: String,
     }
@@ -459,20 +456,10 @@ mod lobsters_resilience {
         short_id: String,
         title: String,
         url: Option<String>,
-        #[serde(default)]
-        description: String,
-        created_at: Option<String>,
         score: Option<i32>,
         comment_count: Option<i32>,
         #[serde(default)]
         tags: Vec<String>,
-        #[serde(default)]
-        submitter_user: Option<LobstersUser>,
-    }
-
-    #[derive(Debug, Deserialize)]
-    struct LobstersUser {
-        username: String,
     }
 
     #[test]
@@ -535,14 +522,9 @@ mod github_resilience {
 
     #[derive(Debug, Deserialize)]
     struct GitHubRepo {
-        id: u64,
-        name: String,
-        full_name: String,
         description: Option<String>,
-        html_url: String,
         stargazers_count: i32,
         language: Option<String>,
-        updated_at: String,
         #[serde(default)]
         topics: Vec<String>,
     }
@@ -671,7 +653,6 @@ mod twitter_resilience {
     struct XApiResponse {
         data: Option<Vec<XTweet>>,
         includes: Option<XIncludes>,
-        meta: Option<XMeta>,
     }
 
     #[derive(Debug, Deserialize)]
@@ -679,35 +660,17 @@ mod twitter_resilience {
         id: String,
         text: String,
         author_id: Option<String>,
-        created_at: Option<String>,
         public_metrics: Option<XPublicMetrics>,
     }
 
     #[derive(Debug, Deserialize)]
-    struct XIncludes {
-        users: Option<Vec<XUser>>,
-    }
-
-    #[derive(Debug, Deserialize)]
-    struct XUser {
-        id: String,
-        username: String,
-        name: String,
-    }
+    struct XIncludes {}
 
     #[derive(Debug, Deserialize)]
     struct XPublicMetrics {
-        retweet_count: u64,
-        reply_count: u64,
         like_count: u64,
         #[serde(default)]
         impression_count: u64,
-    }
-
-    #[derive(Debug, Deserialize)]
-    struct XMeta {
-        result_count: Option<u32>,
-        next_token: Option<String>,
     }
 
     #[test]

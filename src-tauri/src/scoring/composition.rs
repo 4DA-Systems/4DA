@@ -217,6 +217,7 @@ mod tests {
             context_score: 0.5,
             interest_score: 0.5,
             keyword_score: 0.0,
+            score_ceiling: None,
             ace_boost: 0.0,
             affinity_mult: 1.0,
             anti_penalty: 0.0,

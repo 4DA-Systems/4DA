@@ -10,8 +10,9 @@ use crate::stacks::{EcosystemShift, PainPoint, SeedItem, StackProfile};
 pub static REACT_NATIVE: StackProfile = StackProfile {
     id: "react_native",
     name: "React Native / Expo",
-    core_tech: &["react-native", "expo", "typescript", "react"],
+    core_tech: &["react-native", "expo", "typescript"],
     companions: &[
+        "react",
         "expo-router",
         "reanimated",
         "gesture-handler",
@@ -145,7 +146,9 @@ pub static LARAVEL: StackProfile = StackProfile {
     companions: &[
         "livewire", "filament", "inertia", "blade", "pest", "forge", "vapor", "horizon", "sanctum",
     ],
-    competing: &["symfony", "django", "rails", "express", "spring"],
+    competing: &[
+        "symfony", "django", "rails", "express", "spring", "dotnet", "csharp",
+    ],
     pain_points: &[
         PainPoint {
             keywords: &[
@@ -271,7 +274,10 @@ pub static DJANGO: StackProfile = StackProfile {
         "pytest-django",
         "redis",
     ],
-    competing: &["flask", "fastapi", "rails", "laravel", "express"],
+    competing: &[
+        "flask", "fastapi", "rails", "laravel", "express", "go", "java", "spring", "dotnet",
+        "csharp", "symfony", "php",
+    ],
     pain_points: &[
         PainPoint {
             keywords: &[

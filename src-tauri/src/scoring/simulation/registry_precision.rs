@@ -184,51 +184,52 @@ fn lookalike_registry_releases_not_relevant() {
     );
 }
 
-/// v18 regression — the post-ceiling boost leak.
+/// v18 regression (verdict) + v19 guarantee (score).
 ///
-/// `lookalike_registry_releases_not_relevant` above passes with the 0.35
-/// ceiling alone because `enriched_rust_persona()` carries an EMPTY
-/// `topic_attention_gaps` map, so the +0.05 attention-gap boost never fires.
-/// That is the harness gap: in production the boost DOES fire, and because it
-/// (and `normalize_score_offset`'s +0.02) run AFTER `apply_final_adjustments`,
-/// a capped look-alike lands at 0.35 + 0.02 + 0.05 = 0.42 — over the 0.40
-/// relevance threshold. Live corpus 2026-07-26: 84 crates_io items sat at
-/// exactly 0.42, 26 of them already `feed_relevant = 1`.
+/// History: the +0.05 topic-attention-gap boost and `normalize_score_offset`
+/// (+0.02) ran AFTER `apply_final_adjustments`, so a 0.35-capped look-alike
+/// landed at 0.42 — over the 0.40 threshold (live corpus 2026-07-26: 84
+/// crates_io items at exactly 0.42, 26 already `feed_relevant = 1`). v18
+/// made the VERDICT categorical; v19 removed the attention-gap boost
+/// entirely (AD-029) and added `score_ceiling` re-assertion in
+/// `finalize_scores` so post-pipeline writers (cross-encoder, dedup boost,
+/// source-tier normalize, LLM reconciler) cannot re-inflate a capped item's
+/// SCORE either.
 ///
-/// This test drives the boost end-to-end by giving each fixture a maximal
-/// (168h) attention gap on its OWN extracted topics. It MUST fail before the
-/// categorical verdict gate and pass after.
+/// This test asserts both invariants end-to-end: a look-alike is never
+/// relevant, and even a post-pipeline writer inflating its `top_score`
+/// gets clamped back to ceiling+offset by `finalize_scores`.
 #[test]
-fn lookalike_not_relevant_even_with_attention_gap_boost() {
-    let mut ctx = enriched_rust_persona();
+fn lookalike_never_relevant_and_score_ceiling_survives_post_writers() {
+    let ctx = enriched_rust_persona();
     let mut failures = Vec::new();
+    let ceiling = crate::scoring_config::COMMODITY_CEILING_REGISTRY_RELEASE_UNGROUNDED
+        + crate::scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR;
     for (i, fx) in LOOKALIKE_CRATES.iter().enumerate() {
-        // Derive topics exactly as the pipeline does, then mark every one of
-        // them maximally starved (168h >= the boost's saturation point) so the
-        // full +0.05 lands. Deriving rather than hard-coding keeps the test
-        // honest if topic extraction changes.
-        let title = format!("crates.io: {} v{}", fx.name, fx.version);
-        let topics = crate::extract_topics(&title, fx.description, &[]);
-        assert!(
-            !topics.is_empty(),
-            "{} produced no topics — the attention-gap boost could not fire, \
-             so this test would vacuously pass",
-            fx.name
-        );
-        ctx.topic_attention_gaps = topics.into_iter().map(|t| (t, 168.0_f32)).collect();
-
-        let r = score_registry_fixture(fx, &ctx, 10_701 + i as u64);
+        let mut r = score_registry_fixture(fx, &ctx, 10_701 + i as u64);
         if r.relevant {
             failures.push(format!(
-                "  {} v{} RELEVANT at {:.3} — a post-ceiling boost lifted a \
-                 non-dependency release back over the threshold",
+                "  {} v{} RELEVANT at {:.3} — the categorical gate failed",
                 fx.name, fx.version, r.top_score
+            ));
+        }
+        // Simulate a post-pipeline writer (reconciler/rerank class) inflating
+        // the score, then run the canonical final pass.
+        r.top_score = 0.95;
+        let mut batch = vec![r];
+        crate::scoring::finalize_scores(&mut batch);
+        let r = &batch[0];
+        if r.top_score > ceiling + 1e-4 {
+            failures.push(format!(
+                "  {} v{} score {:.3} exceeds categorical ceiling {:.3} after \
+                 finalize_scores — a post-pipeline writer can re-inflate capped items",
+                fx.name, fx.version, r.top_score, ceiling
             ));
         }
     }
     assert!(
         failures.is_empty(),
-        "post-ceiling boosts pushed look-alike registry releases into the feed:\n{}",
+        "look-alike registry release invariants violated:\n{}",
         failures.join("\n")
     );
 }

@@ -286,11 +286,21 @@ impl EmbeddingService {
     /// Get cached embedding from database.
     /// Entries older than 30 days are considered stale and ignored,
     /// forcing re-generation with the current model.
+    ///
+    /// v19: the lookup now REQUIRES a model match. The cache always stored
+    /// the model name but never filtered on it, so after an embedding-model
+    /// change (or the INV-004 cloud→local flip) up to 30 days of
+    /// wrong-vector-space embeddings were served as current — the same
+    /// state-outlives-its-model failure class as the 2026-08-11 calibration
+    /// curve, one layer down. The dimension check below cannot catch it
+    /// when old and new models share a dimension (the common case).
     fn get_cached_embedding(&self, text: &str) -> Result<Option<Vec<f32>>> {
         let conn = self.conn.lock();
         let result: std::result::Result<Vec<u8>, _> = conn.query_row(
-            "SELECT embedding FROM embedding_cache WHERE text = ?1 AND created_at > datetime('now', '-30 days')",
-            [text],
+            "SELECT embedding FROM embedding_cache
+             WHERE text = ?1 AND model = ?2
+               AND created_at > datetime('now', '-30 days')",
+            rusqlite::params![text, self.config.model],
             |row| row.get(0),
         );
 

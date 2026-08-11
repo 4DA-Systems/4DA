@@ -44,10 +44,8 @@ mod utils;
 pub(crate) mod validation;
 
 // Public API — external callers use crate::scoring::function_name unchanged
-pub(crate) use ace_context::{check_ace_exclusions, get_ace_context, ACEContext};
-pub(crate) use affinity::{
-    compute_affinity_multiplier, compute_anti_penalty, compute_unified_relevance,
-};
+pub(crate) use ace_context::{get_ace_context, ACEContext};
+pub(crate) use affinity::{compute_affinity_multiplier, compute_unified_relevance};
 pub(crate) use analyzer::{run_post_analysis_hooks, score_items_full};
 pub(crate) use calibration::{calibrate_score, compute_interest_score};
 pub(crate) use calibration_monitor::{
@@ -236,7 +234,37 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 // construction. This bump IS registered in `scoring::epochs::SCOPED_EPOCHS`:
 // only registry-source items can change verdict, so the rest of the corpus is
 // promoted untouched instead of re-scored.
-pub(crate) const PIPELINE_VERSION: i32 = 18;
+//
+// v19 (2026-08-11): BEHAVIORAL-LEARNING DEMOTION (AD-029) + signalchain
+// hardening + score-side cap re-assertion. NOT scope-registered — full drain.
+// (a) Behavioral signals lose scoring authority: engagement multiplier
+//     reduced to the item-side community term; learned gate axis never
+//     confirms; topic-attention-gap boost DELETED (the v18 incident
+//     mechanism); affinity mult / anti-topic penalty / feedback boosts /
+//     taste embedding / persona boosts / stability-facet injections /
+//     autophagy corrections (calibration deltas, topic half-lives,
+//     source+feed autopsies, anti-patterns, archetypes) all neutralized at
+//     the context loader; ACE anti-topic auto-exclusions removed
+//     (user-authored exclusions remain); synthetic affinity seeding
+//     removed; bootstrap branches made unconditional (2× dep weight,
+//     min_signals=1 — both were the permanent live behavior anyway).
+//     Evidence: 2026-07-13 doom loop (own stack at −1.0 affinity from
+//     scroll noise), 2026-08-11 degenerate calibration curve (honest 1/5
+//     judgments remapped to 5/5, +0.15/item every cycle), three
+//     incompatible capture scales, and a loop that never had enough clean
+//     labels to measure a lift.
+// (b) Signalchain hardening (was dark, unbumped, on codex/signalchain):
+//     phantom dep-match kill for non-security items, ungrounded registry
+//     context-axis dampening (×0.3), domain-gated trend boost.
+// (c) `ScoreBreakdown::score_ceiling` + re-assertion in `finalize_scores`:
+//     categorical caps now survive every post-pipeline writer
+//     (cross-encoder, dedup boost, source-tier normalize, LLM reconciler).
+// (d) Serendipity: budget-true injection (no forced ≥1/cycle floor) and
+//     14-day verdict expiry (was immune forever; measured 17.6% of the
+//     curated feed vs 8% configured).
+// (e) Threshold auto-tuners frozen (two conflicting tuners + a kv
+//     resurrection path); threshold is the fixed default.
+pub(crate) const PIPELINE_VERSION: i32 = 19;
 
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
@@ -253,9 +281,7 @@ pub(crate) fn score_item(
         pipeline::score_item(input, ctx, db, options, classifier)
     }
 }
-pub(crate) use semantic::{
-    compute_semantic_ace_boost, compute_taste_embedding, get_topic_embeddings,
-};
+pub(crate) use semantic::{compute_semantic_ace_boost, get_topic_embeddings};
 pub(crate) use utils::{has_word_boundary_match, topic_grounds};
 
 use std::collections::HashMap;
@@ -296,26 +322,18 @@ pub(crate) struct ScoringContext {
     pub taste_embedding: Option<Vec<f32>>,
     /// Topic-aware decay half-lives: topic -> half_life_hours
     pub topic_half_lives: HashMap<String, f32>,
-    /// Per-source engagement rates from autophagy analysis: source_type -> rate (0.0-1.0)
-    pub source_autopsies: HashMap<String, f32>,
-    /// Per-feed engagement rates from autophagy: feed_url -> rate (0.0-1.0)
-    pub feed_autopsies: HashMap<String, f32>,
     /// Anti-pattern penalties from autophagy bias detection: source_type -> penalty (-0.15 to +0.20)
     pub anti_pattern_penalties: HashMap<String, f32>,
     /// Dismissal archetype penalties from TitanCA-inspired learning: archetype_id -> penalty (0.0-0.25)
     pub archetype_penalties: HashMap<String, f32>,
     /// Unified sovereign developer profile (assembled once per run)
     pub sovereign_profile: Option<crate::sovereign_developer_profile::SovereignDeveloperProfile>,
-    /// Hours since last user interaction per topic (attention gap boost).
-    pub topic_attention_gaps: HashMap<String, f32>,
     /// Topics with contradictory signals (both high affinity AND anti-topic).
     /// Content touching these topics gets a necessity boost to help resolve confusion.
     pub contradicted_topics: std::collections::HashSet<String>,
-    /// Dominant persona from continuous taste inference (persona_index, weight)
-    /// Present when dominant weight exceeds uniform threshold (> 0.2)
-    // REMOVE BY 2026-08-10: diagnostic field — wire into score breakdown UI or delete
-    #[allow(dead_code)]
-    pub dominant_persona: Option<(usize, f32)>,
+    // dominant_persona removed at its 2026-08-10 deadline (v19/AD-029: the
+    // persona posterior no longer feeds scoring; the diagnostic field was
+    // never wired into the breakdown UI).
     /// User's professional role from onboarding (developer, security, devops, data, manager)
     pub user_role: Option<String>,
     /// User's experience level (learning, building, leading, architecting)

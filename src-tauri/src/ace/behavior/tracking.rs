@@ -398,11 +398,19 @@ mod learning_loop_tests {
     use crate::ace::create_test_ace;
     use crate::scoring::{compute_unified_relevance, ACEContext};
 
-    /// End-to-end proof of the compound-learning loop: positive feedback on a
-    /// topic must raise its affinity, negative feedback must lower it, and those
-    /// learned affinities must then shift downstream scoring. This is the
-    /// testable form of the "4DA gets sharper every day" promise — if it breaks,
-    /// learning has silently stopped influencing the feed.
+    /// End-to-end proof of the capture half of the learning loop: positive
+    /// feedback on a topic must raise its affinity, negative feedback must
+    /// lower it, and the learned values must flow to their remaining
+    /// consumers (Learned Preferences panel, breakdown display,
+    /// channel-render context).
+    ///
+    /// v19 (AD-029): learned affinities NO LONGER shift feed scoring — the
+    /// scoring pipeline pins affinity_mult to 1.0 and the gate's learned
+    /// axis never confirms (see pipeline_v2.rs and gate.rs). This test used
+    /// to assert the opposite ("learned affinities must shift downstream
+    /// scoring"); that assertion now runs against the legacy V1 helper only,
+    /// as a guard that the capture→affinity→display chain stays alive for
+    /// the surfaces that still read it.
     #[test]
     fn feedback_shifts_affinities_and_scoring() {
         let ace = create_test_ace();
@@ -450,8 +458,9 @@ mod learning_loop_tests {
             java.affinity_score
         );
 
-        // Those learned affinities must move downstream scoring: a Rust item
-        // should outscore an otherwise-identical Java item by a meaningful margin.
+        // The learned affinities must still move their DISPLAY consumers
+        // (V1 helper shared with channel-render context / breakdowns) —
+        // NOT the V2 feed pipeline, which pins affinity to neutral (AD-029).
         let mut ctx = ACEContext::default();
         ctx.topic_affinities
             .insert("rust".to_string(), (rust.affinity_score, rust.confidence));

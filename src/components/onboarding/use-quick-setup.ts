@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
-import { listen } from '@tauri-apps/api/event';
+import { safeListen } from '../../lib/tauri-events';
 
 import type { OllamaStatus, PullProgress } from './types';
 import { normalizeOllamaStatus } from '../../utils/normalize-ollama';
@@ -66,7 +66,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     const { models, initial } = buildInitialPullProgress(status);
     setPullProgress(initial);
 
-    const unlisten = await listen<PullProgress>('ollama-pull-progress', (event) => {
+    const unlisten = await safeListen<PullProgress>('ollama-pull-progress', (event) => {
       setPullProgress((prev) => ({ ...prev, [event.payload.model]: event.payload }));
     });
 

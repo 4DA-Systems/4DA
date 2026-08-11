@@ -7,6 +7,7 @@ use tracing::{error, info, warn};
 use futures::FutureExt;
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::Ordering;
+use std::time::Instant;
 
 use crate::analysis_narration::NarrationEvent;
 use crate::error::Result;
@@ -19,6 +20,7 @@ use crate::{
 };
 
 use super::analysis_deep_scan::run_multi_source_analysis_impl;
+use super::analysis_fast_path::{elapsed_ms, spawn_post_foreground_cache_fill, CachedAnalysisRun};
 use super::{is_aborted, SIGNAL_CLASSIFIER};
 
 // ============================================================================
@@ -108,12 +110,19 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 // Run post-analysis innovation hooks (non-blocking)
                 scoring::run_post_analysis_hooks(&results);
 
-                // Cold-start: seed topic affinities from high-scoring items so
-                // the learned 5th axis fires immediately instead of waiting for
-                // manual engagement. Idempotent — no-ops once affinities exist.
-                if let Err(e) = crate::ace_commands::seed_topic_affinities_from_analysis(&results) {
-                    tracing::debug!(target: "4da::analysis", error = %e, "Topic affinity seeding skipped");
-                }
+                // Synthetic topic-affinity seeding removed in v19 (AD-029):
+                // it fabricated engagement rows (positive_signals=3) that
+                // the learned axis could not distinguish from real behavior.
+                // With behavioral learning demoted from scoring authority,
+                // the seed served no purpose and only polluted the
+                // preferences/radar surfaces that still read affinities.
+
+                // Manual analysis is now genuinely cache-first: finish scoring
+                // visible cached data before touching the network. Refresh sources
+                // afterward on a separate task so the next scheduled/manual pass has
+                // fresh data without making this foreground completion wait on slow
+                // or broken adapters.
+                spawn_post_foreground_cache_fill(app.clone());
 
                 // Background content enrichment for ambiguous-zone items.
                 // Fetches page body for title-only items scoring 0.20–0.55,
@@ -236,7 +245,6 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// The actual cache-first analysis implementation
 /// Merge a batch of items still scored under an older `PIPELINE_VERSION` into
 /// `items` (skipping any already present), so a version bump drains the backlog
 /// a bounded batch per analysis run. Returns the number of items added.
@@ -274,18 +282,17 @@ fn merge_stale_drain_batch(
 
 /// Uses differential analysis when previous results exist (only scores new items)
 pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<SourceRelevance>> {
-    analyze_cached_content_inner(app, false).await
+    analyze_cached_content_inner(app, CachedAnalysisRun::foreground_fast()).await
 }
 
 /// Cache-first analysis with control over user-facing progress emission.
 ///
 /// `silent = true` is used by the background/scheduled scheduler so a background
 /// refresh does not hijack the user's visible progress bar. The work (fetch,
-/// score, persist) and terminal events (`analysis-complete`/`background-results`)
-/// still run — only the intermediate `emit_progress`/`emit_narration` surface
-/// events are suppressed.
+/// score, persist) still runs from the caller's orchestration path; only the
+/// intermediate `emit_progress`/`emit_narration` surface events are suppressed.
 pub(crate) async fn analyze_cached_content_silent(app: &AppHandle) -> Result<Vec<SourceRelevance>> {
-    analyze_cached_content_inner(app, true).await
+    analyze_cached_content_inner(app, CachedAnalysisRun::background_deep()).await
 }
 
 /// Persist everything a completed analysis cycle owes the DB: relevance scores,
@@ -385,9 +392,9 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
 /// regression this consolidation fixed (see `persist_cycle_results`).
 async fn analyze_cached_content_inner(
     app: &AppHandle,
-    silent: bool,
+    run: CachedAnalysisRun,
 ) -> Result<Vec<SourceRelevance>> {
-    let results = analyze_cached_content_inner_impl(app, silent).await?;
+    let results = analyze_cached_content_inner_impl(app, run).await?;
     if let Ok(db) = get_database() {
         persist_cycle_results(db, &results);
     }
@@ -404,9 +411,19 @@ async fn analyze_cached_content_inner(
 
 async fn analyze_cached_content_inner_impl(
     app: &AppHandle,
-    silent: bool,
+    run: CachedAnalysisRun,
 ) -> Result<Vec<SourceRelevance>> {
-    info!(target: "4da::analysis", silent, "=== CACHE-FIRST ANALYSIS STARTED ===");
+    let analysis_started = Instant::now();
+    let silent = run.silent;
+    info!(
+        target: "4da::analysis",
+        silent,
+        run_type = run.run_type,
+        repair_pending_embeddings = run.repair_pending_embeddings,
+        drain_stale_backlog = run.drain_stale_backlog,
+        llm_rerank = run.llm_rerank,
+        "=== CACHE-FIRST ANALYSIS STARTED ==="
+    );
 
     // Gated emitters: when `silent`, suppress user-facing progress/narration so a
     // background refresh doesn't move the foreground progress bar. Call sites stay
@@ -432,121 +449,80 @@ async fn analyze_cached_content_inner_impl(
 
     let db = get_database()?;
 
-    // Attempt re-embedding of previously failed items
-    match db.get_pending_embedding_items(100) {
-        Ok(pending) if !pending.is_empty() => {
-            info!(target: "4da::analysis", count = pending.len(), "Attempting re-embedding of pending items");
-            emit_progress(
-                app,
-                "init",
-                0.05,
-                &format!("Re-embedding {} pending items...", pending.len()),
-                0,
-                0,
-            );
-            let texts: Vec<String> = pending.iter().map(|(_, _, _, t)| t.clone()).collect();
-            match crate::embed_texts(&texts).await {
-                Ok(embeddings) => {
-                    let (mut upgraded, mut fallback, mut failed) = (0usize, 0usize, 0usize);
-                    let mut first_error: Option<String> = None;
-                    for ((id, _, _, _), embedding) in pending.iter().zip(embeddings.iter()) {
-                        if embedding.iter().all(|&v| v == 0.0) {
-                            fallback += 1;
-                            continue;
-                        }
-                        match db.upgrade_pending_to_complete(*id, embedding) {
-                            Ok(()) => upgraded += 1,
-                            Err(e) => {
-                                failed += 1;
-                                first_error.get_or_insert_with(|| e.to_string());
+    // Keep foreground manual analysis fast. Pending-embedding repair is a
+    // maintenance loop, so background/headless cycles own it; manual analysis
+    // scores the best cache it has and does not wait on repair work.
+    if run.repair_pending_embeddings {
+        let repair_started = Instant::now();
+        match db.get_pending_embedding_items(100) {
+            Ok(pending) if !pending.is_empty() => {
+                info!(target: "4da::analysis", count = pending.len(), "Attempting re-embedding of pending items");
+                emit_progress(
+                    app,
+                    "init",
+                    0.05,
+                    &format!("Re-embedding {} pending items...", pending.len()),
+                    0,
+                    0,
+                );
+                let texts: Vec<String> = pending.iter().map(|(_, _, _, t)| t.clone()).collect();
+                match crate::embed_texts(&texts).await {
+                    Ok(embeddings) => {
+                        let (mut upgraded, mut fallback, mut failed) = (0usize, 0usize, 0usize);
+                        let mut first_error: Option<String> = None;
+                        for ((id, _, _, _), embedding) in pending.iter().zip(embeddings.iter()) {
+                            if embedding.iter().all(|&v| v == 0.0) {
+                                fallback += 1;
+                                continue;
+                            }
+                            match db.upgrade_pending_to_complete(*id, embedding) {
+                                Ok(()) => upgraded += 1,
+                                Err(e) => {
+                                    failed += 1;
+                                    first_error.get_or_insert_with(|| e.to_string());
+                                }
                             }
                         }
+                        // ALWAYS report the outcome. A repair loop that upgrades nothing
+                        // must never again look identical to one that had no work to do:
+                        // the previous `if upgraded > 0` gate hid 624 consecutive total
+                        // failures for three months (vec0 rejecting `INSERT OR REPLACE`),
+                        // while 887 items accumulated stale embeddings.
+                        if upgraded > 0 {
+                            info!(
+                                target: "4da::analysis",
+                                upgraded,
+                                failed,
+                                fallback,
+                                total = pending.len(),
+                                elapsed_ms = elapsed_ms(repair_started),
+                                "Re-embedded previously pending items"
+                            );
+                        } else {
+                            warn!(
+                                target: "4da::analysis",
+                                total = pending.len(), failed, fallback,
+                                elapsed_ms = elapsed_ms(repair_started),
+                                error = first_error.as_deref().unwrap_or("none"),
+                                "Re-embed cycle upgraded NOTHING — the repair pipeline is not making progress"
+                            );
+                        }
                     }
-                    // ALWAYS report the outcome. A repair loop that upgrades nothing
-                    // must never again look identical to one that had no work to do:
-                    // the previous `if upgraded > 0` gate hid 624 consecutive total
-                    // failures for three months (vec0 rejecting `INSERT OR REPLACE`),
-                    // while 887 items accumulated stale embeddings.
-                    if upgraded > 0 {
-                        info!(target: "4da::analysis", upgraded, failed, fallback, total = pending.len(), "Re-embedded previously pending items");
-                    } else {
+                    Err(e) => {
                         warn!(
                             target: "4da::analysis",
-                            total = pending.len(), failed, fallback,
-                            error = first_error.as_deref().unwrap_or("none"),
-                            "Re-embed cycle upgraded NOTHING — the repair pipeline is not making progress"
+                            error = %e,
+                            count = pending.len(),
+                            elapsed_ms = elapsed_ms(repair_started),
+                            "Re-embed batch could not be embedded"
                         );
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::analysis", error = %e, count = pending.len(), "Re-embed batch could not be embedded");
-                }
             }
+            _ => {} // No pending items or DB error - continue normally
         }
-        _ => {} // No pending items or DB error - continue normally
-    }
-
-    // Fetch fresh content from all sources before scoring.
-    // 120s timeout: allows 20 sources to each attempt with 30s per-adapter timeout.
-    emit_progress(
-        app,
-        "fetch",
-        0.08,
-        "Fetching fresh content from sources...",
-        0,
-        0,
-    );
-    match tokio::time::timeout(
-        std::time::Duration::from_mins(2),
-        crate::source_fetching::fill_cache_background(app),
-    )
-    .await
-    {
-        Ok(Ok(summary)) => {
-            let msg = if summary.new_items > 0 {
-                format!(
-                    "Fetched {} new items from {} sources",
-                    summary.new_items, summary.succeeded
-                )
-            } else if summary.succeeded > 0 {
-                format!("Checked {} sources — no new items", summary.succeeded)
-            } else if summary.failed > 0 {
-                format!(
-                    "Source fetch: {} sources failed, {} skipped",
-                    summary.failed, summary.skipped_disabled
-                )
-            } else {
-                "No enabled sources to fetch".to_string()
-            };
-            if summary.failed > 0 {
-                warn!(
-                    target: "4da::analysis",
-                    succeeded = summary.succeeded,
-                    failed = summary.failed,
-                    new_items = summary.new_items,
-                    "{msg}"
-                );
-            } else {
-                info!(target: "4da::analysis", "{msg}");
-            }
-            emit_progress(app, "fetch_done", 0.15, &msg, 0, 0);
-        }
-        Ok(Err(e)) => {
-            let msg = format!("Source fetch failed: {e}");
-            warn!(target: "4da::analysis", error = %e, "Cache fill failed, continuing with existing cache");
-            emit_progress(app, "fetch_done", 0.15, &msg, 0, 0);
-        }
-        Err(_) => {
-            warn!(target: "4da::analysis", "Cache fill timed out after 120s, continuing with existing cache");
-            emit_progress(
-                app,
-                "fetch_done",
-                0.15,
-                "Source fetch timed out — scoring cached data",
-                0,
-                0,
-            );
-        }
+    } else {
+        info!(target: "4da::analysis", "Skipping pending-embedding repair on foreground fast path");
     }
 
     // Check if we can do differential analysis (have previous results + timestamp)
@@ -565,28 +541,42 @@ async fn analyze_cached_content_inner_impl(
         let since = last_completed_at.as_deref().unwrap_or("");
         info!(target: "4da::analysis", since = since, "Differential analysis - checking for new items since last run");
 
+        let select_started = Instant::now();
         let mut new_items = db
             .get_items_since_timestamp_tiered(since, 500)
             .map_err(|e| format!("Failed to load new items: {e}"))?;
+        info!(
+            target: "4da::analysis",
+            items = new_items.len(),
+            elapsed_ms = elapsed_ms(select_started),
+            "Selected differential candidates"
+        );
 
-        // Always drain a batch of items scored under an older pipeline version —
-        // even when fresh items also arrived this run. Previously this only ran when
-        // NO new items existed, so a continuously-updating feed meant pipeline-version
-        // bumps never caught up and stale scores lingered indefinitely. Merging the
-        // stale batch into `new_items` makes version bumps drain on every run, bounded
-        // by the 500-item cap. (See merge_stale_drain_batch.)
-        let drained = merge_stale_drain_batch(db, &mut new_items);
-        if drained > 0 {
-            info!(target: "4da::analysis", stale = drained,
-                "Re-scoring stale items from an older pipeline version (merged with new items)");
-            emit_progress(
-                app,
-                "cache",
-                0.5,
-                &format!("Re-scoring {drained} items (pipeline updated)..."),
-                0,
-                drained,
-            );
+        // Deep/background cycles drain a batch of items scored under an older
+        // pipeline version. Foreground manual analysis skips this maintenance
+        // work so a user click scores visible cache instead of inheriting a
+        // bounded-but-slow backlog repair.
+        if run.drain_stale_backlog {
+            let stale_started = Instant::now();
+            let drained = merge_stale_drain_batch(db, &mut new_items);
+            if drained > 0 {
+                info!(
+                    target: "4da::analysis",
+                    stale = drained,
+                    elapsed_ms = elapsed_ms(stale_started),
+                    "Re-scoring stale items from an older pipeline version (merged with new items)"
+                );
+                emit_progress(
+                    app,
+                    "cache",
+                    0.5,
+                    &format!("Re-scoring {drained} items (pipeline updated)..."),
+                    0,
+                    drained,
+                );
+            }
+        } else {
+            info!(target: "4da::analysis", "Skipping stale-version backlog drain on foreground fast path");
         }
 
         if new_items.is_empty() {
@@ -621,7 +611,15 @@ async fn analyze_cached_content_inner_impl(
                 return run_multi_source_analysis_impl(app, silent).await;
             }
 
-            return scoring::score_items_full(app, db, &all_items, silent).await;
+            let results =
+                scoring::score_items_full(app, db, &all_items, silent, run.llm_rerank).await?;
+            info!(
+                target: "4da::analysis",
+                run_type = run.run_type,
+                elapsed_ms = elapsed_ms(analysis_started),
+                "Cache-first analysis finished"
+            );
+            return Ok(results);
         }
 
         info!(target: "4da::analysis", new_items = new_items.len(), "Found new items for differential scoring");
@@ -696,27 +694,38 @@ async fn analyze_cached_content_inner_impl(
             ));
         }
 
-        // LLM Reranking on new items only (if enabled)
-        // 120s timeout: LLM API calls can hang on provider outages
-        emit_narration(
-            app,
-            NarrationEvent {
-                narration_type: "insight".into(),
-                message: "Ranking items against your profile...".into(),
-                source: None,
-                relevance: None,
-            },
-        );
-        match tokio::time::timeout(
-            std::time::Duration::from_mins(2),
-            analysis_rerank::apply_llm_reranking(app, &mut new_results, &scoring_ctx),
-        )
-        .await
-        {
-            Ok(_) => {}
-            Err(_) => {
-                warn!(target: "4da::analysis", "LLM reranking timed out after 120s, using pipeline scores only");
+        if run.llm_rerank {
+            // LLM Reranking on new items only (if enabled)
+            // 120s timeout: LLM API calls can hang on provider outages
+            emit_narration(
+                app,
+                NarrationEvent {
+                    narration_type: "insight".into(),
+                    message: "Ranking items against your profile...".into(),
+                    source: None,
+                    relevance: None,
+                },
+            );
+            let rerank_started = Instant::now();
+            match tokio::time::timeout(
+                std::time::Duration::from_mins(2),
+                analysis_rerank::apply_llm_reranking(app, &mut new_results, &scoring_ctx),
+            )
+            .await
+            {
+                Ok(_) => {
+                    info!(
+                        target: "4da::analysis",
+                        elapsed_ms = elapsed_ms(rerank_started),
+                        "Differential LLM rerank phase complete"
+                    );
+                }
+                Err(_) => {
+                    warn!(target: "4da::analysis", "LLM reranking timed out after 120s, using pipeline scores only");
+                }
             }
+        } else {
+            info!(target: "4da::analysis", "Skipping LLM rerank on foreground fast path");
         }
 
         // Merge: take previous results, update/add new ones by ID
@@ -757,15 +766,28 @@ async fn analyze_cached_content_inner_impl(
             prev.len(),
         );
 
+        info!(
+            target: "4da::analysis",
+            run_type = run.run_type,
+            elapsed_ms = elapsed_ms(analysis_started),
+            "Cache-first analysis finished"
+        );
         return Ok(prev);
     }
 
     // Full analysis path (no previous results or first run)
     // Use 7-day window to include items from recent fetches
     // Respects free-tier 30-day history gate via get_items_tiered
+    let select_started = Instant::now();
     let mut cached_items = db
         .get_items_tiered(168, 1000)
         .map_err(|e| format!("Failed to load cached items: {e}"))?;
+    info!(
+        target: "4da::analysis",
+        items = cached_items.len(),
+        elapsed_ms = elapsed_ms(select_started),
+        "Selected full-analysis candidates"
+    );
 
     let total_cached = cached_items.len();
     info!(target: "4da::analysis", cached_items = total_cached, "Loaded items from cache");
@@ -783,18 +805,32 @@ async fn analyze_cached_content_inner_impl(
         return run_multi_source_analysis_impl(app, silent).await;
     }
 
-    // Drain a batch of backlog items scored under an older pipeline version on the
-    // full (non-differential) path too. Without this the version-bump drain only
-    // ran on the scheduler's differential runs — never on first-run-after-restart
-    // or a manual run_cached_analysis — so the deep backlog re-scored far slower
-    // than intended. Bounded by the 500-item cap; score_items_full dedups internally.
-    let drained = merge_stale_drain_batch(db, &mut cached_items);
-    if drained > 0 {
-        info!(target: "4da::analysis", stale = drained,
-            "Re-scoring stale backlog items from an older pipeline version (full path)");
+    // Background/headless full passes also drain stale pipeline-version backlog.
+    // Foreground manual passes skip it: correctness still converges in background,
+    // while the visible user action returns after scoring current cache.
+    if run.drain_stale_backlog {
+        let stale_started = Instant::now();
+        let drained = merge_stale_drain_batch(db, &mut cached_items);
+        if drained > 0 {
+            info!(
+                target: "4da::analysis",
+                stale = drained,
+                elapsed_ms = elapsed_ms(stale_started),
+                "Re-scoring stale backlog items from an older pipeline version (full path)"
+            );
+        }
+    } else {
+        info!(target: "4da::analysis", "Skipping stale-version backlog drain on foreground fast path");
     }
 
-    scoring::score_items_full(app, db, &cached_items, silent).await
+    let results = scoring::score_items_full(app, db, &cached_items, silent, run.llm_rerank).await?;
+    info!(
+        target: "4da::analysis",
+        run_type = run.run_type,
+        elapsed_ms = elapsed_ms(analysis_started),
+        "Cache-first analysis finished"
+    );
+    Ok(results)
 }
 
 /// Cancel a running analysis

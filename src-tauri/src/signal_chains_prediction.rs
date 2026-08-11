@@ -93,8 +93,7 @@ fn compute_intervals(links: &[ChainLink]) -> Vec<f64> {
 
     let timestamps: Vec<chrono::DateTime<chrono::Utc>> = links
         .iter()
-        .filter_map(|l| chrono::DateTime::parse_from_rfc3339(&l.timestamp).ok())
-        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .filter_map(|l| parse_chain_timestamp(&l.timestamp))
         .collect();
 
     if timestamps.len() < 2 {
@@ -108,6 +107,23 @@ fn compute_intervals(links: &[ChainLink]) -> Vec<f64> {
             diff.num_minutes() as f64 / 60.0
         })
         .collect()
+}
+
+fn parse_chain_timestamp(raw: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(raw) {
+        return Some(dt.with_timezone(&chrono::Utc));
+    }
+
+    for format in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S%.f"] {
+        if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(raw, format) {
+            return Some(chrono::DateTime::from_naive_utc_and_offset(
+                naive,
+                chrono::Utc,
+            ));
+        }
+    }
+
+    None
 }
 
 /// Compute acceleration: slope of interval changes (negative = speeding up)
@@ -240,5 +256,45 @@ fn build_forecast(
             format!("{chain_name} at peak intensity — high activity expected {timing}")
         }
         ChainPhase::Resolving => format!("{chain_name} is cooling down — signals slowing"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn link(id: i64, timestamp: &str) -> ChainLink {
+        ChainLink {
+            signal_type: "learning".to_string(),
+            source_item_id: id,
+            title: format!("link {id}"),
+            timestamp: timestamp.to_string(),
+            description: "test".to_string(),
+        }
+    }
+
+    #[test]
+    fn intervals_accept_sqlite_timestamps_from_source_items() {
+        let links = vec![
+            link(1, "2026-07-22 22:59:01"),
+            link(2, "2026-07-23 22:59:01"),
+            link(3, "2026-07-24 10:59:01"),
+        ];
+
+        let intervals = compute_intervals(&links);
+
+        assert_eq!(intervals, vec![24.0, 12.0]);
+    }
+
+    #[test]
+    fn intervals_still_accept_rfc3339_timestamps() {
+        let links = vec![
+            link(1, "2026-07-22T22:59:01Z"),
+            link(2, "2026-07-23T04:59:01Z"),
+        ];
+
+        let intervals = compute_intervals(&links);
+
+        assert_eq!(intervals, vec![6.0]);
     }
 }

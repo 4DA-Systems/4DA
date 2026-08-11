@@ -143,8 +143,8 @@ pub(crate) use state::{
     get_ace_engine, get_ace_engine_mut, get_analysis_abort, get_analysis_state, get_context_dir,
     get_context_dirs, get_context_engine, get_database, get_llm_token_usage, get_monitoring_state,
     get_relevance_threshold, get_settings_manager, get_source_registry, invalidate_context_engine,
-    open_db_connection, register_sqlite_vec_extension, set_relevance_threshold, try_get_database,
-    verify_sqlite_vec_once, SUPPORTED_EXTENSIONS,
+    open_db_connection, register_sqlite_vec_extension, try_get_database, verify_sqlite_vec_once,
+    SUPPORTED_EXTENSIONS,
 };
 
 mod accuracy;
@@ -187,7 +187,7 @@ mod channel_render;
 pub mod channels;
 /// Intelligence Reconciliation Phase 11 — Commitment Contracts.
 mod commitment_contracts;
-// REMOVE BY 2026-08-01 — community intelligence commands gated; module kept for CommunityIntelligenceConfig type
+// REMOVE BY 2026-09-15 — extended 2026-08-11 in the AD-029 PR (file touched for an unrelated re-export removal); community intelligence commands gated; module kept for CommunityIntelligenceConfig type
 #[allow(dead_code)]
 mod community_intelligence;
 mod competing_tech;
@@ -213,7 +213,7 @@ mod decisions;
 #[cfg(feature = "experimental")]
 mod delegation;
 #[cfg(not(feature = "experimental"))]
-// REMOVE BY 2026-08-01
+// REMOVE BY 2026-09-15 — extended 2026-08-11 in the AD-029 PR (file touched for an unrelated re-export removal): feature-gate structure, its owner decides wiring vs drop
 #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "delegation_stub.rs"]
 mod delegation;
@@ -236,7 +236,7 @@ mod triage_audit_commands;
 #[cfg(feature = "experimental")]
 mod achievement_commands;
 #[cfg(not(feature = "experimental"))]
-// REMOVE BY 2026-08-01
+// REMOVE BY 2026-09-15 — extended 2026-08-11 in the AD-029 PR (file touched for an unrelated re-export removal): feature-gate structure, its owner decides wiring vs drop
 #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "achievement_commands_stub.rs"]
 mod achievement_commands;
@@ -344,6 +344,7 @@ pub(crate) mod stability_detector;
 mod standing_queries;
 mod standing_queries_evaluation;
 mod standing_queries_suggestions;
+mod startup_frontend;
 mod startup_health;
 mod synthesis_schema;
 pub(crate) mod topic_hotness;
@@ -363,7 +364,7 @@ mod topic_clustering;
 mod url_validation;
 mod void_commands;
 mod void_engine;
-// REMOVE BY 2026-08-01
+// REMOVE BY 2026-09-15 — extended 2026-08-11 in the AD-029 PR (file touched for an unrelated re-export removal); WaitlistEntry only constructed in tests, owner to wire or drop
 #[allow(dead_code)] // WaitlistEntry struct only constructed in tests
 mod waitlist;
 mod weekly_digest;
@@ -389,7 +390,7 @@ mod toolkit_export;
 #[cfg(feature = "experimental")]
 mod toolkit_http;
 #[cfg(not(feature = "experimental"))]
-// REMOVE BY 2026-08-01
+// REMOVE BY 2026-09-15 — extended 2026-08-11 in the AD-029 PR (file touched for an unrelated re-export removal): feature-gate structure, its owner decides wiring vs drop
 #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "toolkit_http_stub.rs"]
 mod toolkit_http;
@@ -796,7 +797,7 @@ pub fn run() {
                     .collect();
             victauri_plugin::VictauriBuilder::new()
                 .commands(&commands)
-                .auth_disabled()
+                .auth_enabled()
                 // 4DA stores its SQLite DB in the project `data/` dir, not the OS
                 // app-data dir. The app runs from `src-tauri/`, so the DB lives at
                 // `../data`. Register both that and an absolute fallback so
@@ -1088,6 +1089,8 @@ pub fn run() {
             commands::get_diagnostics,
             commands::export_diagnostics,
             commands::log_frontend_error,
+            startup_frontend::mark_frontend_ready,
+            startup_frontend::get_startup_runtime_flags,
             startup_health::get_startup_health,
             // Capability Health (Graceful Degradation Framework)
             capabilities::get_capability_states,

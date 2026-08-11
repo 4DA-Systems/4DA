@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! Behavior queries — reading topic affinities, anti-topics, source preferences.
+//! Behavior queries — reading topic affinities and anti-topics.
 
 use crate::ace::ACE;
 use crate::error::Result;
@@ -64,21 +64,6 @@ impl ACE {
                 first_rejection: row.get(5)?,
                 last_rejection: row.get(6)?,
             })
-        })?;
-
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(std::convert::Into::into)
-    }
-
-    /// Get source preferences for scoring
-    pub fn get_source_preferences(&self) -> Result<Vec<(String, f32)>> {
-        let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT source, score FROM source_preferences WHERE interactions >= 5 ORDER BY source",
-        )?;
-
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, f32>(1)?))
         })?;
 
         rows.collect::<std::result::Result<Vec<_>, _>>()

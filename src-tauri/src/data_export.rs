@@ -341,6 +341,10 @@ fn export_signals(conn: &rusqlite::Connection) -> Result<(JsonValue, u32)> {
     let mut data = serde_json::Map::new();
     let mut total = 0u32;
 
+    let (rows, count) = query_signal_chain_events(conn)?;
+    data.insert("signal_chains".to_string(), rows);
+    total += count;
+
     // Validated signals
     if table_exists(conn, "validated_signals") {
         let (rows, count) = safe_query_all(conn, "validated_signals", "timestamp DESC")?;
@@ -363,6 +367,41 @@ fn export_signals(conn: &rusqlite::Connection) -> Result<(JsonValue, u32)> {
     }
 
     Ok((JsonValue::Object(data), total))
+}
+
+fn query_signal_chain_events(conn: &rusqlite::Connection) -> Result<(JsonValue, u32)> {
+    if !table_exists(conn, "temporal_events") {
+        return Ok((JsonValue::Array(vec![]), 0));
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT id, event_type, subject, data, source_item_id, created_at, expires_at
+         FROM temporal_events
+         WHERE event_type = 'signal_chain'
+         ORDER BY created_at DESC
+         LIMIT 500",
+    )?;
+
+    let rows: Vec<JsonValue> = stmt
+        .query_map([], |row| {
+            let data_str: String = row.get(3)?;
+            let data =
+                serde_json::from_str::<JsonValue>(&data_str).unwrap_or(JsonValue::String(data_str));
+            Ok(serde_json::json!({
+                "id": row.get::<_, i64>(0)?,
+                "event_type": row.get::<_, String>(1)?,
+                "subject": row.get::<_, String>(2)?,
+                "data": data,
+                "source_item_id": row.get::<_, Option<i64>>(4)?,
+                "created_at": row.get::<_, String>(5)?,
+                "expires_at": row.get::<_, Option<String>>(6)?,
+            }))
+        })?
+        .filter_map(std::result::Result::ok)
+        .collect();
+
+    let count = rows.len() as u32;
+    Ok((JsonValue::Array(rows), count))
 }
 
 /// Export source configuration — with all secrets stripped.

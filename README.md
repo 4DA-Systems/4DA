@@ -21,7 +21,7 @@ It scans your codebase — `Cargo.toml`, `package.json`, `go.mod`, Git history �
 
 Tested across 9 developer personas: **92% of content is filtered as noise, 98% of actual noise is correctly rejected.** Your real rejection rate — computed from your own data — is shown in the Evidence tab.
 
-It learns from how you engage with what it shows you. Save something — topics boost, source reputation rises, your taste embedding sharpens. Dismiss something — anti-patterns form, future noise drops. Yesterday's noise becomes tomorrow's signal.
+It learns from how you engage with what it shows you. Saves and dismissals build a preference profile you can inspect, pin, or forget — and teach the Brief what to stop showing you. Relevance scoring itself stays grounded in your actual stack. Yesterday's noise becomes tomorrow's signal.
 
 ### The fastest way to try it
 
@@ -51,7 +51,7 @@ This scans your project, detects your stack, and gives your AI assistant live vu
 | **Interest** | Alignment with your declared and learned topics |
 | **ACE** | Real-time signals from your Git commits and file edits |
 | **Dependency** | Direct matches against your installed packages |
-| **Learned** | Save/dismiss feedback boosts or suppresses future scores |
+| **Learned** | Reserved — held out of scoring until it can be validated against your explicit feedback |
 
 What passes the gate goes through 12 quality multipliers: content depth, novelty detection, competing tech penalties, title-body coherence, and intent scoring from recent work. Every constant is calibrated across 9 simulated developer personas with 215 labeled test items.
 
@@ -74,7 +74,7 @@ Content creators who learn the scoring algorithm still can't game it:
 - **Title-body coherence**: titles must deliver on what they promise. Claim "React + Rust + Tauri" but only discuss React? Penalty.
 - **Keyword concentration**: repeating "Rust" four times in a title hurts your score.
 - **Confirmation gate**: keyword-stuffing hits one axis. Without matching the user's codebase, installed packages, AND recent work — the gate rejects it.
-- **Feedback loop**: gamed articles get dismissed. Sources that produce dismissed content lose reputation. Gaming becomes self-defeating.
+- **Grounded scoring**: relevance keys on your actual dependency graph and stack — not popularity, not engagement. There is no behavioural signal to farm; content scores only when it matters to what you actually build.
 
 No algorithm can be gamed when the scoring signal comes from your local filesystem. Your `Cargo.lock` doesn't lie.
 

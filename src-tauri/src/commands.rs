@@ -7,8 +7,7 @@ use tracing::info;
 use crate::error::Result;
 use crate::{
     anomaly, extract_topics, get_ace_engine, get_analysis_state, get_context_engine, get_database,
-    get_relevance_threshold, get_source_registry, health, scoring, set_relevance_threshold,
-    SourceRelevance,
+    get_relevance_threshold, get_source_registry, health, scoring, SourceRelevance,
 };
 
 // ============================================================================
@@ -99,22 +98,21 @@ pub async fn run_background_behavior_decay() -> Result<serde_json::Value> {
         "Background behavior decay applied"
     );
 
-    // Auto-tune relevance threshold based on engagement rate
-    let threshold_adjusted = {
+    // Threshold auto-tuning FROZEN (v19, AD-029): the engagement-rate tuner
+    // no longer moves or persists the global threshold. It computes what it
+    // WOULD have done, for observability only. See monitoring.rs for the
+    // frozen calibration-delta twin and the rationale.
+    let threshold_adjusted: Option<f32> = {
         let current = get_relevance_threshold();
-        if let Some(new_threshold) = ace.compute_threshold_adjustment(current) {
-            set_relevance_threshold(new_threshold);
-            ace.store_threshold(new_threshold);
+        if let Some(would_be) = ace.compute_threshold_adjustment(current) {
             info!(
                 target: "4da::threshold",
-                old = current,
-                new = new_threshold,
-                "Auto-tuned relevance threshold"
+                current = current,
+                would_be = would_be,
+                "Threshold auto-tune FROZEN — logging what it would have done (AD-029)"
             );
-            Some(new_threshold)
-        } else {
-            None
         }
+        None
     };
 
     // Stability detector rebuild — recompute facet lifecycles on the daily cycle

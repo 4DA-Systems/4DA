@@ -80,8 +80,18 @@ pub(crate) fn count_confirmed_signals(
     let ace_confirmed = semantic_boost >= scoring_config::SEMANTIC_THRESHOLD
         || ace_via_active_topics
         || stack_pain_match;
-    let learned_confirmed = feedback_boost > scoring_config::FEEDBACK_THRESHOLD
-        || affinity_mult >= scoring_config::AFFINITY_THRESHOLD;
+    // Learned axis DEMOTED in v19 (AD-029): topic history alone could flip
+    // signal_count 1→2, multiplying the score ceiling 0.28→0.72 (2.57×) —
+    // the single highest-leverage lever in the system — while its inputs
+    // came from a capture layer with three incompatible strength scales and
+    // a documented self-poisoning incident (2026-07-13 doom loop: the
+    // user's own stack driven to −1.0 affinity by passive scroll noise).
+    // The axis structurally remains (breakdowns, gate table, public "5
+    // axes" docs) but never confirms until the re-enable criteria in
+    // AD-029 are met. The `feedback_boost`/`affinity_mult` params stay so
+    // breakdown plumbing and a future re-enable keep their wiring.
+    let _ = (feedback_boost, affinity_mult);
+    let learned_confirmed = false;
     let dependency_confirmed = dep_match_score >= scoring_config::DEPENDENCY_THRESHOLD;
 
     // Deduplicate interest + ACE when ONLY keyword matching drives both axes.
@@ -330,6 +340,10 @@ mod tests {
 
     #[test]
     fn test_four_signals_boost() {
+        // v19 (AD-029): the learned axis never confirms, so the 4th signal
+        // here comes from a dependency match instead of feedback/affinity
+        // (which are supplied at would-have-confirmed levels to prove they
+        // no longer count toward the total).
         let mut ace_ctx = ACEContext::default();
         ace_ctx.active_topics.push("rust".to_string());
         ace_ctx
@@ -342,9 +356,10 @@ mod tests {
             0.55, // interest confirmed
             0.10,
             0.20, // ace confirmed via semantic boost (above 0.18 threshold = independent signal)
-            &ace_ctx, &topics, 0.10,  // feedback confirmed
-            1.20,  // affinity confirmed
-            0.0,   // no dep match
+            &ace_ctx, &topics,
+            0.10,  // feedback at would-have-confirmed level (demoted — must not count)
+            1.20,  // affinity at would-have-confirmed level (demoted — must not count)
+            0.30,  // dependency confirmed (the real 4th axis)
             false, // no stack pain match
             1.0,   // specific interest
         );
@@ -564,8 +579,10 @@ mod tests {
     }
 
     #[test]
-    fn test_5th_axis_gate_all_five_signals() {
-        // All 5 signals confirmed
+    fn learned_axis_never_confirms_even_with_maximal_inputs() {
+        // v19 (AD-029): the learned axis is structurally present but demoted
+        // — even feedback_boost and affinity values that would have confirmed
+        // it pre-v19 must not count. Practical maximum is 4 of 5 axes.
         let mut ace_ctx = ACEContext::default();
         ace_ctx.active_topics.push("tokio".to_string());
         let topics = vec!["tokio".to_string()];
@@ -574,20 +591,27 @@ mod tests {
             0.50, // context: confirmed
             0.50, // interest: confirmed
             0.10, 0.30, // semantic: confirmed -> ace confirmed
-            &ace_ctx, &topics, 0.20,  // feedback: confirmed
-            1.5,   // affinity: confirmed (>= 1.3)
+            &ace_ctx, &topics, 0.20,  // feedback: would have confirmed pre-v19
+            1.5,   // affinity: would have confirmed pre-v19
             0.30,  // dep_match_score: confirmed
             false, // no stack pain match
             1.0,   // specific interest
         );
 
-        assert_eq!(conf.count, 5, "All 5 signals should be confirmed");
+        assert_eq!(
+            conf.count, 4,
+            "learned axis is demoted (AD-029) — 4 axes is the maximum"
+        );
+        assert!(!conf.learned_confirmed);
 
         let names = conf.confirmed_names();
         assert!(names.contains(&"context".to_string()));
         assert!(names.contains(&"interest".to_string()));
         assert!(names.contains(&"ace".to_string()));
-        assert!(names.contains(&"learned".to_string()));
+        assert!(
+            !names.contains(&"learned".to_string()),
+            "learned must never appear in confirmed names"
+        );
         assert!(names.contains(&"dependency".to_string()));
     }
 

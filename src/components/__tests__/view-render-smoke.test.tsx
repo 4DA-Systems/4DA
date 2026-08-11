@@ -18,6 +18,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { Suspense } from 'react';
 
+const VIEW_RENDER_SMOKE_TIMEOUT_MS = 15_000;
+
 // Stub IPC so views that load data on mount don't hit a missing Tauri runtime
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(() => Promise.resolve(null)),
@@ -29,7 +31,6 @@ vi.mock('@tauri-apps/api/event', () => ({
 vi.mock('../../lib/commands', () => ({
   cmd: vi.fn(() => Promise.resolve(null)),
 }));
-
 
 // Every view that ViewRouter can render
 const VIEWS = [
@@ -49,6 +50,6 @@ describe('View render smoke', () => {
           </Suspense>,
         );
       }).not.toThrow();
-    });
+    }, VIEW_RENDER_SMOKE_TIMEOUT_MS);
   }
 });

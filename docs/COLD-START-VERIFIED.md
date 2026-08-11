@@ -45,9 +45,9 @@ When no LLM provider is configured and Ollama is not running:
 | Interest | BLIND | Requires embedding cosine similarity |
 | ACE | FUNCTIONAL | Falls back to keyword topic matching |
 | Dependency | FUNCTIONAL | Package name extraction (text-based) |
-| Learned | FUNCTIONAL | Affinity/feedback (topic-based) |
+| Learned | RESERVED (v19, AD-029) | Held out of scoring — builds the preference profile only |
 
-**3 of 5 axes functional.** Items can still pass the 2-of-5 confirmation gate.
+**2 of 5 axes functional (ACE + Dependency) as of v19 — the Learned axis is reserved under AD-029 (2026-08-11) and no longer confirms.** Items can still pass the confirmation gate on those two axes.
 Precision drops ~30-40% compared to full embeddings, but the system does NOT collapse.
 
 ## Empty States (Verified)
@@ -68,7 +68,7 @@ Precision drops ~30-40% compared to full embeddings, but the system does NOT col
 | No API keys | No | Zero-vector fallback + 7 sources work without keys |
 | No interests set | No | Dependency + keyword matching still work |
 | No context dirs | No | ACE skipped, other axes compensate |
-| No Ollama | No | Zero vectors returned, 3/5 axes functional |
+| No Ollama | No | Zero vectors returned, 2/5 axes functional (v19: Learned reserved) |
 | Network down | Partial | Empty results, but SmartEmptyState guides user |
 
 ## INV-002 Compliance

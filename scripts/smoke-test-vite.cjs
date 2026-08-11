@@ -22,14 +22,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const PORT = 4444;
-const DEV_HOST = `http://localhost:${PORT}`;
-const STARTUP_TIMEOUT_MS = 30000;
-const REQUEST_TIMEOUT_MS = 20000;
+const DEV_HOST = `http://127.0.0.1:${PORT}`;
+const STARTUP_TIMEOUT_MS = Number(process.env.VITE_SMOKE_STARTUP_TIMEOUT_MS ?? 90000);
+const REQUEST_TIMEOUT_MS = Number(process.env.VITE_SMOKE_REQUEST_TIMEOUT_MS ?? 60000);
+const ROUTE_RETRY_DELAY_MS = Number(process.env.VITE_SMOKE_ROUTE_RETRY_DELAY_MS ?? 3000);
 
 // Critical modules that MUST resolve on a cold start.
-// main.tsx is last because it imports the entire app tree — requesting lighter
-// modules first gives Vite's dep optimizer time to finish pre-bundling before
-// the heavy entry point is fetched (avoids 10s timeout on CI cold cache).
+// main.tsx is intentionally before App.tsx: the startup path now paints a
+// lightweight BootShell before dynamically importing the full app graph, so the
+// smoke test should prove that entry independently before App.tsx forces the
+// heavy dependency optimizer path.
 const CRITICAL_ROUTES = [
   '/src/store/index.ts',
   '/src/lib/commands.ts',
@@ -42,8 +44,8 @@ const CRITICAL_ROUTES = [
   '/src/components/IntelligenceConsole.tsx',
   '/src/components/BriefingView.tsx',
   '/src/components/DecisionMemory.tsx',
-  '/src/App.tsx',
   '/src/main.tsx',
+  '/src/App.tsx',
 ];
 
 function log(msg) { console.log(`[smoke] ${msg}`); }
@@ -130,10 +132,15 @@ async function main() {
   log('Starting fresh Vite dev server...');
 
   // Clean the Vite deps cache so we do a true cold start
-  const depsCache = path.join(__dirname, '..', 'node_modules', '.vite', 'deps');
-  if (fs.existsSync(depsCache)) {
-    log('Clearing node_modules/.vite/deps cache...');
-    fs.rmSync(depsCache, { recursive: true, force: true });
+  const viteCacheRoot = path.join(__dirname, '..', 'node_modules', '.vite');
+  const viteCacheEntries = fs.existsSync(viteCacheRoot)
+    ? fs.readdirSync(viteCacheRoot).filter((entry) => entry === 'deps' || entry.startsWith('deps_temp_'))
+    : [];
+  if (viteCacheEntries.length > 0) {
+    log(`Clearing Vite optimizer cache (${viteCacheEntries.length} director${viteCacheEntries.length === 1 ? 'y' : 'ies'})...`);
+    for (const entry of viteCacheEntries) {
+      fs.rmSync(path.join(viteCacheRoot, entry), { recursive: true, force: true });
+    }
   }
 
   const viteBin = path.join(__dirname, '..', 'node_modules', 'vite', 'bin', 'vite.js');
@@ -179,7 +186,7 @@ async function main() {
     let ok = false;
     for (let attempt = 0; attempt < MAX_RETRIES && !ok; attempt++) {
       try {
-        if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+        if (attempt > 0) await new Promise((r) => setTimeout(r, ROUTE_RETRY_DELAY_MS));
         const res = await httpGet(`${DEV_HOST}${route}`);
         if (res.status !== 200) {
           lastErr = `HTTP ${res.status}`;

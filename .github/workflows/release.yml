@@ -143,16 +143,13 @@ jobs:
           $cstUrl = "https://www.ssl.com/download/codesigntool-for-windows/"
           $zipPath = Join-Path $env:RUNNER_TEMP "CodeSignTool.zip"
           $extractPath = Join-Path $env:RUNNER_TEMP "CodeSignTool"
-          Invoke-WebRequest -Uri "https://www.ssl.com/download/codesigntool-for-windows/" -OutFile $zipPath -UseBasicParsing
+          Invoke-WebRequest -Uri $cstUrl -OutFile $zipPath -UseBasicParsing
 
           # SHA-256 verification of the downloaded CodeSignTool archive.
-          # TODO: compute the SHA-256 of the current SSL.com CodeSignTool
-          # release and replace PLACEHOLDER_SHA256_FILL_IN below. Once set,
-          # uncomment the `if` block to enforce it. Leaving verification
-          # off is tolerated only because SSL.com publishes the tool over
-          # HTTPS without a separate checksum endpoint - pin the hash
-          # ourselves and update it whenever we intentionally upgrade.
-          $expected = "033b55dcb6a5f64cd9e3893dd960f1d7606e97e57bacdb60bae88720eece0c8b"
+          # SSL.com publishes this download behind a stable URL without a
+          # separate checksum endpoint. Keep the archive hash pinned here and
+          # refresh it only after verifying an intentional CodeSignTool update.
+          $expected = "317d429be3aa12a5f2c1ffdd575eab0cb0ce5e2408ab0056bcdcaab29875f73d"
           $actual = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "CodeSignTool.zip SHA-256: $actual"
           if ($actual -ne $expected.ToLowerInvariant()) { Write-Error "CodeSignTool SHA-256 mismatch - expected $expected, got $actual"; exit 1 }
@@ -239,9 +236,9 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
           # Explicit - tauri-action generates and merges latest.json across
-          # matrix jobs when updater signing is configured. The updater
-          # endpoint in tauri.conf.json (releases/latest/download/latest.json)
-          # depends on this file existing on every release.
+          # matrix jobs when updater signing is configured. The desktop updater
+          # endpoint points at the dedicated desktop-latest manifest release,
+          # so publish-release must copy this file there after validation.
           includeUpdaterJson: true
 
       - name: Windows signing debug log (always)
@@ -529,6 +526,7 @@ jobs:
           # Required artifacts - fail the release if any are missing.
           REQUIRED=(
             "SHASUMS256.txt"
+            "latest.json"
           )
 
           MISSING=()
@@ -538,10 +536,7 @@ jobs:
             fi
           done
 
-          # Desirable-but-not-fatal checks.
-          if ! echo "$ASSETS" | grep -qx "latest.json"; then
-            echo "::warning::latest.json (auto-updater manifest) not present - updater won't work until fixed."
-          fi
+          # Desirable-but-not-fatal platform coverage checks.
           for PATTERN in "\\.exe$" "\\.dmg$" "\\.AppImage$"; do
             if ! echo "$ASSETS" | grep -qE "$PATTERN"; then
               echo "::warning::No asset matches $PATTERN - platform coverage incomplete."
@@ -554,6 +549,37 @@ jobs:
             exit 1
           fi
           echo "All required artifacts present."
+
+      - name: Publish desktop updater manifest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          POINTER_TAG="desktop-latest"
+          WORK_DIR="desktop-updater-manifest"
+
+          rm -rf "$WORK_DIR"
+          mkdir -p "$WORK_DIR"
+          gh release download "$TAG" --repo "$GH_REPO" -p latest.json -D "$WORK_DIR" --clobber
+          test -s "$WORK_DIR/latest.json"
+
+          NOTES="Auto-generated pointer release for the desktop app updater. Do not attach MCP server assets here; this release exists only to serve latest.json to installed desktop clients."
+          if gh release view "$POINTER_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release edit "$POINTER_TAG" --repo "$GH_REPO" \
+              --title "4DA Desktop Latest Manifest" \
+              --notes "$NOTES" \
+              --prerelease
+          else
+            gh release create "$POINTER_TAG" --repo "$GH_REPO" \
+              --title "4DA Desktop Latest Manifest" \
+              --notes "$NOTES" \
+              --prerelease
+          fi
+
+          gh release upload "$POINTER_TAG" "$WORK_DIR/latest.json" --repo "$GH_REPO" --clobber
 
       - name: Publish release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7

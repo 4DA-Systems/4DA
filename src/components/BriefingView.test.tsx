@@ -47,9 +47,15 @@ function setMockState(overrides: Record<string, unknown>) {
   };
 }
 
-vi.mock('../store', () => ({
-  useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) => selector(mockState)),
-}));
+vi.mock('../store', () => {
+  const useAppStore = vi.fn(
+    (selector: (s: Record<string, unknown>) => unknown) => selector(mockState),
+  ) as unknown as ((selector: (s: Record<string, unknown>) => unknown) => unknown) & {
+    getState: () => Record<string, unknown>;
+  };
+  useAppStore.getState = () => mockState;
+  return { useAppStore };
+});
 
 describe('BriefingView', () => {
   describe('loading state', () => {

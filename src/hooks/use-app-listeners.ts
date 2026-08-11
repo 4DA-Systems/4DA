@@ -3,10 +3,11 @@
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 import { useEffect } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store';
 import type { ToastType } from '../store/types';
 import { cmd } from '../lib/commands';
+import { isVictauriDogfoodMode } from '../lib/startup-runtime';
+import { safeListen } from '../lib/tauri-events';
 
 interface AppListenersConfig {
   addToast: (type: ToastType, message: string) => void;
@@ -36,7 +37,7 @@ export function useAppListeners({
 
   // Deep-link handler: 4da://activate?key=...
   useEffect(() => {
-    const unlisten = listen<string>('deep-link-activate', (event) => { void (async () => {
+    const unlisten = safeListen<string>('deep-link-activate', (event) => { void (async () => {
       try {
         const url = new URL(event.payload);
         if (url.hostname === 'activate' || url.pathname === '/activate') {
@@ -59,7 +60,7 @@ export function useAppListeners({
 
   // Embedding status listener — surfaces degraded/unavailable state via toast
   useEffect(() => {
-    const unlisten = listen<{ status: 'active' | 'degraded' | 'unavailable' }>('4da://embedding-status', (event) => {
+    const unlisten = safeListen<{ status: 'active' | 'degraded' | 'unavailable' }>('4da://embedding-status', (event) => {
       setEmbeddingStatus(event.payload.status);
       if (event.payload.status !== 'active') {
         addToast('warning', event.payload.status === 'degraded'
@@ -100,6 +101,10 @@ export function useAppListeners({
     let cancelled = false;
     const loadOrAnalyze = async () => {
       try {
+        if (useAppStore.getState().isBrowserMode) return;
+        if (await isVictauriDogfoodMode()) return;
+        if (cancelled) return;
+
         const analysisState = await cmd('get_analysis_status');
         if (cancelled) return;
 

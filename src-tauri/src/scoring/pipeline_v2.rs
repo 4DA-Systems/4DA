@@ -291,7 +291,6 @@ struct RawSignals {
     affinity_mult: f32,
     anti_penalty: f32,
     domain_relevance: f32,
-    taste_boost: f32,
     stack_boost: f32,
     stack_pain_match: bool,
     topics: Vec<String>,
@@ -599,6 +598,25 @@ fn extract_signals(
         // with the registry-subject verdict below.
         dependencies::align_registry_corroboration(input.source_type, input.source_id, &mut deps);
 
+        // Kill PHANTOM dep matches for non-security items: align dep_match_score
+        // with the evidence the user actually sees. match_dependencies sums
+        // confidence over ALL matches (its own comment: corroboration is "NOT a
+        // confidence input"), but display_worthy_deps shows only CORROBORATED
+        // deps. So an item could carry dep_match_score 0.595 while matched_deps
+        // rendered EMPTY — a phantom "in your stack" score with no package behind
+        // it (a Portabase Docker discussion won the hero this way; a live audit
+        // found 33 such items in one feed). Credit only corroborated matches, so
+        // the score and the evidence can never disagree. CVE/OSV already recompute
+        // above from their strict advisory post-filter, so leave those untouched.
+        if !matches!(input.source_type, "cve" | "osv") {
+            let corroborated_confidence: f32 = deps
+                .iter()
+                .filter(|d| d.corroborated)
+                .map(|d| d.confidence)
+                .sum();
+            score = (corroborated_confidence / 2.0).min(1.0);
+        }
+
         (deps, score)
     };
 
@@ -624,9 +642,15 @@ fn extract_signals(
         }
     };
 
-    // Affinity and anti-penalty from learned topic preferences
-    let affinity_mult = compute_affinity_multiplier(&topics, &ctx.ace_ctx);
-    let anti_penalty = compute_anti_penalty(&topics, &ctx.ace_ctx);
+    // Affinity multiplier and anti-topic penalty DEMOTED in v19 (AD-029):
+    // both derived from `topic_affinities`/`anti_topics`, whose capture
+    // layer mixed three incompatible strength scales and self-poisoned
+    // (2026-07-13 doom loop: passive scroll noise drove the user's own
+    // stack to −1.0 affinity at ×[0.3, 1.7] authority). Neutral values
+    // keep breakdown plumbing intact; explicit suppression still works
+    // via user-authored `exclusions`.
+    let affinity_mult = 1.0_f32;
+    let anti_penalty = 0.0_f32;
 
     // Domain relevance: graduated penalty based on technology identity
     let mut domain_relevance =
@@ -651,14 +675,6 @@ fn extract_signals(
         domain_relevance = domain_relevance.max(1.0);
     }
 
-    // Taste embedding boost
-    let taste_boost = match ctx.taste_embedding {
-        Some(ref taste_emb) if !input.embedding.is_empty() => {
-            semantic::compute_taste_boost(input.embedding, taste_emb)
-        }
-        _ => 0.0,
-    };
-
     // Stack intelligence
     let stack_boost = crate::stacks::scoring::compute_stack_boost(
         input.title,
@@ -672,6 +688,19 @@ fn extract_signals(
         &ctx.composed_stack,
     );
 
+    // Registry-release discipline: embedding proximity to local code is not,
+    // by itself, evidence that an arbitrary package-registry release matters.
+    // For registry releases whose subject is not a corroborated dependency,
+    // dampen the context axis so package feed noise cannot ride language-level
+    // similarity into the user's "relevant" set.
+    let raw_context = if crate::dep_linker::is_registry_source(input.source_type)
+        && !matched_deps.iter().any(|d| d.corroborated)
+    {
+        raw_context * 0.3
+    } else {
+        raw_context
+    };
+
     RawSignals {
         context: raw_context,
         interest: raw_interest,
@@ -683,7 +712,6 @@ fn extract_signals(
         affinity_mult,
         anti_penalty,
         domain_relevance,
-        taste_boost,
         stack_boost,
         stack_pain_match,
         topics,
@@ -914,56 +942,9 @@ fn compute_quality_composite(
         1.0
     };
 
-    // Source quality boost from learned preferences
-    let source_quality_boost =
-        ctx.source_quality
-            .get(input.source_type)
-            .copied()
-            .map_or(0.0, |score| {
-                (score * scoring_config::SOURCE_QUALITY_MULT).clamp(
-                    scoring_config::SOURCE_QUALITY_CAP_RANGE.0,
-                    scoring_config::SOURCE_QUALITY_CAP_RANGE.1,
-                )
-            });
-    let learned_source_mult = 1.0 + source_quality_boost;
-
-    // Blend learned source quality with autophagy engagement rate (if available)
-    let source_quality_mult =
-        if let Some(&engagement_rate) = ctx.source_autopsies.get(input.source_type) {
-            let autophagy_factor =
-                if engagement_rate < scoring_config::SOURCE_ENGAGEMENT_LOW_THRESHOLD {
-                    scoring_config::SOURCE_ENGAGEMENT_LOW_PENALTY
-                } else if engagement_rate > scoring_config::SOURCE_ENGAGEMENT_HIGH_THRESHOLD {
-                    scoring_config::SOURCE_ENGAGEMENT_HIGH_BOOST
-                } else {
-                    1.0
-                };
-            (learned_source_mult * scoring_config::SOURCE_ENGAGEMENT_BLEND_LEARNED_WEIGHT
-                + autophagy_factor * scoring_config::SOURCE_ENGAGEMENT_BLEND_AUTOPHAGY_WEIGHT)
-                .clamp(
-                    scoring_config::SOURCE_ENGAGEMENT_BLEND_MIN,
-                    scoring_config::SOURCE_ENGAGEMENT_BLEND_MAX,
-                )
-        } else {
-            learned_source_mult
-        };
-
-    // Per-feed engagement correction (granular: overrides source-type-level when available)
-    let source_quality_mult = if let Some(feed_url) = input.feed_origin {
-        if let Some(&feed_rate) = ctx.feed_autopsies.get(feed_url) {
-            if feed_rate < scoring_config::SOURCE_ENGAGEMENT_LOW_THRESHOLD {
-                source_quality_mult * scoring_config::SOURCE_ENGAGEMENT_LOW_PENALTY
-            } else if feed_rate > scoring_config::SOURCE_ENGAGEMENT_HIGH_THRESHOLD {
-                source_quality_mult * scoring_config::SOURCE_ENGAGEMENT_HIGH_BOOST
-            } else {
-                source_quality_mult
-            }
-        } else {
-            source_quality_mult
-        }
-    } else {
-        source_quality_mult
-    };
+    // Source-engagement multiplier (learned source pref + autophagy blend +
+    // per-feed override) DEMOTED in v19 (AD-029); breakdown field stays present and neutral.
+    let source_quality_boost = 0.0_f32;
 
     // Anti-topic multiplier: raw.anti_penalty is used directly in the engagement
     // formula below. This derived value is kept for score breakdown diagnostics.
@@ -1169,26 +1150,20 @@ fn compute_quality_composite(
         * negative_stack_prior
         * tier_authority_mult;
 
-    // ── Engagement multiplier (user-learned signals, unified weighted sum) ──
-    // Convert each signal to a centered effect:
-    //   affinity_mult [0.3, 1.7] → effect [-0.7, 0.7] (subtract 1.0)
-    //   anti_penalty [0.0, 0.7] → effect [0.0, -0.7] (negate)
-    //   community_signal [0.0, 1.0] → effect [-0.5, 0.5] (subtract 0.5)
-    //   feedback_boost [-0.20, 0.20] → used directly
-    //   taste_boost [-0.08, 0.08] → used directly
-    //   source_quality_mult [0.8, 1.2] → effect [-0.2, 0.2] (subtract 1.0)
-    let affinity_effect = raw.affinity_mult - 1.0;
-    let anti_effect = -raw.anti_penalty;
+    // ── Community multiplier (item-side signal only, v19 / AD-029) ─────
+    // The unified "engagement multiplier" that lived here blended SIX terms,
+    // four of them pure user history (affinity ×0.3–1.7, anti-topics,
+    // feedback boosts, taste embedding, learned source quality) into a
+    // ×[0.50, 1.60] swing on the composite. Behavioral learning was demoted
+    // from scoring authority (AD-029): its capture layer mixed three
+    // incompatible strength scales, it self-poisoned twice (2026-07-13 doom
+    // loop, 2026-08-11 calibration curve), and it never had enough clean
+    // data to measure a lift. What remains is the COMMUNITY term — an
+    // item-side popularity signal (upvotes/comments on the item itself,
+    // not user behavior) — at its original weight and a clamp preserving
+    // its original contribution range.
     let community_effect = community_signal - 0.5;
-    let source_quality_effect = source_quality_mult - 1.0;
-
-    let engagement_sum = affinity_effect * scoring_config::ENGAGEMENT_WEIGHTS_AFFINITY_W
-        + anti_effect * scoring_config::ENGAGEMENT_WEIGHTS_ANTI_TOPIC_W
-        + community_effect * scoring_config::ENGAGEMENT_WEIGHTS_COMMUNITY_W
-        + raw.feedback_boost * scoring_config::ENGAGEMENT_WEIGHTS_FEEDBACK_W
-        + raw.taste_boost * scoring_config::ENGAGEMENT_WEIGHTS_TASTE_W
-        + source_quality_effect * scoring_config::ENGAGEMENT_WEIGHTS_SOURCE_QUALITY_W;
-
+    let engagement_sum = community_effect * scoring_config::ENGAGEMENT_WEIGHTS_COMMUNITY_W;
     let engagement_mult = 1.0
         + engagement_sum.clamp(
             scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
@@ -1263,13 +1238,13 @@ fn compute_quality_composite(
     // Federated/microblog sources (mastodon, lemmy, bluesky, twitter) are UGC
     // too — they were missing from this list, so no quality cap ever applied
     // to them (the other half of the neutral-community-arm escape fixed in
-    // extract_community_signal).
-    let quality_score = if community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD {
-        match input.source_type {
-            "devto" | "medium" | "hashnode" | "reddit" | "stackoverflow" | "lobsters"
-            | "mastodon" | "lemmy" | "bluesky" | "twitter" => quality_score.min(0.50),
-            _ => quality_score,
-        }
+    // extract_community_signal). v19: the same predicate also arms
+    // `score_ceiling`, re-asserted at the pipeline exit and in
+    // `finalize_scores`, because Phase 6 boosts run after this cap.
+    let quality_score = if community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD
+        && is_low_community_ugc_source(input.source_type)
+    {
+        quality_score.min(0.50)
     } else {
         quality_score
     };
@@ -1293,6 +1268,25 @@ fn compute_quality_composite(
     )
 }
 
+/// UGC platforms whose zero/low-community items are quality-capped at 0.50.
+/// ONE predicate for both the Phase-5 cap and the v19 exit `score_ceiling`
+/// so the two can never disagree on what counts as UGC.
+fn is_low_community_ugc_source(source_type: &str) -> bool {
+    matches!(
+        source_type,
+        "devto"
+            | "medium"
+            | "hashnode"
+            | "reddit"
+            | "stackoverflow"
+            | "lobsters"
+            | "mastodon"
+            | "lemmy"
+            | "bluesky"
+            | "twitter"
+    )
+}
+
 // ============================================================================
 // Phase 6: Compute boosts — sum, cap, dampen, add
 // ============================================================================
@@ -1306,7 +1300,11 @@ fn compute_boosts(
     ctx: &ScoringContext,
     raw: &RawSignals,
 ) -> (f32, f32, f32, f32, f32, f32, Option<i64>, Vec<String>) {
-    // Dependency boost (in bootstrap mode, 2x weight)
+    // Dependency boost (in bootstrap mode, 2x weight). The bootstrap
+    // GRADUATION on feedback count survives AD-029 deliberately: it is a
+    // cold-start threshold policy (how strict to be while evidence is
+    // thin), not an engagement-derived score weight — and the calibrated
+    // persona baselines depend on established users keeping the 1x weight.
     let dep_weight = if ctx.feedback_interaction_count < 10 {
         scoring_config::DEPENDENCY_BOOST_WEIGHT * 2.0
     } else {
@@ -1409,8 +1407,8 @@ fn compute_boosts(
     );
 
     // Sum all boosts -> cap -> dampen -> add
-    // Note: feedback_boost and taste_boost are now handled in the Phase 5
-    // unified engagement formula, not here.
+    // Note: feedback_boost is handled in the Phase 5 unified engagement
+    // formula, not here.
     let total_raw = dep_boost
         + raw.stack_boost
         + intent_boost
@@ -1829,6 +1827,17 @@ mod desaturation_tests {
 /// each path keeps its own sort / composition-floor logic.
 pub(crate) fn finalize_scores(results: &mut [crate::SourceRelevance]) {
     for r in results.iter_mut() {
+        // Re-assert categorical ceilings FIRST. `score_item` caps commodity
+        // items (e.g. ungrounded registry releases at ceiling+offset), but
+        // the cross-encoder rerank, dedup cluster boost, source-tier
+        // normalizer, and LLM reconciler all overwrite `top_score` after
+        // the pipeline. The verdict is already categorical (v18); this
+        // makes the SCORE hold the same line, so a capped item can never
+        // be re-inflated into the top of the feed by a post-pipeline
+        // writer (v19).
+        if let Some(ceiling) = r.score_breakdown.as_ref().and_then(|b| b.score_ceiling) {
+            r.top_score = r.top_score.min(ceiling);
+        }
         r.top_score = soft_ceiling(
             r.top_score,
             BOUNDARY_CEILING_KNEE,
@@ -1998,7 +2007,12 @@ pub(crate) fn score_item(
 
     // ── Exclusion check (before any scoring work) ──────────────────────
     let excluded_by = check_exclusions(&topics, &ctx.exclusions)
-        .or_else(|| check_ace_exclusions(&topics, &ctx.ace_ctx));
+        // ACE anti-topic auto-exclusions removed in v19 (AD-029): inferred
+        // negative filtering carried the same broken-capture authority as
+        // the rest of the behavioral stack (a topic could be auto-banned by
+        // dismissal-count alone). User-authored `exclusions` (the
+        // suppress-topic button) remain the explicit suppression path.
+        ;
 
     if let Some(exclusion) = excluded_by {
         return SourceRelevance {
@@ -2151,8 +2165,11 @@ pub(crate) fn score_item(
         matched_skill_gaps,
     ) = compute_boosts(quality_score, input, ctx, &raw);
 
-    // Trend topic boost (temporal clustering signal)
-    let trend_boost = if !options.trend_topics.is_empty()
+    // Trend topic boost (temporal clustering signal). Raw trend detection is
+    // corpus-wide; require domain relevance so off-domain repeated feed noise
+    // cannot earn a developer-facing trend boost.
+    let trend_boost = if raw.domain_relevance >= 0.5
+        && !options.trend_topics.is_empty()
         && raw.topics.iter().any(|t| options.trend_topics.contains(t))
     {
         0.08
@@ -2243,25 +2260,13 @@ pub(crate) fn score_item(
     // truly-unknown (zero) items by shifting up by floor amount.
     let combined_score = normalize_score_offset(combined_score);
 
-    let combined_score = if !ctx.topic_attention_gaps.is_empty() && !raw.topics.is_empty() {
-        let matching_gaps: Vec<f32> = raw
-            .topics
-            .iter()
-            .filter_map(|t| ctx.topic_attention_gaps.get(t.as_str()).copied())
-            .filter(|&h| h > 48.0)
-            .collect();
-        if matching_gaps.is_empty() {
-            combined_score
-        } else {
-            let avg_gap = matching_gaps.iter().sum::<f32>() / matching_gaps.len() as f32;
-            let boost = ((avg_gap - 48.0) / (168.0 - 48.0)).clamp(0.0, 1.0) * 0.05;
-            // No hard clamp here — the final soft_ceiling handles the top end
-            // while preserving the differentiation this boost just added.
-            combined_score + boost
-        }
-    } else {
-        combined_score
-    };
+    // The topic-attention-gap boost that lived here (+0.00–0.05 for
+    // positive-affinity topics unseen >48h) was REMOVED in v19 (AD-029,
+    // behavioral-learning demotion). It was the v18 incident's mechanism —
+    // an engagement-derived additive term running AFTER the commodity cap,
+    // hardcoded outside the DSL, with an explicit "no hard clamp" note —
+    // and it rewarded previously-engaged topics on items already known to
+    // be ungrounded. Behavioral signals no longer carry scoring authority.
 
     // ── Critical content fast-path ─────────────────────────────────────
     // Security advisories and breaking changes affecting user's actual
@@ -2328,7 +2333,48 @@ pub(crate) fn score_item(
         combined_score
     };
 
+    // ── Categorical ceiling re-assertion at the pipeline EXIT (v19) ────
+    // The commodity and UGC caps fire in Phase 5 (quality), but Phase 6
+    // additive boosts (intent/stack/window/skill-gap), the fast-path
+    // floors, and the score offset all run AFTER them — the exact
+    // cap-before-boosts ordering bug that produced the v18 incident (a
+    // 0.35-capped look-alike landing at 0.42). Live proof of the UGC
+    // twin: a zero-engagement mastodon post held to 0.50 by the Phase-5
+    // cap exited at 0.84 after boosts (masked pre-v19 by an anti-topic
+    // exclusion). The ceiling is enforced here — after every additive
+    // term — persisted on the breakdown, and re-asserted once more in
+    // `finalize_scores` so post-pipeline writers cannot reopen it either.
+    let score_ceiling: Option<f32> = {
+        let commodity = ungrounded_registry_release.then_some(
+            scoring_config::COMMODITY_CEILING_REGISTRY_RELEASE_UNGROUNDED
+                + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR,
+        );
+        // Critical fast-path items are exempt from the UGC ceiling: a
+        // strongly-grounded security advisory shared on a UGC platform
+        // must keep its floor (grounding beats popularity capping). The
+        // commodity ceiling needs no such exemption — it is mutually
+        // exclusive with the fast path by construction.
+        let ugc = (!critical_fast_path
+            && community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD
+            && is_low_community_ugc_source(input.source_type))
+        .then_some(0.50);
+        match (commodity, ugc) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
+    };
+    let combined_score = match score_ceiling {
+        Some(ceiling) => combined_score.min(ceiling),
+        None => combined_score,
+    };
+
     // ── Relevance determination ───────────────────────────────────────
+    // The bootstrap relaxation (1 signal while feedback_interaction_count
+    // < 10, then the 2-signal quality floor) survives AD-029 deliberately:
+    // graduating to a STRICTER gate as explicit feedback accumulates is a
+    // cold-start threshold policy, not an engagement-derived score weight,
+    // and the enriched-persona simulation baselines depend on it
+    // (federated-social noise is held out by the 2-signal floor there).
     let bootstrap_mode = ctx.feedback_interaction_count < 10;
     let min_signals = if bootstrap_mode {
         1u8
@@ -2607,6 +2653,12 @@ pub(crate) fn score_item(
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names,
         strongly_grounded: grounding.strong,
+        // Categorical ceiling for post-pipeline writers: a capped item
+        // (ungrounded registry release, zero-engagement UGC) must never
+        // rank above its ceiling no matter what the cross-encoder, dedup
+        // boost, source-tier normalizer, or LLM reconciler add later —
+        // `finalize_scores` re-asserts this after every writer.
+        score_ceiling,
         domain_relevance: raw.domain_relevance,
         content_quality_mult,
         novelty_mult,
@@ -3025,6 +3077,117 @@ mod tests {
         );
     }
 
+    #[test]
+    fn v2_ungrounded_registry_release_dampens_context_axis() {
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let input = ScoringInput {
+            id: 1,
+            title: "crates.io: rand v0.9.0",
+            url: Some("https://crates.io/crates/rand"),
+            content: "A new rand release is available",
+            source_type: "crates_io",
+            embedding: &zero,
+            created_at: None,
+            detected_lang: "",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+            source_id: Some("crate-rand"),
+        };
+        let matches = vec![RelevanceMatch {
+            source_file: "src/lib.rs".to_string(),
+            matched_text: "rust async runtime dependency code".to_string(),
+            similarity: 0.90,
+        }];
+
+        let ungrounded = extract_signals(
+            &input,
+            &crate::scoring::ScoringContext::builder().build(),
+            &matches,
+        );
+        assert!(
+            (ungrounded.context - 0.27).abs() < 1e-6,
+            "ungrounded registry release must dampen KNN context 0.90 -> 0.27, got {}",
+            ungrounded.context
+        );
+
+        let grounded_ctx = fastpath_ctx(&[("rand", "rust")]);
+        let grounded = extract_signals(&input, &grounded_ctx, &matches);
+        assert!(
+            (grounded.context - 0.90).abs() < 1e-6,
+            "registry release for a corroborated dependency must keep raw context, got {}",
+            grounded.context
+        );
+    }
+
+    #[test]
+    fn v2_trend_boost_requires_domain_relevance() {
+        let db = crate::test_utils::test_db();
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let mut profile = crate::domain_profile::DomainProfile::default();
+        profile.primary_stack.insert("rust".to_string());
+        profile.all_tech.insert("rust".to_string());
+        let ctx = crate::scoring::ScoringContext::builder()
+            .domain_profile(profile)
+            .build();
+
+        let sports_tags = vec!["sports".to_string()];
+        let sports_input = ScoringInput {
+            id: 1,
+            title: "Sports analytics startup raises new funding",
+            url: Some("https://example.com/sports"),
+            content: "Sports media rights and football growth",
+            source_type: "rss",
+            embedding: &zero,
+            created_at: None,
+            detected_lang: "",
+            source_tags: &sports_tags,
+            tags_json: None,
+            feed_origin: None,
+            source_id: None,
+        };
+        let no_trend = score_item(&sports_input, &ctx, &db, &fastpath_options(), None);
+        let sports_options = ScoringOptions {
+            trend_topics: vec!["sports".to_string()],
+            ..fastpath_options()
+        };
+        let with_trend = score_item(&sports_input, &ctx, &db, &sports_options, None);
+        assert!(
+            (with_trend.top_score - no_trend.top_score).abs() < f32::EPSILON,
+            "off-domain repeated feed topic must not get trend boost: base={}, trend={}",
+            no_trend.top_score,
+            with_trend.top_score
+        );
+
+        let rust_tags = vec!["rust".to_string()];
+        let rust_input = ScoringInput {
+            id: 2,
+            title: "Rust async runtime performance update",
+            url: Some("https://example.com/rust"),
+            content: "Rust async runtime benchmark notes",
+            source_type: "rss",
+            embedding: &zero,
+            created_at: None,
+            detected_lang: "",
+            source_tags: &rust_tags,
+            tags_json: None,
+            feed_origin: None,
+            source_id: None,
+        };
+        let rust_no_trend = score_item(&rust_input, &ctx, &db, &fastpath_options(), None);
+        let rust_options = ScoringOptions {
+            trend_topics: vec!["rust".to_string()],
+            ..fastpath_options()
+        };
+        let rust_with_trend = score_item(&rust_input, &ctx, &db, &rust_options, None);
+        assert!(
+            rust_with_trend.top_score > rust_no_trend.top_score,
+            "in-domain trend should still boost: base={}, trend={}",
+            rust_no_trend.top_score,
+            rust_with_trend.top_score
+        );
+    }
+
     // ========================================================================
     // Zero-vector KNN guard — a zero embedding must not manufacture a
     // confirmed context axis (gate count inflation, Fix A)
@@ -3173,16 +3336,14 @@ mod tests {
         };
         let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
 
-        // Sanity: the raw dep matching DID reach fast-path-level aggregate
-        // strength — this is exactly the configuration that previously
-        // inflated. (Since Wave 8, `matched_deps` carries only display-worthy
-        // corroborated evidence, so the ambiguous `log` hit is correctly
-        // ABSENT from it — asserted below — while its raw scoring effect is
-        // still visible through dep_match_score.)
+        // Sanity: stricter package ambiguity proof now stops this fixture even
+        // before aggregate dep-match strength reaches the fast-path threshold.
+        // `matched_deps` carries only display-worthy corroborated evidence, so
+        // the ambiguous `log` hit is correctly ABSENT from it as well.
         let bd = result.score_breakdown.as_ref().expect("breakdown");
         assert!(
-            bd.dep_match_score >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD,
-            "fixture must clear the aggregate fast-path threshold (got {})",
+            bd.dep_match_score < scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD,
+            "ambiguous low-grounding fixture must not clear the aggregate fast-path threshold (got {})",
             bd.dep_match_score
         );
         assert!(
@@ -3669,88 +3830,41 @@ mod tests {
     }
 
     // ========================================================================
-    // Engagement formula tests
+    // Engagement formula tests — v19 (AD-029): the multiplier is community-
+    // only. The old six-term formula tests (affinity/anti/feedback/taste/
+    // source-quality) were deleted with the terms themselves; keeping them
+    // would document a formula the pipeline no longer runs.
     // ========================================================================
 
     #[test]
-    fn test_engagement_positive_affinity_boosts() {
-        // High affinity + no anti-topic -> engagement_mult > 1.0
-        let affinity_effect = 0.5; // affinity_mult was 1.5
-        let engagement = affinity_effect * scoring_config::ENGAGEMENT_WEIGHTS_AFFINITY_W;
-        let mult = 1.0
-            + engagement.clamp(
+    fn test_engagement_mult_is_community_only() {
+        // Strong community signal -> modest boost, bounded by weight.
+        let strong = (1.0_f32 - 0.5) * scoring_config::ENGAGEMENT_WEIGHTS_COMMUNITY_W;
+        let strong_mult = 1.0
+            + strong.clamp(
                 scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
                 scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MAX,
             );
         assert!(
-            mult > 1.0,
-            "Positive affinity should produce boost: {}",
-            mult
+            strong_mult > 1.0
+                && strong_mult <= 1.0 + scoring_config::ENGAGEMENT_WEIGHTS_COMMUNITY_W * 0.5 + 1e-6
         );
-        assert!(mult <= 1.6, "Should not exceed clamp max: {}", mult);
-    }
 
-    #[test]
-    fn test_engagement_anti_topic_penalizes() {
-        // Strong anti-topic with no affinity -> engagement_mult < 1.0
-        let anti_effect = -0.7; // max anti_penalty
-        let engagement = anti_effect * scoring_config::ENGAGEMENT_WEIGHTS_ANTI_TOPIC_W;
-        let mult = 1.0
-            + engagement.clamp(
+        // Absent community signal -> modest penalty, symmetric bound.
+        let weak = (0.0_f32 - 0.5) * scoring_config::ENGAGEMENT_WEIGHTS_COMMUNITY_W;
+        let weak_mult = 1.0
+            + weak.clamp(
                 scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
                 scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MAX,
             );
-        assert!(mult < 1.0, "Anti-topic should produce penalty: {}", mult);
-        assert!(mult >= 0.5, "Should not go below clamp floor: {}", mult);
-    }
-
-    #[test]
-    fn test_engagement_competing_signals_resolve() {
-        // High affinity + moderate anti-topic -> net positive
-        let affinity_effect = 0.5;
-        let anti_effect = -0.3;
-        let engagement = affinity_effect * scoring_config::ENGAGEMENT_WEIGHTS_AFFINITY_W
-            + anti_effect * scoring_config::ENGAGEMENT_WEIGHTS_ANTI_TOPIC_W;
-        let mult = 1.0
-            + engagement.clamp(
-                scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
-                scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MAX,
-            );
-        // With w_aff=0.55 and w_anti=0.35: 0.5*0.55 + (-0.3)*0.35 = 0.275 - 0.105 = 0.17
         assert!(
-            mult > 1.0,
-            "Affinity should outweigh moderate anti-topic: {}",
-            mult
+            weak_mult < 1.0
+                && weak_mult >= 1.0 - scoring_config::ENGAGEMENT_WEIGHTS_COMMUNITY_W * 0.5 - 1e-6
         );
-    }
 
-    #[test]
-    fn test_engagement_clamp_prevents_extreme() {
-        // All negative signals -> clamped at floor
-        let affinity_effect = -0.7;
-        let anti_effect = -0.7;
-        let community_effect = -0.5;
-        let feedback = -0.20_f32;
-        let taste = -0.08_f32;
-        let source_quality_effect = -0.2;
-
-        let engagement = affinity_effect * scoring_config::ENGAGEMENT_WEIGHTS_AFFINITY_W
-            + anti_effect * scoring_config::ENGAGEMENT_WEIGHTS_ANTI_TOPIC_W
-            + community_effect * scoring_config::ENGAGEMENT_WEIGHTS_COMMUNITY_W
-            + feedback * scoring_config::ENGAGEMENT_WEIGHTS_FEEDBACK_W
-            + taste * scoring_config::ENGAGEMENT_WEIGHTS_TASTE_W
-            + source_quality_effect * scoring_config::ENGAGEMENT_WEIGHTS_SOURCE_QUALITY_W;
-        let clamped = engagement.clamp(
-            scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
-            scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MAX,
-        );
-        let mult = 1.0 + clamped;
-        assert_eq!(
-            clamped,
-            scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
-            "Extreme negative should hit floor"
-        );
-        assert!(mult >= 0.5, "Multiplier should be 1 + clamp_min = {}", mult);
+        // The community term alone can never approach the historical
+        // ×[0.5, 1.6] engagement swing — behavioral authority is gone.
+        assert!(strong_mult - weak_mult <= scoring_config::ENGAGEMENT_WEIGHTS_COMMUNITY_W + 1e-6);
     }
 
     // ========================================================================

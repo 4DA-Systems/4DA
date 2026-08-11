@@ -384,19 +384,70 @@ fn test_serendipity_marks_items_correctly() {
 
 #[test]
 fn test_serendipity_budget_caps_at_five() {
-    let mut results = vec![make_item("Relevant", None, 0.8)];
-    // Add many non-relevant items with signal
+    // 10 relevant at 100% budget would allow 10 — the hard cap holds at 5.
+    let mut results: Vec<SourceRelevance> = (0..10)
+        .map(|i| make_item(&format!("Relevant {i}"), None, 0.8))
+        .collect();
+    // Add many non-relevant items with signal (context_score must EXCEED
+    // SERENDIPITY_MIN_AXIS_SCORE = 0.35 to be candidates — the old 0.3
+    // fixture produced zero candidates and the ≤5 assertion passed
+    // vacuously, which is how the forced-floor bug stayed invisible)
     for i in 0..20 {
-        let mut item = make_item(&format!("Miss {}", i), None, 0.3);
+        let mut item = make_item(&format!("Miss {}", i), None, 0.4);
         item.relevant = false;
-        item.context_score = 0.3;
+        item.context_score = 0.4;
         results.push(item);
     }
     let candidates = compute_serendipity_candidates(&results, 100);
-    assert!(
-        candidates.len() <= 5,
+    assert_eq!(
+        candidates.len(),
+        5,
         "Budget should cap at 5, got {}",
         candidates.len()
+    );
+}
+
+/// v19 regression (2026-08-11): the old budget formula seeded the count with
+/// `total_relevant.max(5)` then `.clamp(1, 5)`, FORCING at least one
+/// scorer-rejected item into the feed every cycle. On a ~4-relevant/cycle
+/// feed those forced injections accumulated to 17.6% of the curated set
+/// against an 8% budget. Budget-true means 8% of 4 relevant = ZERO.
+#[test]
+fn test_serendipity_budget_true_no_forced_floor() {
+    let mut results: Vec<SourceRelevance> = (0..4)
+        .map(|i| make_item(&format!("Relevant {i}"), None, 0.8))
+        .collect();
+    for i in 0..10 {
+        let mut item = make_item(&format!("Miss {}", i), None, 0.45);
+        item.relevant = false;
+        item.context_score = 0.4;
+        results.push(item);
+    }
+    let candidates = compute_serendipity_candidates(&results, 8);
+    assert!(
+        candidates.is_empty(),
+        "8% of 4 relevant items is 0 injections — got {}",
+        candidates.len()
+    );
+}
+
+/// The budget scales with the relevant count: 8% of 50 relevant = 4.
+#[test]
+fn test_serendipity_budget_proportional() {
+    let mut results: Vec<SourceRelevance> = (0..50)
+        .map(|i| make_item(&format!("Relevant {i}"), None, 0.8))
+        .collect();
+    for i in 0..10 {
+        let mut item = make_item(&format!("Miss {}", i), None, 0.45);
+        item.relevant = false;
+        item.context_score = 0.4;
+        results.push(item);
+    }
+    let candidates = compute_serendipity_candidates(&results, 8);
+    assert_eq!(
+        candidates.len(),
+        4,
+        "8% of 50 relevant items rounds down to 4 injections"
     );
 }
 

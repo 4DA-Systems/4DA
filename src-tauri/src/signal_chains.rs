@@ -4,15 +4,37 @@
 //! Connects individual signals into causal chains over time.
 //! "CVE Monday + your dep uses it Tuesday + patch released today = act now."
 
-use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::info;
 
 use crate::error::Result;
+#[path = "signal_chains_candidates.rs"]
+mod signal_chains_candidates;
+#[path = "signal_chains_grounding.rs"]
+mod signal_chains_grounding;
+#[path = "signal_chains_persistence.rs"]
+mod signal_chains_persistence;
 #[path = "signal_chains_prediction.rs"]
 mod signal_chains_prediction;
+use signal_chains_candidates::{
+    load_chain_candidate_items_by_id, load_recent_chain_candidate_items, ChainCandidateItem,
+};
+use signal_chains_grounding::{chain_policy, dependency_evidence};
+use signal_chains_persistence::record_signal_chain_events;
 pub use signal_chains_prediction::*;
+
+const SIGNAL_CHAIN_WINDOW_DAYS: i64 = 7;
+const SIGNAL_CHAIN_PER_SOURCE_DAY: usize = 25;
+const SIGNAL_CHAIN_MAX_ITEMS: usize = 3_000;
+type TopicChainItem = (i64, String, String, String, String);
+
+/// Confidence ceiling for a chain whose topic is NOT one of the user's installed
+/// dependencies. Grounded chains start at ~0.43 (dep_match >= 0.5 -> 0.25, plus the
+/// minimum corroboration/severity), so this cap keeps every ungrounded chain strictly
+/// below the grounded band. It can still surface as low-urgency awareness when
+/// well-corroborated, but never out-ranks a chain that actually touches the user's stack.
+pub(crate) const UNGROUNDED_CONFIDENCE_CAP: f64 = 0.35;
 
 // ============================================================================
 // Types
@@ -30,7 +52,7 @@ pub struct SignalChain {
     pub created_at: String,
     pub updated_at: String,
     /// The chain's topic IFF it exactly matches one of the user's actually-installed
-    /// dependencies (verified at build via `has_dependency_match`). This is the ONLY
+    /// dependencies (verified at build via `dependency_match_score`). This is the ONLY
     /// trustworthy "affected dependency" for the chain — replacing the old heuristic that
     /// regex-split the chain_name and emitted boilerplate ("signal", "chain") and topic
     /// words as fake affected dependencies. `None` when the topic isn't a real dep.
@@ -62,35 +84,32 @@ pub enum ChainResolution {
 
 /// Detect signal chains from recent temporal events
 pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
-    // Get recent signal-worthy source items (with signal classification)
-    let mut stmt = conn.prepare(
-        "SELECT si.id, si.title, si.source_type, si.created_at, si.content
-             FROM source_items si
-             WHERE si.created_at >= datetime('now', '-7 days')
-             ORDER BY si.created_at DESC
-             LIMIT 200",
-    )?;
-
-    let items: Vec<(i64, String, String, String, String)> = stmt
-        .query_map([], |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get::<_, String>(4).unwrap_or_default(),
-            ))
-        })?
-        .filter_map(|r| match r {
-            Ok(v) => Some(v),
-            Err(e) => {
-                tracing::warn!("Row processing failed in signal_chains: {e}");
-                None
-            }
-        })
-        .collect();
-
+    let items = load_recent_chain_candidate_items(conn)?;
     detect_chains_from_items(conn, items)
+}
+
+/// Detect current chains and refresh the persisted `temporal_events` snapshot
+/// consumed by MCP/export surfaces. Detection remains available as a pure read
+/// through [`detect_chains`]; this producer path is intentionally explicit.
+pub fn detect_and_record_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
+    let chains = detect_chains(conn)?;
+    match record_signal_chain_events(conn, &chains) {
+        Ok(persisted) => {
+            info!(
+                target: "4da::signal_chains",
+                persisted,
+                "Signal chain temporal snapshot refreshed"
+            );
+        }
+        Err(e) => {
+            tracing::warn!(
+                target: "4da::signal_chains",
+                error = %e,
+                "Signal chain temporal snapshot refresh failed"
+            );
+        }
+    }
+    Ok(chains)
 }
 
 /// Detect chains among a SPECIFIC item set (by id), instead of the global
@@ -106,87 +125,80 @@ pub fn detect_chains_for_items(
     if item_ids.is_empty() {
         return Ok(vec![]);
     }
-    // Chunk to stay far below SQLite's bound-parameter limit.
-    let mut items: Vec<(i64, String, String, String, String)> = Vec::new();
-    for chunk in item_ids.chunks(500) {
-        let placeholders = vec!["?"; chunk.len()].join(",");
-        let sql = format!(
-            "SELECT si.id, si.title, si.source_type, si.created_at, si.content
-                 FROM source_items si
-                 WHERE si.id IN ({placeholders})"
-        );
-        let mut stmt = conn.prepare(&sql)?;
-        let params: Vec<&dyn rusqlite::types::ToSql> = chunk
-            .iter()
-            .map(|id| id as &dyn rusqlite::types::ToSql)
-            .collect();
-        let rows = stmt.query_map(params.as_slice(), |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get::<_, String>(4).unwrap_or_default(),
-            ))
-        })?;
-        for r in rows {
-            match r {
-                Ok(v) => items.push(v),
-                Err(e) => tracing::warn!("Row processing failed in signal_chains: {e}"),
-            }
-        }
-    }
-    // Deterministic order regardless of chunking/IN-clause order.
-    items.sort_by_key(|(id, ..)| *id);
+    let items = load_chain_candidate_items_by_id(conn, item_ids)?;
     detect_chains_from_items(conn, items)
 }
 
 /// Core chain detection over an already-loaded item set.
 fn detect_chains_from_items(
     conn: &rusqlite::Connection,
-    items: Vec<(i64, String, String, String, String)>,
+    items: Vec<ChainCandidateItem>,
 ) -> Result<Vec<SignalChain>> {
     if items.is_empty() {
         return Ok(vec![]);
     }
 
-    // Extract topics from each item and group by topic
-    let mut topic_items: HashMap<String, Vec<(i64, String, String, String)>> = HashMap::new();
+    let sampled_items = items.len();
 
-    for (id, title, source_type, created_at, content) in &items {
-        let topics = crate::extract_topics(title, content, &[]);
+    // Extract topics from each item and group by topic
+    let mut topic_items: HashMap<String, Vec<TopicChainItem>> = HashMap::new();
+
+    for (id, title, source_type, created_at, content, tags) in &items {
+        let topics = crate::extract_topics(title, content, tags);
         for topic in topics {
             topic_items.entry(topic).or_default().push((
                 *id,
                 title.clone(),
                 source_type.clone(),
                 created_at.clone(),
+                content.clone(),
             ));
         }
     }
 
     // Find chains: topics with 2+ items that span multiple days
     let mut chains = Vec::new();
+    let topic_count = topic_items.len();
+    let mut candidate_topics = 0_usize;
+    let mut multi_day_topics = 0_usize;
+    let mut rejected_same_day = 0_usize;
+    let mut rejected_low_confidence = 0_usize;
 
     for (topic, topic_items_list) in &topic_items {
         if topic_items_list.len() < 2 {
             continue;
         }
+        candidate_topics += 1;
 
         // Check if items span at least 2 different days
         let dates: std::collections::HashSet<String> = topic_items_list
             .iter()
-            .filter_map(|(_, _, _, ts)| ts.get(..10).map(String::from))
+            .filter_map(|(_, _, _, ts, _)| ts.get(..10).map(String::from))
             .collect();
 
         if dates.len() < 2 {
+            rejected_same_day += 1;
             continue;
         }
+        multi_day_topics += 1;
 
-        // Classify signal types based on keywords
+        // Verify installed-dependency relevance BEFORE assigning urgency. The
+        // security_alert / breaking_change signal_type is KEYWORD-INFERRED from titles
+        // (a "cve-" / "breaking change" substring), never OSV-verified — so it must not,
+        // on its own, mint a "critical" alert. A chain only earns critical/alert urgency
+        // (and full confidence) when it actually touches one of the user's installed
+        // dependencies. Otherwise it is ecosystem awareness, not a personal threat.
+        let dep_evidence = dependency_evidence(conn, topic, topic_items_list);
+        let dep_match = dep_evidence.score;
+        let has_dep = dep_match > 0.0;
+
+        // Classify signal types based on keywords. For a verified dependency chain,
+        // display only item-level grounded links; otherwise one real package hit plus
+        // several ordinary same-word articles can masquerade as a personal chain.
         let mut links: Vec<ChainLink> = topic_items_list
             .iter()
-            .map(|(id, title, source_type, timestamp)| {
+            .filter(|(id, _, _, _, _)| !has_dep || dep_evidence.grounded_item_ids.contains(id))
+            .map(|(id, title, source_type, timestamp, _)| {
                 let signal_type = classify_chain_signal(title);
                 ChainLink {
                     signal_type: signal_type.clone(),
@@ -198,34 +210,52 @@ fn detect_chains_from_items(
             })
             .collect();
 
-        links.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        // Keep the most decision-relevant links before timeline display. A
+        // critical chain must not hide the grounded security item merely because
+        // five older learning links came first chronologically.
+        links.sort_by(|a, b| {
+            signal_type_rank(&a.signal_type)
+                .cmp(&signal_type_rank(&b.signal_type))
+                .then(a.timestamp.cmp(&b.timestamp))
+                .then(a.source_item_id.cmp(&b.source_item_id))
+        });
         links.truncate(5);
+        links.sort_by(|a, b| {
+            a.timestamp
+                .cmp(&b.timestamp)
+                .then(a.source_item_id.cmp(&b.source_item_id))
+        });
 
         let has_security = links.iter().any(|l| l.signal_type == "security_alert");
         let has_breaking = links.iter().any(|l| l.signal_type == "breaking_change");
 
-        // Verify installed-dependency relevance BEFORE assigning urgency. The
-        // security_alert / breaking_change signal_type is KEYWORD-INFERRED from titles
-        // (a "cve-" / "breaking change" substring), never OSV-verified — so it must not,
-        // on its own, mint a "critical" alert. A chain only earns critical/alert urgency
-        // (and full confidence) when it actually touches one of the user's installed
-        // dependencies. Otherwise it is ecosystem awareness, not a personal threat.
-        let dep_match = has_dependency_match(conn, topic);
-        let has_dep = dep_match > 0.0;
-        let policy = chain_policy(has_security, has_breaking, dep_match, links.len());
+        let policy = chain_policy(
+            dep_evidence.security_signal,
+            dep_evidence.breaking_signal,
+            dep_match,
+            links.len(),
+        );
         let priority = policy.priority;
         let confidence = policy.confidence;
+        if confidence < 0.3 {
+            rejected_low_confidence += 1;
+            continue;
+        }
 
-        let action = match (has_security, has_breaking, has_dep) {
-            (true, _, true) => format!("Review security implications for {topic} in your projects"),
-            (true, _, false) => format!(
-                "Security activity around {topic} — not in your tracked dependencies, awareness only"
-            ),
-            (false, true, true) => format!("Check if {topic} breaking changes affect your code"),
-            (false, true, false) => {
-                format!("Breaking-change signals for {topic} — not currently in your stack")
-            }
-            _ => format!("Multiple signals about {topic} - review the trend"),
+        let action = if dep_evidence.security_signal {
+            format!("Review security implications for {topic} in your projects")
+        } else if has_security {
+            format!(
+                "Security activity around {topic} — not confirmed against your tracked dependencies"
+            )
+        } else if dep_evidence.breaking_signal {
+            format!("Check if {topic} breaking changes affect your code")
+        } else if has_breaking {
+            format!("Breaking-change signals for {topic} — not confirmed against your stack")
+        } else if has_dep {
+            format!("Multiple signals about {topic} in your stack - review the trend")
+        } else {
+            format!("Multiple signals about {topic} - review the trend")
         };
 
         let chain_id = format!(
@@ -255,8 +285,6 @@ fn detect_chains_from_items(
         });
     }
 
-    chains.retain(|c| c.confidence >= 0.3);
-
     // Sort by priority. The id tie-break matters: chains come out of a
     // HashMap, and equal (priority, length) chains would otherwise keep
     // hash-random relative order — truncate(10) below then picks different
@@ -270,92 +298,18 @@ fn detect_chains_from_items(
     });
 
     chains.truncate(10);
-    info!(target: "4da::signal_chains", chains = chains.len(), "Signal chain detection complete");
+    info!(
+        target: "4da::signal_chains",
+        sampled_items,
+        topics = topic_count,
+        candidate_topics,
+        multi_day_topics,
+        rejected_same_day,
+        rejected_low_confidence,
+        chains = chains.len(),
+        "Signal chain detection complete"
+    );
     Ok(chains)
-}
-
-/// Confidence ceiling for a chain whose topic is NOT one of the user's installed
-/// dependencies. Grounded chains start at ~0.43 (dep_match ≥ 0.5 → 0.25, plus the
-/// minimum corroboration/severity), so this cap keeps every ungrounded chain strictly
-/// below the grounded band — it can still surface as low-urgency awareness when
-/// well-corroborated, but never out-ranks (or masquerades as) a chain that actually
-/// touches the user's stack.
-pub(crate) const UNGROUNDED_CONFIDENCE_CAP: f64 = 0.35;
-
-/// Pure urgency/confidence policy for a detected chain, separated from DB access so the
-/// grounding rules are unit-testable without a live database.
-///
-/// `dep_match` is the installed-dependency relevance (0.0 when the chain's topic is not a
-/// tracked dependency). `has_security` / `has_breaking` are KEYWORD-INFERRED, so they only
-/// escalate urgency when there is also a dependency match; without one the chain is capped
-/// at `watch` and its confidence is held below the grounded band.
-struct ChainPolicy {
-    priority: &'static str,
-    confidence: f64,
-}
-
-fn chain_policy(
-    has_security: bool,
-    has_breaking: bool,
-    dep_match: f64,
-    links_len: usize,
-) -> ChainPolicy {
-    let has_dep = dep_match > 0.0;
-
-    let priority = if has_security && has_dep {
-        "critical"
-    } else if has_breaking && has_dep {
-        "alert"
-    } else if has_dep && links_len >= 3 {
-        "advisory"
-    } else {
-        // Ungrounded (no installed dep), or a thin grounded signal → awareness only.
-        "watch"
-    };
-
-    let corroboration = (links_len as f64 / 5.0).min(1.0);
-    let severity = if has_security {
-        1.0
-    } else if has_breaking {
-        0.7
-    } else {
-        0.3
-    };
-    // Weighted confidence: dep relevance matters most (50%), corroboration from
-    // multiple sources adds credibility (30%), keyword-inferred severity is least
-    // reliable (20%).
-    let mut confidence = dep_match * 0.5 + corroboration * 0.3 + severity * 0.2;
-    if !has_dep {
-        confidence = confidence.min(UNGROUNDED_CONFIDENCE_CAP);
-    }
-
-    ChainPolicy {
-        priority,
-        confidence,
-    }
-}
-
-fn has_dependency_match(conn: &rusqlite::Connection, topic: &str) -> f64 {
-    let lower = topic.to_lowercase();
-    // Check both user-curated and ACE-scanned dependencies with exact name match.
-    // Substring LIKE was producing false positives ("node" matching "nodemon").
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM (
-                SELECT package_name FROM user_dependencies WHERE LOWER(package_name) = ?1
-                UNION
-                SELECT package_name FROM project_dependencies WHERE LOWER(package_name) = ?1
-            )",
-            params![lower],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if count >= 1 {
-        (0.50 + (count as f64 * 0.12).min(0.40)).min(0.90)
-    } else {
-        0.0
-    }
 }
 
 fn classify_chain_signal(title: &str) -> String {
@@ -397,6 +351,15 @@ fn priority_rank(priority: &str) -> u8 {
         "alert" => 1,
         "advisory" => 2,
         _ => 3, // "watch" and fallback
+    }
+}
+
+fn signal_type_rank(signal_type: &str) -> u8 {
+    match signal_type {
+        "security_alert" => 0,
+        "breaking_change" => 1,
+        "tool_discovery" => 2,
+        _ => 3,
     }
 }
 

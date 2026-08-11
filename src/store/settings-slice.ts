@@ -2,6 +2,7 @@
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import type { AppStore, SettingsSlice, SettingsForm, OllamaStatus } from './types';
+import type { Settings } from '../types/settings';
 import { normalizeOllamaStatus } from '../utils/normalize-ollama';
 import { translateError } from '../utils/error-messages';
 import { setActivityTrackingEnabled } from '../hooks/use-telemetry';
@@ -19,6 +20,19 @@ const defaultSettingsForm: SettingsForm = {
 };
 
 let onboardingChecked = false;
+const BOOTSTRAP_SETTINGS_TIMEOUT_MS = 5_000;
+
+function withBootstrapTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('settings bootstrap timed out')), BOOTSTRAP_SETTINGS_TIMEOUT_MS);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
 
 export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> = (set, get) => ({
   settings: null,
@@ -48,8 +62,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
   setShowOnboarding: (show) => set({ showOnboarding: show }),
 
   loadSettings: async () => {
-    try {
-      const s = await cmd('get_settings');
+    const applySettings = (s: Settings) => {
       // Activity-tracking gate. No telemetry is recorded until this
       // line flips the runtime flag. Default (no settings, bootstrap
       // failure, user not opted in) keeps it off. See use-telemetry.ts.
@@ -83,8 +96,16 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
       void cmd('get_model_registry').then((registry) => {
         set({ modelRegistry: registry });
       }).catch((e) => console.debug('[settings] model registry:', e));
+    };
+
+    const settingsPromise = cmd('get_settings');
+    try {
+      applySettings(await withBootstrapTimeout(settingsPromise));
     } catch {
-      /* settings not available — still lift the splash so boot never hangs */
+      // The original invoke may still resolve after the shell is visible. Keep
+      // listening and apply it then, but never strand boot behind the full
+      // command timeout.
+      void settingsPromise.then(applySettings).catch(() => {});
       set({ settingsLoaded: true });
     }
   },

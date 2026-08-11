@@ -4,6 +4,8 @@
 
 import './i18n';
 
+import '@fontsource-variable/inter';
+import '@fontsource-variable/jetbrains-mono';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import './App.css';
@@ -11,6 +13,7 @@ import sunLogo from './assets/sun-logo.webp';
 import sunLogoLight from './assets/sun-logo-light.webp';
 import { useTheme } from './lib/theme';
 import { SplashScreen } from './components/SplashScreen';
+import { BrowserModeNotice } from './components/BrowserModeNotice';
 // Onboarding — only shown on first launch, lazy-loaded for returning users
 const Onboarding = lazy(() => import('./components/Onboarding').then(m => ({ default: m.Onboarding })));
 import { UnifiedAppBar } from './components/app/UnifiedAppBar';
@@ -54,7 +57,7 @@ import { useUpdateCheck } from './hooks/use-update-check';
 import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
 import { useAppListeners } from './hooks/use-app-listeners';
-import { loadSourceMeta } from './config/sources';
+import { ALL_SOURCE_IDS, loadSourceMeta } from './config/sources';
 import { runWhenIdle } from './lib/defer';
 
 function App() {
@@ -239,8 +242,10 @@ function App() {
     const cancelIdle = runWhenIdle(() => {
       // Source metadata populates the dynamic source registry + resets filters
       // (only visible in the relevance view, never the default Brief view).
-      void loadSourceMeta().then(() => {
-        useAppStore.getState().resetSourceFilters();
+      void loadSourceMeta().then((loaded) => {
+        if (loaded || ALL_SOURCE_IDS.size > 0) {
+          useAppStore.getState().resetSourceFilters();
+        }
       });
       void loadSourceHealth();
       // Pure maintenance — has no business on the critical mount path.
@@ -283,7 +288,11 @@ function App() {
       <ViewErrorBoundary viewName="First Run">
         {/* Splash Screen */}
         {showSplash && (
-          <SplashScreen onComplete={() => setSplashMinElapsed(true)} minimumDisplayTime={800} />
+          <SplashScreen
+            backendReady={settingsLoaded}
+            onComplete={() => setSplashMinElapsed(true)}
+            minimumDisplayTime={800}
+          />
         )}
 
         {/* Onboarding Flow (first run) — lazy-loaded */}
@@ -335,17 +344,7 @@ function App() {
         />
 
         {/* Browser Mode Notice */}
-        {isBrowserMode && (
-          <div className="mb-6 px-4 py-4 bg-bg-secondary border border-border rounded-lg">
-            <p className="text-sm font-medium text-text-primary mb-2">{t('browser.title')}</p>
-            <p className="text-xs text-gray-400">
-              {t('browser.description')}
-            </p>
-            <p className="text-xs text-gray-500 mt-2">
-              {t('browser.hint')}
-            </p>
-          </div>
-        )}
+        {isBrowserMode && <BrowserModeNotice />}
 
         <main id="main-content">
         <h1 className="sr-only">{t('app.title', '4DA')}</h1>

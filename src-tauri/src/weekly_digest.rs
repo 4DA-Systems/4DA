@@ -250,7 +250,7 @@ pub async fn generate_weekly_digest() -> Result<WeeklyDigest> {
     let top_topics = collect_topics(&conn);
 
     // 4. Signal chains (reuse existing detection)
-    let active_signals = match crate::signal_chains::detect_chains(&conn) {
+    let active_signals = match crate::signal_chains::detect_and_record_chains(&conn) {
         Ok(chains) => chains
             .into_iter()
             .take(5)

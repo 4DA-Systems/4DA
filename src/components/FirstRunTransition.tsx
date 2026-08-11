@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { UnlistenFn } from '@tauri-apps/api/event';
-import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../lib/commands';
+import { safeListen, type UnlistenFn } from '../lib/tauri-events';
 
 import { useAppStore } from '../store';
 import { getSourceNarration } from '../utils/first-run-messages';
@@ -124,7 +123,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
   useEffect(() => {
     let unlisten: UnlistenFn | null = null;
     const setup = async () => {
-      unlisten = await listen<{ source: string; count: number }>('source-fetched', (event) => {
+      unlisten = await safeListen<{ source: string; count: number }>('source-fetched', (event) => {
         const { source, count } = event.payload;
         setItemCount(prev => prev + count);
         setSourceMessages(prev => [...prev.slice(-4), getSourceNarration(source, count)]);
@@ -138,7 +137,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
   useEffect(() => {
     let unlisten: UnlistenFn | null = null;
     const setup = async () => {
-      unlisten = await listen<{
+      unlisten = await safeListen<{
         narration_type: string;
         message: string;
         source: string | null;

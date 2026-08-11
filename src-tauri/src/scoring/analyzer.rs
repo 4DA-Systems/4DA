@@ -21,6 +21,8 @@
 //! capped at 0.45 and marked `serendipity: true` so it cannot masquerade as a
 //! scored signal.
 
+use std::time::Instant;
+
 use tauri::Emitter;
 use tracing::{info, warn};
 
@@ -61,8 +63,11 @@ pub(crate) async fn score_items_full(
     db: &crate::db::Database,
     cached_items: &[crate::db::StoredSourceItem],
     silent: bool,
+    llm_rerank: bool,
 ) -> Result<Vec<SourceRelevance>> {
     use std::sync::atomic::Ordering;
+
+    let scoring_started = Instant::now();
 
     // Gated emitters: when `silent` (background/scheduled run), suppress
     // user-facing progress/narration so a background refresh doesn't move the
@@ -102,12 +107,18 @@ pub(crate) async fn score_items_full(
     );
 
     crate::diagnostics::log_rss("scoring:before_build_context");
+    let context_started = Instant::now();
     let scoring_ctx = tokio::time::timeout(
         std::time::Duration::from_secs(10),
         scoring::build_scoring_context(db),
     )
     .await
     .map_err(|_| String::from("Scoring context build timed out after 10s"))??;
+    info!(
+        target: "4da::analysis",
+        elapsed_ms = context_started.elapsed().as_millis(),
+        "Scoring context build complete"
+    );
     crate::diagnostics::log_rss("scoring:after_build_context");
     let trend_topics = crate::detect_trend_topics(keep_indices.iter().map(|&i| {
         (
@@ -132,6 +143,7 @@ pub(crate) async fn score_items_full(
 
     let classifier = crate::analysis::signal_classifier();
     let mut results: Vec<SourceRelevance> = Vec::new();
+    let scoring_loop_started = Instant::now();
 
     for (idx, &item_idx) in keep_indices.iter().enumerate() {
         let item = &cached_items[item_idx];
@@ -151,7 +163,7 @@ pub(crate) async fn score_items_full(
                 app,
                 "relevance",
                 progress,
-                &format!("[{}] {}", &item.source_type, truncated_title),
+                &format!("[{}] {}", item.source_type, truncated_title),
                 idx + 1,
                 total_cached,
             );
@@ -194,6 +206,12 @@ pub(crate) async fn score_items_full(
             Some(classifier),
         ));
     }
+    info!(
+        target: "4da::analysis",
+        items = results.len(),
+        elapsed_ms = scoring_loop_started.elapsed().as_millis(),
+        "PASIFA scoring loop complete"
+    );
 
     // Pre-score coverage instrumentation (#3 scale lever): this pass scored
     // `total_cached` candidates out of the embedded corpus. A low ratio means
@@ -245,6 +263,7 @@ pub(crate) async fn score_items_full(
     }
 
     crate::diagnostics::log_rss("scoring:loop_done_before_cross_encoder");
+    let post_score_started = Instant::now();
     crate::cross_encoder_rerank::apply_cross_encoder_reranking(&mut results, &scoring_ctx);
     crate::diagnostics::log_rss("scoring:after_cross_encoder");
 
@@ -286,29 +305,45 @@ pub(crate) async fn score_items_full(
     }
 
     telemetry.log_summary();
+    info!(
+        target: "4da::analysis",
+        elapsed_ms = post_score_started.elapsed().as_millis(),
+        "Post-score rerank/dedup/diversity phase complete"
+    );
     crate::diagnostics::log_rss("scoring:after_dedup_diversity");
 
-    // LLM Reranking (if enabled and within daily limits)
-    // 120s timeout: LLM API calls can hang on provider outages
-    emit_narration(
-        app,
-        NarrationEvent {
-            narration_type: "insight".into(),
-            message: "Ranking items against your profile...".into(),
-            source: None,
-            relevance: None,
-        },
-    );
-    match tokio::time::timeout(
-        std::time::Duration::from_mins(2),
-        crate::analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx),
-    )
-    .await
-    {
-        Ok(_) => {}
-        Err(_) => {
-            warn!(target: "4da::analysis", "LLM reranking timed out after 120s, using pipeline scores only");
+    if llm_rerank {
+        // LLM Reranking (if enabled and within daily limits)
+        // 120s timeout: LLM API calls can hang on provider outages
+        emit_narration(
+            app,
+            NarrationEvent {
+                narration_type: "insight".into(),
+                message: "Ranking items against your profile...".into(),
+                source: None,
+                relevance: None,
+            },
+        );
+        let llm_started = Instant::now();
+        match tokio::time::timeout(
+            std::time::Duration::from_mins(2),
+            crate::analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx),
+        )
+        .await
+        {
+            Ok(_) => {
+                info!(
+                    target: "4da::analysis",
+                    elapsed_ms = llm_started.elapsed().as_millis(),
+                    "LLM rerank phase complete"
+                );
+            }
+            Err(_) => {
+                warn!(target: "4da::analysis", "LLM reranking timed out after 120s, using pipeline scores only");
+            }
         }
+    } else {
+        info!(target: "4da::analysis", "LLM rerank skipped for this run");
     }
     crate::diagnostics::log_rss("scoring:after_llm_rerank");
 
@@ -350,6 +385,7 @@ pub(crate) async fn score_items_full(
         total = results.len(),
         relevant = relevant_count,
         excluded = excluded_count,
+        elapsed_ms = scoring_started.elapsed().as_millis(),
         "Cache analysis summary"
     );
 

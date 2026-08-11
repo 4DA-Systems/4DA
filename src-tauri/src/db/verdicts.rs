@@ -65,8 +65,12 @@ pub enum VerdictSource {
     /// scorer is a like-for-like comparison.
     Score,
     /// An anti-bubble injection decided it, bypassing or overriding the scorer.
-    /// **Never demoted by reconciliation** — the current pipeline rejecting it
-    /// is the normal case, not evidence of staleness.
+    /// **Not demoted by reconciliation while fresh** — the current pipeline
+    /// rejecting it is the normal case, not evidence of staleness. It DOES
+    /// expire: after `SERENDIPITY_VERDICT_TTL_DAYS` the verdict re-enters the
+    /// reconciliation working set, so anti-bubble picks rotate instead of
+    /// squatting in the curated set forever (measured live 2026-08-11:
+    /// immune-forever picks had accumulated to 17.6% of the curated feed).
     Serendipity,
 }
 
@@ -107,8 +111,20 @@ impl VerdictSource {
 ///   the engine re-injects on the very next cycle. Every verdict written from
 ///   Phase 101 onward carries exact provenance, so this fallback applies once.
 const STALE_VERDICT_WHERE: &str = "feed_relevant = 1
-       AND COALESCE(feed_verdict_version, 0) < ?1
-       AND COALESCE(feed_verdict_source, 'score') = 'score'";
+       AND (
+            (COALESCE(feed_verdict_version, 0) < ?1
+             AND COALESCE(feed_verdict_source, 'score') = 'score')
+         OR (feed_verdict_source = 'serendipity'
+             AND COALESCE(feed_verdict_at, '1970-01-01') <= datetime('now', '-14 days'))
+       )";
+
+/// How long an anti-bubble (serendipity) verdict stays immune to
+/// reconciliation. After this window it re-enters the working set and is
+/// re-judged like any score verdict — the scorer rejecting it then demotes
+/// it, and the next cycle's injection rotates a FRESH pick in. Mirrors the
+/// `-14 days` literal inside `STALE_VERDICT_WHERE` (SQL cannot interpolate
+/// a const; the TTL regression test pins the two together).
+pub const SERENDIPITY_VERDICT_TTL_DAYS: u32 = 14;
 
 impl Database {
     /// Persist the per-run feed curation VERDICT (Phase 95, W4-5 corpus

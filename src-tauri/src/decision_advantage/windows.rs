@@ -459,7 +459,7 @@ fn detect_chain_security_windows(conn: &Connection, windows: &mut Vec<DecisionWi
         return;
     }
 
-    let chains = match crate::signal_chains::detect_chains(conn) {
+    let chains = match crate::signal_chains::detect_and_record_chains(conn) {
         Ok(c) => c,
         Err(_) => return,
     };
