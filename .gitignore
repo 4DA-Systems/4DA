@@ -343,8 +343,6 @@ service-account*.json
 # MCP server build artifacts
 mcp-4da-server/dist/
 mcp-4da-server/node_modules/
-mcp-streets-server/dist/
-mcp-streets-server/node_modules/
 
 wisdom.db
 

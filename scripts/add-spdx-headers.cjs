@@ -20,7 +20,6 @@ const DIRS = [
   'src-tauri/src',
   'mcp-4da-server/src',
   'mcp-memory-server/src',
-  'mcp-streets-server/src',
 ];
 
 const EXTS = new Set(['.rs', '.ts', '.tsx', '.cjs', '.mjs']);
