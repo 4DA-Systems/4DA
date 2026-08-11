@@ -56,6 +56,11 @@ src-tauri/fourda-macros/Cargo.lock
 # root) — the crate lives in src-tauri/, so a root /target/ is never tracked.
 /target/
 
+# Root-level scratch dir. Nothing here is ever part of the build (the repo's own
+# temp paths are data/*.tmp and the OS temp dir), but loose working files land
+# here and then show up as untracked noise in every terminal's git status.
+/tmp/
+
 # Runtime cache (model downloads, embeddings cache)
 data/cache/
 
@@ -88,6 +93,9 @@ data/briefing_snapshot.json.tmp
 
 # Calibration curves (runtime state — fit from user interactions, per-machine)
 data/calibrations/
+# Quarantined curves (same runtime class — a degenerate curve moved aside for
+# diagnosis, e.g. data/calibrations-quarantine-2026-08-11/). Never tracked.
+data/calibrations-quarantine-*/
 
 # Digest cache (generated briefings, machine-local)
 data/digests/
