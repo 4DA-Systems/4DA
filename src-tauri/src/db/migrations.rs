@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 116;
+        const TARGET_VERSION: i64 = 117;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5301,6 +5301,57 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Phase 115: scoring_explanations created — per-item score breakdowns now persist (write-only lane; scores unchanged)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 117: fourth mastodon-title heal (authored as Phase 104 in
+            // #416; renumbered when the rebase carried it past schemas
+            // 104-116). derive_title now takes the first paragraph as the
+            // title when it already reads as a headline, instead of welding
+            // every <p> into one run and cutting the result at 120 chars. The
+            // live card showed the cost of the old shape: "…in Major Software
+            // Supply Chain Attack A large-scale…", and three postings of the
+            // same DeadLock story carried three different titles that
+            // de-duplication could not collapse. Same shape as Phases
+            // 93/94/102: re-derive every stored mastodon title from the raw
+            // body; rows that re-derive to empty keep their old title. Title
+            // UPDATEs ride the trigger-maintained FTS index (Phase 104+), so
+            // search stays consistent without a manual rebuild.
+            if current_version < 117 {
+                Self::run_versioned_migration(
+                    &conn,
+                    116,
+                    117,
+                    "Phase 117: re-derive mastodon titles (paragraph headlines)",
+                    |c| {
+                        let mut stmt = c.prepare(
+                            "SELECT id, content FROM source_items
+                             WHERE source_type = 'mastodon'
+                               AND content IS NOT NULL AND content != ''",
+                        )?;
+                        let rows: Vec<(i64, String)> = stmt
+                            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                            .collect::<std::result::Result<_, _>>()?;
+                        drop(stmt);
+
+                        let mut healed = 0usize;
+                        for (id, content) in rows {
+                            let title = crate::sources::mastodon::derive_title(&content);
+                            if !title.is_empty() {
+                                c.execute(
+                                    "UPDATE source_items SET title = ?1 WHERE id = ?2",
+                                    rusqlite::params![title, id],
+                                )?;
+                                healed += 1;
+                            }
+                        }
+                        info!(
+                            target: "4da::db",
+                            healed,
+                            "Phase 117: re-derived mastodon titles (paragraph headlines)"
                         );
                         Ok(())
                     },

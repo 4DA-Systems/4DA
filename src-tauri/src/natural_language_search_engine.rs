@@ -77,11 +77,7 @@ pub(crate) async fn execute_hybrid_search(
                 (None, Some(_)) => format!("semantic similarity ({:.0}%)", relevance * 100.0),
                 (None, None) => "match".to_string(),
             };
-            let preview = if r.content.len() > 200 {
-                format!("{}...", &r.content[..r.content.floor_char_boundary(200)])
-            } else {
-                r.content
-            };
+            let preview = crate::utils::truncate_display(&r.content, 200);
             QueryResultItem {
                 id: r.item_id,
                 file_path: r.url,

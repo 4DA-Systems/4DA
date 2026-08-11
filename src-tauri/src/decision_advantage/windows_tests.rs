@@ -200,7 +200,10 @@ fn truncate_exact_boundary() {
 
 #[test]
 fn truncate_longer_adds_ellipsis() {
-    assert_eq!(truncate("hello world", 5), "hello...");
+    // Breaks on the word boundary, and the ellipsis is counted against the
+    // budget — the old helper returned 8 chars for a max of 5.
+    assert_eq!(truncate("hello world", 8), "hello\u{2026}");
+    assert!(truncate("hello world", 5).chars().count() <= 5);
 }
 
 #[test]
@@ -210,11 +213,12 @@ fn truncate_empty_string() {
 
 #[test]
 fn truncate_multibyte_utf8() {
-    // 4-byte emoji: should back up to char boundary
+    // 4-byte emoji: must never split a char, and the budget is counted in
+    // chars so a multibyte string gets the same allowance as an ASCII one.
     let s = "hey \u{1F600} there"; // "hey 😀 there"
     let result = truncate(s, 5);
-    assert!(result.ends_with("..."));
-    assert!(result.len() <= 8); // 5 bytes + "..."
+    assert!(result.ends_with('\u{2026}'), "{result}");
+    assert!(result.chars().count() <= 5, "{result}");
 }
 
 // -- find_matching_dep --
@@ -328,6 +332,6 @@ fn make_window_basic_fields() {
 fn make_window_long_title_truncated_in_description() {
     let long_title = "A".repeat(300);
     let w = make_window("knowledge", None, &long_title, 0.5, 0.5, None);
-    assert!(w.description.len() < 210); // 200 + "..."
-    assert!(w.description.ends_with("..."));
+    assert!(w.description.chars().count() <= 200); // ellipsis included in the cap
+    assert!(w.description.ends_with('\u{2026}'));
 }
