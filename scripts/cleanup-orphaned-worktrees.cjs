@@ -7,7 +7,19 @@
  * worktree that has:
  *
  *   1. Uncommitted changes in its working tree
- *   2. Commits that aren't already reachable from main
+ *   2. Work that is not provably already in `origin/main`
+ *
+ * On (2) — the criterion was wrong until 2026-08-12 and the tool was inert
+ * because of it. It asked "is the branch tip an ANCESTOR of main?", but this
+ * repo merges by SQUASH: a merged branch's commits are never ancestors of main,
+ * main gets one new commit with a different hash. So merged branches looked
+ * unmerged forever, the tool proposed 0 removals every run, and 18 worktrees /
+ * 73 branches accumulated while it reported all-clear. It also compared against
+ * the LOCAL `main`, which had drifted 10 commits behind origin (and carried an
+ * unpushed commit), so even the ancestry answer was computed off a wrong base.
+ *
+ * Now it asks the question that actually matters — "does merging this branch
+ * change `origin/main` at all?" — and keeps anything it cannot prove.
  *
  * Run modes:
  *
@@ -80,10 +92,60 @@ function listOrphanBranches() {
   return out.split(/\r?\n/).filter(Boolean);
 }
 
-function isReachableFromMain(ref) {
+/**
+ * The branch every worktree lands onto.
+ *
+ * `origin/main`, not `main`. The local `main` ref drifts: on 2026-08-12 it was
+ * 10 commits behind origin AND carried one unpushed commit, so every verdict
+ * computed against it was wrong. Falls back to `main` only if there is no
+ * remote-tracking ref.
+ */
+function baseRef() {
+  return sh("git rev-parse --verify --quiet origin/main") ? "origin/main" : "main";
+}
+
+/**
+ * Is this branch's work already in the base — by CONTENT, not by ancestry?
+ *
+ * Ancestry alone is the wrong test for this repo. Under **squash merge** the
+ * merged branch's commits are never ancestors of main; main gets one new commit
+ * with a different hash. So `tip === merge-base` is false forever for merged
+ * work, and the old check proposed **0 removals** while 18 worktrees and 73
+ * branches accumulated — a guard rail reporting all-clear while the thing it
+ * guards against happened anyway.
+ *
+ * Content test: three-way merge the branch into the base and ask whether the
+ * result differs from the base tree. If it does not, the branch contributes
+ * nothing and is safe to retire.
+ *
+ * Conservative by construction — anything uncertain returns false (KEEP):
+ *   - merge conflicts (exit 1) mean the trees genuinely diverge, or the branch
+ *     is too stale to compare; either way it is not provably superseded
+ *   - any command failure (old git without `merge-tree --write-tree`, bad ref)
+ *     falls through to the ancestry test rather than guessing
+ */
+function isSupersededByBase(ref) {
+  const base = baseRef();
+
+  // Cheap path first: a genuine fast-forward ancestor is superseded outright.
   const tip = sh(`git rev-parse ${ref}`);
-  const mergeBase = sh(`git merge-base ${ref} main`);
-  return typeof tip === "string" && typeof mergeBase === "string" && tip === mergeBase;
+  const mergeBase = sh(`git merge-base ${ref} ${base}`);
+  if (typeof tip === "string" && typeof mergeBase === "string" && tip === mergeBase) {
+    return { superseded: true, reason: "tip is an ancestor of " + base };
+  }
+
+  // Content path: does merging it into the base change the base at all?
+  const baseTree = sh(`git rev-parse ${base}^{tree}`);
+  const merged = sh(`git merge-tree --write-tree ${base} ${ref}`);
+  if (typeof baseTree !== "string" || typeof merged !== "string") {
+    // Could not run the content test (conflict, old git, bad ref) — KEEP.
+    return { superseded: false, reason: "content test inconclusive — keeping" };
+  }
+  const mergedTree = merged.split(/\r?\n/)[0].trim();
+  if (mergedTree && mergedTree === baseTree) {
+    return { superseded: true, reason: `adds nothing to ${base} (content-identical merge)` };
+  }
+  return { superseded: false, reason: "has unique content" };
 }
 
 function hasUncommittedChanges(dirPath) {
@@ -129,15 +191,15 @@ function main() {
   // Phase 1: worktrees that git knows about
   for (const w of worktreeWorktrees) {
     const branchName = w.branch.replace(/^refs\/heads\//, "");
-    const reachable = isReachableFromMain(branchName);
+    const verdict = isSupersededByBase(branchName);
     const { empty, status } = hasUncommittedChanges(w.path);
 
-    if (!reachable) {
+    if (!verdict.superseded) {
       plan.unsafe.push({
         kind: "worktree",
         path: w.path,
         branch: branchName,
-        reason: "branch tip NOT reachable from main — has unique commits",
+        reason: `not superseded — ${verdict.reason}`,
       });
       continue;
     }
@@ -160,11 +222,12 @@ function main() {
   );
   for (const b of orphanBranches) {
     if (stillLiveBranches.has(b)) continue; // already handled above
-    if (!isReachableFromMain(b)) {
+    const verdict = isSupersededByBase(b);
+    if (!verdict.superseded) {
       plan.unsafe.push({
         kind: "branch",
         branch: b,
-        reason: "branch tip NOT reachable from main — unique commits",
+        reason: `not superseded — ${verdict.reason}`,
       });
       continue;
     }
