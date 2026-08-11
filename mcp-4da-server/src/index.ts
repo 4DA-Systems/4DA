@@ -11,9 +11,6 @@
  * SECURITY: the server trusts its local environment and does NOT implement
  * authentication. The optional --http transport is intended for localhost use;
  * do NOT expose it over a network without putting your own auth in front.
- */
-/**
- * 4DA MCP Server v4.6.3 — Dependency Intelligence for AI Coding Agents
  *
  * 14 tools across 5 categories. Live vulnerability scanning (OSV.dev),
  * ecosystem news, persistent memory, and tech stack awareness for any MCP host.
@@ -25,16 +22,14 @@
  *   Decisions (2)     — decision memory, alignment checking
  *   Agent (1)         — cross-session persistent memory
  *   Identity (1)      — developer DNA profile
+ *
+ * Protocol: MCP TypeScript SDK v2. stdio serving goes through `serveStdio`,
+ * HTTP through `createMcpHandler` — both entries negotiate the era per
+ * connection/request, so 2025-era hosts (classic `initialize` handshake) and
+ * 2026-07-28 hosts (stateless `server/discover`) are both supported.
  */
-
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { Server } from "@modelcontextprotocol/server";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -85,19 +80,6 @@ function resolveProjectDir(): string {
   if (dir && !dir.includes("${")) return dir;
   return process.cwd();
 }
-
-const server = new Server(
-  {
-    name: "4da-server",
-    version: SERVER_VERSION,
-  },
-  {
-    capabilities: {
-      tools: { listChanged: true },
-      resources: {},
-    },
-  }
-);
 
 // Database instance (lazy initialized)
 let db: FourDADatabase | null = null;
@@ -214,140 +196,153 @@ function getDatabase(): FourDADatabase {
 }
 
 // =============================================================================
-// Tool Handlers
+// Server Factory
 // =============================================================================
 
 /**
- * List available tools (SLIM)
+ * Build a Server instance with every handler registered.
  *
- * Returns one-liner descriptions only (~500 tokens vs ~4500).
- * Full schemas available via MCP Resources: 4da://schema/{tool_name}
+ * The v2 serving entries take a factory: `serveStdio` pins one instance per
+ * connection; stateless HTTP (`createMcpHandler`) builds one per request.
+ * Handlers close over the module-level database singleton, so every instance
+ * shares the same lazily-initialized database and live-intelligence layer.
  */
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const database = getDatabase();
-  return {
-    tools: getSlimToolList(database.isStandalone ? true : undefined),
-  };
-});
-
-/**
- * List schema resources
- *
- * Exposes full tool schemas as MCP Resources for lazy loading.
- * Also exposes skill manifest for agent dispatch.
- */
-server.setRequestHandler(ListResourcesRequestSchema, async () => {
-  const resources = [
-    ...getSchemaResources(),
-    // Skill manifest for agent dispatch
+export function buildServer(): Server {
+  const server = new Server(
     {
-      uri: "4da://skills",
-      name: "Skill manifest",
-      description: "Registry of 4DA skills for Claude Code agent dispatch",
-      mimeType: "application/json",
+      name: "4da-server",
+      version: SERVER_VERSION,
     },
-    // Category manifest for tool discovery
     {
-      uri: "4da://categories",
-      name: "Tool categories",
-      description: "Tool groupings by category with tag metadata",
-      mimeType: "application/json",
-    },
-  ];
-
-  return { resources };
-});
-
-/**
- * Read a resource (schema or skill manifest)
- */
-server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-  const uri = request.params.uri;
-
-  // Handle category manifest
-  if (uri === "4da://categories") {
-    return {
-      contents: [
-        {
-          uri,
-          mimeType: "application/json",
-          text: JSON.stringify(getCategoryManifest(), null, 2),
-        },
-      ],
-    };
-  }
-
-  // Handle skill manifest
-  if (uri === "4da://skills") {
-    const skillsPath = join(homedir(), ".local", "share", "4da", "skills", "registry.json");
-    if (!existsSync(skillsPath)) {
-      throw new Error("Skill manifest not found. Run 4DA setup to create it.");
-    }
-    const skillsContent = readFileSync(skillsPath, "utf-8");
-    return {
-      contents: [
-        {
-          uri,
-          mimeType: "application/json",
-          text: skillsContent,
-        },
-      ],
-    };
-  }
-
-  // Parse tool name from URI: 4da://schema/{tool_name}
-  const match = uri.match(/^4da:\/\/schema\/(.+)$/);
-  if (!match) {
-    throw new Error(`Invalid resource URI: ${uri}`);
-  }
-
-  const toolName = match[1];
-  if (!hasToolSchema(toolName)) {
-    throw new Error(`Unknown tool: ${toolName}`);
-  }
-
-  const schemaFile = getSchemaFilename(toolName);
-  if (!schemaFile) {
-    throw new Error(`No schema file for tool: ${toolName}`);
-  }
-
-  // Read schema from file
-  const schemaPath = join(__dirname, "schemas", schemaFile);
-  const schemaContent = readFileSync(schemaPath, "utf-8");
-
-  return {
-    contents: [
-      {
-        uri,
-        mimeType: "application/json",
-        text: schemaContent,
+      capabilities: {
+        tools: { listChanged: true },
+        resources: {},
       },
-    ],
-  };
-});
+    }
+  );
 
-/**
- * Execute a tool
- */
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-
-  try {
+  // List available tools (SLIM): one-liner descriptions only (~500 tokens vs
+  // ~4500). Full schemas available via MCP Resources: 4da://schema/{tool_name}
+  server.setRequestHandler("tools/list", async () => {
     const database = getDatabase();
-    return await dispatchTool(name, database, args as Record<string, unknown> | undefined);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
-      content: [
+      tools: getSlimToolList(database.isStandalone ? true : undefined),
+    };
+  });
+
+  // List schema resources: full tool schemas as MCP Resources for lazy
+  // loading, plus the skill and category manifests.
+  server.setRequestHandler("resources/list", async () => {
+    const resources = [
+      ...getSchemaResources(),
+      // Skill manifest for agent dispatch
+      {
+        uri: "4da://skills",
+        name: "Skill manifest",
+        description: "Registry of 4DA skills for Claude Code agent dispatch",
+        mimeType: "application/json",
+      },
+      // Category manifest for tool discovery
+      {
+        uri: "4da://categories",
+        name: "Tool categories",
+        description: "Tool groupings by category with tag metadata",
+        mimeType: "application/json",
+      },
+    ];
+
+    return { resources };
+  });
+
+  // Read a resource (schema or skill manifest)
+  server.setRequestHandler("resources/read", async (request) => {
+    const uri = request.params.uri;
+
+    // Handle category manifest
+    if (uri === "4da://categories") {
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "application/json",
+            text: JSON.stringify(getCategoryManifest(), null, 2),
+          },
+        ],
+      };
+    }
+
+    // Handle skill manifest
+    if (uri === "4da://skills") {
+      const skillsPath = join(homedir(), ".local", "share", "4da", "skills", "registry.json");
+      if (!existsSync(skillsPath)) {
+        throw new Error("Skill manifest not found. Run 4DA setup to create it.");
+      }
+      const skillsContent = readFileSync(skillsPath, "utf-8");
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "application/json",
+            text: skillsContent,
+          },
+        ],
+      };
+    }
+
+    // Parse tool name from URI: 4da://schema/{tool_name}
+    const match = uri.match(/^4da:\/\/schema\/(.+)$/);
+    if (!match) {
+      throw new Error(`Invalid resource URI: ${uri}`);
+    }
+
+    const toolName = match[1];
+    if (!hasToolSchema(toolName)) {
+      throw new Error(`Unknown tool: ${toolName}`);
+    }
+
+    const schemaFile = getSchemaFilename(toolName);
+    if (!schemaFile) {
+      throw new Error(`No schema file for tool: ${toolName}`);
+    }
+
+    // Read schema from file
+    const schemaPath = join(__dirname, "schemas", schemaFile);
+    const schemaContent = readFileSync(schemaPath, "utf-8");
+
+    return {
+      contents: [
         {
-          type: "text",
-          text: JSON.stringify({ error: errorMessage }, null, 2),
+          uri,
+          mimeType: "application/json",
+          text: schemaContent,
         },
       ],
-      isError: true,
     };
-  }
-});
+  });
+
+  // Execute a tool
+  server.setRequestHandler("tools/call", async (request) => {
+    const { name, arguments: args } = request.params;
+
+    try {
+      const database = getDatabase();
+      return await dispatchTool(name, database, args as Record<string, unknown> | undefined);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ error: errorMessage }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  });
+
+  return server;
+}
 
 // =============================================================================
 // Server Lifecycle
@@ -357,8 +352,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
  * Start the MCP server
  *
  * Supports three modes:
- *   (default)  stdio transport — classic MCP, works with all hosts
- *   --http     Streamable HTTP transport (spec 2025-03-26)
+ *   (default)  stdio transport — serves 2025-era and 2026-07-28 hosts
+ *   --http     Streamable HTTP transport — stateless, both eras
  *   --setup    Configure editors for 4DA MCP
  */
 async function main() {
@@ -418,7 +413,7 @@ async function main() {
     const portIndex = args.indexOf("--port");
     const port = portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : 4840;
     const host = args.includes("--host") ? args[args.indexOf("--host") + 1] : "127.0.0.1";
-    await startHttpServer(server, { port, host });
+    await startHttpServer(buildServer, { port, host });
     return;
   }
 
@@ -443,9 +438,14 @@ async function main() {
     console.error(``);
   }
 
-  // Default: stdio transport (existing behavior)
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  // Default: stdio serving. `serveStdio` owns the era decision per connection —
+  // a 2025-era `initialize` opening is served exactly as before; a 2026-07-28
+  // `server/discover` opening gets the stateless modern protocol.
+  serveStdio(buildServer, {
+    onerror: (error) => {
+      console.error(`[4DA] stdio serving error: ${error.message}`);
+    },
+  });
 
   // Handle graceful shutdown
   process.on("SIGINT", () => {
@@ -461,7 +461,7 @@ async function main() {
   });
 
   const toolCount = getSlimToolList().length;
-  console.error(`4DA MCP Server v4.6.3 started — ${toolCount} tools, stdio transport`);
+  console.error(`4DA MCP Server v${SERVER_VERSION} started — ${toolCount} tools, stdio transport`);
   console.error("  Use --http for Streamable HTTP, --setup to configure editors, --doctor to check health");
 }
 

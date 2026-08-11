@@ -1,5 +1,36 @@
 # Changelog
 
+## 5.0.0 (2026-08-11)
+
+### Breaking: Node.js 20+ required
+
+The server now requires Node.js >= 20 (previously >= 18; Node 18 has been EOL
+since April 2025). No tool behavior changes.
+
+### Changed: migrated to MCP TypeScript SDK v2 + 2026-07-28 protocol support
+
+Replaced the discontinued `@modelcontextprotocol/sdk` v1 with the v2 packages
+(`@modelcontextprotocol/server` + `@modelcontextprotocol/node`) and moved both
+transports onto the v2 serving entries:
+
+- **stdio** now goes through `serveStdio`, which negotiates the protocol era
+  per connection: 2025-era hosts (Claude Code, Claude Desktop, Cursor — the
+  classic `initialize` handshake) are served exactly as before, and hosts
+  speaking the new stateless 2026-07-28 revision (`server/discover`) are now
+  supported on the same endpoint.
+- **--http** now goes through `createMcpHandler` + `toNodeHandler`: stateless
+  serving for both eras from one factory — the previous per-request transport
+  wiring is gone. Health endpoint, localhost binding, Origin-header DNS
+  rebinding protection, and the optional JWT auth gate are unchanged.
+
+Existing clients need no changes — protocol version negotiation is untouched
+for 2025-era hosts and verified against a v1-SDK client.
+
+### Fixed: startup log reported a stale version
+
+The stdio startup line hardcoded "v4.6.3" regardless of the installed version;
+it now derives from package.json like `--version` and `serverInfo`.
+
 ## 4.6.2 (2026-06-17)
 
 ### Fixed: vulnerability_scan returned empty severity, fix versions, and summaries

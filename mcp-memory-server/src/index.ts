@@ -21,15 +21,13 @@
  * - list_sessions: List all archived sessions
  * - search_sessions: Search through past session transcripts
  * - get_session_messages: Get messages from a specific session
+ *
+ * Protocol: MCP TypeScript SDK v2, served via `serveStdio` — 2025-era hosts
+ * (classic `initialize` handshake) and 2026-07-28 hosts (stateless
+ * `server/discover`) are both supported on the same stdio endpoint.
  */
-
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { Server } from "@modelcontextprotocol/server";
 import { getDb, closeDb, DB_PATH, SESSIONS_DIR } from "./db.js";
 import { getToolDefinitions, dispatchTool } from "./tools/index.js";
 import type { ToolContext } from "./types.js";
@@ -40,63 +38,76 @@ const db = getDb();
 // Build shared context for tool handlers
 const toolContext: ToolContext = { db, sessionsDir: SESSIONS_DIR };
 
-// Create server
-const server = new Server(
-  { name: "mcp-memory-server", version: "1.0.0" },
-  { capabilities: { tools: {} } }
-);
+/**
+ * Build a Server instance with the tool handlers registered. `serveStdio`
+ * takes a factory and pins one instance per connection; handlers close over
+ * the module-level database singleton.
+ */
+function buildServer(): Server {
+  const server = new Server(
+    { name: "mcp-memory-server", version: "2.0.0" },
+    { capabilities: { tools: {} } }
+  );
 
-// Handle tool listing
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: getToolDefinitions(),
-}));
+  // Handle tool listing
+  server.setRequestHandler("tools/list", async () => ({
+    tools: getToolDefinitions(),
+  }));
 
-// Handle tool calls
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+  // Handle tool calls
+  server.setRequestHandler("tools/call", async (request) => {
+    const { name, arguments: args } = request.params;
 
-  try {
-    const result = dispatchTool(
-      name,
-      (args as Record<string, unknown>) || {},
-      toolContext
-    );
+    try {
+      const result = dispatchTool(
+        name,
+        (args as Record<string, unknown>) || {},
+        toolContext
+      );
 
-    if (!result) {
+      if (!result) {
+        return {
+          content: [{ type: "text" as const, text: `Unknown tool: ${name}` }],
+          isError: true,
+        };
+      }
+
+      return result;
+    } catch (error) {
       return {
-        content: [{ type: "text", text: `Unknown tool: ${name}` }],
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
+  });
 
-    return result;
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-});
+  return server;
+}
 
-// Start server
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+// Start server — `serveStdio` owns the era decision per connection: a
+// 2025-era `initialize` opening is served exactly as before; a 2026-07-28
+// `server/discover` opening gets the stateless modern protocol.
+function main() {
+  serveStdio(buildServer, {
+    onerror: (error) => {
+      console.error(`[Memory] stdio serving error: ${error.message}`);
+    },
+  });
 
   const toolCount = getToolDefinitions().length;
   console.error(
-    `MCP Memory Server v1.0 started -- ${toolCount} tools, stdio transport`
+    `MCP Memory Server v2.0 started -- ${toolCount} tools, stdio transport`
   );
   console.error(`  Database: ${DB_PATH}`);
   console.error(`  Sessions: ${SESSIONS_DIR}`);
 }
 
-main().catch(console.error);
+main();
 
 // Handle graceful shutdown
 process.on("SIGINT", () => {

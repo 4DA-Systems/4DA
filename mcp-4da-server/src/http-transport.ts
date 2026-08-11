@@ -2,21 +2,25 @@
 /**
  * 4DA MCP Server — Streamable HTTP Transport
  *
- * Implements the MCP Streamable HTTP transport (spec 2025-03-26) using
- * Node's built-in http module. No express or other framework needed.
+ * Serves MCP over HTTP using the v2 `createMcpHandler` entry (one factory,
+ * one endpoint, both protocol eras): 2026-07-28 requests are served natively;
+ * 2025-era requests get the established stateless serving (fresh instance per
+ * request — the same behavior as the previous per-request
+ * `StreamableHTTPServerTransport` wiring). Node's built-in http module only;
+ * no express or other framework needed.
  *
  * Security:
  * - Binds to 127.0.0.1 only (localhost)
  * - DNS rebinding protection via Origin header check
- * - Stateless mode (no session tracking)
+ * - Stateless (no session tracking)
  */
 
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpHandler, type Server } from "@modelcontextprotocol/server";
+import { toNodeHandler } from "@modelcontextprotocol/node";
 import { extractAuthClaims, type TeamClaims } from "./auth.js";
 
 const DEFAULT_PORT = 4840;
@@ -30,36 +34,24 @@ export interface HttpServerOptions {
 }
 
 /**
- * Parse JSON body from an incoming HTTP request.
- */
-function parseBody(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
-    req.on("end", () => {
-      try {
-        const raw = Buffer.concat(chunks).toString("utf-8");
-        resolve(raw ? JSON.parse(raw) : undefined);
-      } catch (e) {
-        reject(e);
-      }
-    });
-    req.on("error", reject);
-  });
-}
-
-/**
  * Start a Streamable HTTP server for the MCP protocol.
  *
- * Uses stateless mode (sessionIdGenerator: undefined) — each request
- * gets its own transport instance. This is the simplest approach and
- * is compatible with serverless environments.
+ * Takes a server factory: `createMcpHandler` builds a fresh instance per
+ * request (stateless — compatible with serverless environments and simple
+ * round-robin load balancing).
  */
 export async function startHttpServer(
-  server: Server,
+  factory: () => Server,
   options: HttpServerOptions = { port: DEFAULT_PORT, host: DEFAULT_HOST }
 ): Promise<void> {
   const { port, host } = options;
+
+  const mcpHandler = createMcpHandler(factory);
+  const handleMcpRequest = toNodeHandler(mcpHandler, {
+    onerror: (err) => {
+      console.error("MCP transport error:", err);
+    },
+  });
 
   const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // DNS rebinding protection: reject cross-origin requests from non-local origins
@@ -118,37 +110,9 @@ export async function startHttpServer(
       return;
     }
 
-    // Parse JSON body for POST requests
-    let body: unknown = undefined;
-    if (req.method === "POST") {
-      try {
-        body = await parseBody(req);
-      } catch {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Invalid JSON body" }));
-        return;
-      }
-    }
-
-    // Stateless mode: new transport per request
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    });
-
-    res.on("close", () => {
-      transport.close();
-    });
-
-    try {
-      await server.connect(transport);
-      await transport.handleRequest(req, res, body);
-    } catch (err) {
-      console.error("MCP transport error:", err);
-      if (!res.headersSent) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Internal server error" }));
-      }
-    }
+    // Hand off to the MCP handler — body parsing, era classification, and
+    // per-request instance construction happen inside the entry.
+    await handleMcpRequest(req, res);
   });
 
   httpServer.listen(port, host, () => {
@@ -159,6 +123,7 @@ export async function startHttpServer(
   // Graceful shutdown
   const shutdown = () => {
     console.error("Shutting down HTTP server...");
+    void mcpHandler.close();
     httpServer.close();
     process.exit(0);
   };

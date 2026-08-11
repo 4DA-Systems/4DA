@@ -2,8 +2,8 @@
 /**
  * Tool registry -- aggregates all tool definitions and handlers.
  */
+import type { Tool } from "@modelcontextprotocol/server";
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolContext, ToolResponse, ToolEntry } from "../types.js";
 
 import { decisionTools } from "./decisions.js";
