@@ -210,7 +210,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
         if let Some(scored) = results.last() {
             if scored.top_score > 0.7 && high_match_count < 3 {
                 high_match_count += 1;
-                let title_preview: String = item.title.chars().take(60).collect();
+                let title_preview = crate::utils::truncate_display(&item.title, 60);
                 emit_narration(
                     app,
                     NarrationEvent {
@@ -415,7 +415,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
 
     // Narration: top signal
     if let Some(top) = results.first() {
-        let title_preview: String = top.title.chars().take(50).collect();
+        let title_preview = crate::utils::truncate_display(&top.title, 50);
         emit_narration(
             app,
             NarrationEvent {

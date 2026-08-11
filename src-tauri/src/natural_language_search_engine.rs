@@ -77,11 +77,7 @@ pub(crate) async fn execute_hybrid_search(
                 (None, Some(_)) => format!("semantic similarity ({:.0}%)", relevance * 100.0),
                 (None, None) => "match".to_string(),
             };
-            let preview = if r.content.len() > 200 {
-                format!("{}...", &r.content[..r.content.floor_char_boundary(200)])
-            } else {
-                r.content
-            };
+            let preview = crate::utils::truncate_display(&r.content, 200);
             QueryResultItem {
                 id: r.item_id,
                 file_path: r.url,
@@ -179,11 +175,7 @@ pub(crate) fn execute_text_search(
                 let content: String = row.get(4)?;
                 let created_at: Option<String> = row.get(5)?;
 
-                let preview = if content.len() > 200 {
-                    format!("{}...", &content[..content.floor_char_boundary(200)])
-                } else {
-                    content
-                };
+                let preview = crate::utils::truncate_display(&content, 200);
 
                 Ok(QueryResultItem {
                     id,
@@ -254,11 +246,7 @@ pub(crate) async fn execute_vector_search(
             let distance: f64 = row.get(6)?;
             let relevance = (1.0 - distance).clamp(0.0, 1.0);
 
-            let preview = if content.len() > 200 {
-                format!("{}...", &content[..content.floor_char_boundary(200)])
-            } else {
-                content
-            };
+            let preview = crate::utils::truncate_display(&content, 200);
 
             Ok(QueryResultItem {
                 id,

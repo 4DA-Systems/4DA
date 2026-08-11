@@ -821,11 +821,14 @@ fn gap_severity_to_urgency(s: &GapSeverity) -> Urgency {
 }
 
 fn truncate_gap_title(s: &str) -> String {
-    s.trim_end_matches('.').chars().take(120).collect()
+    // Schema: ≤ 120 chars, no trailing period. `truncate_display` counts its
+    // ellipsis against the budget, so the cap still holds.
+    crate::utils::truncate_display(s.trim_end_matches('.'), 120)
 }
 
 fn truncate_gap_note(s: &str) -> String {
-    s.chars().take(200).collect()
+    // Citation relevance_note schema cap: 200 chars.
+    crate::utils::truncate_display(s, 200)
 }
 
 fn classify_missed_item(title: &str) -> &'static str {
@@ -962,7 +965,7 @@ fn build_gap_explanation(
     let mut explanation = format!("{dep}{ver}: {categories} · {recency}");
 
     if let Some(item) = highlight {
-        let short_title: String = item.title.chars().take(80).collect();
+        let short_title = crate::utils::truncate_display(&item.title, 80);
         explanation.push_str(&format!(" — notably \"{short_title}\""));
     }
 

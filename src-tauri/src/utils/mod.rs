@@ -22,7 +22,7 @@ pub(crate) use text::is_boilerplate_chunk;
 pub(crate) use text::MAX_CONTENT_LENGTH;
 pub(crate) use text::{
     build_embedding_text, chunk_text, decode_html_entities, preprocess_content, strip_html_tags,
-    truncate_utf8,
+    truncate_display, truncate_utf8,
 };
 pub(crate) use topics::{check_exclusions, detect_trend_topics, extract_topics};
 pub(crate) use url::{validate_deep_link_url, validate_safe_url};

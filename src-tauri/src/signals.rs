@@ -2,6 +2,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Character budget for a headline interpolated into a signal action string.
+///
+/// The action is the Key Signals card's headline and doubles as the OS
+/// notification body (`CriticalAlertBanner`) and the digest's item line, so it
+/// has to survive outside the card — that rules out dropping the title from the
+/// template entirely.
+const SIGNAL_TITLE_CHARS: usize = 120;
+
 // ============================================================================
 // Signal Types & Priority
 // ============================================================================
@@ -734,7 +742,11 @@ impl SignalClassifier {
         matched_tech: Option<&str>,
     ) -> String {
         let lang = crate::i18n::get_user_language();
-        let short_title: String = title.chars().take(60).collect();
+        // 120 chars, cut on a word boundary. The old flat 60-char `take()` fired
+        // on 58% of the live corpus and cut mid-word ("…400 npm Pa"); 120 leaves
+        // 2.3% of titles to truncate and matches the cap the Mastodon adapter
+        // already applies, so a Mastodon title passes through un-ellipsised.
+        let short_title = crate::utils::truncate_display(title, SIGNAL_TITLE_CHARS);
         match (signal_type, matched_tech) {
             (SignalType::SecurityAlert, Some(tech)) => crate::i18n::t(
                 "signals:action.securityReviewStack",
