@@ -10,7 +10,8 @@
 //   5. Cross-platform Rust verification (via cargo test)
 //
 // Run: node site/test-e2e-stripe.mjs
-// Requires: site/.env.test (pulled from Vercel)
+// Requires: site/.env.test (values mirror the Cloudflare Pages environment for
+//           project "4da-site" — see `wrangler pages secret list`)
 // =============================================================================
 
 import { readFileSync } from 'fs';

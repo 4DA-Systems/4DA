@@ -3,26 +3,26 @@ export default function(eleventyConfig) {
   eleventyConfig.addPassthroughCopy({ "hero-bg.mp4": "hero-bg.mp4" });
   eleventyConfig.addPassthroughCopy({ "hero-sun.jpg": "hero-sun.jpg" });
   eleventyConfig.addPassthroughCopy({ "og-image.png": "og-image.png" });
-  eleventyConfig.addPassthroughCopy({ "robots.txt": "robots.txt" });
+  // robots.txt lives in src/ and .txt is not an Eleventy template format, so it
+  // needs an explicit passthrough. (This previously pointed at a site-root
+  // "robots.txt" that does not exist, so no robots.txt was emitted at all.)
+  eleventyConfig.addPassthroughCopy({ "src/robots.txt": "robots.txt" });
   eleventyConfig.addPassthroughCopy({ "screenshots": "screenshots" });
-  eleventyConfig.addPassthroughCopy({ "media": "media" });
-  eleventyConfig.addPassthroughCopy({ "merch-designs": "merch-designs" });
-  eleventyConfig.addPassthroughCopy({ "merch-photos": "merch-photos" });
-  // Cloudflare migration: the /api serverless functions are NOT copied to the
-  // static output. They run as Cloudflare Pages Functions from site/functions/.
-  // Copying the raw source into _site would expose it publicly AND collide with
-  // Functions routing. (On Vercel this passthrough was a no-op at best.)
+  // NOTE: nothing internal ships here. merch-photos/ are Shopify upload masters
+  // (merch.njk renders product images from the Shopify Storefront API, not from
+  // this repo), shopify-theme.css belongs in the Shopify admin, and
+  // test-e2e-stripe.mjs is an internal harness. None of them are passed through.
+  //
+  // The API handlers are NOT copied to the static output either. They run as
+  // Cloudflare Pages Functions from site/functions/, which Pages picks up
+  // directly from the project root — copying source into _site would expose it
+  // publicly AND collide with Functions routing.
   // _redirects + _headers must live in the OUTPUT dir to take effect on Pages.
   eleventyConfig.addPassthroughCopy({ "_redirects": "_redirects" });
   eleventyConfig.addPassthroughCopy({ "_headers": "_headers" });
-  eleventyConfig.addPassthroughCopy({ "shopify-theme.css": "shopify-theme.css" });
-  eleventyConfig.addPassthroughCopy({ "test-e2e-stripe.mjs": "test-e2e-stripe.mjs" });
   // Stack Scan — self-contained static app (no analytics by design; must NOT go through
   // base.njk, which injects PostHog — the page's promise is a clean Network tab)
   eleventyConfig.addPassthroughCopy({ "scan": "scan" });
-
-  // Exclude utility files from processing
-  eleventyConfig.ignores.add("src/og-image.html");
 
   return {
     dir: {

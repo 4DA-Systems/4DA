@@ -171,7 +171,7 @@ permalink: "/privacy.html"
 
   <div class="legal-container">
     <h1>Privacy Policy</h1>
-    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 15 March 2026</p>
+    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 12 August 2026</p>
 
     <div class="short-version">
       4DA is a desktop application that runs on your computer. Your data stays on your computer. We do not collect it, we do not transmit it, we do not store it on our servers, and we do not sell it. This privacy policy exists because the law requires one, but also because we believe you deserve to know exactly how your software works.
@@ -272,7 +272,7 @@ permalink: "/privacy.html"
     <ul>
       <li>Sends your <strong>license key</strong> to Keygen's validation API</li>
       <li>Does <strong>not</strong> send your name, email address, device identifiers, or any other personal data</li>
-      <li>Occurs at activation and periodically thereafter (cached for 24 hours to minimise network calls)</li>
+      <li>Occurs at activation and periodically thereafter (cached for 90 days to minimise network calls)</li>
       <li>Results are cached locally to allow offline usage between validations</li>
     </ul>
     <p>The App also supports <strong>offline license verification</strong> using Ed25519 digital signatures embedded in the license key itself. This verification requires no network access whatsoever.</p>
@@ -305,7 +305,7 @@ permalink: "/privacy.html"
 
     <h3>3.1 Data We May Collect</h3>
     <ul>
-      <li><strong>Server logs:</strong> Our hosting provider (Vercel) may collect standard server log data including IP addresses, browser type, referring pages, and pages visited. See <a href="https://vercel.com/legal/privacy-policy">Vercel's Privacy Policy</a>.</li>
+      <li><strong>Server logs:</strong> Our hosting provider (Cloudflare) may collect standard server log data including IP addresses, browser type, referring pages, and pages visited. See <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare's Privacy Policy</a>.</li>
       <li><strong>Analytics:</strong> We may use privacy-respecting analytics to understand aggregate traffic patterns. If used, this data is anonymised and does not track individual users across sessions.</li>
       <li><strong>Cookies:</strong> The website may use essential cookies for basic functionality. We do not use third-party advertising cookies or cross-site tracking cookies.</li>
     </ul>
@@ -358,7 +358,7 @@ permalink: "/privacy.html"
         <tr><td>RSS/Atom feeds</td><td>App</td><td>Standard HTTP requests (your IP visible)</td><td>Content aggregation</td></tr>
         <tr><td>Keygen</td><td>App (Signal tier only)</td><td>License key</td><td>License validation</td></tr>
         <tr><td>User's SMTP provider</td><td>App (optional, user-configured)</td><td>Digest email contents</td><td>Email delivery</td></tr>
-        <tr><td>Vercel</td><td>Website</td><td>Server logs, analytics</td><td>Website hosting</td></tr>
+        <tr><td>Cloudflare</td><td>Website</td><td>Server logs, analytics</td><td>Website hosting</td></tr>
         <tr><td>Shopify</td><td>Store</td><td>Purchase and shipping information</td><td>Merchandise sales</td></tr>
       </tbody>
     </table>
@@ -377,7 +377,7 @@ permalink: "/privacy.html"
     <p>No action from us is required for you to fully erase all traces of the App from your system.</p>
 
     <h3>7.2 Website Data</h3>
-    <p>Server logs retained by Vercel are subject to Vercel's data retention policies. We do not independently retain website visitor data.</p>
+    <p>Server logs retained by Cloudflare are subject to Cloudflare's data retention policies. We do not independently retain website visitor data.</p>
 
     <h3>7.3 Store Data</h3>
     <p>Purchase records are retained as required by Australian tax law (generally 5 years). You may request deletion of non-legally-required data by contacting <a href="mailto:privacy@4da.ai">privacy@4da.ai</a>.</p>
@@ -455,7 +455,7 @@ permalink: "/privacy.html"
     <p>These transfers are initiated by you, using your own API keys, and are governed by the respective provider's privacy policy. 4DA Systems has no role in these transfers.</p>
 
     <h3>10.2 Website and Store</h3>
-    <p>Our website is hosted on Vercel, which operates globally. Shopify also operates globally. Data processed by these services may be transferred to and stored in countries outside your jurisdiction, including the United States. These providers maintain appropriate safeguards for international transfers, including Standard Contractual Clauses where required by GDPR.</p>
+    <p>Our website is hosted on Cloudflare, which operates globally. Shopify also operates globally. Data processed by these services may be transferred to and stored in countries outside your jurisdiction, including the United States. These providers maintain appropriate safeguards for international transfers, including Standard Contractual Clauses where required by GDPR.</p>
 
     <h2>11. Security</h2>
 
@@ -472,7 +472,7 @@ permalink: "/privacy.html"
     </ul>
 
     <h3>11.2 Website and Store</h3>
-    <p>We rely on industry-standard security measures provided by Vercel and Shopify, including TLS encryption for all data in transit and secure payment processing (Shopify is PCI-DSS compliant).</p>
+    <p>We rely on industry-standard security measures provided by Cloudflare and Shopify, including TLS encryption for all data in transit and secure payment processing (Shopify is PCI-DSS compliant).</p>
 
     <h2>12. Changes to This Policy</h2>
     <p>We may update this Privacy Policy from time to time. When we make changes:</p>
@@ -517,7 +517,7 @@ permalink: "/privacy.html"
       </thead>
       <tbody>
         <tr><td>Do we collect personal data?</td><td>No</td><td>Minimal (server logs)</td><td>Yes (for orders)</td></tr>
-        <tr><td>Do we store data on our servers?</td><td>No</td><td>Vercel handles logs</td><td>Shopify handles data</td></tr>
+        <tr><td>Do we store data on our servers?</td><td>No</td><td>Cloudflare handles logs</td><td>Shopify handles data</td></tr>
         <tr><td>Do we sell data?</td><td>No</td><td>No</td><td>No</td></tr>
         <tr><td>Do we use cookies?</td><td>N/A (desktop app)</td><td>Essential only</td><td>Shopify standard</td></tr>
         <tr><td>Do we track you?</td><td>No</td><td>No</td><td>No</td></tr>

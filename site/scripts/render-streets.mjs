@@ -15,8 +15,8 @@
 // with hreflang alternates emitted into each page's frontmatter for the layout.
 //
 // Run after editing docs/streets:  node scripts/render-streets.mjs
-// The generated files are committed so the Vercel build (rooted at site/)
-// never needs to reach outside its root.
+// The generated files are committed so the Cloudflare Pages build (rooted at
+// site/) never needs to reach outside its root.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
