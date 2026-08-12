@@ -18,7 +18,6 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set) => (
 
   setShowSettings: (show) => set({ showSettings: show }),
   setSettingsInitialTab: (tab) => set({ settingsInitialTab: tab }),
-  setShowSplash: (show) => set({ showSplash: show }),
   setActiveView: (view) => {
     if (VALID_VIEWS.includes(view)) set({ activeView: view });
   },

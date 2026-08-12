@@ -11,7 +11,7 @@ import type {
   SourceHealthStatus,
 } from '../types';
 import type { DeveloperDecision } from './decisions-slice';
-import type { AgentMemoryEntry, DelegationScoreEntry } from './agent-slice';
+import type { AgentMemoryEntry } from './agent-slice';
 import type {
   Toast,
   ToastType,
@@ -44,7 +44,7 @@ export type ActiveView =
   | 'preemption'
   | 'blindspots';
 
-export type SignalViewMode = 'list' | 'graph';
+type SignalViewMode = 'list' | 'graph';
 
 export interface UiSlice {
   showSettings: boolean;
@@ -62,7 +62,6 @@ export interface UiSlice {
   searchFocusItemId: number | null;
   setShowSettings: (show: boolean) => void;
   setSettingsInitialTab: (tab: string | null) => void;
-  setShowSplash: (show: boolean) => void;
   setActiveView: (view: ActiveView) => void;
   setSignalViewMode: (mode: SignalViewMode) => void;
   setIsFirstRun: (v: boolean) => void;
@@ -70,13 +69,6 @@ export interface UiSlice {
   setEmbeddingMode: (mode: 'semantic' | 'keyword-only' | null) => void;
   setEmbeddingStatus: (status: EmbeddingStatus | undefined) => void;
   setSearchFocusItemId: (id: number | null) => void;
-}
-
-export interface ToolkitSlice {
-  recentTools: string[];
-  pinnedTools: string[];
-  addRecentTool: (toolId: string) => void;
-  togglePinnedTool: (toolId: string) => void;
 }
 
 export interface ModelRegistryData {
@@ -276,7 +268,7 @@ export interface InstantBriefingSnapshot {
 }
 
 /** Source data freshness summary — signals when the pipeline has gone silent. */
-export interface DataFreshness {
+interface DataFreshness {
   newest_item_age_hours: number | null;
   items_last_24h: number;
   items_last_72h: number;
@@ -413,18 +405,12 @@ export interface DecisionsSlice {
       confidence?: number;
     },
   ) => Promise<void>;
-  removeTechDecision: (technology: string) => Promise<void>;
 }
 
 export interface AgentSlice {
   agentMemories: AgentMemoryEntry[];
-  delegationScores: DelegationScoreEntry[];
-  agentDataExists: boolean;
   agentMemoryLoading: boolean;
   loadAgentMemories: () => Promise<void>;
-  loadDelegationScores: () => Promise<void>;
-  checkAgentDataExists: () => Promise<void>;
-  promoteMemoryToDecision: (memoryId: number) => Promise<void>;
 }
 
 export interface TrialStatus {

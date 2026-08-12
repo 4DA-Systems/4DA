@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-export interface PolyhedronGeometry {
+interface PolyhedronGeometry {
   vertices: [number, number, number][];
   edges: [number, number][];
   faces: number[][];
 }
 
-export interface Polyhedron4DGeometry {
+interface Polyhedron4DGeometry {
   vertices: [number, number, number, number][];
   edges: [number, number][];
   faces: number[][];
@@ -125,7 +125,7 @@ export const DODECAHEDRON: PolyhedronGeometry = {
 
 // Compound of five tetrahedra — 5 tetrahedra sharing the dodecahedron's 20 vertices
 // Each tetrahedron is assigned a color group index.
-export interface CompoundGeometry {
+interface CompoundGeometry {
   groups: { vertices: [number, number, number][]; edges: [number, number][]; faces: number[][]; color: string }[];
 }
 

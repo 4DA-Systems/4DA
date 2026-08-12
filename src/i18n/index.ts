@@ -3,9 +3,10 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import resourcesToBackend from 'i18next-resources-to-backend';
 
-// Supported languages — must match locale directories in src/locales/
-// Ship 10 languages — ar/hi/it deferred (RTL untested / insufficient market demand)
-// Locale files preserved in repo for future activation.
+// Supported languages — a subset of the locale directories in src/locales/.
+// Ships 12 languages. `ar` is the one locale present in src/locales/ but NOT
+// listed here (RTL layout untested), so its translations are unreachable at
+// runtime; the files are preserved in the repo for future activation.
 // Single source of truth for shipped languages, in display order, with native
 // names. Used by i18n init AND every language picker so the offered set can
 // never diverge from what the app actually ships (see LanguageSwitcher).

@@ -5,7 +5,6 @@ import { cmd } from '../lib/commands';
 import { isSignalGateError } from '../utils/error-messages';
 import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceItem';
 import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
-import type { Urgency } from '../../src-tauri/bindings/bindings/Urgency';
 
 // ============================================================================
 // Types
@@ -16,10 +15,7 @@ import type { Urgency } from '../../src-tauri/bindings/bindings/Urgency';
 // counts). Legacy shape aliases are exported for any lingering consumers,
 // but new code should import from the canonical bindings directly.
 
-export type PreemptionUrgency = Urgency;
 export type PreemptionAlert = EvidenceItem;
-export type PreemptionEvidence = EvidenceItem['evidence'][number];
-export type PreemptionAction = EvidenceItem['suggested_actions'][number];
 export type { EvidenceFeed as PreemptionFeed };
 
 // ============================================================================

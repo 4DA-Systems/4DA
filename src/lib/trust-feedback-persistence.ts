@@ -28,7 +28,7 @@ export function persistQueueFallback(queue: QueuedFeedbackEvent[]): void {
 }
 
 /** Clear the localStorage fallback (called when SQLite outbox has the data) */
-export function clearLocalStorageFallback(): void {
+function clearLocalStorageFallback(): void {
   try {
     localStorage.removeItem(QUEUE_STORAGE_KEY);
   } catch {
@@ -55,7 +55,7 @@ function isQueuedFeedbackEvent(item: unknown): item is QueuedFeedbackEvent {
   );
 }
 
-export function loadLocalStorageFallback(): QueuedFeedbackEvent[] {
+function loadLocalStorageFallback(): QueuedFeedbackEvent[] {
   try {
     const stored = localStorage.getItem(QUEUE_STORAGE_KEY);
     if (!stored) return [];

@@ -83,7 +83,7 @@ export function useTheme(): { theme: Theme; isLight: boolean; toggle: () => void
  * attributes (which cannot resolve CSS var()). Values mirror the
  * --geometry-stroke / --geometry-glow tokens in App.css — keep in sync.
  */
-export interface GeometryPalette {
+interface GeometryPalette {
   stroke: string;
   glow: string;
   glowOpacity: number;

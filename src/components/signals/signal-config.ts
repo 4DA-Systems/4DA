@@ -5,31 +5,21 @@ import type { EvidencePool } from './evidence-pool';
 // Signal & Priority display configuration
 // ============================================================================
 
-export interface SignalStyleConfig {
+interface SignalStyleConfig {
   icon: string;
   color: string;
   borderColor: string;
   bgColor: string;
 }
 
-export interface PriorityStyleConfig {
+interface PriorityStyleConfig {
   label: string;
   color: string;
   bgColor: string;
   dot: string;
 }
 
-export interface LaneConfig {
-  key: string;
-  label: string;
-  icon: string;
-  color: string;
-  borderColor: string;
-  types: Set<string>;
-  priorityFilter?: Set<string>;
-}
-
-export interface EvidencePoolStyle {
+interface EvidencePoolStyle {
   key: EvidencePool;
   /** i18n key for the pool heading (see src/locales/en/ui.json). */
   labelKey: string;
@@ -96,30 +86,3 @@ export const SIGNAL_LABELS: Record<string, string> = {
   competitive_intel: 'Competitive',
 };
 
-export const LANES: LaneConfig[] = [
-  {
-    key: 'critical',
-    label: 'Critical Now',
-    icon: '🔴',
-    color: 'text-red-400',
-    borderColor: 'border-red-500/20',
-    types: new Set(['security_alert', 'breaking_change']),
-    priorityFilter: new Set(['critical', 'alert']),
-  },
-  {
-    key: 'stack',
-    label: 'Stack Updates',
-    icon: '📦',
-    color: 'text-amber-400',
-    borderColor: 'border-amber-500/20',
-    types: new Set(['security_alert', 'breaking_change', 'tool_discovery']),
-  },
-  {
-    key: 'learning',
-    label: 'Learning & Trends',
-    icon: '📈',
-    color: 'text-blue-400',
-    borderColor: 'border-blue-500/20',
-    types: new Set(['learning', 'tech_trend', 'competitive_intel']),
-  },
-];

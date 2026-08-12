@@ -19,7 +19,7 @@ const CIRCUIT_BREAKER_THRESHOLD = 10;
 // Helpers (shared)
 // ============================================================================
 
-export function relativeTime(iso: string | null): string {
+function relativeTime(iso: string | null): string {
   if (!iso) return '--';
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);
@@ -59,7 +59,7 @@ function deliveryStatusBadge(status: string): { bg: string; text: string } {
 // Webhook Card
 // ============================================================================
 
-export interface WebhookCardProps {
+interface WebhookCardProps {
   webhook: Webhook;
   deliveries: WebhookDelivery[];
   expanded: boolean;

@@ -5,7 +5,7 @@ import type { Settings } from '../../types';
 import type { SettingsForm } from './ai-provider-types';
 import type { KeyValidation } from './ai-provider-constants';
 
-export interface APIKeyInputProps {
+interface APIKeyInputProps {
   settings: Settings | null;
   settingsForm: SettingsForm;
   setSettingsForm: React.Dispatch<React.SetStateAction<SettingsForm>>;

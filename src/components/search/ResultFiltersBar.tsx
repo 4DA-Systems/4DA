@@ -4,7 +4,7 @@ import { SourceCategoryFilter } from '../SourceCategoryFilter';
 
 type SortMode = 'score' | 'date' | 'priority' | 'applicability' | 'freshness' | 'urgency';
 
-export interface ResultFiltersBarProps {
+interface ResultFiltersBarProps {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   sourceFilters: Set<string>;

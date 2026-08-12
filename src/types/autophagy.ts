@@ -35,14 +35,14 @@ export interface DecisionWindow {
 
 // Intelligence Pulse types (shared between IntelligencePulse + BriefingView via store)
 
-export interface CalibrationInsight {
+interface CalibrationInsight {
   topic: string;
   delta: number;
   sample_size: number;
   confidence: number;
 }
 
-export interface SourceQuality {
+interface SourceQuality {
   source_type: string;
   items_surfaced: number;
   items_engaged: number;
@@ -63,7 +63,7 @@ export interface IntelligencePulseData {
 
 // Data Health types (database maintenance + cleanup)
 
-export interface DbStats {
+interface DbStats {
   source_items: number;
   context_chunks: number;
   feedback_count: number;

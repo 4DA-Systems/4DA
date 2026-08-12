@@ -162,18 +162,14 @@ vi.mock('../../config/content-types', () => ({
 // ---------------------------------------------------------------------------
 // Component imports
 // ---------------------------------------------------------------------------
-import { ConfidenceIndicator } from '../ConfidenceIndicator';
 import { ToastContainer } from '../Toast';
 import { KeyboardShortcutsModal } from '../KeyboardShortcutsModal';
 import { ErrorBoundary } from '../ErrorBoundary';
-import { BadgeRow } from '../result-item/BadgeRow';
-import { ScoreBreakdownRow } from '../result-item/ScoreBreakdownRow';
 import { AboutPanel } from '../AboutPanel';
 import { ProGate } from '../ProGate';
 
 import { ViewTabBar } from '../ViewTabBar';
 import { FeedbackButtons } from '../result-item/FeedbackButtons';
-import { ProInsightRow } from '../result-item/ProInsightRow';
 import { BriefingLoadingState, BriefingReadyState, BriefingNoDataState } from '../BriefingEmptyStates';
 import { SignalsPanel } from '../SignalsPanel';
 import { OllamaStatus } from '../OllamaStatus';
@@ -182,7 +178,7 @@ import { BrandMark } from '../void-engine/BrandMark';
 // ---------------------------------------------------------------------------
 // Shared test data
 // ---------------------------------------------------------------------------
-import { makeItem, makeBreakdown } from '../../test/factories';
+import { makeItem } from '../../test/factories';
 
 // ---------------------------------------------------------------------------
 // Smoke test suite
@@ -192,14 +188,6 @@ const SMOKE_COMPONENTS: Array<{
   render: () => React.JSX.Element;
 }> = [
   // --- Original 18 components ---
-  {
-    name: 'ConfidenceIndicator (with confidence)',
-    render: () => <ConfidenceIndicator confidence={0.85} />,
-  },
-  {
-    name: 'ConfidenceIndicator (no confidence)',
-    render: () => <ConfidenceIndicator />,
-  },
   {
     name: 'ToastContainer (empty)',
     render: () => <ToastContainer toasts={[]} onDismiss={vi.fn()} />,
@@ -226,20 +214,6 @@ const SMOKE_COMPONENTS: Array<{
       <ErrorBoundary>
         <div>Child content</div>
       </ErrorBoundary>
-    ),
-  },
-  {
-    name: 'BadgeRow',
-    render: () => <BadgeRow item={makeItem()} />,
-  },
-  {
-    name: 'ScoreBreakdownRow',
-    render: () => (
-      <ScoreBreakdownRow
-        item={makeItem({ score_breakdown: makeBreakdown() })}
-        isTopPick={true}
-        isHighConfidence={true}
-      />
     ),
   },
   {
@@ -286,22 +260,6 @@ const SMOKE_COMPONENTS: Array<{
         item={makeItem()}
         feedback="dismiss"
         onRecordInteraction={vi.fn()}
-      />
-    ),
-  },
-  {
-    name: 'ProInsightRow (no signal)',
-    render: () => <ProInsightRow item={makeItem({ top_score: 0.2 })} />,
-  },
-  {
-    name: 'ProInsightRow (with signal)',
-    render: () => (
-      <ProInsightRow
-        item={makeItem({
-          top_score: 0.7,
-          signal_type: 'security_alert',
-          score_breakdown: makeBreakdown({ context_score: 0.5 }),
-        })}
       />
     ),
   },
@@ -391,7 +349,6 @@ describe('Component accessibility tests', () => {
       'ToastContainer (with toasts)',
       'KeyboardShortcutsModal',
       'ErrorBoundary (no error)',
-      'BadgeRow',
       'AboutPanel',
       'OllamaStatus (ollama provider)',
     ].includes(name),

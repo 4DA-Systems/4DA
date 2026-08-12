@@ -1,11 +1,4 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-export interface ApiKeyState {
-  anthropic: string;
-  openai: string;
-  xApiKey: string;
-  provider: 'anthropic' | 'openai' | 'ollama';
-}
-
 export type { OllamaStatus } from '../../store/types';
 
 export interface PullProgress {
@@ -13,14 +6,6 @@ export interface PullProgress {
   status: string;
   percent: number;
   done: boolean;
-}
-
-export interface ScanProgress {
-  phase: 'fetching' | 'scoring' | 'done' | 'error';
-  message: string;
-  results?: Array<{ title: string; score: number; source: string }>;
-  total?: number;
-  relevant?: number;
 }
 
 export type Step = 'welcome' | 'taste' | 'choice' | 'setup' | 'calibrate';

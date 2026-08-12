@@ -28,7 +28,6 @@ import type {
   DecisionsSlice,
   AgentSlice,
   LicenseSlice,
-  ToolkitSlice,
 } from './slice-types';
 
 // ============================================================================
@@ -127,7 +126,6 @@ export type {
   EmbeddingStatus,
   ActiveView,
   UiSlice,
-  ToolkitSlice,
   ModelRegistryData,
   SettingsSlice,
   AnalysisSlice,
@@ -166,7 +164,6 @@ export type AppStore =
   & DecisionsSlice
   & AgentSlice
   & LicenseSlice
-  & ToolkitSlice
   & AutophagySlice
   & DecisionAdvantageSlice
   & ChannelsSlice

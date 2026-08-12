@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { VoidSignal } from "../../types";
 
-export interface SignalVisualState {
+interface SignalVisualState {
   glowOpacity: number;
   edgeColor: string;
   vertexColor: string;

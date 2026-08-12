@@ -13,10 +13,6 @@ vi.mock('./ScoreAutopsy', () => ({
   ScoreAutopsy: () => <div data-testid="score-autopsy" />,
 }));
 
-vi.mock('./ConfidenceIndicator', () => ({
-  ConfidenceIndicator: () => null,
-}));
-
 vi.mock('./ArticleReader', () => ({
   ArticleReader: () => <div data-testid="article-reader" />,
 }));

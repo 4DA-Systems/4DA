@@ -60,7 +60,7 @@ function t(key: string, fallback: string): string {
  * When the backend returns errors, they now come as structured objects
  * with error codes, titles, details, and remediation steps.
  */
-export interface StructuredError {
+interface StructuredError {
   code: string;
   title: string;
   detail: string;

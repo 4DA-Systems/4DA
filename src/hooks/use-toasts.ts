@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useAppStore } from '../store';
 
-export type { ToastType, ToastAction, Toast } from '../store';
+// Single component-facing path for the toast types; they are defined once in
+// `../store/types` and re-exported here only (not via the store or hooks barrels).
+export type { ToastType, ToastAction, Toast } from '../store/types';
 
 /**
  * Toast hook — thin wrapper around Zustand store.

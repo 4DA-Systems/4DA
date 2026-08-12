@@ -10,7 +10,7 @@ interface ContentEdgeData {
   [key: string]: unknown;
 }
 
-export type ContentEdge = Edge<ContentEdgeData, 'contentEdge'>;
+type ContentEdge = Edge<ContentEdgeData, 'contentEdge'>;
 
 // The three edge types the backend emits (EdgeType::Concept/Duplicate exist
 // in the enum but no pipeline stage produces them — no styles for ghosts).
