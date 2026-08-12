@@ -68,10 +68,10 @@ Every outbound connection, in one table:
 | 14 | Custom OpenAI-compatible URL | User-initiated | Content + system prompt | API key (BYOK) | `src-tauri/src/llm.rs` |
 | 15 | `api.openai.com/v1/embeddings` | User-initiated | Text for embedding | API key (BYOK) | `src-tauri/src/embeddings.rs` |
 | 16 | `localhost:11434` | User-initiated or fallback | Content for local AI | None | `src-tauri/src/llm.rs`, `src-tauri/src/embeddings.rs` |
-| 17 | `api.keygen.sh` | License activation + every 6 hrs | License key only | Keygen account ID | `src-tauri/src/settings/license.rs` |
+| 17 | `api.keygen.sh` | License activation, then at most once per 90 days | License key only | Keygen account ID | `src-tauri/src/settings/license/keygen.rs` |
 | 18 | `github.com/.../latest.json` | Auto (periodic) | GET version check | None | `src-tauri/tauri.conf.json` (Tauri updater) |
-| 19 | Team Relay server | User-enabled | E2E encrypted blobs | Team key | `src-tauri/src/team_sync_commands.rs` |
-| 20 | Webhook endpoints | Enterprise events | HMAC-signed payloads | HMAC-SHA256 | `src-tauri/src/webhooks.rs` |
+| 19 | Team Relay server | User-enabled | E2E encrypted blobs | Team key | `src-tauri/src/team_sync_scheduler.rs` |
+| 20 | Webhook endpoints | Enterprise events | HMAC-signed payloads | HMAC-SHA256 | `src-tauri/src/webhooks/dispatch.rs` |
 | 21 | OIDC/JWKS endpoints | Enterprise SSO | Public key fetch | None | `src-tauri/src/sso_crypto.rs` |
 | 22 | User-specified domains | Toolkit HTTP proxy | User-crafted request | User-specified | `src-tauri/src/toolkit_http.rs` |
 
@@ -126,9 +126,9 @@ All content sources are user-configurable. Each can be enabled or disabled in th
 - **Method:** POST
 - **Data sent:** License key only
 - **Data NOT sent:** Name, email, device ID, usage data, or any personal information
-- **Frequency:** At activation, then re-validated every 6 hours
-- **Offline support:** Results cached locally for 7 days. Offline Ed25519 verification also available.
-- **Source:** `src-tauri/src/settings/license.rs` (around line 587)
+- **Frequency:** At activation (which bypasses the cache), then only once the cached result expires. A local integrity re-check runs every 6 hours, but it makes no network call while the cache is valid.
+- **Offline support:** Results cached locally for 90 days (`VALIDATION_CACHE_HOURS = 2160`). Self-signed `4DA-` keys additionally verify fully offline via Ed25519 and make no network call at all.
+- **Source:** `src-tauri/src/settings/license/keygen.rs` (endpoint constructed around line 357)
 
 ### Auto-Updates (Row 18)
 
@@ -146,7 +146,7 @@ Only active when the user explicitly enables team sync.
 - **Encryption:** XChaCha20Poly1305 with X25519 key exchange and HKDF key derivation
 - **Architecture:** Zero-knowledge relay. The server handles only encrypted blobs and cannot read, decrypt, or inspect any content.
 - **Key management:** Private keys generated on-device and never transmitted. Zeroized from memory after use.
-- **Source:** `src-tauri/src/team_sync_commands.rs` (around lines 435-644)
+- **Source:** `src-tauri/src/team_sync_scheduler.rs` (around lines 435-644)
 - **HTTP client:** Dedicated `TEAM_CLIENT` with 15-second timeout
 
 ### Webhooks (Row 20) -- Enterprise Only
@@ -157,7 +157,7 @@ Webhooks fire only for enterprise team events and only to endpoints the administ
 - **Retry strategy:** Exponential backoff (1m, 5m, 30m, 2h, 12h)
 - **Circuit breaker:** Auto-disables after 10 consecutive failures
 - **Timeout:** 10 seconds
-- **Source:** `src-tauri/src/webhooks.rs` (around line 370)
+- **Source:** `src-tauri/src/webhooks/dispatch.rs` (around line 370)
 
 ### SSO/OIDC (Row 21) -- Enterprise Only
 

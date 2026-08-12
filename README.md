@@ -19,7 +19,7 @@
 
 It scans your codebase — `Cargo.toml`, `package.json`, `go.mod`, Git history — and scores every article, advisory, and release from 20+ sources against what you actually build. An item needs 2+ independent signals to survive. Everything else is rejected.
 
-Tested across 9 developer personas: **92% of content is filtered as noise, 98% of actual noise is correctly rejected.** Your real rejection rate — computed from your own data — is shown in the Evidence tab.
+Tested across 9 developer personas: **92% of content is filtered as noise, 98% of actual noise is correctly rejected.** Your real rejection rate — computed from your own data — is shown in the Signal tab.
 
 It learns from how you engage with what it shows you. Saves and dismissals build a preference profile you can inspect, pin, or forget — and teach the Brief what to stop showing you. Relevance scoring itself stays grounded in your actual stack. Yesterday's noise becomes tomorrow's signal.
 
@@ -203,10 +203,10 @@ Your Codebase                    External Sources
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), behavior learning, MCP server (14 tools), CLI
+- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), Developer DNA profiling, Score Autopsy (5-axis breakdown), signal chain analysis, channels, the OSV security floor, behavior learning, MCP server (14 tools), CLI
 
-**Signal** — $12/month or $99/year (14-day free trial).
-- Everything in Free, plus: Signal tab intelligence (Key Signals + analytics), Score Autopsy (5-axis breakdown), Developer DNA profiling, signal chain analysis, knowledge gap detection, semantic shift tracking, attention analytics, standing queries, project health radar
+**Signal** — $12 AUD/month, $99 AUD/year, or $299 AUD once for a Lifetime license (14-day free trial).
+- Everything in Free, plus: blind spot detection, knowledge gap detection, standing queries, semantic shift tracking, project health radar, attention analytics, decision health, cross-project intelligence, and Trust Ledger analytics
 
 Free is not a demo. It's the full scoring engine, all sources, behavior learning, and MCP integration.
 

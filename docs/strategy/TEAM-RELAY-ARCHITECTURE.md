@@ -468,10 +468,10 @@ The Team Relay uses end-to-end encryption (E2E) so that the relay server is zero
 | HTTP client | `src-tauri/src/http_client.rs` | reqwest 0.12 singleton pattern |
 | Background scheduler | `src-tauri/src/monitoring.rs` | tokio interval + atomic state pattern |
 | Settings persistence | `src-tauri/src/settings/mod.rs` | SettingsManager + serde defaults |
-| License validation | `src-tauri/src/settings/license.rs` | Keygen API call pattern + caching |
+| License validation | `src-tauri/src/settings/license/keygen.rs` | Keygen API call pattern + caching |
 | Anonymous ID | `src-tauri/src/community_intelligence.rs` | SHA-256 ID generation |
 | Email transport | `src-tauri/src/digest_email.rs` | Async external communication pattern |
-| Ed25519 signing | `src-tauri/src/settings/license.rs` | ed25519-dalek already in Cargo.toml |
+| Ed25519 signing | `src-tauri/src/settings/license/verify.rs` | ed25519-dalek already in Cargo.toml |
 | SHA-256 hashing | `Cargo.toml` | sha2 0.10 already available |
 
 ---

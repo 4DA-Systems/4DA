@@ -22,34 +22,30 @@ Everything you need to configure 4DA, fix common issues, and get the most out of
 
 ## First Launch
 
-When you first open 4DA, you'll see a splash screen while the system initializes (database, embedding models, sources). Once ready, you'll land on the **Briefing** view.
+When you first open 4DA, you'll see a splash screen while the system initializes (database, embedding models, sources). Once ready, you'll land on the **Brief** view.
 
 ### Navigation
 
-**Main Views** (bottom tab bar):
+**Main Views** (tab bar, above the content area):
 
 | Tab | Purpose |
 |-----|---------|
-| **Briefing** | AI-generated intelligence summary, top picks, decision windows |
-| **Channels** | Custom topic channels you create and monitor |
-| **Results** | All scored content from every source |
-| **Profile** | Your sovereign developer profile and identity |
-| **Insights** | Trends, decisions, system health |
-| **Saved** | Bookmarked items |
-| **Toolkit** | Developer tools and utilities |
-| **Playbook** | STREETS independence modules |
-| **Calibrate** | Tune scoring accuracy |
+| **Brief** | Your intelligence at a glance — AI-generated summary, top picks, attention cards |
+| **Preemption** | What matters before it hurts — forward-looking dependency and ecosystem risk |
+| **Blind Spots** | What you're not watching — gaps in your coverage |
+| **Signal** | Your curated intelligence feed — every item scored against your stack. Toggle between **List** and **Graph** views (top right of the panel) |
 
 **Settings** (gear icon, top right) has these tabs:
 
 | Tab | What's Inside |
 |-----|--------------|
-| **General** | AI provider, API keys, re-ranking, usage stats, language, license |
+| **General** | Language, background monitoring and refresh interval, data retention, deep clean |
+| **Intelligence** | AI provider, API keys, model selection, blind-spot auto-assess, Your Stack (which projects count toward relevance), license |
 | **Sources** | Enable/disable content sources, configure RSS feeds |
-| **Profile** | Your role, tech stack, interests, exclusions |
-| **Discovery** | ACE scan directories, auto-discovery |
-| **Health** | System diagnostics, anomaly detection, learned behavior |
+| **Projects** | ACE scan directories and auto-discovery, indexed documents, personalization (role, tech stack, interests, exclusions), learned preferences |
 | **About** | Version, attribution, keyboard shortcuts |
+
+A **Team** tab appears additionally on Team and Enterprise tiers.
 
 ---
 
@@ -72,7 +68,7 @@ Full AI capabilities running entirely on your machine.
    ```
    ollama pull llama3.2
    ```
-3. In 4DA: **Settings > General > AI Provider** > select **Ollama**
+3. In 4DA: **Settings > Intelligence > AI Provider** > select **Ollama**
 4. The app auto-detects Ollama. If not, click **Recheck**
 5. Select your model from the dropdown
 
@@ -81,7 +77,7 @@ Full AI capabilities running entirely on your machine.
 ### Option 3: Anthropic (Claude)
 
 1. Get an API key from [console.anthropic.com](https://console.anthropic.com)
-2. In 4DA: **Settings > General > AI Provider** > select **Anthropic**
+2. In 4DA: **Settings > Intelligence > AI Provider** > select **Anthropic**
 3. Paste your API key
 4. Select a model (claude-3-haiku is cheapest, claude-3-opus is best)
 
@@ -90,7 +86,7 @@ Full AI capabilities running entirely on your machine.
 ### Option 4: OpenAI
 
 1. Get an API key from [platform.openai.com](https://platform.openai.com)
-2. In 4DA: **Settings > General > AI Provider** > select **OpenAI**
+2. In 4DA: **Settings > Intelligence > AI Provider** > select **OpenAI**
 3. Paste your API key
 4. Select a model (gpt-4o-mini is cheapest)
 
@@ -100,7 +96,7 @@ Full AI capabilities running entirely on your machine.
 
 Re-ranking uses AI to improve the order of your results beyond basic scoring.
 
-- **Settings > General > Re-Ranking** > Enable
+- **Settings > Intelligence > Re-Ranking** > Enable
 - Set **Max Items per Batch** (default: 15)
 - Set **Min Score** threshold (default: 0.25)
 - Set daily token and cost limits to control spending
@@ -131,18 +127,17 @@ Your profile tells 4DA what you work on so it can surface relevant content.
 
 ### Setting Your Role
 
-**Settings > Profile > Your Role**
+**Settings > Projects > Personalization > Your Role**
 
 Enter your job title or role (e.g., "Senior Rust Developer", "Full-Stack Engineer", "ML Researcher"). This shapes how content is prioritized.
 
 ### Managing Your Tech Stack
 
-**Settings > Profile > Tech Stack**
+**Settings > Projects > Personalization > Tech Stack**
 
 Your tech stack is the most important personalization signal. It affects:
 - Which content scores higher
 - What appears in your Developer DNA
-- Decision Windows and tech radar entries
 
 **To add technologies:** Type a technology name and press Enter or click Add.
 
@@ -152,7 +147,7 @@ Your tech stack is the most important personalization signal. It affects:
 
 ### Setting Interests
 
-**Settings > Profile > Interests**
+**Settings > Projects > Personalization > Interests**
 
 Add topics you want to see more of. These boost relevance scores for matching content.
 
@@ -160,7 +155,7 @@ Add topics you want to see more of. These boost relevance scores for matching co
 
 ### Setting Exclusions
 
-**Settings > Profile > Exclusions**
+**Settings > Projects > Personalization > Exclusions**
 
 Add topics you never want to see. These apply a penalty to matching content.
 
@@ -206,7 +201,7 @@ ACE (Autonomous Context Engine) scans your local projects to understand what you
 
 ### Configuring Scan Directories
 
-**Settings > Discovery**
+**Settings > Projects**
 
 1. Click **Auto-Discover** to let ACE find common project directories
 2. Or manually add directories using the input field
@@ -236,30 +231,25 @@ ACE scans up to 5 levels deep in each directory, looking for:
 
 ACE scans all projects in your configured directories. If it picks up technology from a project you don't actively work on (for example, scanning a tutorial repo that uses Drizzle when you don't use Drizzle), you have two ways to fix it:
 
-**Method 1: Remove from Settings (Quick)**
+**Method 1: Remove the tag (Quick)**
 
-1. Open **Settings > Profile > Tech Stack**
+1. Open **Settings > Projects > Personalization > Tech Stack**
 2. Find the incorrect technology tag
 3. Click the **x** button to remove it
 
-**Method 2: Remove from Decision Memory (Thorough)**
+Also check the **Interests** list in the same panel — ACE may have auto-seeded a matching interest. Remove it the same way.
 
-This method also removes the technology from your interests and decision history:
+**Method 2: Stop the source project from counting (Thorough)**
 
-1. Go to the **Insights** tab in the main view
-2. Scroll to **Decision Windows**
-3. Find the incorrect tech entry (e.g., "drizzle")
-4. Click to expand it
-5. Click the red **Remove** button
+If the wrong technology keeps coming back, the project it came from is still being scanned:
 
-This cleans the technology from three places:
-- **Tech stack** (primary storage, affects scoring)
-- **Interests** (may have been auto-seeded by ACE)
-- **Decisions** (supersedes the tech_choice decision record)
+1. Open **Settings > Intelligence > Your Stack**
+2. Find the project the technology came from (each row shows its path and dependency count)
+3. Toggle it **off** so its dependencies stop counting toward relevance
+
+To stop scanning the directory entirely, remove it under **Settings > Projects > scan directories**.
 
 After removal, scoring and Developer DNA reflect the corrected stack from the next analysis cycle.
-
-> **Tip:** Auto-detected tech decisions show an amber banner: *"Some tech choices were auto-detected from your local projects."* Use the Remove button on any that don't belong.
 
 ---
 
@@ -278,33 +268,26 @@ Every time you interact with a result, 4DA records a signal:
 | **Dismiss** | Mild negative | Slightly reduces topic |
 | **Mark Irrelevant** | Strong negative | Reduces topic, may create anti-topic |
 
-### Learning Indicator
+### Learned Preferences
 
-The **"Learning: N preferences"** bar below the action bar shows how many topic preferences the system has learned. Click it to expand and see:
+**Settings > Projects > Learned Preferences**
 
-- **Green pills** (+): Topics you engage with (positive affinity)
-- **Red pills** (-): Topics you've rejected (anti-topics)
+Shows what 4DA has learned about your interests from your interactions. Each preference can be:
 
-### Intelligence Profile
+- **Pinned** — always show content matching this preference
+- **Forgotten** — drop it from the profile
 
-On the **Briefing** view (scroll down), you'll see **"Your Intelligence Profile"** with:
+You can also reset the whole learned profile from this panel. If nothing is listed yet, keep saving, dismissing, and rating items — the profile builds from those signals.
 
-- **Top Affinities / Strongest Signals**: Your most significant learned preferences
-- **Learning Velocity**: Total topics the system has learned about
-- **System Activity**: Items analyzed, items you've engaged with, learning cycles completed
+### Engagement Pulse
 
-### Intelligence Metrics
+On the **Brief** view you'll see the **Engagement Pulse** — a compact activity sparkline and your current engagement streak.
 
-Click **"Intelligence Metrics"** on the Briefing view to expand detailed analytics:
+### What You Would Have Missed
 
-- **Engagement Pulse**: Your interaction patterns
-- **Intelligence Pulse**: Calibration accuracy, source quality, anti-patterns
-- **Scoring Delta**: How scores are shifting over time
-- **Compound Advantage**: Your overall intelligence advantage score
+On the **Signal** view (List mode, after an analysis completes), 4DA shows how much noise it rejected for you: the number of items scanned, the number rejected, your own rejection rate as a percentage, and the single highest-value item you would otherwise have missed.
 
-### Calibration
-
-Go to the **Calibrate** tab to review and tune scoring accuracy. Rate items as relevant or irrelevant to train the system.
+This panel only appears once the rejection rate is high enough to tell a meaningful story.
 
 ---
 
@@ -314,14 +297,14 @@ Go to the **Calibrate** tab to review and tune scoring accuracy. Rate items as r
 
 | Tier | Price | Features |
 |------|-------|----------|
-| **Free** | $0 | All sources, scoring, learning, AI briefings, natural language search (BYOK) |
-| **Signal** | Paid | Everything in Free + Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Semantic Shifts, Project Health |
+| **Free** | $0 | All sources, scoring, learning, the OSV security floor, plus AI briefings, natural language search, Developer DNA (BYOK), Score Autopsy, signal chains, and channels |
+| **Signal** | Paid | Everything in Free + Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts, Project Health, Attention Report, Decision Health, cross-project intelligence, Trust Ledger analytics |
 | **Team** | Paid | Everything in Signal + team features |
 
 ### Activating a License Key
 
-1. Open **Settings > General** > scroll to **License** section
-2. Paste your license key (format: `XXXXXX-XXXXXX-XXXXXX-XXXXXX-XXXXXX-V3`)
+1. Open **Settings > Intelligence** > scroll to the **License** section
+2. Paste your license key
 3. Click **Activate**
 4. You should see a gold **SIGNAL** badge appear in the header bar
 
@@ -331,7 +314,7 @@ Your license persists across restarts. You should never need to re-enter it.
 
 Your current tier is shown:
 - In the header bar (gold tier badge — **SIGNAL** when licensed, **SIGNAL TRIAL** during the 14-day trial, gray **FREE** otherwise)
-- In **Settings > General > License** section
+- In **Settings > Intelligence > License** section
 
 ---
 
@@ -410,39 +393,31 @@ For basic scoring without AI, select **Built-in (Local)** as your provider — n
 - Try broadening your interests or reducing exclusions
 - Wait for sources to fetch — the first analysis may take 30-60 seconds
 
-### Wrong Technology in My Profile / Playbook
+### Wrong Technology in My Profile
 
 ACE auto-detects technologies from your local projects. If it detects something incorrect:
 
-1. **Quick fix**: **Settings > Profile > Tech Stack** > click **x** on the wrong tag
-2. **Thorough fix**: **Insights tab > Decision Windows** > expand the entry > click **Remove**
+1. **Quick fix**: **Settings > Projects > Personalization > Tech Stack** > click **x** on the wrong tag (and check the **Interests** list in the same panel)
+2. **Thorough fix**: **Settings > Intelligence > Your Stack** > toggle off the project the technology came from
 
-The Remove button cleans the technology from your tech stack, interests, and decision history. The Playbook regenerates automatically.
+Scoring and Developer DNA reflect the corrected stack from the next analysis cycle.
 
 See [Fixing Incorrect Tech Detection](#fixing-incorrect-tech-detection) for full details.
 
-### "0 Topics Learned" in Intelligence Profile
+### No Learned Preferences Yet
 
-This means the system hasn't detected any interaction patterns yet. To build your profile:
+If **Settings > Projects > Learned Preferences** is empty, the system hasn't detected any interaction patterns yet. To build your profile:
 
 1. Run an analysis (**R** key)
 2. **Save** articles you find relevant (boosts those topics)
 3. **Dismiss** articles you don't care about (deprioritizes those topics)
 4. After 3+ interactions per topic, affinities will appear
 
-### Learning Preferences Dropdown Won't Expand
-
-If the "Learning: N preferences" bar doesn't expand when clicked:
-
-1. Make sure you're clicking the bar itself (not the area around it)
-2. Try scrolling down — the expanded content appears below the bar
-3. If the issue persists, refresh the page (Ctrl+R)
-
 ### License Key Not Persisting After Restart
 
 Your license should persist across restarts. If it reverts to "Free":
 
-1. Re-enter your license key in **Settings > General > License**
+1. Re-enter your license key in **Settings > Intelligence > License**
 2. Click **Activate**
 3. Verify the gold "Signal" badge appears
 4. Restart the app to confirm it persists
@@ -469,7 +444,7 @@ If a source shows errors in the briefing header:
 
 If your API costs are higher than expected:
 
-1. **Settings > General > Re-Ranking** > reduce **Max Items per Batch**
+1. **Settings > Intelligence > Re-Ranking** > reduce **Max Items per Batch**
 2. Set a **Daily Token Limit** (e.g., 100,000)
 3. Set a **Daily Cost Limit** (e.g., $0.50)
 4. Switch to a cheaper model (claude-3-haiku or gpt-4o-mini)

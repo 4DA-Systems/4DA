@@ -81,19 +81,20 @@ This file provides a quick reference. For detailed design, read the specs.
 - **Modes:** Feed, Notifications, Digests (planned)
 
 ### 5. Learning Engine
-- **Location:** `src-tauri/src/ace/behavior.rs`
+- **Location:** `src-tauri/src/ace/behavior/` (module directory: `decay.rs`, `queries.rs`, `tracking.rs`, `types.rs`)
 - **Purpose:** Improve over time
 - **Signals:** Clicks, dismissals, saves, explicit feedback
 
 ### 6. Void Engine (Ambient Visualization)
-- **Location:** `src-tauri/src/void_engine.rs`, `src-tauri/src/void_commands.rs`
+- **Location:** `src-tauri/src/void_engine/` (module directory: `heartbeat.rs`, `universe.rs`), `src-tauri/src/void_commands.rs`
 - **Frontend:** `src/components/void-engine/`
 - **Purpose:** Communicate system state through ambient visual signals
 - **Status:**
   - **Heartbeat (Production):** 48px WebGL2/CSS glow in header. Driven by real backend events. Maps pulse/heat/burst/morph/error/staleness to visual changes. Zero-cost when idle (change-driven, not polled).
   - **Universe (Experimental):** Full-screen Three.js 3D visualization. Code-split via React.lazy (~908KB, loads only on click). Projects embeddings to 3D via Johnson-Lindenstrauss random projection. Particle selection, search, camera fly-to, neighbor discovery. **Not actively maintained** - see AD-012 in DECISIONS.md.
 - **Key Files:**
-  - `void_engine.rs` - Signal system, projection math, universe builder, k-means, 22 tests
+  - `void_engine/heartbeat.rs` - Signal system driving the header glow
+  - `void_engine/universe.rs` - Projection math, universe builder, k-means
   - `void_commands.rs` - 4 Tauri commands (get_void_signal, void_get_universe, void_get_particle_detail, void_get_neighbors)
   - `VoidHeartbeat.tsx` - WebGL2 fragment shader with CSS fallback
   - `VoidEngine.tsx` - Orchestrator (heartbeat click -> lazy-load universe)
@@ -146,16 +147,16 @@ Sources                              ▲
 ├── src-tauri/           # Rust backend
 │   └── src/
 │       ├── ace/         # Autonomic Context Engine
-│       ├── scoring/     # Relevance scoring (mod.rs + 10 submodules)
+│       ├── scoring/     # Relevance scoring (mod.rs + ~46 submodules)
 │       ├── sources/     # External adapters
 │       ├── lib.rs       # App entry (run, setup, re-exports)
 │       ├── commands.rs  # Tauri command handlers + background jobs
 │       ├── types.rs     # Shared struct/enum definitions
 │       ├── state.rs     # Global statics + accessor functions
-│       ├── utils.rs     # Text processing, vector math, topics
+│       ├── utils/       # Text processing, vector math, topics
 │       ├── embeddings.rs # Embedding generation (OpenAI/Ollama)
 │       ├── events.rs    # Tauri event emission helpers
-│       └── db.rs        # Database layer
+│       └── db/          # Database layer
 ├── src/                 # React frontend
 ├── specs/               # Design documents (ARCHITECTURE.md, ACE-STONE-TABLET.md)
 └── mcp-memory-server/   # MCP memory tools

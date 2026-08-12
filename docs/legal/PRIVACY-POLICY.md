@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**4DA Systems Pty Ltd** | **Effective Date: 15 March 2026** | **Last Updated: 15 March 2026**
+**4DA Systems Pty Ltd** | **Effective Date: 15 March 2026** | **Last Updated: 12 August 2026**
 
 ---
 
@@ -120,7 +120,7 @@ If you purchase a Signal subscription, the App validates your license key using 
 
 - Sends your **license key** to Keygen's validation API
 - Does **not** send your name, email address, device identifiers, or any other personal data
-- Occurs at activation and periodically thereafter (cached for 24 hours to minimise network calls)
+- Occurs when you activate your license, and thereafter only once the cached result has expired (results are cached for 90 days to minimise network calls)
 - Results are cached locally to allow offline usage between validations
 
 The App also supports **offline license verification** using Ed25519 digital signatures embedded in the license key itself. This verification requires no network access whatsoever.
@@ -160,7 +160,7 @@ Unlike the App, our website is a standard web property. When you visit 4da.ai:
 
 ### 3.1 Data We May Collect
 
-- **Server logs:** Our hosting provider (Vercel) may collect standard server log data including IP addresses, browser type, referring pages, and pages visited. See [Vercel's Privacy Policy](https://vercel.com/legal/privacy-policy).
+- **Server logs:** Our hosting provider (Cloudflare) may collect standard server log data including IP addresses, browser type, referring pages, and pages visited. See [Cloudflare's Privacy Policy](https://www.cloudflare.com/privacypolicy/).
 - **Analytics:** We may use privacy-respecting analytics to understand aggregate traffic patterns. If used, this data is anonymised and does not track individual users across sessions.
 - **Cookies:** The website may use essential cookies for basic functionality. We do not use third-party advertising cookies or cross-site tracking cookies.
 
@@ -218,7 +218,7 @@ To be unambiguous:
 | RSS/Atom feeds | App | Standard HTTP requests (your IP visible) | Content aggregation |
 | Keygen | App (Signal tier only) | License key | License validation |
 | User's SMTP provider | App (optional, user-configured) | Digest email contents | Email delivery |
-| Vercel | Website | Server logs, analytics | Website hosting |
+| Cloudflare | Website | Server logs, analytics | Website hosting |
 | Shopify | Store | Purchase and shipping information | Merchandise sales |
 
 ---
@@ -239,7 +239,7 @@ No action from us is required for you to fully erase all traces of the App from 
 
 ### 7.2 Website Data
 
-Server logs retained by Vercel are subject to Vercel's data retention policies. We do not independently retain website visitor data.
+Server logs retained by Cloudflare are subject to Cloudflare's data retention policies. We do not independently retain website visitor data.
 
 ### 7.3 Store Data
 
@@ -332,7 +332,7 @@ These transfers are initiated by you, using your own API keys, and are governed 
 
 ### 10.2 Website and Store
 
-Our website is hosted on Vercel, which operates globally. Shopify also operates globally. Data processed by these services may be transferred to and stored in countries outside your jurisdiction, including the United States. These providers maintain appropriate safeguards for international transfers, including Standard Contractual Clauses where required by GDPR.
+Our website is hosted on Cloudflare, which operates globally. Shopify also operates globally. Data processed by these services may be transferred to and stored in countries outside your jurisdiction, including the United States. These providers maintain appropriate safeguards for international transfers, including Standard Contractual Clauses where required by GDPR.
 
 ---
 
@@ -355,7 +355,7 @@ The App's security model is straightforward: your data is on your device, protec
 
 ### 11.2 Website and Store
 
-We rely on industry-standard security measures provided by Vercel and Shopify, including TLS encryption for all data in transit and secure payment processing (Shopify is PCI-DSS compliant).
+We rely on industry-standard security measures provided by Cloudflare and Shopify, including TLS encryption for all data in transit and secure payment processing (Shopify is PCI-DSS compliant).
 
 ---
 
@@ -407,7 +407,7 @@ If you are unsatisfied with our response, you may lodge a complaint with:
 | Question | App | Website | Store |
 |----------|-----|---------|-------|
 | Do we collect personal data? | No | Minimal (server logs) | Yes (for orders) |
-| Do we store data on our servers? | No | Vercel handles logs | Shopify handles data |
+| Do we store data on our servers? | No | Cloudflare handles logs | Shopify handles data |
 | Do we sell data? | No | No | No |
 | Do we use cookies? | N/A (desktop app) | Essential only | Shopify standard |
 | Do we track you? | No | No | No |

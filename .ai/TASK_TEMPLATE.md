@@ -75,10 +75,10 @@ Enable 4DA to fetch and process posts from specified subreddits.
 ### Files Allowed to Change
 - `src-tauri/src/sources/mod.rs` - add reddit module export
 - `src-tauri/src/sources/reddit.rs` - new file, implement adapter
-- `src-tauri/src/settings.rs` - add reddit configuration fields
+- `src-tauri/src/settings/mod.rs` - add reddit configuration fields
 
 ### Files Forbidden to Change
-- `src-tauri/src/db.rs` - schema changes require separate task
+- `src-tauri/src/db/` - schema changes require separate task
 - `src-tauri/src/ace/*` - ACE logic unrelated to this task
 
 ### Relevant Invariants
