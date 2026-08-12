@@ -256,10 +256,7 @@ pub(crate) async fn generate_briefing_internal(
     // (`is_brief_capable`). Without one — no LLM at all, or a model too weak for genuine
     // synthesis (Haiku / *-mini / consumer-hardware local) — we serve the deterministic,
     // grounded floor below instead of erroring or faking synthesis with a weak model.
-    let has_llm = crate::content_personalization::context::compute_has_llm(
-        &llm_settings.provider,
-        &llm_settings.api_key,
-    );
+    let has_llm = crate::llm_gate::compute_has_llm(&llm_settings.provider, &llm_settings.api_key);
     let brief_capable = has_llm && crate::llm_capability::is_brief_capable(&llm_settings);
 
     // Get items from analysis state or DB. `grounded_ids` carries the canonical

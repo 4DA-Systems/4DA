@@ -284,6 +284,7 @@ mod knowledge_decay;
 pub(crate) mod language_detect;
 mod llm;
 pub(crate) mod llm_capability;
+mod llm_gate;
 mod llm_judge;
 mod llm_judgments;
 mod llm_stream;
@@ -374,7 +375,6 @@ pub mod taste_test;
 mod taste_test_commands;
 
 mod content_integrity;
-mod content_personalization;
 pub(crate) mod i18n;
 mod playbook_commands;
 mod sovereign_developer_profile;
@@ -1045,8 +1045,6 @@ pub fn run() {
             // Stack Health Engine
             stack_health::get_stack_health,
             stack_health::get_missed_intelligence,
-            // Content Personalization (Sovereign Content Engine)
-            content_personalization::commands::prune_personalization_cache,
             // Sovereign Developer Profile (unified view)
             sovereign_developer_profile::export_sovereign_profile_markdown,
             sovereign_developer_profile::export_sovereign_profile_json,

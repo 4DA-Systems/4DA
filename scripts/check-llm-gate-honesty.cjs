@@ -8,7 +8,7 @@
  * (`provider == "ollama"`). A stray/env key with provider "none" flips such a check
  * true (false-positive "configured"), and the OR-shortcut silently drops "builtin"
  * (false-negative). Ten such sites were fixed by routing through the single source of
- * truth: `content_personalization::context::compute_has_llm(provider, api_key)`.
+ * truth: `llm_gate::compute_has_llm(provider, api_key)`.
  *
  * This gate fails the commit if a NEW inline proxy construct appears. Capability is a
  * property of the SELECTED PROVIDER, not of key presence — route through compute_has_llm.
@@ -42,7 +42,7 @@ const EXCLUDE = [
   /[._]test\./,
   /_tests\.rs$/,
   /\/tests\//,
-  /content_personalization[\\/]context\.rs$/, // defines compute_has_llm (match arms, not a proxy)
+  /llm_gate\.rs$/, // defines compute_has_llm (match arms, not a proxy)
   /scripts[\\/]check-llm-gate-honesty\.cjs$/,
 ];
 

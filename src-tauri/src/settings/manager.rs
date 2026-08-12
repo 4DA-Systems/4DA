@@ -331,7 +331,7 @@ impl SettingsManager {
     /// Check if LLM re-ranking is configured and enabled
     pub fn is_rerank_enabled(&self) -> bool {
         self.settings.rerank.enabled
-            && crate::content_personalization::context::compute_has_llm(
+            && crate::llm_gate::compute_has_llm(
                 &self.settings.llm.provider,
                 &self.settings.llm.api_key,
             )

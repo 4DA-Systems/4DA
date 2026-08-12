@@ -52,7 +52,6 @@ import { ContentTranslationProvider } from './components/ContentTranslationProvi
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAppStore } from './store';
-import { cmd } from './lib/commands';
 import { useUpdateCheck } from './hooks/use-update-check';
 import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
@@ -248,8 +247,6 @@ function App() {
         }
       });
       void loadSourceHealth();
-      // Pure maintenance — has no business on the critical mount path.
-      void cmd('prune_personalization_cache').catch(() => {});
     });
     return () => {
       cancelledLicenseRetry = true;

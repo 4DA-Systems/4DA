@@ -192,7 +192,6 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "get_composed_stack",
     "get_stack_health",
     "get_missed_intelligence",
-    "prune_personalization_cache",
     "export_sovereign_profile_markdown",
     "export_sovereign_profile_json",
     "get_sovereign_profile",

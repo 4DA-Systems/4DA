@@ -423,11 +423,6 @@ interface CommandMap {
   get_trial_status: { params: Record<string, never>; result: { active: boolean; days_remaining: number; started_at: string | null } };
   start_trial: { params: Record<string, never>; result: { success: boolean; days_remaining?: number } };
 
-  // -- Playbook (STREETS) --
-  prune_personalization_cache: { params: Record<string, never>; result: { deleted: number; remaining: number; read_states: number; cache_size_bytes: number } };
-
-  // -- STREETS Health --
-
   // -- Sovereign Profile --
   get_sovereign_profile: { params: Record<string, never>; result: SovereignProfileData };
   get_sovereign_profile_completeness: { params: Record<string, never>; result: ProfileCompleteness };

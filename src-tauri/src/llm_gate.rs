@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! LLM-availability gate shared by every surface that decides whether to attempt
-//! an LLM call.
+//! The single source of truth for "is an LLM provider actually configured?".
 //!
-//! This module used to assemble the full `PersonalizationContext` for the STREETS
-//! lesson pipeline. That pipeline was retired with the STREETS tab; `compute_has_llm`
-//! is the part that outlived it and is now the crate-wide source of truth.
+//! This helper used to live in `content_personalization::context`, where it was
+//! assembled as one field of the STREETS lesson personalization context. That
+//! pipeline was retired; the gate outlived it, so it now has its own module named
+//! for what it is. Every surface that decides whether to attempt an LLM call
+//! (briefings, digests, content translation, summaries, channel rendering,
+//! monitoring jobs, settings) routes through `compute_has_llm`.
+//!
+//! Enforced by `scripts/check-llm-gate-honesty.cjs` (antibody
+//! 2026-06-02-proxy-derived-state): no caller may re-derive availability inline.
 
 /// Honest LLM availability: a provider must actually be selected AND usable.
 /// A stale/leftover api_key with provider "none" must NOT read as has_llm — that
