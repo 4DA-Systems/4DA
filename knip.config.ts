@@ -7,6 +7,11 @@ const config: KnipConfig = {
   project: ['src/**/*.{ts,tsx}'],
   ignore: [
     'src/test/**',
+    // `site/` is a separate workspace with its OWN package.json (4da-site) and its
+    // own deps. Scanning it from the root manifest reported @noble/ed25519 and
+    // stripe as "unlisted dependencies" when they are correctly declared in
+    // site/package.json — a false positive on every run.
+    'site/**',
   ],
   ignoreDependencies: [
     '@types/*',
