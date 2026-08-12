@@ -8,11 +8,13 @@ Add @4da/mcp-server — developer intelligence with codebase-aware content scori
 
 ## Line to Add
 
-Insert this line in the **Developer Tools** section, alphabetically between
-`rsdouglas/janee` and `ryan0204/github-repo-mcp`:
+Insert this line in the **Developer Tools** section, in alphabetical order.
+The entry name `4DA-Systems/4DA` begins with a digit, so it sorts into the
+numeric-prefix group at the top of the section — confirm the exact neighbours
+against the section's current contents before opening the PR:
 
 ```markdown
-- [runyourempire/4DA](https://github.com/4DA-Systems/4DA/tree/main/mcp-4da-server) 📇 🏠 🍎 🪟 🐧 - 14 MCP tools (9 standalone): live vulnerability scanning (OSV.dev) across npm/Rust/Python/Go, dependency health and upgrade planning, codebase-aware content scoring, Hacker News ecosystem pulse, decision memory, knowledge-gap detection, and cross-agent persistent memory. Privacy-first - everything stays local. `npx @4da/mcp-server`
+- [4DA-Systems/4DA](https://github.com/4DA-Systems/4DA/tree/main/mcp-4da-server) 📇 🏠 🍎 🪟 🐧 - 14 MCP tools (9 standalone): live vulnerability scanning (OSV.dev) across npm/Rust/Python/Go, dependency health and upgrade planning, codebase-aware content scoring, Hacker News ecosystem pulse, decision memory, knowledge-gap detection, and cross-agent persistent memory. Privacy-first - everything stays local. `npx @4da/mcp-server`
 ```
 
 ## PR Description / Body
@@ -50,7 +52,7 @@ Adds [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) to the Dev
 - [x] Server name linked to its repository
 - [x] Brief description of functionality
 - [x] Categorized under relevant section (Developer Tools)
-- [x] Alphabetical order maintained (between `rsdouglas/janee` and `ryan0204/github-repo-mcp`)
+- [x] Alphabetical order maintained (numeric-prefix group at the top of the section — verify neighbours at PR time)
 - [x] One server per line
 - [x] Follows existing format: `- [org/repo](url) <badges> - Description`
 - [x] Badges used: 📇 (TypeScript), 🏠 (Local Service), 🍎 (macOS), 🪟 (Windows), 🐧 (Linux)

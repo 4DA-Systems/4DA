@@ -2,7 +2,9 @@
 
 ## What Is 4DA
 
-4DA (4 Dimensional Autonomy) is a Tauri 2.0 desktop app that surfaces developer-relevant content from the internet — privately, locally, with zero configuration.
+**4DA reads the internet for developers — privately, locally — and gets sharper every day.**
+
+4DA (4 Dimensional Autonomy) is the Tauri 2.0 desktop app that delivers on that promise. It learns from how you engage with what it shows you: yesterday's noise becomes tomorrow's signal. It is **not** a content tool or a news reader — it is proactive developer intelligence.
 
 **Stack:** Rust backend + React/TypeScript frontend + SQLite (with sqlite-vec for vector search)
 **Dev server:** localhost:4444 | **Package manager:** pnpm
@@ -24,7 +26,7 @@ pnpm run validate:sizes    # Check file size limits
 2. **BYOK** — user provides API keys, never stored remotely
 3. **Local first** — works offline with Ollama fallback
 4. **Minimal** — no feature bloat, every element earns its place
-5. **Zero-config value** — a new user should see useful content within 60 seconds
+5. **Accurate first** — never show intelligence the system can't stand behind. Correct results from a capable model beat fast results from a weak one. If the model can't do the job, don't fake it.
 
 ## Architecture
 
@@ -39,7 +41,10 @@ src-tauri/              # Rust backend
     extractors/         # File format extractors (PDF, Office, etc.)
     scoring/            # PASIFA scoring algorithm (multi-module)
     settings/           # Settings management + keychain + validation
-    sources/            # Content source adapters (HN, Reddit, RSS, GitHub)
+    sources/            # 20+ content source adapters (HN, Reddit, RSS, GitHub, arXiv,
+                        #   dev.to, Lobsters, ProductHunt, Bluesky, crates.io, npm, PyPI,
+                        #   HuggingFace, PapersWithCode, CVE/OSV, StackOverflow, X/Twitter,
+                        #   YouTube, Go modules, Mastodon, Lemmy)
   src/embeddings.rs     # Local embedding via Ollama
 data/                   # Runtime data (gitignored)
   settings.json         # User config (use settings.example.json as template)
@@ -55,10 +60,14 @@ mcp-4da-server/         # MCP server exposing 4DA tools (Codex)
 - **Rust:** std > External crates > `crate::` > `super::`
 
 ### File Size Limits
+
+Enforced by `scripts/check-file-sizes.cjs` (`pnpm run validate:sizes`):
+
 - TypeScript (.ts): warn at 300 lines, error at 500
-- TypeScript (.tsx): warn at 300 lines, error at 450
-- Rust: warn at 500 lines, error at 800
-- Rust functions: max 60 lines (warning only)
+- TypeScript (.tsx): warn at 350 lines, error at 500
+- Rust: warn at 700 lines, error at 1000
+- Test files (`*.test.*`, `*_tests.rs`): exempt from warnings, error at 2x the normal threshold
+- Rust functions: max 60 lines (convention only — clippy's `too_many_lines` is set to `allow`)
 - Exceeding files must be split or added to `scripts/check-file-sizes.cjs` exceptions
 
 ### Error Handling
@@ -73,16 +82,20 @@ mcp-4da-server/         # MCP server exposing 4DA tools (Codex)
 
 ## Design System
 
+Tokens are defined in `src/App.css`. The real CSS custom-property names carry a `--color-` prefix.
+
 ```css
 /* Background */
---bg-primary: #0A0A0A;    --bg-secondary: #141414;   --bg-tertiary: #1F1F1F;
+--color-bg-primary: #0A0A0A;     --color-bg-secondary: #141414;   --color-bg-tertiary: #1F1F1F;
 /* Text */
---text-primary: #FFFFFF;   --text-secondary: #A0A0A0; --text-muted: #8A8A8A;
+--color-text-primary: #FFFFFF;   --color-text-secondary: #A0A0A0; --color-text-muted: #8A8A8A;
 /* Accent */
---accent-primary: #FFFFFF; --accent-gold: #D4AF37;    --border: #2A2A2A;
+--color-accent-primary: #FFFFFF; --color-accent-gold: #D4AF37;    --color-border: #2A2A2A;
 /* Status */
---success: #22C55E;        --error: #EF4444;
+--color-success: #22C55E;        --color-error: #EF4444;
 ```
+
+A **light theme** overrides the same token names with a separate palette — never hard-code a hex value; always reference the token so both themes work.
 
 Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
 
@@ -111,8 +124,9 @@ Before modifying architecture or invariants, read the relevant `.ai/` file:
 
 ## Codex-Specific
 
-- Agent definitions: `.Codex/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
-- Slash commands: `.Codex/commands/` (project-specific commands)
+- Agent definitions: `.claude/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
+- Slash commands: `.claude/commands/` (project-specific commands)
+- Rules: `.claude/rules/` (document hygiene, intelligence doctrine, worktree hygiene)
 - MCP servers: memory (persistent decisions/learnings), 4da (14 tools)
 - Hooks: wisdom gates (PreToolUse), consequence processing (UserPromptSubmit), session capture (Stop), prompt analyzer
 
