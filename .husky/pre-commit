@@ -230,190 +230,31 @@ node scripts/i18n-guard.cjs 2>/dev/null || {
 }
 
 # Secret scanning — comprehensive, nukeproof detection
-# Blocks commits containing real API keys, tokens, private keys, PII, and credentials
+# Blocks commits containing real API keys, tokens, private keys, PII, and credentials.
+#
+# The ~180 lines of inline `scan_pattern` greps that used to live here are gone.
+# Patterns, the staged-file skip list, and the statutory ABN/phone exemptions are
+# now maintained ONCE in scripts/scan-secrets.cjs and shared with .husky/pre-push.
+# `--staged` scans STAGED blob content (`git show :FILE`), not the working tree —
+# identical semantics to the old inline loop, so a secret that was `git add`ed and
+# then edited out of the file still blocks the commit.
 echo "Scanning for secrets..."
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | \
-    grep -v 'node_modules/' | \
-    grep -v 'target/' | \
-    grep -v 'dist/' | \
-    grep -v '\.gitignore$' | \
-    grep -v 'SECURITY\.md$' | \
-    grep -v '\.example' | \
-    grep -v '\.test\.' | \
-    grep -v '\.spec\.' | \
-    grep -v 'privacy_tests' | \
-    grep -v 'PRE-LAUNCH-PLAN\.md$' | \
-    grep -v 'PRODUCT-CATALOG\.md$' | \
-    grep -v 'SHOPIFY-.*GUIDE\.md$' | \
-    grep -v 'SHOPIFY-VERIFICATION\.md$' | \
-    grep -v 'TEAM-RELAY-ARCHITECTURE\.md$' | \
-    grep -v 'docker-compose\.yml$' | \
-    grep -v 'terms\.njk$' | \
-    grep -v 'privacy\.njk$' | \
-    grep -v 'contact\.njk$' | \
-    grep -v 'PRIVACY-POLICY\.md$' || true)
-
-if [ -n "$STAGED_FILES" ]; then
-    SECRETS_FOUND=""
-    FAIL=0
-
-    # Helper: scan staged file contents (not working tree) for a pattern
-    scan_pattern() {
-        local LABEL="$1"
-        local PATTERN="$2"
-        local EXCLUDE_PATTERN="${3:-}"
-        for FILE in $STAGED_FILES; do
-            # Skip binary files
-            if file "$FILE" 2>/dev/null | grep -qE 'binary|executable|image|archive'; then
-                continue
-            fi
-            local MATCHES
-            if [ -n "$EXCLUDE_PATTERN" ]; then
-                MATCHES=$(git show ":$FILE" 2>/dev/null | grep -nE "$PATTERN" 2>/dev/null | grep -vE "$EXCLUDE_PATTERN" || true)
-            else
-                MATCHES=$(git show ":$FILE" 2>/dev/null | grep -nE "$PATTERN" 2>/dev/null || true)
-            fi
-            if [ -n "$MATCHES" ]; then
-                while IFS= read -r LINE; do
-                    SECRETS_FOUND="${SECRETS_FOUND}  [$LABEL] $FILE:$LINE\n"
-                    FAIL=1
-                done <<EOF
-$MATCHES
-EOF
-            fi
-        done
-    }
-
-    # --- API Keys & Tokens ---
-    # OpenAI
-    scan_pattern "OpenAI" 'sk-proj-[A-Za-z0-9_-]{20,}'
-    scan_pattern "OpenAI" 'sk-[a-zA-Z0-9]{20,}' 'sk-ant-|sk-proj-|sk_live|sk_test'
-    # Anthropic
-    scan_pattern "Anthropic" 'sk-ant-[A-Za-z0-9_-]{20,}'
-    # GitHub tokens (all prefixes)
-    scan_pattern "GitHub" 'gh[pousr]_[A-Za-z0-9]{36,}'
-    # AWS access keys
-    scan_pattern "AWS Key" '(AKIA|ASIA)[0-9A-Z]{16}'
-    # AWS secret keys (40-char base64 near aws_secret)
-    scan_pattern "AWS Secret" 'aws_secret[_a-zA-Z]*\s*[:=]\s*['\''"][A-Za-z0-9/+=]{40}'
-    # Google API keys
-    scan_pattern "Google API" 'AIza[0-9A-Za-z_-]{35}'
-    # Stripe keys (live only — test keys are safe)
-    scan_pattern "Stripe" '[spr]k_live_[A-Za-z0-9]{20,}'
-    # Keygen tokens
-    scan_pattern "Keygen" 'key_[A-Za-z0-9]{20,}'
-    scan_pattern "Keygen" 'prod_[A-Za-z0-9]{20,}'
-    # Shopify tokens
-    scan_pattern "Shopify" 'shp(at|ca|pa|ss)_[a-fA-F0-9]{32,}'
-    # npm tokens
-    scan_pattern "npm" 'npm_[A-Za-z0-9]{36,}'
-    # Discord tokens
-    scan_pattern "Discord" '[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}'
-    # Vercel tokens
-    scan_pattern "Vercel" 'vck_[A-Za-z0-9]{20,}'
-    scan_pattern "Vercel" 'vca_[A-Za-z0-9]{20,}'
-    # Slack tokens
-    scan_pattern "Slack" 'xox[baprs]-[0-9]{10,}-[A-Za-z0-9-]+'
-    # Twilio
-    scan_pattern "Twilio" 'SK[a-f0-9]{32}'
-    # SendGrid
-    scan_pattern "SendGrid" 'SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}'
-    # Mailgun
-    scan_pattern "Mailgun" 'key-[a-f0-9]{32}'
-
-    # --- Private Keys ---
-    scan_pattern "Private Key" '-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'
-
-    # --- Connection Strings with credentials ---
-    scan_pattern "DB Connection" '(mongodb|postgres|mysql|postgresql|redis|amqp)://[^:]+:[^@]+@'
-
-    # --- Generic credential patterns ---
-    scan_pattern "Password" 'password\s*[:=]\s*['\''"][^'\''"]{8,}' 'example|placeholder|changeme|your_|test|fake|dummy|TODO|FIXME|xxx|REPLACE'
-    scan_pattern "Secret" 'secret\s*[:=]\s*['\''"][^'\''"]{8,}' 'example|placeholder|changeme|your_|test|fake|dummy|TODO|FIXME|xxx|REPLACE'
-    scan_pattern "API Key" 'api[_-]?key\s*[:=]\s*['\''"][A-Za-z0-9_-]{16,}' 'example|placeholder|your_|test|fake|dummy|TODO|FIXME|xxx|REPLACE'
-
-    # --- Personal Identifiable Information ---
-    # Australian phone numbers (contact.njk is the legitimate public contact page)
-    for FILE in $STAGED_FILES; do
-        case "$FILE" in
-            site/src/contact.njk) continue ;;
-        esac
-        if file "$FILE" 2>/dev/null | grep -qE 'binary|executable|image|archive'; then
-            continue
-        fi
-        PHONE_MATCHES=$(git show ":$FILE" 2>/dev/null | grep -nE '\+614[0-9]{8}' 2>/dev/null || true)
-        if [ -n "$PHONE_MATCHES" ]; then
-            while IFS= read -r LINE; do
-                SECRETS_FOUND="${SECRETS_FOUND}  [AU Phone] $FILE:$LINE\n"
-                FAIL=1
-            done <<EOF
-$PHONE_MATCHES
-EOF
-        fi
-    done
-    # ABN (11 digits) near keyword — EXCLUDING legitimate statutory disclosures
-    # on legal pages. Per CLAUDE.md Document Hygiene v2: "Business-statutory
-    # info (ABN, ACN, TM serials) is fine on legal pages only." The list below
-    # enumerates every tracked surface where the ACN/ABN is a required legal
-    # disclosure (terms, privacy, trademarks, CLA, security, license, etc).
-    for FILE in $STAGED_FILES; do
-        case "$FILE" in
-            LICENSE|LICENSE.md|NOTICE|CLA.md|TRADEMARKS.md|SECURITY.md|\
-            README.md|CONTRIBUTING.md|CODE_OF_CONDUCT.md|\
-            docs/legal/*|docs/TRUST-ARCHITECTURE.md|docs/NETWORK-TRANSPARENCY.md|\
-            docs/PRIVACY-PLAIN-LANGUAGE.md|docs/BUILD-FROM-SOURCE.md|\
-            docs/SECURITY-AUDIT-GUIDE.md|docs/VERIFY-DOWNLOADS.md|\
-            docs/launch/WINDOWS-INSTALL.md|site/src/*|\
-            docs/philosophy/*|docs/launch/*|docs/RELEASE-NOTES-*.md|NETWORK.md)
-                continue ;;
-        esac
-        if file "$FILE" 2>/dev/null | grep -qE 'binary|executable|image|archive'; then
-            continue
-        fi
-        ABN_MATCHES=$(git show ":$FILE" 2>/dev/null | grep -nE '(ABN|TFN|abn|tfn)\s*[:=]?\s*[0-9]{2}\s?[0-9]{3}\s?[0-9]{3}\s?[0-9]{3}' 2>/dev/null || true)
-        if [ -n "$ABN_MATCHES" ]; then
-            while IFS= read -r LINE; do
-                SECRETS_FOUND="${SECRETS_FOUND}  [ABN/TFN] $FILE:$LINE\n"
-                FAIL=1
-            done <<EOF
-$ABN_MATCHES
-EOF
-        fi
-    done
-
-    # --- Personal emails in code files ---
-    # Only flag in .ts/.tsx/.rs/.js/.jsx source files (not docs, config, legal)
-    for FILE in $STAGED_FILES; do
-        if echo "$FILE" | grep -qE '\.(ts|tsx|rs|js|jsx)$'; then
-            EMAIL_MATCHES=$(git show ":$FILE" 2>/dev/null | grep -nE '[a-zA-Z0-9._%+-]+@(gmail|yahoo|hotmail|outlook|protonmail|icloud)\.(com|net|org)' 2>/dev/null | grep -vE 'example|test|fake|dummy|noreply|placeholder' || true)
-            if [ -n "$EMAIL_MATCHES" ]; then
-                while IFS= read -r LINE; do
-                    SECRETS_FOUND="${SECRETS_FOUND}  [Personal Email] $FILE:$LINE\n"
-                    FAIL=1
-                done <<EOF
-$EMAIL_MATCHES
-EOF
-            fi
-        fi
-    done
-
-    if [ "$FAIL" -eq 1 ]; then
-        echo ""
-        echo "============================================================"
-        echo "  COMMIT BLOCKED — Secrets/sensitive data detected!"
-        echo "============================================================"
-        printf "$SECRETS_FOUND"
-        echo ""
-        echo "Fix: remove the secret, use environment variables, or add"
-        echo "     the value to data/settings.json (gitignored)."
-        echo ""
-        echo "False positive? Add the file to the exclusion list in"
-        echo "     .husky/pre-commit or use a clearly fake value."
-        echo ""
-        echo "DANGEROUS bypass: git commit --no-verify"
-        exit 1
-    fi
-fi
+node scripts/scan-secrets.cjs --staged || {
+    echo ""
+    echo "============================================================"
+    echo "  COMMIT BLOCKED — Secrets/sensitive data detected!"
+    echo "============================================================"
+    echo ""
+    echo "Fix: remove the secret, use environment variables, or add"
+    echo "     the value to data/settings.json (gitignored)."
+    echo ""
+    echo "False positive? Adjust STAGED_EXCLUDE (skip a file) or the"
+    echo "     per-pattern exemptions in scripts/scan-secrets.cjs,"
+    echo "     or use a clearly fake value."
+    echo ""
+    echo "DANGEROUS bypass: git commit --no-verify"
+    exit 1
+}
 
 # Cargo sweep — prune build artifacts older than 7 days
 # Prevents target/ from growing unbounded (80+ GB incremental cache observed)

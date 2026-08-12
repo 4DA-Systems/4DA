@@ -2,7 +2,7 @@ name: Validate
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch: {}
 
 # Cancel superseded runs on the same ref. This workflow is PR-only, so a new
@@ -64,7 +64,6 @@ jobs:
               - 'tailwind.config.*'
               - 'scripts/**'
               - 'public/**'
-              - 'locales/**'
             mcp:
               - 'mcp-4da-server/**'
 

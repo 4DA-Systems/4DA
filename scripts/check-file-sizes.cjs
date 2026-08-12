@@ -58,8 +58,6 @@ const EXCEPTIONS = {
   'src-tauri/src/data_export.rs':          'Multi-format export (JSON/CSV/PDF) — split by format',
   'src-tauri/src/scoring/dependencies.rs': 'Dependency scoring — extract lockfile matching from scoring',
   'src-tauri/src/ace/mod.rs':              'ACE module root — orchestration',
-  'src-tauri/src/webhooks.rs':             'Enterprise webhook system — feature-gated',
-  'src-tauri/src/ace/behavior.rs':         'Behavior analysis — pattern detection + tests',
   'src-tauri/src/achievement_engine.rs':   'Achievement system — feature-gated experimental',
   'src-tauri/src/ace/watcher.rs':          'Filesystem watcher — event handling + debounce + tests',
   'src-tauri/src/calibration_fitter.rs':   'Curve fitting algorithm + tests',
@@ -67,17 +65,17 @@ const EXCEPTIONS = {
   'src-tauri/src/signal_terminal.rs':      'Signal terminal processing + tests',
   'src-tauri/src/settings/types.rs':       'Settings struct (33 fields) + sub-config types + defaults',
   'src-tauri/src/domain_profile.rs':       'Domain profiling — extract data tables from logic',
-  'src-tauri/src/team_sync_commands.rs':   'Team sync — feature-gated, 17 commands',
-  'src-tauri/src/settings/license.rs':     'License validation + Keygen integration + tests',
   'src-tauri/src/source_fetching/mod.rs':  'Source fetching orchestration — scheduler + rate limiting',
   'src-tauri/src/bin/cli.rs':              'Standalone CLI binary — cannot split (cli/ gitignored for workspace)',
 
   // ── TypeScript — justified large files ────────────────────────────────────
   'src/lib/commands.ts':                   'IPC command registry — all typed Tauri commands',
   'src/store/slice-types.ts':               'Store slice interfaces — 16 pure type definitions',
+  // NOTE: gitignored + auto-generated (~3k lines) — absent in a fresh clone but
+  // present after `pnpm run i18n:types`, which `validate:all` runs BEFORE this
+  // gate. The entry must stay even though the path does not resolve here.
   'src/types/i18n-resources.d.ts':         'Auto-generated i18n type declarations — regenerated via pnpm i18n:types',
   'src/components/enterprise/SsoConfigPanel.tsx': 'SSO config form — enterprise feature-gated, 5 lines over',
-  'src/components/IntelligenceReport.tsx':  'Intelligence report card — single component, 9 lines over',
   'src/components/preemption/PreemptionCard.tsx': 'Preemption card — single component, 9 lines over',
 };
 
