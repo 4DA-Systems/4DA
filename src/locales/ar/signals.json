@@ -9,8 +9,6 @@
   "priority.alert": "تنبيه",
   "priority.advisory": "استشاري",
   "priority.watch": "مراقبة",
-  "horizon.tactical": "تكتيكي",
-  "horizon.strategic": "استراتيجي",
   "action.securityReviewStack": "مراجعة {{title}} — يؤثر على مكدس {{tech}} الخاص بك",
   "action.securityReview": "مراجعة التأثيرات الأمنية: {{title}}",
   "action.breakingMigration": "تحقق من مسار الترحيل — تغيير جذري في {{tech}}",

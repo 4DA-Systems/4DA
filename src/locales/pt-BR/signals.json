@@ -9,8 +9,6 @@
   "priority.alert": "alerta",
   "priority.advisory": "aviso",
   "priority.watch": "observar",
-  "horizon.tactical": "tático",
-  "horizon.strategic": "estratégico",
   "action.securityReviewStack": "Revise {{title}} — afeta sua stack {{tech}}",
   "action.securityReview": "Revise as implicações de segurança: {{title}}",
   "action.breakingMigration": "Verifique o caminho de migração — mudança importante no {{tech}}",

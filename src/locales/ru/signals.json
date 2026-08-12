@@ -9,8 +9,6 @@
   "priority.alert": "тревога",
   "priority.advisory": "рекомендация",
   "priority.watch": "наблюдение",
-  "horizon.tactical": "тактический",
-  "horizon.strategic": "стратегический",
   "action.securityReviewStack": "Проверьте {{title}} — затрагивает ваш стек {{tech}}",
   "action.securityReview": "Проверьте последствия для безопасности: {{title}}",
   "action.breakingMigration": "Проверьте путь миграции — критическое изменение {{tech}}",

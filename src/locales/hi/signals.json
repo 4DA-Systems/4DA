@@ -9,8 +9,6 @@
   "priority.alert": "चेतावनी",
   "priority.advisory": "सलाह",
   "priority.watch": "निगरानी",
-  "horizon.tactical": "सामरिक",
-  "horizon.strategic": "रणनीतिक",
   "action.securityReviewStack": "{{title}} की समीक्षा करें — आपके {{tech}} स्टैक को प्रभावित करता है",
   "action.securityReview": "सुरक्षा प्रभावों की समीक्षा करें: {{title}}",
   "action.breakingMigration": "माइग्रेशन पथ जांचें — {{tech}} में महत्वपूर्ण बदलाव",

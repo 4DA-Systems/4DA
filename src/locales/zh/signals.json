@@ -9,8 +9,6 @@
   "priority.alert": "警报",
   "priority.advisory": "建议",
   "priority.watch": "关注",
-  "horizon.tactical": "战术性",
-  "horizon.strategic": "战略性",
   "action.securityReviewStack": "审查 {{title}} — 影响您的 {{tech}} 技术栈",
   "action.securityReview": "审查安全影响：{{title}}",
   "action.breakingMigration": "检查迁移路径 — {{tech}} 破坏性变更",

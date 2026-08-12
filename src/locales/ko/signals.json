@@ -9,8 +9,6 @@
   "priority.alert": "경고",
   "priority.advisory": "주의",
   "priority.watch": "관찰",
-  "horizon.tactical": "전술적",
-  "horizon.strategic": "전략적",
   "action.securityReviewStack": "{{title}} 검토 — {{tech}} 스택에 영향",
   "action.securityReview": "보안 영향 검토: {{title}}",
   "action.breakingMigration": "마이그레이션 경로 확인 — {{tech}} 주요 변경",

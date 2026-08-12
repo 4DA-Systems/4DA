@@ -9,8 +9,6 @@
   "priority.alert": "uyarı",
   "priority.advisory": "tavsiye",
   "priority.watch": "izle",
-  "horizon.tactical": "taktik",
-  "horizon.strategic": "stratejik",
   "action.securityReviewStack": "{{title}} inceleyin — {{tech}} yığınınızı etkiliyor",
   "action.securityReview": "Güvenlik etkilerini inceleyin: {{title}}",
   "action.breakingMigration": "Geçiş yolunu kontrol edin — {{tech}} önemli değişiklik",
