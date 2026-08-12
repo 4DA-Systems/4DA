@@ -2195,5 +2195,20 @@
   "license.unverified.title": "Couldn't verify your license",
   "license.unverified.description": "The app couldn't reach the license service at startup. Your key is stored locally and has NOT been lost - this is usually a transient timeout. Re-check to restore your tier.",
   "license.unverified.recheck": "Re-check license",
-  "license.unverified.rechecking": "Re-checking..."
+  "license.unverified.rechecking": "Re-checking...",
+  "autopsy.title": "Score Autopsy",
+  "autopsy.failed": "Could not load the score breakdown.",
+  "autopsy.aiAssessment": "AI assessment",
+  "autopsy.components": "Score components",
+  "autopsy.whatMatched": "What matched",
+  "autopsy.interests": "Interests",
+  "autopsy.techStack": "Tech stack",
+  "autopsy.recentWork": "Recent work",
+  "autopsy.learnedPreferences": "Learned preferences",
+  "autopsy.howToImprove": "How to improve this score",
+  "autopsy.comparedToSimilar": "Compared to similar items",
+  "autopsy.close": "Close",
+  "settings.context.addDirectory": "Add directory",
+  "settings.personalization.addSuggestion": "Add {{name}} to your interests",
+  "settings.personalization.dismissSuggestion": "Dismiss {{name}}"
 }
