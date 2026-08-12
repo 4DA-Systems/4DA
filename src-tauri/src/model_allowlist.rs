@@ -9,12 +9,17 @@ pub(crate) enum ModelTier {
     Blocked,
 }
 
-#[allow(dead_code)] // REMOVE BY 2026-07-01
 pub(crate) struct ModelEntry {
     pub family: &'static str,
     pub tier: ModelTier,
     pub min_ram_gb: f64,
+    /// Curatorial metadata kept beside the entry it describes so a reviewer can
+    /// audit licence compatibility without leaving the allowlist. Not rendered
+    /// anywhere — deliberately retained as machine-readable documentation.
+    #[allow(dead_code)] // REMOVE BY 2026-11-12
     pub license: &'static str,
+    /// Why this model sits in this tier. Same rationale as `license`.
+    #[allow(dead_code)] // REMOVE BY 2026-11-12
     pub notes: &'static str,
 }
 
@@ -125,12 +130,6 @@ pub(crate) fn classify_model(model_tag: &str) -> ModelTier {
     find_entry(model_tag).map_or(ModelTier::Experimental, |e| e.tier)
 }
 
-/// Get the full allowlist entry for a model, if one exists.
-#[allow(dead_code)] // REMOVE BY 2026-07-01
-pub(crate) fn get_model_entry(model_tag: &str) -> Option<&'static ModelEntry> {
-    find_entry(model_tag)
-}
-
 /// Recommend models that fit within `available_ram_gb`, ordered by preference
 /// (Verified first, then Experimental; Blocked models are excluded).
 pub(crate) fn recommend_models(available_ram_gb: f64) -> Vec<&'static ModelEntry> {
@@ -157,12 +156,6 @@ pub(crate) fn recommend_models(available_ram_gb: f64) -> Vec<&'static ModelEntry
     });
 
     models
-}
-
-/// Get all models of a given tier.
-#[allow(dead_code)] // REMOVE BY 2026-07-01
-pub(crate) fn models_by_tier(tier: ModelTier) -> Vec<&'static ModelEntry> {
-    ALLOWLIST.iter().filter(|e| e.tier == tier).collect()
 }
 
 #[cfg(test)]
@@ -218,22 +211,6 @@ mod tests {
         assert_eq!(classify_model("TINYLLAMA"), ModelTier::Blocked);
     }
 
-    // ── get_model_entry ────────────────────────────────────────────────
-
-    #[test]
-    fn entry_found_for_known_model() {
-        let entry = get_model_entry("qwen3:14b").unwrap();
-        assert_eq!(entry.family, "qwen3:14b");
-        assert_eq!(entry.tier, ModelTier::Verified);
-        assert!((entry.min_ram_gb - 11.0).abs() < f64::EPSILON);
-        assert_eq!(entry.license, "Apache-2.0");
-    }
-
-    #[test]
-    fn entry_none_for_unknown_model() {
-        assert!(get_model_entry("solar:10.7b").is_none());
-    }
-
     // ── recommend_models ───────────────────────────────────────────────
 
     #[test]
@@ -266,14 +243,5 @@ mod tests {
     fn recommend_returns_empty_for_tiny_ram() {
         let recs = recommend_models(0.5);
         assert!(recs.is_empty());
-    }
-
-    // ── models_by_tier ─────────────────────────────────────────────────
-
-    #[test]
-    fn models_by_tier_counts() {
-        assert_eq!(models_by_tier(ModelTier::Verified).len(), 3);
-        assert_eq!(models_by_tier(ModelTier::Experimental).len(), 5);
-        assert_eq!(models_by_tier(ModelTier::Blocked).len(), 3);
     }
 }

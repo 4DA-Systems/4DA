@@ -16,15 +16,6 @@ const SERVICE_NAME: &str = "com.4da.app";
 #[cfg(test)]
 const TEST_SERVICE_NAME: &str = "com.4da.app.test";
 
-/// Key names for secrets stored in the platform keychain.
-const KEY_NAMES: &[&str] = &[
-    "llm_api_key",
-    "openai_api_key",
-    "x_api_key",
-    "license_key",
-    "translation_api_key",
-];
-
 /// Report of a plaintext-to-keychain migration run.
 #[derive(Debug, Clone)]
 pub struct MigrationReport {
@@ -263,11 +254,6 @@ pub fn migrate_from_plaintext(settings: &super::Settings) -> Result<MigrationRep
     Ok(report)
 }
 
-/// Return the list of known key names for iteration / diagnostics.
-pub fn known_key_names() -> &'static [&'static str] {
-    KEY_NAMES
-}
-
 #[cfg(test)]
 fn migrate_from_plaintext_isolated(
     settings: &super::Settings,
@@ -389,17 +375,6 @@ mod tests {
         // Clean up test keychain entries
         let _ = delete_secret_with_service(TEST_SERVICE_NAME, "llm_api_key");
         let _ = delete_secret_with_service(TEST_SERVICE_NAME, "x_api_key");
-    }
-
-    #[test]
-    fn test_known_key_names() {
-        let names = known_key_names();
-        assert_eq!(names.len(), 5);
-        assert!(names.contains(&"llm_api_key"));
-        assert!(names.contains(&"openai_api_key"));
-        assert!(names.contains(&"x_api_key"));
-        assert!(names.contains(&"license_key"));
-        assert!(names.contains(&"translation_api_key"));
     }
 
     #[test]

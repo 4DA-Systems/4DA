@@ -1765,23 +1765,13 @@ fn parse_pnpm_package_key(key: &str) -> Option<(String, String)> {
 // ============================================================================
 
 /// The dependency scope of an edge. Cargo.lock does not separate dev in its
-/// resolved graph (everything is `Runtime`); npm/pnpm distinguish dev/runtime,
-/// and build-only scopes map to `Build`. `Unknown` is the safe default when a
-/// lockfile gives us no scope signal.
+/// resolved graph (everything is `Runtime`); npm/pnpm distinguish dev/runtime.
+/// The `scope` column keeps its `DEFAULT 'unknown'` for rows written before the
+/// parsers emitted a scope — no Rust variant produces that string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EdgeScope {
     Runtime,
     Dev,
-    // `Build` and `Unknown` complete the scope model and back the table's
-    // `scope` DEFAULT 'unknown'; they are not yet produced by the current
-    // parsers (Cargo/npm/pnpm yield Runtime/Dev). Constructed once additional
-    // ecosystems (build-only graphs) are wired in Increment 2.
-    // REMOVE BY 2026-07-31: build-only graph scopes wired in increment 2
-    #[allow(dead_code)]
-    Build,
-    // REMOVE BY 2026-07-31: unknown-scope fallback exercised once more ecosystems land (increment 2)
-    #[allow(dead_code)]
-    Unknown,
 }
 
 impl EdgeScope {
@@ -1790,8 +1780,6 @@ impl EdgeScope {
         match self {
             EdgeScope::Runtime => "runtime",
             EdgeScope::Dev => "dev",
-            EdgeScope::Build => "build",
-            EdgeScope::Unknown => "unknown",
         }
     }
 }

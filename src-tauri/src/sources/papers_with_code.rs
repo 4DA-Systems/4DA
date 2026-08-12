@@ -39,9 +39,7 @@ struct PwcTask {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 struct PwcRepo {
-    url: Option<String>,
     stars: Option<u32>,
 }
 
@@ -128,18 +126,7 @@ impl Source for PapersWithCodeSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "Papers with Code rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "Papers with Code forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        super::check_http_status(status, "Papers With Code API")?;
+        super::classify_http_status(response.status(), "Papers With Code API")?;
 
         // Try HuggingFace daily_papers format first (flat array of {paper: {...}})
         // Fall back to original PwC format ({results: [...]})

@@ -199,86 +199,45 @@ fn test_source_registry_operations() {
 }
 
 // ============================================================================
-// Test 5: Settings backward compatibility with new resilience/rate fields
+// Test 5: Settings deserialization is forward- and backward-compatible
 // ============================================================================
 
+/// A user's on-disk `settings.json` must survive both directions of drift:
+/// keys the current build has never heard of (written by a newer/older build,
+/// or left behind when a dead config block is deleted) must be IGNORED, and
+/// keys that are absent must fall back to defaults. `Settings` carries a
+/// container-level `#[serde(default)]` and no `deny_unknown_fields`, which is
+/// exactly what makes that true — this test pins it so a future `serde`
+/// attribute change cannot silently start rejecting real users' settings.
 #[test]
-fn test_settings_resilience_and_rate_budget_defaults() {
-    use fourda_lib::settings::{RateBudgetConfig, Settings, SourceResilienceConfig};
+fn test_settings_ignores_unknown_keys_and_defaults_missing_ones() {
+    use fourda_lib::settings::Settings;
 
-    // Default settings should have the new fields populated
-    let settings = Settings::default();
-
-    // source_resilience defaults to empty map (all sources use built-in defaults)
-    assert!(
-        settings.source_resilience.is_empty(),
-        "Default source_resilience should be empty (use built-in defaults)"
-    );
-
-    // rate_budgets defaults to known sources with specific limits
-    assert!(
-        !settings.rate_budgets.is_empty(),
-        "Default rate_budgets should have known sources"
-    );
-    assert_eq!(
-        settings
-            .rate_budgets
-            .get("hackernews")
-            .map(|c| c.requests_per_minute),
-        Some(30),
-        "HN should default to 30 rpm"
-    );
-    assert_eq!(
-        settings
-            .rate_budgets
-            .get("reddit")
-            .map(|c| c.requests_per_minute),
-        Some(10),
-        "Reddit should default to 10 rpm (rate-limited API)"
-    );
-    assert_eq!(
-        settings
-            .rate_budgets
-            .get("github")
-            .map(|c| c.requests_per_minute),
-        Some(25),
-        "GitHub should default to 25 rpm"
-    );
-    assert_eq!(
-        settings
-            .rate_budgets
-            .get("twitter")
-            .map(|c| c.requests_per_minute),
-        Some(15),
-        "Twitter should default to 15 rpm"
-    );
-
-    // SourceResilienceConfig defaults
-    let resilience = SourceResilienceConfig::default();
-    assert_eq!(resilience.max_failures, 5);
-    assert_eq!(resilience.cooldown_seconds, 600);
-
-    // RateBudgetConfig defaults
-    let budget = RateBudgetConfig::default();
-    assert_eq!(budget.requests_per_minute, 30);
-
-    // Backward compatibility: deserializing a JSON without the new fields should work
-    let old_json = r#"{
+    // Sparse JSON: only a handful of keys present, plus retired keys that no
+    // longer exist on the struct (source_resilience / rate_budgets / predictive
+    // / audio_briefing / health_radar / attention / nitter_instance were removed
+    // once it was confirmed nothing read them).
+    let legacy_json = r#"{
         "llm": {"provider":"none","api_key":"","model":"","base_url":null,"openai_api_key":""},
         "rerank": {"enabled":true,"max_items_per_batch":48,"min_embedding_score":0.2,"daily_token_limit":500000,"daily_cost_limit_cents":100},
         "context_dirs": [],
-        "embedding_threshold": 0.5
+        "embedding_threshold": 0.5,
+        "nitter_instance": "https://nitter.example",
+        "predictive": {"enabled": true, "prefetch_window_minutes": 30},
+        "audio_briefing": {"enabled": false, "tts_model": "auto", "max_duration_seconds": 180},
+        "health_radar": {"enabled": true, "check_interval_hours": 24},
+        "attention": {"enabled": true},
+        "source_resilience": {"reddit": {"max_failures": 5, "cooldown_seconds": 600}},
+        "rate_budgets": {"reddit": {"requests_per_minute": 10}},
+        "some_key_from_a_future_build": {"nested": [1, 2, 3]}
     }"#;
-    let deserialized: Settings = serde_json::from_str(old_json)
-        .expect("Should deserialize old settings JSON without source_resilience/rate_budgets");
-    // New fields should get their defaults
-    assert!(deserialized.source_resilience.is_empty());
-    assert!(!deserialized.rate_budgets.is_empty());
-    assert_eq!(
-        deserialized
-            .rate_budgets
-            .get("reddit")
-            .map(|c| c.requests_per_minute),
-        Some(10)
-    );
+    let deserialized: Settings = serde_json::from_str(legacy_json)
+        .expect("retired and unknown settings keys must be ignored, never rejected");
+
+    // Present keys are honoured...
+    assert_eq!(deserialized.embedding_threshold, 0.5);
+    assert!(deserialized.rerank.enabled);
+    // ...and absent keys fall back to their defaults rather than failing.
+    assert_eq!(deserialized.license.tier, "free");
+    assert!(!deserialized.onboarding_complete);
 }

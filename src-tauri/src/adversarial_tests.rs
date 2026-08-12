@@ -55,42 +55,6 @@ fn test_grounded_reasoning_exact_threshold_length() {
     assert!(has_grounded_reasoning(explanation));
 }
 
-// ---- is_title_restatement tests ----
-
-#[test]
-fn test_restatement_detection() {
-    // Title words (>2 chars, lowered): {"critical", "vulnerability", "lodash"}
-    // Explanation words (>2 chars): "critical", "vulnerability", "lodash" = 3
-    // Overlap: 3/3 = 1.0 > 0.8 -- restatement detected.
-    assert!(is_title_restatement(
-        "Critical vulnerability in lodash",
-        "A critical vulnerability in lodash.",
-    ));
-}
-
-#[test]
-fn test_not_a_restatement() {
-    assert!(!is_title_restatement(
-        "Critical vulnerability in lodash",
-        "CVE-2021-23337 allows prototype pollution via the set() \
-         function. Your project imports lodash 4.17.20, which is \
-         in the affected range. Update to 4.17.21 to remediate.",
-    ));
-}
-
-#[test]
-fn test_restatement_empty_explanation() {
-    assert!(is_title_restatement("Some title", ""));
-}
-
-#[test]
-fn test_restatement_empty_title() {
-    assert!(!is_title_restatement(
-        "",
-        "This is a detailed explanation with many words.",
-    ));
-}
-
 // ---- JSON parsing tests ----
 
 #[test]

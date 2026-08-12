@@ -38,17 +38,14 @@ use super::{SourceError, SourceItem, SourceResult};
 
 /// One concrete way to reach a source's content. Adapters compose an ordered `Vec<Box<dyn
 /// AccessStrategy>>` (preferred first) and hand it to [`resilient_fetch`].
+///
+/// Ordering invariant: the credential-free base (public API, RSS, open-protocol) comes FIRST so the
+/// product works with zero keys; credentialed strategies are opt-in *depth*, appended by the adapter
+/// only when a key is present.
 #[async_trait]
 pub trait AccessStrategy: Send + Sync {
     /// Stable short label for telemetry / health, e.g. `"reddit:json"`, `"reddit:rss"`.
     fn label(&self) -> &str;
-
-    /// Whether this strategy is inert without a user-supplied credential. The credential-free base
-    /// (public API, RSS, open-protocol) must come first so the product works with zero keys;
-    /// credentialed strategies are opt-in *depth*, included only when a key is present.
-    fn requires_credential(&self) -> bool {
-        false
-    }
 
     /// Attempt to fetch items via this strategy. Returning `Ok(vec![])` means "reached the source,
     /// it had nothing" (a real signal); returning `Err` means "this path failed, try the next".

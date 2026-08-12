@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! Semantic scoring — vector-similarity ACE boost, topic enrichment, embedding cache, and taste profiling.
+//! Semantic scoring — vector-similarity ACE boost, topic enrichment, embedding cache.
+//!
+//! The `taste` submodule (`compute_taste_boost`) was deleted 2026-08-12: its only
+//! caller was the V1 pipeline, and its input `ScoringContext::taste_embedding` has
+//! been hardcoded `None` since AD-029.
 
 mod boost;
 mod embeddings;
 mod enrichment;
-mod taste;
 #[cfg(test)]
 mod tests;
 
@@ -14,4 +17,3 @@ pub(crate) use embeddings::get_topic_embeddings;
 // enrich_topic_for_embedding is pub(crate) for future external use + test access via `super::*`
 #[allow(unused_imports)]
 pub(crate) use enrichment::enrich_topic_for_embedding;
-pub(crate) use taste::compute_taste_boost;

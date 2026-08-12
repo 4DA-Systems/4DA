@@ -154,9 +154,11 @@ impl LLMClient {
         }
     }
 
-    /// Check if the client is configured
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Reason: used in tests for provider validation
+    /// Check if the client is configured.
+    /// Only the provider-validation tests call this today; the production paths
+    /// check capability via `llm_capability` instead.
+    /// (Expired removal marker dated 2026-08-01 cleared 2026-08-12.)
+    #[allow(dead_code)] // REMOVE BY 2026-11-12
     pub fn is_configured(&self) -> bool {
         match self.provider.provider.as_str() {
             "anthropic" | "openai" | "openai-compatible" => !self.provider.api_key.is_empty(),

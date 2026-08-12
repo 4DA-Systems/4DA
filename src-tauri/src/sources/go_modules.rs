@@ -124,16 +124,12 @@ impl GoModulesSource {
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
         let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "Go module proxy rate limited (HTTP 429)".to_string(),
-            ));
-        }
         if status == reqwest::StatusCode::NOT_FOUND || status == reqwest::StatusCode::GONE {
-            // No published version for this module path — not an error.
+            // No published version for this module path — not an error. Checked before the
+            // shared gate, which would otherwise classify it as a network error.
             return Ok(None);
         }
-        super::check_http_status(status, "Go module proxy")?;
+        super::classify_http_status(status, "Go module proxy")?;
 
         let info: GoLatestInfo = response
             .json()
@@ -235,18 +231,7 @@ impl Source for GoModulesSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "Go Module Index rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "Go Module Index forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        super::check_http_status(status, "Go modules proxy")?;
+        super::classify_http_status(response.status(), "Go modules proxy")?;
 
         let body = response
             .text()

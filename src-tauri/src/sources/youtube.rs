@@ -62,15 +62,6 @@ impl YouTubeSource {
         source
     }
 
-    /// Create with named channels
-    pub fn with_named_channels(channels: Vec<YouTubeChannel>) -> Self {
-        let mut source = Self::new();
-        if !channels.is_empty() {
-            source.channels = channels;
-        }
-        source
-    }
-
     /// Fetch the Atom feed for a single channel
     async fn fetch_channel_feed(&self, channel: &YouTubeChannel) -> Result<Vec<VideoEntry>> {
         let url = format!(
@@ -85,7 +76,7 @@ impl YouTubeSource {
             .get(&url)
             .send()
             .await
-            .with_context(|| format!("Network error for{}", channel.name))?;
+            .with_context(|| format!("Network error for {}", channel.name))?;
 
         let status = resp.status();
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
@@ -106,7 +97,7 @@ impl YouTubeSource {
         let xml = resp
             .text()
             .await
-            .with_context(|| format!("Failed to read feed for{}", channel.name))?;
+            .with_context(|| format!("Failed to read feed for {}", channel.name))?;
 
         self.parse_atom_feed(&xml, &channel.name)
     }

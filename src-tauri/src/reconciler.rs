@@ -54,8 +54,10 @@ pub const DISAGREEMENT_THRESHOLD: f32 = 0.30;
 /// receipts UI ("Why this score?") will render the adjustment explicitly,
 /// and the tests exercise them as a regression guard for the math.
 #[derive(Debug, Clone)]
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Serde-serialized pipeline output fields
+// Expired removal marker dated 2026-08-01 cleared 2026-08-12: the Phase 7 receipts UI that
+// consumes `pipeline_score`/`applied_adjustment` has not landed, so retention is an
+// owner call rather than a rolled-forward date. The tests below still guard the math.
+#[allow(dead_code)] // REMOVE BY 2026-11-12
 pub struct Reconciled {
     /// The final rank. `pipeline_score + clamped_adjustment`, in [0.0, 1.0].
     pub final_rank: f32,

@@ -67,18 +67,7 @@ impl LobstersSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "Lobste.rs rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "Lobste.rs forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        super::check_http_status(status, "Lobste.rs API")?;
+        super::classify_http_status(response.status(), "Lobste.rs API")?;
 
         let stories: Vec<LobstersStory> = response
             .json()

@@ -506,11 +506,6 @@ fn bar_chart(percent: f32) -> String {
 // ============================================================================
 
 #[tauri::command]
-pub async fn get_developer_dna() -> Result<DeveloperDna> {
-    generate_dna()
-}
-
-#[tauri::command]
 pub async fn export_developer_dna_markdown() -> Result<String> {
     let dna = generate_dna()?;
     Ok(export_as_markdown(&dna))

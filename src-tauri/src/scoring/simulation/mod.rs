@@ -40,8 +40,10 @@ pub(super) mod reality;
 pub(super) mod registry_precision;
 pub(super) mod tier2_semantic;
 pub(super) mod tier3_rerank;
+// `version_registry` was deleted 2026-08-12 with the V1 pipeline: its whole
+// purpose was dispatching a score between V1 and V2 without touching the
+// `USE_V2` const, and with V1 gone there is only one version to select.
 pub(super) mod version_comparison;
-pub(super) mod version_registry;
 
 use super::{ScoringInput, ScoringOptions};
 use std::path::Path;

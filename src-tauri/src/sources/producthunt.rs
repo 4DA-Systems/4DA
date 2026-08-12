@@ -28,10 +28,13 @@ pub(crate) struct ProductHuntItem {
 // ============================================================================
 
 /// Product Hunt source - fetches featured products from RSS feed
+///
+/// Not category-configurable: Product Hunt publishes a single site-wide feed
+/// (`/feed`) with no category parameter, so there is nothing for a category list
+/// to select.
 pub struct ProductHuntSource {
     config: SourceConfig,
     client: reqwest::Client,
-    categories: Vec<String>,
 }
 
 impl ProductHuntSource {
@@ -45,15 +48,7 @@ impl ProductHuntSource {
                 custom: None,
             },
             client: super::shared_client(),
-            categories: vec!["tech".into(), "developer-tools".into()],
         }
-    }
-
-    /// Create with custom categories
-    pub fn with_categories(categories: Vec<String>) -> Self {
-        let mut source = Self::new();
-        source.categories = categories;
-        source
     }
 
     /// Parse Product Hunt RSS feed (XML)
@@ -185,23 +180,7 @@ impl Source for ProductHuntSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "Product Hunt rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "Product Hunt forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "Product Hunt API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::classify_http_status(response.status(), "Product Hunt API")?;
 
         let xml = response
             .text()
@@ -265,13 +244,6 @@ mod tests {
         assert!(source.config().enabled);
         assert_eq!(source.config().max_items, 30);
         assert_eq!(source.config().fetch_interval_secs, 3600);
-    }
-
-    #[test]
-    fn test_custom_categories() {
-        let source = ProductHuntSource::with_categories(vec!["ai".into(), "devtools".into()]);
-        assert_eq!(source.categories.len(), 2);
-        assert_eq!(source.categories[0], "ai");
     }
 
     #[test]

@@ -61,8 +61,6 @@ const PHASE0_BUDGET_SECS: u64 = 5;
 const PHASE0_BUDGET_SECS: u64 = 45;
 
 /// Time budget for Phase 1 (essential services ready).
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Const: phase budget for startup rewrite
 const PHASE1_BUDGET_SECS: u64 = 10;
 
 /// How often to write the heartbeat file (steady state).
@@ -71,8 +69,10 @@ const HEARTBEAT_INTERVAL_SECS: u64 = 60;
 /// Heartbeat is considered stale if the file is older than this. The
 /// frontend uses this threshold when deciding whether to show the
 /// recovery panel.
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Const: heartbeat staleness threshold
+/// Test-only in Rust: the frontend carries its own copy of this threshold, so
+/// nothing here reads it outside the invariant test that keeps it above
+/// `HEARTBEAT_INTERVAL_SECS`. (Expired removal marker dated 2026-08-01 cleared 2026-08-12.)
+#[allow(dead_code)] // REMOVE BY 2026-11-12
 pub const HEARTBEAT_STALE_SECS: u64 = 180;
 
 /// One-shot guard so phase-0 logging fires exactly once regardless of how
@@ -199,8 +199,6 @@ pub fn mark_phase0_complete() {
 /// does NOT write a stalled marker because Phase 1 runs entirely in the
 /// background and a slow essential-services setup doesn't affect the
 /// user-visible first paint.
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Used by Wave 6 phased startup rewrite
 pub fn mark_phase1_complete() {
     #[allow(unsafe_code)]
     let elapsed = unsafe { STARTUP_BEGAN.map(|t| t.elapsed()).unwrap_or(Duration::ZERO) };

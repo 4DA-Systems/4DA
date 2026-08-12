@@ -24,10 +24,8 @@ mod explanation_chain;
 mod gate;
 mod keywords;
 pub(crate) mod necessity;
-mod pipeline;
 mod pipeline_signals;
 mod pipeline_v2;
-#[allow(dead_code, unused_imports)]
 pub(crate) mod query_weighting;
 pub(crate) mod reexamination;
 #[cfg(test)]
@@ -40,14 +38,16 @@ pub(crate) mod stemming;
 mod telemetry;
 mod temporal_cluster;
 pub(crate) mod triage;
+mod types;
 mod utils;
+#[cfg(test)]
 pub(crate) mod validation;
 
 // Public API — external callers use crate::scoring::function_name unchanged
 pub(crate) use ace_context::{get_ace_context, ACEContext};
-pub(crate) use affinity::{compute_affinity_multiplier, compute_unified_relevance};
+pub(crate) use affinity::compute_affinity_multiplier;
 pub(crate) use analyzer::{run_post_analysis_hooks, score_items_full};
-pub(crate) use calibration::{calibrate_score, compute_interest_score};
+pub(crate) use calibration::calibrate_score;
 pub(crate) use calibration_monitor::{
     compute_calibration_snapshot, compute_high_stakes_recall, CalibrationSnapshot, HighStakesRecall,
 };
@@ -60,18 +60,14 @@ pub(crate) use dedup::{
     dedup_results, fuzzy_dedup_results, sort_results, topic_dedup_results,
 };
 pub(crate) use dependencies::{
-    is_ambiguous_dep_name, is_generic_topic_token, match_dependencies, VersionDelta,
-    STRONG_GROUNDING_CONFIDENCE,
+    is_ambiguous_dep_name, is_generic_topic_token, match_dependencies, STRONG_GROUNDING_CONFIDENCE,
 };
-pub(crate) use explanation::{
-    calculate_confidence, compute_temporal_freshness, generate_relevance_explanation,
-};
-pub(crate) use gate::apply_confirmation_gate;
-pub(crate) use pipeline::{ScoringInput, ScoringOptions};
+pub(crate) use explanation::{calculate_confidence, compute_temporal_freshness};
 pub(crate) use pipeline_v2::finalize_scores;
 pub(crate) use telemetry::ScoringTelemetry;
 pub(crate) use temporal_cluster::temporal_cluster_results;
 pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
+pub(crate) use types::{ScoringInput, ScoringOptions};
 /// Bump this whenever the scoring pipeline changes to invalidate stale scores.
 /// Items scored under an older version will be re-scored on the next analysis run.
 ///
@@ -266,8 +262,11 @@ pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 //     resurrection path); threshold is the fixed default.
 pub(crate) const PIPELINE_VERSION: i32 = 19;
 
-// Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
-const USE_V2: bool = true;
+/// Score a single item through the PASIFA V2 pipeline.
+///
+/// The V1 pipeline was deleted 2026-08-12: dispatch had been pinned to V2 by a
+/// hardcoded `const USE_V2: bool = true` with no cfg/env/test override, so the
+/// V1 arm had been structurally unreachable while still being co-maintained.
 pub(crate) fn score_item(
     input: &ScoringInput,
     ctx: &ScoringContext,
@@ -275,11 +274,7 @@ pub(crate) fn score_item(
     options: &ScoringOptions,
     classifier: Option<&crate::signals::SignalClassifier>,
 ) -> crate::SourceRelevance {
-    if USE_V2 {
-        pipeline_v2::score_item(input, ctx, db, options, classifier)
-    } else {
-        pipeline::score_item(input, ctx, db, options, classifier)
-    }
+    pipeline_v2::score_item(input, ctx, db, options, classifier)
 }
 pub(crate) use semantic::{compute_semantic_ace_boost, get_topic_embeddings};
 pub(crate) use utils::{has_word_boundary_match, topic_grounds};
@@ -301,6 +296,13 @@ pub(crate) struct ScoringContext {
     /// Feedback-derived topic boosts: topic -> net_score (-1.0 to 1.0)
     pub feedback_boosts: HashMap<String, f64>,
     /// Source quality scores from learned preferences: source_type -> score (-1.0 to 1.0)
+    ///
+    /// Loaded permanently empty and read by nothing since AD-029 demoted the
+    /// behavioural scoring signals (V2 pins `source_quality_boost` to 0.0). The
+    /// field is retained deliberately as AD-029 scaffolding — it still carries
+    /// the simulation's enrichment knob — and must NOT be deleted until that
+    /// decision is revisited against AD-029's re-enable criteria.
+    #[allow(dead_code)] // REMOVE BY 2026-11-12
     pub source_quality: HashMap<String, f32>,
     /// User's explicitly declared tech stack (3-5 items from onboarding).
     /// Used for signal action text and priority escalation — much smaller than detected_tech.

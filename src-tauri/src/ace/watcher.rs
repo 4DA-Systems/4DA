@@ -107,9 +107,6 @@ impl Default for WatcherConfig {
 pub struct FileChange {
     pub path: PathBuf,
     pub change_type: FileChangeType,
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Reason: field populated by watcher events but not yet read
-    pub timestamp: Instant,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -313,7 +310,6 @@ impl FileWatcher {
             let change = FileChange {
                 path: path.clone(),
                 change_type,
-                timestamp: Instant::now(),
             };
 
             let mut pending = pending_changes.lock();

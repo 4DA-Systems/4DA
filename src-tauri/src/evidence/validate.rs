@@ -42,14 +42,14 @@ pub enum ValidationError {
     #[error("id is empty")]
     IdEmpty,
     #[error("explanation required (Phase 9+)")]
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)]
-    // Gated on a future phase flag; checker wired in Phase 9 — REMOVE BY 2026-08-01
+    // Gated on a future phase flag; checker wires in Phase 9. Retention tracked by
+    // docs/strategy/EVIDENCE-ITEM-SCHEMA.md, not by a calendar deadline — the
+    // expired 2026-08-01 markers were removed 2026-08-12 rather than rolled forward.
+    #[allow(dead_code)] // REMOVE BY 2026-11-12
     ExplanationRequired,
     #[error("explanation lacks grounded reasoning (no causal connectors found)")]
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)]
-    // Gated — will warn in dev, not block, until Phase 10 — REMOVE BY 2026-08-01
+    // Gated — will warn in dev, not block, until Phase 10. See note above.
+    #[allow(dead_code)] // REMOVE BY 2026-11-12
     ReasoningNotGrounded,
 }
 

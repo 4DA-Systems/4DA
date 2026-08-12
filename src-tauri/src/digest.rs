@@ -63,9 +63,9 @@ pub struct SmtpConfig {
     pub host: String,
     pub port: u16,
     pub username: String,
+    /// Read by `digest_email::send_digest` to build SMTP credentials; never
+    /// serialized back out.
     #[serde(skip_serializing)]
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Reason: deserialized from JSON for SMTP auth
     pub password: String,
     pub from_address: String,
     pub use_tls: bool,

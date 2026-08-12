@@ -77,18 +77,7 @@ impl HuggingFaceSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "Hugging Face rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "Hugging Face forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        super::check_http_status(status, "HuggingFace API")?;
+        super::classify_http_status(response.status(), "HuggingFace API")?;
 
         let models: Vec<HfModel> = response
             .json()

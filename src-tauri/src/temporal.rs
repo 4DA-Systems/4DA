@@ -225,35 +225,6 @@ pub fn prune_removed_dependencies(
     Ok(removed)
 }
 
-/// Get all dependencies for a project
-pub fn get_project_dependencies(
-    conn: &rusqlite::Connection,
-    project_path: &str,
-) -> Result<Vec<ProjectDependency>> {
-    let canonical = canonicalize_project_path(project_path);
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned, detected_from
-             FROM project_dependencies
-             WHERE project_path = ?1
-             ORDER BY package_name",
-        )
-        ?;
-
-    let results: Vec<ProjectDependency> = stmt
-        .query_map(params![canonical], map_project_dependency_row)?
-        .filter_map(|r| match r {
-            Ok(v) => Some(v),
-            Err(e) => {
-                tracing::warn!("Row processing failed in temporal: {e}");
-                None
-            }
-        })
-        .collect();
-
-    Ok(results)
-}
-
 /// Map a row from the project_dependencies table to a `ProjectDependency`.
 /// Column order must be: id, project_path, manifest_type, package_name,
 ///                        version, is_dev, is_direct, language, last_scanned,

@@ -3,7 +3,8 @@
 //!
 //! Validates the scoring engine across 10 developer profiles by scoring
 //! content items and auto-judging relevance via topic overlap.
+//!
+//! The `runner` submodule was deleted 2026-08-12 — it was a comment-only husk
+//! left behind when the `run_scoring_validation` ghost command was removed.
 
-#[cfg(test)]
 pub mod personas;
-pub mod runner;

@@ -3,7 +3,14 @@
 ///
 /// Transcribes audio files to text using Whisper.
 ///
-/// CURRENT STATUS: Stubbed - requires system dependencies
+/// CURRENT STATUS: Stubbed - requires system dependencies.
+///
+/// NOT REGISTERED in `ExtractorRegistry` while stubbed. A registered extractor
+/// whose `extract` always errors would make the registry advertise six audio
+/// extensions this build cannot transcribe, turning "unsupported file" into
+/// "failed extraction" for every audio file that reached it. The module is kept
+/// (type, extension list, and tests intact) so wiring real transcription is a
+/// one-line re-registration — see `ExtractorRegistry::new`.
 ///
 /// To enable audio transcription:
 /// 1. Install LLVM/Clang (for bindgen)
@@ -11,6 +18,8 @@
 /// 3. Download a Whisper model from:
 ///    https://huggingface.co/ggerganov/whisper.cpp/tree/main
 ///    Place ggml-base.bin in %LOCALAPPDATA%\4da\models\ or ~/.4da/models/
+///
+/// 4. Re-register it in `ExtractorRegistry::new`
 ///
 /// Alternatively, wait for pure Rust Whisper implementations to mature
 /// (whisper-apr, candle-whisper)

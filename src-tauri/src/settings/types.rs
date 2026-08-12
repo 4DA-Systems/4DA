@@ -300,23 +300,6 @@ impl Default for MonitoringConfig {
     }
 }
 
-/// Predictive context switching configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct PredictiveConfig {
-    pub enabled: bool,
-    pub prefetch_window_minutes: u32,
-}
-
-impl Default for PredictiveConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            prefetch_window_minutes: 30,
-        }
-    }
-}
-
 /// Serendipity engine configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -364,55 +347,6 @@ impl Default for FeedCompositionConfig {
             stretch_pct: 20,
             horizon_pct: 10,
         }
-    }
-}
-
-/// Audio briefing configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct AudioBriefingConfig {
-    pub enabled: bool,
-    pub tts_model: String,
-    pub max_duration_seconds: u32,
-}
-
-impl Default for AudioBriefingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            tts_model: "auto".to_string(),
-            max_duration_seconds: 180,
-        }
-    }
-}
-
-/// Project health radar configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct HealthRadarConfig {
-    pub enabled: bool,
-    pub check_interval_hours: u32,
-}
-
-impl Default for HealthRadarConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            check_interval_hours: 24,
-        }
-    }
-}
-
-/// Attention tracking configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct AttentionConfig {
-    pub enabled: bool,
-}
-
-impl Default for AttentionConfig {
-    fn default() -> Self {
-        Self { enabled: true }
     }
 }
 
@@ -481,123 +415,6 @@ impl Default for LicenseConfig {
             dev_unlock_all: false,
         }
     }
-}
-
-/// Per-source circuit breaker / resilience configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct SourceResilienceConfig {
-    /// Maximum consecutive failures before the circuit breaker opens
-    #[serde(default = "default_max_failures")]
-    pub max_failures: u32,
-    /// Cooldown period in seconds before retrying after circuit opens
-    #[serde(default = "default_cooldown_seconds")]
-    pub cooldown_seconds: u64,
-}
-
-fn default_max_failures() -> u32 {
-    5
-}
-
-fn default_cooldown_seconds() -> u64 {
-    600
-}
-
-impl Default for SourceResilienceConfig {
-    fn default() -> Self {
-        Self {
-            max_failures: default_max_failures(),
-            cooldown_seconds: default_cooldown_seconds(),
-        }
-    }
-}
-
-/// Per-source rate budget configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct RateBudgetConfig {
-    /// Maximum requests allowed per minute for this source
-    pub requests_per_minute: u32,
-}
-
-impl Default for RateBudgetConfig {
-    fn default() -> Self {
-        Self {
-            requests_per_minute: 30,
-        }
-    }
-}
-
-/// Build the default rate budget map for known sources
-pub(crate) fn default_rate_budgets() -> std::collections::HashMap<String, RateBudgetConfig> {
-    let mut map = std::collections::HashMap::new();
-    map.insert(
-        "hackernews".to_string(),
-        RateBudgetConfig {
-            requests_per_minute: 30,
-        },
-    );
-    map.insert(
-        "reddit".to_string(),
-        RateBudgetConfig {
-            requests_per_minute: 10,
-        },
-    );
-    map.insert(
-        "github".to_string(),
-        RateBudgetConfig {
-            requests_per_minute: 25,
-        },
-    );
-    map.insert(
-        "twitter".to_string(),
-        RateBudgetConfig {
-            requests_per_minute: 15,
-        },
-    );
-    map.insert(
-        "arxiv".to_string(),
-        RateBudgetConfig {
-            requests_per_minute: 30,
-        },
-    );
-    map.insert(
-        "rss".to_string(),
-        RateBudgetConfig {
-            requests_per_minute: 30,
-        },
-    );
-    map.insert(
-        "youtube".to_string(),
-        RateBudgetConfig {
-            requests_per_minute: 30,
-        },
-    );
-    map.insert(
-        "lobsters".to_string(),
-        RateBudgetConfig {
-            requests_per_minute: 30,
-        },
-    );
-    map.insert(
-        "devto".to_string(),
-        RateBudgetConfig {
-            requests_per_minute: 30,
-        },
-    );
-    map.insert(
-        "producthunt".to_string(),
-        RateBudgetConfig {
-            requests_per_minute: 30,
-        },
-    );
-    map
-}
-
-/// Build the default source resilience map (empty -- all sources use built-in defaults)
-pub(crate) fn default_source_resilience(
-) -> std::collections::HashMap<String, SourceResilienceConfig> {
-    std::collections::HashMap::new()
 }
 
 /// Dedicated translation provider configuration.
@@ -803,9 +620,6 @@ pub struct Settings {
     /// Twitter handles to monitor
     #[serde(default)]
     pub twitter_handles: Vec<String>,
-    /// Nitter instance (deprecated — nitter.net is dead, kept only for deserialization compat)
-    #[serde(default, skip_serializing)]
-    pub nitter_instance: Option<String>,
     /// X API Bearer Token (BYOK)
     #[serde(default)]
     pub x_api_key: SensitiveString,
@@ -829,33 +643,15 @@ pub struct Settings {
     /// GitHub programming languages to track trending repos
     #[serde(default)]
     pub github_languages: Vec<String>,
-    /// Predictive context switching
-    #[serde(default)]
-    pub predictive: PredictiveConfig,
     /// Serendipity engine (anti-bubble)
     #[serde(default)]
     pub serendipity: SerendipityConfig,
     /// Feed composition floors (comfort/stretch/horizon ratios for top-N)
     #[serde(default)]
     pub feed_composition: FeedCompositionConfig,
-    /// Audio briefing
-    #[serde(default)]
-    pub audio_briefing: AudioBriefingConfig,
-    /// Project health radar
-    #[serde(default)]
-    pub health_radar: HealthRadarConfig,
-    /// Attention tracking
-    #[serde(default)]
-    pub attention: AttentionConfig,
     /// License tier configuration
     #[serde(default)]
     pub license: LicenseConfig,
-    /// Per-source circuit breaker configuration overrides
-    #[serde(default = "default_source_resilience")]
-    pub source_resilience: std::collections::HashMap<String, SourceResilienceConfig>,
-    /// Per-source rate budget configuration
-    #[serde(default = "default_rate_budgets")]
-    pub rate_budgets: std::collections::HashMap<String, RateBudgetConfig>,
     /// Locale configuration for regional content
     #[serde(default)]
     pub locale: LocaleConfig,
@@ -977,15 +773,6 @@ impl Settings {
             }
         }
 
-        // rate_budgets: clamp all requests_per_minute to 1..=120
-        for (source, budget) in self.rate_budgets.iter_mut() {
-            let old = budget.requests_per_minute;
-            budget.requests_per_minute = old.clamp(1, 120);
-            if budget.requests_per_minute != old {
-                tracing::warn!(target: "4da::settings", field = "rate_budget.requests_per_minute", source = %source, old, new = budget.requests_per_minute, "Clamped invalid value");
-            }
-        }
-
         // context_dirs paths must be non-empty strings
         let before = self.context_dirs.len();
         self.context_dirs.retain(|d| !d.trim().is_empty());
@@ -1099,7 +886,6 @@ impl Default for Settings {
             digest: DigestConfig::default(),
             rss_feeds: vec![],
             twitter_handles: vec![],
-            nitter_instance: None,
             x_api_key: SensitiveString::default(),
             youtube_channels: vec![],
             disabled_default_rss_feeds: vec![],
@@ -1107,15 +893,9 @@ impl Default for Settings {
             disabled_default_youtube_channels: vec![],
             disabled_default_twitter_handles: vec![],
             github_languages: vec![],
-            predictive: PredictiveConfig::default(),
             serendipity: SerendipityConfig::default(),
             feed_composition: FeedCompositionConfig::default(),
-            audio_briefing: AudioBriefingConfig::default(),
-            health_radar: HealthRadarConfig::default(),
-            attention: AttentionConfig::default(),
             license: LicenseConfig::default(),
-            source_resilience: default_source_resilience(),
-            rate_budgets: default_rate_budgets(),
             locale: LocaleConfig::default(),
             translation: TranslationConfig::default(),
             community_intelligence: None,

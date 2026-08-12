@@ -38,8 +38,6 @@ struct CrateInfo {
 struct CrateVersion {
     num: String,
     yanked: bool,
-    #[allow(dead_code)]
-    created_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -131,20 +129,12 @@ impl CratesIoSource {
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
         let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "crates.io rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "crates.io forbidden (HTTP 403)".to_string(),
-            ));
-        }
+        // 404 is "this crate does not exist", not a transport failure — check it before
+        // the shared gate, which would otherwise classify it as a network error.
         if status == reqwest::StatusCode::NOT_FOUND {
             return Err(SourceError::Other(format!("Crate not found: {name}")));
         }
-        super::check_http_status(status, "crates.io API")?;
+        super::classify_http_status(status, "crates.io API")?;
 
         let data: CratesIoResponse = response
             .json()
@@ -240,18 +230,7 @@ impl CratesIoSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "crates.io rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "crates.io forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        super::check_http_status(status, "crates.io API")?;
+        super::classify_http_status(response.status(), "crates.io API")?;
 
         let data: CratesSearchResponse = response
             .json()

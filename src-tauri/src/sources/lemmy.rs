@@ -87,18 +87,7 @@ async fn fetch_api(
         .await
         .map_err(|e| SourceError::Network(e.to_string()))?;
 
-    let status = response.status();
-    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err(SourceError::RateLimited(
-            "Lemmy rate limited (HTTP 429)".to_string(),
-        ));
-    }
-    if status == reqwest::StatusCode::FORBIDDEN {
-        return Err(SourceError::Forbidden(
-            "Lemmy forbidden (HTTP 403)".to_string(),
-        ));
-    }
-    super::check_http_status(status, "Lemmy API")?;
+    super::classify_http_status(response.status(), "Lemmy API")?;
 
     let list: LemmyPostList = response
         .json()
@@ -140,13 +129,7 @@ async fn fetch_rss(
         .await
         .map_err(|e| SourceError::Network(e.to_string()))?;
 
-    let status = response.status();
-    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err(SourceError::RateLimited(
-            "Lemmy RSS rate limited (HTTP 429)".to_string(),
-        ));
-    }
-    super::check_http_status(status, "Lemmy RSS")?;
+    super::classify_http_status(response.status(), "Lemmy RSS")?;
 
     let body = response
         .text()

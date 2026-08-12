@@ -8,8 +8,6 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tracing::{debug, info, warn};
 
-use crate::error::{FourDaError, Result};
-
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 
 // ============================================================================
@@ -20,8 +18,6 @@ use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 struct XApiResponse {
     data: Option<Vec<XTweet>>,
     includes: Option<XIncludes>,
-    #[allow(dead_code)]
-    meta: Option<XMeta>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -42,8 +38,6 @@ struct XIncludes {
 struct XUser {
     id: String,
     username: String,
-    #[allow(dead_code)]
-    name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,14 +47,6 @@ struct XPublicMetrics {
     like_count: u64,
     #[serde(default)]
     impression_count: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct XMeta {
-    #[allow(dead_code)]
-    result_count: Option<u32>,
-    #[allow(dead_code)]
-    next_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -164,8 +150,33 @@ impl TwitterSource {
         self
     }
 
+    /// Triage an X API response status into the shared error taxonomy.
+    ///
+    /// X does NOT use 403-only for auth: an invalid or expired bearer token comes back
+    /// as 401, and both mean "this key will not work until the user replaces it", so
+    /// both map to [`SourceError::Forbidden`]. That is what lets `fetch_items` bail the
+    /// whole run on the first auth failure by matching on the variant instead of
+    /// string-searching the message.
+    fn classify_x_status(status: reqwest::StatusCode, context: &str) -> SourceResult<()> {
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err(SourceError::RateLimited(format!("Rate limited {context}")));
+        }
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            return Err(SourceError::Forbidden(format!(
+                "X API key invalid or expired (HTTP {}) {context}",
+                status.as_u16()
+            )));
+        }
+        if !status.is_success() {
+            return Err(SourceError::Network(format!(
+                "X API error {context}: HTTP {status}"
+            )));
+        }
+        Ok(())
+    }
+
     /// Look up a user ID from a username
-    async fn lookup_user_id(&self, username: &str) -> Result<String> {
+    async fn lookup_user_id(&self, username: &str) -> SourceResult<String> {
         let url = format!("https://api.x.com/2/users/by/username/{username}");
 
         let resp = self
@@ -175,35 +186,27 @@ impl TwitterSource {
             .send()
             .await
             .map_err(|e| {
-                FourDaError::Internal(format!("Network error looking up @{username}: {e}"))
+                SourceError::Network(format!("Network error looking up @{username}: {e}"))
             })?;
 
-        if resp.status() == 429 {
-            return Err(FourDaError::Internal(format!(
-                "Rate limited looking up @{username}"
-            )));
-        }
-
-        if !resp.status().is_success() {
-            return Err(FourDaError::Internal(format!(
-                "X API error for @{}: HTTP {}",
-                username,
-                resp.status()
-            )));
-        }
+        Self::classify_x_status(resp.status(), &format!("looking up @{username}"))?;
 
         let body: XUserLookupResponse = resp
             .json()
             .await
-            .map_err(|e| FourDaError::Internal(format!("Parse error for @{username}: {e}")))?;
+            .map_err(|e| SourceError::Parse(format!("Parse error for @{username}: {e}")))?;
 
         body.data
             .map(|d| d.id)
-            .ok_or_else(|| FourDaError::Internal(format!("User @{username} not found")))
+            .ok_or_else(|| SourceError::Other(format!("User @{username} not found")))
     }
 
     /// Fetch recent tweets for a user by their ID
-    async fn fetch_user_tweets(&self, user_id: &str, username: &str) -> Result<Vec<SourceItem>> {
+    async fn fetch_user_tweets(
+        &self,
+        user_id: &str,
+        username: &str,
+    ) -> SourceResult<Vec<SourceItem>> {
         let url = format!(
             "https://api.x.com/2/users/{user_id}/tweets?max_results=10&tweet.fields=created_at,public_metrics,author_id&expansions=author_id&user.fields=username,name"
         );
@@ -217,82 +220,31 @@ impl TwitterSource {
             .send()
             .await
             .map_err(|e| {
-                FourDaError::Internal(format!(
+                SourceError::Network(format!(
                     "Network error fetching tweets for @{username}: {e}"
                 ))
             })?;
 
-        if resp.status() == 429 {
-            return Err(FourDaError::Internal(format!(
-                "Rate limited fetching tweets for @{username}"
-            )));
-        }
-
-        if !resp.status().is_success() {
-            return Err(FourDaError::Internal(format!(
-                "X API error for @{}: HTTP {}",
-                username,
-                resp.status()
-            )));
-        }
+        Self::classify_x_status(resp.status(), &format!("fetching tweets for @{username}"))?;
 
         let body: XApiResponse = resp
             .json()
             .await
-            .map_err(|e| FourDaError::Internal(format!("Parse error for @{username}: {e}")))?;
+            .map_err(|e| SourceError::Parse(format!("Parse error for @{username}: {e}")))?;
 
         let tweets = body.data.unwrap_or_default();
         let users = body.includes.and_then(|i| i.users).unwrap_or_default();
 
-        let items: Vec<SourceItem> = tweets
+        // Timeline payload: the permalink and `handle` are the REQUESTED handle, and the
+        // response carries `impression_count`.
+        Ok(tweets
             .into_iter()
-            .map(|tweet| {
-                // Find the author username from includes
-                let author = tweet
-                    .author_id
-                    .as_ref()
-                    .and_then(|aid| users.iter().find(|u| &u.id == aid))
-                    .map_or_else(|| format!("@{username}"), |u| format!("@{}", u.username));
-
-                let tweet_url = format!("https://x.com/{}/status/{}", username, tweet.id);
-
-                // Build a readable title from the tweet text (first ~100 chars)
-                let title = if tweet.text.len() > 120 {
-                    format!(
-                        "{}...",
-                        &tweet.text[..tweet
-                            .text
-                            .char_indices()
-                            .nth(117)
-                            .map_or(tweet.text.len(), |(i, _)| i)]
-                    )
-                } else {
-                    tweet.text.clone()
-                };
-
-                let metrics = tweet.public_metrics.as_ref();
-                let metadata = serde_json::json!({
-                    "author": author,
-                    "handle": username,
-                    "created_at": tweet.created_at,
-                    "likes": metrics.map_or(0, |m| m.like_count),
-                    "retweets": metrics.map_or(0, |m| m.retweet_count),
-                    "replies": metrics.map_or(0, |m| m.reply_count),
-                    "impressions": metrics.map_or(0, |m| m.impression_count),
-                });
-
-                SourceItem::new("twitter", &tweet.id, &title)
-                    .with_url(Some(tweet_url))
-                    .with_content(tweet.text)
-                    .with_metadata(metadata)
-            })
-            .collect();
-
-        Ok(items)
+            .map(|tweet| tweet_to_item(tweet, &users, Some(username), true))
+            .collect())
     }
 
     /// Search recent tweets by query
-    async fn search_recent(&self, query: &str, max_results: u32) -> Result<Vec<SourceItem>> {
+    async fn search_recent(&self, query: &str, max_results: u32) -> SourceResult<Vec<SourceItem>> {
         let url = format!(
             "https://api.x.com/2/tweets/search/recent?query={}&max_results={}&tweet.fields=created_at,public_metrics,author_id&expansions=author_id&user.fields=username,name",
             urlencoding::encode(query),
@@ -307,78 +259,95 @@ impl TwitterSource {
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .map_err(|e| FourDaError::Internal(format!("Network error searching tweets: {e}")))?;
+            .map_err(|e| SourceError::Network(format!("Network error searching tweets: {e}")))?;
 
-        if resp.status() == 429 {
-            return Err(FourDaError::Internal(
-                "Rate limited on tweet search".to_string(),
-            ));
-        }
-
-        if !resp.status().is_success() {
-            return Err(FourDaError::Internal(format!(
-                "X API search error: HTTP {}",
-                resp.status()
-            )));
-        }
+        Self::classify_x_status(resp.status(), "on tweet search")?;
 
         let body: XApiResponse = resp
             .json()
             .await
-            .map_err(|e| FourDaError::Internal(format!("Parse error on search: {e}")))?;
+            .map_err(|e| SourceError::Parse(format!("Parse error on search: {e}")))?;
 
         let tweets = body.data.unwrap_or_default();
         let users = body.includes.and_then(|i| i.users).unwrap_or_default();
 
-        let items: Vec<SourceItem> = tweets
+        // Search payload: there is no requested handle, so the author resolved from
+        // `includes` drives both the permalink and `handle`; no `impression_count`.
+        Ok(tweets
             .into_iter()
-            .map(|tweet| {
-                let author = tweet
-                    .author_id
-                    .as_ref()
-                    .and_then(|aid| users.iter().find(|u| &u.id == aid))
-                    .map_or_else(|| "unknown".to_string(), |u| format!("@{}", u.username));
-
-                let author_username = tweet
-                    .author_id
-                    .as_ref()
-                    .and_then(|aid| users.iter().find(|u| &u.id == aid))
-                    .map_or_else(|| "unknown".to_string(), |u| u.username.clone());
-
-                let tweet_url = format!("https://x.com/{}/status/{}", author_username, tweet.id);
-
-                let title = if tweet.text.len() > 120 {
-                    format!(
-                        "{}...",
-                        &tweet.text[..tweet
-                            .text
-                            .char_indices()
-                            .nth(117)
-                            .map_or(tweet.text.len(), |(i, _)| i)]
-                    )
-                } else {
-                    tweet.text.clone()
-                };
-
-                let metrics = tweet.public_metrics.as_ref();
-                let metadata = serde_json::json!({
-                    "author": author,
-                    "handle": author_username,
-                    "created_at": tweet.created_at,
-                    "likes": metrics.map_or(0, |m| m.like_count),
-                    "retweets": metrics.map_or(0, |m| m.retweet_count),
-                    "replies": metrics.map_or(0, |m| m.reply_count),
-                });
-
-                SourceItem::new("twitter", &tweet.id, &title)
-                    .with_url(Some(tweet_url))
-                    .with_content(tweet.text)
-                    .with_metadata(metadata)
-            })
-            .collect();
-
-        Ok(items)
+            .map(|tweet| tweet_to_item(tweet, &users, None, false))
+            .collect())
     }
+}
+
+/// Convert one X API tweet into a [`SourceItem`]. Shared by the timeline and search
+/// fetchers, which differ only in how the author is resolved and whether the payload
+/// carries impressions.
+///
+/// - `fallback_handle`: `Some(handle)` for the timeline — the requested handle owns the
+///   permalink and the `handle` metadata field even when `includes` resolves an author.
+///   `None` for search — the author resolved from `includes` (or `"unknown"`) owns both.
+/// - `include_impressions`: only the timeline payload carries `impression_count`.
+fn tweet_to_item(
+    tweet: XTweet,
+    users: &[XUser],
+    fallback_handle: Option<&str>,
+    include_impressions: bool,
+) -> SourceItem {
+    let resolved = tweet
+        .author_id
+        .as_ref()
+        .and_then(|aid| users.iter().find(|u| &u.id == aid))
+        .map(|u| u.username.as_str());
+
+    let author = match (resolved, fallback_handle) {
+        (Some(u), _) => format!("@{u}"),
+        (None, Some(h)) => format!("@{h}"),
+        (None, None) => "unknown".to_string(),
+    };
+
+    // The permalink/handle owner: the requested handle on a timeline fetch, the resolved
+    // author on a search.
+    let handle = match fallback_handle {
+        Some(h) => h.to_string(),
+        None => resolved.unwrap_or("unknown").to_string(),
+    };
+
+    let tweet_url = format!("https://x.com/{}/status/{}", handle, tweet.id);
+
+    // Build a readable title from the tweet text (first ~100 chars).
+    // NOTE: truncation policy here is owned by the title-truncation lane — do not
+    // "improve" this block; it is byte-for-byte the behaviour both fetchers had.
+    let title = if tweet.text.len() > 120 {
+        format!(
+            "{}...",
+            &tweet.text[..tweet
+                .text
+                .char_indices()
+                .nth(117)
+                .map_or(tweet.text.len(), |(i, _)| i)]
+        )
+    } else {
+        tweet.text.clone()
+    };
+
+    let metrics = tweet.public_metrics.as_ref();
+    let mut metadata = serde_json::json!({
+        "author": author,
+        "handle": handle,
+        "created_at": tweet.created_at,
+        "likes": metrics.map_or(0, |m| m.like_count),
+        "retweets": metrics.map_or(0, |m| m.retweet_count),
+        "replies": metrics.map_or(0, |m| m.reply_count),
+    });
+    if include_impressions {
+        metadata["impressions"] = serde_json::json!(metrics.map_or(0, |m| m.impression_count));
+    }
+
+    SourceItem::new("twitter", &tweet.id, &title)
+        .with_url(Some(tweet_url))
+        .with_content(tweet.text)
+        .with_metadata(metadata)
 }
 
 impl Default for TwitterSource {
@@ -448,50 +417,38 @@ impl Source for TwitterSource {
                 continue;
             }
 
-            // First look up the user ID
-            match self.lookup_user_id(handle).await {
-                Ok(user_id) => match self.fetch_user_tweets(&user_id, handle).await {
-                    Ok(items) => {
-                        info!(handle = %handle, items = items.len(), "Fetched tweets");
-                        all_items.extend(items);
-                    }
-                    Err(e) => {
-                        let es = e.to_string();
-                        if es.contains("Rate limited") {
+            // Look up the user ID, then its timeline. Both legs funnel into ONE failure
+            // triage below, tagged with which leg failed.
+            let outcome = match self.lookup_user_id(handle).await {
+                Ok(user_id) => self
+                    .fetch_user_tweets(&user_id, handle)
+                    .await
+                    .map_err(|e| (e, "Failed to fetch tweets")),
+                Err(e) => Err((e, "Failed to look up user")),
+            };
+
+            match outcome {
+                Ok(items) => {
+                    info!(handle = %handle, items = items.len(), "Fetched tweets");
+                    all_items.extend(items);
+                }
+                Err((e, what)) => {
+                    // Triage on the error VARIANT — the taxonomy carries the meaning, so
+                    // there is nothing to string-match.
+                    match &e {
+                        SourceError::RateLimited(_) => {
                             warn!("X API rate limited - stopping handle fetches for this run");
                             rate_limited = true;
-                        } else if es.contains("401")
-                            || es.contains("Unauthorized")
-                            || es.contains("403")
-                        {
+                        }
+                        SourceError::Forbidden(_) => {
                             warn!("X API key invalid or expired (HTTP 401/403) - skipping X for this run; update the key in Settings");
                             auth_failed = true;
-                        } else {
-                            warn!(handle = %handle, error = %es, "Failed to fetch tweets");
                         }
-                        self.feed_errors
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .push((handle.clone(), e.to_string()));
-                    }
-                },
-                Err(e) => {
-                    let es = e.to_string();
-                    if es.contains("Rate limited") {
-                        warn!("X API rate limited - stopping handle fetches for this run");
-                        rate_limited = true;
-                    } else if es.contains("401")
-                        || es.contains("Unauthorized")
-                        || es.contains("403")
-                    {
-                        warn!("X API key invalid or expired (HTTP 401/403) - skipping X for this run; update the key in Settings");
-                        auth_failed = true;
-                    } else {
-                        warn!(handle = %handle, error = %es, "Failed to look up user");
+                        _ => warn!(handle = %handle, error = %e, "{}", what),
                     }
                     self.feed_errors
                         .lock()
-                        .unwrap_or_else(|e| e.into_inner())
+                        .unwrap_or_else(|p| p.into_inner())
                         .push((handle.clone(), e.to_string()));
                 }
             }
@@ -533,18 +490,15 @@ impl Source for TwitterSource {
                     info!(query, count = items.len(), "Search results");
                     all_items.extend(items);
                 }
-                Err(e) => {
-                    let es = e.to_string();
-                    if es.contains("Rate limited") {
-                        warn!("X API rate limited - stopping searches");
-                        break;
-                    }
-                    if es.contains("401") || es.contains("Unauthorized") || es.contains("403") {
-                        warn!("X API key invalid or expired (HTTP 401/403) - stopping searches; update the key in Settings");
-                        break;
-                    }
-                    warn!(query, error = %es, "Search failed");
+                Err(SourceError::RateLimited(_)) => {
+                    warn!("X API rate limited - stopping searches");
+                    break;
                 }
+                Err(SourceError::Forbidden(_)) => {
+                    warn!("X API key invalid or expired (HTTP 401/403) - stopping searches; update the key in Settings");
+                    break;
+                }
+                Err(e) => warn!(query, error = %e, "Search failed"),
             }
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }

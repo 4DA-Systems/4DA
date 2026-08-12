@@ -35,15 +35,14 @@ pub(crate) fn interest_specificity_weight_for(
     }
 }
 
-/// Find the best-matching interest for an item and return its specificity weight.
-/// Used to attenuate keyword_score for broad interests.
+/// Find the best-matching interest for an item and return its specificity weight
+/// (no profile). Test-only convenience: production paths use the `_for` variant.
 ///
-/// When the user has very few interests (1-2), SPECIFIC interests get full
-/// 1.0x weight — someone who only declares "Tauri" and "Rust" clearly means
-/// both. GENERIC lone interests ("ai", "api") keep their computed specificity
-/// weight so the gate's broad-interest corroboration guard still applies.
-/// With 3+ interests the broad-term discount kicks in at a gentler rate
-/// (0.60x for 3-5 interests) than the default (0.25x for 6+).
+/// Was a production entry point until 2026-08-12, when its only non-test caller
+/// (the V1 pipeline) was deleted. Kept `#[cfg(test)]` — mirroring
+/// `interest_specificity_weight` above — because the keyword specificity suite
+/// exercises the profile-less behaviour directly.
+#[cfg(test)]
 pub(crate) fn best_interest_specificity_weight(
     title: &str,
     content: &str,
@@ -52,9 +51,16 @@ pub(crate) fn best_interest_specificity_weight(
     best_interest_specificity_weight_for(title, content, interests, None)
 }
 
-/// Profile-aware variant of [`best_interest_specificity_weight`]: broad terms
-/// that are the user's own detected domain keep their normal (non-broad)
-/// specificity weight.
+/// Production entry point for interest specificity weighting. Broad terms that
+/// are the user's own detected domain keep their normal (non-broad) specificity
+/// weight instead of taking the broad-term discount.
+///
+/// When the user has very few interests (1-2), SPECIFIC interests get full
+/// 1.0x weight — someone who only declares "Tauri" and "Rust" clearly means
+/// both. GENERIC lone interests ("ai", "api") keep their computed specificity
+/// weight so the gate's broad-interest corroboration guard still applies.
+/// With 3+ interests the broad-term discount kicks in at a gentler rate
+/// (0.60x for 3-5 interests) than the default (0.25x for 6+).
 pub(crate) fn best_interest_specificity_weight_for(
     title: &str,
     content: &str,

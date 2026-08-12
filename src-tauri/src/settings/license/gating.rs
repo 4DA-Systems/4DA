@@ -32,9 +32,10 @@ use super::LicenseConfig;
 ///   `natural_language_query` (AD-025).
 pub const SIGNAL_FEATURES: &[&str] = &[
     // Intelligence panels (original)
-    "get_attention_report",
+    // get_attention_report / get_project_health removed 2026-08-12: both commands
+    // were deleted as ghosts (no frontend caller), so gating their names gated
+    // nothing. Project Health survives via get_project_health_comparison below.
     "get_knowledge_gaps",
-    "get_project_health",
     // Developer DNA un-gated (AD-026): free tier viral sharing of DNA cards
     // natural_language_query removed — BYOK: runs on user's API key at zero cost (AD-025)
     // synthesize_search removed — BYOK, same reasoning (see free-floor exceptions above)
@@ -118,10 +119,9 @@ fn signal_feature_label(feature: &str) -> &'static str {
     match feature {
         "get_blind_spots" => "Blind Spots",
         "get_knowledge_gaps" => "Knowledge Gaps",
-        "get_attention_report" => "Attention Report",
         "standing_queries" => "Standing Queries",
         "get_semantic_shifts" => "Semantic Shifts",
-        "get_project_health" | "get_project_health_comparison" => "Project Health",
+        "get_project_health_comparison" => "Project Health",
         "get_decision_health_report" => "Decision Health",
         "get_tech_convergence" => "Tech Convergence",
         "get_cross_project_dependencies" => "Cross-Project Dependencies",

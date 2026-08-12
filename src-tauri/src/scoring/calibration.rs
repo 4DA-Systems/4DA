@@ -22,18 +22,15 @@ pub(crate) fn calibrate_score(raw: f32) -> f32 {
     1.0 / (1.0 + ((center - raw) * scale).exp())
 }
 
-/// Compute interest score by comparing item embedding against interest embeddings
-#[score_component(output_range = "0.0..=1.0")]
-pub(crate) fn compute_interest_score(
-    item_embedding: &[f32],
-    interests: &[context_engine::Interest],
-) -> f32 {
-    compute_interest_score_for(item_embedding, interests, None)
-}
-
-/// Profile-aware variant of [`compute_interest_score`]: broad terms that are
-/// the user's own detected domain (e.g. "ml" for an ML engineer) keep full
-/// specificity weight instead of the broad-term discount.
+/// Compute interest score by comparing item embedding against interest
+/// embeddings, with profile-aware specificity: broad terms that are the user's
+/// own detected domain (e.g. "ml" for an ML engineer) keep full specificity
+/// weight instead of the broad-term discount.
+///
+/// The profile-less `compute_interest_score` wrapper was deleted 2026-08-12 —
+/// its only caller was the V1 pipeline. Its `#[score_component]` range assert
+/// went with it rather than moving here: V2 has run this function un-asserted
+/// for months, and silently arming a new debug_assert is not a cleanup.
 pub(crate) fn compute_interest_score_for(
     item_embedding: &[f32],
     interests: &[context_engine::Interest],

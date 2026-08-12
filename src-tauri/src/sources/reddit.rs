@@ -69,18 +69,7 @@ async fn fetch_subreddit_json(
         .await
         .map_err(|e| SourceError::Network(e.to_string()))?;
 
-    let status = response.status();
-    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err(SourceError::RateLimited(
-            "Reddit rate limited (HTTP 429)".to_string(),
-        ));
-    }
-    if status == reqwest::StatusCode::FORBIDDEN {
-        return Err(SourceError::Forbidden(
-            "Reddit forbidden (HTTP 403)".to_string(),
-        ));
-    }
-    super::check_http_status(status, "Reddit API")?;
+    super::classify_http_status(response.status(), "Reddit API")?;
 
     let listing: RedditListing = response
         .json()
@@ -133,18 +122,7 @@ async fn fetch_subreddit_rss(
         .await
         .map_err(|e| SourceError::Network(e.to_string()))?;
 
-    let status = response.status();
-    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err(SourceError::RateLimited(
-            "Reddit RSS rate limited (HTTP 429)".to_string(),
-        ));
-    }
-    if status == reqwest::StatusCode::FORBIDDEN {
-        return Err(SourceError::Forbidden(
-            "Reddit RSS forbidden (HTTP 403)".to_string(),
-        ));
-    }
-    super::check_http_status(status, "Reddit RSS")?;
+    super::classify_http_status(response.status(), "Reddit RSS")?;
 
     let body = response
         .text()

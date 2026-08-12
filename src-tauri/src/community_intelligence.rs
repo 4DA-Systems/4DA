@@ -3,12 +3,16 @@
 //!
 //! Shares PATTERNS (scoring weights, accuracy metrics), never DATA
 //! (content, URLs, identity, preferences, tech stack).
+//!
+//! The three IPC commands (`get_community_status`,
+//! `set_community_intelligence_enabled`, `set_community_frequency`), the
+//! `CommunityStatus` response type, and the SHA-256 anonymous-id generator were
+//! deleted 2026-08-12: the commands were removed from the Tauri handler for
+//! having zero frontend callers, which left every one of them unreachable. Only
+//! the persisted config type below is live — `settings::types::Settings` carries
+//! it. Git history preserves the removed implementation.
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-
-use crate::error::Result;
-use crate::get_settings_manager;
 
 // ============================================================================
 // Types
@@ -31,101 +35,4 @@ impl Default for CommunityIntelligenceConfig {
             anonymous_id: None,
         }
     }
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct CommunityStatus {
-    pub enabled: bool,
-    pub frequency: String,
-    pub last_contributed: Option<String>,
-    pub anonymous_id_preview: Option<String>, // first 8 chars only
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-/// Generate a random anonymous ID using SHA-256 hash of timestamp + process info.
-/// No external `uuid` crate needed — produces a 64-char hex string.
-fn generate_anonymous_id() -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(
-        chrono::Utc::now()
-            .timestamp_nanos_opt()
-            .unwrap_or(0)
-            .to_le_bytes(),
-    );
-    hasher.update(std::process::id().to_le_bytes());
-    // Mix in a counter to avoid collisions if called twice in the same nanosecond
-    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    hasher.update(
-        COUNTER
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            .to_le_bytes(),
-    );
-    hex::encode(hasher.finalize())
-}
-
-// ============================================================================
-// Commands
-// ============================================================================
-
-/// Get the current community intelligence status
-pub async fn get_community_status() -> Result<CommunityStatus> {
-    let manager = get_settings_manager();
-    let guard = manager.lock();
-    let settings = guard.get();
-
-    let config = settings.community_intelligence.clone().unwrap_or_default();
-
-    Ok(CommunityStatus {
-        enabled: config.enabled,
-        frequency: config.frequency,
-        last_contributed: config.last_contributed,
-        anonymous_id_preview: config
-            .anonymous_id
-            .as_ref()
-            .map(|id| id[..8.min(id.len())].to_string()),
-    })
-}
-
-/// Toggle community intelligence on/off
-pub async fn set_community_intelligence_enabled(enabled: bool) -> Result<()> {
-    let manager = get_settings_manager();
-    let mut guard = manager.lock();
-    let settings = guard.get_mut();
-
-    let config = settings
-        .community_intelligence
-        .get_or_insert_with(CommunityIntelligenceConfig::default);
-    config.enabled = enabled;
-
-    // Generate anonymous ID on first enable
-    if enabled && config.anonymous_id.is_none() {
-        config.anonymous_id = Some(generate_anonymous_id());
-    }
-
-    guard.save()?;
-    Ok(())
-}
-
-/// Set contribution frequency
-pub async fn set_community_frequency(frequency: String) -> Result<()> {
-    if frequency != "weekly" && frequency != "monthly" {
-        return Err(crate::error::FourDaError::Config(
-            "Frequency must be 'weekly' or 'monthly'".into(),
-        ));
-    }
-
-    let manager = get_settings_manager();
-    let mut guard = manager.lock();
-    let settings = guard.get_mut();
-
-    let config = settings
-        .community_intelligence
-        .get_or_insert_with(CommunityIntelligenceConfig::default);
-    config.frequency = frequency;
-
-    guard.save()?;
-    Ok(())
 }

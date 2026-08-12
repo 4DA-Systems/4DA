@@ -28,8 +28,6 @@ struct PypiInfo {
     summary: Option<String>,
     author: Option<String>,
     home_page: Option<String>,
-    #[allow(dead_code)]
-    project_url: Option<String>,
     requires_python: Option<String>,
     classifiers: Option<Vec<String>>,
     project_urls: Option<HashMap<String, String>>,
@@ -91,20 +89,6 @@ impl PypiSource {
         }
     }
 
-    /// Create a PyPI source with a custom list of packages to monitor
-    pub fn with_packages(packages: Vec<String>) -> Self {
-        Self {
-            config: SourceConfig {
-                enabled: true,
-                max_items: 20,
-                fetch_interval_secs: 3600,
-                custom: None,
-            },
-            client: super::shared_client(),
-            packages,
-        }
-    }
-
     /// Fetch metadata for a single package from the PyPI JSON API
     async fn fetch_package(&self, package: &str) -> SourceResult<SourceItem> {
         let url = format!("https://pypi.org/pypi/{}/json", package);
@@ -118,22 +102,14 @@ impl PypiSource {
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
         let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "PyPI rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "PyPI forbidden (HTTP 403)".to_string(),
-            ));
-        }
+        // 404 is "this package does not exist", not a transport failure — check it before
+        // the shared gate, which would otherwise classify it as a network error.
         if status == reqwest::StatusCode::NOT_FOUND {
             return Err(SourceError::Other(format!(
                 "PyPI package not found: {package}"
             )));
         }
-        super::check_http_status(status, "PyPI API")?;
+        super::classify_http_status(status, "PyPI API")?;
 
         let pkg: PypiPackageInfo = response
             .json()
@@ -328,14 +304,6 @@ mod tests {
         assert_eq!(source.config().max_items, 20);
         assert_eq!(source.config().fetch_interval_secs, 3600);
         assert_eq!(source.packages.len(), DEFAULT_PACKAGES.len());
-    }
-
-    #[test]
-    fn test_pypi_with_custom_packages() {
-        let packages = vec!["httpx".to_string(), "rich".to_string()];
-        let source = PypiSource::with_packages(packages.clone());
-        assert_eq!(source.packages, packages);
-        assert_eq!(source.source_type(), "pypi");
     }
 
     #[test]

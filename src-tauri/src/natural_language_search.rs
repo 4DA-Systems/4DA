@@ -372,39 +372,6 @@ fn find_query_gaps(conn: &rusqlite::Connection, keywords: &[String]) -> Vec<Quer
 }
 
 // ============================================================================
-// Merge and deduplicate
-// ============================================================================
-
-#[allow(dead_code)] // REMOVE BY 2026-08-01 — replaced by hybrid_search
-fn merge_results(
-    text_results: Vec<QueryResultItem>,
-    vector_results: Vec<QueryResultItem>,
-) -> Vec<QueryResultItem> {
-    let mut seen_ids = std::collections::HashSet::new();
-    let mut merged = Vec::new();
-
-    for item in vector_results {
-        if seen_ids.insert(item.id) {
-            merged.push(item);
-        }
-    }
-    for mut item in text_results {
-        if seen_ids.insert(item.id) {
-            item.relevance = 0.4;
-            merged.push(item);
-        }
-    }
-
-    merged.sort_by(|a, b| {
-        b.relevance
-            .partial_cmp(&a.relevance)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    merged.truncate(30);
-    merged
-}
-
-// ============================================================================
 // LLM availability check
 // ============================================================================
 

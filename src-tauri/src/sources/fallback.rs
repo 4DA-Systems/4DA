@@ -33,14 +33,8 @@ pub enum FallbackParser {
     HnRss,
     /// Reddit .rss suffix (XML/Atom)
     RedditRss,
-    /// GitHub GraphQL API
-    GithubGraphql,
-    /// GitHub releases.atom feed
-    GithubRss,
     /// arXiv RSS feed
     ArxivRss,
-    /// Standard RSS/Atom parser
-    GenericRss,
 }
 
 // ============================================================================
@@ -69,11 +63,11 @@ pub fn get_fallbacks(source_type: &str) -> Vec<FallbackEndpoint> {
             url: "https://www.reddit.com/r/programming/.rss".into(),
             parser: FallbackParser::RedditRss,
         }],
-        "github" => vec![FallbackEndpoint {
-            name: "GitHub Trending RSS".into(),
-            url: "https://github.com/trending?since=daily".into(),
-            parser: FallbackParser::GenericRss,
-        }],
+        // NOTE: no "github" fallback. The previous entry pointed the RSS parser at
+        // https://github.com/trending?since=daily — an HTML page with no <item>/<entry>
+        // elements — so it burned a request on every GitHub failure and always parsed
+        // to 0 items. GitHub publishes no equivalent trending feed; a real fallback
+        // needs a verified endpoint, not a guessed URL.
         "arxiv" => vec![FallbackEndpoint {
             name: "arXiv RSS".into(),
             url: "http://arxiv.org/rss/cs.AI".into(),
@@ -177,20 +171,7 @@ async fn fetch_fallback(
         .await
         .map_err(|e| SourceError::Network(format!("{}: {}", endpoint.name, e)))?;
 
-    let status = response.status();
-    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err(SourceError::RateLimited(format!(
-            "{} rate limited",
-            endpoint.name
-        )));
-    }
-    if !status.is_success() {
-        return Err(SourceError::Network(format!(
-            "{}: HTTP {}",
-            endpoint.name,
-            status.as_u16()
-        )));
-    }
+    crate::sources::classify_http_status(response.status(), &endpoint.name)?;
 
     let body = response
         .text()
@@ -201,12 +182,7 @@ async fn fetch_fallback(
         FallbackParser::HnAlgolia => parse_hn_algolia(&body),
         FallbackParser::HnRss => parse_rss_generic(&body, "hackernews"),
         FallbackParser::RedditRss => parse_rss_generic(&body, "reddit"),
-        FallbackParser::GithubRss => parse_rss_generic(&body, "github"),
         FallbackParser::ArxivRss => parse_rss_generic(&body, "arxiv"),
-        FallbackParser::GithubGraphql => Err(SourceError::Other(
-            "GraphQL fallback not yet implemented".into(),
-        )),
-        FallbackParser::GenericRss => parse_rss_generic(&body, "rss"),
     }
 }
 
@@ -361,8 +337,15 @@ mod tests {
     fn test_fallbacks_exist_for_key_sources() {
         assert!(!get_fallbacks("hackernews").is_empty());
         assert!(!get_fallbacks("reddit").is_empty());
-        assert!(!get_fallbacks("github").is_empty());
         assert!(!get_fallbacks("arxiv").is_empty());
+    }
+
+    #[test]
+    fn test_github_has_no_fallback() {
+        // Guard against re-adding an unverified GitHub endpoint. The old entry parsed
+        // an HTML page as RSS and could only ever yield 0 items; "no fallback" is the
+        // honest state until a real feed is verified live.
+        assert!(get_fallbacks("github").is_empty());
     }
 
     #[test]

@@ -41,6 +41,36 @@ pub struct DepEntry {
     pub source: String,
 }
 
+/// Retention window for `dependency_snapshots`, in days.
+///
+/// A snapshot row's `scanned_at` is bumped by `snapshot_project_deps` on every
+/// re-scan of its project, so a row older than this belongs to a project ACE
+/// has not seen in three months — a deleted checkout, a renamed directory, or
+/// a path the user dropped from their context dirs. Matches the 90-day window
+/// the module's own expiry test has always asserted.
+pub(crate) const SNAPSHOT_RETENTION_DAYS: i64 = 90;
+
+/// Delete `dependency_snapshots` rows older than `older_than_days`, using a
+/// caller-supplied connection.
+///
+/// Exists separately from [`Database::expire_stale_snapshots`] so the DB
+/// maintenance sweep can run this INSIDE its open transaction: `self.conn` is a
+/// non-reentrant `parking_lot::Mutex`, so a method that re-locks it would
+/// deadlock against the guard `run_maintenance` already holds.
+pub(crate) fn expire_stale_snapshots_on(
+    conn: &rusqlite::Connection,
+    older_than_days: i64,
+) -> Result<usize> {
+    let deleted = conn
+        .execute(
+            "DELETE FROM dependency_snapshots
+             WHERE scanned_at < datetime('now', ?1)",
+            params![format!("-{older_than_days} days")],
+        )
+        .context("expire stale snapshots")?;
+    Ok(deleted)
+}
+
 // ============================================================================
 // Database Operations
 // ============================================================================
@@ -148,16 +178,13 @@ impl Database {
 
     /// Delete dependency snapshots older than `older_than_days` days.
     /// Returns the number of rows deleted.
+    ///
+    /// Production expiry runs from `run_maintenance` via
+    /// [`expire_stale_snapshots_on`] (inside that sweep's transaction); this is
+    /// the standalone entry point for callers that hold no connection.
     pub fn expire_stale_snapshots(&self, older_than_days: i64) -> Result<usize> {
         let conn = self.conn.lock();
-        let deleted = conn
-            .execute(
-                "DELETE FROM dependency_snapshots
-                 WHERE scanned_at < datetime('now', ?1)",
-                params![format!("-{older_than_days} days")],
-            )
-            .context("expire stale snapshots")?;
-        Ok(deleted)
+        expire_stale_snapshots_on(&conn, older_than_days)
     }
 }
 
@@ -309,7 +336,61 @@ mod tests {
         assert!(current.is_empty(), "no deps should remain after expiry");
     }
 
-    /// Test 5: Empty deps list is a no-op, returning 0.
+    /// Test 5: the expiry the DB maintenance sweep performs — run exactly the
+    /// way `run_maintenance` runs it, from inside a transaction on an
+    /// already-held connection.
+    ///
+    /// This is the regression guard for that wiring. Before it, nothing in
+    /// production ever deleted from `dependency_snapshots`, so the table grew
+    /// without bound. It pins three things the wiring depends on: the retention
+    /// cutoff is applied per row (fresh projects survive), the delete works
+    /// against a caller-supplied connection WITHOUT re-locking `self.conn`
+    /// (which would deadlock — `parking_lot::Mutex` is not reentrant), and a
+    /// second sweep is a no-op.
+    #[test]
+    fn test_maintenance_style_expiry_is_scoped_and_idempotent() {
+        let db = test_db();
+        db.snapshot_project_deps("/proj", &sample_deps()).unwrap();
+        db.snapshot_project_deps("/fresh", &sample_deps()).unwrap();
+
+        // Backdate only /proj past the retention window.
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE dependency_snapshots
+                 SET scanned_at = datetime('now', ?1)
+                 WHERE project_path = '/proj'",
+                params![format!("-{} days", SNAPSHOT_RETENTION_DAYS + 10)],
+            )
+            .unwrap();
+        }
+
+        // Mirror run_maintenance: hold the writer lock, open a transaction, and
+        // expire through the connection-taking helper.
+        let sweep = || {
+            let conn = db.conn.lock();
+            let tx = conn.unchecked_transaction().unwrap();
+            let deleted = expire_stale_snapshots_on(&tx, SNAPSHOT_RETENTION_DAYS).unwrap();
+            tx.commit().unwrap();
+            deleted
+        };
+
+        assert_eq!(sweep(), 2, "both stale /proj rows should be expired");
+        assert!(
+            db.get_current_deps("/proj").unwrap().is_empty(),
+            "snapshots past the retention window must be gone"
+        );
+        assert_eq!(
+            db.get_current_deps("/fresh").unwrap().len(),
+            2,
+            "snapshots inside the window must be untouched"
+        );
+
+        assert_eq!(sweep(), 0, "a second sweep must be a no-op");
+        assert_eq!(db.get_current_deps("/fresh").unwrap().len(), 2);
+    }
+
+    /// Test 6: Empty deps list is a no-op, returning 0.
     #[test]
     fn test_empty_snapshot() {
         let db = test_db();

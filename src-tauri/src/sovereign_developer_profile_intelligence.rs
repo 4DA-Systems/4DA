@@ -621,12 +621,6 @@ fn write_map_section(md: &mut String, label: &str, map: &HashMap<String, String>
 // ============================================================================
 
 #[tauri::command]
-pub fn get_sovereign_developer_profile() -> crate::error::Result<SovereignDeveloperProfile> {
-    let conn = crate::open_db_connection()?;
-    Ok(assemble_profile(&conn))
-}
-
-#[tauri::command]
 pub fn export_sovereign_profile_markdown() -> crate::error::Result<String> {
     let conn = crate::open_db_connection()?;
     let profile = assemble_profile(&conn);

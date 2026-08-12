@@ -13,7 +13,7 @@
 
 use super::benchmark::{bench_db, no_freshness};
 use super::benchmark_scenarios::profile_ctx;
-use super::pipeline::ScoringInput;
+use super::types::ScoringInput;
 use super::*;
 
 fn score<'a>(

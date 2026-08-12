@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 
-#![allow(dead_code)]
-
 //! Per-Source Compression Rules — reduce LLM/embedding token usage by applying
 //! source-specific noise removal before content enters the intelligence pipeline.
 //!
@@ -21,6 +19,9 @@ pub fn chars_saved() -> u64 {
     TOTAL_CHARS_SAVED.load(Ordering::Relaxed)
 }
 
+/// Test-only: the production counter is monotonic for the process lifetime, so
+/// only tests need to zero it between cases.
+#[cfg(test)]
 pub fn reset_chars_saved() {
     TOTAL_CHARS_SAVED.store(0, Ordering::Relaxed);
 }

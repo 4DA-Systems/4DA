@@ -124,23 +124,6 @@ pub(crate) fn compute_anti_penalty(topics: &[String], ace_ctx: &ACEContext) -> f
 // corroboration. Doctrine rule 8: dead code is deleted. Git history
 // preserves it.
 
-/// Unified relevance scoring using multiplicative formula
-/// PASIFA: semantic_sim * affinity_multiplier * (1.0 - anti_penalty)
-pub(crate) fn compute_unified_relevance(
-    base_score: f32,
-    topics: &[String],
-    ace_ctx: &ACEContext,
-) -> f32 {
-    let affinity_mult = compute_affinity_multiplier(topics, ace_ctx);
-    let anti_penalty = compute_anti_penalty(topics, ace_ctx);
-
-    // Apply multiplicative formula
-    let unified_score = base_score * affinity_mult * (1.0 - anti_penalty);
-
-    // Clamp to valid range
-    unified_score.clamp(0.0, 1.0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,45 +190,10 @@ mod tests {
         assert!(penalty <= 0.7, "Penalty should be capped at 0.7");
     }
 
-    // Test unified relevance scoring
-    #[test]
-    fn test_unified_relevance_neutral() {
-        let ctx = ACEContext::default();
-        let topics = vec!["test".to_string()];
-        let score = compute_unified_relevance(0.5, &topics, &ctx);
-
-        // With neutral context: 0.5 * 1.0 * (1.0 - 0.0) = 0.5
-        assert_eq!(score, 0.5, "Neutral context should preserve base score");
-    }
-
-    // Test unified relevance with positive affinity
-    #[test]
-    fn test_unified_relevance_positive_affinity() {
-        let mut ctx = ACEContext::default();
-        ctx.topic_affinities.insert("rust".to_string(), (0.8, 1.0));
-
-        let topics = vec!["rust".to_string()];
-        let score = compute_unified_relevance(0.5, &topics, &ctx);
-
-        // Base 0.5 * multiplier > 1.0 * (1.0 - 0.0)
-        assert!(score > 0.5, "Positive affinity should boost score");
-    }
-
-    // Test unified relevance with anti-topic
-    #[test]
-    fn test_unified_relevance_anti_topic() {
-        let mut ctx = ACEContext::default();
-        ctx.anti_topics.push("spam".to_string());
-        ctx.anti_topic_confidence.insert("spam".to_string(), 1.0);
-
-        let topics = vec!["spam".to_string()];
-        let score = compute_unified_relevance(0.5, &topics, &ctx);
-
-        // Base 0.5 * 1.0 * (1.0 - penalty)
-        assert!(score < 0.5, "Anti-topic should reduce score");
-    }
-
-    // Test confidence weighting effect
+    // Confidence must weight the affinity effect: same affinity, lower
+    // confidence => weaker multiplier. (Previously asserted through the V1
+    // `compute_unified_relevance` wrapper; re-pointed at the live primitive
+    // when V1 was removed.)
     #[test]
     fn test_confidence_weighting() {
         let mut ctx_high_conf = ACEContext::default();
@@ -260,39 +208,13 @@ mod tests {
 
         let topics = vec!["rust".to_string()];
 
-        let score_high = compute_unified_relevance(0.5, &topics, &ctx_high_conf);
-        let score_low = compute_unified_relevance(0.5, &topics, &ctx_low_conf);
+        let mult_high = compute_affinity_multiplier(&topics, &ctx_high_conf);
+        let mult_low = compute_affinity_multiplier(&topics, &ctx_low_conf);
 
         assert!(
-            score_high > score_low,
-            "Higher confidence should produce stronger effect"
+            mult_high > mult_low,
+            "Higher confidence should produce stronger effect ({mult_high} vs {mult_low})"
         );
-    }
-
-    // Test score clamping
-    #[test]
-    fn test_score_clamping() {
-        let mut ctx = ACEContext::default();
-        // Extreme positive affinity
-        ctx.topic_affinities.insert("rust".to_string(), (1.0, 1.0));
-
-        let topics = vec!["rust".to_string()];
-        let score = compute_unified_relevance(1.0, &topics, &ctx);
-
-        assert!(score <= 1.0, "Score should be clamped to 1.0");
-
-        // Extreme negative
-        let mut ctx_neg = ACEContext::default();
-        ctx_neg
-            .topic_affinities
-            .insert("spam".to_string(), (-1.0, 1.0));
-        ctx_neg.anti_topics.push("spam".to_string());
-        ctx_neg
-            .anti_topic_confidence
-            .insert("spam".to_string(), 1.0);
-
-        let score_neg = compute_unified_relevance(0.5, &["spam".to_string()], &ctx_neg);
-        assert!(score_neg >= 0.0, "Score should be clamped to 0.0");
     }
 
     // Test partial topic matching (word-boundary aware)

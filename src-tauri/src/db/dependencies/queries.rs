@@ -49,6 +49,30 @@ fn canonicalize_project_path(project_path: &str) -> String {
     crate::project_inclusion::canonical_storage_path(project_path)
 }
 
+/// The `project_dependencies` projection every ACE-scanned-dependency query
+/// selects, in the exact order [`map_scanned_row`] reads. Kept in one place so a
+/// column added to one query can never silently shift another query's indices.
+const SCANNED_DEPENDENCY_COLUMNS: &str =
+    "id, project_path, package_name, version, language, is_dev, is_direct, last_scanned";
+
+/// Map one `project_dependencies` row selected as [`SCANNED_DEPENDENCY_COLUMNS`]
+/// into a `StoredDependency`. `last_scanned` fills both timestamps: the scan
+/// table records only the most recent sighting, so first-seen is unknown.
+fn map_scanned_row(row: &rusqlite::Row<'_>) -> SqliteResult<StoredDependency> {
+    Ok(StoredDependency {
+        id: row.get(0)?,
+        project_path: row.get(1)?,
+        package_name: row.get(2)?,
+        version: row.get(3)?,
+        ecosystem: row.get::<_, String>(4)?,
+        is_dev: row.get::<_, bool>(5)?,
+        is_direct: row.get::<_, bool>(6)?,
+        detected_at: row.get::<_, String>(7)?,
+        last_seen_at: row.get::<_, String>(7)?,
+        license: None,
+    })
+}
+
 /// Post-query filter applying the FULL canonical inclusion policy (tiers
 /// 1+2 hard exclusion + tier-3 "Your Stack" user exclusions) to dependency
 /// rows headed for intelligence surfaces (OSV matching/sync/cache, local
@@ -323,26 +347,13 @@ impl Database {
     /// Maps `language` -> `ecosystem` and `last_scanned` -> `detected_at`/`last_seen_at`.
     pub fn get_all_scanned_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT id, project_path, package_name, version, language, is_dev, is_direct, last_scanned
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {SCANNED_DEPENDENCY_COLUMNS}
              FROM project_dependencies
-             ORDER BY language, package_name",
-        )?;
+             ORDER BY language, package_name"
+        ))?;
 
-        let rows = stmt.query_map([], |row| {
-            Ok(StoredDependency {
-                id: row.get(0)?,
-                project_path: row.get(1)?,
-                package_name: row.get(2)?,
-                version: row.get(3)?,
-                ecosystem: row.get::<_, String>(4)?,
-                is_dev: row.get::<_, bool>(5)?,
-                is_direct: row.get::<_, bool>(6)?,
-                detected_at: row.get::<_, String>(7)?,
-                last_seen_at: row.get::<_, String>(7)?,
-                license: None,
-            })
-        })?;
+        let rows = stmt.query_map([], map_scanned_row)?;
 
         Ok(rows
             .filter_map(|r| match r {
@@ -359,38 +370,16 @@ impl Database {
     ///
     /// Includes all dependency scopes, but keeps the project-hygiene and
     /// relevance filters used by user-facing intelligence.
+    ///
+    /// `is_direct` (migration 53), `project_relevance` (55) and the rest of the
+    /// `project_dependencies` shape are unconditional here: `Database::new`
+    /// runs `migrate()` to the current schema version and propagates any
+    /// failure, so no `Database` handle can exist against a pre-migration
+    /// schema. See the note on [`Self::platform_inactive_packages`].
     pub fn get_auditable_scanned_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
         let conn = self.conn.lock();
-
-        let has_direct = conn
-            .query_row(
-                "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'is_direct'",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(0)
-            > 0;
-        let has_relevance = conn
-            .query_row(
-                "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'project_relevance'",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(0)
-            > 0;
-
-        let direct_col = if has_direct {
-            "is_direct"
-        } else {
-            "1 as is_direct"
-        };
-        let relevance_clause = if has_relevance {
-            "AND project_relevance >= 0.15"
-        } else {
-            ""
-        };
-        let sql = format!(
-            "SELECT id, project_path, package_name, version, language, is_dev, {direct_col}, last_scanned
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {SCANNED_DEPENDENCY_COLUMNS}
              FROM project_dependencies
              WHERE project_path NOT LIKE '%/.claude/%'
                AND project_path NOT LIKE '%\\.claude\\%'
@@ -399,107 +388,17 @@ impl Database {
                AND project_path NOT LIKE '%/tmp/%'
                AND project_path NOT LIKE '%\\tmp\\%'
                AND project_path NOT LIKE '%AppData%Local%Temp%'
-               {relevance_clause}
+               AND project_relevance >= 0.15
              ORDER BY language, package_name"
-        );
+        ))?;
 
-        let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map([], |row| {
-            Ok(StoredDependency {
-                id: row.get(0)?,
-                project_path: row.get(1)?,
-                package_name: row.get(2)?,
-                version: row.get(3)?,
-                ecosystem: row.get::<_, String>(4)?,
-                is_dev: row.get::<_, bool>(5)?,
-                is_direct: row.get::<_, bool>(6)?,
-                detected_at: row.get::<_, String>(7)?,
-                last_seen_at: row.get::<_, String>(7)?,
-                license: None,
-            })
-        })?;
+        let rows = stmt.query_map([], map_scanned_row)?;
 
         Ok(retain_included(
             rows.filter_map(|r| match r {
                 Ok(v) => Some(v),
                 Err(e) => {
                     tracing::warn!("Row processing failed in auditable scanned dependencies: {e}");
-                    None
-                }
-            })
-            .collect(),
-        ))
-    }
-
-    /// Get ACE-scanned dependencies filtered to relevant runtime deps only.
-    ///
-    /// Excludes dev deps, transitive deps, and low-relevance projects
-    /// (example/demo/test directories). Falls back gracefully if `is_direct`
-    /// or `project_relevance` columns don't exist in older databases.
-    pub fn get_relevant_scanned_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
-        let conn = self.conn.lock();
-
-        // Check which filter columns exist (Phase 53 added is_direct, Phase 55 added project_relevance)
-        let has_direct = conn
-            .query_row(
-                "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'is_direct'",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(0)
-            > 0;
-
-        let has_relevance = conn
-            .query_row(
-                "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'project_relevance'",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(0)
-            > 0;
-
-        let direct_clause = if has_direct { "AND is_direct = 1" } else { "" };
-        let relevance_clause = if has_relevance {
-            "AND project_relevance >= 0.15"
-        } else {
-            ""
-        };
-        let direct_col = if has_direct {
-            "is_direct"
-        } else {
-            "1 as is_direct"
-        };
-
-        let sql = format!(
-            "SELECT id, project_path, package_name, version, language, is_dev, {direct_col}, last_scanned
-             FROM project_dependencies
-             WHERE is_dev = 0
-               {direct_clause}
-               {relevance_clause}
-             ORDER BY language, package_name"
-        );
-
-        let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map([], |row| {
-            Ok(StoredDependency {
-                id: row.get(0)?,
-                project_path: row.get(1)?,
-                package_name: row.get(2)?,
-                version: row.get(3)?,
-                ecosystem: row.get::<_, String>(4)?,
-                is_dev: false,
-                is_direct: row.get::<_, bool>(6)?,
-                detected_at: row.get::<_, String>(7)?,
-                last_seen_at: row.get::<_, String>(7)?,
-                license: None,
-            })
-        })?;
-
-        Ok(retain_included(
-            rows.filter_map(|r| match r {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    tracing::warn!("Row processing failed in relevant scanned dependencies: {e}");
                     None
                 }
             })
@@ -762,8 +661,14 @@ impl Database {
     /// Lowercase names of packages that are platform-INACTIVE in every tracked
     /// project — i.e. gated behind a build target (e.g. `cfg(not(windows))`) the
     /// host does not build (Phase 85 `platform_active`). `MAX(platform_active)=0`
-    /// means no project has an active instance. Empty when the column is absent
-    /// (pre-Phase-85 DB) — fail open, so nothing is wrongly de-prioritised.
+    /// means no project has an active instance.
+    ///
+    /// `platform_active` is queried unconditionally: `Database::new` calls
+    /// `migrate()` before the handle is returned and propagates any migration
+    /// error (`db/mod.rs`), and each migration bumps `schema_version` inside the
+    /// same transaction as its DDL — so a live `Database` is always at the
+    /// current schema. The query still fails open (empty set) on any prepare or
+    /// row error, so nothing is wrongly de-prioritised if the read goes wrong.
     ///
     /// Read by the Upgrade Plan brain to keep genuinely-irrelevant advisories
     /// (a Linux-only crate's CVE on a Windows box) OUT of the ranked plan — they
@@ -771,16 +676,6 @@ impl Database {
     /// this labels-and-de-prioritises, never suppresses (doctrine).
     pub fn platform_inactive_packages(&self) -> std::collections::HashSet<String> {
         let conn = self.conn.lock();
-        let has_col: bool = conn
-            .query_row(
-                "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name='platform_active'",
-                [],
-                |row| row.get::<_, i64>(0).map(|n| n > 0),
-            )
-            .unwrap_or(false);
-        if !has_col {
-            return std::collections::HashSet::new();
-        }
         let mut stmt = match conn.prepare(
             "SELECT LOWER(package_name) FROM project_dependencies
              GROUP BY LOWER(package_name) HAVING MAX(platform_active) = 0",

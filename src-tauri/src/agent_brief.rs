@@ -99,7 +99,7 @@ pub fn generate_brief(
     let ecosystem_changes = query_ecosystem_changes(conn, since)?;
     let active_concerns = build_active_concerns(conn, &active_decisions, since)?;
     let open_signals = query_open_signals(conn, since)?;
-    let recent_briefing = crate::digest_commands::get_latest_briefing_text();
+    let recent_briefing = crate::digest_config::get_latest_briefing_text();
 
     let since_for_memories = since.unwrap_or("2000-01-01T00:00:00Z");
     let agent_memories =

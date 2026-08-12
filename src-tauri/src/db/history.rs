@@ -155,6 +155,18 @@ impl Database {
             [],
         ).unwrap_or(0);
 
+        // Expire dependency_snapshots rows for projects ACE has not re-scanned
+        // inside the retention window. Every scan bumps `scanned_at` via the
+        // upsert, so surviving old rows are deleted/renamed checkouts. Nothing
+        // else deletes from this table, so without this sweep it grows forever.
+        // Idempotent: a second run deletes nothing because the first already
+        // removed everything past the cutoff.
+        let deleted_dep_snapshots: usize = super::dep_snapshots::expire_stale_snapshots_on(
+            &tx,
+            super::dep_snapshots::SNAPSHOT_RETENTION_DAYS,
+        )
+        .unwrap_or(0);
+
         // Clean orphaned embeddings (belt-and-suspenders with cleanup_old_items)
         if let Err(e) = tx.execute(
             "DELETE FROM source_vec WHERE rowid NOT IN (SELECT id FROM source_items)",
@@ -166,7 +178,7 @@ impl Database {
         info!(
             target: "4da::db",
             deleted_intelligence, deleted_windows, deleted_cycles, deleted_necessity,
-            deleted_temporal, deleted_file_signals, deleted_sun_runs,
+            deleted_temporal, deleted_file_signals, deleted_sun_runs, deleted_dep_snapshots,
             "Deep clean: pruned unbounded tables"
         );
 

@@ -280,7 +280,6 @@ mod intelligence_history;
 mod intelligence_metrics;
 mod ipc_guard;
 mod ipc_rate_limit;
-mod job_queue;
 mod knowledge_decay;
 pub(crate) mod language_detect;
 mod llm;
@@ -304,18 +303,16 @@ mod novelty;
 mod ollama;
 mod osv;
 mod package_ambiguity;
+mod platform_filter;
 pub mod plugins;
 mod preemption;
 mod preference_commands;
 mod probes_corpus;
 mod probes_engine;
-mod project_health;
-mod project_health_dimensions;
 pub(crate) mod project_inclusion;
 mod prompt_safety;
 pub mod provenance;
 pub mod query;
-pub(crate) mod reachability;
 mod reconciler;
 pub(crate) mod runtime_paths;
 pub(crate) mod scheduler_gate;
@@ -986,7 +983,6 @@ pub fn run() {
             // Void Engine
             void_commands::get_void_signal,
             // Intelligence panels
-            attention::get_attention_report,
             blind_spots::get_blind_spots,
             blind_spots::get_blind_spot_teaser,
             blind_spots::add_package_watch,
@@ -1000,8 +996,6 @@ pub fn run() {
             content_graph::build_content_graph,
             content_graph::get_graph_node_details,
             semantic_diff::get_semantic_shifts,
-            project_health::get_project_health,
-            developer_dna::get_developer_dna,
             developer_dna::export_developer_dna_markdown,
             // Content (article reader, AI summaries, saved items)
             content_commands::get_item_content,
@@ -1017,7 +1011,6 @@ pub fn run() {
             decisions::get_decisions,
             decisions::record_developer_decision,
             decisions::update_developer_decision,
-            decisions::remove_tech_decision,
             // Decision Advantage
             decision_advantage_commands::get_decision_windows,
             decision_advantage_commands::act_on_decision_window,
@@ -1033,12 +1026,10 @@ pub fn run() {
             // Agent Memory
             agent_memory::store_agent_memory,
             agent_memory::recall_agent_memories,
-            agent_memory::promote_memory_to_decision,
             // Agent Brief
             agent_brief::generate_agent_brief,
             // Delegation Scoring
             delegation::get_delegation_score,
-            delegation::get_all_delegation_scores,
             // Toolkit
             toolkit::toolkit_list_ports,
             toolkit::toolkit_kill_process,
@@ -1054,21 +1045,9 @@ pub fn run() {
             // Stack Health Engine
             stack_health::get_stack_health,
             stack_health::get_missed_intelligence,
-            // Playbook (STREETS Playbook)
-            playbook_commands::get_playbook_modules,
-            playbook_commands::get_playbook_content,
-            playbook_commands::get_playbook_progress,
-            playbook_commands::mark_lesson_complete,
-            playbook_commands::translate_playbook_module,
-            playbook_commands::get_lesson_translation_status,
             // Content Personalization (Sovereign Content Engine)
-            content_personalization::commands::get_personalized_lesson,
-            content_personalization::commands::get_personalized_lessons_batch,
-            content_personalization::commands::get_personalization_context_summary,
             content_personalization::commands::prune_personalization_cache,
-            content_personalization::commands::hydrate_lesson_with_llm,
             // Sovereign Developer Profile (unified view)
-            sovereign_developer_profile::get_sovereign_developer_profile,
             sovereign_developer_profile::export_sovereign_profile_markdown,
             sovereign_developer_profile::export_sovereign_profile_json,
             // Sovereign Profile
@@ -1155,8 +1134,6 @@ pub fn run() {
             indexed_documents_commands::get_indexed_stats,
             indexed_documents_commands::search_documents,
             indexed_documents_commands::get_document_content,
-            // STREETS Health
-            suns_commands::get_street_health,
             // Intelligence History
             intelligence_history::get_intelligence_growth,
             intelligence_history::get_session_diff,

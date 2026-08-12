@@ -13,10 +13,6 @@ use crate::prompt_safety::{
 use crate::scoring::get_ace_context;
 use crate::{get_analysis_state, get_database, get_settings_manager};
 
-// Re-export so that `crate::digest_commands::get_latest_briefing_text` still resolves
-// for callers that haven't been updated — canonical home is digest_config.
-pub(crate) use crate::digest_config::get_latest_briefing_text;
-
 // ============================================================================
 // Briefing slate selection (grounded-first)
 // ============================================================================
