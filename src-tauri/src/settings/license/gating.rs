@@ -44,7 +44,9 @@ pub const SIGNAL_FEATURES: &[&str] = &[
     // Additional panels added by LICENSE-GATING-AUDIT-2026-04-15
     // get_preemption_alerts removed — free OSV security floor (see exceptions above)
     "get_blind_spots",
-    "get_decision_health_report",
+    // get_decision_health_report removed 2026-08-13: no such command exists anywhere
+    // in the crate — it was never defined or registered, so the entry gated nothing.
+    // The /signal page was selling it as "Decision Signals"; that card is gone too.
     // Cross-project intelligence
     "get_tech_convergence",
     "get_project_health_comparison",
@@ -122,7 +124,6 @@ fn signal_feature_label(feature: &str) -> &'static str {
         "standing_queries" => "Standing Queries",
         "get_semantic_shifts" => "Semantic Shifts",
         "get_project_health_comparison" => "Project Health",
-        "get_decision_health_report" => "Decision Health",
         "get_tech_convergence" => "Tech Convergence",
         "get_cross_project_dependencies" => "Cross-Project Dependencies",
         "get_accuracy_report" | "get_intelligence_report" => "Intelligence Report",

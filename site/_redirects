@@ -3,11 +3,13 @@
 # Clean URLs (/streets -> /streets.html etc.) are handled AUTOMATICALLY by Pages,
 # so the per-page .html rewrites from vercel.json are not needed here.
 #
-# SPA-style catch-all: preserve Vercel's `/(.*) -> /index.html` behavior so unknown
-# paths render the homepage instead of a bare 404. Status 200 = rewrite (URL stays).
-# Static assets and Pages Functions (/api/*) are matched BEFORE this fallback, so
-# real pages and API routes are never shadowed.
+# The SPA-style catch-all (`/*  /index.html  200`) that preserved Vercel's old
+# behaviour was REMOVED 2026-08-13. It made every unknown path a soft-404: the
+# homepage returned with HTTP 200, which search engines treat as duplicate
+# content, and which meant deleted endpoints (the legacy /api/*.js handlers)
+# answered 200 instead of 404 after their files were removed. Every real route
+# on this site is a real file — Pages resolves clean URLs itself — so the
+# catch-all only ever matched genuine 404s.
 #
-# NOTE: this makes unknown paths soft-404 (home, 200). If real 404s are preferred
-# later, add a 404.html to the build and drop this line.
-/*    /index.html    200
+# Unknown paths now fall through to /404.html (src/404.njk), which Pages serves
+# automatically with a real 404 status.

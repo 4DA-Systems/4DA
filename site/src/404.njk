@@ -1,0 +1,52 @@
+---
+title: "Page not found — 4DA"
+description: "That page does not exist on 4da.ai."
+permalink: "/404.html"
+eleventyExcludeFromCollections: true
+---
+{% extends "base.njk" %}
+
+{% block head %}
+  <meta name="robots" content="noindex">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0A0A0A;
+      color: #FFFFFF;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    .wrap { max-width: 34rem; text-align: center; }
+    .code {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.875rem;
+      letter-spacing: 0.08em;
+      color: #D4AF37;
+      margin-bottom: 1.25rem;
+    }
+    h1 { font-size: 1.75rem; font-weight: 600; margin-bottom: 0.75rem; }
+    p { color: #A0A0A0; margin-bottom: 2rem; }
+    .links { display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap; }
+    a { color: #FFFFFF; text-decoration: none; border-bottom: 1px solid #2A2A2A; padding-bottom: 2px; }
+    a:hover { border-bottom-color: #D4AF37; }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <main class="wrap">
+    <div class="code">404 — NOT FOUND</div>
+    <h1>That page doesn't exist.</h1>
+    <p>The link may be out of date, or the page may have moved.</p>
+    <div class="links">
+      <a href="/">Home</a>
+      <a href="/docs/">Docs</a>
+      <a href="/download/">Download</a>
+      <a href="/contact">Contact</a>
+    </div>
+  </main>
+{% endblock %}

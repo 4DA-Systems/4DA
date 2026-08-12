@@ -1,6 +1,6 @@
 ---
 title: "Signal -- The Intelligence Layer | 4DA"
-description: "Signal adds compound intelligence to 4DA: Developer DNA, Signal Chains, Knowledge Gaps, Semantic Shifts, and more. $12/mo or $99/yr."
+description: "Signal adds compound intelligence to 4DA: Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts, and cross-project intelligence. $12/mo or $99/yr."
 permalink: "/signal.html"
 ---
 {% extends "base.njk" %}
@@ -8,13 +8,13 @@ permalink: "/signal.html"
 {% block head %}
   <link rel="canonical" href="https://4da.ai/signal">
   <meta property="og:title" content="Signal -- The Intelligence Layer">
-  <meta property="og:description" content="Developer DNA, Signal Chains, Knowledge Gaps, Semantic Shifts. Intelligence that compounds with every interaction. $12/mo.">
+  <meta property="og:description" content="Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts. Intelligence that compounds with every interaction. $12/mo.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://4da.ai/signal">
   <meta property="og:image" content="https://4da.ai/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Signal -- The Intelligence Layer">
-  <meta name="twitter:description" content="Developer DNA, Signal Chains, Knowledge Gaps, Semantic Shifts. Intelligence that compounds.">
+  <meta name="twitter:description" content="Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts. Intelligence that compounds.">
   <meta name="twitter:image" content="https://4da.ai/og-image.png">
 
   <style>
@@ -221,24 +221,24 @@ permalink: "/signal.html"
       <!-- Primary Features (full-width) -->
       <div class="signal-grid">
         <div class="feature-card">
-          <span class="tag">Signal Chains</span>
-          <h3>See the full story, not fragments</h3>
-          <p class="scenario">A Tokio release drops. Three hours later, a blog post explains the migration path. By evening, two HN threads debate the trade-offs and a Reddit thread surfaces a workaround for a breaking change. You see all four &mdash; separately. Signal Chains connects them into one linked narrative, ranked by relevance to your Cargo.toml. One click, complete picture.</p>
-          <div class="technical"><span>chains</span> = cross-source entity linking + temporal clustering + codebase affinity scoring</div>
+          <span class="tag">Blind Spots</span>
+          <h3>The risk you never read about</h3>
+          <p class="scenario">You ship against 47 crates. You read about four of them. Blind Spots compares what your manifests actually depend on against what you have engaged with, and names the gap: a maintainer stepping back, a license moving to BUSL, a deprecation buried in release notes. No CVE exists for any of it, so no scanner will tell you.</p>
+          <div class="technical"><span>blind spots</span> = dependency graph &times; engagement history &times; upstream signal monitoring</div>
         </div>
 
         <div class="feature-card">
           <span class="tag">Knowledge Gaps</span>
           <h3>What you don't know &mdash; quantified</h3>
-          <p class="scenario">Your package.json says you use Next.js 14. You've shipped App Router pages. But Knowledge Gaps notices you've never engaged with any content about Server Actions, Partial Prerendering, or the new caching semantics. Those aren't random omissions &mdash; they're blind spots in features you're actively shipping against. Knowledge Gaps surfaces them before they become production incidents.</p>
+          <p class="scenario">Your package.json says you use Next.js 14. You've shipped App Router pages. But Knowledge Gaps notices you've never engaged with any content about Server Actions, Partial Prerendering, or the new caching semantics. Those aren't random omissions &mdash; they're gaps in features you're actively shipping against. Knowledge Gaps surfaces them before they become production incidents.</p>
           <div class="technical"><span>gaps</span> = dependency graph analysis &times; content engagement history &times; topic coverage scoring</div>
         </div>
 
         <div class="feature-card">
-          <span class="tag">Developer DNA</span>
-          <h3>Your technical identity, auto-generated</h3>
-          <p class="scenario">Developer DNA builds a living profile of your expertise: 68% systems (Rust, WASM, networking), 24% web (TypeScript, React), 8% infrastructure (Docker, CI/CD). It tracks depth, not just breadth &mdash; you're not just a "Rust developer," you're deep in async runtimes and shallow on macros. Watch it evolve as your work evolves. Export as SVG card for your README, markdown for your portfolio, or keep it private.</p>
-          <div class="technical"><span>dna</span> = manifest analysis + interaction patterns + expertise depth weighting | export: svg, md, card</div>
+          <span class="tag">Cross-Project Intelligence</span>
+          <h3>One change, every repo it touches</h3>
+          <p class="scenario">You maintain six projects. A breaking change lands in a crate that three of them share &mdash; and you only notice in the one you happen to be working in that week. Cross-project intelligence reads every manifest you have indexed, tells you which repos a change actually reaches, and where the same dependency has drifted to different versions.</p>
+          <div class="technical"><span>cross-project</span> = multi-manifest indexing + shared-dependency resolution + convergence detection</div>
         </div>
       </div>
 
@@ -252,38 +252,17 @@ permalink: "/signal.html"
         </div>
 
         <div class="feature-card">
-          <span class="tag">Project Health</span>
-          <h3>Early warning for your dependencies</h3>
-          <p class="scenario">Your Cargo.toml has 47 dependencies. Project Health monitors their pulse: commit velocity, issue trends, release cadence, maintainer activity. When a critical dep goes quiet for 3 weeks after 6 months of weekly releases, you know before the GitHub issue asking "is this project dead?" appears.</p>
-          <div class="technical"><span>health</span> = dependency manifest parsing &times; upstream signal monitoring &times; anomaly detection</div>
-        </div>
-
-        <div class="feature-card">
-          <span class="tag">Score Autopsy</span>
-          <h3>Full transparency on every score</h3>
-          <p class="scenario">An item scored 0.87. Why? Score Autopsy shows the full breakdown: Relevance 0.92 (3 matching technologies in your manifest), Freshness 0.85 (posted 4 hours ago), Authority 0.78 (author maintains a dep you use), Proximity 0.91 (direct stack overlap), Action Potential 0.89 (migration guide format). Every axis, every weight, every signal. No black boxes.</p>
-          <div class="technical"><span>autopsy</span> = full PASIFA 5-axis decomposition with per-signal attribution and weight explanation</div>
-        </div>
-
-        <div class="feature-card">
           <span class="tag">Standing Queries</span>
           <h3>Persistent watchlists that never sleep</h3>
-          <p class="scenario">Set "Tauri security advisories" as a standing query. Every new item from every source gets tested against it. When CVE-2026-XXXX drops at 3am and appears on a security blog, Standing Queries flags it before your next coffee. Like Google Alerts but running against scored, codebase-relevant content.</p>
+          <p class="scenario">Set "Tauri security advisories" as a standing query. Every new item from every source gets tested against it. When an advisory drops at 3am and appears on a security blog, Standing Queries flags it before your next coffee. Like Google Alerts, but running against scored, codebase-relevant content.</p>
           <div class="technical"><span>standing</span> = persistent semantic queries &times; real-time new-item evaluation &times; notification triggers</div>
         </div>
 
         <div class="feature-card">
-          <span class="tag">Attention Report</span>
-          <h3>See where your focus actually goes</h3>
-          <p class="scenario">You spent 71% of your reading time on Rust content this month, but your project is 55% TypeScript. Your attention doesn't match your work distribution. Attention Report shows the disconnect &mdash; and whether it's a problem (neglecting your primary stack) or a signal (you're preparing to migrate).</p>
-          <div class="technical"><span>attention</span> = interaction time tracking &times; stack distribution analysis &times; attention/work divergence scoring</div>
-        </div>
-
-        <div class="feature-card">
-          <span class="tag">Decision Signals</span>
-          <h3>Content that arrives at the right moment</h3>
-          <p class="scenario">You've been reading 6 articles about Hono vs Express this week. Decision Signals detects the pattern and proactively surfaces the 3 most authoritative comparisons, a benchmark from last month you missed, and a migration guide from a team that just shipped the switch. The right information at the decision point.</p>
-          <div class="technical"><span>decisions</span> = reading pattern clustering + decision-point detection + proactive content surfacing</div>
+          <span class="tag">Precision Ledger</span>
+          <h3>Hold the tool to its own claims</h3>
+          <p class="scenario">Every tool says it cuts noise. Signal shows its working: how often what it surfaced turned out to matter, broken down by domain, and every item you marked a false positive. If precision drops in a domain, you see it &mdash; and so does the scoring engine, which recalibrates against your corrections rather than an average user's.</p>
+          <div class="technical"><span>ledger</span> = per-domain precision + false-positive analysis + calibration feedback</div>
         </div>
       </div>
     </div>
@@ -312,28 +291,28 @@ permalink: "/signal.html"
               <span class="phase-label">Week 1</span>
               <span class="phase-title">Behavior learning kicks in</span>
             </div>
-            <p class="phase-desc">Your saves and dismissals start building a preference profile &mdash; visible, inspectable, yours to override. Developer DNA begins forming. Knowledge Gaps start identifying areas where your dependency graph exceeds your reading history.</p>
+            <p class="phase-desc">Your saves and dismissals start building a preference profile &mdash; visible, inspectable, yours to override. Knowledge Gaps start identifying areas where your dependency graph exceeds your reading history.</p>
           </div>
           <div class="phase">
             <div class="phase-header">
               <span class="phase-label">Month 1</span>
               <span class="phase-title">Patterns emerge</span>
             </div>
-            <p class="phase-desc">Signal Chains connect items across sources. Semantic Shifts detect topic trajectories. Decision Signals recognize when you're evaluating a technology choice. Attention Reports show where your focus diverges from your work.</p>
+            <p class="phase-desc">Semantic Shifts detect topic trajectories in your domain. Blind Spots name the dependencies you rely on but never read about. Cross-project intelligence connects a single change to every repo it reaches.</p>
           </div>
           <div class="phase">
             <div class="phase-header">
               <span class="phase-label">Month 3</span>
               <span class="phase-title">Compounding intelligence</span>
             </div>
-            <p class="phase-desc">90 days of interaction data. Signal anticipates your needs. It surfaces content you didn't know you needed. Knowledge Gaps close. Your Developer DNA shows expertise trajectory. Standing Queries have caught things you would have missed. The tool that was useful on day 1 is now indispensable.</p>
+            <p class="phase-desc">90 days of interaction data. Signal anticipates your needs. It surfaces content you didn't know you needed. Knowledge Gaps close. Standing Queries have caught things you would have missed. The Precision Ledger shows whether it is actually getting sharper. The tool that was useful on day 1 is now indispensable.</p>
           </div>
           <div class="phase">
             <div class="phase-header">
               <span class="phase-label">Year 1</span>
               <span class="phase-title">A second technical brain</span>
             </div>
-            <p class="phase-desc">365 days of codebase-aware, privacy-preserving intelligence. Semantic Shifts show you how your entire domain evolved. Developer DNA charts your growth. Signal Chains have connected hundreds of narratives. No other tool on Earth has this data, because no other tool runs locally against your codebase for a year.</p>
+            <p class="phase-desc">365 days of codebase-aware, privacy-preserving intelligence. Semantic Shifts show how your domain evolved. Blind Spots have closed on dependencies you never would have read about. The Precision Ledger shows the engine measurably sharper on your corrections than it was on day one.</p>
           </div>
         </div>
       </div>
@@ -375,7 +354,7 @@ permalink: "/signal.html"
         <div class="how-card">
           <div class="step">03 / Intelligence</div>
           <h4>Signal analysis layer</h4>
-          <p>Cross-source entity linking builds Signal Chains. Embedding trajectory analysis detects Semantic Shifts. Dependency graph diffing surfaces Knowledge Gaps. All computed locally using sqlite-vec for vector operations.</p>
+          <p>Embedding trajectory analysis detects Semantic Shifts. Dependency graph diffing surfaces Knowledge Gaps and Blind Spots. Multi-manifest resolution powers cross-project intelligence. All computed locally using sqlite-vec for vector operations.</p>
         </div>
       </div>
     </div>
@@ -408,15 +387,12 @@ permalink: "/signal.html"
         <div class="price-trial">14-day free trial included in the app. No credit card required to try.</div>
         <ul class="price-features">
           <li>Everything in the free tier</li>
-          <li>Developer DNA profiling + exports</li>
-          <li>Signal chain analysis</li>
+          <li>Blind spot detection</li>
           <li>Knowledge gap detection</li>
-          <li>Semantic shift tracking</li>
           <li>Standing queries (persistent watchlists)</li>
-          <li>Score autopsy (full 5-axis breakdown)</li>
-          <li>Project health monitoring</li>
-          <li>Decision signals</li>
-          <li>Attention analytics</li>
+          <li>Semantic shift tracking</li>
+          <li>Cross-project intelligence</li>
+          <li>Precision ledger (per-domain accuracy)</li>
           <li>Priority support</li>
         </ul>
       </div>
@@ -434,7 +410,7 @@ permalink: "/signal.html"
 
       <div class="faq-item">
         <div class="faq-q">What's the difference between free and Signal?</div>
-        <div class="faq-a">Free gives you the full scoring engine, AI briefings, all 20+ sources, and natural language search. Signal adds the intelligence analysis layer: Signal Chains, Knowledge Gaps, Developer DNA, Semantic Shifts, Project Health, Standing Queries, Score Autopsy, Attention Reports, and Decision Signals. Free surfaces relevant content. Signal tells you what it means, what you're missing, and how your domain is evolving.</div>
+        <div class="faq-a">Free gives you the full scoring engine, AI briefings, all 20+ sources, natural language search, Developer DNA, signal chains and Score Autopsy. Signal adds the analysis layer that reads across your whole dependency graph: Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts, cross-project intelligence, and the Precision Ledger. Free surfaces relevant content. Signal tells you what you're missing.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Wait, AI briefings are free?</div>
