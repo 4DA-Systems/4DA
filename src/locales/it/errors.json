@@ -40,8 +40,5 @@
   "errorMsg.permission": "Permesso negato. Controlla i permessi dei file.",
   "errorMsg.rateLimit": "Limite di richieste raggiunto. Attendi un momento e riprova.",
   "errorMsg.timeout": "Richiesta scaduta. Riprova tra un momento.",
-  "module.fileNotFound": "File del modulo non trovato: {{path}}",
-  "module.unknown": "Modulo sconosciuto: {{id}}",
-  "translation.noLlm": "LLM non configurato — imposta la tua chiave API nelle Impostazioni per abilitare la traduzione dei contenuti",
-  "translation.sourceIsEnglish": "L'inglese è la lingua di origine — traduzione non necessaria"
+  "translation.noLlm": "LLM non configurato — imposta la tua chiave API nelle Impostazioni per abilitare la traduzione dei contenuti"
 }

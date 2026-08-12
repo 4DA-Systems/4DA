@@ -40,8 +40,5 @@
   "errorMsg.permission": "Zugriff verweigert. Überprüfe die Dateiberechtigungen.",
   "errorMsg.rateLimit": "Rate-Limit erreicht. Bitte warte einen Moment und versuche es erneut.",
   "errorMsg.timeout": "Zeitüberschreitung der Anfrage. Versuche es gleich nochmal.",
-  "module.fileNotFound": "Moduldatei nicht gefunden: {{path}}",
-  "module.unknown": "Unbekanntes Modul: {{id}}",
-  "translation.noLlm": "LLM nicht konfiguriert — richte deinen API-Schlüssel in den Einstellungen ein, um die Inhaltsübersetzung zu aktivieren",
-  "translation.sourceIsEnglish": "Englisch ist die Quellsprache — keine Übersetzung nötig"
+  "translation.noLlm": "LLM nicht konfiguriert — richte deinen API-Schlüssel in den Einstellungen ein, um die Inhaltsübersetzung zu aktivieren"
 }

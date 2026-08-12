@@ -40,8 +40,5 @@
   "errorMsg.permission": "تم رفض الإذن. تحقق من أذونات الملفات.",
   "errorMsg.rateLimit": "تم بلوغ حد الطلبات. انتظر لحظة ثم حاول مجددًا.",
   "errorMsg.timeout": "انتهت مهلة الطلب. حاول مرة أخرى بعد لحظة.",
-  "module.fileNotFound": "ملف الوحدة غير موجود: {{path}}",
-  "module.unknown": "وحدة غير معروفة: {{id}}",
-  "translation.noLlm": "LLM غير مُهيأ — قم بإعداد مفتاح API في الإعدادات لتفعيل ترجمة المحتوى",
-  "translation.sourceIsEnglish": "اللغة المصدر هي الإنجليزية — لا حاجة للترجمة"
+  "translation.noLlm": "LLM غير مُهيأ — قم بإعداد مفتاح API في الإعدادات لتفعيل ترجمة المحتوى"
 }
