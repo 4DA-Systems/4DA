@@ -85,7 +85,10 @@ pub async fn get_community_status() -> Result<CommunityStatus> {
         anonymous_id_preview: config
             .anonymous_id
             .as_ref()
-            .map(|id| id[..8.min(id.len())].to_string()),
+            // Chars, matching the "first 8 chars only" contract on the field.
+            // `[..8.min(len)]` clamps length but not the char boundary, and
+            // this value round-trips through hand-editable settings.json.
+            .map(|id| id.chars().take(8).collect::<String>()),
     })
 }
 

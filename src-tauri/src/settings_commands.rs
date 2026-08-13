@@ -202,11 +202,16 @@ pub async fn get_llm_key_for_mcp() -> Result<serde_json::Value> {
     let guard = manager.lock();
     let settings = guard.get();
 
-    // Mask the API key — only show first 4 and last 2 chars
-    let masked_key = if settings.llm.api_key.len() > 8 {
-        let key = &settings.llm.api_key;
-        format!("{}...{}", &key[..4], &key[key.len() - 2..])
-    } else if !settings.llm.api_key.is_empty() {
+    // Mask the API key — only show first 4 and last 2 chars. Counted in CHARS,
+    // not bytes: byte slicing panics this command on a mis-pasted key holding
+    // multi-byte UTF-8, and "first 4 chars" is what the mask actually means.
+    let key = &settings.llm.api_key;
+    let key_chars = key.chars().count();
+    let masked_key = if key_chars > 8 {
+        let head: String = key.chars().take(4).collect();
+        let tail: String = key.chars().skip(key_chars - 2).collect();
+        format!("{head}...{tail}")
+    } else if !key.is_empty() {
         "****".to_string()
     } else {
         String::new()

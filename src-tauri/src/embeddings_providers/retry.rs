@@ -26,8 +26,12 @@ where
             Err(e) => {
                 last_error = e.to_string();
                 if attempt < max_retries {
-                    // Detect rate-limit errors and use extended backoff
-                    let lower = last_error.to_lowercase();
+                    // Detect rate-limit errors and use extended backoff.
+                    // ASCII folding: `retry_after` below takes an index from
+                    // this copy and slices `last_error` with it, so the two
+                    // must stay byte-aligned. `to_lowercase()` is Unicode-aware
+                    // and can change byte length; every needle here is ASCII.
+                    let lower = last_error.to_ascii_lowercase();
                     let is_rate_limited = lower.contains("rate limit")
                         || lower.contains("429")
                         || lower.contains("too many requests");

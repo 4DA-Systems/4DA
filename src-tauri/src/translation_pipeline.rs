@@ -60,7 +60,11 @@ pub async fn translate_batch(
         let clean = strip_markdown_fences(&response.content);
 
         let translated: HashMap<String, String> = serde_json::from_str(clean).map_err(|e| {
-            let preview_len = response.content.len().min(200);
+            // Snapped to a char boundary (also subsumes the `.min(len)` clamp).
+            // This is the parse-FAILURE path and the payload is by construction
+            // translated text in a non-English target language, so a raw byte
+            // cut turned a reportable error into a panic.
+            let preview_len = response.content.floor_char_boundary(200);
             format!(
                 "Invalid JSON from LLM: {} -- response: {}",
                 e,

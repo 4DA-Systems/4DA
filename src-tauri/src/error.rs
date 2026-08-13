@@ -360,11 +360,15 @@ impl FourDaError {
 }
 
 /// Truncate an error message to a maximum length, appending "..." if truncated.
+///
+/// The cut is snapped to a char boundary. Error messages carry source titles,
+/// file paths and provider response bodies, all of which can be non-ASCII — a
+/// raw byte cut here turned a handled error into a panic while formatting it.
 fn truncate_error_msg(msg: &str, max_len: usize) -> String {
     if msg.len() <= max_len {
         msg.to_string()
     } else {
-        format!("{}...", &msg[..max_len])
+        format!("{}...", &msg[..msg.floor_char_boundary(max_len)])
     }
 }
 
@@ -400,5 +404,36 @@ impl<T, E: std::fmt::Display> ResultExt<T> for std::result::Result<T, E> {
 
     fn with_context<F: FnOnce() -> String>(self, f: F) -> Result<T> {
         self.map_err(|e| FourDaError::Internal(format!("{}: {e}", f())))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_error_msg_passes_short_messages_through() {
+        assert_eq!(truncate_error_msg("short", 120), "short");
+    }
+
+    /// Regression: `&msg[..max_len]` was a raw byte cut. Error messages embed
+    /// source titles, file paths and provider response bodies, so a non-ASCII
+    /// message longer than the cap panicked WHILE FORMATTING AN ERROR —
+    /// turning a handled failure into a crash.
+    #[test]
+    fn truncate_error_msg_cuts_on_char_boundary() {
+        let msg = "\u{65E5}".repeat(50); // 150 bytes, 3 bytes per char
+        let out = truncate_error_msg(&msg, 10);
+        // floor_char_boundary(10) == 9 -> exactly three chars, then the marker.
+        assert_eq!(out, format!("{}...", "\u{65E5}".repeat(3)));
+    }
+
+    /// The cut point must never split a char for ANY cap value.
+    #[test]
+    fn truncate_error_msg_never_splits_a_char() {
+        let msg = "a\u{65E5}b\u{1F600}c".repeat(20);
+        for cap in 1..40 {
+            let _ = truncate_error_msg(&msg, cap);
+        }
     }
 }
