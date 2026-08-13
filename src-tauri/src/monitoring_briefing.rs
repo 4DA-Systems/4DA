@@ -557,9 +557,12 @@ fn extract_ids_from_text(text: &str, out: &mut Vec<String>) {
     let mut start = 0;
     while let Some(pos) = text[start..].find("GHSA-") {
         let abs = start + pos;
-        // GHSA-xxxx-xxxx-xxxx = 19 chars total
-        if abs + 19 <= text.len() {
-            let candidate = &text[abs..abs + 19];
+        // GHSA-xxxx-xxxx-xxxx = 19 ASCII bytes. `get` rather than raw slicing:
+        // it rejects BOTH a short tail and a cut landing mid-UTF-8-sequence.
+        // Raw slicing panicked on ingested text like "GHSA-abcd-abcd-ab<CJK>",
+        // where byte 19 falls inside a 3-byte char. A non-boundary candidate
+        // could never satisfy `is_valid_ghsa` anyway, so nothing is lost.
+        if let Some(candidate) = text.get(abs..abs + 19) {
             if is_valid_ghsa(candidate) {
                 let id = candidate.to_string();
                 if !out.contains(&id) {
@@ -607,7 +610,11 @@ fn parse_cve_suffix(rest: &str) -> Option<&str> {
     if rest.len() < 9 {
         return None;
     }
-    if !rest[..4].chars().all(|c| c.is_ascii_digit()) {
+    // Byte-wise, not `rest[..4]`: the string slice panics when byte 4 lands
+    // mid-sequence (e.g. "CVE-" followed by CJK). Checking bytes is exactly
+    // equivalent here — a multi-byte char's bytes are all >= 0x80 and so are
+    // never ASCII digits — and matches the `as_bytes()[4]` check below.
+    if !rest.as_bytes()[..4].iter().all(u8::is_ascii_digit) {
         return None;
     }
     if rest.as_bytes()[4] != b'-' {
@@ -3508,6 +3515,57 @@ fn is_provider_error(err: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ─── advisory-id scanning: UTF-8 boundary regressions ───────────────
+    //
+    // Both scanners ran fixed byte offsets over ARBITRARY ingested titles.
+    // Each case below panicked ("byte index N is not a char boundary")
+    // before the boundary-aware rewrite.
+
+    /// `&text[abs..abs + 19]` — the 19-byte GHSA window. The length guard
+    /// passed but byte 19 landed inside the trailing 3-byte char.
+    #[test]
+    fn extract_ids_survives_multibyte_after_ghsa_prefix() {
+        let mut out = Vec::new();
+        extract_ids_from_text("GHSA-abcd-abcd-ab\u{65E5}", &mut out);
+        // Not a well-formed GHSA id, so nothing is collected — but critically
+        // the scan completes instead of panicking.
+        assert!(out.is_empty());
+    }
+
+    /// A genuine GHSA id embedded in non-ASCII prose is still found.
+    #[test]
+    fn extract_ids_still_finds_ghsa_in_non_ascii_prose() {
+        let mut out = Vec::new();
+        extract_ids_from_text(
+            "\u{65E5}\u{672C}\u{8A9E} GHSA-m7pr-hjqh-92cm \u{4FEE}\u{6B63}",
+            &mut out,
+        );
+        assert_eq!(out, vec!["GHSA-m7pr-hjqh-92cm".to_string()]);
+    }
+
+    /// `rest[..4]` — the CVE year window. `rest` cleared the 9-byte length
+    /// guard but byte 4 fell mid-sequence.
+    #[test]
+    fn extract_ids_survives_multibyte_after_cve_prefix() {
+        let mut out = Vec::new();
+        extract_ids_from_text(
+            "CVE-\u{65E5}\u{672C}\u{8A9E}\u{30C6}\u{30AD}\u{30B9}\u{30C8}",
+            &mut out,
+        );
+        assert!(out.is_empty());
+    }
+
+    /// A genuine CVE id is still parsed out of non-ASCII prose.
+    #[test]
+    fn extract_ids_still_finds_cve_in_non_ascii_prose() {
+        let mut out = Vec::new();
+        extract_ids_from_text(
+            "\u{65E5}\u{672C}\u{8A9E} CVE-2025-62718 \u{4FEE}\u{6B63}",
+            &mut out,
+        );
+        assert_eq!(out, vec!["CVE-2025-62718".to_string()]);
+    }
 
     fn freshness_test_db() -> rusqlite::Connection {
         let conn = rusqlite::Connection::open_in_memory().unwrap();

@@ -97,7 +97,11 @@ fn signal_to_briefing_item(
 }
 
 pub(crate) fn check_output(fixture: &EvalFixture, synthesis: &str) -> EvalReport {
-    let lower = synthesis.to_lowercase();
+    // ASCII-only folding: `find_violation` takes indices from this folded copy
+    // and slices `synthesis` with them. `to_lowercase()` is Unicode-aware and
+    // can change byte length, desynchronizing the two. Forbidden patterns are
+    // ASCII phrases, so ASCII folding matches identically.
+    let lower = synthesis.to_ascii_lowercase();
 
     let violations: Vec<Violation> = fixture
         .forbidden_patterns
@@ -128,11 +132,15 @@ pub(crate) fn check_output(fixture: &EvalFixture, synthesis: &str) -> EvalReport
 }
 
 fn find_violation(fp: &ForbiddenPattern, original: &str, lower: &str) -> Option<Violation> {
-    let pattern_lower = fp.pattern.to_lowercase();
+    // ASCII folding to match `check_output`'s haystack — keeps `pos` a valid,
+    // identically-offset index into `original`.
+    let pattern_lower = fp.pattern.to_ascii_lowercase();
     let pos = lower.find(&pattern_lower)?;
     let end = (pos + fp.pattern.len()).min(original.len());
-    let context_start = pos.saturating_sub(20);
-    let context_end = (end + 20).min(original.len());
+    // The +/-20 context window is raw byte arithmetic over LLM output, so both
+    // ends must be snapped to char boundaries before slicing.
+    let context_start = original.floor_char_boundary(pos.saturating_sub(20));
+    let context_end = original.ceil_char_boundary((end + 20).min(original.len()));
     let matched = &original[context_start..context_end];
 
     Some(Violation {

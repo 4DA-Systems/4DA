@@ -1253,13 +1253,22 @@ fn cross_tier_dedup_key(alert: &PreemptionAlert) -> String {
 
 /// Pull the first GHSA-xxx or CVE-xxx identifier from text.
 fn extract_advisory_id(text: &str) -> Option<String> {
-    let text_upper = text.to_uppercase();
+    // ASCII-only case folding is deliberate. `to_uppercase()` is Unicode-aware
+    // and can CHANGE BYTE LENGTH (U+FB01 "fi" -> "FI" shrinks by 1; U+0149
+    // -> "'N" grows by 1), which desynchronizes an index taken from the folded
+    // copy and applied to `text` — either a mid-char panic, an out-of-bounds
+    // panic, or a silently byte-shifted advisory id that corrupts the
+    // cross-tier dedup key. Both prefixes are pure ASCII, so ASCII folding is
+    // sufficient AND keeps byte offsets identical between the two strings.
+    let text_upper = text.to_ascii_uppercase();
     for prefix in &["GHSA-", "CVE-"] {
         if let Some(start) = text_upper.find(prefix) {
             let end = text[start..]
                 .find(|c: char| c.is_whitespace() || c == ')' || c == ']' || c == ':' || c == ',')
                 .map(|i| start + i)
-                .unwrap_or(text.len().min(start + 30));
+                // No terminator: cap at 30 bytes, snapped down to a char
+                // boundary (this also subsumes the old `.min(text.len())`).
+                .unwrap_or_else(|| text.floor_char_boundary(start + 30));
             return Some(text[start..end].to_string());
         }
     }
@@ -1404,7 +1413,11 @@ fn is_advisory_subject_match(title_lower: &str, dep: &str) -> bool {
         .iter()
         .filter_map(|m| remainder.find(m))
         .min()
-        .unwrap_or(remainder.len().min(80));
+        // No marker matched: fall back to an 80-byte window, snapped down to a
+        // char boundary. A raw `.min(80)` panics on a non-English advisory
+        // summary whose 80th byte lands mid-sequence (OSV summaries routinely
+        // carry accented names and CJK). Also subsumes the old `.len()` clamp.
+        .unwrap_or_else(|| remainder.floor_char_boundary(80));
 
     let subject = &remainder[..subject_end];
 
@@ -2425,6 +2438,41 @@ mod tests {
     #[test]
     fn extract_advisory_id_returns_none_for_no_id() {
         assert_eq!(extract_advisory_id("Some generic title"), None);
+    }
+
+    /// Regression: `to_uppercase()` is Unicode-aware and can SHRINK the byte
+    /// length (U+FB01 "fi" ligature -> "FI" loses one byte), so an index taken
+    /// from the folded copy pointed one byte early into the original and the
+    /// extracted id came back empty — silently corrupting the dedup key.
+    #[test]
+    fn extract_advisory_id_survives_length_changing_case_fold() {
+        assert_eq!(
+            extract_advisory_id("\u{FB01}x CVE-2025-1234 landed"),
+            Some("CVE-2025-1234".to_string())
+        );
+    }
+
+    /// Regression: with no terminator after the id, the fallback capped at
+    /// `start + 30` BYTES. Byte 30 here lands inside a 3-byte CJK char, which
+    /// panicked. The cap must snap down to a char boundary (byte 28).
+    #[test]
+    fn extract_advisory_id_unterminated_id_caps_on_char_boundary() {
+        assert_eq!(
+            extract_advisory_id(
+                "CVE-2025-1234567890\u{65E5}\u{672C}\u{8A9E}\u{30C6}\u{30AD}\u{30B9}\u{30C8}"
+            ),
+            Some("CVE-2025-1234567890\u{65E5}\u{672C}\u{8A9E}".to_string())
+        );
+    }
+
+    /// Regression: when no subject-end marker matches, the subject window fell
+    /// back to a raw 80-BYTE cut. A CJK advisory summary puts a multi-byte
+    /// char across byte 80 and the slice panicked.
+    #[test]
+    fn advisory_subject_match_survives_multibyte_at_byte_80() {
+        let title = format!("[cve-2025-1] {}", "\u{65E5}".repeat(30));
+        // Must not panic; the dep plainly is not the subject here.
+        let _ = is_advisory_subject_match(&title, "axios");
     }
 
     // ─── confidence scoring ─────────────────────────────────────────

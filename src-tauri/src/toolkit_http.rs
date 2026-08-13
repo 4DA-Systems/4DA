@@ -145,9 +145,14 @@ pub async fn toolkit_http_request(request: HttpProbeRequest) -> Result<HttpProbe
         .unwrap_or_else(|_| "<binary or unreadable>".into());
     let size_bytes = body.len();
 
-    // Truncate very large responses
+    // Truncate very large responses. Snap to a char boundary — the URL is
+    // user-supplied, so a raw byte cut panics this command on any large
+    // non-ASCII response body.
     let body = if body.len() > 500_000 {
-        format!("{}...\n\n(truncated at 500KB)", &body[..500_000])
+        format!(
+            "{}...\n\n(truncated at 500KB)",
+            &body[..body.floor_char_boundary(500_000)]
+        )
     } else {
         body
     };

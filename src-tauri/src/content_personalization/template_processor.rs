@@ -189,9 +189,12 @@ fn extract_fallback_value(s: &str) -> Option<&str> {
     let inner = inner.strip_suffix(')')?;
     let inner = inner.trim();
 
-    // Remove surrounding quotes
-    if (inner.starts_with('"') && inner.ends_with('"'))
-        || (inner.starts_with('\'') && inner.ends_with('\''))
+    // Remove surrounding quotes. The `len() >= 2` guard is load-bearing: a
+    // lone `"` satisfies BOTH starts_with and ends_with, and `1..0` is an
+    // invalid range ("slice index starts at 1 but ends at 0" panic).
+    if inner.len() >= 2
+        && ((inner.starts_with('"') && inner.ends_with('"'))
+            || (inner.starts_with('\'') && inner.ends_with('\'')))
     {
         Some(&inner[1..inner.len() - 1])
     } else {
@@ -230,6 +233,21 @@ fn collect_injection_markers(input: &str, markers: &mut Vec<String>) {
 mod tests {
     use super::*;
     use crate::content_personalization::context::*;
+
+    /// Regression: a LONE quote satisfies both `starts_with('"')` and
+    /// `ends_with('"')`, so the unquoting slice became `inner[1..0]` — an
+    /// invalid range ("slice index starts at 1 but ends at 0" panic).
+    #[test]
+    fn extract_fallback_value_survives_lone_quote() {
+        assert_eq!(extract_fallback_value("fallback(\")"), Some("\""));
+        assert_eq!(extract_fallback_value("fallback(')"), Some("'"));
+    }
+
+    #[test]
+    fn extract_fallback_value_still_unquotes_normally() {
+        assert_eq!(extract_fallback_value("fallback(\"hi\")"), Some("hi"));
+        assert_eq!(extract_fallback_value("fallback('hi')"), Some("hi"));
+    }
 
     fn test_ctx() -> PersonalizationContext {
         let mut cpu = std::collections::HashMap::new();

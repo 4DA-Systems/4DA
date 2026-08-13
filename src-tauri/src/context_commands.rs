@@ -303,19 +303,21 @@ pub async fn index_project_readmes() -> Result<String> {
 /// Only called at runtime on Linux (WSL); on other platforms it's used only in tests.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn convert_windows_to_wsl_path(path: &str) -> String {
-    // Check if it looks like a Windows path (e.g., "D:\something" or "D:/something")
-    if path.len() >= 2 && path.chars().nth(1) == Some(':') {
-        let drive = path
-            .chars()
-            .next()
-            .unwrap_or('c')
-            .to_lowercase()
-            .next()
-            .unwrap_or('c');
-        let rest = &path[2..].replace('\\', "/");
-        format!("/mnt/{drive}{rest}")
-    } else {
-        path.to_string()
+    // Check if it looks like a Windows path (e.g., "D:\something" or "D:/something").
+    //
+    // Driven off the char iterator, never a byte index. The old guard checked
+    // `path.chars().nth(1) == Some(':')` — a CHAR check used to justify the
+    // BYTE slice `path[2..]` — so a path whose first char is multi-byte
+    // ("<CJK>:x") passed the guard and panicked. Requiring an ASCII-alphabetic
+    // drive letter both fixes that and is strictly more correct: a Windows
+    // drive letter is always alphabetic.
+    let mut chars = path.chars();
+    match (chars.next(), chars.next()) {
+        (Some(drive), Some(':')) if drive.is_ascii_alphabetic() => {
+            let rest = chars.as_str().replace('\\', "/");
+            format!("/mnt/{}{}", drive.to_ascii_lowercase(), rest)
+        }
+        _ => path.to_string(),
     }
 }
 
@@ -463,6 +465,22 @@ mod tests {
     fn test_convert_windows_to_wsl_path_already_unix() {
         let unix_path = "/mnt/d/already/unix";
         assert_eq!(convert_windows_to_wsl_path(unix_path), unix_path);
+    }
+
+    /// Regression: the guard tested `path.chars().nth(1) == Some(':')` — a CHAR
+    /// check — then sliced `path[2..]` by BYTE. A path whose first char is
+    /// multi-byte satisfied the guard and split that char, panicking. It is
+    /// also not a Windows path, so it must pass through untouched.
+    #[test]
+    fn convert_windows_to_wsl_path_ignores_multibyte_leading_char() {
+        let p = "\u{65E5}:x";
+        assert_eq!(convert_windows_to_wsl_path(p), p);
+    }
+
+    /// A non-alphabetic "drive" is not a Windows path either.
+    #[test]
+    fn convert_windows_to_wsl_path_requires_alphabetic_drive() {
+        assert_eq!(convert_windows_to_wsl_path("1:\\x"), "1:\\x");
     }
 
     // -- is_meta_doc --

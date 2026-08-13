@@ -43,9 +43,12 @@ fn get_system_uptime() -> u64 {
             "powershell -NoProfile -Command \"(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToString('yyyyMMddHHmmss')\"",
         ) {
             let ts = output.trim();
-            if ts.len() >= 14 {
+            // `get` rather than `len() >= 14` + raw slice: command output is
+            // decoded with `from_utf8_lossy`, which inserts 3-byte U+FFFD on a
+            // non-UTF-8 console codepage and can straddle byte 14.
+            if let Some(head) = ts.get(..14) {
                 if let Ok(boot_time) =
-                    chrono::NaiveDateTime::parse_from_str(&ts[..14], "%Y%m%d%H%M%S")
+                    chrono::NaiveDateTime::parse_from_str(head, "%Y%m%d%H%M%S")
                 {
                     let now = chrono::Utc::now().naive_utc();
                     let duration = now.signed_duration_since(boot_time);
@@ -64,9 +67,10 @@ fn get_system_uptime() -> u64 {
                     // Format: 20250101120000.000000+000
                     // Parse first 14 chars as YYYYMMDDHHmmss
                     let ts = val.trim();
-                    if ts.len() >= 14 {
+                    // `get`, same lossy-decode reason as the PowerShell arm.
+                    if let Some(head) = ts.get(..14) {
                         if let Ok(boot_time) =
-                            chrono::NaiveDateTime::parse_from_str(&ts[..14], "%Y%m%d%H%M%S")
+                            chrono::NaiveDateTime::parse_from_str(head, "%Y%m%d%H%M%S")
                         {
                             let now = chrono::Utc::now().naive_utc();
                             let duration = now.signed_duration_since(boot_time);
