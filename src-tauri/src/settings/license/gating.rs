@@ -44,6 +44,15 @@ pub const SIGNAL_FEATURES: &[&str] = &[
     // Additional panels added by LICENSE-GATING-AUDIT-2026-04-15
     // get_preemption_alerts removed — free OSV security floor (see exceptions above)
     "get_blind_spots",
+    // Added 2026-08-13. These three call require_signal_feature() but their names
+    // were never added here, and is_signal_feature_available() is
+    // `!SIGNAL_FEATURES.contains(&feature)` — so the gate always passed and the
+    // features were free in practice. The intent is unambiguous: the calls exist,
+    // BlindSpotsPaywall.tsx + BlindSpotsView.paywall.test.tsx implement and assert
+    // the gated experience, and BlindSpotsView respects a `paywalled` state.
+    "assess_blind_spots_with_ai",
+    "get_cached_blind_spot_assessment",
+    "add_package_watch",
     // get_decision_health_report removed 2026-08-13: no such command exists anywhere
     // in the crate — it was never defined or registered, so the entry gated nothing.
     // The /signal page was selling it as "Decision Signals"; that card is gone too.
