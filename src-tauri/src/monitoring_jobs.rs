@@ -399,8 +399,61 @@ pub fn maybe_save_mini_digest(state: &crate::monitoring::MonitoringState) {
 // Proactive Chain Prediction Notifications (Phase B)
 // ============================================================================
 
+/// How long before the SAME chain in the SAME phase may notify again.
+///
+/// The hourly cadence alone is not enough. A chain sits in Escalating or Peak
+/// for days, so an hourly sweep with no memory would still fire the identical
+/// toast 24 times a day. Notifications are re-armed by a PHASE CHANGE (genuinely
+/// new information) or by this timeout, whichever comes first.
+const CHAIN_RENOTIFY_SECS: u64 = 86_400; // 24 hours
+
+/// Entries older than this are dropped so the ledger cannot grow without bound.
+const CHAIN_LEDGER_TTL_SECS: u64 = 7 * 86_400;
+
+/// chain_name -> (phase last notified, unix seconds when notified).
+///
+/// Deliberately in-memory: a restart re-arming one notification per chain is
+/// acceptable, and the scheduler's own persisted `CHAIN_NOTIFY` timestamp
+/// already prevents a cold boot from firing the sweep immediately.
+static NOTIFIED_CHAINS: std::sync::Mutex<Option<std::collections::HashMap<String, (String, u64)>>> =
+    std::sync::Mutex::new(None);
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// True when this chain/phase pair is worth interrupting the user for again.
+/// Records the decision, so callers must only invoke it when they will notify.
+fn should_notify_chain(chain_name: &str, phase: &str) -> bool {
+    let now = now_secs();
+    let mut guard = NOTIFIED_CHAINS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let ledger = guard.get_or_insert_with(std::collections::HashMap::new);
+
+    ledger.retain(|_, (_, at)| now.saturating_sub(*at) < CHAIN_LEDGER_TTL_SECS);
+
+    let fire = match ledger.get(chain_name) {
+        Some((seen_phase, at)) => {
+            seen_phase != phase || now.saturating_sub(*at) >= CHAIN_RENOTIFY_SECS
+        }
+        None => true,
+    };
+
+    if fire {
+        ledger.insert(chain_name.to_string(), (phase.to_string(), now));
+    }
+    fire
+}
+
 /// Check signal chains for escalating/peak phases and send OS notifications.
-/// Called hourly alongside anomaly detection and decision window checks.
+///
+/// Interval-gated to hourly by the scheduler (`CHAIN_NOTIFY_INTERVAL`), and
+/// de-duplicated per chain/phase by [`should_notify_chain`]. Both layers are
+/// required: the gate stops the 60-second sweep, the ledger stops the same
+/// chain shouting once an hour for a week.
 pub fn maybe_notify_escalating_chains<R: Runtime>(app: &AppHandle<R>) {
     // Only for Signal users (signal chains are a Signal feature)
     if !crate::settings::is_signal() {
@@ -430,6 +483,7 @@ pub fn maybe_notify_escalating_chains<R: Runtime>(app: &AppHandle<R>) {
     };
 
     let mut notified = 0;
+    let mut suppressed = 0;
     for chain in &chains {
         let prediction = crate::signal_chains::predict_chain_lifecycle(chain);
 
@@ -459,6 +513,12 @@ pub fn maybe_notify_escalating_chains<R: Runtime>(app: &AppHandle<R>) {
             _ => continue,
         };
 
+        // Same chain, same phase, already told them recently — stay quiet.
+        if !should_notify_chain(&chain.chain_name, phase_str) {
+            suppressed += 1;
+            continue;
+        }
+
         crate::monitoring_notifications::send_chain_prediction_notification(
             app,
             &chain.chain_name,
@@ -473,8 +533,13 @@ pub fn maybe_notify_escalating_chains<R: Runtime>(app: &AppHandle<R>) {
         }
     }
 
-    if notified > 0 {
-        info!(target: "4da::jobs", notified, "Chain prediction notifications sent");
+    if notified > 0 || suppressed > 0 {
+        info!(
+            target: "4da::jobs",
+            notified,
+            suppressed,
+            "Chain prediction notification sweep complete"
+        );
     }
 }
 
@@ -620,5 +685,65 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
             resolved_at: None,
         };
         let _ = db.store_dependency_alert(&alert);
+    }
+}
+
+#[cfg(test)]
+mod chain_notify_dedup_tests {
+    use super::{should_notify_chain, CHAIN_RENOTIFY_SECS, NOTIFIED_CHAINS};
+
+    /// Backdate a ledger entry so re-arm behaviour can be tested without sleeping.
+    fn backdate(chain: &str, secs_ago: u64) {
+        let mut guard = NOTIFIED_CHAINS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let ledger = guard.get_or_insert_with(std::collections::HashMap::new);
+        if let Some(entry) = ledger.get_mut(chain) {
+            entry.1 = super::now_secs().saturating_sub(secs_ago);
+        }
+    }
+
+    // Each test uses a UNIQUE chain name: the ledger is a process-global static
+    // and cargo runs these in parallel threads.
+
+    #[test]
+    fn first_sighting_notifies_then_repeats_are_suppressed() {
+        let chain = "dedup-test-first-sighting";
+        assert!(should_notify_chain(chain, "escalating"), "first must fire");
+        assert!(
+            !should_notify_chain(chain, "escalating"),
+            "identical chain/phase must be suppressed — this is the 2,880/day bug"
+        );
+        assert!(!should_notify_chain(chain, "escalating"));
+    }
+
+    #[test]
+    fn phase_change_rearms_the_notification() {
+        let chain = "dedup-test-phase-change";
+        assert!(should_notify_chain(chain, "escalating"));
+        assert!(
+            should_notify_chain(chain, "peak"),
+            "a real phase change is new information and must reach the user"
+        );
+        assert!(!should_notify_chain(chain, "peak"), "…but only once");
+    }
+
+    #[test]
+    fn renotifies_after_the_timeout_elapses() {
+        let chain = "dedup-test-timeout";
+        assert!(should_notify_chain(chain, "escalating"));
+        assert!(!should_notify_chain(chain, "escalating"));
+
+        backdate(chain, CHAIN_RENOTIFY_SECS + 60);
+        assert!(
+            should_notify_chain(chain, "escalating"),
+            "after the re-notify window the chain may speak again"
+        );
+    }
+
+    #[test]
+    fn distinct_chains_do_not_suppress_each_other() {
+        assert!(should_notify_chain("dedup-test-alpha", "peak"));
+        assert!(should_notify_chain("dedup-test-beta", "peak"));
     }
 }

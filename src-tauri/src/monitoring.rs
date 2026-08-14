@@ -73,6 +73,8 @@ pub struct MonitoringState {
     pub last_calibration_check: AtomicU64,
     /// Last dependency-change re-examination timestamp (unix seconds)
     pub last_reexamination: AtomicU64,
+    /// Last proactive signal-chain notification sweep (unix seconds)
+    pub last_chain_notify: AtomicU64,
     /// When true, the briefing is waiting for a fresh analysis before firing.
     /// Set by the briefing-due check; cleared after the briefing fires.
     pub briefing_needs_fresh_data: AtomicBool,
@@ -100,6 +102,7 @@ impl Default for MonitoringState {
             last_backfill: AtomicU64::new(0),
             last_calibration_check: AtomicU64::new(0),
             last_reexamination: AtomicU64::new(0),
+            last_chain_notify: AtomicU64::new(0),
             briefing_needs_fresh_data: AtomicBool::new(false),
             briefing_wait_ticks: AtomicU64::new(0),
         }
@@ -268,6 +271,14 @@ const CALIBRATION_CHECK_INTERVAL: u64 = 21600; // 6 hours
                                                // Re-examination — checks hourly whether the dependency graph changed; only does work
                                                // (re-queues buried releases/advisories of now-tracked deps) when it actually changed.
 const REEXAMINATION_CHECK_INTERVAL: u64 = 3600; // 1 hour
+/// Proactive signal-chain prediction notifications — 1 hour.
+///
+/// This job used to have NO interval gate at all. It sat bare in the scheduler
+/// loop, which ticks every 60 SECONDS, while its own comment claimed "hourly" —
+/// so it ran 60x more often than intended and fired 2 critical toasts a minute
+/// (~2,880/day) at the user, forever. Every sibling job in that loop is gated;
+/// this one was simply missed.
+const CHAIN_NOTIFY_INTERVAL: u64 = 3600; // 1 hour
 
 /// Sovereign Cold Boot — adaptive grace period (default).
 ///
@@ -841,9 +852,26 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
-            // Proactive chain prediction notifications — hourly
+            // Proactive chain prediction notifications — hourly (Normal priority).
             // Sends OS notifications for chains in Escalating or Peak phase.
-            crate::monitoring_jobs::maybe_notify_escalating_chains(&app);
+            //
+            // The gate below is load-bearing. Without it this call ran on every
+            // 60-second tick: a full chain detection (topic extraction over ~900
+            // items) plus a DB write plus up to 3 OS toasts, once a minute,
+            // ignoring even the power/battery scheduler gate that governs every
+            // other job here.
+            let last_chain_notify = state.last_chain_notify.load(Ordering::Relaxed);
+            if now - last_chain_notify
+                >= crate::scheduler_gate::effective_interval(CHAIN_NOTIFY_INTERVAL)
+                && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Normal)
+            {
+                mark_job_complete(
+                    &state.last_chain_notify,
+                    now,
+                    crate::scheduler_state::jobs::CHAIN_NOTIFY,
+                );
+                crate::monitoring_jobs::maybe_notify_escalating_chains(&app);
+            }
 
             // Mini-autophagy: trigger early cycle when sufficient feedback accumulated
             // but no autophagy has run yet. Shortens time-to-first-calibration from days to hours.
