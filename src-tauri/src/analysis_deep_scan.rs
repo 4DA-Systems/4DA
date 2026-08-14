@@ -368,7 +368,10 @@ pub(crate) async fn run_multi_source_analysis_impl(
             relevance: None,
         },
     );
-    analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx).await;
+    let rerank_started = std::time::Instant::now();
+    analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx)
+        .await
+        .log(rerank_started.elapsed().as_millis(), "deep_scan");
 
     // Final ceiling on the persisted score — after every rerank stage, before
     // composition floors reorder. Without this the cross-encoder/reconciler
