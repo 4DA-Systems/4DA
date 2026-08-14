@@ -130,14 +130,20 @@ if [ -n "$STAGED_RS" ]; then
     fi
 
     # --- Ghost Command Detection ---
+    # Blocks NEW ghosts (registered command, no frontend caller). Pre-existing
+    # ghosts are allowlisted in scripts/ghost-command-backlog.json and reported
+    # as a loud backlog line below — never silently swallowed.
     echo "Checking for ghost commands..."
-    node scripts/ghost-commands.cjs > /dev/null 2>&1 || {
+    GHOST_OUT=$(node scripts/ghost-commands.cjs 2>&1) || {
         echo ""
-        echo "Ghost commands detected! Commands exist in Rust with no frontend caller."
-        echo "Run 'node scripts/ghost-commands.cjs' for details."
+        echo "$GHOST_OUT" | sed -n '/GHOST (NEW)/,/^$/p'
+        echo "New ghost command(s) detected — registered in Rust with no frontend caller."
+        echo "Wire it up in the frontend, or delete it from Rust + generate_handler![]"
+        echo "+ the CommandMap. Run 'node scripts/ghost-commands.cjs' for details."
         echo ""
         exit 1
     }
+    echo "$GHOST_OUT" | grep "DEAD IPC BACKLOG" || true
 fi
 
 # Rust formatting (fast check, ~2s) — skip if cargo is busy or modules missing
