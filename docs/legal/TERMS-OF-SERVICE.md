@@ -1,6 +1,6 @@
 # Terms of Service
 
-**4DA Systems Pty Ltd** | **Effective Date: 15 March 2026** | **Last Updated: 15 March 2026**
+**4DA Systems Pty Ltd** | **Effective Date: 15 March 2026** | **Last Updated: 26 July 2026**
 
 ---
 
@@ -56,7 +56,10 @@ The Free tier includes:
 - Keyword matching and local embedding-based semantic matching
 - Feedback-driven score personalisation
 - Local Ollama integration for embeddings
-- The complete STREETS playbook (all 7 modules)
+- Natural language search across all content (requires BYOK API key or Ollama)
+- AI-powered daily briefings and intelligence summaries (requires BYOK API key or Ollama)
+- Weekly digest (requires BYOK API key or Ollama)
+- Developer DNA profiling
 
 The Free tier is provided at no cost and may be used indefinitely. We reserve the right to modify Free tier features with reasonable notice, but we will not retroactively remove core scoring functionality from existing Free tier users without a compelling reason.
 
@@ -65,13 +68,9 @@ The Free tier is provided at no cost and may be used indefinitely. We reserve th
 The Signal tier includes everything in the Free tier, plus:
 
 - LLM-powered content re-ranking and analysis
-- Natural language search across all content
-- AI-powered daily briefings and intelligence summaries
-- Weekly digest emails (where an email address is provided)
 - Standing queries (persistent, automated searches)
 - Channels (curated content streams)
 - Semantic analysis and trend detection
-- Developer DNA profiling
 - Audio briefings
 - Additional Signal features as released
 
@@ -83,10 +82,13 @@ We may introduce additional subscription tiers (such as Team or Enterprise) in t
 
 ### 4.1 Signal Tier Pricing
 
-- **Monthly:** $12 USD per month
-- **Annual:** $99 USD per year
+- **Monthly:** $12 AUD per month
+- **Annual:** $99 AUD per year
+- **Lifetime:** $299 AUD one-time payment (Lifetime license)
 
-Prices are in US Dollars and are exclusive of any applicable taxes. We will display applicable taxes at checkout where required by law. We reserve the right to change pricing with at least 30 days' notice. Price changes will not affect your current billing period.
+**Lifetime license** means a single one-time payment granting access to all Signal tier features, including all future updates to the Signal tier, for the lifetime of the 4DA product. License verification runs locally on your device and works offline; if 4DA is ever discontinued, your installed app and Lifetime license continue to function on your machine.
+
+Prices are in Australian Dollars (AUD) and are exclusive of any applicable taxes. We will display applicable taxes at checkout where required by law. We reserve the right to change pricing with at least 30 days' notice. Price changes will not affect your current billing period.
 
 ### 4.2 Payment Processing
 
@@ -94,11 +96,11 @@ Payment is processed through our payment provider (currently **Stripe**). By sub
 
 **4DA Systems does not store your payment card details.** All payment information is handled directly by our payment processor in accordance with PCI-DSS standards. See [Stripe's Privacy Policy](https://stripe.com/privacy) for details on how Stripe handles your payment data.
 
-Your subscription begins on the date of your first payment and renews automatically unless cancelled before the next billing date.
+Your subscription begins on the date of your first payment and renews automatically unless cancelled before the next billing date. Lifetime purchases are a single one-time charge and do not renew.
 
 ### 4.3 License Validation
 
-Signal tier users receive a license key validated through Keygen. Your license key is personal to you and must not be shared, redistributed, or used on more devices than your subscription permits. License validation sends only your license key and a machine fingerprint (a hardware-derived hash) to the Keygen API -- no personal data, device fingerprints beyond this hash, or other identifying information is transmitted.
+Signal tier users receive a cryptographically signed license key. The key is verified locally on your device -- verification works offline and transmits nothing. When issuing or refreshing a license, the app contacts our licensing endpoint with only your license key (which embeds the email address used at purchase); no machine fingerprint, hardware identifiers, or other device data are transmitted. Subscription status is confirmed against our payment provider (Stripe). Your license key is personal to you and must not be shared or redistributed.
 
 ### 4.4 Cancellation
 
@@ -113,7 +115,7 @@ You may cancel your Signal subscription at any time. Upon cancellation:
 
 If your subscription lapses due to cancellation, non-payment, or expiry:
 
-- All Signal tier features (LLM re-ranking, natural language search, AI briefings, standing queries, channels, and other Signal capabilities) will become unavailable
+- All Signal tier features (Blind Spots, Knowledge Gaps, standing queries, Semantic Shifts, Project Health, Attention Report, Decision Health, cross-project intelligence, and Trust Ledger analytics) will become unavailable. AI briefings, natural language search, Developer DNA, Score Autopsy, signal chain analysis, and channels remain available as free tier features.
 - Your local data, including all previously scored and saved content, remains on your device and is not deleted
 - Free tier functionality continues to operate as normal
 - You may re-subscribe at any time to restore Signal features
@@ -133,11 +135,15 @@ If you purchase a monthly Signal subscription and are not satisfied, you may req
 
 This prorated refund applies to first-time monthly Signal subscriptions only. Subsequent monthly charges after the initial 30-day period are not eligible for prorated refunds, though they remain subject to your statutory rights.
 
-### 5.3 Refund for Faulty Service
+### 5.3 Lifetime Purchases -- 14-Day Money-Back Guarantee
+
+If you purchase a Signal Lifetime license and are not satisfied, you may request a full refund within **14 days** of purchase. No reason is required. To request a refund, contact us at [support@4da.ai](mailto:support@4da.ai). If a Lifetime purchase is refunded, the associated license is deactivated.
+
+### 5.4 Refund for Faulty Service
 
 If the Signal tier does not work as described -- for example, if Signal features fail to activate after a valid purchase, or if a defect prevents you from using features you have paid for -- you are entitled to a full refund regardless of the refund periods stated above. Contact us at [support@4da.ai](mailto:support@4da.ai) and describe the issue.
 
-### 5.4 Australian Consumer Law
+### 5.5 Australian Consumer Law
 
 Our goods and services come with guarantees that cannot be excluded under the Australian Consumer Law ("ACL"). For major failures with the service, you are entitled to:
 
@@ -148,7 +154,7 @@ You are also entitled to choose a refund or replacement for major failures with 
 
 **Nothing in these Terms limits or excludes any rights you have under the Australian Consumer Law or any other applicable consumer protection legislation.**
 
-### 5.5 Refund Process
+### 5.6 Refund Process
 
 Refund requests should be sent to [support@4da.ai](mailto:support@4da.ai). We aim to process approved refunds within 10 business days. Refunds are issued to the original payment method via our payment processor.
 

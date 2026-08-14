@@ -44,11 +44,6 @@ import type {
   ItemSummary,
 } from '../types/sources';
 import type {
-  ProjectHealth,
-  AttentionReport,
-  DeveloperDna,
-} from '../types/innovation';
-import type {
   AutophagyCycleResult,
   AutophagyStatus,
   DataHealth,
@@ -56,23 +51,8 @@ import type {
   DecisionWindow,
   IntelligencePulseData,
 } from '../types/autophagy';
-import type {
-  PlaybookModule,
-  PlaybookContent,
-  PlaybookProgress,
-} from '../types/playbook';
 import type { ChannelRender, RenderProvenance, ChannelChangelog, ChannelSourceMatch } from '../types/channels';
 import type { StackProfileSummary, StackDetection } from '../types/stacks';
-import type {
-  InfrastructureDimension,
-  StackDimension,
-  SkillsDimension,
-  PreferencesDimension,
-  ContextDimension,
-  IntelligenceReport,
-  CompletenessReport,
-} from '../types';
-import type { PersonalizedLesson as PersonalizedLessonType } from '../types/personalization';
 import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
 import type { BlindSpotTeaser } from '../../src-tauri/bindings/bindings/BlindSpotTeaser';
 import type { BlindSpotAssessment } from '../../src-tauri/bindings/bindings/BlindSpotAssessment';
@@ -407,15 +387,12 @@ interface CommandMap {
   get_decisions: { params: { limit?: number; decisionType?: string; status?: string }; result: DeveloperDecision[] };
   record_developer_decision: { params: { decisionType: string; subject: string; decision: string; rationale: string | null; alternativesRejected: string[]; contextTags: string[]; confidence: number }; result: DeveloperDecision };
   update_developer_decision: { params: { id: number; decision: string | null; rationale: string | null; status: string | null; confidence: number | null }; result: DeveloperDecision };
-  remove_tech_decision: { params: { technology: string }; result: void };
 
   // -- Agent Memory --
   store_agent_memory: { params: { sessionId: string; agentType: string; memoryType: string; subject: string; content: string; contextTags?: string[]; expiresAt?: string }; result: number };
   recall_agent_memories: { params: { subject: string; limit: number }; result: AgentMemoryEntry[] };
   generate_agent_brief: { params: { agentType?: string; since?: string }; result: AgentSessionBrief };
   get_delegation_score: { params: { subject: string }; result: DelegationScoreResult };
-  get_all_delegation_scores: { params: Record<string, never>; result: DelegationScoreEntry[] };
-  promote_memory_to_decision: { params: { memoryId: number }; result: number };
 
   // -- Decision Advantage --
   get_decision_windows: { params: Record<string, never>; result: DecisionWindow[] };
@@ -446,22 +423,6 @@ interface CommandMap {
   get_trial_status: { params: Record<string, never>; result: { active: boolean; days_remaining: number; started_at: string | null } };
   start_trial: { params: Record<string, never>; result: { success: boolean; days_remaining?: number } };
 
-  // -- Playbook (STREETS) --
-  get_playbook_modules: { params: { lang?: string }; result: PlaybookModule[] };
-  get_playbook_content: { params: { moduleId: string; lang?: string }; result: PlaybookContent };
-  get_playbook_progress: { params: Record<string, never>; result: PlaybookProgress };
-  mark_lesson_complete: { params: { moduleId: string; lessonIdx: number }; result: void };
-  translate_playbook_module: { params: { moduleId: string; lang: string }; result: string };
-  get_lesson_translation_status: { params: { lang: string }; result: Record<string, boolean> };
-  get_personalized_lesson: { params: { moduleId: string; lessonIdx: number }; result: PersonalizedLesson };
-  get_personalized_lessons_batch: { params: { requests: Array<[string, number]> }; result: PersonalizedLesson[] };
-  get_personalization_context_summary: { params: Record<string, never>; result: PersonalizationContextSummary };
-  prune_personalization_cache: { params: Record<string, never>; result: { deleted: number; remaining: number; read_states: number; cache_size_bytes: number } };
-  hydrate_lesson_with_llm: { params: { moduleId: string; lessonIdx: number }; result: { upgraded: number; total_blocks?: number; reason?: string } };
-
-  // -- STREETS Health --
-  get_street_health: { params: Record<string, never>; result: StreetHealthScore };
-
   // -- Sovereign Profile --
   get_sovereign_profile: { params: Record<string, never>; result: SovereignProfileData };
   get_sovereign_profile_completeness: { params: Record<string, never>; result: ProfileCompleteness };
@@ -470,7 +431,6 @@ interface CommandMap {
   get_execution_log: { params: { moduleId: string; lessonIdx?: number }; result: ExecutionLogEntry[] };
 
   // -- Sovereign Developer Profile (Unified) --
-  get_sovereign_developer_profile: { params: Record<string, never>; result: SovereignDeveloperProfileData };
   export_sovereign_profile_markdown: { params: Record<string, never>; result: string };
   export_sovereign_profile_json: { params: Record<string, never>; result: string };
 
@@ -503,7 +463,6 @@ interface CommandMap {
 
   // -- Engagement & Attention --
   get_engagement_summary: { params: Record<string, never>; result: EngagementData };
-  get_attention_report: { params: { periodDays: number }; result: AttentionReport };
 
   // -- Preemption & Blind Spots --
   // Phase 3 & 4 (2026-04-17): both return the canonical EvidenceFeed
@@ -541,7 +500,6 @@ interface CommandMap {
   get_false_positive_analysis: { params: { days?: number }; result: FalsePositiveAnalysis };
 
   // -- Developer DNA --
-  get_developer_dna: { params: Record<string, never>; result: DeveloperDna };
   export_developer_dna_markdown: { params: Record<string, never>; result: string };
 
   // -- Tech Radar --
@@ -552,7 +510,6 @@ interface CommandMap {
   get_radar_snapshots: { params: Record<string, never>; result: Array<{ date: string }> };
 
   // -- Project Health --
-  get_project_health: { params: Record<string, never>; result: ProjectHealth[] };
 
   // -- Semantic Shifts --
   get_semantic_shifts: { params: { lookbackDays?: number }; result: SemanticShift[] };
@@ -1300,13 +1257,6 @@ interface AgentMemoryEntry {
   created_at: string;
 }
 
-interface DelegationScoreEntry {
-  task_type: string;
-  score: number;
-  factors: Record<string, number>;
-  recommendation: string;
-}
-
 interface StreetHealthScore {
   overall: number;
   module_scores: Array<{
@@ -1604,21 +1554,6 @@ interface DelegationScoreResult {
   factors: { complexity: number; reversibility: number; domain_familiarity: number; time_sensitivity: number; strategic_value: number };
   recommendation: { level: string; summary: string };
   caveats: string[];
-}
-
-/** @deprecated Use PersonalizedLesson from types/personalization.ts instead */
-type PersonalizedLesson = PersonalizedLessonType;
-
-interface SovereignDeveloperProfileData {
-  generated_at: string;
-  identity_summary: string;
-  infrastructure: InfrastructureDimension;
-  stack: StackDimension;
-  skills: SkillsDimension;
-  preferences: PreferencesDimension;
-  context: ContextDimension;
-  intelligence: IntelligenceReport;
-  completeness: CompletenessReport;
 }
 
 interface RadarEntry {
@@ -1976,7 +1911,6 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'build_content_graph',
   'translate_content',
   'translate_content_batch',
-  'translate_playbook_module',
   'get_embedding_model_info',
 ]);
 
@@ -2013,11 +1947,9 @@ export type {
   DeveloperDecision,
   AgentMemoryEntry,
   AgentSessionBrief,
-  DelegationScoreEntry,
   DelegationScoreResult,
   StreetHealthScore,
   SovereignProfileData,
-  SovereignDeveloperProfileData,
   ProfileCompleteness,
   NLQResult,
   ScoreAutopsyResult,
@@ -2045,7 +1977,6 @@ export type {
   DiagnosticsSnapshot,
   ComposedStackSummary,
   IntelligencePulseData,
-  PersonalizedLesson,
   SemanticShift,
   RegionalData,
   ChannelSummary,

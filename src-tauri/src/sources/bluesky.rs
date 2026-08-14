@@ -6,7 +6,7 @@
 
 use async_trait::async_trait;
 use serde::Deserialize;
-use tracing::{info, warn};
+use tracing::info;
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 
@@ -19,8 +19,6 @@ struct BskySearchResponse {
     posts: Option<Vec<BskyPost>>,
     // getFeed returns {feed: [{post: BskyPost}]}
     feed: Option<Vec<BskyFeedItem>>,
-    #[allow(dead_code)]
-    cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,8 +29,6 @@ struct BskyFeedItem {
 #[derive(Debug, Deserialize)]
 struct BskyPost {
     uri: String,
-    #[allow(dead_code)]
-    cid: Option<String>,
     author: BskyAuthor,
     record: BskyRecord,
     #[serde(rename = "likeCount")]
@@ -41,17 +37,11 @@ struct BskyPost {
     reply_count: Option<u32>,
     #[serde(rename = "repostCount")]
     repost_count: Option<u32>,
-    #[serde(rename = "indexedAt")]
-    #[allow(dead_code)]
-    indexed_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct BskyAuthor {
     handle: String,
-    #[serde(rename = "displayName")]
-    #[allow(dead_code)]
-    display_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,22 +55,10 @@ struct BskyRecord {
 // Bluesky Source
 // ============================================================================
 
-/// Default search queries for developer content
-const DEFAULT_QUERIES: &[&str] = &[
-    "rust programming",
-    "typescript",
-    "react framework",
-    "open source security",
-    "developer tools",
-    "machine learning",
-    "web development",
-];
-
 /// Bluesky source — fetches developer posts from the AT Protocol network
 pub struct BlueskySource {
     config: SourceConfig,
     client: reqwest::Client,
-    queries: Vec<String>,
 }
 
 impl BlueskySource {
@@ -94,18 +72,7 @@ impl BlueskySource {
                 custom: None,
             },
             client: super::shared_client(),
-            queries: DEFAULT_QUERIES.iter().map(|s| (*s).to_string()).collect(),
         }
-    }
-
-    /// Create a Bluesky source whose search queries are shaped by the user's detected stack.
-    /// Falls back to `DEFAULT_QUERIES` when `queries` is empty (no stack signals / fresh install).
-    pub fn with_queries(queries: Vec<String>) -> Self {
-        let mut source = Self::new();
-        if !queries.is_empty() {
-            source.queries = queries;
-        }
-        source
     }
 
     /// Extract the rkey from an AT Protocol URI
@@ -134,31 +101,25 @@ impl BlueskySource {
         }
     }
 
-    /// Fetch posts from Bluesky's "What's Hot" feed generator.
-    /// The search API requires auth, so we use the public feed endpoint instead.
-    async fn fetch_query(&self, _query: &str) -> SourceResult<Vec<SourceItem>> {
-        // Use the "What's Hot" feed generator which is public and doesn't need auth
-        let url = "https://public.api.bsky.app/xrpc/app.bsky.feed.getFeed?feed=at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot&limit=25".to_string();
+    /// Fetch posts from Bluesky's public "What's Hot" feed generator.
+    ///
+    /// SINGLE fetch by design: `app.bsky.feed.searchPosts` requires an authenticated
+    /// AT Protocol session, and 4DA is BYOK/no-account for social reads — so there is
+    /// no query to vary. The feed generator is the only credential-free surface that
+    /// returns developer-adjacent posts, and it takes no search term. Anything
+    /// stack-shaping wants to do here has to wait for an auth story; per-query
+    /// plumbing without it just issues the same request N times.
+    async fn fetch_feed(&self) -> SourceResult<Vec<SourceItem>> {
+        let url = "https://public.api.bsky.app/xrpc/app.bsky.feed.getFeed?feed=at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot&limit=25";
 
         let response = self
             .client
-            .get(&url)
+            .get(url)
             .send()
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "Bluesky rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "Bluesky forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        super::check_http_status(status, "Bluesky API")?;
+        super::classify_http_status(response.status(), "Bluesky API")?;
 
         let bsky_resp: BskySearchResponse = response
             .json()
@@ -259,30 +220,10 @@ impl Source for BlueskySource {
 
         info!("Fetching Bluesky developer posts");
 
-        let mut all_items = Vec::new();
-        let mut seen_ids = std::collections::HashSet::new();
-
-        for (i, query) in self.queries.iter().enumerate() {
-            // 1-second delay between query requests (skip first)
-            if i > 0 {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            }
-
-            match self.fetch_query(query).await {
-                Ok(items) => {
-                    info!(query = %query, count = items.len(), "Fetched Bluesky posts");
-
-                    for item in items {
-                        if seen_ids.insert(item.source_id.clone()) {
-                            all_items.push(item);
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!(query = %query, error = ?e, "Failed to fetch Bluesky posts for query");
-                }
-            }
-        }
+        // Propagate the error rather than reporting `Ok(vec![])` — with one fetch there
+        // is nothing to partially succeed, and an honest failure lets the retry/health
+        // layer see it instead of recording a silent empty cycle.
+        let mut all_items = self.fetch_feed().await?;
 
         // Respect max_items limit
         all_items.truncate(self.config.max_items);
@@ -308,7 +249,6 @@ mod tests {
         assert!(source.config().enabled);
         assert_eq!(source.config().max_items, 25);
         assert_eq!(source.config().fetch_interval_secs, 1800);
-        assert_eq!(source.queries.len(), 7);
     }
 
     #[test]

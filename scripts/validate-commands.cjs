@@ -8,7 +8,15 @@
  *   4. Raw invoke() calls that bypass the typed CommandMap
  *
  * Usage:  node scripts/validate-commands.cjs
- * Exit:   always 0 (informational only)
+ * Exit:   1 when Rust registrations and the TS CommandMap disagree in either
+ *         direction (registered-but-missing-from-CommandMap, or in-CommandMap-
+ *         but-not-registered); 0 otherwise. Raw invoke() calls and Rust
+ *         commands that are defined but never registered are reported for
+ *         information only and do NOT affect the exit code.
+ *
+ *         This is a BLOCKING gate: it runs in .husky/pre-commit, in the
+ *         tools/gate-jobs.json pre-push gate, and in CI's validate job, so a
+ *         non-zero exit fails the commit or the build.
  */
 
 const fs = require("fs");

@@ -311,45 +311,6 @@ pub(crate) fn has_grounded_reasoning(explanation: &str) -> bool {
     true
 }
 
-/// Check whether an explanation is mostly a restatement of the title.
-///
-/// Returns `true` if title words make up more than 80% of the explanation
-/// words (i.e. the explanation adds almost nothing beyond the title).
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Reason: available for callers that have both title and explanation
-pub(crate) fn is_title_restatement(title: &str, explanation: &str) -> bool {
-    let title_words: std::collections::HashSet<String> = title
-        .split_whitespace()
-        .map(|w| {
-            w.trim_matches(|c: char| !c.is_alphanumeric())
-                .to_lowercase()
-        })
-        .filter(|w| w.len() > 2) // skip short words like "a", "is", "to"
-        .collect();
-
-    if title_words.is_empty() {
-        return false;
-    }
-
-    let explanation_words: Vec<&str> = explanation
-        .split_whitespace()
-        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
-        .filter(|w| w.len() > 2)
-        .collect();
-
-    if explanation_words.is_empty() {
-        return true; // empty explanation is effectively a restatement
-    }
-
-    let overlap_count = explanation_words
-        .iter()
-        .filter(|w| title_words.contains(&w.to_lowercase()))
-        .count();
-
-    let overlap_ratio = overlap_count as f32 / explanation_words.len() as f32;
-    overlap_ratio > 0.8
-}
-
 // ============================================================================
 // Prompt construction
 // ============================================================================

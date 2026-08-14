@@ -14,10 +14,8 @@ use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 // ============================================================================
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)] // Fields deserialized from GitHub API JSON
 struct GitHubRepo {
     id: u64,
-    name: String,
     full_name: String,
     description: Option<String>,
     html_url: String,
@@ -30,8 +28,6 @@ struct GitHubRepo {
 
 #[derive(Debug, Deserialize)]
 struct GitHubSearchResponse {
-    #[allow(dead_code)]
-    total_count: u32,
     items: Vec<GitHubRepo>,
 }
 
@@ -176,17 +172,15 @@ impl Source for GitHubSource {
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
         let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "GitHub rate limited (HTTP 429)".to_string(),
-            ));
-        }
+        // GitHub 403s are usually the *unauthenticated* rate ceiling rather than a real
+        // permission denial, so this keeps its own actionable message instead of the
+        // shared gate's generic one.
         if status == reqwest::StatusCode::FORBIDDEN {
             return Err(SourceError::Forbidden(
                 "GitHub forbidden (HTTP 403) — check API rate limits or auth".to_string(),
             ));
         }
-        super::check_http_status(status, "GitHub API")?;
+        super::classify_http_status(status, "GitHub API")?;
 
         let search_result: GitHubSearchResponse = response
             .json()

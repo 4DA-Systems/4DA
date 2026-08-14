@@ -36,7 +36,7 @@ function adaptItem(
   };
 }
 
-export interface AdaptedSnapshot {
+interface AdaptedSnapshot {
   /** Attention-worthy items (Zone 2 cards): carry a signal hint. */
   signalItems: SourceRelevance[];
   /** Remaining items, highest score first (fill Zone 2, then Zone 3 feed). */

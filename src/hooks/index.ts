@@ -8,8 +8,6 @@ export { useSystemHealth } from './use-system-health';
 export { useUserContext } from './use-user-context';
 export { useResultFilters } from './use-result-filters';
 export { useBriefing } from './use-briefing';
-export { useKeyboardShortcuts } from './use-keyboard-shortcuts';
 export { useToasts } from './use-toasts';
-export type { ToastType, ToastAction } from './use-toasts';
 export { useLicense } from './use-license';
 export { useUiZoom } from './use-ui-zoom';

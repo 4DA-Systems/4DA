@@ -312,4 +312,3 @@ export const ComparisonPage = memo(function ComparisonPage({ onClose }: Comparis
   );
 });
 
-export default ComparisonPage;

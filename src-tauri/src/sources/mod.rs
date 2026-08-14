@@ -75,6 +75,9 @@ pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
 
 /// Check HTTP response status and return a `SourceError::Network` on failure.
 /// Replaces the duplicated `if !status.is_success()` pattern across adapters.
+///
+/// Prefer [`classify_http_status`] — it triages 429/403 into the retry-aware
+/// variants first and falls through to this for everything else.
 pub(crate) fn check_http_status(
     status: reqwest::StatusCode,
     source_name: &str,
@@ -89,6 +92,39 @@ pub(crate) fn check_http_status(
     Ok(())
 }
 
+/// Triage an HTTP response status into the shared [`SourceError`] taxonomy.
+///
+/// This is THE status gate for source adapters — every adapter previously
+/// re-implemented the same 429/403 preamble before delegating the generic tail
+/// to [`check_http_status`]. The mapping:
+///
+/// - `429 Too Many Requests` → [`SourceError::RateLimited`] (retryable, backs off)
+/// - `403 Forbidden` → [`SourceError::Forbidden`] (NOT retryable — needs a credential)
+/// - any other non-2xx → [`SourceError::Network`] via [`check_http_status`]
+/// - 2xx → `Ok(())`
+///
+/// `source_name` names the endpoint in the error message (e.g. `"Dev.to API"`).
+///
+/// Status codes an adapter treats specially (404 → `Ok(None)`, 410 → skip, 401 →
+/// auth prompt) must be checked BEFORE calling this, since the generic tail
+/// would otherwise claim them as a network error.
+pub(crate) fn classify_http_status(
+    status: reqwest::StatusCode,
+    source_name: &str,
+) -> SourceResult<()> {
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(SourceError::RateLimited(format!(
+            "{source_name} rate limited (HTTP 429)"
+        )));
+    }
+    if status == reqwest::StatusCode::FORBIDDEN {
+        return Err(SourceError::Forbidden(format!(
+            "{source_name} forbidden (HTTP 403)"
+        )));
+    }
+    check_http_status(status, source_name)
+}
+
 // ============================================================================
 // Scalability limits — guards for 100+ source configurations
 // ============================================================================
@@ -98,19 +134,6 @@ pub(crate) fn check_http_status(
 /// 500 sources ÷ 15 concurrent × 2.5s rate limit = ~83s per cycle.
 /// DB handles ~100,000 items comfortably in SQLite with WAL mode.
 pub const MAX_SOURCES: usize = 500;
-
-/// Maximum items to retain per source in the database.
-/// 500 sources × 200 items = 100,000 total (within SQLite comfort zone).
-pub const MAX_ITEMS_PER_SOURCE: usize = 200;
-
-/// Maximum total items in the database before old items are pruned.
-/// At 500 sources × 30 items/cycle, takes ~6 cycles to fill.
-/// Auto-pruning removes oldest items beyond this threshold.
-pub const MAX_TOTAL_ITEMS: usize = 100_000;
-
-/// Warning thresholds for progressive UI feedback
-pub const SOURCE_WARNING_THRESHOLD: usize = 50;
-pub const SOURCE_CAUTION_THRESHOLD: usize = 200;
 
 // ============================================================================
 // Source Item - Universal representation of content from any source
@@ -350,20 +373,6 @@ pub enum SourceCategory {
     General,
 }
 
-impl SourceCategory {
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Security => "Security",
-            Self::PackageRegistry => "Packages",
-            Self::News => "News",
-            Self::Social => "Social",
-            Self::Research => "Research",
-            Self::Community => "Community",
-            Self::General => "Other",
-        }
-    }
-}
-
 /// Declarative metadata for a source — category, default content type,
 /// display hints, and quality gate configuration. Sources declare this
 /// once; the system uses it for classification, UI grouping, quality
@@ -550,17 +559,6 @@ pub trait Source: Send + Sync {
     fn feed_errors(&self) -> Vec<(String, String)> {
         Vec::new()
     }
-
-    /// Check if enough time has passed since last fetch
-    fn should_fetch(&self, last_fetch: Option<std::time::SystemTime>) -> bool {
-        match last_fetch {
-            None => true,
-            Some(last) => {
-                let elapsed = last.elapsed().unwrap_or_default();
-                elapsed.as_secs() >= self.config().fetch_interval_secs
-            }
-        }
-    }
 }
 
 // ============================================================================
@@ -672,9 +670,9 @@ pub fn build_all_sources() -> Vec<Box<dyn Source>> {
         )),
         // Social
         Box::new(twitter::TwitterSource::with_handles(twitter_handles).with_api_key(x_api_key)),
-        Box::new(bluesky::BlueskySource::with_queries(
-            stack.bluesky_queries(),
-        )),
+        // Bluesky is NOT stack-shaped: its search API requires auth, so the adapter
+        // reads the public "What's Hot" feed, which takes no query. See `bluesky.rs`.
+        Box::new(bluesky::BlueskySource::new()),
         // Security
         Box::new(cve::CveSource::new()),
         Box::new(osv::OsvSource::new()),

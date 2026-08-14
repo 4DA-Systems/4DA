@@ -12,7 +12,7 @@ export interface IndexedDocument {
   indexed_at: string;
 }
 
-export interface DocumentChunk {
+interface DocumentChunk {
   index: number;
   content: string;
   word_count: number;

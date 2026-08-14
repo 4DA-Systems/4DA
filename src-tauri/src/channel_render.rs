@@ -282,10 +282,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
         guard.get().llm.clone()
     };
 
-    let has_llm = crate::content_personalization::context::compute_has_llm(
-        &llm_settings.provider,
-        &llm_settings.api_key,
-    );
+    let has_llm = crate::llm_gate::compute_has_llm(&llm_settings.provider, &llm_settings.api_key);
 
     if !has_llm {
         let fallback = generate_fallback_content(&channel, &items);

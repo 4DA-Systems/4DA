@@ -15,7 +15,6 @@ import { createSystemHealthSlice } from './system-health-slice';
 import { createDecisionsSlice } from './decisions-slice';
 import { createAgentSlice } from './agent-slice';
 import { createLicenseSlice } from './license-slice';
-import { createToolkitSlice } from './toolkit-slice';
 import { createAutophagySlice } from './autophagy-slice';
 import { createDecisionAdvantageSlice } from './decision-advantage-slice';
 import { createChannelsSlice } from './channels-slice';
@@ -27,11 +26,10 @@ import { createPreemptionSlice } from './preemption-slice';
 import { createBlindSpotsSlice } from './blind-spots-slice';
 import { createTrustSlice } from './trust-slice';
 
-// Re-export types consumed by hooks and components via the barrel
+// Re-export types consumed by hooks and components via the barrel.
+// Toast types are NOT re-exported here — `./types` is their single source and
+// `../hooks/use-toasts` is the one component-facing path.
 export type {
-  ToastType,
-  ToastAction,
-  Toast,
   SettingsForm,
   OllamaStatus,
   BriefingState,
@@ -52,7 +50,6 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createDecisionsSlice(...a),
   ...createAgentSlice(...a),
   ...createLicenseSlice(...a),
-  ...createToolkitSlice(...a),
   ...createAutophagySlice(...a),
   ...createDecisionAdvantageSlice(...a),
   ...createChannelsSlice(...a),

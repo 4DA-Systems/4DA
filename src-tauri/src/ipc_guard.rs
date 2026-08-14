@@ -98,8 +98,6 @@ pub(crate) fn validate_path_input(field: &str, path: &str) -> Result<String> {
 /// Validate a file path by resolving symlinks and ensuring the canonical path
 /// is safe. Use this instead of `validate_path_input` when the path will be
 /// used for actual filesystem access (reads, writes, directory listing).
-// REMOVE BY 2026-08-01
-#[allow(dead_code)]
 ///
 /// Performs all checks from `validate_path_input` plus:
 /// - Resolves symlinks via `std::fs::canonicalize()`
@@ -107,6 +105,13 @@ pub(crate) fn validate_path_input(field: &str, path: &str) -> Result<String> {
 /// - Optionally validates the resolved path is under an allowed root
 ///
 /// Returns the canonicalized path as a string.
+///
+/// NO PRODUCTION CALLER TODAY — exercised only by `ipc_guard_tests`. Kept as the
+/// hardened path-validation primitive any future filesystem-touching IPC command
+/// must use; deleting it would invite an unguarded re-implementation. The expired
+/// removal marker dated 2026-08-01 was cleared 2026-08-12 rather than rolled
+/// forward; wiring or removal is an owner decision.
+#[allow(dead_code)] // REMOVE BY 2026-11-12
 pub(crate) fn validate_path_canonical(
     field: &str,
     path: &str,
@@ -185,16 +190,12 @@ pub(crate) fn validate_path_canonical(
 }
 
 /// Ollama's default local endpoint — explicitly allowed through SSRF checks.
-// REMOVE BY 2026-08-01
-#[allow(dead_code)]
+#[allow(dead_code)] // REMOVE BY 2026-11-12
 const OLLAMA_HOST: &str = "127.0.0.1";
-// REMOVE BY 2026-08-01
-#[allow(dead_code)]
+#[allow(dead_code)] // REMOVE BY 2026-11-12
 const OLLAMA_PORT: u16 = 11434;
 
 /// Validate a URL is safe for outbound HTTP requests (SSRF prevention).
-// REMOVE BY 2026-08-01
-#[allow(dead_code)]
 ///
 /// Blocks:
 /// - Non-HTTP(S) schemes (file://, ftp://, data:, etc.)
@@ -204,6 +205,29 @@ const OLLAMA_PORT: u16 = 11434;
 /// - Localhost references (by name or IP)
 ///
 /// Exception: `127.0.0.1:11434` (Ollama) is explicitly allowed.
+///
+/// NO PRODUCTION CALLER TODAY — exercised only by `ipc_guard_tests`.
+///
+/// WHY IT IS UNWIRED, and what to do about it (recorded 2026-08-13 after an
+/// audit flagged it as orphaned hardening):
+///
+/// This policy is deliberately stricter than 4DA's actual use cases, and
+/// wiring it into the outbound-fetch paths as-is WOULD BREAK legitimate,
+/// documented behaviour:
+///   - Self-hosted / private-network RSS feeds. 4DA lets a developer add any
+///     feed URL; a homelab Gitea, an internal Confluence, or a LAN service is
+///     a normal thing to follow. `is_private_ip` rejects all of them.
+///   - Local LLM endpoints other than Ollama's default. Settings expose a
+///     custom OpenAI-compatible `baseUrl`; LM Studio, llama.cpp servers and
+///     proxies bind to other ports, and the exemption here is hardcoded to
+///     127.0.0.1:11434.
+///
+/// So this is NOT dead code to delete, and NOT a gate to switch on blindly.
+/// If SSRF hardening is wanted on the fetch path, it needs a policy that
+/// distinguishes user-authored URLs (a feed the user typed — trusted) from
+/// content-derived URLs (a link discovered inside fetched content — untrusted,
+/// and the real SSRF vector). Apply it to the latter only.
+#[allow(dead_code)] // REMOVE BY 2026-11-12
 pub(crate) fn validate_url_safe_for_request(field: &str, url: &str) -> Result<String> {
     // Basic input validation first
     let clean = validate_url_input(field, url)?;

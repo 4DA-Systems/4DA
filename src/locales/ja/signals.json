@@ -9,8 +9,6 @@
   "priority.alert": "警告",
   "priority.advisory": "注意",
   "priority.watch": "監視",
-  "horizon.tactical": "戦術的",
-  "horizon.strategic": "戦略的",
   "action.securityReviewStack": "{{title}} を確認 — {{tech}} スタックに影響",
   "action.securityReview": "セキュリティへの影響を確認: {{title}}",
   "action.breakingMigration": "移行パスを確認 — {{tech}} の破壊的変更",

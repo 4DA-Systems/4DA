@@ -40,8 +40,5 @@
   "errorMsg.permission": "İzin reddedildi. Dosya izinlerini kontrol edin.",
   "errorMsg.rateLimit": "İstek sınırına ulaşıldı. Lütfen biraz bekleyin ve tekrar deneyin.",
   "errorMsg.timeout": "İstek zaman aşımına uğradı. Biraz sonra tekrar deneyin.",
-  "module.fileNotFound": "Modül dosyası bulunamadı: {{path}}",
-  "module.unknown": "Bilinmeyen modül: {{id}}",
-  "translation.noLlm": "LLM yapılandırılmadı — içerik çevirisini etkinleştirmek için Ayarlar'da API anahtarınızı girin",
-  "translation.sourceIsEnglish": "İngilizce kaynak dildir — çeviriye gerek yok"
+  "translation.noLlm": "LLM yapılandırılmadı — içerik çevirisini etkinleştirmek için Ayarlar'da API anahtarınızı girin"
 }

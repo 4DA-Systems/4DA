@@ -43,19 +43,6 @@ impl SignalType {
         }
     }
 
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)]
-    fn label(&self) -> &'static str {
-        match self {
-            SignalType::SecurityAlert => "Security Alert",
-            SignalType::BreakingChange => "Breaking Change",
-            SignalType::ToolDiscovery => "Tool Discovery",
-            SignalType::TechTrend => "Tech Trend",
-            SignalType::Learning => "Learning",
-            SignalType::CompetitiveIntel => "Competitive Intel",
-        }
-    }
-
     /// Translated label for user-facing display.
     pub(crate) fn label_translated(&self, lang: &str) -> String {
         let key = match self {
@@ -103,19 +90,6 @@ impl SignalPriority {
             SignalPriority::Watch => "watch",
         }
     }
-
-    /// Translated label for user-facing display.
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)]
-    pub(crate) fn label_translated(&self, lang: &str) -> String {
-        let key = match self {
-            SignalPriority::Critical => "signals:priority.critical",
-            SignalPriority::Alert => "signals:priority.alert",
-            SignalPriority::Advisory => "signals:priority.advisory",
-            SignalPriority::Watch => "signals:priority.watch",
-        };
-        crate::i18n::t(key, lang, &[])
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -133,17 +107,6 @@ impl SignalHorizon {
             SignalHorizon::Tactical => "tactical",
             SignalHorizon::Strategic => "strategic",
         }
-    }
-
-    /// Translated label for user-facing display.
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)]
-    pub(crate) fn label_translated(&self, lang: &str) -> String {
-        let key = match self {
-            SignalHorizon::Tactical => "signals:horizon.tactical",
-            SignalHorizon::Strategic => "signals:horizon.strategic",
-        };
-        crate::i18n::t(key, lang, &[])
     }
 }
 
@@ -1199,16 +1162,6 @@ mod tests {
         assert_eq!(SignalType::TechTrend.slug(), "tech_trend");
         assert_eq!(SignalType::Learning.slug(), "learning");
         assert_eq!(SignalType::CompetitiveIntel.slug(), "competitive_intel");
-    }
-
-    #[test]
-    fn test_signal_type_labels() {
-        assert_eq!(SignalType::SecurityAlert.label(), "Security Alert");
-        assert_eq!(SignalType::BreakingChange.label(), "Breaking Change");
-        assert_eq!(SignalType::ToolDiscovery.label(), "Tool Discovery");
-        assert_eq!(SignalType::TechTrend.label(), "Tech Trend");
-        assert_eq!(SignalType::Learning.label(), "Learning");
-        assert_eq!(SignalType::CompetitiveIntel.label(), "Competitive Intel");
     }
 
     #[test]

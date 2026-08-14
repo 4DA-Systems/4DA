@@ -59,22 +59,6 @@ describe('ui-slice', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // setShowSplash
-  // ---------------------------------------------------------------------------
-  describe('setShowSplash', () => {
-    it('sets showSplash to false', () => {
-      useAppStore.getState().setShowSplash(false);
-      expect(useAppStore.getState().showSplash).toBe(false);
-    });
-
-    it('sets showSplash back to true', () => {
-      useAppStore.getState().setShowSplash(false);
-      useAppStore.getState().setShowSplash(true);
-      expect(useAppStore.getState().showSplash).toBe(true);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   // setActiveView
   // ---------------------------------------------------------------------------
   describe('setActiveView', () => {

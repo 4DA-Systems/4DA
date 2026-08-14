@@ -32,9 +32,10 @@ use super::LicenseConfig;
 ///   `natural_language_query` (AD-025).
 pub const SIGNAL_FEATURES: &[&str] = &[
     // Intelligence panels (original)
-    "get_attention_report",
+    // get_attention_report / get_project_health removed 2026-08-12: both commands
+    // were deleted as ghosts (no frontend caller), so gating their names gated
+    // nothing. Project Health survives via get_project_health_comparison below.
     "get_knowledge_gaps",
-    "get_project_health",
     // Developer DNA un-gated (AD-026): free tier viral sharing of DNA cards
     // natural_language_query removed — BYOK: runs on user's API key at zero cost (AD-025)
     // synthesize_search removed — BYOK, same reasoning (see free-floor exceptions above)
@@ -43,7 +44,18 @@ pub const SIGNAL_FEATURES: &[&str] = &[
     // Additional panels added by LICENSE-GATING-AUDIT-2026-04-15
     // get_preemption_alerts removed — free OSV security floor (see exceptions above)
     "get_blind_spots",
-    "get_decision_health_report",
+    // Added 2026-08-13. These three call require_signal_feature() but their names
+    // were never added here, and is_signal_feature_available() is
+    // `!SIGNAL_FEATURES.contains(&feature)` — so the gate always passed and the
+    // features were free in practice. The intent is unambiguous: the calls exist,
+    // BlindSpotsPaywall.tsx + BlindSpotsView.paywall.test.tsx implement and assert
+    // the gated experience, and BlindSpotsView respects a `paywalled` state.
+    "assess_blind_spots_with_ai",
+    "get_cached_blind_spot_assessment",
+    "add_package_watch",
+    // get_decision_health_report removed 2026-08-13: no such command exists anywhere
+    // in the crate — it was never defined or registered, so the entry gated nothing.
+    // The /signal page was selling it as "Decision Signals"; that card is gone too.
     // Cross-project intelligence
     "get_tech_convergence",
     "get_project_health_comparison",
@@ -118,11 +130,9 @@ fn signal_feature_label(feature: &str) -> &'static str {
     match feature {
         "get_blind_spots" => "Blind Spots",
         "get_knowledge_gaps" => "Knowledge Gaps",
-        "get_attention_report" => "Attention Report",
         "standing_queries" => "Standing Queries",
         "get_semantic_shifts" => "Semantic Shifts",
-        "get_project_health" | "get_project_health_comparison" => "Project Health",
-        "get_decision_health_report" => "Decision Health",
+        "get_project_health_comparison" => "Project Health",
         "get_tech_convergence" => "Tech Convergence",
         "get_cross_project_dependencies" => "Cross-Project Dependencies",
         "get_accuracy_report" | "get_intelligence_report" => "Intelligence Report",

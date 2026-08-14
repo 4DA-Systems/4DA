@@ -1,8 +1,25 @@
 # Silent-Failure Defense Architecture
 
-**Status:** Draft — Layer 1 + Layer 2 foundations landing in this commit.
-**Last updated:** 2026-04-12
-**Owner:** T-SILENT-FAILURE-DEFENSE (will be historical after this commit)
+**Status:** HISTORICAL — the original plan, preserved as written. See the delivery audit below for what actually shipped.
+**Last updated:** 2026-04-12 (plan) · 2026-08-12 (delivery audit appended)
+**Owner:** T-SILENT-FAILURE-DEFENSE (historical)
+
+> **Delivery audit (verified against the filesystem, 2026-08-12).** The body of this
+> document is the April 2026 plan and is left unedited. Not all of it was built:
+>
+> | Planned artefact | Status |
+> |---|---|
+> | `scripts/validate-commands.cjs` | Shipped (pre-existing, still load-bearing) |
+> | `scripts/validate-boundary-calls.cjs` | Shipped |
+> | `scripts/validate-schema-drift.cjs` | Shipped (was listed as backlog) |
+> | `src-tauri/src/external/` typed wrappers | Shipped |
+> | `scripts/validate-regex-tests.cjs` | **Never built** |
+> | `src-tauri/src/smoke_test.rs` (Layer 4 cold-boot self-test) | **Never built** |
+> | `external::ollama::OllamaClient` | **Never built** |
+> | `src-tauri/tests/integration/` | **Never created as a directory.** Integration tests live as flat files in `src-tauri/tests/` (`migration_tests.rs`, `pipeline_integration.rs`, `source_resilience.rs`, `stack_simulation.rs`, `victauri_dogfood.rs`, `sql_checker.rs`). |
+>
+> References below to the "Never built" rows describe intent, not code. Do not
+> follow them expecting to find a file.
 **Related antibodies:**
 - `.claude/wisdom/antibodies/2026-04-12-silent-cli-failures.md`
 - `.claude/wisdom/antibodies/2026-04-12-ghost-ipc-and-idempotency-amnesia.md`
@@ -326,7 +343,7 @@ What comes in follow-up commits:
 8. **`external::ollama::OllamaClient`** — same pattern for Ollama.
 9. **`src-tauri/src/smoke_test.rs`** — Layer 4 cold-boot self-test.
 10. **`validate-schema-drift.cjs`** — test-schema vs production-migration diff.
-11. **Integration test suite** in `src-tauri/tests/integration/`.
+11. **Integration test suite** in `src-tauri/tests/` (never created as an `integration/` subdirectory — see the delivery audit at the top).
 
 ---
 
@@ -399,7 +416,7 @@ A new silent failure at that point would need to escape all five layers simultan
 
 - `.claude/wisdom/antibodies/2026-04-12-silent-cli-failures.md` — Bug 1 + Bug 2 (the external CLI instances)
 - `.claude/wisdom/antibodies/2026-04-12-ghost-ipc-and-idempotency-amnesia.md` — Bug 3 + Bug 4 (ghost IPC + hook idempotency)
-- `docs/strategy/PRELAUNCH-HARDENING.md` — related pre-launch risk mitigations
+- Pre-launch hardening notes — never published as a tracked document
 - `.ai/FAILURE_MODES.md` — should be updated with a "Silent Failure Family" section cross-referencing this document (follow-up action item)
 - `scripts/validate-commands.cjs` — existing Layer 2 IPC validator
 - `scripts/validate-boundary-calls.cjs` — NEW Layer 2 CLI validator (this commit)

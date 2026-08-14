@@ -127,7 +127,7 @@ src/
 **Purpose**: Core logic, database operations, LLM integration, source fetching.
 
 **Key Features**:
-- **82+ Tauri commands**: Full IPC surface for frontend
+- **404 Tauri commands**: Full IPC surface for frontend (count taken from the `tauri::generate_handler!` block in `lib.rs`)
 - **Async/await**: Non-blocking I/O with Tokio
 - **Error handling**: `thiserror` for structured errors
 - **Logging**: `tracing` with structured logging
@@ -137,7 +137,7 @@ src/
 src-tauri/src/
 ├── lib.rs                # Main entry, Tauri commands
 ├── main.rs               # Application entrypoint
-├── db.rs                 # Database operations
+├── db/                   # Database operations (module directory)
 ├── llm.rs                # LLM integration (Anthropic/OpenAI/Ollama)
 ├── context_engine.rs     # Interest management, embeddings
 ├── digest.rs             # Daily digest generation
@@ -957,5 +957,5 @@ fn decay_affinities() {
 **End of Technical Architecture Document**
 
 *For implementation details, see source code at src-tauri/src/*
-*For API documentation, see docs/API.md*
-*For user guide, see docs/USER_GUIDE.md*
+*For API documentation, see docs/API_REFERENCE.md*
+*For user guide, see docs/GETTING_STARTED.md and docs/SETUP-GUIDE.md*

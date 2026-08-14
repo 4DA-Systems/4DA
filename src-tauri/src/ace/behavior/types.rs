@@ -72,18 +72,6 @@ impl InteractionPattern {
             InteractionPattern::Abandoned => 0.0,
         }
     }
-
-    /// True when the pattern suggests the item was above the user's level.
-    /// Reread + short-Bounced fall here; Engaged/Completed do not. Used by
-    /// the necessity scorer to boost foundational content on the same topic.
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Consumed by necessity-scorer hook in follow-up commit.
-    pub fn suggests_above_level(&self) -> bool {
-        matches!(
-            self,
-            InteractionPattern::Reread | InteractionPattern::Bounced
-        )
-    }
 }
 
 /// Types of user behavior we track
@@ -282,9 +270,8 @@ mod tests {
     }
 
     #[test]
-    fn test_click_reread_signals_above_level() {
-        // Re-reading patterns suggest the content was above the user's level.
-        // Positive but muted, and flagged for necessity-scorer pickup.
+    fn test_click_reread_strength_is_muted_positive() {
+        // Re-reading is net-positive but weaker than a straight engaged read.
         let action = BehaviorAction::Click {
             dwell_time_seconds: 60,
             pattern: Some(InteractionPattern::Reread),
@@ -292,15 +279,6 @@ mod tests {
         let strength = action.compute_strength();
         assert!(strength > 0.0, "reread is still net-positive");
         assert!(strength < 1.0, "but less than a straight Engaged read");
-        assert!(InteractionPattern::Reread.suggests_above_level());
-    }
-
-    #[test]
-    fn test_engaged_and_completed_do_not_suggest_above_level() {
-        assert!(!InteractionPattern::Engaged.suggests_above_level());
-        assert!(!InteractionPattern::Completed.suggests_above_level());
-        assert!(!InteractionPattern::Scanned.suggests_above_level());
-        assert!(!InteractionPattern::Abandoned.suggests_above_level());
     }
 
     #[test]

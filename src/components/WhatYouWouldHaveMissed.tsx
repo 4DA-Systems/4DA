@@ -316,4 +316,3 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
   );
 });
 
-export default WhatYouWouldHaveMissed;

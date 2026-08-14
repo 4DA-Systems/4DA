@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use tracing::{info, warn};
 
 use super::benchmark::{bench_db, no_freshness};
-use super::pipeline::ScoringInput;
+use super::types::ScoringInput;
 use super::*;
 
 const SCENARIOS_JSON: &str = include_str!("benchmark_scenarios.json");

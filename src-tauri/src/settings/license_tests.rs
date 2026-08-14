@@ -89,7 +89,7 @@ mod tests {
             dev_unlock_all: false,
         };
         // Signal-gated features should be blocked for free users
-        assert!(!is_signal_feature_available("get_attention_report", &free));
+        assert!(!is_signal_feature_available("get_blind_spots", &free));
         assert!(is_signal_feature_available("some_free_feature", &free));
 
         let signal = LicenseConfig {
@@ -99,7 +99,7 @@ mod tests {
             trial_started_at: None,
             dev_unlock_all: false,
         };
-        assert!(is_signal_feature_available("get_attention_report", &signal));
+        assert!(is_signal_feature_available("get_blind_spots", &signal));
 
         // Legacy "pro" tier should still work
         let legacy_pro = LicenseConfig {
@@ -109,10 +109,7 @@ mod tests {
             trial_started_at: None,
             dev_unlock_all: false,
         };
-        assert!(is_signal_feature_available(
-            "get_attention_report",
-            &legacy_pro
-        ));
+        assert!(is_signal_feature_available("get_blind_spots", &legacy_pro));
     }
 
     #[test]

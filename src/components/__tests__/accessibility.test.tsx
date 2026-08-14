@@ -82,23 +82,9 @@ vi.mock('../../config/sources', () => ({
 vi.mock('../../config/content-types', () => ({ getContentTypeBadge: () => null }));
 
 // --- Import components ---
-import { ConfidenceIndicator } from '../ConfidenceIndicator';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { ViewTabBar } from '../ViewTabBar';
 import { SplashScreen } from '../SplashScreen';
-describe('Accessibility: ConfidenceIndicator', () => {
-  it('has no a11y violations with confidence value', async () => {
-    const { container } = render(<ConfidenceIndicator confidence={0.85} />);
-    const results = await axe(container);
-    expect(results).toHaveNoViolations();
-  });
-
-  it('has no a11y violations without confidence', async () => {
-    const { container } = render(<ConfidenceIndicator />);
-    const results = await axe(container);
-    expect(results).toHaveNoViolations();
-  });
-});
 
 describe('Accessibility: ErrorBoundary', () => {
   it('has no a11y violations in normal state', async () => {

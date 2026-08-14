@@ -13,10 +13,6 @@ use crate::prompt_safety::{
 use crate::scoring::get_ace_context;
 use crate::{get_analysis_state, get_database, get_settings_manager};
 
-// Re-export so that `crate::digest_commands::get_latest_briefing_text` still resolves
-// for callers that haven't been updated — canonical home is digest_config.
-pub(crate) use crate::digest_config::get_latest_briefing_text;
-
 // ============================================================================
 // Briefing slate selection (grounded-first)
 // ============================================================================
@@ -260,10 +256,7 @@ pub(crate) async fn generate_briefing_internal(
     // (`is_brief_capable`). Without one — no LLM at all, or a model too weak for genuine
     // synthesis (Haiku / *-mini / consumer-hardware local) — we serve the deterministic,
     // grounded floor below instead of erroring or faking synthesis with a weak model.
-    let has_llm = crate::content_personalization::context::compute_has_llm(
-        &llm_settings.provider,
-        &llm_settings.api_key,
-    );
+    let has_llm = crate::llm_gate::compute_has_llm(&llm_settings.provider, &llm_settings.api_key);
     let brief_capable = has_llm && crate::llm_capability::is_brief_capable(&llm_settings);
 
     // Get items from analysis state or DB. `grounded_ids` carries the canonical

@@ -70,18 +70,7 @@ impl DevtoSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "Dev.to rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "Dev.to forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        super::check_http_status(status, "Dev.to API")?;
+        super::classify_http_status(response.status(), "Dev.to API")?;
 
         let articles: Vec<DevtoArticle> = response
             .json()

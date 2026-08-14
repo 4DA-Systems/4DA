@@ -195,7 +195,7 @@ pub struct Validated<T> {
 3. Output must match a declared JSON schema. Parse failures → empty response + flag provider as unreliable for this batch.
 4. No ingested content concatenated into the system prompt directly.
 
-**Prompt versioning:**
+**Prompt versioning** (planned — `src-tauri/prompts/` has not been created; prompts are currently inline in the Rust modules):
 - All prompts live in `src-tauri/prompts/` (e.g., `judge/v3.md`, `summarize/v1.md`)
 - Each prompt file has a frontmatter block: `version`, `task`, `schema_ref`, `created`, `breaking_changes`
 - `prompt_version` = stable ID (e.g., `judge-v3-2026-04-15`), stored on every artifact
@@ -660,13 +660,13 @@ Receipts + disagreement flags + advisor selection could bloat the settings surfa
 - `src-tauri/src/analysis_rerank.rs` — current 50/50 blend (to be replaced)
 - `src-tauri/src/embeddings.rs` — embedding dispatch, 384-dim truncation
 - `src-tauri/src/llm.rs` — current LLMClient, to be refactored into trait impls
-- `src-tauri/src/briefing_synthesis.rs` — Morning Brief synthesis (Phase 5 calibration)
+- `src-tauri/src/briefing_deterministic.rs`, `src-tauri/src/synthesis_schema.rs` — Morning Brief synthesis (Phase 5 calibration). There is no `briefing_synthesis.rs`; synthesis is split across the `briefing_*` modules.
 - `src-tauri/src/briefing_groundedness.rs` — per-model calibration target
 - `.ai/WISDOM.md` — operating system for 4DA development
 - `.ai/INVARIANTS.md` — system-level invariants (update when Phase 3 ships)
 - `docs/strategy/TEAM-RELAY-ARCHITECTURE.md` — relay sync scope (Phase 6 decision point)
 - `docs/strategy/SILENT-FAILURE-DEFENSE.md` — boundary-call discipline (enforces Layer 2)
-- `docs/strategy/ONBOARDING-LOAD-TIME.md` — first-launch plan (Phase 2 independent)
+- First-launch/onboarding load-time plan (Phase 2 independent) — never published as a tracked document
 - `D:\crucible` — sibling product, post-launch shared-substrate opportunity
 
 ---

@@ -509,7 +509,7 @@ The reference implementation of PASIFA is in the 4DA application, a source-avail
 | V2 pipeline | `src-tauri/src/scoring/pipeline_v2.rs` | Eight-phase pipeline implementation |
 | Confirmation gate | `src-tauri/src/scoring/gate.rs` | `count_confirmed_signals()`, `apply_confirmation_gate()` |
 | Calibration | `src-tauri/src/scoring/calibration.rs` | `calibrate_score()`, `compute_interest_score()` |
-| Semantic scoring | `src-tauri/src/scoring/semantic.rs` | `compute_semantic_ace_boost()`, `compute_taste_embedding()` |
+| Semantic scoring | `src-tauri/src/scoring/semantic/boost.rs` | `compute_semantic_ace_boost()` |
 | Affinity | `src-tauri/src/scoring/affinity.rs` | `compute_affinity_multiplier()`, `compute_anti_penalty()` |
 | ACE context | `src-tauri/src/scoring/ace_context.rs` | `ACEContext` struct, `get_ace_context()` |
 | Dependencies | `src-tauri/src/scoring/dependencies.rs` | `match_dependencies()`, `VersionDelta` |

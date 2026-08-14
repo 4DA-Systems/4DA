@@ -73,8 +73,10 @@ pub struct JudgeResponse {
 /// them per-response to render "Why this score?", at which point the
 /// `allow(dead_code)` here becomes removable.
 #[derive(Debug, Clone)]
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Serde-serialized metadata fields
+// The provenance fields below are populated on every advisor response but not yet
+// read anywhere (the Phase 7 receipts UI is their consumer). Expired
+// removal marker dated 2026-08-01 cleared 2026-08-12 rather than rolled forward.
+#[allow(dead_code)] // REMOVE BY 2026-11-12
 pub struct Validated<T> {
     pub value: T,
     pub identity: ModelIdentity,

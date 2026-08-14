@@ -68,10 +68,6 @@ export async function loadSourceMeta(): Promise<boolean> {
   return allIds.size > 0;
 }
 
-export function isSourcesLoaded(): boolean {
-  return allIds.size > 0;
-}
-
 // Keep backward-compatible exports
 export const ALL_SOURCE_IDS = allIds;
 export function getSourceLabel(id: string): string {

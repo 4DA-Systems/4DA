@@ -147,7 +147,11 @@ impl Confidence {
     // .claude/rules/intelligence-doctrine.md rule 1 (one canonical type
     // per concept, extended via ADR — not by removing builders that
     // haven't landed their lens yet).
-    #[allow(dead_code)] // Doctrine-bound scaffolding (Phase 9); test-exercised — REMOVE BY 2026-08-01
+    // Retention is tracked by docs/strategy/INTELLIGENCE-RECONCILIATION.md
+    // (Phase 9), not by a calendar deadline — the 2026-08-01 marker that used to
+    // sit here expired without the phase landing and was removed 2026-08-12
+    // rather than silently rolled forward.
+    #[allow(dead_code)] // REMOVE BY 2026-11-12 — Doctrine-bound scaffolding (Phase 9); test-exercised
     /// Constructor for keyword/pattern-matched confidence.
     pub fn checklist(value: f32) -> Self {
         Self {
@@ -169,7 +173,7 @@ impl Confidence {
     /// Constructor for Bayesian-calibrated confidence.
     /// `n` must be ≥ 10 per schema rules (enforced by `validate_item`).
     /// Doctrine-bound scaffolding — see the impl-block note above.
-    #[allow(dead_code)] // Doctrine-bound scaffolding (Phase 9); test-exercised — REMOVE BY 2026-08-01
+    #[allow(dead_code)] // REMOVE BY 2026-11-12 — Doctrine-bound scaffolding (Phase 9); test-exercised
     pub fn calibrated(value: f32, n: u32) -> Self {
         Self {
             value,
@@ -356,7 +360,7 @@ impl LensHints {
     /// Convenience: hint only the evidence lens (decisions, retrospectives).
     /// Doctrine-bound scaffolding (see `Confidence` note above) — will be
     /// used once retrospective lens materializers land in Phase 9.
-    #[allow(dead_code)] // Doctrine-bound scaffolding (Phase 9) — REMOVE BY 2026-08-01
+    #[allow(dead_code)] // REMOVE BY 2026-11-12 — Doctrine-bound scaffolding (Phase 9)
     pub fn evidence_only() -> Self {
         Self {
             evidence: true,

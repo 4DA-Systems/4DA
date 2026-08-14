@@ -22,7 +22,7 @@ if [ -z "$CHANGED" ]; then
     RUST_CHANGED=1
     echo "Pre-push: change range unknown — running all checks."
 else
-    if echo "$CHANGED" | grep -qE '^(src/|package\.json|pnpm-lock\.yaml|index\.html|vite\.config\.|tsconfig.*json|tailwind\.config\.|public/|locales/|scripts/)'; then FE_CHANGED=1; else FE_CHANGED=0; fi
+    if echo "$CHANGED" | grep -qE '^(src/|package\.json|pnpm-lock\.yaml|index\.html|vite\.config\.|tsconfig.*json|tailwind\.config\.|public/|scripts/)'; then FE_CHANGED=1; else FE_CHANGED=0; fi
     if echo "$CHANGED" | grep -qE '^src-tauri/'; then RUST_CHANGED=1; else RUST_CHANGED=0; fi
 fi
 
@@ -104,11 +104,14 @@ if command -v cargo-audit > /dev/null 2>&1; then
 fi
 
 # Secret scan — defense-in-depth (catches secrets added via --no-verify)
-# Uses the same comprehensive patterns as pre-commit
+#
+# The flat regex alternation that used to be duplicated here is gone. The patterns
+# live ONCE in scripts/scan-secrets.cjs (shared with .husky/pre-commit); this hook
+# still owns the RANGE logic below, because which commits a push contributes is
+# push-protocol-specific. `--diff-added` reads the `git log -p` stream on stdin and
+# scans only ADDED (`+`) lines using the high-confidence pattern subset — the same
+# subset, with no exclude filters, that the old alternation encoded.
 echo "Scanning for secrets in push range..."
-
-# All secret patterns consolidated — must match pre-commit coverage
-SECRET_PATTERNS='sk-ant-[A-Za-z0-9_-]{20,}|sk-proj-[A-Za-z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|(AKIA|ASIA)[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|[spr]k_live_[A-Za-z0-9]{20,}|key_[A-Za-z0-9]{20,}|prod_[A-Za-z0-9]{20,}|shp(at|ca|pa|ss)_[a-fA-F0-9]{32,}|npm_[A-Za-z0-9]{36,}|vck_[A-Za-z0-9]{20,}|vca_[A-Za-z0-9]{20,}|xox[baprs]-[0-9]{10,}-[A-Za-z0-9-]+|SK[a-f0-9]{32}|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}|key-[a-f0-9]{32}|-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----|[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}|(mongodb|postgres|mysql|postgresql|redis|amqp)://[^:]+:[^@]+@|\+614[0-9]{8}'
 
 REMOTE="$1"
 URL="$2"
@@ -148,15 +151,12 @@ while read LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
         # catches a secret that was added and later removed in the same push,
         # which a net diff misses entirely.
         # shellcheck disable=SC2086 # RANGE/EXCLUDE_PUBLISHED must word-split into git args
-        SECRETS=$(git log -p -n 2000 --no-color $RANGE $EXCLUDE_PUBLISHED -- ':!site/src/contact.njk' ':!site/src/privacy.njk' ':!site/src/terms.njk' 2>/dev/null | grep -E '^\+' | grep -oE \
-            "$SECRET_PATTERNS" \
-            2>/dev/null || true)
-        if [ -n "$SECRETS" ]; then
+        if ! git log -p -n 2000 --no-color $RANGE $EXCLUDE_PUBLISHED -- ':!site/src/contact.njk' ':!site/src/privacy.njk' ':!site/src/terms.njk' 2>/dev/null \
+            | node scripts/scan-secrets.cjs --diff-added; then
             echo ""
             echo "============================================================"
             echo "  PUSH BLOCKED — Secrets detected in commits!"
             echo "============================================================"
-            echo "$SECRETS" | sort -u
             echo ""
             echo "Remove secrets, amend/rebase commits, and force-push clean history."
             echo "Run: node scripts/scan-secrets.cjs  (for full repo audit)"

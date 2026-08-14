@@ -89,57 +89,6 @@ fn test_orthogonal_embeddings_produce_zero_boost() {
     );
 }
 
-// ====================================================================
-// Taste Boost Tests
-// ====================================================================
-
-#[test]
-fn test_taste_boost_identical() {
-    let emb = seed_embedding("rust");
-    let boost = compute_taste_boost(&emb, &emb);
-    // Cosine similarity of identical = 1.0 → (1.0 - 0.4) * 0.2 = 0.12, clamped to 0.08
-    assert!(
-        boost > 0.0,
-        "Identical embeddings should produce positive boost"
-    );
-    assert!(
-        boost <= 0.08,
-        "Boost should be clamped to 0.08, got {}",
-        boost
-    );
-}
-
-#[test]
-fn test_taste_boost_orthogonal() {
-    let mut emb_a = vec![0.0f32; crate::EMBEDDING_DIMS];
-    emb_a[0] = 1.0;
-    let mut emb_b = vec![0.0f32; crate::EMBEDDING_DIMS];
-    emb_b[1] = 1.0;
-
-    let boost = compute_taste_boost(&emb_a, &emb_b);
-    // Cosine sim = 0.0 → (0.0 - 0.4) * 0.2 = -0.08
-    assert!(
-        boost < 0.0,
-        "Orthogonal embeddings should produce negative boost"
-    );
-    assert!(
-        boost >= -0.08,
-        "Boost should be clamped to -0.08, got {}",
-        boost
-    );
-}
-
-#[test]
-fn test_taste_boost_zero_embedding() {
-    let zero = vec![0.0f32; crate::EMBEDDING_DIMS];
-    let taste = seed_embedding("rust");
-    let boost = compute_taste_boost(&zero, &taste);
-    assert!(
-        (boost - 0.0).abs() < f32::EPSILON,
-        "Zero embedding should produce 0 boost"
-    );
-}
-
 #[test]
 fn test_zero_norm_embedding_handled_gracefully() {
     let zero_emb = vec![0.0f32; crate::EMBEDDING_DIMS];

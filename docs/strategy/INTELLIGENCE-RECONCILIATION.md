@@ -1,8 +1,26 @@
 # Intelligence Reconciliation Plan
 
-**Status:** Approved 2026-04-16. This is THE plan. No v1.x follow-up architecture discussions on this system.
+**Status:** EXECUTED. Approved 2026-04-16; kill list verified complete 2026-08-12. This is THE plan. No v1.x follow-up architecture discussions on this system.
 **Owner:** Lead development (Claude + founder)
 **Supersedes:** Any prior ad-hoc treatment of Momentum, Preemption/Blindspots integration.
+
+> **Execution stamp (verified against the filesystem, 2026-08-12).** This document is
+> the canonical historical record and is preserved as written — the present-tense
+> language below ("is being deleted", "has become") describes the April 2026 state,
+> not today's.
+>
+> The Momentum tab is **gone**. Every item on the kill list is confirmed removed:
+> `Momentum.tsx`, `src/components/momentum/`, `CompoundAdvantageScore.tsx`,
+> `IntelligenceProfileCard.tsx`, and `CategoryChapterView.tsx` are absent, as are the
+> `get_compound_advantage` and `get_active_work_context` handlers and the
+> `extract_rich_universal` TODO-scan.
+>
+> Navigation landed at **four** tabs, not five — Brief, Preemption, Blind Spots, Signal
+> (`VALID_VIEWS` in `src/store/ui-slice.ts`). Two tabs listed as DONE in the phase table
+> below did not survive to release: the **Evidence** tab (phase 12) was cut before launch,
+> and the **Playbook/STREETS** tab was retired in June 2026, with STREETS moving to the
+> web. The removed views are asserted absent by
+> `src/store/__tests__/ui-slice-navigation.test.ts`.
 
 ---
 

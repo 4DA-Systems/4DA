@@ -2,9 +2,8 @@
 //! Agent Memory — Cross-Agent Shared Memory for 4DA
 //!
 //! Enables AI agents to store and recall memories across sessions.
-//! Memories can be promoted to developer decisions for permanent tracking.
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use ts_rs::TS;
@@ -183,52 +182,6 @@ pub fn get_memories_since(
     Ok(memories)
 }
 
-/// Promote an agent memory to a developer decision.
-pub fn promote_to_decision(conn: &Connection, memory_id: i64) -> Result<i64> {
-    // Get the memory
-    let memory = conn
-        .query_row(
-            "SELECT id, subject, content, context_tags FROM agent_memory WHERE id = ?1",
-            params![memory_id],
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                ))
-            },
-        )
-        .optional()
-        .context("Failed to get memory")?
-        .ok_or_else(|| format!("Memory {memory_id} not found"))?;
-
-    let (_, subject, content, tags_str) = memory;
-    let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
-
-    // Create a decision from this memory
-    let decision_id = crate::decisions::record_decision(
-        conn,
-        &crate::decisions::DecisionType::TechChoice,
-        &subject,
-        &content,
-        Some("Promoted from agent memory"),
-        &[],
-        &tags,
-        0.7,
-    )?;
-
-    // Mark memory as promoted
-    conn.execute(
-        "UPDATE agent_memory SET promoted_to_decision_id = ?1 WHERE id = ?2",
-        params![decision_id, memory_id],
-    )
-    .context("Failed to mark memory as promoted")?;
-
-    info!(target: "4da::agent_memory", memory_id = memory_id, decision_id = decision_id, "Memory promoted to decision");
-    Ok(decision_id)
-}
-
 /// Clean up expired memories.
 pub fn cleanup_expired(conn: &Connection) -> Result<usize> {
     let deleted = conn
@@ -317,12 +270,6 @@ pub async fn recall_agent_memories(
 ) -> Result<Vec<AgentMemoryEntry>> {
     let conn = crate::open_db_connection()?;
     recall_memories(&conn, &subject, agent_type.as_deref(), limit.unwrap_or(20))
-}
-
-#[tauri::command]
-pub async fn promote_memory_to_decision(memory_id: i64) -> Result<i64> {
-    let conn = crate::open_db_connection()?;
-    promote_to_decision(&conn, memory_id)
 }
 
 // ============================================================================

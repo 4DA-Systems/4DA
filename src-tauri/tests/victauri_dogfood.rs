@@ -512,7 +512,7 @@ async fn ipc_coverage_via_log_analysis() {
     // Trigger several different commands to build up IPC log
     let _ = client.invoke_command("get_settings", None).await;
     let _ = client.invoke_command("get_monitoring_status", None).await;
-    let _ = client.invoke_command("get_developer_dna", None).await;
+    let _ = client.invoke_command("get_scoring_stats", None).await;
     let _ = client.invoke_command("list_channels", None).await;
 
     // Get the full IPC log and count unique commands
@@ -1090,25 +1090,6 @@ async fn invoke_monitoring_returns_status() {
 }
 
 #[tokio::test]
-async fn invoke_developer_dna_returns_stack() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = connect_victauri().await.unwrap();
-    let dna = client
-        .invoke_command("get_developer_dna", None)
-        .await
-        .unwrap();
-
-    let stack = dna
-        .get("primary_stack")
-        .and_then(|s| s.as_array())
-        .map_or(0, |a| a.len());
-    assert!(stack > 0, "developer DNA should have primary stack");
-}
-
-#[tokio::test]
 async fn invoke_channels_returns_list() {
     if skip_unless_e2e() {
         return;
@@ -1380,7 +1361,7 @@ async fn parallel_ipc_burst() {
     let commands = [
         "get_settings",
         "get_monitoring_status",
-        "get_developer_dna",
+        "get_scoring_stats",
         "list_channels",
         "get_analysis_status",
     ];
@@ -3404,7 +3385,6 @@ async fn ipc_commands_never_panic() {
         "get_blind_spots",
         "get_knowledge_gaps",
         "get_void_signal",
-        "get_developer_dna",
         "get_capability_states",
         "get_capability_summary",
         "get_source_health",
@@ -3717,108 +3697,6 @@ async fn user_role_set_and_verify() {
     }
 }
 
-// ── Phase 17: Playbook content commands (backend-only; UI removed, content
-// serves personalization + the website) ─────────────────────────────────────
-
-#[tokio::test]
-async fn playbook_modules_returns_non_empty_list() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = connect_victauri().await.unwrap();
-    let modules = client
-        .invoke_command("get_playbook_modules", None)
-        .await
-        .unwrap();
-
-    assert!(
-        modules.is_array(),
-        "get_playbook_modules must return array, got: {modules}"
-    );
-    let arr = modules.as_array().unwrap();
-    assert!(!arr.is_empty(), "playbook must have at least one module");
-
-    for (i, m) in arr.iter().enumerate() {
-        assert!(m.get("id").is_some(), "playbook module[{i}] must have 'id'");
-        assert!(
-            m.get("title").is_some(),
-            "playbook module[{i}] must have 'title'"
-        );
-    }
-}
-
-#[tokio::test]
-async fn playbook_content_returns_lessons() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = connect_victauri().await.unwrap();
-
-    // Get first module ID
-    let modules = client
-        .invoke_command("get_playbook_modules", None)
-        .await
-        .unwrap();
-    let first_id = modules
-        .as_array()
-        .and_then(|a| a.first())
-        .and_then(|m| m.get("id"))
-        .and_then(|id| id.as_str())
-        .expect("at least one playbook module must exist");
-
-    let content = client
-        .invoke_command(
-            "get_playbook_content",
-            Some(serde_json::json!({"module_id": first_id})),
-        )
-        .await;
-
-    match content {
-        Ok(c) if !c.as_object().map_or(true, |o| o.is_empty()) => {
-            assert!(
-                c.get("lessons").is_some(),
-                "playbook content must have 'lessons' field, got keys: {:?}",
-                c.as_object().map(|o| o.keys().collect::<Vec<_>>())
-            );
-            assert!(
-                c.get("title").is_some(),
-                "playbook content must have 'title' field"
-            );
-        }
-        Ok(_) => {
-            // Empty object — content files may not be deployed in dev mode.
-            // The command succeeded without panicking, which is the baseline.
-        }
-        Err(e) => {
-            let err_str = format!("{e:?}");
-            assert!(
-                err_str.contains("fileNotFound") || err_str.contains("not found"),
-                "playbook content error must be 'file not found', not a panic: {err_str}"
-            );
-        }
-    }
-}
-
-#[tokio::test]
-async fn playbook_progress_returns_state() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = connect_victauri().await.unwrap();
-    let progress = client
-        .invoke_command("get_playbook_progress", None)
-        .await
-        .unwrap();
-
-    assert!(
-        progress.is_object(),
-        "playbook progress must be an object, got: {progress}"
-    );
-}
-
 // ── Phase 18: Intelligence Systems — Deep IPC Coverage ──────────────────────
 
 #[tokio::test]
@@ -3985,24 +3863,6 @@ async fn intelligence_metrics_returns_data() {
     assert!(
         metrics.is_object(),
         "intelligence metrics must return an object, got: {metrics}"
-    );
-}
-
-#[tokio::test]
-async fn attention_report_returns_structure() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = connect_victauri().await.unwrap();
-    let report = client
-        .invoke_command("get_attention_report", None)
-        .await
-        .unwrap();
-
-    assert!(
-        report.is_object(),
-        "attention report must return an object, got: {report}"
     );
 }
 

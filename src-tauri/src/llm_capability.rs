@@ -266,10 +266,7 @@ pub struct BriefCapability {
 /// command so it is unit-testable without a settings manager. The verdict is IDENTICAL to
 /// the one `digest_commands` uses to choose the brief path — keep them in lockstep.
 pub(crate) fn compute_brief_capability(settings: &LLMProvider) -> BriefCapability {
-    let has_llm = crate::content_personalization::context::compute_has_llm(
-        &settings.provider,
-        &settings.api_key,
-    );
+    let has_llm = crate::llm_gate::compute_has_llm(&settings.provider, &settings.api_key);
     let brief_capable = has_llm && is_brief_capable(settings);
     let reason = if !has_llm {
         BriefNarrationReason::NoLlm

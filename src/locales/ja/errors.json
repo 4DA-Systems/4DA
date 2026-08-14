@@ -40,8 +40,5 @@
   "errorMsg.permission": "アクセスが拒否されました。ファイルの権限を確認してください。",
   "errorMsg.rateLimit": "レート制限に達しました。しばらく待ってから再試行してください。",
   "errorMsg.timeout": "リクエストがタイムアウトしました。しばらくしてから再試行してください。",
-  "module.fileNotFound": "モジュールファイルが見つかりません: {{path}}",
-  "module.unknown": "不明なモジュール: {{id}}",
-  "translation.noLlm": "LLM が設定されていません — コンテンツ翻訳を有効にするには設定で API キーを設定してください",
-  "translation.sourceIsEnglish": "英語がソース言語です — 翻訳は不要です"
+  "translation.noLlm": "LLM が設定されていません — コンテンツ翻訳を有効にするには設定で API キーを設定してください"
 }

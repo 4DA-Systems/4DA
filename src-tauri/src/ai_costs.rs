@@ -63,27 +63,6 @@ pub(crate) struct ModelRecommendation {
 }
 
 // ============================================================================
-// SQL Schema
-// ============================================================================
-
-#[allow(dead_code)]
-pub(crate) const AI_USAGE_SQL: &str = "
-CREATE TABLE IF NOT EXISTS ai_usage (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    provider TEXT NOT NULL,
-    model TEXT NOT NULL,
-    task_type TEXT NOT NULL,
-    tokens_in INTEGER DEFAULT 0,
-    tokens_out INTEGER DEFAULT 0,
-    estimated_cost_usd REAL DEFAULT 0.0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_ai_usage_provider ON ai_usage(provider, model);
-CREATE INDEX IF NOT EXISTS idx_ai_usage_task ON ai_usage(task_type);
-CREATE INDEX IF NOT EXISTS idx_ai_usage_date ON ai_usage(created_at);
-";
-
-// ============================================================================
 // Core Functions
 // ============================================================================
 

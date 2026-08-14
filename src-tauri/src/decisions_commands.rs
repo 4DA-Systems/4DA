@@ -2,7 +2,7 @@
 //! Tauri command handlers for developer decision management.
 
 use super::*;
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use tracing::info;
 
 #[tauri::command]
@@ -64,47 +64,6 @@ pub async fn update_developer_decision(
         st.as_ref(),
         confidence,
     )
-}
-
-/// Fully delete a technology from all tables where it can persist.
-/// Used when ACE scanner detects a technology the user doesn't actually use.
-/// Performs hard deletion (not supersede) so the tech never resurfaces in the UI.
-#[tauri::command]
-pub async fn remove_tech_decision(technology: String) -> Result<()> {
-    let conn = crate::open_db_connection()?;
-
-    // 1. Remove from tech_stack (primary tech storage)
-    conn.execute(
-        "DELETE FROM tech_stack WHERE technology = ?1",
-        params![technology],
-    )?;
-
-    // 2. Remove from explicit_interests (may have been auto-seeded by ACE)
-    conn.execute(
-        "DELETE FROM explicit_interests WHERE topic = ?1",
-        params![technology],
-    )?;
-
-    // 3. Delete any matching tech_choice decision (hard delete, not supersede)
-    conn.execute(
-        "DELETE FROM developer_decisions WHERE subject = ?1 AND decision_type = 'tech_choice'",
-        params![technology],
-    )?;
-
-    // 4. Remove from detected_tech (prevent re-seeding on next ACE scan)
-    conn.execute(
-        "DELETE FROM detected_tech WHERE technology = ?1",
-        params![technology],
-    )?;
-
-    // 5. Remove any learned affinity for this false tech
-    conn.execute(
-        "DELETE FROM topic_affinities WHERE topic = ?1",
-        params![technology],
-    )?;
-
-    info!(target: "4da::decisions", technology = %technology, "Technology fully deleted: tech_stack + interests + decision + detected_tech + topic_affinities");
-    Ok(())
 }
 
 /// Auto-seed decisions from tech_stack on first run.

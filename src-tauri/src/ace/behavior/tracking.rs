@@ -396,7 +396,7 @@ impl ACE {
 mod learning_loop_tests {
     use super::*;
     use crate::ace::create_test_ace;
-    use crate::scoring::{compute_unified_relevance, ACEContext};
+    use crate::scoring::{compute_affinity_multiplier, ACEContext};
 
     /// End-to-end proof of the capture half of the learning loop: positive
     /// feedback on a topic must raise its affinity, negative feedback must
@@ -458,9 +458,9 @@ mod learning_loop_tests {
             java.affinity_score
         );
 
-        // The learned affinities must still move their DISPLAY consumers
-        // (V1 helper shared with channel-render context / breakdowns) —
-        // NOT the V2 feed pipeline, which pins affinity to neutral (AD-029).
+        // The learned affinities must still move their DISPLAY consumer —
+        // `compute_affinity_multiplier`, used by channel_render.rs — NOT the V2
+        // feed pipeline, which pins affinity to neutral (AD-029).
         let mut ctx = ACEContext::default();
         ctx.topic_affinities
             .insert("rust".to_string(), (rust.affinity_score, rust.confidence));
@@ -468,8 +468,8 @@ mod learning_loop_tests {
             .insert("java".to_string(), (java.affinity_score, java.confidence));
 
         let base = 0.5;
-        let rust_score = compute_unified_relevance(base, &["rust".to_string()], &ctx);
-        let java_score = compute_unified_relevance(base, &["java".to_string()], &ctx);
+        let rust_score = base * compute_affinity_multiplier(&["rust".to_string()], &ctx);
+        let java_score = base * compute_affinity_multiplier(&["java".to_string()], &ctx);
 
         assert!(
             rust_score > java_score,

@@ -6,9 +6,11 @@
 // fires ~10+ Tauri commands at once. They serialize over the IPC bridge while
 // the webview main thread is still parsing/executing the JS bundle, so unrelated
 // commands clustered at ~230ms even though their real compute was ~30-70ms — the
-// extra time was pure queue depth. The worst single offender, the
-// `prune_personalization_cache` maintenance command (576-902ms), was firing
-// fire-and-forget directly on the mount path.
+// extra time was pure queue depth. The worst single offender at the time was a
+// `prune_personalization_cache` maintenance command (576-902ms) firing
+// fire-and-forget directly on the mount path; that command was deleted with the
+// STREETS retirement (2026-08-12), but the stampede it exposed is structural —
+// source metadata and source-health loads still queue behind first paint.
 //
 // `runWhenIdle` moves non-critical work off that stampede: it runs after the
 // browser reports idle (requestIdleCallback, available in WebView2/Chromium),

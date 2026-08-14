@@ -40,8 +40,5 @@
   "errorMsg.permission": "权限被拒绝。请检查文件权限。",
   "errorMsg.rateLimit": "已达到请求频率限制。请稍等片刻后重试。",
   "errorMsg.timeout": "请求超时。请稍后重试。",
-  "module.fileNotFound": "未找到模块文件：{{path}}",
-  "module.unknown": "未知模块：{{id}}",
-  "translation.noLlm": "LLM 未配置——请在设置中配置 API 密钥以启用内容翻译",
-  "translation.sourceIsEnglish": "英语为源语言——无需翻译"
+  "translation.noLlm": "LLM 未配置——请在设置中配置 API 密钥以启用内容翻译"
 }

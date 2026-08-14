@@ -176,18 +176,7 @@ impl OsvSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "OSV batch API rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "OSV batch API forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        super::check_http_status(status, "OSV batch API")?;
+        super::classify_http_status(response.status(), "OSV batch API")?;
 
         let result: OsvBatchResponse = response
             .json()

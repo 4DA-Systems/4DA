@@ -221,13 +221,10 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     // 3 implicit signals = 1 effective explicit signal
     let effective_feedback_count = feedback_interaction_count + implicit_interaction_count / 3;
 
-    // Warm-start source preferences from stack profiles (only fills gaps)
-    let mut source_quality = source_quality;
-    if composed_stack.active {
-        for (&source, &pref) in &composed_stack.source_preferences {
-            source_quality.entry(source.to_string()).or_insert(pref);
-        }
-    }
+    // The stack-profile warm-start of `source_quality` was deleted 2026-08-12:
+    // its only production reader was the V1 pipeline's source-quality boost, and
+    // V2 pins `source_quality_boost = 0.0` (pipeline_v2.rs). The field itself
+    // stays on ScoringContext — the simulation enrichment harness populates it.
 
     // Taste embedding + persona-posterior boosts DEMOTED in v19 (AD-029):
     // both were behavioral aggregates injected into scoring (taste ±0.08 +

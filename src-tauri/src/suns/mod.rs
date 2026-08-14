@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::debug;
+#[cfg(test)]
+use tracing::info;
 
 pub mod api_cost_monitor;
 pub mod automation_auditor;
@@ -35,9 +37,13 @@ pub struct SunResult {
 
 // These structs are part of the Suns dashboard API, currently used only in tests.
 // They will be wired to the frontend when the Suns dashboard is registered.
+//
+// The expired removal markers dated 2026-08-01 were replaced 2026-08-12 with honest
+// `#[cfg(test)]` gating: these really are test-only, so compiling them out of the
+// shipped binary is truthful where a blanket `allow(dead_code)` merely hid them.
+// Re-wiring the dashboard means dropping the `cfg` — the code is right here.
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Test-only: exercised by suns unit tests
 pub struct SunStatus {
     pub id: String,
     pub name: String,
@@ -50,9 +56,8 @@ pub struct SunStatus {
     pub run_count: u64,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Test-only: exercised by suns unit tests
 pub struct SunAlert {
     pub id: i64,
     pub sun_id: String,
@@ -60,26 +65,6 @@ pub struct SunAlert {
     pub message: String,
     pub acknowledged: bool,
     pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModuleHealth {
-    pub module_id: String,
-    pub module_name: String,
-    pub score: f32, // 0.0 - 1.0
-    pub sun_count: usize,
-    pub success_rate: f32, // sun success rate over last 7 days
-    pub lessons_completed: usize,
-    pub total_lessons: usize,
-    pub last_activity: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StreetHealthScore {
-    pub overall: f32, // 0.0 - 1.0
-    pub module_scores: Vec<ModuleHealth>,
-    pub trend: String,      // "improving" | "stable" | "declining"
-    pub top_action: String, // Most impactful next action
 }
 
 // ============================================================================
@@ -97,8 +82,9 @@ pub struct SunRegistry {
 
 struct SunDef {
     id: String,
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Test-only: exercised by suns unit tests
+    /// Display name. Read only by `get_statuses` (test-gated), but the field is
+    /// populated unconditionally in `new()`, so it cannot be `cfg`-gated with it.
+    #[allow(dead_code)] // REMOVE BY 2026-11-12
     name: String,
     module_id: String,
     interval_secs: u64,
@@ -218,9 +204,9 @@ impl SunRegistry {
             .insert(id.to_string(), Arc::new(AtomicU64::new(0)));
     }
 
-    /// Return status for each registered sun.
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Test-only: exercised by suns unit tests
+    /// Return status for each registered sun. Test-only until the Suns dashboard
+    /// is registered — see the note on `SunStatus`.
+    #[cfg(test)]
     pub fn get_statuses(&self) -> Vec<SunStatus> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -278,7 +264,8 @@ impl SunRegistry {
             .collect()
     }
 
-    /// Get sun definitions grouped by module ID.
+    /// Get sun definitions grouped by module ID. Test-only — see the note on `SunStatus`.
+    #[cfg(test)]
     pub fn get_module_sun_counts(&self) -> HashMap<String, usize> {
         let mut counts = HashMap::new();
         for sun in &self.suns {
@@ -287,9 +274,8 @@ impl SunRegistry {
         counts
     }
 
-    /// Enable or disable a sun by ID.
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Test-only: exercised by suns unit tests
+    /// Enable or disable a sun by ID. Test-only — see the note on `SunStatus`.
+    #[cfg(test)]
     pub fn set_enabled(&mut self, sun_id: &str, enabled: bool) {
         self.enabled.insert(sun_id.to_string(), enabled);
         info!(target: "4da::suns", sun = sun_id, enabled, "Sun toggled");
@@ -353,8 +339,8 @@ impl SunRegistry {
     }
 
     /// Execute a specific sun by ID, bypassing the interval check.
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Test-only: exercised by suns unit tests
+    /// Test-only — see the note on `SunStatus`.
+    #[cfg(test)]
     pub fn execute_one(&mut self, sun_id: &str) -> Option<SunResult> {
         let sun = self.suns.iter().find(|s| s.id == sun_id)?;
 

@@ -21,6 +21,7 @@ use crate::evidence::{
     Action as EvidenceAction, Confidence, ConfidenceProvenance, EvidenceCitation, EvidenceFeed,
     EvidenceItem, EvidenceKind, LensHints, TierScope, Urgency,
 };
+use crate::package_ambiguity::has_word_boundary_match;
 use crate::scoring_config;
 use crate::signal_chains::ChainResolution;
 
@@ -316,24 +317,15 @@ fn infer_advisory_ecosystem(title_lower: &str, source_type: &str) -> Option<&'st
 }
 
 fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRuntimeDep>> {
-    let direct_filter = if has_is_direct_column(conn) {
-        "AND is_direct = 1"
-    } else {
-        ""
-    };
-    let relevance_filter = if has_project_relevance_column(conn) {
-        "AND project_relevance >= 0.15"
-    } else {
-        ""
-    };
-    let sql = format!(
+    // `is_direct` (Phase 53) and `project_relevance` (Phase 55) are guaranteed by
+    // migrate(), which `Database::new` runs before any query path can execute.
+    let mut stmt = conn.prepare(
         "SELECT package_name, project_path, language
          FROM project_dependencies
          WHERE is_dev = 0
-           {direct_filter}
-           {relevance_filter}"
-    );
-    let mut stmt = conn.prepare(&sql)?;
+           AND is_direct = 1
+           AND project_relevance >= 0.15",
+    )?;
     let rows = stmt.query_map([], |row| {
         Ok(DirectRuntimeDep {
             package_name: row.get(0)?,
@@ -488,7 +480,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
     // Packages inactive on the host platform — their advisories get de-prioritised
     // (to Watch) below: surfaced, but not urgent for a target the user doesn't build.
     let platform_inactive_pkgs = crate::open_db_connection()
-        .map(|conn| load_platform_inactive_packages(&conn))
+        .map(|conn| crate::platform_filter::load_platform_inactive_packages(&conn))
         .unwrap_or_default();
 
     pkg_groups
@@ -982,74 +974,6 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
     })
 }
 
-/// Check whether `project_dependencies` has the `is_direct` column.
-///
-/// Added in Phase 53 migration. Pre-Phase-53 databases lack the column
-/// and would SQL-error on `WHERE pd.is_direct = 1`. This runtime check
-/// lets us gracefully fall back to processing all non-dev deps.
-fn has_is_direct_column(conn: &rusqlite::Connection) -> bool {
-    conn.query_row(
-        "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'is_direct'",
-        [],
-        |row| row.get::<_, i64>(0),
-    )
-    .map(|count| count > 0)
-    .unwrap_or(false)
-}
-
-/// Check whether `project_dependencies` has the `project_relevance` column.
-///
-/// Added in Phase 55 migration. Pre-Phase-55 databases lack the column.
-/// When present, low-relevance projects (example/demo/test dirs) are excluded
-/// from preemption alerts.
-fn has_project_relevance_column(conn: &rusqlite::Connection) -> bool {
-    conn.query_row(
-        "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'project_relevance'",
-        [],
-        |row| row.get::<_, i64>(0),
-    )
-    .map(|count| count > 0)
-    .unwrap_or(false)
-}
-
-/// Check whether `project_dependencies` has the `platform_active` column.
-///
-/// Added in Phase 85 migration. When present, advisories for dependencies that
-/// are not built on the host platform can be de-prioritised.
-fn has_platform_active_column(conn: &rusqlite::Connection) -> bool {
-    conn.query_row(
-        "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'platform_active'",
-        [],
-        |row| row.get::<_, i64>(0),
-    )
-    .map(|count| count > 0)
-    .unwrap_or(false)
-}
-
-/// Lowercased names of packages whose EVERY tracked instance is inactive on the
-/// host platform (e.g. a `cfg(not(windows))` crate on a Windows machine). A
-/// package active in even one project/target is NOT included — relevance is
-/// "active in any target you build", so we never de-prioritise a dep the user
-/// actually ships somewhere. Empty when the column is absent (pre-Phase-85 DBs).
-fn load_platform_inactive_packages(
-    conn: &rusqlite::Connection,
-) -> std::collections::HashSet<String> {
-    use std::collections::HashSet;
-    if !has_platform_active_column(conn) {
-        return HashSet::new();
-    }
-    let mut stmt = match conn.prepare(
-        "SELECT LOWER(package_name) FROM project_dependencies
-         GROUP BY LOWER(package_name) HAVING MAX(platform_active) = 0",
-    ) {
-        Ok(s) => s,
-        Err(_) => return HashSet::new(),
-    };
-    stmt.query_map([], |row| row.get::<_, String>(0))
-        .map(|rows| rows.flatten().collect())
-        .unwrap_or_default()
-}
-
 // (Tier 3 heuristics and suppression list removed — see get_preemption_feed comment)
 // ============================================================================
 // Converters
@@ -1430,33 +1354,6 @@ fn is_advisory_subject_match(title_lower: &str, dep: &str) -> bool {
     false
 }
 
-/// Check whether `text` contains `term` at a word boundary (not embedded in a
-/// larger word). Case-sensitive — pass lowercase strings for case-insensitive
-/// matching. Accepts `.js`/`.ts`/`.rs` suffixes as valid boundaries for package
-/// names like "next.js" or "serde.rs".
-fn has_word_boundary_match(text: &str, term: &str) -> bool {
-    if term.is_empty() {
-        return false;
-    }
-    let bytes = text.as_bytes();
-    let mut search_from = 0;
-    while let Some(pos) = text[search_from..].find(term) {
-        let abs = search_from + pos;
-        let before_ok = abs == 0 || !bytes[abs - 1].is_ascii_alphanumeric();
-        let after = abs + term.len();
-        let after_ok = after >= bytes.len()
-            || !bytes[after].is_ascii_alphanumeric()
-            || text[after..].starts_with(".js")
-            || text[after..].starts_with(".ts")
-            || text[after..].starts_with(".rs");
-        if before_ok && after_ok {
-            return true;
-        }
-        search_from = abs + 1;
-    }
-    false
-}
-
 // ============================================================================
 // EvidenceItem conversion (Intelligence Reconciliation — Phase 3)
 // ============================================================================
@@ -1807,51 +1704,6 @@ fn validated_preemption_items() -> std::result::Result<Vec<EvidenceItem>, String
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::Connection;
-
-    // ─── Platform-relevance de-prioritisation (Phase 2) ──────────────
-
-    #[test]
-    fn platform_inactive_packages_collected_only_when_inactive_everywhere() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE project_dependencies (
-                 project_path TEXT, package_name TEXT, is_dev INTEGER DEFAULT 0,
-                 is_direct INTEGER DEFAULT 1, platform_active INTEGER DEFAULT 1
-             );
-             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/p', 'libc', 0);
-             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/p', 'serde', 1);
-             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/a', 'shared', 0);
-             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/b', 'shared', 1);",
-        )
-        .unwrap();
-
-        let inactive = load_platform_inactive_packages(&conn);
-        assert!(
-            inactive.contains("libc"),
-            "inactive-everywhere dep is collected"
-        );
-        assert!(
-            !inactive.contains("serde"),
-            "active dep is not de-prioritised"
-        );
-        assert!(
-            !inactive.contains("shared"),
-            "a dep active in any project/target stays prioritised"
-        );
-    }
-
-    #[test]
-    fn platform_inactive_empty_on_pre_phase85_db() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE project_dependencies (project_path TEXT, package_name TEXT);
-             INSERT INTO project_dependencies VALUES ('/p', 'libc');",
-        )
-        .unwrap();
-        // No platform_active column -> graceful empty (nothing de-prioritised).
-        assert!(load_platform_inactive_packages(&conn).is_empty());
-    }
 
     // ─── Feed cache (first-paint latency fix) ────────────────────────
 
@@ -2101,53 +1953,6 @@ mod tests {
             "[ghsa-xxxx-yyyy] dotenv could override environment variables",
             "dotenv"
         ));
-    }
-
-    // ─── Word-boundary helper ────────────────────────────────────────
-
-    #[test]
-    fn word_boundary_match_handles_suffix_extensions() {
-        assert!(has_word_boundary_match("next.js release", "next"));
-        assert!(has_word_boundary_match("serde.rs v2", "serde"));
-        assert!(!has_word_boundary_match("unexpected", "next"));
-    }
-
-    // ─── Runtime column detection ────────────────────────────────────
-
-    #[test]
-    fn has_is_direct_column_true_when_present() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE project_dependencies (
-                id INTEGER PRIMARY KEY,
-                project_path TEXT NOT NULL,
-                manifest_type TEXT NOT NULL,
-                package_name TEXT NOT NULL,
-                is_dev INTEGER DEFAULT 0,
-                is_direct INTEGER DEFAULT 1,
-                language TEXT NOT NULL DEFAULT 'unknown'
-            );",
-        )
-        .unwrap();
-        assert!(has_is_direct_column(&conn));
-    }
-
-    #[test]
-    fn has_is_direct_column_false_when_absent() {
-        let conn = Connection::open_in_memory().unwrap();
-        // Create table WITHOUT is_direct column
-        conn.execute_batch(
-            "CREATE TABLE project_dependencies (
-                id INTEGER PRIMARY KEY,
-                project_path TEXT NOT NULL,
-                manifest_type TEXT NOT NULL,
-                package_name TEXT NOT NULL,
-                is_dev INTEGER DEFAULT 0,
-                language TEXT NOT NULL DEFAULT 'unknown'
-            );",
-        )
-        .unwrap();
-        assert!(!has_is_direct_column(&conn));
     }
 
     // ========================================================================

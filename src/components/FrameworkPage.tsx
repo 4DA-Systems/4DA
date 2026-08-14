@@ -108,4 +108,3 @@ export const FrameworkPage = memo(function FrameworkPage({ onClose }: FrameworkP
   );
 });
 
-export default FrameworkPage;

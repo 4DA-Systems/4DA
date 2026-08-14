@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! V1 vs V2 Pipeline Comparison & Enrichment Impact Tests
+//! Enrichment Impact Tests
 //!
-//! 4 test categories:
-//!   a. V1 vs V2 regression detection across all personas
-//!   b. Per-signal enrichment impact measurement
-//!   c. Enriched reality tests (full-fidelity per-persona)
-//!   d. Cross-version score stability
+//! 2 test categories:
+//!   a. Per-signal enrichment impact measurement
+//!   b. Enriched reality tests (full-fidelity per-persona)
+//!
+//! The V1-vs-V2 regression and cross-version score-stability tests that used to
+//! head this file were deleted 2026-08-12 with the V1 pipeline — there is only
+//! one pipeline version left to compare against.
 
 use tracing::info;
 
@@ -14,19 +16,14 @@ use super::enrichment::{EnrichmentConfig, EnrichmentField};
 use super::metrics::SimMetrics;
 use super::persona_data::all_enrichments;
 use super::personas::{all_personas, all_personas_enriched};
-use super::version_registry::{compare_versions, score_with_version, PipelineVersion};
 use super::{load_corpus_embeddings, sim_db, sim_input, sim_no_freshness};
 use super::{ExpectedOutcome, PERSONA_NAMES};
 
 // ============================================================================
-// Shared: score a persona through a specific pipeline version
+// Shared: score a persona through the scoring pipeline
 // ============================================================================
 
-fn run_persona_versioned(
-    persona_idx: usize,
-    ctx: &super::super::ScoringContext,
-    version: PipelineVersion,
-) -> SimMetrics {
+fn run_persona_simulation(persona_idx: usize, ctx: &super::super::ScoringContext) -> SimMetrics {
     let items = corpus();
     let db = sim_db();
     let opts = sim_no_freshness();
@@ -43,65 +40,14 @@ fn run_persona_versioned(
             .get((item.id - 1) as usize)
             .unwrap_or(&zero_emb);
         let input = sim_input(item.id, item.title, item.content, emb);
-        let result = score_with_version(version, &input, ctx, &db, &opts);
+        let result = super::super::score_item(&input, ctx, &db, &opts, None);
         metrics.record(&result, expected);
     }
     metrics
 }
 
-fn run_persona_simulation(persona_idx: usize, ctx: &super::super::ScoringContext) -> SimMetrics {
-    run_persona_versioned(persona_idx, ctx, PipelineVersion::V2)
-}
-
 // ============================================================================
-// 4a. V1 vs V2 regression detection
-// ============================================================================
-
-#[test]
-fn version_comparison_all_personas() {
-    let personas = all_personas();
-
-    info!("\n=== V1 vs V2 COMPARISON (base personas) ===");
-    info!(
-        "{:<20} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8}",
-        "Persona", "V1_P", "V1_R", "V1_F1", "V2_P", "V2_R", "V2_F1"
-    );
-
-    let mut v1_f1_sum = 0.0_f64;
-    let mut v2_f1_sum = 0.0_f64;
-
-    for (pi, persona) in personas.iter().enumerate() {
-        let v1 = run_persona_versioned(pi, persona, PipelineVersion::V1);
-        let v2 = run_persona_versioned(pi, persona, PipelineVersion::V2);
-
-        info!(
-            "{:<20} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3}",
-            PERSONA_NAMES[pi],
-            v1.precision(),
-            v1.recall(),
-            v1.f1(),
-            v2.precision(),
-            v2.recall(),
-            v2.f1()
-        );
-
-        v1_f1_sum += v1.f1();
-        v2_f1_sum += v2.f1();
-    }
-
-    let v1_avg = v1_f1_sum / 9.0;
-    let v2_avg = v2_f1_sum / 9.0;
-    info!("\nAverage F1: V1={v1_avg:.3} V2={v2_avg:.3}");
-
-    // V2 must not regress more than 5% vs V1 on average
-    assert!(
-        v2_avg >= v1_avg * 0.95,
-        "V2 avg F1 ({v2_avg:.3}) regressed more than 5% vs V1 ({v1_avg:.3})"
-    );
-}
-
-// ============================================================================
-// 4b. Enrichment impact measurement
+// a. Enrichment impact measurement
 // ============================================================================
 
 #[test]
@@ -145,7 +91,7 @@ fn enrichment_impact_per_signal() {
 }
 
 // ============================================================================
-// 4c. Enriched reality tests — full-fidelity per-persona
+// b. Enriched reality tests — full-fidelity per-persona
 // ============================================================================
 
 #[test]
@@ -260,53 +206,5 @@ fn enriched_reality_aggregate() {
         aggregate.precision() >= 0.50,
         "Enriched aggregate precision {:.3} below minimum 0.50",
         aggregate.precision()
-    );
-}
-
-// ============================================================================
-// 4d. Cross-version score stability
-// ============================================================================
-
-#[test]
-fn version_score_stability() {
-    let personas = all_personas();
-    let items = corpus();
-    let db = sim_db();
-    let opts = sim_no_freshness();
-    let calibrated_embeddings = load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
-
-    // Sample 20 items spread across the corpus
-    let step = items.len().max(1) / 20;
-    let mut large_divergences = 0u32;
-    let mut total_checked = 0u32;
-
-    for (idx, item) in items.iter().enumerate() {
-        if step > 0 && idx % step != 0 {
-            continue;
-        }
-        let emb = calibrated_embeddings
-            .get((item.id - 1) as usize)
-            .unwrap_or(&zero_emb);
-        let input = sim_input(item.id, item.title, item.content, emb);
-        let cmp = compare_versions(&input, &personas[0], &db, &opts);
-        total_checked += 1;
-
-        if cmp.score_delta.abs() > 0.30 {
-            large_divergences += 1;
-        }
-    }
-
-    info!("[version_stability] checked={total_checked} large_divergences={large_divergences}");
-
-    // Allow some divergence but not catastrophic
-    let divergence_rate = if total_checked > 0 {
-        large_divergences as f64 / total_checked as f64
-    } else {
-        0.0
-    };
-    assert!(
-        divergence_rate <= 0.40,
-        "Too many items diverge >0.30 between V1/V2: {large_divergences}/{total_checked} ({divergence_rate:.2})"
     );
 }

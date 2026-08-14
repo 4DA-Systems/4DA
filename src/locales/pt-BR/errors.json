@@ -40,8 +40,5 @@
   "errorMsg.permission": "Permissão negada. Verifique as permissões dos arquivos.",
   "errorMsg.rateLimit": "Limite de requisições atingido. Aguarde um momento e tente novamente.",
   "errorMsg.timeout": "A requisição expirou. Tente novamente em instantes.",
-  "module.fileNotFound": "Arquivo do módulo não encontrado: {{path}}",
-  "module.unknown": "Módulo desconhecido: {{id}}",
-  "translation.noLlm": "LLM não configurado — configure sua chave API em Configurações para habilitar a tradução de conteúdo",
-  "translation.sourceIsEnglish": "O inglês é o idioma de origem — tradução não necessária"
+  "translation.noLlm": "LLM não configurado — configure sua chave API em Configurações para habilitar a tradução de conteúdo"
 }

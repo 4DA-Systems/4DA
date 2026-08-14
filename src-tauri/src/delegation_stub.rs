@@ -42,8 +42,3 @@ pub enum DelegationRec {
 pub async fn get_delegation_score(_subject: String) -> Result<DelegationScore> {
     Err("Delegation scoring is an experimental feature".into())
 }
-
-#[tauri::command]
-pub async fn get_all_delegation_scores() -> Result<Vec<DelegationScore>> {
-    Err("Delegation scoring is an experimental feature".into())
-}

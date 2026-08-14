@@ -60,13 +60,6 @@ impl ArxivSource {
         }
     }
 
-    /// Create with custom categories
-    pub fn with_categories(categories: Vec<String>) -> Self {
-        let mut source = Self::new();
-        source.categories = categories;
-        source
-    }
-
     /// Parse arXiv Atom feed response into entries
     pub(crate) fn parse_atom_feed(&self, xml: &str) -> Vec<ArxivEntry> {
         let mut entries = Vec::new();
@@ -191,18 +184,7 @@ impl ArxivSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "arXiv rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "arXiv forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        super::check_http_status(status, "arXiv API")?;
+        super::classify_http_status(response.status(), "arXiv API")?;
 
         let xml = response
             .text()

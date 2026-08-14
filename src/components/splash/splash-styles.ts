@@ -131,17 +131,6 @@ export const miniSpinnerStyle: CSSProperties = {
   animation: 'spin 0.8s linear infinite',
 };
 
-export const retryButtonStyle: CSSProperties = {
-  marginTop: '1rem',
-  padding: '0.5rem 1.5rem',
-  background: 'var(--color-error)',
-  color: '#fff',
-  border: 'none',
-  borderRadius: '0.375rem',
-  cursor: 'pointer',
-  fontSize: '0.8125rem',
-};
-
 export const versionStyle: CSSProperties = {
   position: 'absolute',
   bottom: '1.5rem',

@@ -7,10 +7,11 @@
     "node": "24.x"
   },
   "scripts": {
-    "build": "eleventy",
+    "clean": "node -e \"require('fs').rmSync('_site',{recursive:true,force:true})\"",
+    "build": "pnpm run clean && eleventy",
     "dev": "eleventy --serve",
     "cf:dev": "wrangler pages dev",
-    "cf:deploy": "wrangler pages deploy",
+    "cf:deploy": "pnpm run build && wrangler pages deploy",
     "verify:ed25519": "node scripts/verify-ed25519-equivalence.mjs",
     "test:lease": "node scripts/test-lease.mjs"
   },

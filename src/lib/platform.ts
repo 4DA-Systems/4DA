@@ -49,14 +49,14 @@ export function osFamily(): OsFamily {
   return cachedOs;
 }
 
-export function isMac(): boolean {
+function isMac(): boolean {
   return osFamily() === 'mac';
 }
 
 /**
  * Label for the primary command modifier: "⌘" on macOS, "Ctrl" elsewhere.
  */
-export function modKeyLabel(): string {
+function modKeyLabel(): string {
   return isMac() ? '⌘' : 'Ctrl';
 }
 

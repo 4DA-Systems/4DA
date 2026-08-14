@@ -569,49 +569,6 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
     Ok(result)
 }
 
-/// Check whether `project_dependencies` has the `platform_active` column.
-///
-/// Added in the Phase 85 migration. When absent (old/test DBs), the platform
-/// relevance gate is a graceful no-op — every dep stays fully visible.
-/// Mirrors `preemption::has_platform_active_column`.
-fn has_platform_active_column(conn: &rusqlite::Connection) -> bool {
-    conn.query_row(
-        "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'platform_active'",
-        [],
-        |row| row.get::<_, i64>(0),
-    )
-    .map(|count| count > 0)
-    .unwrap_or(false)
-}
-
-/// Lowercased names of packages whose EVERY tracked instance is inactive on the
-/// host platform (e.g. a `cfg(not(windows))` crate on a Windows machine). A
-/// package active in even one project/target is NOT included — relevance is
-/// "active in any target you build", so we never de-prioritise a dep the user
-/// actually ships somewhere. Empty when the column is absent (pre-Phase-85 DBs).
-///
-/// De-prioritise, NEVER exclude: this set only caps urgency to Watch in
-/// `uncovered_dep_to_evidence_item`; the dep is still surfaced. Mirrors
-/// `preemption::load_platform_inactive_packages`.
-fn load_platform_inactive_packages(
-    conn: &rusqlite::Connection,
-) -> std::collections::HashSet<String> {
-    use std::collections::HashSet;
-    if !has_platform_active_column(conn) {
-        return HashSet::new();
-    }
-    let mut stmt = match conn.prepare(
-        "SELECT LOWER(package_name) FROM project_dependencies
-         GROUP BY LOWER(package_name) HAVING MAX(platform_active) = 0",
-    ) {
-        Ok(s) => s,
-        Err(_) => return HashSet::new(),
-    };
-    stmt.query_map([], |row| row.get::<_, String>(0))
-        .map(|rows| rows.flatten().collect())
-        .unwrap_or_default()
-}
-
 /// Map ecosystem names to the source adapter types that should cover them.
 fn ecosystem_source_types(ecosystem: &str) -> Vec<String> {
     // Alias recognition is centralized in `crate::ecosystem::Ecosystem`. Unknown
@@ -1186,7 +1143,7 @@ fn find_uncovered_deps(
     // surfaced, but not urgent for a target the user doesn't build. De-prioritise,
     // never exclude — a cross-platform dev still reaches them. Empty on pre-Phase-85
     // DBs (graceful no-op). Loaded once; membership keyed on lowercased bare name.
-    let platform_inactive_pkgs = load_platform_inactive_packages(conn);
+    let platform_inactive_pkgs = crate::platform_filter::load_platform_inactive_packages(conn);
 
     let mut uncovered = Vec::new();
     let mut weak_match_deps: Vec<UncoveredDep> = Vec::new();
@@ -5485,48 +5442,6 @@ mod tests {
             item.affected_deps.contains(&"libc (cargo)".to_string()),
             "platform-inactive dep is still surfaced, not dropped"
         );
-    }
-
-    #[test]
-    fn platform_inactive_packages_collected_only_when_inactive_everywhere() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE project_dependencies (
-                 project_path TEXT, package_name TEXT, is_dev INTEGER DEFAULT 0,
-                 is_direct INTEGER DEFAULT 1, platform_active INTEGER DEFAULT 1
-             );
-             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/p', 'libc', 0);
-             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/p', 'serde', 1);
-             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/a', 'shared', 0);
-             INSERT INTO project_dependencies (project_path, package_name, platform_active) VALUES ('/b', 'shared', 1);",
-        )
-        .unwrap();
-
-        let inactive = load_platform_inactive_packages(&conn);
-        assert!(
-            inactive.contains("libc"),
-            "inactive-everywhere dep is collected"
-        );
-        assert!(
-            !inactive.contains("serde"),
-            "active dep is not de-prioritised"
-        );
-        assert!(
-            !inactive.contains("shared"),
-            "a dep active in any project/target stays prioritised"
-        );
-    }
-
-    #[test]
-    fn platform_inactive_empty_on_pre_phase85_db() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE project_dependencies (project_path TEXT, package_name TEXT);
-             INSERT INTO project_dependencies VALUES ('/p', 'libc');",
-        )
-        .unwrap();
-        // No platform_active column -> graceful empty (nothing de-prioritised).
-        assert!(load_platform_inactive_packages(&conn).is_empty());
     }
 
     // ─── AI assessment ("Assess with AI", Phase B) ───────────────────

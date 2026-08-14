@@ -129,59 +129,11 @@ pub(crate) fn count_confirmed_signals(
     }
 }
 
-/// Apply the multi-signal confirmation gate to a base score.
-/// Returns (gated_score, confirmation_count, confirmation_multiplier, confirmed_signal_names).
-///
-/// Key property: with only 1 confirmed signal, score is capped at 0.28 — well below the
-/// 0.35 relevance threshold. This means a single signal (no matter how strong) can
-/// NEVER make an item relevant on its own.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn apply_confirmation_gate(
-    base_score: f32,
-    context_score: f32,
-    interest_score: f32,
-    keyword_score: f32,
-    semantic_boost: f32,
-    ace_ctx: &ACEContext,
-    topics: &[String],
-    feedback_boost: f32,
-    affinity_mult: f32,
-    dep_match_score: f32,
-    stack_pain_match: bool,
-    best_keyword_specificity: f32,
-) -> (f32, u8, f32, Vec<String>) {
-    let confirmation = count_confirmed_signals(
-        context_score,
-        interest_score,
-        keyword_score,
-        semantic_boost,
-        ace_ctx,
-        topics,
-        feedback_boost,
-        affinity_mult,
-        dep_match_score,
-        stack_pain_match,
-        best_keyword_specificity,
-    );
-
-    let idx = (confirmation.count as usize).min(scoring_config::CONFIRMATION_GATE.len() - 1);
-    let (conf_mult, score_ceiling) = scoring_config::CONFIRMATION_GATE[idx];
-
-    // Direct dependency gate bypass: raise ceiling for strong dep matches stuck
-    // in single-axis territory (prevents serde/tokio release notes capping at 0.28)
-    let score_ceiling = if confirmation.count <= 1
-        && dep_match_score >= scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_MIN_SCORE
-    {
-        score_ceiling.max(scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_CEILING)
-    } else {
-        score_ceiling
-    };
-
-    let gated = (base_score * conf_mult).min(score_ceiling);
-    let names = confirmation.confirmed_names();
-
-    (gated, confirmation.count, conf_mult, names)
-}
+// NOTE: the former `apply_confirmation_gate` (count → CONFIRMATION_GATE lookup →
+// direct-dep ceiling bypass → `base * mult` clamp) was deleted 2026-08-12 with the
+// V1 pipeline, its only caller. V2 calls `count_confirmed_signals` directly and
+// applies the gate table itself in `pipeline_v2.rs` — it has to, because V2 defers
+// the ceiling until after the domain gate multiplier.
 
 #[cfg(test)]
 mod tests {
@@ -280,116 +232,6 @@ mod tests {
         assert_eq!(conf.count, 2);
         assert!(conf.context_confirmed);
         assert!(conf.ace_confirmed);
-    }
-
-    #[test]
-    fn test_single_signal_cannot_pass_threshold() {
-        // The key property: with only 1 confirmed signal, ceiling is 0.45 < 0.50 threshold
-        // The quality floor always requires 2+ signals (no bootstrap bypass).
-        // This gate test validates the raw confirmation gate behavior.
-        let ace_ctx = ACEContext::default();
-        let topics = vec!["test".to_string()];
-
-        // Even with high base_score (0.90), single signal caps below threshold
-        let (gated, count, _, _) = apply_confirmation_gate(
-            0.90, // Very high base
-            0.10, // low context
-            0.60, // HIGH interest (1 signal)
-            0.10, // low keyword
-            0.01, // low semantic
-            &ace_ctx, &topics, 0.0,   // no feedback
-            1.0,   // neutral affinity
-            0.0,   // no dep match
-            false, // no stack pain match
-            1.0,   // specific interest
-        );
-        assert_eq!(count, 1);
-        assert!(
-            gated <= 0.28,
-            "Single signal should cap at 0.28, got {}",
-            gated
-        );
-        assert!(
-            gated < 0.35,
-            "Single signal score must be below 0.35 threshold"
-        );
-    }
-
-    #[test]
-    fn test_two_signals_can_pass_threshold() {
-        let mut ace_ctx = ACEContext::default();
-        ace_ctx.active_topics.push("rust".to_string());
-        let topics = vec!["rust".to_string()];
-
-        let (gated, count, _, names) = apply_confirmation_gate(
-            0.70, // Good base score
-            0.50, // HIGH context
-            0.55, // HIGH interest
-            0.10, 0.01, // low semantic, but ace_confirmed via detected_tech
-            &ace_ctx, &topics, 0.0, 1.0, 0.0, false, // no stack pain match
-            1.0,   // specific interest
-        );
-        assert!(count >= 2, "Expected 2+ confirmed signals, got {}", count);
-        assert!(
-            gated >= 0.50,
-            "Two signals should allow passing threshold, got {}",
-            gated
-        );
-        assert!(!names.is_empty());
-    }
-
-    #[test]
-    fn test_four_signals_boost() {
-        // v19 (AD-029): the learned axis never confirms, so the 4th signal
-        // here comes from a dependency match instead of feedback/affinity
-        // (which are supplied at would-have-confirmed levels to prove they
-        // no longer count toward the total).
-        let mut ace_ctx = ACEContext::default();
-        ace_ctx.active_topics.push("rust".to_string());
-        ace_ctx
-            .topic_affinities
-            .insert("rust".to_string(), (0.8, 0.9));
-        let topics = vec!["rust".to_string()];
-
-        let (gated, count, mult, _) = apply_confirmation_gate(
-            0.70, 0.50, // context confirmed
-            0.55, // interest confirmed
-            0.10,
-            0.20, // ace confirmed via semantic boost (above 0.18 threshold = independent signal)
-            &ace_ctx, &topics,
-            0.10,  // feedback at would-have-confirmed level (demoted — must not count)
-            1.20,  // affinity at would-have-confirmed level (demoted — must not count)
-            0.30,  // dependency confirmed (the real 4th axis)
-            false, // no stack pain match
-            1.0,   // specific interest
-        );
-        assert_eq!(count, 4);
-        assert_eq!(mult, 1.20);
-        assert!(
-            gated > 0.70,
-            "4 signals should boost above base, got {}",
-            gated
-        );
-    }
-
-    #[test]
-    fn test_zero_signals_heavy_penalty() {
-        let ace_ctx = ACEContext::default();
-        let topics = vec!["test".to_string()];
-
-        let (gated, count, _, _) = apply_confirmation_gate(
-            0.60, 0.10, // low context
-            0.10, // low interest
-            0.10, 0.01, // low semantic
-            &ace_ctx, &topics, 0.0, 1.0, 0.0, false, // no stack pain match
-            1.0,   // specific interest
-        );
-        assert_eq!(count, 0);
-        assert!(
-            gated <= 0.20,
-            "Zero signals should cap at 0.20, got {}",
-            gated
-        );
     }
 
     #[test]
@@ -505,48 +347,6 @@ mod tests {
             "Without stack_pain_match, ACE should NOT be confirmed"
         );
         assert_eq!(without_pain.count, 0);
-    }
-
-    #[test]
-    fn test_stack_pain_match_plus_interest_passes_gate() {
-        // Interest confirmed + ACE confirmed via pain match = 2 signals = passes gate
-        let ace_ctx = ACEContext::default();
-        let topics = vec!["borrow".to_string()];
-
-        let (gated, count, _, _) = apply_confirmation_gate(
-            0.70, // good base score
-            0.10, // low context
-            0.60, // HIGH interest (confirmed)
-            0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0,
-            true, // stack_pain_match → ACE confirmed
-            1.0,  // specific interest
-        );
-        assert_eq!(count, 2, "Interest + ACE(pain) = 2 signals");
-        assert!(
-            gated >= 0.50,
-            "Two signals should pass relevance threshold, got {}",
-            gated
-        );
-    }
-
-    #[test]
-    fn test_stack_pain_match_alone_cannot_pass() {
-        // Only stack_pain_match=true, everything else below threshold.
-        // Single signal property: score capped below 0.45
-        let ace_ctx = ACEContext::default();
-        let topics = vec!["test".to_string()];
-
-        let (gated, count, _, _) = apply_confirmation_gate(
-            0.90, // very high base
-            0.10, 0.10, 0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0, true, // only signal
-            1.0,  // specific interest
-        );
-        assert_eq!(count, 1, "Only ACE (via pain match) should be confirmed");
-        assert!(
-            gated < 0.45,
-            "Single signal (pain match) should cap below 0.45, got {}",
-            gated
-        );
     }
 
     #[test]

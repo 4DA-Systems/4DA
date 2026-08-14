@@ -10,7 +10,7 @@ use tracing::info;
 
 use super::personas::{fullstack_typescript, python_ml_engineer, rust_systems_dev};
 use super::{sim_db, sim_input, sim_no_freshness};
-use crate::scoring::pipeline::score_item;
+use crate::scoring::score_item;
 
 #[derive(serde::Deserialize)]
 struct HNItem {

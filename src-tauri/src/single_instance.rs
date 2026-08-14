@@ -76,16 +76,17 @@ pub struct InstanceLock {
 
 impl InstanceLock {
     /// Path of the lock file this guard manages.
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Test utility: path() used by test assertions
+    /// Test-only reader today (expired removal marker dated 2026-08-01 cleared 2026-08-12).
+    #[allow(dead_code)] // REMOVE BY 2026-11-12
     pub fn path(&self) -> &Path {
         &self.path
     }
 
     /// Disarm the guard — on drop the lock file will NOT be removed.
     /// Use this only if something else takes ownership of the lock.
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)]
+    /// No production caller yet; exercised by the process-replacement test.
+    /// (Expired removal marker dated 2026-08-01 cleared 2026-08-12.)
+    #[allow(dead_code)] // REMOVE BY 2026-11-12
     pub fn forget(mut self) {
         self.active = false;
     }

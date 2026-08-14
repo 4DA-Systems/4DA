@@ -6,7 +6,7 @@
 //! technology radar, and AI agent context.
 
 use crate::error::Result;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use ts_rs::TS;
@@ -98,27 +98,6 @@ pub struct DeveloperDecision {
     pub updated_at: String,
 }
 
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Used by check_alignment (test-exercised, MCP API surface)
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "bindings/")]
-pub struct AlignmentResult {
-    pub aligned: bool,
-    pub relevant_decisions: Vec<DeveloperDecision>,
-    pub conflicts: Vec<AlignmentConflict>,
-    pub confidence: f64,
-}
-
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Used by check_alignment (test-exercised, MCP API surface)
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "bindings/")]
-pub struct AlignmentConflict {
-    pub decision_id: i64,
-    pub decision_subject: String,
-    pub conflict_reason: String,
-}
-
 // ============================================================================
 // Core Functions
 // ============================================================================
@@ -159,9 +138,12 @@ pub fn record_decision(
 }
 
 /// Get a single decision by ID.
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Test-exercised, MCP API surface
+///
+/// Test-only read-back helper: the UI lists decisions (`get_decisions`) and the
+/// MCP server queries the DB itself, so nothing in production fetches one by id.
+#[cfg(test)]
 pub fn get_decision(conn: &Connection, id: i64) -> Result<Option<DeveloperDecision>> {
+    use rusqlite::OptionalExtension;
     Ok(conn
         .query_row(
             "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
@@ -261,145 +243,6 @@ pub fn update_decision(
 
     info!(target: "4da::decisions", id = id, "Decision updated");
     Ok(())
-}
-
-/// Supersede an old decision with a new one.
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Test-exercised, MCP API surface
-pub fn supersede_decision(conn: &Connection, old_id: i64, new_id: i64) -> Result<()> {
-    conn.execute(
-        "UPDATE developer_decisions SET status = 'superseded', superseded_by = ?1, updated_at = datetime('now') WHERE id = ?2",
-        params![new_id, old_id],
-    )?;
-
-    info!(target: "4da::decisions", old = old_id, new = new_id, "Decision superseded");
-    Ok(())
-}
-
-/// Find decisions by subject (fuzzy match on subject + context_tags).
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Test-exercised, MCP API surface
-pub fn find_decisions_by_subject(
-    conn: &Connection,
-    subject: &str,
-    limit: usize,
-) -> Result<Vec<DeveloperDecision>> {
-    let pattern = format!("%{}%", subject.to_lowercase());
-    let mut stmt = conn.prepare(
-        "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
-         FROM developer_decisions
-         WHERE status = 'active'
-         AND (LOWER(subject) LIKE ?1 OR LOWER(context_tags) LIKE ?1)
-         ORDER BY confidence DESC
-         LIMIT ?2",
-    )?;
-
-    let rows = stmt.query_map(params![pattern, limit as i64], |row| {
-        Ok(row_to_decision(row))
-    })?;
-
-    let mut decisions = Vec::new();
-    for row in rows {
-        decisions.push(row?);
-    }
-    Ok(decisions)
-}
-
-/// Check alignment of a technology/pattern against active decisions.
-/// This is the critical function that AI agents call before suggesting changes.
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Test-exercised, MCP API surface
-pub fn check_alignment(
-    conn: &Connection,
-    technology: &str,
-    pattern: Option<&str>,
-) -> Result<AlignmentResult> {
-    let search = technology.to_lowercase();
-    let pattern_search = pattern.map(str::to_lowercase);
-
-    // Find all active decisions that relate to this technology
-    let mut stmt = conn.prepare(
-        "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
-         FROM developer_decisions
-         WHERE status = 'active'
-         AND (LOWER(subject) LIKE ?1 OR LOWER(context_tags) LIKE ?1 OR LOWER(alternatives_rejected) LIKE ?1)",
-    )?;
-
-    let like_pattern = format!("%{search}%");
-    let rows = stmt.query_map(params![like_pattern], |row| Ok(row_to_decision(row)))?;
-
-    let mut relevant_decisions = Vec::new();
-    let mut conflicts = Vec::new();
-
-    for row in rows {
-        let decision = row?;
-
-        // Check if this technology was explicitly rejected
-        let rejected = decision
-            .alternatives_rejected
-            .iter()
-            .any(|alt| alt.to_lowercase().contains(&search));
-
-        if rejected {
-            conflicts.push(AlignmentConflict {
-                decision_id: decision.id,
-                decision_subject: decision.subject.clone(),
-                conflict_reason: format!(
-                    "'{}' was rejected in favor of '{}' (rationale: {})",
-                    technology,
-                    decision.decision,
-                    decision.rationale.as_deref().unwrap_or("none")
-                ),
-            });
-        }
-
-        relevant_decisions.push(decision);
-    }
-
-    // Also check pattern alignment if provided
-    if let Some(pat) = &pattern_search {
-        let pat_like = format!("%{pat}%");
-        let mut stmt2 = conn.prepare(
-            "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
-             FROM developer_decisions
-             WHERE status = 'active'
-             AND decision_type IN ('architecture', 'pattern')
-             AND (LOWER(subject) LIKE ?1 OR LOWER(decision) LIKE ?1)",
-        )?;
-
-        let rows2 = stmt2.query_map(params![pat_like], |row| Ok(row_to_decision(row)))?;
-
-        for row in rows2 {
-            let decision = row?;
-            if !relevant_decisions.iter().any(|d| d.id == decision.id) {
-                relevant_decisions.push(decision);
-            }
-        }
-    }
-
-    let aligned = conflicts.is_empty();
-    let confidence = if relevant_decisions.is_empty() {
-        0.5 // No data: neutral
-    } else if aligned {
-        relevant_decisions
-            .iter()
-            .map(|d| d.confidence)
-            .fold(0.0_f64, f64::max)
-    } else {
-        // Confidence of the conflicting decision
-        conflicts
-            .iter()
-            .filter_map(|c| relevant_decisions.iter().find(|d| d.id == c.decision_id))
-            .map(|d| d.confidence)
-            .fold(0.0_f64, f64::max)
-    };
-
-    Ok(AlignmentResult {
-        aligned,
-        relevant_decisions,
-        conflicts,
-        confidence,
-    })
 }
 
 // ============================================================================
@@ -520,66 +363,6 @@ mod tests {
     }
 
     #[test]
-    fn test_check_alignment_conflict() {
-        let conn = setup_test_db();
-        record_decision(
-            &conn,
-            &DecisionType::TechChoice,
-            "sqlite",
-            "Use SQLite for local storage",
-            Some("Local-first principle"),
-            &["postgresql".to_string(), "mysql".to_string()],
-            &["database".to_string()],
-            0.9,
-        )
-        .unwrap();
-
-        // Querying rejected tech should show conflict
-        let result = check_alignment(&conn, "postgresql", None).unwrap();
-        assert!(!result.aligned);
-        assert_eq!(result.conflicts.len(), 1);
-        assert!(result.conflicts[0].conflict_reason.contains("rejected"));
-
-        // Querying chosen tech should be aligned
-        let result2 = check_alignment(&conn, "sqlite", None).unwrap();
-        assert!(result2.aligned);
-        assert!(!result2.relevant_decisions.is_empty());
-    }
-
-    #[test]
-    fn test_supersede_decision() {
-        let conn = setup_test_db();
-        let old_id = record_decision(
-            &conn,
-            &DecisionType::TechChoice,
-            "react",
-            "Use React",
-            None,
-            &[],
-            &[],
-            0.8,
-        )
-        .unwrap();
-        let new_id = record_decision(
-            &conn,
-            &DecisionType::TechChoice,
-            "svelte",
-            "Use Svelte",
-            None,
-            &["react".to_string()],
-            &[],
-            0.9,
-        )
-        .unwrap();
-
-        supersede_decision(&conn, old_id, new_id).unwrap();
-
-        let old = get_decision(&conn, old_id).unwrap().unwrap();
-        assert_eq!(old.status, DecisionStatus::Superseded);
-        assert_eq!(old.superseded_by, Some(new_id));
-    }
-
-    #[test]
     fn test_seed_decisions_from_profile() {
         let conn = setup_test_db();
         conn.execute("INSERT INTO tech_stack (technology) VALUES ('rust')", [])
@@ -600,40 +383,6 @@ mod tests {
         let decisions = list_decisions(&conn, None, None, 50).unwrap();
         assert_eq!(decisions.len(), 2);
         assert!(decisions.iter().all(|d| d.confidence == 0.6));
-    }
-
-    #[test]
-    fn test_find_decisions_by_subject() {
-        let conn = setup_test_db();
-        record_decision(
-            &conn,
-            &DecisionType::TechChoice,
-            "sqlite",
-            "Use SQLite",
-            None,
-            &[],
-            &["database".to_string()],
-            0.9,
-        )
-        .unwrap();
-        record_decision(
-            &conn,
-            &DecisionType::TechChoice,
-            "rust",
-            "Use Rust",
-            None,
-            &[],
-            &["language".to_string()],
-            0.9,
-        )
-        .unwrap();
-
-        let found = find_decisions_by_subject(&conn, "sqlite", 10).unwrap();
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].subject, "sqlite");
-
-        let found2 = find_decisions_by_subject(&conn, "database", 10).unwrap();
-        assert_eq!(found2.len(), 1); // matches via context_tags
     }
 
     #[test]

@@ -155,10 +155,10 @@ Additional purpose-built clients exist in specific modules (documented in `http_
 | LLM provider | `src-tauri/src/llm.rs` | `api.openai.com` | OpenAI GPT API | User-configured (BYOK) |
 | LLM provider | `src-tauri/src/llm.rs` | `localhost:11434` | Ollama (local) | User-configured |
 | Embeddings | `src-tauri/src/embeddings.rs` | `api.openai.com` or `localhost:11434` | Text embeddings | Automatic (indexing) |
-| License validation | `src-tauri/src/settings/license.rs` | `api.keygen.sh` | Validate license key | On activation + periodic |
+| License validation | `src-tauri/src/settings/license/keygen.rs` | `api.keygen.sh` | Validate license key | On activation + periodic |
 | App updates | Tauri updater plugin | `github.com/.../releases` | Check for updates | Automatic (configurable) |
-| Team relay | `src-tauri/src/team_sync_commands.rs` | User-configured relay URL | Encrypted metadata sync | User-configured (opt-in) |
-| Webhooks | `src-tauri/src/webhooks.rs` | Admin-configured URLs | Enterprise event webhooks | Admin-configured |
+| Team relay | `src-tauri/src/team_sync_scheduler.rs` | User-configured relay URL | Encrypted metadata sync | User-configured (opt-in) |
+| Webhooks | `src-tauri/src/webhooks/dispatch.rs` | Admin-configured URLs | Enterprise event webhooks | Admin-configured |
 | SSO/OIDC | `src-tauri/src/sso_crypto.rs` | IdP discovery endpoints | JWKS key fetch | Enterprise SSO |
 | Digest email | Uses `lettre` SMTP | User-configured SMTP server | Send digest emails | User-configured |
 
@@ -366,7 +366,7 @@ head -10 src-tauri/src/telemetry.rs
 
 **Files:**
 - `src-tauri/src/team_sync_crypto.rs` -- Cryptographic primitives
-- `src-tauri/src/team_sync_commands.rs` -- Tauri command handlers
+- `src-tauri/src/team_sync_scheduler.rs` -- Tauri command handlers
 - `src-tauri/src/team_sync.rs` -- Sync logic
 
 **Encryption stack:**
@@ -516,7 +516,7 @@ grep "ALLOWED_DOMAINS" -A 25 src-tauri/src/toolkit_http.rs | grep "\*"
 
 ### 4.11 Enterprise Webhooks
 
-**File:** `src-tauri/src/webhooks.rs`
+**File:** `src-tauri/src/webhooks/dispatch.rs`
 
 Enterprise webhook delivery uses HMAC-SHA256 signed payloads. Each webhook has a unique secret stored in the local database.
 
@@ -530,7 +530,7 @@ Enterprise webhook delivery uses HMAC-SHA256 signed payloads. Each webhook has a
 
 ### 4.12 License Validation
 
-**File:** `src-tauri/src/settings/license.rs`
+**File:** `src-tauri/src/settings/license/keygen.rs`
 
 License validation calls the Keygen API (`api.keygen.sh`) to verify license keys. This is the only connection to a service related to 4DA's business operations.
 
@@ -544,11 +544,11 @@ License validation calls the Keygen API (`api.keygen.sh`) to verify license keys
 **Verification:**
 ```bash
 # Inspect exactly what is sent to Keygen
-grep -A 10 "serde_json::json" src-tauri/src/settings/license.rs | head -15
+grep -A 10 "serde_json::json" src-tauri/src/settings/license/keygen.rs | head -15
 # Expected: only "meta.key" field
 
 # Confirm the only external URL
-grep "keygen.sh" src-tauri/src/settings/license.rs
+grep "keygen.sh" src-tauri/src/settings/license/keygen.rs
 ```
 
 ---
@@ -730,15 +730,15 @@ Quick reference for all security-relevant files:
 | `src-tauri/capabilities/default.json` | 13 | Tauri capability permissions |
 | `src-tauri/src/settings/types.rs` | ~670 | Settings struct, Debug redaction, zeroize |
 | `src-tauri/src/settings/keystore.rs` | 199 | OS keychain integration |
-| `src-tauri/src/settings/license.rs` | ~630 | Keygen license validation |
+| `src-tauri/src/settings/license/keygen.rs` | ~630 | Keygen license validation |
 | `src-tauri/src/http_client.rs` | 63 | Shared HTTP client pool |
 | `src-tauri/src/llm.rs` | ~400 | LLM provider routing, API error sanitization |
 | `src-tauri/src/embeddings.rs` | ~300 | Embedding API calls |
 | `src-tauri/src/telemetry.rs` | 541 | Local-only telemetry (zero network calls) |
 | `src-tauri/src/data_export.rs` | ~935 | GDPR data export with sensitive field stripping |
 | `src-tauri/src/team_sync_crypto.rs` | ~200 | XChaCha20Poly1305 + X25519 encryption |
-| `src-tauri/src/team_sync_commands.rs` | ~400 | Team relay command handlers |
-| `src-tauri/src/webhooks.rs` | ~640 | Enterprise webhook dispatch (HMAC-SHA256) |
+| `src-tauri/src/team_sync_scheduler.rs` | ~400 | Team relay command handlers |
+| `src-tauri/src/webhooks/dispatch.rs` | ~640 | Enterprise webhook dispatch (HMAC-SHA256) |
 | `src-tauri/src/sso_crypto.rs` | ~200 | OIDC JWKS / SAML signature verification |
 | `src-tauri/src/toolkit_http.rs` | ~200 | HTTP probe with domain allowlist |
 | `src-tauri/src/community_intelligence.rs` | ~200 | Opt-in pattern sharing (disabled by default) |

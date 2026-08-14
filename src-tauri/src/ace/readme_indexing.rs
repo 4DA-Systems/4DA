@@ -120,16 +120,12 @@ fn discover_projects_recursive(
 struct ReadmeSection {
     heading: String,
     content: String,
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Serde: populated during README parsing
-    level: usize,
 }
 
 fn parse_readme_sections(content: &str) -> Vec<ReadmeSection> {
     let mut sections = Vec::new();
     let mut current_heading = String::from("Overview");
     let mut current_content = String::new();
-    let mut current_level = 1;
 
     for line in content.lines() {
         let trimmed = line.trim();
@@ -141,18 +137,15 @@ fn parse_readme_sections(content: &str) -> Vec<ReadmeSection> {
                 sections.push(ReadmeSection {
                     heading: current_heading.clone(),
                     content: current_content.trim().to_string(),
-                    level: current_level,
                 });
                 current_content.clear();
             }
 
             // Parse new heading
-            let level = trimmed.chars().take_while(|c| *c == '#').count();
             let heading_text = trimmed.trim_start_matches('#').trim();
 
             if !heading_text.is_empty() {
                 current_heading = heading_text.to_string();
-                current_level = level;
             }
         } else {
             current_content.push_str(line);
@@ -165,7 +158,6 @@ fn parse_readme_sections(content: &str) -> Vec<ReadmeSection> {
         sections.push(ReadmeSection {
             heading: current_heading,
             content: current_content.trim().to_string(),
-            level: current_level,
         });
     }
 

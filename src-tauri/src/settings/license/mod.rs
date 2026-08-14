@@ -37,12 +37,6 @@ use std::sync::atomic::AtomicU64;
 
 const KEYGEN_ACCOUNT_ID: &str = "runyourempirehq";
 
-/// Base URL template for Keygen validation.
-/// Full URL: `https://api.keygen.sh/v1/accounts/{ACCOUNT_ID}/licenses/actions/validate-key`
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // Const: Keygen API URL for license validation
-const KEYGEN_VALIDATE_URL: &str = "https://api.keygen.sh/v1/licenses/actions/validate-key";
-
 /// Hours before a cached validation result is considered stale.
 /// 90 days provides resilience for offline periods and intermittent keychain failures.
 const VALIDATION_CACHE_HOURS: u64 = 2160; // 90 days

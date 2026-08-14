@@ -4,14 +4,14 @@ import type { SourceRelevance, SourceHealthStatus } from '../types';
 import { parseBriefingContent } from '../utils/briefing-parser';
 import type { BriefingState } from '../store';
 
-export interface LowQualitySource {
+interface LowQualitySource {
   source: string;
   total: number;
   relevant: number;
   ratio: number;
 }
 
-export interface HealthSummary {
+interface HealthSummary {
   healthy: number;
   total: number;
   allHealthy: boolean;

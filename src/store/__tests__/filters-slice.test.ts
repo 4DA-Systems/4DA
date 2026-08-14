@@ -15,7 +15,6 @@ vi.mock('../../config/sources', () => {
     getSourceColorClass: () => 'bg-gray-500/20 text-gray-400',
     getSourceCategory: () => 'general',
     getSourcesByCategory: () => new Map([['general', [...ids]]]),
-    isSourcesLoaded: () => true,
     loadSourceMeta: () => Promise.resolve(),
   };
 });

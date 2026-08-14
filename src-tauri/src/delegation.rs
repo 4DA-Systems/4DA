@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use ts_rs::TS;
 
-use crate::error::{Result, ResultExt};
+use crate::error::Result;
 
 // ============================================================================
 // Types
@@ -127,44 +127,6 @@ pub fn compute_delegation_score(conn: &Connection, subject: &str) -> Result<Dele
         recommendation,
         caveats,
     })
-}
-
-/// Compute delegation scores for all entries in tech_stack, sorted by score DESC.
-pub fn compute_all_delegation_scores(conn: &Connection) -> Result<Vec<DelegationScore>> {
-    let mut stmt = conn
-        .prepare("SELECT technology FROM tech_stack")
-        .context("Failed to query tech_stack")?;
-
-    let techs: Vec<String> = stmt
-        .query_map([], |row| row.get::<_, String>(0))
-        .context("Failed to read tech_stack")?
-        .filter_map(|r| match r {
-            Ok(v) => Some(v),
-            Err(e) => {
-                tracing::warn!("Row processing failed in delegation: {e}");
-                None
-            }
-        })
-        .collect();
-
-    let mut scores = Vec::with_capacity(techs.len());
-    for tech in &techs {
-        scores.push(compute_delegation_score(conn, tech)?);
-    }
-
-    scores.sort_by(|a, b| {
-        b.overall_score
-            .partial_cmp(&a.overall_score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    info!(
-        target: "4da::delegation",
-        count = scores.len(),
-        "All delegation scores computed"
-    );
-
-    Ok(scores)
 }
 
 // ============================================================================
@@ -357,12 +319,6 @@ pub async fn get_delegation_score(subject: String) -> Result<DelegationScore> {
     compute_delegation_score(&conn, &subject)
 }
 
-#[tauri::command]
-pub async fn get_all_delegation_scores() -> Result<Vec<DelegationScore>> {
-    let conn = crate::open_db_connection()?;
-    compute_all_delegation_scores(&conn)
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -524,44 +480,6 @@ mod tests {
         assert!(!score.caveats.is_empty());
         assert!(score.caveats.iter().any(|c| c.contains("security")));
         assert!(score.caveats.iter().any(|c| c.contains("AI warnings")));
-    }
-
-    #[test]
-    fn test_compute_all_delegation_scores() {
-        let conn = setup_test_db();
-
-        conn.execute("INSERT INTO tech_stack (technology) VALUES ('rust')", [])
-            .unwrap();
-        conn.execute(
-            "INSERT INTO tech_stack (technology) VALUES ('typescript')",
-            [],
-        )
-        .unwrap();
-        conn.execute("INSERT INTO tech_stack (technology) VALUES ('python')", [])
-            .unwrap();
-
-        // Add some complexity for typescript
-        for i in 0..5 {
-            conn.execute(
-                "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, language)
-                 VALUES ('/proj', 'npm', ?1, '1.0', 'typescript')",
-                params![format!("typescript-pkg-{}", i)],
-            )
-            .unwrap();
-        }
-
-        let scores = compute_all_delegation_scores(&conn).unwrap();
-
-        assert_eq!(scores.len(), 3);
-        // All should have scores since they're in tech_stack
-        for score in &scores {
-            assert!(score.overall_score > 0.0);
-            assert!(score.overall_score <= 1.0);
-        }
-        // Should be sorted by overall_score DESC
-        for window in scores.windows(2) {
-            assert!(window[0].overall_score >= window[1].overall_score);
-        }
     }
 
     #[test]

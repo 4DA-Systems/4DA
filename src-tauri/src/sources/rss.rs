@@ -92,13 +92,6 @@ impl RssSource {
         source
     }
 
-    /// Add a feed URL
-    pub fn add_feed(&mut self, url: String) {
-        if !self.feed_urls.contains(&url) {
-            self.feed_urls.push(url);
-        }
-    }
-
     /// Get configured feed URLs
     pub fn feed_urls(&self) -> &[String] {
         &self.feed_urls

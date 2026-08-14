@@ -4,7 +4,10 @@ use std::collections::HashMap;
 ///
 /// This module provides a unified interface for extracting text and metadata
 /// from various file formats including PDFs, Office documents, images (OCR),
-/// audio files (transcription), and archives.
+/// and archives.
+///
+/// Audio transcription has a module (`audio`) but no registered extractor —
+/// see the note in `ExtractorRegistry::new`.
 use std::path::Path;
 
 use crate::error::Result;
@@ -110,12 +113,20 @@ impl ExtractorRegistry {
             extractors: Vec::new(),
         };
 
-        // Register all extractors
+        // Register all extractors.
+        //
+        // `audio::AudioExtractor` is deliberately NOT registered: its `extract`
+        // is a stub that always errors (no Whisper backend is compiled in), so
+        // registering it would advertise six audio extensions this build cannot
+        // actually transcribe — `supported_extensions()` would promise a
+        // capability that does not exist, and any caller routing on it would
+        // attempt-then-fail instead of cleanly skipping. Accurate-first: an
+        // unhandled extension is honest, a failing handler is not. Re-register
+        // here when real transcription lands (see extractors/audio.rs).
         registry.register(Box::new(pdf::PdfExtractor::new()));
         registry.register(Box::new(office::OfficeExtractor::new()));
         #[cfg(feature = "ocr")]
         registry.register(Box::new(image::ImageExtractor::new()));
-        registry.register(Box::new(audio::AudioExtractor::new()));
         #[cfg(feature = "archive")]
         registry.register(Box::new(archive::ArchiveExtractor::new()));
 
@@ -179,8 +190,18 @@ mod tests {
         assert!(extensions.contains(&"docx".to_string()));
 
         // Should have multiple extractors registered
-        // Count depends on features: base 3 (pdf, office, audio) + ocr + archive
-        assert!(registry.extractors.len() >= 3);
+        // Count depends on features: base 2 (pdf, office) + ocr + archive
+        assert!(registry.extractors.len() >= 2);
+
+        // Audio is NOT registered while transcription is stubbed — the registry
+        // must not advertise a format it can only fail on.
+        for audio_ext in ["wav", "mp3", "ogg", "m4a", "flac", "aac"] {
+            assert!(
+                !extensions.contains(&audio_ext.to_string()),
+                "{audio_ext} must not be advertised while AudioExtractor is a stub"
+            );
+        }
+        assert!(registry.find_extractor(Path::new("note.wav")).is_none());
     }
 
     #[test]

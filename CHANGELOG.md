@@ -4,6 +4,101 @@ All notable changes to 4DA will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.1] - Unreleased
+
+Version bumped in the app manifests; not yet tagged or published. Curated highlights
+from a large body of work — this is a selection, not an exhaustive commit log.
+
+### Changed
+
+- **Behavioral learning demoted from scoring authority.** Degenerate calibration curves are now refused at both save and load, raw pre-curve scores are persisted alongside adjusted ones, and a uniform-pass circuit breaker halts a curve that stops discriminating. The engagement multiplier is reduced to the item-side community term, the learned gate axis can no longer confirm an item on its own, and both threshold auto-tuners are frozen. A migration purges poisoned calibration samples. Scoring pipeline version 18 → 19.
+- Main navigation collapsed to four views — Brief, Preemption, Blind Spots, Signal.
+- Blind Spots are ranked by consequence rather than unread volume.
+- Briefing rebuilt around a News vs. Standing Conditions split, with a unified cold-boot path; security items no longer duplicate into the feed when already shown in Preemption.
+- Embedding model swapped to bge-small-en-v1.5 (INT8) — smaller, faster, and better calibrated than the previous model.
+- Briefing synthesis is BYOK-only; the default models are set so the brief narrates out of the box.
+- Raw score percentages replaced with qualitative relevance labels.
+- Crash reporting replaced with a local-first diagnostics export.
+- Cloud embedding is opt-in; local-only is the default.
+- Signal trial shortened from 45 days to 14.
+- Website moved from Vercel to Cloudflare Pages.
+
+### Added
+
+- **Graph view for Signal** — an interactive map of how content relates, with story-first clustering, semantic satellites, colorblind-safe categories, an in-app detail panel, and remembered layout.
+- **Upgrade Plan** — ranked, per-package dependency upgrade planning, surfaced in Preemption, persisted across restarts, and readable from the CLI via `4da plan [--json]`.
+- **Ranked evidence chains** explaining why an item scored the way it did, with score reason chips on the feed.
+- **Blind Spots "Assess with AI"** — batched LLM triage, auto-assessment when your dependency set changes, a stack coverage map, package watching, and persistent dismissals.
+- **Platform-aware dependency relevance**, so advisories for build targets you do not ship are separated out.
+- **Transitive and dev-dependency vulnerability surfacing** via a local OSV audit, including an offline ecosystem cache for air-gapped scanning.
+- Curated scoring profiles and day-0 content for Java, C#, Ruby, PHP, and native mobile stacks.
+- Security floor is never paywalled — OSV preemption stays available on the free tier.
+- **Command palette** with deep-link picks, frecency ranking, and a result cache.
+- **In-process ONNX embeddings**, bundled for a zero-download cold start.
+- **Hybrid BM25 + vector search** with reciprocal rank fusion and context weighting, plus cross-encoder reranking.
+- **Mastodon and Lemmy** source adapters.
+- **Curated feed registry** of vetted sources with an in-Settings browser and per-feed health, plus access-strategy failover and adaptive throttling.
+- **Headless engine** — keeps the database fresh without the GUI, runnable one-shot or as a daemon, with OS-scheduler background refresh and a Settings toggle.
+- **Claude Desktop extension and Claude Code plugin manifest**; MCP server upgraded to SDK v2.
+- **Light theme**, plus a grouped side-rail in Settings.
+- **Instant 14-day Signal trial**, with graceful handling when no AI provider is configured.
+- Onboarding: consent-gated local scanning, editable detected interests, a persistent language switcher, and one-click project scan.
+- API keys are probed before saving, with an alert if a working key starts failing.
+- **Signal Lifetime plan.**
+- Opt-in email digest sent through your own SMTP server.
+- Hindi and Italian, bringing runtime localization to 13 languages.
+
+### Fixed
+
+- Numerous signal-feed precision failures, including registry release noise that dominated the feed and look-alike package matches.
+- Grounding now requires name corroboration before a text match counts, removing phantom critical alerts; several gate count-inflation paths closed.
+- CVSS extraction was reading a version-label digit as the severity score.
+- A confirmed direct-dependency CVE is now treated as full evidence rather than partial.
+- Curation verdicts had no epoch guard, so stale verdicts from a superseded scoring brain persisted.
+- Scheduled and headless analysis now persist the feed verdict.
+- Cold start no longer shows false assurance, vanity zero-counts, or fabricated accuracy figures on a profile with no feedback; taste-test interests are embedded so the first feed is not empty.
+- Unchanged advisories collapse instead of re-alerting daily; ungrounded security alerts cap at advisory level; a misleading "Update" action was replaced with an honest "View advisory".
+- OSV advisories were being dropped at intake; C#, PHP, and Dart stacks surfaced no vulnerabilities at all due to an ecosystem mapping gap.
+- **The pre-migration backup was deleting itself, leaving migrations with no rollback point.**
+- The re-embed repair pipeline was entirely non-functional.
+- Corpus durability: atomic rebuild and collapse detection.
+- Out-of-memory crashes in the cross-encoder reranker that killed background analysis.
+- UTF-8 character-boundary panics across many modules, including an RSS parsing panic.
+- Graph view crash under prototype freezing, an error boundary that locked navigation, and a canvas with no height that never rendered.
+- Bounded webview recovery loop; fixed a development cold-boot crash loop.
+- Signal tier silently dropped to Free when the settings schema drifted.
+- API key loss, addressed with a layered keystore, lazy hydration with backoff, and platform-native credential backends; license recovery gained a multi-layer chain and a recovery banner.
+- **Ghost tray icons** now removed on clean exit, with a sweep tool for strays.
+- Windows console-window flashes from spawned child processes silenced; notifications now attribute to 4DA rather than the parent process.
+- Modals scroll instead of clipping on short windows.
+
+### Removed
+
+- Momentum tab and the vanity metric panels that fed it.
+- Evidence tab.
+- Playbook tab — STREETS is published on the web instead.
+- Tech Radar, superseded by stack intelligence.
+- The Artificial Wisdom Engine and all its surfaces.
+- The built-in local LLM sidecar (added and removed within this cycle; never shipped in a release). Local AI is Ollama or BYOK.
+- "Hours saved" and similar vanity metrics.
+- Crash reporting.
+- Command Deck, the toolkit micro-tools, the Watches tab, and a large volume of dead components.
+
+### Security
+
+- Cleared advisories across the Rust and npm dependency trees, including RUSTSEC-2026-0037, RUSTSEC-2026-0141, RUSTSEC-2026-0187, RUSTSEC-2026-0193/0194/0195, and vulnerable `ws`, `undici`, `esbuild`, `hono`, `lopdf`, `quinn-proto`, and `lettre` versions. Nightly auditing extended to sub-lockfiles.
+- **SQL injection in natural language search**, and unparameterized standing queries.
+- **Cross-site scripting via an unvalidated URL scheme.**
+- Shell-injection and SQL formatting hardening on Linux; macOS hardened runtime.
+- SSRF and keychain posture gaps closed.
+- Prompt-injection hardening for search synthesis, with an adversarial content filter.
+- Prototype freezing for Array, Map, and Set; no-referrer policy.
+- Credential-safe project indexing.
+- Input validation on IPC command boundaries; webview CSP and plugin isolation.
+- Secret scanning across many patterns with layered defense; a private-asset leak gate whose pre-push hook had been scanning the wrong commit range.
+- Rate limiting on LLM API usage, enforced by both token count and cost.
+- Privacy claims rescoped to match actual behavior, with explicit consent for cloud LLM use and zero-retention defaults where the provider supports it.
+
 ## [1.0.0] - 2026-03-08
 
 ### Highlights
@@ -45,7 +140,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **Privacy & Security**
 - Local-first — zero telemetry, zero data collection, no 4DA server
 - BYOK (Bring Your Own Key) — API keys never leave your machine
-- Local AI via Ollama or the built-in model; optional BYOK cloud models send only what you analyze, to the provider you choose
+- Local AI via Ollama; optional BYOK cloud models send only what you analyze, to the provider you choose
 - Restrictive CSP blocks unauthorized network requests
 - Keyword-only mode available without any AI provider
 

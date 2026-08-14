@@ -1,16 +1,10 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Settings and monitoring types
 
-export interface LicenseConfig {
+interface LicenseConfig {
   tier: 'free' | 'pro' | 'signal' | 'team' | 'enterprise';
   has_key: boolean;
   activated_at: string | null;
-}
-
-export interface LocaleConfig {
-  country: string;
-  language: string;
-  currency: string;
 }
 
 export interface Settings {
@@ -94,12 +88,4 @@ export interface SystemHealth {
     engagement_rate: number;
     calibration_error: number;
   } | null;
-}
-
-export interface LearnedBehavior {
-  id: number;
-  behavior_type: string;
-  pattern: string;
-  strength: number;
-  last_triggered: string;
 }

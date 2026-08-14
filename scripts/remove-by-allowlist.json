@@ -1,0 +1,11 @@
+{
+  "_doc": "Known-expired REMOVE BY markers that are already ticketed. Consumed by scripts/check-remove-by.cjs. An entry suppresses EVERY expired marker in `file` bearing that exact `date`.",
+  "_intent": "This is a PAYDOWN LEDGER, not a parking lot. It ships empty and the goal is to keep it empty. Adding an entry is an admission of debt: it requires a ticket. Resolve the marker (delete the code, or move the date with a written reason) and remove the entry.",
+  "_schema": {
+    "file": "repo-relative path, forward slashes (e.g. src-tauri/src/decisions.rs)",
+    "date": "the marker's date, YYYY-MM-DD, exactly as written in the source",
+    "ticket": "REQUIRED — issue/PR reference tracking the removal",
+    "note": "optional one-line context"
+  },
+  "allow": []
+}

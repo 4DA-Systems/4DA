@@ -40,8 +40,5 @@
   "errorMsg.permission": "Permission refusée. Vérifiez les permissions des fichiers.",
   "errorMsg.rateLimit": "Limite de requêtes atteinte. Veuillez patienter et réessayer.",
   "errorMsg.timeout": "La requête a expiré. Réessayez dans un instant.",
-  "module.fileNotFound": "Fichier du module introuvable : {{path}}",
-  "module.unknown": "Module inconnu : {{id}}",
-  "translation.noLlm": "LLM non configuré — configurez votre clé API dans les Paramètres pour activer la traduction du contenu",
-  "translation.sourceIsEnglish": "L'anglais est la langue source — aucune traduction nécessaire"
+  "translation.noLlm": "LLM non configuré — configurez votre clé API dans les Paramètres pour activer la traduction du contenu"
 }

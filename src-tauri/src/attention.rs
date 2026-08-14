@@ -5,7 +5,6 @@
 //! Identifies blind spots between engagement patterns and codebase topics.
 
 use serde::{Deserialize, Serialize};
-use tracing::info;
 
 use crate::error::Result;
 
@@ -262,18 +261,6 @@ fn compute_trend(conn: &rusqlite::Connection, period_days: u32) -> Result<Vec<Tr
 
     trend.sort_by(|a, b| a.date.cmp(&b.date));
     Ok(trend)
-}
-
-// ============================================================================
-// Tauri Commands
-// ============================================================================
-
-#[tauri::command]
-pub fn get_attention_report(period_days: Option<u32>) -> Result<AttentionReport> {
-    crate::settings::require_signal_feature("get_attention_report")?;
-    let days = period_days.unwrap_or(30);
-    info!(target: "4da::attention", period_days = days, "Generating attention report");
-    generate_report(days)
 }
 
 #[cfg(test)]

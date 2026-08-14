@@ -13,8 +13,6 @@
 use tracing::{info, warn};
 
 const DB_KEY_NAME: &str = "4da_db_encryption_key";
-#[allow(dead_code)]
-const DB_KEY_LENGTH: usize = 64; // 256-bit key as hex string
 
 /// Get or generate the database encryption key from the OS keychain.
 ///
@@ -76,23 +74,6 @@ pub(crate) fn apply_key_to_connection(
     Ok(())
 }
 
-/// Check if a database file is encrypted by attempting to read its header.
-/// SQLCipher-encrypted databases have a non-standard header (not "SQLite format 3\0").
-#[allow(dead_code)]
-pub(crate) fn is_database_encrypted(db_path: &std::path::Path) -> bool {
-    if !db_path.exists() {
-        return false;
-    }
-    match std::fs::read(db_path) {
-        Ok(data) if data.len() >= 16 => {
-            // Standard SQLite header starts with "SQLite format 3\0"
-            let header = &data[..16];
-            header != b"SQLite format 3\0"
-        }
-        _ => false,
-    }
-}
-
 /// Generate a random 256-bit key as a hex string.
 fn generate_hex_key() -> String {
     use sha2::{Digest, Sha256};
@@ -128,10 +109,15 @@ fn generate_hex_key() -> String {
 mod tests {
     use super::*;
 
+    /// A 256-bit key rendered as hex is 64 characters. SQLCipher's `PRAGMA key`
+    /// expects exactly this width, so the length is a real invariant, not a
+    /// restatement of the implementation.
+    const EXPECTED_HEX_KEY_LEN: usize = 64;
+
     #[test]
     fn test_generate_hex_key_length() {
         let key = generate_hex_key();
-        assert_eq!(key.len(), DB_KEY_LENGTH);
+        assert_eq!(key.len(), EXPECTED_HEX_KEY_LEN);
     }
 
     #[test]
@@ -139,35 +125,6 @@ mod tests {
         let key1 = generate_hex_key();
         let key2 = generate_hex_key();
         assert_ne!(key1, key2, "Two generated keys should be different");
-    }
-
-    #[test]
-    fn test_is_database_encrypted_plaintext() {
-        // Create a temp database (plaintext) with a fully unique name to avoid
-        // conflicts when tests run in parallel within the same process.
-        let unique_id = format!(
-            "{}_{:?}_{}",
-            std::process::id(),
-            std::thread::current().id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-        );
-        let dir = std::env::temp_dir().join("4da_test_enc");
-        std::fs::create_dir_all(&dir).ok();
-        let path = dir.join(format!("test_plain_{unique_id}.db"));
-        // Clean up from any prior run
-        std::fs::remove_file(&path).ok();
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch("CREATE TABLE enc_test (id INTEGER);")
-            .unwrap();
-        drop(conn);
-
-        assert!(!is_database_encrypted(&path));
-
-        std::fs::remove_file(&path).ok();
-        std::fs::remove_dir(&dir).ok();
     }
 
     #[test]

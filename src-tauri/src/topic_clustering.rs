@@ -72,9 +72,10 @@ pub(crate) struct ClusterCandidate {
     pub source_type: String,
     pub embedding: Vec<f32>,
     pub title: String,
-    /// Content type for future mixed-signal detection refinements.
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Serde: deserialized from clustering output
+    /// Content type, loaded with each item for mixed-signal detection refinements
+    /// that were never built. Populated, never read.
+    /// (Expired removal marker dated 2026-08-01 cleared 2026-08-12.)
+    #[allow(dead_code)] // REMOVE BY 2026-11-12
     pub content_type: Option<String>,
 }
 

@@ -9,8 +9,6 @@
   "priority.alert": "alert",
   "priority.advisory": "advisory",
   "priority.watch": "watch",
-  "horizon.tactical": "tactical",
-  "horizon.strategic": "strategic",
   "action.securityReviewStack": "Review {{title}} - affects your {{tech}} stack",
   "action.securityReview": "Review security implications: {{title}}",
   "action.breakingMigration": "Check migration path - {{tech}} breaking change",

@@ -29,8 +29,6 @@ struct NpmPackageInfo {
 #[derive(Debug, Deserialize)]
 struct NpmDistTags {
     latest: Option<String>,
-    #[allow(dead_code)]
-    next: Option<String>,
 }
 
 // ============================================================================
@@ -108,20 +106,6 @@ impl NpmRegistrySource {
         }
     }
 
-    /// Create with a custom package list.
-    pub fn with_packages(packages: Vec<String>) -> Self {
-        Self {
-            config: SourceConfig {
-                enabled: true,
-                max_items: 30,
-                fetch_interval_secs: 3600,
-                custom: None,
-            },
-            client: super::shared_client(),
-            packages,
-        }
-    }
-
     /// Fetch metadata for a single package from the npm registry.
     async fn fetch_package(&self, package: &str) -> SourceResult<Option<SourceItem>> {
         let url = format!("https://registry.npmjs.org/{}", package);
@@ -136,21 +120,13 @@ impl NpmRegistrySource {
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
         let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "npm registry rate limited (HTTP 429)".to_string(),
-            ));
-        }
+        // An unpublished/renamed package is a skip, not a failure — check 404 before the
+        // shared gate, which would otherwise classify it as a network error.
         if status == reqwest::StatusCode::NOT_FOUND {
             warn!(package = %package, "npm package not found, skipping");
             return Ok(None);
         }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "npm registry forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        super::check_http_status(status, "npm registry API")?;
+        super::classify_http_status(status, "npm registry API")?;
 
         let info: NpmPackageInfo = response
             .json()
@@ -391,13 +367,6 @@ mod tests {
     }
 
     #[test]
-    fn test_npm_source_with_packages() {
-        let source = NpmRegistrySource::with_packages(vec!["lodash".into(), "axios".into()]);
-        assert_eq!(source.packages, vec!["lodash", "axios"]);
-        assert_eq!(source.source_type(), "npm_registry");
-    }
-
-    #[test]
     fn test_npm_source_default_trait() {
         let source = NpmRegistrySource::default();
         assert_eq!(source.source_type(), "npm_registry");
@@ -410,7 +379,6 @@ mod tests {
             description: Some("Next generation frontend tooling".to_string()),
             dist_tags: Some(NpmDistTags {
                 latest: Some("6.2.0".to_string()),
-                next: None,
             }),
             time: Some(HashMap::from([
                 ("created".to_string(), "2020-04-21T00:00:00Z".to_string()),
@@ -451,7 +419,6 @@ mod tests {
             description: Some("Simplified HTTP request client".to_string()),
             dist_tags: Some(NpmDistTags {
                 latest: Some("2.88.2".to_string()),
-                next: None,
             }),
             time: None,
             deprecated: Some(serde_json::json!("Use 'got' or 'node-fetch' instead")),
@@ -514,10 +481,6 @@ mod tests {
         assert_eq!(
             info.dist_tags.as_ref().unwrap().latest.as_deref(),
             Some("3.23.0")
-        );
-        assert_eq!(
-            info.dist_tags.as_ref().unwrap().next.as_deref(),
-            Some("4.0.0-beta.1")
         );
         assert!(info.time.as_ref().unwrap().contains_key("3.23.0"));
         assert!(info.deprecated.is_none());

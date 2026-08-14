@@ -26,7 +26,7 @@ use crate::{
 use crate::sources::cve_matching::normalize_ecosystem;
 
 use super::dependencies::DepMatch;
-use super::pipeline::{ScoringInput, ScoringOptions};
+use super::types::{ScoringInput, ScoringOptions};
 use super::*;
 
 // ============================================================================
@@ -3005,7 +3005,7 @@ mod tests {
         let (ctx, options) = lang_gate_fixture(&embedding);
 
         // Detect the user's current language at runtime and pick a
-        // definitively different one (mirrors pipeline_tests.rs:931).
+        // definitively different one.
         let user_lang = crate::i18n::get_user_language();
         let mismatched_lang = if user_lang == "zz-test" {
             "en"
@@ -3648,7 +3648,7 @@ mod tests {
         DepMatch {
             package_name: package_name.to_string(),
             confidence: 0.75,
-            version_delta: VersionDelta::Unknown,
+            version_delta: dependencies::VersionDelta::Unknown,
             is_dev: false,
             is_direct: true,
             version: None,

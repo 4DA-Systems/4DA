@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Stack-adaptive source signals.
 //!
-//! The content sources (Stack Overflow, Reddit, Bluesky, GitHub) historically fetched
+//! The content sources (Stack Overflow, Reddit, GitHub) historically fetched
 //! against hard-coded query lists skewed to the founder's stack (rust/typescript/react/
 //! python). That makes the firehose founder-shaped: a Go, Java, Ruby, PHP, or C# developer
 //! sees mostly content for languages they don't use.
@@ -200,23 +200,6 @@ impl StackSignals {
         dedup(out, 8)
     }
 
-    /// Bluesky search queries for the detected stack. Empty if no signals.
-    pub fn bluesky_queries(&self) -> Vec<String> {
-        let mut out: Vec<String> = Vec::new();
-        for l in &self.languages {
-            let term = match l.as_str() {
-                "csharp" => "c#".to_string(),
-                "cpp" => "c++".to_string(),
-                other => other.to_string(),
-            };
-            out.push(format!("{term} programming"));
-        }
-        for f in &self.frameworks {
-            out.push(f.clone());
-        }
-        dedup(out, 6)
-    }
-
     /// GitHub language-search names for the detected stack. Empty if no language signals.
     pub fn github_languages(&self) -> Vec<String> {
         let out: Vec<String> = self
@@ -261,7 +244,6 @@ mod tests {
         assert!(s.is_empty());
         assert!(s.stackoverflow_tags().is_empty());
         assert!(s.reddit_subreddits().is_empty());
-        assert!(s.bluesky_queries().is_empty());
         assert!(s.github_languages().is_empty());
     }
 
@@ -283,7 +265,6 @@ mod tests {
         assert!(s.stackoverflow_tags().contains(&"c#".to_string()));
         assert!(s.github_languages().contains(&"c#".to_string()));
         assert!(s.reddit_subreddits().contains(&"csharp".to_string()));
-        assert!(s.bluesky_queries().contains(&"c# programming".to_string()));
     }
 
     #[test]

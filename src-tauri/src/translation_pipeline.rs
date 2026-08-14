@@ -85,32 +85,6 @@ pub async fn translate_batch(
     Ok(all_translated)
 }
 
-/// Translate markdown content preserving structure.
-pub async fn translate_markdown(content: &str, target_lang: &str) -> Result<String> {
-    let client = get_llm_client()?;
-
-    let system = format!(
-        "Translate the following Markdown from English to {}. \
-         Preserve all Markdown formatting, headings (## Lesson N: ...), code blocks, and links. \
-         Translate the heading text after 'Lesson N:' but keep the '## Lesson N:' prefix structure. \
-         Return only the translated Markdown.",
-        lang_name(target_lang)
-    );
-
-    let response = client
-        .complete(
-            &system,
-            vec![llm::Message {
-                role: "user".to_string(),
-                content: content.to_string(),
-            }],
-        )
-        .await
-        .context("Markdown translation failed")?;
-
-    Ok(response.content)
-}
-
 // ============================================================================
 // Key Comparison
 // ============================================================================

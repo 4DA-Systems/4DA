@@ -33,7 +33,7 @@ function orderResults(all: CommandResult[]): CommandResult[] {
   return ordered;
 }
 
-export interface UseCommandSearch {
+interface UseCommandSearch {
   query: string;
   setQuery: (q: string) => void;
   results: CommandResult[];

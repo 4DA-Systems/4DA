@@ -75,22 +75,11 @@ pub struct TrustSummary {
     pub trend: String,
 }
 
-/// Preemption win -- record of a case where 4DA caught something before it became urgent.
-/// Populated by the background validator (Phase 2 plan, scheduled task runs weekly)
-/// that checks whether past preemption alerts were later validated by reality
-/// (e.g. a CVE we warned about was published, a breaking change actually shipped).
-// REMOVE BY 2026-08-01
-#[allow(dead_code)] // DB schema struct -- deserialized from preemption_wins table
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct PreemptionWin {
-    pub alert_id: String,
-    pub alert_title: String,
-    pub alerted_at: String,
-    pub incident_at: Option<String>,
-    pub lead_time_hours: Option<f32>,
-    pub verified: bool,
-}
+// `PreemptionWin` (a mirror of the `preemption_wins` table) was deleted
+// 2026-08-12: its removal marker dated 2026-08-01 expired and nothing ever
+// deserialized it. The live writer/reader is `decision_advantage::validation`,
+// which uses raw SQL — so the struct was an unbound second copy of the schema
+// and free to drift from it. Git history preserves it.
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]

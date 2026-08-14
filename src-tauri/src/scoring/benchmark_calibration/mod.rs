@@ -32,12 +32,16 @@ use super::benchmark_scenarios::{
     load_scenarios, profile_ctx, BenchmarkFailure, BenchmarkReport, CategoryResult, Scenario,
 };
 #[cfg(feature = "fastembed-local")]
-use super::pipeline::ScoringInput;
+use super::types::ScoringInput;
 #[cfg(feature = "fastembed-local")]
 use super::*;
 
+// `self::` is explicit on purpose: `use super::*` above now also glob-imports
+// `scoring::types` (the ScoringInput/ScoringOptions home). The local `mod types`
+// shadows the glob by Rust's resolution rules, but naming it leaves nothing to
+// infer at a glance.
 #[cfg(feature = "fastembed-local")]
-pub(crate) use types::CalibrationResult;
+pub(crate) use self::types::CalibrationResult;
 
 // ============================================================================
 // Full Calibration Orchestrator
@@ -168,7 +172,10 @@ fn embedding_generation_works() {
             return;
         }
     };
-    let embeddings: Vec<Vec<f32>> = raw.into_iter().map(types::pad_and_normalize).collect();
+    let embeddings: Vec<Vec<f32>> = raw
+        .into_iter()
+        .map(self::types::pad_and_normalize)
+        .collect();
     assert_eq!(embeddings.len(), 3, "Should get one embedding per text");
 
     for (i, emb) in embeddings.iter().enumerate() {

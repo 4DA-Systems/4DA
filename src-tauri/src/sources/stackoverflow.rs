@@ -17,8 +17,6 @@ use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 #[derive(Debug, Deserialize)]
 struct SoResponse {
     items: Option<Vec<SoQuestion>>,
-    #[allow(dead_code)]
-    has_more: Option<bool>,
     quota_remaining: Option<u32>,
 }
 
@@ -103,18 +101,7 @@ impl StackOverflowSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "Stack Overflow rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "Stack Overflow forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        super::check_http_status(status, "StackOverflow API")?;
+        super::classify_http_status(response.status(), "StackOverflow API")?;
 
         let so_resp: SoResponse = response
             .json()

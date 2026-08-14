@@ -6,7 +6,6 @@
 //! attention (query x document jointly), which is substantially more precise than
 //! bi-encoder cosine similarity for ranking.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{debug, info, warn};
 
 use crate::scoring;
@@ -19,9 +18,6 @@ use parking_lot::Mutex;
 /// model can be dropped and re-initialized; the lock serializes load/use/unload.
 #[cfg(feature = "fastembed-local")]
 static RERANKER_MODEL: Mutex<Option<fastembed::TextRerank>> = Mutex::new(None);
-
-/// True while the model is resident (drives `is_reranker_available`).
-static RERANKER_AVAILABLE: AtomicBool = AtomicBool::new(false);
 
 /// Maximum number of candidates to rerank (keeps latency under 200ms on 4-core CPU).
 const MAX_RERANK_CANDIDATES: usize = 50;
@@ -48,12 +44,6 @@ pub(crate) struct RerankCandidate {
 #[derive(Debug, Clone)]
 pub(crate) struct RerankResult {
     pub id: u64,
-    /// Raw cross-encoder score (diagnostic — logged in debug traces).
-    #[allow(dead_code)] // REMOVE BY 2026-08-01 — wire into debug trace UI or drop
-    pub cross_encoder_score: f32,
-    /// Original PASIFA score before blending (diagnostic — logged in debug traces).
-    #[allow(dead_code)] // REMOVE BY 2026-08-01 — wire into debug trace UI or drop
-    pub original_score: f32,
     pub blended_score: f32,
 }
 
@@ -164,10 +154,7 @@ fn load_reranker() -> Option<fastembed::TextRerank> {
         .with_show_download_progress(true);
 
     match fastembed::TextRerank::try_new(options) {
-        Ok(model) => {
-            RERANKER_AVAILABLE.store(true, Ordering::Relaxed);
-            Some(model)
-        }
+        Ok(model) => Some(model),
         Err(e) => {
             warn!(
                 target: "4da::reranker",
@@ -187,7 +174,6 @@ fn load_reranker() -> Option<fastembed::TextRerank> {
 pub(crate) fn unload_reranker() {
     let mut guard = RERANKER_MODEL.lock();
     if guard.take().is_some() {
-        RERANKER_AVAILABLE.store(false, Ordering::Relaxed);
         info!(target: "4da::reranker", "Cross-encoder reranker unloaded — ONNX arena reclaimed until next pass");
     }
 }
@@ -254,8 +240,6 @@ pub(crate) fn rerank_candidates(query: &str, candidates: &[RerankCandidate]) -> 
 
                         output.push(RerankResult {
                             id: candidate.id,
-                            cross_encoder_score: ce_score,
-                            original_score: candidate.original_score,
                             blended_score: blended,
                         });
                     }
@@ -265,8 +249,6 @@ pub(crate) fn rerank_candidates(query: &str, candidates: &[RerankCandidate]) -> 
                 for candidate in candidates.iter().skip(capped) {
                     output.push(RerankResult {
                         id: candidate.id,
-                        cross_encoder_score: candidate.original_score,
-                        original_score: candidate.original_score,
                         blended_score: candidate.original_score,
                     });
                 }
@@ -307,8 +289,6 @@ fn passthrough(candidates: &[RerankCandidate]) -> Vec<RerankResult> {
         .iter()
         .map(|c| RerankResult {
             id: c.id,
-            cross_encoder_score: c.original_score,
-            original_score: c.original_score,
             blended_score: c.original_score,
         })
         .collect()
@@ -390,12 +370,6 @@ pub(crate) fn apply_cross_encoder_reranking(
 
     // Pass complete — reclaim the model's ~1.5-2 GB ONNX arena until next time.
     unload_reranker();
-}
-
-/// Check if the cross-encoder reranker is available (without initializing it).
-#[allow(dead_code)] // REMOVE BY 2026-08-01 — expose in settings UI or drop
-pub(crate) fn is_reranker_available() -> bool {
-    RERANKER_AVAILABLE.load(Ordering::Relaxed)
 }
 
 #[cfg(test)]

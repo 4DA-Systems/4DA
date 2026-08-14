@@ -23,7 +23,7 @@ export type EvidencePool = 'affects_you' | 'in_orbit' | 'ambient';
  * >= 0.70 means the item's extracted topics matched the user's declared or
  * adjacent stack even without a concrete dependency edge.
  */
-export const ORBIT_DOMAIN_THRESHOLD = 0.7;
+const ORBIT_DOMAIN_THRESHOLD = 0.7;
 
 /**
  * True when the item has a verifiable edge to the user's own machine state —

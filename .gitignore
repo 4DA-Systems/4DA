@@ -426,3 +426,6 @@ data/*.db.backup.*
 data/*.db.corrupt; these add the -wal.bak variant.)
 data/*.bak-*
 data/*.db-wal.bak*
+
+# Transient commit-message scratch files
+.git-msg-*.txt
