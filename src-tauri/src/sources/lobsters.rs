@@ -26,12 +26,32 @@ struct LobstersStory {
     #[serde(default)]
     tags: Vec<String>,
     #[serde(default)]
-    submitter_user: Option<LobstersUser>,
+    submitter_user: Option<LobstersSubmitter>,
 }
 
+/// The submitter arrives either as a bare username string — the shape the live
+/// API returns as of 2026-08-14 — or as an object carrying a `username` field,
+/// which is what it used to return. Accept both.
+///
+/// This is not defensive padding: the object-only binding silently took the
+/// whole source offline. `#[serde(default)]` did not save it, because the field
+/// was PRESENT with the wrong type, and `default` only covers ABSENT fields. A
+/// single field's type change zeroed every Lobste.rs fetch, and the unit test
+/// kept passing because it asserted the stale shape.
 #[derive(Debug, Deserialize)]
-struct LobstersUser {
-    username: String,
+#[serde(untagged)]
+enum LobstersSubmitter {
+    Name(String),
+    Object { username: String },
+}
+
+impl LobstersSubmitter {
+    fn username(&self) -> &str {
+        match self {
+            Self::Name(name) => name,
+            Self::Object { username } => username,
+        }
+    }
 }
 
 // ============================================================================
@@ -69,14 +89,53 @@ impl LobstersSource {
 
         super::classify_http_status(response.status(), "Lobste.rs API")?;
 
-        let stories: Vec<LobstersStory> = response
+        // Decode the envelope and each story SEPARATELY. Deserializing straight
+        // into `Vec<LobstersStory>` is all-or-nothing: one record whose shape
+        // drifted upstream takes the entire batch to zero, which is exactly how
+        // this source went dark. Per-record decoding degrades to "lost one
+        // story" instead of "lost the source".
+        let raw: Vec<serde_json::Value> = response
             .json()
             .await
             .map_err(|e| SourceError::Parse(e.to_string()))?;
+        let raw_count = raw.len();
+
+        let mut stories: Vec<LobstersStory> = Vec::with_capacity(raw_count.min(max));
+        let mut skipped: Vec<String> = Vec::new();
+        for value in raw {
+            if stories.len() >= max {
+                break;
+            }
+            match serde_json::from_value::<LobstersStory>(value) {
+                Ok(story) => stories.push(story),
+                Err(e) => skipped.push(e.to_string()),
+            }
+        }
+
+        if !skipped.is_empty() {
+            warn!(
+                url = %url,
+                skipped = skipped.len(),
+                raw_count,
+                first_error = %skipped[0],
+                "Lobste.rs: skipped unparseable stories (upstream shape drift?)"
+            );
+        }
+
+        // Records arrived but NONE decoded — that is a contract break, not an
+        // empty feed. Surface it as an error so the source shows as failing
+        // rather than quietly reporting zero items forever.
+        if stories.is_empty() && raw_count > 0 {
+            return Err(SourceError::Parse(format!(
+                "all {raw_count} Lobste.rs stories failed to decode; first error: {}",
+                skipped
+                    .first()
+                    .map_or("<none>", std::string::String::as_str)
+            )));
+        }
 
         let items: Vec<SourceItem> = stories
             .into_iter()
-            .take(max)
             .map(|story| {
                 // Use description as content; for stories without description,
                 // content will be populated later via scrape_content
@@ -103,7 +162,7 @@ impl LobstersSource {
                     metadata["created_at"] = serde_json::json!(created);
                 }
                 if let Some(user) = &story.submitter_user {
-                    metadata["author"] = serde_json::json!(user.username);
+                    metadata["author"] = serde_json::json!(user.username());
                 }
 
                 SourceItem::new("lobsters", &story.short_id, &story.title)
@@ -324,7 +383,7 @@ mod tests {
         assert_eq!(stories[0].comment_count, Some(15));
         assert_eq!(stories[0].tags, vec!["rust", "programming"]);
         assert_eq!(
-            stories[0].submitter_user.as_ref().unwrap().username,
+            stories[0].submitter_user.as_ref().unwrap().username(),
             "rustdev"
         );
 
@@ -332,5 +391,72 @@ mod tests {
         assert!(stories[1].url.is_none());
         assert!(stories[1].description.is_empty());
         assert!(stories[1].submitter_user.is_none());
+    }
+
+    /// VERBATIM record from `https://lobste.rs/hottest.json`, captured
+    /// 2026-08-14. `submitter_user` is a BARE STRING here. The previous binding
+    /// required an object and so failed this exact payload — every fetch, both
+    /// endpoints — while `test_lobsters_json_parsing` above stayed green because
+    /// it asserted the old shape. Keep this fixture byte-faithful to the wire.
+    #[test]
+    fn test_lobsters_parses_live_bare_string_submitter() {
+        let json = r#"[{
+            "short_id":"tssf5y",
+            "created_at":"2026-08-13T12:43:13.111-05:00",
+            "title":"I want extern \"fil-c\"",
+            "url":"https://domenkozar.com/2026/08/13/i-want-extern-fil-c/",
+            "score":42,
+            "flags":1,
+            "comment_count":13,
+            "description":"",
+            "description_plain":"",
+            "submitter_user":"fzakaria",
+            "user_is_author":false,
+            "tags":["c","rust"],
+            "short_id_url":"https://lobste.rs/s/tssf5y",
+            "comments_url":"https://lobste.rs/s/tssf5y/i_want_extern_fil_c"
+        }]"#;
+
+        let stories: Vec<LobstersStory> =
+            serde_json::from_str(json).expect("live Lobste.rs payload must decode");
+        assert_eq!(stories.len(), 1);
+        assert_eq!(stories[0].short_id, "tssf5y");
+        assert_eq!(stories[0].tags, vec!["c", "rust"]);
+        assert_eq!(
+            stories[0].submitter_user.as_ref().unwrap().username(),
+            "fzakaria"
+        );
+    }
+
+    /// Both submitter shapes must decode to the same username.
+    #[test]
+    fn test_lobsters_submitter_accepts_both_shapes() {
+        let bare: LobstersSubmitter = serde_json::from_str(r#""alice""#).unwrap();
+        assert_eq!(bare.username(), "alice");
+
+        let object: LobstersSubmitter = serde_json::from_str(r#"{"username":"bob"}"#).unwrap();
+        assert_eq!(object.username(), "bob");
+    }
+
+    /// One malformed record must cost one story, not the whole batch. This is
+    /// the property whose absence turned a single field's type change into a
+    /// total source blackout.
+    #[test]
+    fn test_lobsters_one_bad_record_does_not_zero_the_batch() {
+        let json = r#"[
+            {"short_id":"ok1","title":"Good one","tags":["rust"]},
+            {"title":"Missing short_id — undecodable"},
+            {"short_id":"ok2","title":"Good two","tags":["c"]}
+        ]"#;
+
+        let raw: Vec<serde_json::Value> = serde_json::from_str(json).unwrap();
+        let decoded: Vec<LobstersStory> = raw
+            .into_iter()
+            .filter_map(|v| serde_json::from_value::<LobstersStory>(v).ok())
+            .collect();
+
+        assert_eq!(decoded.len(), 2, "the two well-formed stories must survive");
+        assert_eq!(decoded[0].short_id, "ok1");
+        assert_eq!(decoded[1].short_id, "ok2");
     }
 }

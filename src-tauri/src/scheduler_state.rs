@@ -50,6 +50,10 @@ pub mod jobs {
     pub const TEMPORAL_SNAPSHOT: &str = "temporal_snapshot";
     pub const BACKFILL: &str = "scoring_backfill";
     pub const CALIBRATION_MONITOR: &str = "calibration_monitor";
+    /// Proactive signal-chain prediction notifications. Persisted so a restart
+    /// cannot reset the cadence to "fire immediately" — without this the job
+    /// re-fires on every cold boot.
+    pub const CHAIN_NOTIFY: &str = "chain_notify";
     /// Stores the dependency-set epoch HASH (not a timestamp) — when it changes, the
     /// re-examination job re-queues buried releases/advisories of now-tracked deps.
     pub const DEP_EPOCH: &str = "dep_epoch_hash";
@@ -109,6 +113,10 @@ pub fn hydrate_from_db(state: &MonitoringState) {
             }
             jobs::DEP_HEALTH => {
                 state.last_dep_health_check.store(ts_u64, Ordering::Relaxed);
+                hydrated += 1;
+            }
+            jobs::CHAIN_NOTIFY => {
+                state.last_chain_notify.store(ts_u64, Ordering::Relaxed);
                 hydrated += 1;
             }
             jobs::BEHAVIOR_DECAY | jobs::AUTOPHAGY => {

@@ -713,12 +713,8 @@ async fn analyze_cached_content_inner_impl(
             )
             .await
             {
-                Ok(_) => {
-                    info!(
-                        target: "4da::analysis",
-                        elapsed_ms = elapsed_ms(rerank_started),
-                        "Differential LLM rerank phase complete"
-                    );
+                Ok(outcome) => {
+                    outcome.log(elapsed_ms(rerank_started), "differential");
                 }
                 Err(_) => {
                     warn!(target: "4da::analysis", "LLM reranking timed out after 120s, using pipeline scores only");

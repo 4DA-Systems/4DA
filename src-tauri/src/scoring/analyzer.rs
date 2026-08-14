@@ -213,25 +213,35 @@ pub(crate) async fn score_items_full(
         "PASIFA scoring loop complete"
     );
 
-    // Pre-score coverage instrumentation (#3 scale lever): this pass scored
-    // `total_cached` candidates out of the embedded corpus. A low ratio means
-    // the candidate SELECTOR — not the scorer — governs recall: items not
-    // selected here are never scored and so never surface. Logged so the
-    // selection prefilter can be tuned against real drop numbers at scale.
+    // Candidate-selection instrumentation for THIS pass.
+    //
+    // This used to be logged as "Pre-score coverage — items not selected this
+    // pass were never scored", with a `coverage_pct` of `total_cached / corpus`.
+    // That claim is false and the metric was actively misleading: items not
+    // selected this pass retain the score and pipeline-version stamp written by
+    // an EARLIER pass. Measured against the live DB on 2026-08-14, the log
+    // reported coverage_pct=9.5 / not_scored=9,171 while every one of the
+    // 10,172 corpus items was in fact scored and stamped at the current
+    // PIPELINE_VERSION — i.e. real coverage was 100%, not 9.5%. Anyone acting
+    // on the old line would go hunting a recall crisis that does not exist.
+    //
+    // What this ratio genuinely measures is selector THROUGHPUT per pass. The
+    // honest measure of corpus coverage is the pipeline-version histogram,
+    // surfaced by `get_scoring_coverage` (triage_audit_commands.rs).
     if let Ok(corpus) = db.count_embedded_source_items() {
-        let not_scored = (corpus - total_cached as i64).max(0);
-        let coverage_pct = if corpus > 0 {
+        let not_selected = (corpus - total_cached as i64).max(0);
+        let selection_pct = if corpus > 0 {
             (total_cached as f64 / corpus as f64) * 100.0
         } else {
             0.0
         };
         info!(
             target: "4da::analysis",
-            candidates_scored = total_cached,
+            candidates_this_pass = total_cached,
             corpus_embedded = corpus,
-            not_scored = not_scored,
-            coverage_pct = format!("{coverage_pct:.1}"),
-            "Pre-score coverage — items not selected this pass were never scored"
+            not_selected_this_pass = not_selected,
+            selection_pct = format!("{selection_pct:.1}"),
+            "Candidate selection for this pass — NOT corpus coverage; unselected items keep their score from an earlier pass"
         );
     }
 
@@ -331,12 +341,14 @@ pub(crate) async fn score_items_full(
         )
         .await
         {
-            Ok(_) => {
-                info!(
-                    target: "4da::analysis",
-                    elapsed_ms = llm_started.elapsed().as_millis(),
-                    "LLM rerank phase complete"
-                );
+            Ok(outcome) => {
+                // Log what ACTUALLY happened. This previously printed
+                // "LLM rerank phase complete" for every outcome including the
+                // silent skips, so a rerank that never ran was indistinguishable
+                // from one that did — the live app reported
+                // `elapsed_ms=0` as success while the daily budget had been
+                // exhausted 30 minutes earlier.
+                outcome.log(llm_started.elapsed().as_millis(), "cached_full");
             }
             Err(_) => {
                 warn!(target: "4da::analysis", "LLM reranking timed out after 120s, using pipeline scores only");
@@ -381,17 +393,32 @@ pub(crate) async fn score_items_full(
     let relevant_count = results.iter().filter(|r| r.relevant && !r.excluded).count();
     let excluded_count = results.iter().filter(|r| r.excluded).count();
     info!(target: "4da::analysis", "=== CACHE-FIRST ANALYSIS COMPLETE ===");
+    // `results` has SHRUNK since the PASIFA loop: fuzzy-title dedup, topic-level
+    // dedup and temporal clustering all remove entries. Reporting only the final
+    // length next to a rejection rate invited the reading "we scored 654 items",
+    // when the scorer actually saw `total_cached`. Log both, so the funnel is
+    // legible and the denominator of the rejection rate is unambiguous.
+    let survivors = results.len();
     info!(target: "4da::analysis",
-        total = results.len(),
+        scored = total_cached,
+        survivors,
+        removed_by_dedup = total_cached.saturating_sub(survivors),
         relevant = relevant_count,
         excluded = excluded_count,
         elapsed_ms = scoring_started.elapsed().as_millis(),
         "Cache analysis summary"
     );
 
-    // Record rejection rate for verifiable metrics
+    // Record rejection rate for verifiable metrics.
+    //
+    // NOTE: `total_scored` here is the POST-dedup survivor count, not the number
+    // of items the scorer evaluated — the two differ by the dedup/clustering
+    // drop above. The column keeps this meaning deliberately: 179 historical
+    // rows were written under it, and silently redefining the denominator would
+    // make every stored `rejection_rate` incomparable with its own history.
+    // Read it as "of the items that survived dedup, how many were relevant".
     if let Err(e) =
-        db.record_scoring_stats("cached_full", results.len(), relevant_count, excluded_count)
+        db.record_scoring_stats("cached_full", survivors, relevant_count, excluded_count)
     {
         tracing::warn!(target: "4da::analysis", error = %e, "Failed to record scoring stats");
     }
