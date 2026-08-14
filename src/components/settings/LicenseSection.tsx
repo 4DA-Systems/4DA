@@ -89,11 +89,19 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
   };
 
   const recoveryReasonKey: Record<string, string> = {
+    // `emailed` is the normal, successful outcome — the server mailed the key to
+    // the address on file instead of returning it (it cannot verify that the
+    // caller owns the address). Nothing was activated, so `ok` is false, but this
+    // is NOT an error and must not be rendered as one.
+    emailed: 'settings.license.recovery.emailed',
+    recovery_email_unavailable: 'settings.license.recovery.unavailable',
+    invalid_email: 'settings.license.recovery.invalidEmail',
     not_found: 'settings.license.recovery.notFound',
     expired: 'settings.license.recovery.expired',
     network_error: 'settings.license.recovery.networkError',
     rate_limited: 'settings.license.recovery.rateLimited',
   };
+  const recoveryIsInformational = recoveryResult?.reason === 'emailed';
 
   const handleStartTrial = async () => {
     setStarting(true);
@@ -269,7 +277,13 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
                 </button>
               </div>
               {recoveryResult && (
-                <div className={`text-xs p-2 rounded ${recoveryResult.ok ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>
+                <div className={`text-xs p-2 rounded ${
+                  recoveryResult.ok
+                    ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+                    : recoveryIsInformational
+                      ? 'bg-accent-gold/10 text-accent-gold border border-accent-gold/30'
+                      : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                }`}>
                   {recoveryResult.ok
                     ? t('settings.license.recovery.success')
                     : t(recoveryReasonKey[recoveryResult.reason ?? ''] ?? 'settings.license.recovery.networkError')}

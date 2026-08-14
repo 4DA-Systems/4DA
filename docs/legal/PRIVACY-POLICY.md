@@ -219,6 +219,7 @@ To be unambiguous:
 | Keygen | App (Signal tier only) | License key | License validation |
 | User's SMTP provider | App (optional, user-configured) | Digest email contents | Email delivery |
 | Cloudflare | Website | Server logs, analytics | Website hosting |
+| Resend | Website (licence recovery only, when you ask for it) | Your purchase email address and your licence key | Emailing your licence key to you. We email the key rather than displaying it, because we cannot verify that whoever typed an address owns it. |
 | Shopify | Store | Purchase and shipping information | Merchandise sales |
 
 ---

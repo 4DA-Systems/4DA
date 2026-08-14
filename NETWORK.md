@@ -199,7 +199,11 @@ Only contacted when you enter a license key (`src-tauri/src/settings/license/key
 - **Host:** `4da.ai` — **the only 4DA-operated server the app ever contacts.**
 - **Endpoint:** `GET https://4da.ai/api/streets/activate?email={email}`
 - **Trigger:** only when you click "Recover License by Email" in Settings.
-- **Data sent:** your purchase email (query parameter). Returns the license key + tier.
+- **Data sent:** your purchase email (query parameter).
+- **Data returned:** **not the key.** The server emails the key to the address on file and
+  replies with the same acknowledgement whether or not that address holds a licence. The app
+  cannot prove you own the address you typed, so the key goes to the mailbox instead — that
+  also means the endpoint can't be used to look up whether someone else is a subscriber.
 
 ### 2f. App updates (Tauri updater)
 

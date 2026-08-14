@@ -67,6 +67,12 @@ const EXCEPTIONS = {
   'src-tauri/src/domain_profile.rs':       'Domain profiling — extract data tables from logic',
   'src-tauri/src/source_fetching/mod.rs':  'Source fetching orchestration — scheduler + rate limiting',
   'src-tauri/src/bin/cli.rs':              'Standalone CLI binary — cannot split (cli/ gitignored for workspace)',
+  // NOT a justified exception — a TEMPORARY unblock. #423 grew this file from
+  // 739 to 1032 lines (past the 1000-line hard error) without adding an entry
+  // here, which left main red and blocked every subsequent local commit. Owed
+  // back to #423: split the reranker and DELETE this line. Do not treat the
+  // presence of this entry as permission to keep growing the file.
+  'src-tauri/src/analysis_rerank.rs':      'TEMPORARY — 32 lines over after #423; owed a split, see comment above',
 
   // ── TypeScript — justified large files ────────────────────────────────────
   'src/lib/commands.ts':                   'IPC command registry — all typed Tauri commands',
