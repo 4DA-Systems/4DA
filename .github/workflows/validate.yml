@@ -177,23 +177,11 @@ jobs:
           pnpm_config_pm_on_fail: ignore
         run: npx -y pnpm@11.13.0 audit --audit-level=high
 
-      - name: Check file sizes
-        run: node scripts/check-file-sizes.cjs --ci
-
-      - name: No console-window-flashing spawns (INV-043)
-        run: node scripts/check-no-window-spawns.cjs
-
-      - name: Release channel integrity
-        run: node scripts/check-release-channel.cjs
-
-      - name: Guard self-tests (scripts/*.test.cjs)
-        # The guards immediately above (file sizes, no-window spawns, release
-        # channel) have their OWN unit tests, and until now those tests ran in
-        # no hook and no workflow — nothing verified that the guards still
-        # detect what they claim to. `pnpm run validate` does not run in CI
-        # either (this job runs its steps individually), so wiring them here is
-        # what actually gates them. 53 tests across 6 files, ~5s.
-        run: pnpm run test:scripts
+      # check-file-sizes / check-no-window-spawns / check-release-channel and
+      # the guard self-tests moved to the `repo-guards` job. They are REPO-wide
+      # invariants, not frontend ones — file sizes in particular scan
+      # src-tauri/src too, and living here meant they were skipped on exactly
+      # the Rust-only PRs they needed to gate. See the note on that job.
 
       - name: TypeScript type check
         run: pnpm run typecheck
@@ -283,6 +271,56 @@ jobs:
         working-directory: mcp-4da-server
         run: pnpm run test
 
+  # ─────────────────────────────────────────────────────────────────────
+  # Repo-wide invariants. NO path filter and NO `needs:` — these must run on
+  # EVERY pull request and dispatch, whatever changed.
+  #
+  # This job exists because of a real outage on 2026-08-14. `check-file-sizes`
+  # scans BOTH trees (SCAN_DIRS = ['src', 'src-tauri/src']) but only ever ran
+  # inside the Frontend job — which the path filter SKIPS on a Rust-only PR. So
+  # #423, a Rust-only PR, merged a 1032-line src-tauri/src/analysis_rerank.rs
+  # past the 1000-line hard error threshold without the gate ever executing.
+  # `check-file-sizes.cjs` then exited 1 on main, and because .husky/pre-commit
+  # treats that as blocking, EVERY developer in the fleet was unable to commit.
+  # A gate that guards Rust files must not be reachable only through a filter
+  # that excludes Rust.
+  #
+  # Runs on a hosted runner and needs no `pnpm install`: all three guards use
+  # only node builtins (fs, path), and the self-tests are `node --test`. ~40s.
+  repo-guards:
+    name: Repo guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        # Only so `pnpm run test:scripts` resolves the script list from
+        # package.json rather than duplicating it here. No dependency install.
+        run: |
+          corepack disable
+          npm install -g --force pnpm@9.15.0
+
+      - name: Check file sizes
+        run: node scripts/check-file-sizes.cjs --ci
+
+      - name: No console-window-flashing spawns (INV-043)
+        run: node scripts/check-no-window-spawns.cjs
+
+      - name: Release channel integrity
+        run: node scripts/check-release-channel.cjs
+
+      - name: Guard self-tests (scripts/*.test.cjs)
+        # The guards above have their OWN unit tests, and until now those ran in
+        # no hook and no workflow — nothing verified the guards still detect
+        # what they claim. `pnpm run validate` does not run in CI either.
+        run: pnpm run test:scripts
+
   rust:
     name: Rust (${{ matrix.label }})
     needs: changes
@@ -305,7 +343,12 @@ jobs:
     # the local pre-push gate. cargo-audit/deny use prebuilt binaries (taiki-e) to skip
     # a ~3-min source compile each.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45, not 30: this job now compiles the integration test targets too (see
+    # the compile-gate step). Swatinem's cache is only saved from main, so until
+    # this change lands there, PR runs restore a cache with no integration-test
+    # artifacts in it and pay the full cold link for 5 extra binaries. 30 was
+    # too tight for that first window and a timeout here is a red required gate.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -447,7 +490,10 @@ jobs:
     if: always()
     # Includes `changes` so a failure in the path-detector itself is caught.
     # Path-filtered legs report "skipped", which the check below treats as pass.
-    needs: [changes, frontend, mcp-server, rust]
+    # `repo-guards` is unfiltered and therefore never skips — it is the only leg
+    # guaranteed to have actually run, and it must gate the merge (this job is
+    # the sole required status check).
+    needs: [changes, repo-guards, frontend, mcp-server, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
