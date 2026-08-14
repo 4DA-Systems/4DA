@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 
 // ========================================================================
-// Content capping logic (500KB limit mirrors fetch_all_sources inline logic)
+// Content capping logic — exercises the REAL `cap_on_char_boundary` used by
+// fetch_all_sources. These tests previously re-implemented the capping inline,
+// so they asserted against a copy of the logic and could not have caught the
+// char-boundary panic #422 fixed. They now call the production function.
 // ========================================================================
 
-const CONTENT_CAP: usize = 500_000;
+use super::{cap_on_char_boundary, MAX_CONTENT_BYTES as CONTENT_CAP};
 
 #[test]
 fn test_content_cap_short_content_unchanged() {
     let content = "Short content that is well under the limit.".to_string();
-    let capped = if content.len() > CONTENT_CAP {
-        content[..CONTENT_CAP].to_string()
-    } else {
-        content.clone()
-    };
+    let capped = cap_on_char_boundary(content.clone(), CONTENT_CAP);
     assert_eq!(
         capped, content,
         "Short content should pass through unchanged"
@@ -23,11 +22,7 @@ fn test_content_cap_short_content_unchanged() {
 #[test]
 fn test_content_cap_exactly_at_limit() {
     let content = "x".repeat(CONTENT_CAP);
-    let capped = if content.len() > CONTENT_CAP {
-        content[..CONTENT_CAP].to_string()
-    } else {
-        content.clone()
-    };
+    let capped = cap_on_char_boundary(content, CONTENT_CAP);
     assert_eq!(
         capped.len(),
         CONTENT_CAP,
@@ -38,16 +33,48 @@ fn test_content_cap_exactly_at_limit() {
 #[test]
 fn test_content_cap_over_limit_truncated() {
     let content = "y".repeat(CONTENT_CAP + 1000);
-    let capped = if content.len() > CONTENT_CAP {
-        content[..CONTENT_CAP].to_string()
-    } else {
-        content.clone()
-    };
+    let capped = cap_on_char_boundary(content, CONTENT_CAP);
     assert_eq!(
         capped.len(),
         CONTENT_CAP,
         "Over-limit content should be truncated to 500KB"
     );
+}
+
+/// The regression that matters: a raw `&s[..cap]` panics when `cap` lands
+/// mid-character. Every cap boundary from 1..=8 bytes into a 3-byte-char
+/// string is exercised, so a naive byte cut would panic on most of them.
+#[test]
+fn test_content_cap_never_splits_a_multibyte_char() {
+    // 'あ' is 3 bytes in UTF-8, so most byte offsets are NOT char boundaries.
+    let content = "あ".repeat(16);
+    for cap in 1..=8 {
+        let capped = cap_on_char_boundary(content.clone(), cap);
+        assert!(
+            capped.len() <= cap,
+            "cap {cap}: result must not exceed the byte ceiling"
+        );
+        assert_eq!(
+            capped.len() % 3,
+            0,
+            "cap {cap}: must cut on a char boundary, never mid-sequence"
+        );
+        // Re-validating as UTF-8 is the real proof the cut was legal.
+        assert!(std::str::from_utf8(capped.as_bytes()).is_ok());
+    }
+}
+
+/// Emoji are 4-byte sequences and are common in scraped social content.
+#[test]
+fn test_content_cap_handles_four_byte_chars() {
+    let content = "🚀".repeat(8);
+    let capped = cap_on_char_boundary(content, 10);
+    assert_eq!(
+        capped.len(),
+        8,
+        "10-byte cap over 4-byte chars must floor to 8"
+    );
+    assert_eq!(capped, "🚀🚀");
 }
 
 // ========================================================================

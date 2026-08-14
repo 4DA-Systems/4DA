@@ -230,6 +230,16 @@ unsafe_code = "deny"
 unwrap_used = "deny"
 expect_used = "warn"
 panic = "warn"
+# NOTE on `clippy::string_slice`: byte-slicing a str panics on any index that is
+# not a UTF-8 char boundary, and 23 such vectors accumulated on ingested text
+# before #422 fixed them — while `unwrap_used = "deny"` above kept production
+# unwraps at exactly zero. That asymmetry is real and this lint is the right
+# closer. It is NOT enabled crate-wide yet: measured against this tree it fires
+# 280 times (sources/ 55, ace/ 38, scoring/ 36, content_personalization/ 25,
+# ...). Blanket-allowing that backlog would cement any live panic hiding in it,
+# so it is being adopted module-by-module instead, starting with
+# `source_fetching` (see the `#![deny]` in src/source_fetching/mod.rs). Promote
+# to a crate-wide deny here once the backlog is audited out.
 # Pedantic — good code practices
 pedantic = { level = "warn", priority = -1 }
 # Allow specific pedantic lints that are too noisy for this codebase

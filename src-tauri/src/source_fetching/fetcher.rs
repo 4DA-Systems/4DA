@@ -15,6 +15,30 @@ use crate::{
 use super::processor::process_source_items;
 use super::{fetch_with_retry, AdapterFailureTracker};
 
+/// Byte ceiling for a single item's stored content. Caps memory on a source
+/// that returns a pathological page; 500KB is far above any real article.
+const MAX_CONTENT_BYTES: usize = 500_000;
+
+/// Truncate `s` to at most `max_bytes`, cutting only on a UTF-8 char boundary.
+///
+/// The char-boundary proof for the module's `#![deny(clippy::string_slice)]`:
+/// `floor_char_boundary` returns the greatest index `<= max_bytes` that IS a
+/// char boundary, so the slice below can never split a multi-byte sequence.
+/// A raw `&s[..max_bytes]` here panics with "byte index N is not a char
+/// boundary" on the multi-byte UTF-8 that arbitrary scraped pages are full of —
+/// two of the 23 panic vectors #422 fixed were exactly this cut.
+///
+/// Byte-oriented on purpose: this is a memory cap, not display truncation. Use
+/// `utils::truncate_display` for anything a human reads.
+#[allow(clippy::string_slice)]
+fn cap_on_char_boundary(s: String, max_bytes: usize) -> String {
+    if s.len() > max_bytes {
+        s[..s.floor_char_boundary(max_bytes)].to_string()
+    } else {
+        s
+    }
+}
+
 /// Fetch items from all sources (HN, arXiv, Reddit) directly
 pub(crate) async fn fetch_all_sources(
     db: &Database,
@@ -340,25 +364,13 @@ pub(crate) async fn fetch_all_sources(
                                 let scraped =
                                     source.scrape_content(&item).await.unwrap_or_default();
                                 // Cap scraped content to 500KB to prevent memory exhaustion.
-                                // Snap to a char boundary: a raw byte cut panics with
-                                // "byte index N is not a char boundary" on the multi-byte
-                                // UTF-8 that arbitrary scraped pages are full of.
-                                if scraped.len() > 500_000 {
-                                    scraped[..scraped.floor_char_boundary(500_000)].to_string()
-                                } else {
-                                    scraped
-                                }
+                                cap_on_char_boundary(scraped, MAX_CONTENT_BYTES)
                             } else {
                                 String::new()
                             }
                         } else {
                             // Cap item content too (char-boundary-snapped, same reason)
-                            let c = item.content.clone();
-                            if c.len() > 500_000 {
-                                c[..c.floor_char_boundary(500_000)].to_string()
-                            } else {
-                                c
-                            }
+                            cap_on_char_boundary(item.content.clone(), MAX_CONTENT_BYTES)
                         };
 
                         let generic = GenericSourceItem {
