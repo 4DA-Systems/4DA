@@ -2,14 +2,20 @@
 
 > **Generated from `CLAUDE.md`** — the maintained source of truth for this repo.
 > Regenerate this file whenever `CLAUDE.md` changes; do not edit it in isolation or it will
-> drift back out of sync. Last synced: 2026-08-12.
+> drift back out of sync. Last synced: 2026-08-14.
 
 ## What Is 4DA
 
-**4DA reads the internet for developers — privately, locally — and gets sharper every day.**
+**4DA reads the internet for developers — privately, locally. Your codebase decides what's relevant.**
 
-4DA (4 Dimensional Autonomy) is the Tauri 2.0 desktop app that delivers on that promise. It learns
-from how you engage with what it shows you: yesterday's noise becomes tomorrow's signal.
+4DA (4 Dimensional Autonomy) is the Tauri 2.0 desktop app that delivers on that description. It scores
+every item against your actual stack — your manifests, your dependencies, your recent commits. When the
+engine improves it re-judges everything it already holds: yesterday's noise becomes tomorrow's signal.
+
+<!-- retired-ok: this notice quotes the banned phrases in order to ban them -->
+**Retired (AD-030):** "gets sharper every day" and "it learns from how you engage with what it shows
+you." Do not reintroduce these claims on any surface — enforced by `scripts/check-retired-claims.cjs`.
+Improvement is attributed to engine updates and the user's codebase, never to engagement.
 
 It is **not** a content tool or a news reader — it is proactive developer intelligence.
 

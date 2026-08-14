@@ -11,6 +11,7 @@ from a large body of work — this is a selection, not an exhaustive commit log.
 
 ### Changed
 
+<!-- retired-ok: release history — names the demoted mechanism, does not make the retired claim -->
 - **Behavioral learning demoted from scoring authority.** Degenerate calibration curves are now refused at both save and load, raw pre-curve scores are persisted alongside adjusted ones, and a uniform-pass circuit breaker halts a curve that stops discriminating. The engagement multiplier is reduced to the item-side community term, the learned gate axis can no longer confirm an item on its own, and both threshold auto-tuners are frozen. A migration purges poisoned calibration samples. Scoring pipeline version 18 → 19.
 - Main navigation collapsed to four views — Brief, Preemption, Blind Spots, Signal.
 - Blind Spots are ranked by consequence rather than unread volume.
