@@ -132,8 +132,7 @@ pub fn detect_cross_team_signals(
             ),
         });
     }
-    correlations
-        .sort_by(|a, b| priority_rank(&b.org_severity).cmp(&priority_rank(&a.org_severity)));
+    correlations.sort_by_key(|c| std::cmp::Reverse(priority_rank(&c.org_severity)));
     Ok(correlations)
 }
 

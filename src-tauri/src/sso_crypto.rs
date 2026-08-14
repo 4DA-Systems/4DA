@@ -35,7 +35,7 @@ struct JwksCache {
 
 static JWKS_CACHE: LazyLock<Mutex<Option<JwksCache>>> = LazyLock::new(|| Mutex::new(None));
 
-const JWKS_CACHE_DURATION: std::time::Duration = std::time::Duration::from_secs(3600);
+const JWKS_CACHE_DURATION: std::time::Duration = std::time::Duration::from_hours(1);
 
 /// Fetch JWKS from the IdP's discovery endpoint and cache the keys.
 pub(crate) async fn fetch_and_cache_jwks(issuer: &str) -> crate::error::Result<()> {
@@ -381,7 +381,13 @@ mod tests {
         use rsa::pkcs1::EncodeRsaPrivateKey;
         use rsa::pkcs1::EncodeRsaPublicKey;
 
-        let mut rng = rand::thread_rng();
+        // `rsa` 0.10 takes a `rand_core` 0.10 `CryptoRng`; this crate's `rand`
+        // is 0.8 (rand_core 0.6), so `rand::thread_rng()` no longer satisfies
+        // the bound. `getrandom::SysRng` is the system CSPRNG and implements
+        // `TryCryptoRng`; `UnwrapErr` turns its error type into `Infallible`,
+        // which is what rand_core's blanket `CryptoRng` impl requires.
+        // getrandom is already a direct dependency — no new crate needed.
+        let mut rng = getrandom::rand_core::UnwrapErr(getrandom::SysRng);
         let private_key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
         let public_key = private_key.to_public_key();
 

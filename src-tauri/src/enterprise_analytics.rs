@@ -102,7 +102,7 @@ pub fn get_org_analytics(conn: &Connection, org_id: &str, days: i32) -> Result<O
 
     // Top signal categories (sorted by count descending, top 10)
     let mut sorted_categories: Vec<(String, usize)> = signal_categories.into_iter().collect();
-    sorted_categories.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted_categories.sort_by_key(|c| std::cmp::Reverse(c.1));
     sorted_categories.truncate(10);
 
     // Per-team activity

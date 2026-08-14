@@ -11,8 +11,16 @@
 //! - The team key is encrypted per-member using X25519 for distribution
 
 use anyhow::{bail, Context, Result};
+// NOTE on the two RNG generations in this file. `chacha20poly1305` 0.11 sits on
+// `aead` 0.6 / `crypto-common` 0.2, which dropped the `aead::OsRng` re-export
+// and `AeadCore::generate_nonce` in favour of the `Generate` trait (backed by
+// the system CSPRNG via getrandom, which `chacha20poly1305`'s default features
+// enable). `x25519-dalek` 2.x still pins `rand_core` 0.6, so its
+// `random_from_rng` needs `rand` 0.8's `OsRng` — the two are NOT
+// interchangeable. Both paths are system CSPRNGs; this is an API migration,
+// not a change in randomness source or strength.
 use chacha20poly1305::{
-    aead::{Aead, AeadCore, KeyInit, OsRng},
+    aead::{Aead, Generate, KeyInit},
     XChaCha20Poly1305, XNonce,
 };
 use hkdf::Hkdf;
@@ -70,7 +78,8 @@ pub struct StorableKeypair {
 impl TeamCrypto {
     /// Generate a new X25519 keypair for this team member.
     pub fn generate() -> Self {
-        let secret = StaticSecret::random_from_rng(OsRng);
+        // `rand` 0.8's OsRng: x25519-dalek 2.x is on rand_core 0.6.
+        let secret = StaticSecret::random_from_rng(rand::rngs::OsRng);
         let public = PublicKey::from(&secret);
 
         info!(target: "4da::team_crypto", "Generated new X25519 keypair");
@@ -137,7 +146,7 @@ impl TeamCrypto {
     pub fn generate_team_key() -> [u8; 32] {
         let mut key = [0u8; 32];
         use rand::RngCore;
-        OsRng.fill_bytes(&mut key);
+        rand::rngs::OsRng.fill_bytes(&mut key);
         key
     }
 
@@ -224,7 +233,11 @@ pub fn decrypt_entry(
 
 fn encrypt_bytes(key: &[u8; 32], plaintext: &[u8]) -> Result<Vec<u8>> {
     let cipher = XChaCha20Poly1305::new(key.into());
-    let nonce = XChaCha20Poly1305::generate_nonce(&mut OsRng);
+    // 24 fresh random bytes from the system CSPRNG, per encryption. Replaces
+    // `AeadCore::generate_nonce(&mut OsRng)`, removed in aead 0.6; `Generate`
+    // draws from the same source. XChaCha20's 192-bit nonce is specifically
+    // sized for safe random generation.
+    let nonce = XNonce::generate();
 
     let ciphertext = cipher
         .encrypt(&nonce, plaintext)
@@ -247,11 +260,15 @@ fn decrypt_bytes(key: &[u8; 32], blob: &[u8]) -> Result<Vec<u8>> {
     }
 
     let (nonce_bytes, ciphertext) = blob.split_at(NONCE_SIZE);
-    let nonce = XNonce::from_slice(nonce_bytes);
+    // `Array::from_slice` is deprecated in hybrid-array in favour of TryFrom.
+    // The length is already guaranteed by the guard above, so this cannot fail
+    // — but it is handled rather than unwrapped (no panics in production).
+    let nonce = XNonce::try_from(nonce_bytes)
+        .map_err(|_| anyhow::anyhow!("Invalid nonce length in encrypted blob"))?;
 
     let cipher = XChaCha20Poly1305::new(key.into());
     let plaintext = cipher
-        .decrypt(nonce, ciphertext)
+        .decrypt(&nonce, ciphertext)
         .map_err(|_| anyhow::anyhow!("Decryption failed (wrong key or tampered data)"))?;
 
     Ok(plaintext)

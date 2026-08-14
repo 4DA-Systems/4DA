@@ -7,7 +7,14 @@
 use crate::error::Result;
 
 /// Bundled audit logging parameters (used by team-sync without enterprise).
+///
+/// The fields are deliberately never read: this stub's `log_audit` is a no-op,
+/// but the struct must keep the same shape as the real `audit::AuditLogParams`
+/// so that team-sync call sites compile identically with and without the
+/// `enterprise` feature. Only reachable in the team-sync-without-enterprise
+/// combination, which is why it went unnoticed until that combo was built.
 #[cfg(feature = "team-sync")]
+#[allow(dead_code)]
 pub struct AuditLogParams<'a> {
     pub conn: &'a rusqlite::Connection,
     pub team_id: &'a str,

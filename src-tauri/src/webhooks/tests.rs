@@ -7,7 +7,6 @@
 use rusqlite::{params, Connection};
 use uuid::Uuid;
 
-use super::delivery::check_circuit_breaker;
 use super::ensure_webhook_tables;
 use super::management::delete_webhook;
 use super::secrets::{forget_webhook_secret, persist_webhook_secret, read_webhook_secret};

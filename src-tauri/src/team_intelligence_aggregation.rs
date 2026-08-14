@@ -196,7 +196,7 @@ pub(crate) fn compute_overlap_zones(dnas: &[MemberDna]) -> Vec<OverlapZone> {
         })
         .collect();
 
-    zones.sort_by(|a, b| b.member_count.cmp(&a.member_count));
+    zones.sort_by_key(|z| std::cmp::Reverse(z.member_count));
     zones
 }
 

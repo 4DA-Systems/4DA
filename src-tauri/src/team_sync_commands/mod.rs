@@ -13,15 +13,17 @@ mod sources;
 
 // Re-export all public Tauri commands so callers can use
 // `team_sync_commands::command_name` unchanged.
-pub use decisions::{get_decision_detail, get_team_decisions, resolve_decision, vote_on_decision};
-pub use lifecycle::{create_team, create_team_invite, join_team_via_invite};
-pub use sharing::{
-    get_team_members, get_team_sync_status, propose_team_decision, share_dna_with_team,
-    share_signal_with_team,
-};
-pub use sources::{
-    get_team_sources, remove_team_source, share_source_with_team, upvote_team_source,
-};
+//
+// These MUST be glob re-exports, matching `ace_commands/mod.rs`. `#[tauri::command]`
+// emits a companion `__cmd__<name>` macro next to the function, and
+// `generate_handler!` resolves `team_sync_commands::__cmd__<name>`. A NAMED
+// re-export (`pub use decisions::{get_team_decisions, ...}`) carries only the
+// function, leaving the macro behind — which failed the build with 33
+// "cannot find `__cmd__*`" errors the moment this feature was enabled.
+pub use decisions::*;
+pub use lifecycle::*;
+pub use sharing::*;
+pub use sources::*;
 
 // ============================================================================
 // Helpers (shared across submodules)
