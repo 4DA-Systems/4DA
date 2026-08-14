@@ -473,7 +473,12 @@ fn extract_js_topics(content: &str, topics: &mut HashSet<String>) {
         // ES6 imports
         if trimmed.starts_with("import ") {
             if let Some(from_idx) = trimmed.find(" from ") {
-                let module = &trimmed[from_idx + 7..];
+                // +6, not +7: `" from "` is 6 bytes. The extra byte was there to
+                // skip the opening quote, but `trim_matches` below already
+                // strips quotes from BOTH ends — and stepping one byte past an
+                // ASCII match panics when the next char is multi-byte (curly
+                // quotes in copy-pasted code: `import x from 'pkg'`).
+                let module = &trimmed[from_idx + 6..];
                 let module = module.trim_matches(&['"', '\'', ';'][..]);
                 if !module.starts_with('.') && !module.starts_with('/') {
                     // External module
@@ -935,6 +940,19 @@ pub struct RateLimitStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression: the module offset was `find(" from ") + 7`, one byte PAST
+    /// the 6-byte pattern. That extra byte split the following char whenever
+    /// it was multi-byte — curly quotes in copy-pasted code are the common
+    /// case — panicking the ACE file watcher on an ordinary source file.
+    #[test]
+    fn extract_js_topics_survives_multibyte_after_from() {
+        let content = "import x from \u{2018}react\u{2019};\nimport axios from 'axios';\n";
+        let topics = extract_topics_from_content(content, "ts");
+        // The straight-quoted import on the next line must still be picked up,
+        // proving the scan completed rather than unwinding.
+        assert!(topics.contains(&"axios".to_string()));
+    }
 
     #[test]
     fn test_extract_rust_topics() {

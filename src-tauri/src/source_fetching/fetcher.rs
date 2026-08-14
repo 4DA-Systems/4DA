@@ -339,9 +339,12 @@ pub(crate) async fn fetch_all_sources(
                                 );
                                 let scraped =
                                     source.scrape_content(&item).await.unwrap_or_default();
-                                // Cap scraped content to 500KB to prevent memory exhaustion
+                                // Cap scraped content to 500KB to prevent memory exhaustion.
+                                // Snap to a char boundary: a raw byte cut panics with
+                                // "byte index N is not a char boundary" on the multi-byte
+                                // UTF-8 that arbitrary scraped pages are full of.
                                 if scraped.len() > 500_000 {
-                                    scraped[..500_000].to_string()
+                                    scraped[..scraped.floor_char_boundary(500_000)].to_string()
                                 } else {
                                     scraped
                                 }
@@ -349,10 +352,10 @@ pub(crate) async fn fetch_all_sources(
                                 String::new()
                             }
                         } else {
-                            // Cap item content too
+                            // Cap item content too (char-boundary-snapped, same reason)
                             let c = item.content.clone();
                             if c.len() > 500_000 {
-                                c[..500_000].to_string()
+                                c[..c.floor_char_boundary(500_000)].to_string()
                             } else {
                                 c
                             }

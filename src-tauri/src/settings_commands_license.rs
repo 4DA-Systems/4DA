@@ -90,7 +90,11 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
         expires_at = Some(payload.expires_at);
     } else {
         // Keygen API key (e.g., BE3529-741BAF-...)
-        info!(target: "4da::license", "Validating Keygen key (format: {}...)", &license_key[..6.min(license_key.len())]);
+        // Char-based prefix: `[..6.min(len)]` clamps length but not the char
+        // boundary, so a mis-pasted key with multi-byte UTF-8 in its first
+        // 6 bytes panicked this command.
+        let key_prefix: String = license_key.chars().take(6).collect();
+        info!(target: "4da::license", "Validating Keygen key (format: {key_prefix}...)");
         let result = crate::settings::validate_license_key_keygen_fresh(&license_key, "free").await;
         info!(target: "4da::license", tier = %result.tier, online = result.online, cached = result.cached, code = %result.code, detail = %result.detail, "Keygen validation result");
 

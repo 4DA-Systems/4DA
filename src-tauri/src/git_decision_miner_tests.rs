@@ -36,6 +36,22 @@ fn no_match_on_non_decision() {
     assert!(find_decision_verb("fix: handle edge case in parser").is_none());
 }
 
+/// Regression: the match index came from `subject_line.to_lowercase()` but was
+/// applied to `subject_line`. `to_lowercase()` is Unicode-aware and can change
+/// byte length — U+0130 (capital I with dot) lowercases to TWO code points,
+/// growing by one byte — so every later index was shifted by one. Here that
+/// shift landed inside the 3-byte CJK char right after the verb and panicked.
+/// Real commit subjects carry Turkish/German/CJK text routinely, and this path
+/// runs over the user's whole git history on first run.
+#[test]
+fn decision_verb_survives_length_changing_lowercase() {
+    let (_, verb, after) =
+        find_decision_verb("\u{0130}stanbul: switch to\u{65E5}\u{672C}").unwrap();
+    assert_eq!(verb, "switch");
+    // The text after the verb must start exactly at the char boundary.
+    assert_eq!(after, "\u{65E5}\u{672C}");
+}
+
 #[test]
 fn word_boundary_rejects_substring() {
     // "adopting" contains "adopt" but is narrative, not a decision

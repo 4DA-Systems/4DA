@@ -26,11 +26,18 @@ pub struct DetectedKeysResponse {
 }
 
 /// Mask a key for safe display: first 8 + last 4 chars.
+///
+/// Counted in CHARS throughout. Byte slicing panicked on an env var holding
+/// multi-byte UTF-8, and the byte-length star count rendered one `*` per BYTE
+/// (four stars for a single emoji) rather than per char as documented.
 fn mask_key(key: &str) -> String {
-    if key.len() <= 12 {
-        return "*".repeat(key.len());
+    let key_chars = key.chars().count();
+    if key_chars <= 12 {
+        return "*".repeat(key_chars);
     }
-    format!("{}...{}", &key[..8], &key[key.len() - 4..])
+    let head: String = key.chars().take(8).collect();
+    let tail: String = key.chars().skip(key_chars - 4).collect();
+    format!("{head}...{tail}")
 }
 
 /// Find an API key from a set of env var names.
@@ -164,6 +171,23 @@ mod tests {
     fn test_mask_key_exactly_12() {
         let masked = mask_key("123456789012");
         assert_eq!(masked, "************");
+    }
+
+    /// Regression: `&key[..8]` / `&key[key.len() - 4..]` were byte cuts, so an
+    /// env var holding multi-byte UTF-8 panicked during startup key detection.
+    #[test]
+    fn mask_key_handles_multibyte() {
+        let key = "\u{65E5}".repeat(20); // 20 chars, 60 bytes
+        assert_eq!(
+            mask_key(&key),
+            format!("{}...{}", "\u{65E5}".repeat(8), "\u{65E5}".repeat(4))
+        );
+    }
+
+    /// The star count is per CHAR, not per byte (one emoji is one `*`).
+    #[test]
+    fn mask_key_short_multibyte_stars_count_chars() {
+        assert_eq!(mask_key("\u{1F600}\u{1F600}"), "**");
     }
 
     #[test]

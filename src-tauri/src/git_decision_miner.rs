@@ -188,7 +188,12 @@ pub(crate) struct ParsedCommit {
 /// Find the first decision verb match in a commit subject line.
 /// Returns (detection_token, normalized_verb, text_after_verb) or None.
 pub fn find_decision_verb(subject_line: &str) -> Option<(String, String, String)> {
-    let lower = subject_line.to_lowercase();
+    // ASCII-only folding. `idx` below comes from this copy but slices
+    // `subject_line`; `to_lowercase()` is Unicode-aware and can change byte
+    // length (a subject like "Istanbul: switched to axum" containing U+0130
+    // shifts every later index by one), which either panics mid-char or
+    // silently returns byte-shifted text. Every DECISION_VERBS token is ASCII.
+    let lower = subject_line.to_ascii_lowercase();
     for (token, verb) in DECISION_VERBS {
         if let Some(idx) = lower.find(token) {
             // Word-boundary check: character before the token must be
