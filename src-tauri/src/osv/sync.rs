@@ -492,7 +492,6 @@ pub(super) fn store_vulnerability(
             Affected {
                 package: Some(pkg.clone()),
                 ranges: Some(Vec::new()),
-                versions: None,
             }
         });
         if let Some(ranges) = &affected.ranges {
@@ -639,7 +638,6 @@ mod tests {
                     serde_json::json!({"fixed": "1.2.3"}),
                 ]),
             }]),
-            versions: None,
         };
 
         let fixed = extract_fixed_versions(&affected).unwrap();
@@ -661,7 +659,6 @@ mod tests {
                     serde_json::json!({"fixed": "2.1.0"}),
                 ]),
             }]),
-            versions: None,
         };
 
         let fixed = extract_fixed_versions(&affected).unwrap();
@@ -679,7 +676,6 @@ mod tests {
                 range_type: "SEMVER".to_string(),
                 events: Some(vec![serde_json::json!({"introduced": "0"})]),
             }]),
-            versions: None,
         };
 
         assert!(extract_fixed_versions(&affected).is_none());
@@ -706,7 +702,6 @@ mod tests {
                     ecosystem: "npm".to_string(),
                 }),
                 ranges: None,
-                versions: None,
             }]),
             references: None,
             published: None,

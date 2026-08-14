@@ -61,9 +61,13 @@ pub(crate) struct Severity {
 pub(crate) struct Affected {
     pub package: Option<PackageRef>,
     pub ranges: Option<Vec<Range>>,
-    // REMOVE BY 2026-08-15 — used by OSV deserialization, not directly accessed yet
-    #[allow(dead_code)]
-    pub versions: Option<Vec<String>>,
+    // `versions` (the OSV explicit affected-version list) is deliberately not
+    // deserialized: nothing in this crate ever read it, and matching runs off
+    // `ranges` via check_version_affected, which falls back to "assume
+    // affected" when it cannot decide. An advisory carrying only `versions`
+    // therefore still alerts — dropping the field costs no coverage. Serde
+    // ignores unknown fields, so the wire format is unaffected. Reinstate it
+    // only alongside real matching logic that consumes it.
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
