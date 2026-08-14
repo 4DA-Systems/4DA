@@ -9,6 +9,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/server";
 
 import type { FourDADatabase } from "./db.js";
+import { assertToolPermission } from "./auth-context.js";
 
 import {
   executeGetRelevantContent,
@@ -81,6 +82,10 @@ const FRESHNESS_TOOLS = new Set([
 /**
  * Dispatch a tool call by name. Awaits uniformly (no-op for sync executors).
  * Returns MCP-formatted response with JSON-serialized result.
+ *
+ * Authenticated HTTP callers are role-checked here — the single choke point
+ * every tool call passes through. Stdio callers are unaffected (no auth
+ * context; the host already owns the process).
  */
 export async function dispatchTool(
   name: string,
@@ -91,6 +96,8 @@ export async function dispatchTool(
   if (!executor) {
     throw new Error(`Unknown tool: ${name}`);
   }
+
+  assertToolPermission(name);
 
   const result = await executor(db, (args || {}) as Record<string, unknown>);
   const payload = FRESHNESS_TOOLS.has(name) ? attachFreshness(db, result) : result;

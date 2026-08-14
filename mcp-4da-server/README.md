@@ -188,6 +188,21 @@ npx @4da/mcp-server
 npx @4da/mcp-server --http --port 4840
 ```
 
+The HTTP transport binds to `127.0.0.1` by default and applies a `Host`-header
+DNS rebinding guard to every request. Exposing it beyond this machine requires
+a shared secret:
+
+```bash
+MCP_AUTH_SECRET=<same value as the relay's JWT_SECRET> \
+MCP_ALLOWED_HOSTS=mcp.internal \
+  npx @4da/mcp-server --http --host 0.0.0.0
+```
+
+Without `MCP_AUTH_SECRET` a non-loopback bind is refused at startup. With it,
+every request must carry a Bearer token whose HMAC-SHA256 signature verifies
+against that secret, and the token's role is enforced per tool (`viewer` is
+read-only; `member` and `admin` may write). Put TLS in front of it.
+
 ## CLI Reference
 
 ```
@@ -204,6 +219,9 @@ npx @4da/mcp-server --version    # Print version
 |----------|-------------|---------|
 | `FOURDA_DB_PATH` | Path to 4DA's SQLite database | Auto-detected |
 | `FOURDA_OFFLINE` | Disable all network calls | `false` |
+| `MCP_AUTH_SECRET` | Shared secret for verifying Bearer tokens on `--http` (HMAC-SHA256). Falls back to `JWT_SECRET`. Unset means no token is accepted. | Unset |
+| `MCP_AUTH_REQUIRED` | Require auth on a **loopback** `--http` bind. Always required on a non-loopback bind. | `false` |
+| `MCP_ALLOWED_HOSTS` | Extra comma-separated hostnames accepted in `Host`/`Origin` (needed when binding to `0.0.0.0`). | localhost only |
 
 ## FAQ
 
