@@ -62,6 +62,8 @@ jobs:
     name: Detect changes
     # PR-only (see note in validate.yml): push/schedule/dispatch skip this and
     # always build via fresh-clone's `github.event_name != 'pull_request'` clause.
+    # That clause only works because `fresh-clone`'s `if:` is wrapped in a status
+    # function — see the comment there. Do not remove it.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -91,7 +93,24 @@ jobs:
     # Always run on push/schedule/dispatch (the canary); on PRs, only when code
     # that could affect a fresh clone changed. A skipped run still reports via
     # the `Hermetic Success` aggregate below (skipped == pass).
-    if: github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'
+    #
+    # The `!cancelled()` wrapper is LOAD-BEARING, not decoration. `changes` is
+    # itself PR-only, so on push/schedule/dispatch it is SKIPPED — and GitHub
+    # skips any job whose `needs` was skipped unless that job's `if:` contains a
+    # status function (`always()` / `cancelled()` / `success()` / `failure()`).
+    # Without the wrapper the implicit `success()` on `needs` won this argument
+    # and the canary silently skipped on exactly the three triggers the comment
+    # above promises it runs on: push-to-main, the nightly cron and manual
+    # dispatch all reported "success" in 6-26 SECONDS without cloning anything
+    # (observed 2026-08-13/14: 7s, 7s, 9s vs ~19min for a real PR run). The
+    # nightly cron had never built a single fresh clone.
+    #
+    # `!cancelled()` rather than `always()`: a cancelled run should stay
+    # cancelled, not spawn a 45-minute cold build. If `changes` FAILS on a PR,
+    # `needs.changes.outputs.code` is empty, this evaluates false and the leg
+    # skips — but `hermetic-success` below takes `changes` in its own `needs`
+    # and fails on that `failure` result, so a broken detector cannot pass.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.code == 'true') }}
     runs-on: ${{ matrix.os }}
     # Cold, cacheless build + full test suite on two platforms. Runs have
     # historically landed ~16-18 min; 45 caps a hung network fetch or a runner
@@ -163,17 +182,36 @@ jobs:
 
       - name: Rust — cold compile gate (no cache, no-run)
         # Fast-fails the build/resource class before the slow test run.
+        #
+        # `--tests` (not `--lib`): cargo's `--tests` selects every target with
+        # `test = true`, which is the lib unittests, the bin unittests AND the
+        # integration tests under src-tauri/tests/. The old `--lib` scope meant
+        # the integration suite was never even COMPILED here, so a fresh clone
+        # could not prove it builds.
         working-directory: src-tauri
-        run: cargo test --lib --no-run
+        run: cargo test --tests --no-run
 
-      - name: Rust — hermetic unit tests (isolated, throwaway data dir)
+      - name: Rust — hermetic tests (unit + integration, isolated data dir)
         working-directory: src-tauri
         env:
           # Force any data-dir resolution onto a path that holds no real DB, so
           # a reintroduced live-corpus dependency (Finding 2) fails here.
+          #
+          # The directory name must keep containing the substring "data":
+          # src/state.rs::test_get_db_path_points_to_data_dir asserts the
+          # resolved DB path contains "data" and ends with "4da.db". Renaming
+          # this to something like "4da-hermetic" alone fails that test.
           FOURDA_DATA_DIR: ${{ runner.temp }}/4da-hermetic-data
           FOURDA_DB_PATH: ${{ runner.temp }}/4da-hermetic-data/4da.db
-        run: cargo test --lib
+        # `--tests` widens this from the lib-only scope to lib + bins + the 154
+        # real integration tests in src-tauri/tests/ (migration, pipeline,
+        # source-resilience, stack-simulation) plus the victauri dogfood suite,
+        # which self-skips without VICTAURI_E2E=1. Those had NEVER run in CI on
+        # any workflow. All are hermetic by construction — pipeline_integration
+        # uses an in-memory DB via fourda_lib::test_utils::test_db() and
+        # migration_tests uses tempfile::tempdir() — so they are safe to run
+        # under the isolated data dir above.
+        run: cargo test --tests
 
   # ─────────────────────────────────────────────────────────────────────
   # Aggregate gate: a SINGLE status check to require in branch protection,

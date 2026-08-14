@@ -44,18 +44,71 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       mcp: ${{ steps.filter.outputs.mcp }}
       workflows: ${{ steps.filter.outputs.workflows }}
+      uncovered: ${{ steps.uncovered.outputs.uncovered }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+
+      # ── Fail-safe: paths that NO filter below claims ─────────────────────
+      # The filters below are an ALLOWLIST of areas CI knows how to validate,
+      # and everything else fell through to "skipped == pass". site/,
+      # paddle-webhook/, mcp-memory-server/, editors/vscode/ and .husky/ were
+      # all invisible — while `Validate Success` is the ONLY required check and
+      # auto-merge is enabled repo-wide. A Dependabot bump into the payment
+      # webhook, or a PR weakening .husky/ itself, could merge green with no
+      # build, test, lint or audit having run at all.
+      #
+      # This inverts the default: an unrecognised path now RUNS the generic
+      # gate instead of silently passing, and any directory added in future is
+      # covered on day one without editing this file.
+      #
+      # `predicate-quantifier: every` is REQUIRED here. The default ('some')
+      # ORs the patterns, and a list of negations OR'd together matches every
+      # file (any path outside src/ satisfies '!src/**'). With 'every' a file
+      # must satisfy ALL patterns — i.e. sit outside every known area.
+      #
+      # Deliberately placed BEFORE the main filter step to keep this diff clear
+      # of the end-of-job boundary that PR #418 inserts a new job into.
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        id: uncovered
+        with:
+          predicate-quantifier: 'every'
+          filters: |
+            uncovered:
+              - '!src/**'
+              - '!src-tauri/**'
+              - '!mcp-4da-server/**'
+              - '!scripts/**'
+              - '!public/**'
+              - '!e2e/**'
+              - '!.husky/**'
+              - '!.github/**'
+              - '!.claude/**'
+              - '!docs/**'
+              - '!**/*.md'
+              - '!package.json'
+              - '!pnpm-lock.yaml'
+              - '!index.html'
+              - '!vite.config.*'
+              - '!tsconfig*.json'
+              - '!tailwind.config.*'
+
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: filter
         with:
           filters: |
             workflows:
-              - '.github/workflows/**'
+              # '.github/**', not just workflows/: dependabot.yml, CODEOWNERS
+              # and composite actions all change what CI does or what lands,
+              # yet none of them used to trigger a single job.
+              - '.github/**'
             rust:
               - 'src-tauri/**'
             frontend:
               - 'src/**'
+              # .husky/ holds the local commit-msg / pre-push guards. A PR that
+              # weakens them must not be able to merge without CI running.
+              - '.husky/**'
+              - 'e2e/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'index.html'
@@ -70,7 +123,21 @@ jobs:
   frontend:
     name: Frontend
     needs: changes
-    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
+    # The `!cancelled()` wrapper is LOAD-BEARING on all three heavy jobs.
+    # `changes` is PR-only, so on workflow_dispatch it SKIPS — and GitHub skips
+    # any job whose `needs` skipped unless the job's `if:` contains a status
+    # function. The `github.event_name == 'workflow_dispatch'` clause below has
+    # therefore never once fired: dispatch skipped Frontend, MCP Server and the
+    # whole Rust matrix while `Validate Success` (`if: always()`) still reported
+    # green. Same defect class as hermetic.yml's fresh-clone job.
+    #
+    # `uncovered` is the fail-safe from the detector above: a changed path that
+    # no filter recognises runs this job — the repo-wide generic gate (file
+    # sizes, release-channel integrity, IPC validation, root npm audit) —
+    # rather than passing with nothing run. It deliberately does NOT trigger the
+    # Rust matrix or MCP legs; those are 30-minute builds and an unrecognised
+    # path is far more likely to be JS/config than Rust.
+    if: ${{ !cancelled() && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.workflows == 'true' || needs.changes.outputs.uncovered == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: [self-hosted, windows, 4da]
     timeout-minutes: 30
     defaults:
@@ -110,14 +177,11 @@ jobs:
           pnpm_config_pm_on_fail: ignore
         run: npx -y pnpm@11.13.0 audit --audit-level=high
 
-      - name: Check file sizes
-        run: node scripts/check-file-sizes.cjs --ci
-
-      - name: No console-window-flashing spawns (INV-043)
-        run: node scripts/check-no-window-spawns.cjs
-
-      - name: Release channel integrity
-        run: node scripts/check-release-channel.cjs
+      # check-file-sizes / check-no-window-spawns / check-release-channel and
+      # the guard self-tests moved to the `repo-guards` job. They are REPO-wide
+      # invariants, not frontend ones — file sizes in particular scan
+      # src-tauri/src too, and living here meant they were skipped on exactly
+      # the Rust-only PRs they needed to gate. See the note on that job.
 
       - name: TypeScript type check
         run: pnpm run typecheck
@@ -171,7 +235,9 @@ jobs:
     # Gating on `changes` lets each leg run/skip on its own and parallelize
     # across multiple runners.
     needs: changes
-    if: needs.changes.outputs.mcp == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
+    # See the `!cancelled()` note on the frontend job — without it the
+    # workflow_dispatch clause is unreachable.
+    if: ${{ !cancelled() && (needs.changes.outputs.mcp == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: [self-hosted, windows, 4da]
     timeout-minutes: 15
     defaults:
@@ -205,10 +271,62 @@ jobs:
         working-directory: mcp-4da-server
         run: pnpm run test
 
+  # ─────────────────────────────────────────────────────────────────────
+  # Repo-wide invariants. NO path filter and NO `needs:` — these must run on
+  # EVERY pull request and dispatch, whatever changed.
+  #
+  # This job exists because of a real outage on 2026-08-14. `check-file-sizes`
+  # scans BOTH trees (SCAN_DIRS = ['src', 'src-tauri/src']) but only ever ran
+  # inside the Frontend job — which the path filter SKIPS on a Rust-only PR. So
+  # #423, a Rust-only PR, merged a 1032-line src-tauri/src/analysis_rerank.rs
+  # past the 1000-line hard error threshold without the gate ever executing.
+  # `check-file-sizes.cjs` then exited 1 on main, and because .husky/pre-commit
+  # treats that as blocking, EVERY developer in the fleet was unable to commit.
+  # A gate that guards Rust files must not be reachable only through a filter
+  # that excludes Rust.
+  #
+  # Runs on a hosted runner and needs no `pnpm install`: all three guards use
+  # only node builtins (fs, path), and the self-tests are `node --test`. ~40s.
+  repo-guards:
+    name: Repo guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        # Only so `pnpm run test:scripts` resolves the script list from
+        # package.json rather than duplicating it here. No dependency install.
+        run: |
+          corepack disable
+          npm install -g --force pnpm@9.15.0
+
+      - name: Check file sizes
+        run: node scripts/check-file-sizes.cjs --ci
+
+      - name: No console-window-flashing spawns (INV-043)
+        run: node scripts/check-no-window-spawns.cjs
+
+      - name: Release channel integrity
+        run: node scripts/check-release-channel.cjs
+
+      - name: Guard self-tests (scripts/*.test.cjs)
+        # The guards above have their OWN unit tests, and until now those ran in
+        # no hook and no workflow — nothing verified the guards still detect
+        # what they claim. `pnpm run validate` does not run in CI either.
+        run: pnpm run test:scripts
+
   rust:
     name: Rust (${{ matrix.label }})
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
+    # See the `!cancelled()` note on the frontend job — without it the
+    # workflow_dispatch clause is unreachable.
+    if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch') }}
     # GitHub-HOSTED ubuntu, NOT the self-hosted box. The self-hosted Windows
     # runner shares 16 cores with the whole fleet's dev/cargo churn, so Rust
     # compiles there crawl under contention (a cold leg false-timed-out at 45m,
@@ -225,7 +343,12 @@ jobs:
     # the local pre-push gate. cargo-audit/deny use prebuilt binaries (taiki-e) to skip
     # a ~3-min source compile each.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45, not 30: this job now compiles the integration test targets too (see
+    # the compile-gate step). Swatinem's cache is only saved from main, so until
+    # this change lands there, PR runs restore a cache with no integration-test
+    # artifacts in it and pay the full cold link for 5 extra binaries. 30 was
+    # too tight for that first window and a timeout here is a red required gate.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -299,24 +422,55 @@ jobs:
 
       - name: Compile-gate (cargo test --no-run)
         # Fast-fail if the test binary stops compiling, before the slow test run.
-        run: cargo test --lib ${{ matrix.cargo-features }} --no-run
+        #
+        # `--tests` (not `--lib`): cargo's `--tests` selects every target with
+        # `test = true` — lib unittests, bin unittests AND the integration tests
+        # under src-tauri/tests/. Under the old `--lib` scope the integration
+        # suite was never compiled by this job, so it could rot undetected.
+        run: cargo test --tests ${{ matrix.cargo-features }} --no-run
 
-      - name: Run unit tests and verify count floor
+      - name: Run tests (unit + integration) and verify count floor
+        # Was `--lib`, which silently excluded every one of the 154 real
+        # integration tests in src-tauri/tests/ — including all 12 migration
+        # tests and the repo's only old-schema forward-migration coverage —
+        # against a migration chain with no checksums and no downgrade path.
+        # They had never executed in ANY workflow.
+        env:
+          # Same throwaway-data-dir isolation hermetic.yml uses, so a test that
+          # reaches for a real corpus fails here instead of passing by luck.
+          # The directory name must keep containing the substring "data":
+          # src/state.rs::test_get_db_path_points_to_data_dir asserts the
+          # resolved DB path contains "data" and ends with "4da.db".
+          FOURDA_DATA_DIR: ${{ runner.temp }}/4da-validate-data
+          FOURDA_DB_PATH: ${{ runner.temp }}/4da-validate-data/4da.db
         run: |
           set -o pipefail
-          cargo test --lib ${{ matrix.cargo-features }} 2>&1 | tee test-output.txt
+          cargo test --tests ${{ matrix.cargo-features }} 2>&1 | tee test-output.txt
           status=${PIPESTATUS[0]}
           tail -n 10 test-output.txt
           if [ "$status" -ne 0 ]; then
             echo "::error::Tests exited with code $status"
             exit 1
           fi
-          count=$(grep -oE 'test result: ok\. [0-9]+ passed' test-output.txt | grep -oE '[0-9]+' | tail -1)
-          count=${count:-0}
-          echo "Rust tests passed: $count"
+          # SUM every binary's count, don't take the last. `--tests` runs many
+          # binaries (lib + bins + each integration target), so the previous
+          # `tail -1` would have read only the LAST binary's total (~162) and
+          # tripped the floor on every run.
+          count=$(grep -oE 'test result: ok\. [0-9]+ passed' test-output.txt \
+            | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
+          binaries=$(grep -cE '^test result:' test-output.txt || true)
+          echo "Rust tests passed: $count across $binaries test binaries"
           floor=${{ matrix.test-floor }}
           if [ "$floor" -gt 0 ] && [ "$count" -lt "$floor" ]; then
             echo "::error::Rust test count dropped below $floor (got $count)"
+            exit 1
+          fi
+          # Guards the regression this step exists to fix: if someone re-scopes
+          # this to --lib, only ONE binary reports and the integration suite is
+          # silently gone again. Observed on 2026-08-14: 9 binaries (lib, 3
+          # bins, 5 integration targets).
+          if [ "$floor" -gt 0 ] && [ "$binaries" -lt 5 ]; then
+            echo "::error::only $binaries test binaries ran — the integration tests in src-tauri/tests/ did not execute (is this scoped to --lib again?)"
             exit 1
           fi
           rm -f test-output.txt
@@ -336,7 +490,10 @@ jobs:
     if: always()
     # Includes `changes` so a failure in the path-detector itself is caught.
     # Path-filtered legs report "skipped", which the check below treats as pass.
-    needs: [changes, frontend, mcp-server, rust]
+    # `repo-guards` is unfiltered and therefore never skips — it is the only leg
+    # guaranteed to have actually run, and it must gate the merge (this job is
+    # the sole required status check).
+    needs: [changes, repo-guards, frontend, mcp-server, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
