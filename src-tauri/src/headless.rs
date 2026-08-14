@@ -130,7 +130,18 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
                 );
                 0
             } else {
-                tauri::async_runtime::block_on(run_one_cycle(&handle, "headless_once", force))
+                // Contain panics so an OS-scheduled invocation exits with the
+                // documented failure code (`1`) instead of an unwind/abort. A
+                // Task Scheduler entry reports that as a clean failed run it can
+                // retry, and no crash dialog reaches the user.
+                tauri::async_runtime::block_on(async {
+                    crate::task_guard::contain(
+                        "headless-once-cycle",
+                        run_one_cycle(&handle, "headless_once", force),
+                    )
+                    .await
+                    .unwrap_or(1)
+                })
             }
         }
         HeadlessMode::Daemon => {
@@ -569,7 +580,23 @@ async fn run_daemon_loop(handle: &AppHandle, force: bool) {
     info!(target: "4da::headless", "Daemon mode — entering refresh loop (Ctrl-C to stop)");
     loop {
         if force || !is_cycle_fresh() {
-            run_one_cycle(handle, "headless_daemon", force).await;
+            // Contain panics. An unwind out of a cycle propagates through this
+            // loop and kills the daemon outright — one bad item turns the
+            // background engine into a dead process that never refreshes again,
+            // the headless twin of the GUI's `is_checking` wedge. A panicking
+            // cycle is logged and skipped; the loop sleeps and retries.
+            if crate::task_guard::contain(
+                "headless-daemon-cycle",
+                run_one_cycle(handle, "headless_daemon", force),
+            )
+            .await
+            .is_none()
+            {
+                warn!(
+                    target: "4da::headless",
+                    "Cycle panicked — daemon staying up, retrying on the next tick"
+                );
+            }
         } else {
             info!(target: "4da::headless", "Feed and dependency intelligence already fresh — skipping this tick");
         }

@@ -19,6 +19,10 @@ use crate::{
     signal_terminal, source_fetching::fill_cache_background, standing_queries, void_engine,
 };
 
+#[cfg(test)]
+#[path = "app_setup_tests.rs"]
+mod app_setup_tests;
+
 /// Process-lifetime holder for the single-instance lock. Set once in
 /// `initialize_pre_tauri` and kept alive until process exit so the Drop impl
 /// on `InstanceLock` fires during normal shutdown.
@@ -783,7 +787,8 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         info!(target: "4da::monitor", "Scheduled analysis starting (cache-first)");
         let handle = app_handle_scheduled.clone();
         tauri::async_runtime::spawn(async move {
-            run_scheduled_analysis(handle).await;
+            run_scheduled_cycle_contained(get_monitoring_state(), run_scheduled_analysis(handle))
+                .await;
         });
     });
 
@@ -1974,6 +1979,50 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
 // ============================================================================
 // Scheduled Analysis
 // ============================================================================
+
+/// Run one scheduled-analysis cycle with panic containment, releasing the
+/// scheduler's in-flight gate if the cycle dies before it can release it itself.
+///
+/// `MonitoringState::is_checking` is claimed with `swap(true, SeqCst)` in
+/// `monitoring.rs` *before* the `scheduled-analysis` event is emitted, and every
+/// site that clears it — `complete_scheduled_check`, the scoring-error arm of
+/// [`run_scheduled_analysis`], the two foreground-collision guards — sits
+/// *after* the work. The cycle also runs in a detached `spawn` whose
+/// `JoinHandle` is dropped, so an unwind is observed by nobody. Together that
+/// means a single panic anywhere in fetch-or-score skips every clear site and
+/// latches the gate at `true` for the rest of the process lifetime: each later
+/// tick sees `is_checking == true` and silently skips itself. Background
+/// refresh stops permanently with no error raised and no UI signal — the feed
+/// just goes stale.
+///
+/// Returns `true` if the cycle completed normally, `false` if it panicked.
+async fn run_scheduled_cycle_contained<F>(state: &monitoring::MonitoringState, cycle: F) -> bool
+where
+    F: std::future::Future<Output = ()>,
+{
+    if crate::task_guard::contain("scheduled-analysis", cycle)
+        .await
+        .is_some()
+    {
+        // Normal completion — the cycle's own paths already released the gate.
+        return true;
+    }
+
+    // Recovery arm: the only gate release that survives an unwind.
+    //
+    // Deliberately NOT unconditional. Clearing after a normal completion could
+    // race a scheduler tick that has already claimed the gate for the *next*
+    // cycle, and would then let two scheduled analyses run against the shared
+    // analysis state at once — trading a wedge for a double-run.
+    state
+        .is_checking
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    warn!(
+        target: "4da::monitor",
+        "Scheduled analysis panicked — in-flight gate released, next tick will retry"
+    );
+    false
+}
 
 /// Execute a scheduled analysis cycle (cache-first approach).
 async fn run_scheduled_analysis(handle: tauri::AppHandle) {

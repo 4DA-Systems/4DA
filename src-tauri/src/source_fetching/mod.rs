@@ -4,6 +4,18 @@
 //! Contains: fetch_all_sources, fill_cache_background,
 //! process_source_items, settings loader helpers, and self-healing retry logic.
 
+// This module is where arbitrary internet text is capped and cut, and it is
+// where two of the 23 byte-slicing panics #422 fixed actually lived. Byte-
+// slicing a `str` panics on any index that is not a UTF-8 char boundary, and
+// scraped pages are full of multi-byte text, so the class recurs here by
+// default. Denying it locally makes every future slice in this module carry an
+// explicit char-boundary proof instead of relying on review to catch it.
+//
+// Not yet crate-wide: the lint fires 280 times against this tree (see the note
+// in Cargo.toml). Adopting it module-by-module keeps the guarantee real here
+// without bulk-allowing a backlog that may still hide live panics.
+#![deny(clippy::string_slice)]
+
 mod fetcher;
 mod processor;
 mod yield_throttle;

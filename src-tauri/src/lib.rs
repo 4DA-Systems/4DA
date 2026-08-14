@@ -463,6 +463,7 @@ mod webhooks;
 
 mod content_translation;
 mod content_translation_commands;
+mod task_guard;
 mod telemetry;
 mod toolkit_intelligence;
 mod translation_commands;
