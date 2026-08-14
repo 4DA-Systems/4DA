@@ -1,5 +1,63 @@
 # Changelog
 
+## 5.0.1 (unreleased)
+
+### Security: HTTP transport accepted forged authentication tokens
+
+**Affects `--http` only. The default stdio transport was never exposed.**
+
+`extractAuthClaims` decoded the JWT payload and validated the claims inside it
+but never read the signature segment — no HMAC was ever computed, despite the
+function's own docstring claiming "HMAC-SHA256 verification against the shared
+relay secret". Any request could present
+`Authorization: Bearer x.<base64url({"team_id":"x","client_id":"y","role":"admin","exp":9999999999})>.x`
+and be accepted as a team admin.
+
+Three defects compounded it:
+
+- The transport's header claimed "Binds to 127.0.0.1 only", but `--host`
+  accepted any address, so `--http --host 0.0.0.0` served all 14 tools to the
+  network.
+- The DNS rebinding guard was written as `if (origin) { ...check... }`, so a
+  request with **no** `Origin` header — every non-browser client, and any
+  attacker — skipped it entirely.
+- `hasPermission()` existed but was never called, so even legitimate tokens got
+  no role enforcement: a `viewer` could invoke every write tool.
+
+Fixed:
+
+- **Real signature verification.** HMAC-SHA256 over
+  `base64url(header).base64url(payload)`, constant-time compared
+  (`crypto.timingSafeEqual`) against the shared secret, **before** any claim is
+  read. The algorithm is pinned to `HS256`, so `alg: none`, other HMAC widths,
+  and asymmetric-algorithm confusion are all refused. `exp` is now mandatory
+  (a signed token with no expiry is a permanent credential) and `nbf` is
+  honoured, both with the issuer's 60s leeway. No new dependency — Node's
+  built-in `node:crypto`.
+- **Fail closed.** With no secret configured (`MCP_AUTH_SECRET`, falling back
+  to `JWT_SECRET` for parity with a co-deployed relay), *every* token is
+  rejected. A server that cannot verify a signature must not trust claims.
+- **Host-header DNS rebinding guard on every request**, using the SDK's
+  `validateHostHeader`/`validateOriginHeader`. `Host` is mandatory, so the
+  check can no longer be skipped by omitting a header; a foreign `Origin` is
+  still refused when present.
+- **Safe `--host`.** 127.0.0.1 remains the default. A non-loopback bind is
+  **refused at startup** unless a secret is configured, prints a warning
+  banner, and forces authentication on for every request regardless of
+  `MCP_AUTH_REQUIRED`.
+- **Role enforcement wired up.** Every tool call is checked against the
+  verified role via the registry's existing `readOnlyHint` annotation:
+  `viewer` = read-only, `member`/`admin` = read + write. Unknown tools fail
+  closed as writes.
+- Removed `isNetworkTierAllowed()` — dead code with no tier data anywhere in
+  this package.
+
+**Behaviour change:** an existing `--http --host 0.0.0.0` deployment will now
+refuse to start until `MCP_AUTH_SECRET` is set, and only accepts localhost-class
+`Host` headers unless `MCP_ALLOWED_HOSTS` names the address clients use. This is
+deliberate: that deployment was previously reachable by anyone with forgeable
+admin credentials.
+
 ## 5.0.0 (2026-08-11)
 
 ### Breaking: Node.js 20+ required

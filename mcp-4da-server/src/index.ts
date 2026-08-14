@@ -8,9 +8,12 @@
  * Claude Desktop, and other MCP hosts. Runs locally; the only data leaving the
  * machine is public package names/versions sent to registries (OSV, npm, etc.).
  *
- * SECURITY: the server trusts its local environment and does NOT implement
- * authentication. The optional --http transport is intended for localhost use;
- * do NOT expose it over a network without putting your own auth in front.
+ * SECURITY: stdio serving is unauthenticated by design — the MCP host launches
+ * this process and already holds local process rights. The optional --http
+ * transport defaults to 127.0.0.1 and applies a Host-header DNS rebinding
+ * guard to every request. Binding it anywhere else requires a shared auth
+ * secret (MCP_AUTH_SECRET) and then verifies an HMAC-SHA256-signed Bearer
+ * token on every request, enforcing the token's role at tool dispatch.
  *
  * 14 tools across 5 categories. Live vulnerability scanning (OSV.dev),
  * ecosystem news, persistent memory, and tech stack awareness for any MCP host.
@@ -380,13 +383,23 @@ async function main() {
   Options:
     --http              Use Streamable HTTP instead of stdio
     --port <number>     HTTP port (default: 4840)
-    --host <address>    HTTP bind address (default: 127.0.0.1)
+    --host <address>    HTTP bind address (default: 127.0.0.1). A non-loopback
+                        address exposes every tool to the network and is
+                        refused unless MCP_AUTH_SECRET is set; authentication
+                        is then mandatory for every request.
     --setup             Detect editors and write MCP config
     --doctor            Validate database, bindings, and LLM providers
 
   Environment:
     FOURDA_DB_PATH      Path to 4DA's SQLite database (auto-detected if omitted)
     FOURDA_OFFLINE      Set to "true" to disable all network calls (OSV.dev, HN)
+    MCP_AUTH_SECRET     Shared secret for verifying relay-issued Bearer tokens
+                        (HMAC-SHA256). Falls back to JWT_SECRET. Without it, no
+                        token is accepted.
+    MCP_AUTH_REQUIRED   Set to "true" to require auth on a loopback --http bind
+                        (always required on a non-loopback bind)
+    MCP_ALLOWED_HOSTS   Extra comma-separated hostnames accepted in the Host /
+                        Origin headers (needed when binding to 0.0.0.0)
 
   Works standalone (scans your project on startup) or with the full
   4DA desktop app for content scoring, source monitoring, and more.
@@ -410,10 +423,35 @@ async function main() {
 
   // HTTP transport mode
   if (args.includes("--http")) {
-    const portIndex = args.indexOf("--port");
-    const port = portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : 4840;
-    const host = args.includes("--host") ? args[args.indexOf("--host") + 1] : "127.0.0.1";
-    await startHttpServer(buildServer, { port, host });
+    const flagValue = (flag: string): string | undefined => {
+      const i = args.indexOf(flag);
+      if (i === -1) return undefined;
+      const value = args[i + 1];
+      // A flag with no value (or followed by another flag) is a typo, not a
+      // request to bind everywhere — refuse rather than guess.
+      if (value === undefined || value.startsWith("-")) {
+        console.error(`[4DA] ${flag} requires a value`);
+        process.exit(1);
+      }
+      return value;
+    };
+
+    const rawPort = flagValue("--port");
+    const port = rawPort === undefined ? 4840 : Number.parseInt(rawPort, 10);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) {
+      console.error(`[4DA] Invalid --port value: ${rawPort}`);
+      process.exit(1);
+    }
+    const host = flagValue("--host") ?? "127.0.0.1";
+
+    try {
+      await startHttpServer(buildServer, { port, host });
+    } catch (error) {
+      // Bind-policy refusals carry an actionable message; print it plainly
+      // rather than as an unhandled stack trace.
+      console.error(`[4DA] ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
     return;
   }
 
