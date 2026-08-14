@@ -393,19 +393,31 @@ mod toolkit_http;
 mod toolkit_http;
 // Team sync — encrypted metadata relay (AD-023)
 // Gated: 17 commands with zero frontend callers. Enable with --features team-sync.
+//
+// `#[allow(dead_code)]` on the dormant members below is deliberate and matches
+// the convention used for the stub modules above. These carry the plumbing the
+// command surface will call once AD-023 is activated; until then a portion is
+// legitimately unreferenced. The allow keeps `-D warnings` meaningful for the
+// rest of the crate instead of forcing this staged code to be deleted. It does
+// NOT suppress compile errors — which is the failure this feature actually had.
 #[cfg(feature = "team-sync")]
 mod team_intelligence;
 #[cfg(feature = "team-sync")]
+#[allow(dead_code)]
 mod team_monitoring;
 #[cfg(feature = "team-sync")]
+#[allow(dead_code)]
 mod team_notifications;
 #[cfg(feature = "team-sync")]
+#[allow(dead_code)]
 mod team_sync;
 #[cfg(feature = "team-sync")]
 mod team_sync_commands;
 #[cfg(feature = "team-sync")]
+#[allow(dead_code)]
 mod team_sync_crypto;
 #[cfg(feature = "team-sync")]
+#[allow(dead_code)]
 mod team_sync_scheduler;
 #[cfg(feature = "team-sync")]
 mod team_sync_types;
@@ -433,7 +445,9 @@ mod team_sync_commands;
 mod audit;
 #[cfg(feature = "enterprise")]
 mod enterprise_analytics;
+// Same dormant-surface rationale as the team-sync block above.
 #[cfg(feature = "enterprise")]
+#[allow(dead_code)]
 mod organization;
 #[cfg(feature = "enterprise")]
 mod sso;
@@ -442,6 +456,7 @@ mod sso_crypto;
 #[cfg(feature = "enterprise")]
 mod sso_xml;
 #[cfg(feature = "enterprise")]
+#[allow(dead_code)]
 mod webhooks;
 
 // Stubs when enterprise is disabled

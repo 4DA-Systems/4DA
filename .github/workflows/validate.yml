@@ -359,6 +359,25 @@ jobs:
           - label: experimental
             cargo-features: '--features experimental'
             test-floor: 0
+          # Dormant command surfaces (team-sync = AD-023, enterprise). They have
+          # zero frontend callers, so nothing else in CI ever compiled them —
+          # and they silently rotted: a chacha20poly1305 0.10 -> 0.11 bump broke
+          # team_sync_crypto, and both modules re-exported their #[tauri::command]
+          # functions by name, which drops the generated __cmd__ macro and fails
+          # generate_handler!. 56 errors accumulated unseen. These legs exist to
+          # catch dependency/API drift in staged code the moment it happens.
+          # test-floor 0: these features add no tests, they gate compilation.
+          - label: team-sync
+            cargo-features: '--features team-sync'
+            test-floor: 0
+          - label: enterprise
+            cargo-features: '--features enterprise'
+            test-floor: 0
+          # Both together exercises the third path: the real `audit` module
+          # replacing `audit_stub`, which neither single-feature leg covers.
+          - label: team-sync+enterprise
+            cargo-features: '--features team-sync,enterprise'
+            test-floor: 0
     defaults:
       run:
         shell: bash

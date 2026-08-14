@@ -13,7 +13,6 @@ use super::dispatch::dispatch_delivery_http;
 use super::ensure_webhook_tables;
 use super::management::{delete_webhook, list_webhooks, register_webhook};
 use super::secrets::read_webhook_secret;
-use super::sign_payload;
 use super::types::{Webhook, WebhookDelivery};
 
 /// Extract team_id from settings for webhook commands.

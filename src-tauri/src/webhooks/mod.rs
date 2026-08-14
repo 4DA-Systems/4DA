@@ -42,19 +42,18 @@ use hmac::{Hmac, KeyInit, Mac};
 use rusqlite::Connection;
 use sha2::Sha256;
 
-// Re-export public API at the same paths the rest of the crate expects.
-pub use types::{Webhook, WebhookDelivery};
+// Glob, not a named list: `#[tauri::command]` emits a companion `__cmd__<name>`
+// macro beside each function, and `generate_handler!` resolves
+// `webhooks::__cmd__<name>`. Naming the functions individually re-exports only
+// the functions and leaves the macros behind, which broke the build with
+// "cannot find `__cmd__*`" the moment the `enterprise` feature was enabled.
+// Matches the working pattern in `ace_commands/mod.rs`.
+pub use commands::*;
 
-pub use commands::{
-    delete_webhook_cmd, get_webhook_deliveries_cmd, list_webhooks_cmd, register_webhook_cmd,
-    test_webhook_cmd,
-};
-
-pub(crate) use delivery::{check_circuit_breaker, next_retry_at, reset_circuit_breaker};
-pub(crate) use dispatch::dispatch_webhook_event;
-pub(crate) use management::{
-    delete_webhook, get_webhook_deliveries, list_webhooks, register_webhook,
-};
+// The former `pub(crate) use` re-exports of delivery/dispatch/management/types
+// were dead: every consumer lives inside this module tree and imports from its
+// sibling directly. They are gone rather than `#[allow]`-ed — the items
+// themselves remain in their submodules for when `enterprise` is activated.
 
 /// Create the webhook tables if they don't exist.
 pub(crate) fn ensure_webhook_tables(conn: &Connection) -> Result<()> {

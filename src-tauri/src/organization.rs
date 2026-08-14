@@ -537,7 +537,7 @@ pub fn start_retention_scheduler() {
         use std::time::Duration;
 
         // Wait 60 seconds after startup before first enforcement check
-        tokio::time::sleep(Duration::from_secs(60)).await;
+        tokio::time::sleep(Duration::from_mins(1)).await;
 
         loop {
             // Run retention enforcement if a team is configured
@@ -567,7 +567,7 @@ pub fn start_retention_scheduler() {
             }
 
             // Sleep 24 hours before next check
-            tokio::time::sleep(Duration::from_secs(86400)).await;
+            tokio::time::sleep(Duration::from_hours(24)).await;
         }
     });
 }

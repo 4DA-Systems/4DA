@@ -3,4 +3,4 @@
 /**
  * Organization-level policy configuration (stored as JSON in `organizations.settings`).
  */
-export type OrgPolicies = { default_retention_days: { [key in string]?: number }, min_monitoring_interval: bigint | null, require_decision_tracking: boolean, };
+export type OrgPolicies = { default_retention_days: { [key in string]: number }, min_monitoring_interval: bigint | null, require_decision_tracking: boolean, };
