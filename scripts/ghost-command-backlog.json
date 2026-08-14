@@ -52,6 +52,18 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
+      "command": "create_standing_query",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/standing_queries.rs:117",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
+    },
+    {
+      "command": "delete_standing_query",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/standing_queries.rs:233",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
+    },
+    {
       "command": "delete_translation_override",
       "since": "2026-08-14",
       "rust": "src-tauri/src/translation_commands.rs:165",
@@ -94,6 +106,12 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
+      "command": "get_accuracy_report",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/accuracy.rs:188",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
+    },
+    {
       "command": "get_achievement_state",
       "since": "2026-08-14",
       "rust": "src-tauri/src/achievement_commands.rs:7",
@@ -122,6 +140,18 @@
       "since": "2026-08-14",
       "rust": "src-tauri/src/ai_costs.rs:257",
       "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_ai_cost_recommendation",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/ai_costs.rs:253",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
+    },
+    {
+      "command": "get_ai_usage_summary",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/ai_costs.rs:206",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
     },
     {
       "command": "get_alert_policy_cmd",
@@ -176,6 +206,12 @@
       "since": "2026-08-14",
       "rust": "src-tauri/src/settings_commands_context.rs:562",
       "reason": "no app call site — referenced only from e2e specs"
+    },
+    {
+      "command": "get_cross_project_dependencies",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/tech_convergence.rs:305",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
     },
     {
       "command": "get_delegation_score",
@@ -248,6 +284,18 @@
       "since": "2026-08-14",
       "rust": "src-tauri/src/intelligence_metrics.rs:237",
       "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_intelligence_report",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/accuracy.rs:229",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
+    },
+    {
+      "command": "get_knowledge_decay_report",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/temporal_graph.rs:373",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
     },
     {
       "command": "get_learning_stats",
@@ -346,6 +394,12 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
+      "command": "get_project_health_comparison",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/tech_convergence.rs:265",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
+    },
+    {
       "command": "get_radar_at_snapshot",
       "since": "2026-08-14",
       "rust": "src-tauri/src/tech_radar_commands.rs:134",
@@ -436,16 +490,34 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
+      "command": "get_standing_query_suggestions",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/standing_queries.rs:332",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
+    },
+    {
       "command": "get_street_health",
       "since": "2026-08-14",
       "rust": "src-tauri/src/suns_commands.rs:37",
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
+      "command": "get_tech_convergence",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/tech_convergence.rs:215",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
+    },
+    {
       "command": "get_tech_radar",
       "since": "2026-08-14",
       "rust": "src-tauri/src/tech_radar.rs:80",
       "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_temporal_snapshot",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/temporal_graph.rs:296",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
     },
     {
       "command": "get_translation_cache_stats",
@@ -482,6 +554,12 @@
       "since": "2026-08-14",
       "rust": "src-tauri/src/settings_commands_llm/mod.rs:84",
       "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "list_standing_queries",
+      "since": "2026-08-15",
+      "rust": "src-tauri/src/standing_queries.rs:164",
+      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
     },
     {
       "command": "mark_lesson_complete",
