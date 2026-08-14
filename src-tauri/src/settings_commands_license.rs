@@ -324,7 +324,18 @@ pub async fn validate_license() -> Result<serde_json::Value> {
 }
 
 /// Recover a license key by purchase email.
-/// Calls the Vercel API to look up the key, then auto-activates if found.
+///
+/// The server **never returns the key to this call** and therefore never
+/// auto-activates. Because the email is caller-supplied and unverifiable, the
+/// endpoint mails the key to the address on file and answers `202 Accepted`
+/// identically whether or not that address holds a licence — otherwise anyone
+/// could retrieve any customer's offline-verifiable key just by knowing their
+/// email address (fixed 2026-08-14, see site/functions/api/streets/activate.js).
+///
+/// So the success outcome here is `reason: "emailed"`, not an activation: the
+/// user completes recovery by opening the email and using the key (or its
+/// `4da://activate` deep link). The 200 arm below is retained only for
+/// compatibility with an older server response and is unreachable in production.
 #[tauri::command]
 pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value> {
     validate_input_length(&email, "Email", 254)?;
@@ -403,11 +414,31 @@ pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value
                         "status": body["status"],
                     }))
                 }
+                // The normal, secure outcome: the server accepted the request and
+                // mailed the key to the address on file. It deliberately tells us
+                // nothing about whether that address is a customer, so we must not
+                // infer or display anything beyond "check your email".
+                202 => Ok(serde_json::json!({
+                    "success": false,
+                    "reason": "emailed",
+                    "detail": body["message"].as_str().unwrap_or(""),
+                })),
+                400 => Ok(serde_json::json!({
+                    "success": false,
+                    "reason": body["reason"].as_str().unwrap_or("invalid_email"),
+                })),
                 404 => Ok(serde_json::json!({ "success": false, "reason": "not_found" })),
                 410 => Ok(serde_json::json!({
                     "success": false,
                     "reason": "expired",
                     "detail": body["expired_at"].as_str().unwrap_or(""),
+                })),
+                // Recovery mail not provisioned server-side — an honest, actionable
+                // failure rather than silently pretending an email was sent.
+                503 => Ok(serde_json::json!({
+                    "success": false,
+                    "reason": body["reason"].as_str().unwrap_or("recovery_email_unavailable"),
+                    "detail": body["error"].as_str().unwrap_or(""),
                 })),
                 _ => Ok(serde_json::json!({
                     "success": false,

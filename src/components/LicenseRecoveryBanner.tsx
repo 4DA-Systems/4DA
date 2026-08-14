@@ -15,6 +15,7 @@ export function LicenseRecoveryBanner() {
   const [licenseKey, setLicenseKey] = useState('');
   const [mode, setMode] = useState<'email' | 'key'>('email');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [success, setSuccess] = useState(false);
 
   if (!wasDowngraded || tier !== 'free') return null;
@@ -26,9 +27,17 @@ export function LicenseRecoveryBanner() {
       return;
     }
     setError('');
+    setInfo('');
     const result = await recoverLicenseByEmail(email.trim());
     if (result.ok) {
       setSuccess(true);
+    } else if (result.reason === 'emailed') {
+      // Expected outcome: the server mailed the key to the address on file rather
+      // than returning it (it cannot verify the caller owns the address). Nothing
+      // is activated yet, so the banner stays up — but this is not a failure.
+      setInfo(t('license.recovery.emailed', "If that address has a licence, we've emailed the key to it. Check your inbox and spam folder, then paste the key using \"Enter key\"."));
+    } else if (result.reason === 'recovery_email_unavailable') {
+      setError(t('license.recovery.unavailable', 'Email recovery is temporarily unavailable. Contact support@4da.ai from your purchase email and we will send your key.'));
     } else if (result.reason === 'not_found') {
       setError(t('license.recovery.notFound', 'No license found for this email. Try the email you used at checkout.'));
     } else {
@@ -42,6 +51,7 @@ export function LicenseRecoveryBanner() {
       return;
     }
     setError('');
+    setInfo('');
     const result = await activateLicense(licenseKey.trim());
     if (result.ok) {
       setSuccess(true);
@@ -65,7 +75,7 @@ export function LicenseRecoveryBanner() {
 
         <div className="flex gap-2 mb-2">
           <button
-            onClick={() => { setMode('email'); setError(''); }}
+            onClick={() => { setMode('email'); setError(''); setInfo(''); }}
             className={`px-2 py-1 text-xs rounded transition-colors ${
               mode === 'email'
                 ? 'bg-text-primary/10 text-text-primary'
@@ -75,7 +85,7 @@ export function LicenseRecoveryBanner() {
             {t('license.recovery.byEmail', 'Recover by email')}
           </button>
           <button
-            onClick={() => { setMode('key'); setError(''); }}
+            onClick={() => { setMode('key'); setError(''); setInfo(''); }}
             className={`px-2 py-1 text-xs rounded transition-colors ${
               mode === 'key'
                 ? 'bg-text-primary/10 text-text-primary'
@@ -132,6 +142,10 @@ export function LicenseRecoveryBanner() {
 
         {error && (
           <p className="text-xs text-red-400 mt-1.5">{error}</p>
+        )}
+
+        {info && (
+          <p className="text-xs text-accent-gold mt-1.5">{info}</p>
         )}
       </div>
     </div>

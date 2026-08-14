@@ -56,6 +56,8 @@ permalink: "/signal/success.html"
     a { color: #D4AF37; text-decoration: none; }
     a:hover { text-decoration: underline; }
     label { display: block; text-align: left; font-size: 13px; color: #A0A0A0; margin-bottom: 6px; }
+    .hint { text-align: left; font-size: 12px; color: #8A8A8A; margin-top: 8px; line-height: 1.5; }
+    .result.info { background: #D4AF3710; border: 1px solid #D4AF3730; color: #D4AF37; }
     input {
       width: 100%; padding: 12px 16px; background: #0A0A0A;
       border: 1px solid #2A2A2A; border-radius: 8px; color: #FFFFFF;
@@ -85,7 +87,8 @@ permalink: "/signal/success.html"
       <form onsubmit="return handleManual(event)">
         <label for="email">Email address used at checkout</label>
         <input type="email" id="email" placeholder="you@example.com" required>
-        <button type="submit" class="btn-primary" id="manual-btn">Retrieve License Key</button>
+        <p class="hint">For your security we email the key to the address on file — it is never shown here.</p>
+        <button type="submit" class="btn-primary" id="manual-btn">Email me my key</button>
       </form>
     </div>
 
@@ -123,7 +126,7 @@ permalink: "/signal/success.html"
     function showError(msg) {
       document.getElementById('check-icon').textContent = '!';
       document.getElementById('heading').textContent = 'Could not auto-retrieve';
-      document.getElementById('subtitle').textContent = 'Enter the email you used at checkout.';
+      document.getElementById('subtitle').textContent = "Enter the email you used at checkout and we'll send your key to it.";
       document.getElementById('manual-form').style.display = 'block';
 
       var el = document.getElementById('auto-result');
@@ -160,6 +163,17 @@ permalink: "/signal/success.html"
       return false;
     }
 
+    function showMessage(cls, text) {
+      var el = document.getElementById('auto-result');
+      el.className = 'result ' + cls;
+      el.innerHTML = '<p></p>';
+      el.querySelector('p').textContent = text;
+    }
+
+    // Recovery by email NEVER returns the key. The server mails it to the address
+    // on file and answers identically whether or not that address is a customer,
+    // so this form cannot be used to harvest someone else's licence or to probe
+    // who is a paying subscriber.
     async function handleManual(e) {
       e.preventDefault();
       var email = document.getElementById('email').value.trim();
@@ -167,23 +181,23 @@ permalink: "/signal/success.html"
       if (!email) return false;
 
       btn.disabled = true;
-      btn.textContent = 'Retrieving...';
+      btn.textContent = 'Sending...';
 
       try {
-        var ok = await fetchLicense('email=' + encodeURIComponent(email));
-        if (!ok) {
-          var el = document.getElementById('auto-result');
-          el.className = 'result error';
-          el.innerHTML = '<p>No license found for this email. It may take a moment after checkout. Try again in 30 seconds.</p>';
+        var resp = await fetch('/api/streets/activate?email=' + encodeURIComponent(email));
+        var data = await resp.json();
+        if (resp.status === 202) {
+          showMessage('info', data.message || "If that address has a 4DA licence, we've emailed the key to it. Check your inbox and spam folder.");
+          document.getElementById('manual-form').style.display = 'none';
+        } else {
+          showMessage('error', data.error || 'Could not send the recovery email. Try again, or contact support@4da.ai from your purchase email.');
         }
       } catch {
-        var el2 = document.getElementById('auto-result');
-        el2.className = 'result error';
-        el2.innerHTML = '<p>Network error. Please try again.</p>';
+        showMessage('error', 'Network error. Please try again.');
       }
 
       btn.disabled = false;
-      btn.textContent = 'Retrieve License Key';
+      btn.textContent = 'Email me my key';
       return false;
     }
 

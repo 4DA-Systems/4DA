@@ -9,17 +9,26 @@
 //   - checkout.session.completed   -> initial license generation
 //   - invoice.paid                 -> subscription renewal (fresh key + extended expiry)
 //   - customer.subscription.deleted -> cancellation (mark metadata)
-// GET:  Retrieve license by checkout session_id (secure) or email (fallback)
+// GET:  Retrieve license by checkout session_id (returns the key — the session id
+//       proves the purchase) or recover by email (MAILS the key to the address on
+//       file; never returns it). See the GET block for the security rationale.
 //
 // Secrets/vars (Cloudflare Pages -> Settings -> Environment variables):
 //   STRIPE_SECRET_KEY       — Stripe secret key
 //   STRIPE_WEBHOOK_SECRET   — Stripe webhook signing secret
 //   LICENSE_PRIVATE_KEY_HEX — Ed25519 private key seed (hex, 64 chars) for signing keys
+//   RESEND_API_KEY          — Resend API key; REQUIRED for email-based recovery
+//   RESEND_FROM_EMAIL       — e.g. "4DA <licenses@4da.ai>"; REQUIRED for email-based recovery
 //   ENVIRONMENT             — "production" in prod; anything else enables localhost CORS
 
 import Stripe from 'stripe';
 import * as ed from '@noble/ed25519';
 import { generateRefreshKey } from '../../../lib/ed25519-license.js';
+import {
+  deliverRecoveryEmail,
+  isPlausibleEmail,
+  isRecoveryEmailConfigured,
+} from '../../../lib/recovery-email.js';
 
 // ---------------------------------------------------------------------------
 // Ed25519 on the Workers runtime.
@@ -99,6 +108,9 @@ function corsHeaders(request, env) {
 
 function json(body, status, headers) {
   headers.set('Content-Type', 'application/json');
+  // The session_id path returns a licence key. Never let a browser, proxy or CDN
+  // hold a copy of any response from this endpoint.
+  headers.set('Cache-Control', 'no-store');
   return new Response(JSON.stringify(body), { status, headers });
 }
 
@@ -281,7 +293,7 @@ async function handleSubscriptionDeleted(stripe, subscription) {
 // Handler
 // ---------------------------------------------------------------------------
 
-export async function onRequest({ request, env }) {
+export async function onRequest({ request, env, waitUntil }) {
   const headers = corsHeaders(request, env);
 
   if (request.method === 'OPTIONS') return new Response(null, { status: 200, headers });
@@ -342,73 +354,158 @@ export async function onRequest({ request, env }) {
   }
 
   // -------------------------------------------------------------------------
-  // GET: Retrieve license
-  //   - ?session_id=cs_... (secure: verifies checkout session ownership)
-  //   - ?email=user@... (fallback: for returning users who lost their key)
+  // GET: Retrieve license — two paths with VERY different trust properties.
+  //
+  //   ?session_id=cs_...  VERIFIED. A Stripe checkout session id is a
+  //                       high-entropy, unguessable token issued only to whoever
+  //                       completed that checkout, and we re-verify it against
+  //                       Stripe before using the email inside it. Holding it is
+  //                       proof of purchase, so returning the key here is safe.
+  //                       UNCHANGED by the 2026-08-14 fix.
+  //
+  //   ?email=...          UNVERIFIED caller input — anyone can type anyone's
+  //                       address. This path previously returned that address's
+  //                       licence key in the response body, which meant one
+  //                       unauthenticated GET yielded a full Ed25519-signed key
+  //                       for any customer whose email was known or guessed. Those
+  //                       keys verify OFFLINE against the app's embedded public
+  //                       key, so a stolen one works indefinitely with no further
+  //                       server contact and nothing to revoke it with. The
+  //                       200-vs-404 split was additionally a customer-list oracle.
+  //
+  //                       It now MAILS the key to the address on file and returns a
+  //                       CONSTANT 202 — identical body, and identical work done
+  //                       before responding — whether or not the address matched.
+  //                       Control of the mailbox is the authentication factor;
+  //                       nothing is disclosed to the caller either way.
   // -------------------------------------------------------------------------
   if (request.method === 'GET') {
     const url = new URL(request.url);
     const session_id = url.searchParams.get('session_id');
     const email = url.searchParams.get('email');
 
-    if (!session_id && !email) {
-      return json({ error: 'Provide session_id or email' }, 400, headers);
-    }
+    if (session_id) return handleSessionLookup(env, session_id, headers);
+    if (email) return handleEmailRecovery(env, email, headers, waitUntil);
 
-    try {
-      const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
-      let customerEmail;
-
-      // Preferred path: verify checkout session and extract email from it
-      if (session_id) {
-        try {
-          const session = await stripe.checkout.sessions.retrieve(session_id);
-          customerEmail = session.customer_email || session.customer_details?.email;
-          if (!customerEmail) {
-            return json({ error: 'No email found in checkout session' }, 404, headers);
-          }
-        } catch {
-          return json({ error: 'Invalid session' }, 400, headers);
-        }
-      } else {
-        customerEmail = email;
-      }
-
-      const customers = await stripe.customers.list({ email: customerEmail.toLowerCase(), limit: 1 });
-
-      if (customers.data.length === 0) {
-        return json({ error: 'No license found' }, 404, headers);
-      }
-
-      const customer = customers.data[0];
-      const license = customer.metadata?.streets_license;
-
-      if (!license) {
-        return json({ error: 'No STREETS license found' }, 404, headers);
-      }
-
-      // Check expiration before returning
-      const expiresAt = customer.metadata.streets_expires_at;
-      if (expiresAt && new Date(expiresAt) < new Date()) {
-        return json({ error: 'License has expired. Please renew your subscription.', expired_at: expiresAt }, 410, headers);
-      }
-
-      return json(
-        {
-          license_key: license,
-          tier: customer.metadata.streets_tier,
-          issued_at: customer.metadata.streets_issued_at,
-          expires_at: expiresAt,
-          status: customer.metadata.streets_status || 'active',
-        },
-        200,
-        headers,
-      );
-    } catch (err) {
-      console.error('License retrieval failed:', err.message);
-      return json({ error: 'Failed to retrieve license' }, 500, headers);
-    }
+    return json({ error: 'Provide session_id or email' }, 400, headers);
   }
 
   return json({ error: 'Method not allowed' }, 405, headers);
+}
+
+// ---------------------------------------------------------------------------
+// GET path 1: verified checkout session -> returns the key (unchanged behaviour)
+// ---------------------------------------------------------------------------
+
+async function handleSessionLookup(env, session_id, headers) {
+  try {
+    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+
+    let customerEmail;
+    try {
+      const session = await stripe.checkout.sessions.retrieve(session_id);
+      customerEmail = session.customer_email || session.customer_details?.email;
+      if (!customerEmail) {
+        return json({ error: 'No email found in checkout session' }, 404, headers);
+      }
+    } catch {
+      return json({ error: 'Invalid session' }, 400, headers);
+    }
+
+    const customers = await stripe.customers.list({ email: customerEmail.toLowerCase(), limit: 1 });
+    if (customers.data.length === 0) {
+      return json({ error: 'No license found' }, 404, headers);
+    }
+
+    const customer = customers.data[0];
+    const license = customer.metadata?.streets_license;
+    if (!license) {
+      return json({ error: 'No STREETS license found' }, 404, headers);
+    }
+
+    // Check expiration before returning
+    const expiresAt = customer.metadata.streets_expires_at;
+    if (expiresAt && new Date(expiresAt) < new Date()) {
+      return json({ error: 'License has expired. Please renew your subscription.', expired_at: expiresAt }, 410, headers);
+    }
+
+    return json(
+      {
+        license_key: license,
+        tier: customer.metadata.streets_tier,
+        issued_at: customer.metadata.streets_issued_at,
+        expires_at: expiresAt,
+        status: customer.metadata.streets_status || 'active',
+      },
+      200,
+      headers,
+    );
+  } catch (err) {
+    console.error('License retrieval failed:', err.message);
+    return json({ error: 'Failed to retrieve license' }, 500, headers);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET path 2: recovery by unverified email -> mails the key, discloses nothing
+// ---------------------------------------------------------------------------
+
+// FOLLOW-UP (not fixed here): this path is still unauthenticated and unmetered,
+// so it can be driven in a loop to repeatedly mail an existing customer their own
+// key. It cannot mail anyone who is NOT already a customer (see recovery-email.js),
+// which bounds the blast radius to inbox nuisance rather than open-relay abuse.
+// A proper fix needs per-IP/per-address counters, and this Pages project declares
+// no KV or D1 binding to hold them (site/wrangler.toml). Two options, neither
+// requiring code: a Cloudflare WAF rate-limiting rule on /api/streets/activate
+// (dashboard-only, recommended), or adding a KV binding and gating here.
+//
+// The single response every successful email-recovery request gets, no matter
+// what the lookup finds. Keeping this a module constant makes it impossible to
+// accidentally branch the body on customer existence.
+const RECOVERY_ACCEPTED = {
+  delivery: 'email',
+  message:
+    "If that address has a 4DA licence, we've emailed the key to it. Check your inbox and spam folder.",
+};
+
+async function handleEmailRecovery(env, email, headers, waitUntil) {
+  // Shape-only rejection. Depends purely on the submitted string, so it cannot
+  // distinguish "not a customer" from "not an email".
+  if (!isPlausibleEmail(email)) {
+    return json({ error: 'Provide a valid email address', reason: 'invalid_email' }, 400, headers);
+  }
+
+  // Honest failure when outbound mail is not provisioned. We do NOT fall back to
+  // returning the key — that fallback IS the vulnerability. Checked before any
+  // Stripe call, so this answer is identical for every address.
+  if (!isRecoveryEmailConfigured(env) || !env.STRIPE_SECRET_KEY) {
+    console.error('Recovery by email requested but RESEND_API_KEY/RESEND_FROM_EMAIL are unset');
+    return json(
+      {
+        error:
+          'Email recovery is temporarily unavailable. Contact support@4da.ai from your purchase email and we will send your key.',
+        reason: 'recovery_email_unavailable',
+      },
+      503,
+      headers,
+    );
+  }
+
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+  const delivery = deliverRecoveryEmail(env, stripe, email)
+    // Logged, never returned: the outcome is exactly the fact we must not leak.
+    .then((outcome) => console.log('Recovery by email outcome:', outcome))
+    .catch((err) => console.error('Recovery by email crashed:', err?.message));
+
+  // Respond BEFORE the lookup runs. Response latency is therefore constant and
+  // carries no information about whether the address is a customer — the timing
+  // side of the oracle, which a uniform body alone would not have closed.
+  if (typeof waitUntil === 'function') {
+    waitUntil(delivery);
+  } else {
+    // Runtimes without waitUntil (not production Pages): correctness over timing.
+    await delivery;
+  }
+
+  return json(RECOVERY_ACCEPTED, 202, headers);
 }

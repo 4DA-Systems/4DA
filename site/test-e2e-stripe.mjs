@@ -262,24 +262,44 @@ assert(true, 'License stored in Stripe customer metadata');
 // =============================================================================
 console.log('\n--- Test 3: Activate Endpoint — License Retrieval ---');
 
+// SECURITY REGRESSION TESTS (2026-08-14).
+// The email path must NEVER disclose a licence key, and must answer identically
+// for a real customer and a stranger — otherwise it is both a key-theft endpoint
+// and a "who pays for Signal?" oracle. These two properties are the fix; if
+// either assertion ever fails again, the vulnerability is back.
+let knownBody, knownStatus;
 try {
   const resp = await fetch(`${SITE_URL}/api/streets/activate?email=${encodeURIComponent(TEST_EMAIL)}`);
-  const data = await resp.json();
-  assert(resp.ok, `GET /api/streets/activate returns 200`);
-  assert(data.license_key === licenseKey, 'Retrieved license matches generated key');
-  assert(data.tier === 'signal', 'Tier is signal');
-  assert(data.status === 'active' || !data.status, `Status is active (got: ${data.status || 'undefined'})`);
-  assert(!!data.expires_at, 'Has expiry date');
+  knownStatus = resp.status;
+  knownBody = await resp.text();
+  assert(!knownBody.includes(licenseKey), 'Email path does NOT return the licence key');
+  assert(!knownBody.includes('license_key'), 'Email path response has no license_key field');
+  // 202 = accepted for email delivery; 503 = outbound mail not provisioned in this
+  // environment. Both are secure; returning the key is not.
+  assert(
+    knownStatus === 202 || knownStatus === 503,
+    `Email path returns 202 (or 503 when unconfigured), got ${knownStatus}`,
+  );
 } catch (err) {
   assert(false, `Activate endpoint: ${err.message}`);
 }
 
-// Test with non-existent email
+// Test with non-existent email — must be INDISTINGUISHABLE from the real one
 try {
   const resp = await fetch(`${SITE_URL}/api/streets/activate?email=nobody-${Date.now()}@test.dev`);
-  assert(resp.status === 404, 'Non-existent email returns 404');
+  const body = await resp.text();
+  assert(resp.status === knownStatus, 'Unknown email returns the same status as a known one');
+  assert(body === knownBody, 'Unknown email returns a byte-identical body (no customer oracle)');
 } catch (err) {
-  assert(false, `404 test: ${err.message}`);
+  assert(false, `Oracle test: ${err.message}`);
+}
+
+// Malformed email is rejected on shape alone (cannot leak customer existence)
+try {
+  const resp = await fetch(`${SITE_URL}/api/streets/activate?email=not-an-email`);
+  assert(resp.status === 400, 'Malformed email returns 400');
+} catch (err) {
+  assert(false, `Malformed email test: ${err.message}`);
 }
 
 // Test with no params
@@ -418,13 +438,14 @@ await stripe.customers.update(customer.id, {
   },
 });
 
-// License should still be retrievable (valid until expires_at)
+// The key itself stays valid until expires_at (it is offline-verified), but the
+// email path still discloses nothing about it over HTTP — cancellation state is
+// now communicated to the mailbox owner, not to any caller who types an address.
 try {
   const resp = await fetch(`${SITE_URL}/api/streets/activate?email=${encodeURIComponent(TEST_EMAIL)}`);
-  const data = await resp.json();
-  assert(resp.ok, 'Cancelled license still retrievable');
-  assert(data.license_key === licenseKey, 'Key still valid after cancellation');
-  assert(data.status === 'cancelled', 'Status shows cancelled');
+  const body = await resp.text();
+  assert(resp.status === knownStatus, 'Cancelled customer returns the same status (no oracle)');
+  assert(!body.includes(licenseKey), 'Cancelled customer: key still not disclosed over HTTP');
 } catch (err) {
   assert(false, `Cancellation retrieval: ${err.message}`);
 }
@@ -444,11 +465,14 @@ await stripe.customers.update(customer.id, {
   },
 });
 
+// Expiry is reported to the MAILBOX (a "your licence expired, renew" email), not
+// via the HTTP status — a 410-vs-202 split would re-expose which addresses are
+// customers. The session_id path still returns 410 for expired licences.
 try {
   const resp = await fetch(`${SITE_URL}/api/streets/activate?email=${encodeURIComponent(TEST_EMAIL)}`);
-  assert(resp.status === 410, 'Expired license returns HTTP 410 Gone');
-  const data = await resp.json();
-  assert(data.error && data.error.includes('expired'), 'Error message mentions expiry');
+  const body = await resp.text();
+  assert(resp.status === knownStatus, 'Expired licence returns the same status (no oracle)');
+  assert(!body.includes(licenseKey), 'Expired licence: key not disclosed over HTTP');
 } catch (err) {
   assert(false, `Expired license test: ${err.message}`);
 }
