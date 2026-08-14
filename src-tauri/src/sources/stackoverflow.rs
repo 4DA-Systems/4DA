@@ -129,10 +129,23 @@ fn load_persisted_deadline() -> u64 {
         .unwrap_or(0)
 }
 
+/// Write the deadline atomically: temp file + rename.
+///
+/// Three processes can arm the breaker concurrently, and a plain `fs::write` is
+/// not atomic — a reader can observe a half-written file. That would parse as
+/// garbage, be treated as "no throttle" (fail-soft), and cost a wasted request
+/// into an active ban. `rename` over the same directory replaces in one step, so
+/// a reader sees either the old deadline or the new one, never a torn value.
 #[cfg(not(test))]
 fn persist_deadline(deadline: u64) {
-    if let Some(path) = throttle_file() {
-        let _ = std::fs::write(path, deadline.to_string());
+    let Some(path) = throttle_file() else {
+        return;
+    };
+    let tmp = path.with_extension(format!("tmp{}", std::process::id()));
+    if std::fs::write(&tmp, deadline.to_string()).is_ok() {
+        if std::fs::rename(&tmp, &path).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
     }
 }
 

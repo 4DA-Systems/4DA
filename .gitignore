@@ -115,7 +115,7 @@ data/.process.lock
 
 # Stack Exchange throttle deadline, shared across the GUI and the two
 # `--once` engine processes so a ban discovered by one is honoured by all.
-data/.stackoverflow_throttle
+data/.stackoverflow_throttle*
 
 # Environment files (may contain secrets from `vercel env pull`)
 .env*
