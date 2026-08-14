@@ -84,6 +84,15 @@ fn currency_symbol(currency: &str) -> String {
 // ============================================================================
 
 fn load_regional_file(country_code: &str) -> Option<RegionalData> {
+    // `country_code` is `locale.country` from settings, which the frontend can
+    // write via `set_locale`. It is interpolated into a filename below, so it
+    // must be a single safe path component — `.to_lowercase()` at the call site
+    // does nothing to neutralize a separator or `..`.
+    if crate::ipc_guard::validate_path_component("country_code", country_code).is_err() {
+        warn!(target: "4da::locale", "Refusing to load regional data for an unsafe country code");
+        return None;
+    }
+
     let regions_dir = crate::runtime_paths::RuntimePaths::get().streets_regions_dir();
     let paths_to_try = vec![
         // Primary: via centralized RuntimePaths

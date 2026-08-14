@@ -91,10 +91,16 @@ pub fn path_for(identity_hash: &str, task: &str) -> PathBuf {
 /// attacks if identity_hash or task ever flow in from user content.
 /// Today both values are internally computed (sha256 hex / hardcoded
 /// task name), so this is belt-and-braces defense, not load-bearing.
+///
+/// The character class is shared with `ipc_guard::validate_path_component`
+/// so there is exactly one definition of "safe component character" in the
+/// crate. This is the **lossy** policy (out-of-class becomes `_`) and is only
+/// appropriate because both inputs are internally derived. Anything arriving
+/// from the frontend must use the **rejecting** policy instead.
 fn sanitize_path_component(s: &str) -> String {
     s.chars()
         .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+            if crate::ipc_guard::is_safe_component_char(c) {
                 c
             } else {
                 '_'

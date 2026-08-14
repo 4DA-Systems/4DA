@@ -519,8 +519,35 @@ pub async fn get_locale() -> Result<serde_json::Value> {
 }
 
 /// Update locale configuration
+///
+/// # Security
+///
+/// `language` and `country` are both persisted and later interpolated into
+/// filesystem paths — `language` by `i18n::t()` (`data/translations/{lang}/`),
+/// `country` by `streets_localization` (`docs/streets/regions/{country}.json`).
+/// Settings are a laundering route for path injection: the value looks inert
+/// when written and only becomes a path segment on a later read, in a different
+/// module. Validate at the point of entry.
+///
+/// These are component-validated, not allowlisted against
+/// `i18n::SUPPORTED_LOCALES`, and that is deliberate. `detect_system_locale`
+/// stores whatever the OS reports — a Dutch or Polish machine legitimately ends
+/// up with `nl` / `pl`, which 4DA ships no translations for. Allowlisting here
+/// would make "change my country" fail silently for those users while fixing
+/// nothing: both sinks are *reads*, and a component check already makes it
+/// impossible to leave the intended directory. The strict allowlist belongs on
+/// the translation commands, which *write*.
+///
+/// `currency` is not validated as a path component: it never reaches the
+/// filesystem (only the `currency_symbol` / `usd_exchange_rate` match tables),
+/// and rejecting an empty value here would break a stored empty currency.
 #[tauri::command]
 pub async fn set_locale(country: String, language: String, currency: String) -> Result<()> {
+    let language = crate::ipc_guard::validate_path_component("language", &language)?;
+    let country = crate::ipc_guard::validate_path_component("country", &country)?;
+    let currency = crate::ipc_guard::validate_length("currency", &currency, 16)?;
+    crate::ipc_guard::validate_no_null_bytes("currency", &currency)?;
+
     let manager = get_settings_manager();
     let mut guard = manager.lock();
     guard.get_mut().locale = crate::settings::LocaleConfig {
@@ -544,6 +571,11 @@ pub async fn set_locale(country: String, language: String, currency: String) -> 
 /// configured separately via `set_locale`.
 #[tauri::command]
 pub async fn set_language(language: String) -> Result<()> {
+    // Persisted, then joined into `data/translations/{lang}/` by `i18n::t()`.
+    // See `set_locale` for why validation belongs here, and why this is a
+    // component check rather than the `SUPPORTED_LOCALES` allowlist.
+    let language = crate::ipc_guard::validate_path_component("language", &language)?;
+
     let manager = get_settings_manager();
     let mut guard = manager.lock();
     if guard.get().locale.language == language {

@@ -5,8 +5,17 @@
 //! user-override CRUD to the frontend.
 
 use crate::error::{Result, ResultExt};
+use crate::i18n::{validate_locale, validate_namespace, validate_translation_key};
 use crate::translation_pipeline;
 use std::collections::HashMap;
+
+/// Refuse to read an override file larger than this. Override files hold a
+/// handful of short UI strings; anything at this size is corrupt or hostile,
+/// and parsing it would only serve to burn memory.
+const MAX_OVERRIDE_FILE_BYTES: u64 = 1_000_000;
+
+/// Cap on a single override value. Overrides are UI strings, not documents.
+const MAX_OVERRIDE_VALUE_LENGTH: usize = 4_096;
 
 // ============================================================================
 // Tauri Commands
@@ -18,6 +27,7 @@ use std::collections::HashMap;
 /// in `data/translations/{lang}/` and returns a percentage-complete report.
 #[tauri::command]
 pub fn get_translation_status(lang: String) -> Result<translation_pipeline::TranslationStatus> {
+    let lang = validate_locale("lang", &lang)?;
     let english = translation_pipeline::load_english_strings()?;
     let total = english.len();
 
@@ -46,6 +56,7 @@ pub fn get_translation_status(lang: String) -> Result<translation_pipeline::Tran
 /// Returns a human-readable summary string.
 #[tauri::command]
 pub async fn trigger_translation(lang: String) -> Result<String> {
+    let lang = validate_locale("lang", &lang)?;
     let untranslated = translation_pipeline::get_untranslated_keys(&lang)?;
     if untranslated.is_empty() {
         return Ok(format!("{lang} is fully translated"));
@@ -70,6 +81,7 @@ pub async fn trigger_translation(lang: String) -> Result<String> {
 /// status is one of: `"overridden"`, `"translated"`, `"untranslated"`.
 #[tauri::command]
 pub fn get_all_translations(lang: String) -> Result<HashMap<String, TranslationEntry>> {
+    let lang = validate_locale("lang", &lang)?;
     let english = translation_pipeline::load_english_strings()?;
     let overrides = load_overrides(&lang)?;
 
@@ -77,7 +89,7 @@ pub fn get_all_translations(lang: String) -> Result<HashMap<String, TranslationE
     let trans_dir = crate::i18n::translations_dir().join(&lang);
     let mut auto_translated: HashMap<String, String> = HashMap::new();
     if trans_dir.exists() {
-        for ns in &["ui", "errors"] {
+        for ns in &crate::i18n::TRANSLATION_NAMESPACES {
             let path = trans_dir.join(format!("{ns}.json"));
             if let Ok(content) = std::fs::read_to_string(&path) {
                 if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
@@ -119,6 +131,16 @@ pub fn get_all_translations(lang: String) -> Result<HashMap<String, TranslationE
 /// Save a single user override for a translation key.
 ///
 /// Persists to `data/translations/overrides/{lang}/{namespace}.json`.
+///
+/// # Security
+///
+/// `lang` and `namespace` are joined into the destination path, so both are
+/// allowlisted before they touch the filesystem. Without that, `namespace`
+/// alone was an arbitrary-file-write primitive: `Path::join` with an absolute
+/// component discards the prefix entirely, so traversal was not even needed,
+/// and `create_dir_all` would build whatever directory chain was named. Both
+/// the file's key and its value are attacker-chosen, which made the write
+/// fully controlled content at a fully controlled location.
 #[tauri::command]
 pub fn save_translation_override(
     lang: String,
@@ -126,6 +148,12 @@ pub fn save_translation_override(
     key: String,
     value: String,
 ) -> Result<()> {
+    let lang = validate_locale("lang", &lang)?;
+    let namespace = validate_namespace("namespace", &namespace)?;
+    let key = validate_translation_key("key", &key)?;
+    let value = crate::ipc_guard::validate_length("value", &value, MAX_OVERRIDE_VALUE_LENGTH)?;
+    crate::ipc_guard::validate_no_null_bytes("value", &value)?;
+
     let overrides_dir = crate::i18n::translations_dir()
         .join("overrides")
         .join(&lang);
@@ -134,8 +162,7 @@ pub fn save_translation_override(
     let path = overrides_dir.join(format!("{namespace}.json"));
 
     let mut existing: HashMap<String, String> = if path.exists() {
-        let content = std::fs::read_to_string(&path).unwrap_or_default();
-        serde_json::from_str(&content).unwrap_or_default()
+        read_override_map(&path)?
     } else {
         HashMap::new()
     };
@@ -157,12 +184,27 @@ pub fn save_translation_override(
 /// Returns a flat map of `"namespace:key"` to override value.
 #[tauri::command]
 pub fn get_translation_overrides(lang: String) -> Result<HashMap<String, String>> {
+    let lang = validate_locale("lang", &lang)?;
     load_overrides(&lang)
 }
 
 /// Delete a single user override.
+///
+/// # Security
+///
+/// Same path-injection surface as [`save_translation_override`], plus a
+/// destructive twist: this function rewrites the target file with the parsed
+/// map. When the parse was `unwrap_or_default()`, *any* readable file that was
+/// not a JSON string-map parsed as an empty map and was then overwritten with
+/// `{}` — turning an unvalidated path into an arbitrary-file-truncation
+/// primitive. `read_override_map` now distinguishes "parsed to an empty map"
+/// from "did not parse", and this function refuses to write in the latter case.
 #[tauri::command]
 pub fn delete_translation_override(lang: String, namespace: String, key: String) -> Result<()> {
+    let lang = validate_locale("lang", &lang)?;
+    let namespace = validate_namespace("namespace", &namespace)?;
+    let key = validate_translation_key("key", &key)?;
+
     let overrides_dir = crate::i18n::translations_dir()
         .join("overrides")
         .join(&lang);
@@ -172,11 +214,7 @@ pub fn delete_translation_override(lang: String, namespace: String, key: String)
         return Ok(());
     }
 
-    let content = match std::fs::metadata(&path) {
-        Ok(m) if m.len() > 1_000_000 => return Err("Override file too large".into()),
-        _ => std::fs::read_to_string(&path).unwrap_or_default(),
-    };
-    let mut map: HashMap<String, String> = serde_json::from_str(&content).unwrap_or_default();
+    let mut map = read_override_map(&path)?;
     map.remove(&key);
 
     let json = serde_json::to_string_pretty(&map).context("JSON serialize error")?;
@@ -204,8 +242,50 @@ pub struct TranslationEntry {
 // Helpers
 // ============================================================================
 
+/// Read an override file into a map, refusing to guess when it does not parse.
+///
+/// Both callers write the returned map straight back to `path`, so the
+/// distinction between "this file is an empty map" and "this file is not a map
+/// at all" is the difference between a no-op and destroying its contents.
+/// `unwrap_or_default()` collapses those two cases; this does not.
+///
+/// Whitespace-only content is treated as an empty map rather than an error:
+/// there is nothing there to destroy, and failing would strand a user whose
+/// override file was truncated by an earlier crash.
+pub(crate) fn read_override_map(path: &std::path::Path) -> Result<HashMap<String, String>> {
+    if let Ok(meta) = std::fs::metadata(path) {
+        if meta.len() > MAX_OVERRIDE_FILE_BYTES {
+            return Err("Override file too large".into());
+        }
+    }
+
+    let content = std::fs::read_to_string(path).context("Cannot read override file")?;
+    if content.trim().is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    serde_json::from_str(&content).map_err(|e| {
+        tracing::warn!(
+            target: "4da::i18n",
+            path = %path.display(),
+            error = %e,
+            "Refusing to rewrite an override file that is not a JSON string map"
+        );
+        crate::error::FourDaError::Validation(format!(
+            "{} is not a valid translation override file; \
+             move or delete it before editing overrides for this language",
+            path.display()
+        ))
+    })
+}
+
 /// Load all override files for a language into a single flat map.
+///
+/// Callers reaching this from IPC have already allowlisted `lang`; the
+/// component check here is the second layer, so a future internal caller
+/// cannot reintroduce the escape.
 pub(crate) fn load_overrides(lang: &str) -> Result<HashMap<String, String>> {
+    crate::ipc_guard::validate_path_component("lang", lang)?;
     let overrides_dir = crate::i18n::translations_dir().join("overrides").join(lang);
     let mut overrides: HashMap<String, String> = HashMap::new();
 
@@ -213,7 +293,7 @@ pub(crate) fn load_overrides(lang: &str) -> Result<HashMap<String, String>> {
         return Ok(overrides);
     }
 
-    for ns in &["ui", "errors"] {
+    for ns in &crate::i18n::TRANSLATION_NAMESPACES {
         let path = overrides_dir.join(format!("{ns}.json"));
         if let Ok(content) = std::fs::read_to_string(&path) {
             if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {

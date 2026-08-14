@@ -34,6 +34,100 @@ fn test_validate_path_no_traversal() {
 }
 
 #[test]
+fn validate_path_input_accepts_absolute_by_design() {
+    // Pinned deliberately. Every production caller (dependency_commands,
+    // toolkit) receives an absolute project directory chosen in a native
+    // folder dialog. If a future change makes this reject absolute paths, it
+    // breaks those callers — the guard for "must be one path segment" is
+    // validate_path_component, not this.
+    assert!(validate_path_input("path", "/home/dev/project").is_ok());
+    assert!(validate_path_input("path", "C:/Users/dev/project").is_ok());
+}
+
+// === Path COMPONENT validation (traversal / absolute-join defence) ===
+
+#[test]
+fn path_component_accepts_real_values() {
+    for good in [
+        "en", "pt-BR", "ui", "errors", "signals", "a1_b-2", "zz_test",
+    ] {
+        assert!(
+            validate_path_component("c", good).is_ok(),
+            "{good} should be accepted"
+        );
+    }
+}
+
+#[test]
+fn path_component_rejects_absolute_paths() {
+    // The core of the bug this guard exists for: Path::join with an absolute
+    // component REPLACES the accumulated path instead of extending it, so an
+    // absolute component escapes without any traversal sequence at all.
+    for bad in [
+        "/etc/passwd",
+        "C:/Windows/System32/drivers/etc/hosts",
+        "C:\\Windows\\Temp\\x",
+        "\\\\server\\share",
+        "//server/share",
+    ] {
+        assert!(
+            validate_path_component("c", bad).is_err(),
+            "{bad} must be rejected"
+        );
+    }
+}
+
+#[test]
+fn path_component_rejects_traversal_and_separators() {
+    for bad in ["..", ".", "../x", "a/b", "a\\b", "./x", "~", "~/x"] {
+        assert!(
+            validate_path_component("c", bad).is_err(),
+            "{bad} must be rejected"
+        );
+    }
+}
+
+#[test]
+fn path_component_rejects_null_and_control_bytes() {
+    assert!(validate_path_component("c", "ui\0.txt").is_err());
+    assert!(validate_path_component("c", "ui\n").is_err());
+    assert!(validate_path_component("c", "ui\r\n").is_err());
+    assert!(validate_path_component("c", "ui\t").is_err());
+}
+
+#[test]
+fn path_component_rejects_empty_and_overlong() {
+    assert!(validate_path_component("c", "").is_err());
+    assert!(validate_path_component("c", &"a".repeat(MAX_PATH_COMPONENT_LENGTH)).is_ok());
+    assert!(validate_path_component("c", &"a".repeat(MAX_PATH_COMPONENT_LENGTH + 1)).is_err());
+}
+
+#[test]
+fn path_component_rejects_windows_stream_and_drive_markers() {
+    // ':' opens an NTFS alternate data stream or names a drive.
+    assert!(validate_path_component("c", "ui:$DATA").is_err());
+    assert!(validate_path_component("c", "C:").is_err());
+}
+
+#[test]
+fn path_component_rejects_non_ascii_lookalikes() {
+    // Unicode fullwidth solidus and friends never reach the filesystem as a
+    // separator, but rejecting the whole non-ASCII space keeps the guard's
+    // reasoning simple: only [A-Za-z0-9_-] survives.
+    assert!(validate_path_component("c", "ui\u{FF0F}x").is_err());
+    assert!(validate_path_component("c", "üi").is_err());
+}
+
+#[test]
+fn path_component_error_does_not_echo_input() {
+    // Errors surface in the UI; do not reflect attacker-chosen text back.
+    let err = validate_path_component("namespace", "/etc/passwd")
+        .unwrap_err()
+        .to_string();
+    assert!(!err.contains("/etc/passwd"), "error must not echo input");
+}
+
+#[test]
 fn test_validate_url_length() {
     assert!(validate_url_input("url", "https://example.com").is_ok());
     let long_url = format!("https://example.com/{}", "a".repeat(2100));

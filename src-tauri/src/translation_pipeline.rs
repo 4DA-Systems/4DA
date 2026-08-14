@@ -94,6 +94,7 @@ pub async fn translate_batch(
 /// Returns a map of `"namespace:flat.key" -> "English value"` for every key
 /// present in the English locale files but absent in the target translations.
 pub fn get_untranslated_keys(target_lang: &str) -> Result<HashMap<String, String>> {
+    crate::ipc_guard::validate_path_component("target_lang", target_lang)?;
     let english_strings = load_english_strings()?;
 
     // Load existing translations for target language
@@ -101,7 +102,7 @@ pub fn get_untranslated_keys(target_lang: &str) -> Result<HashMap<String, String
     let mut existing: HashMap<String, String> = HashMap::new();
 
     if trans_dir.exists() {
-        for ns in &["ui", "errors", "signals"] {
+        for ns in &crate::i18n::TRANSLATION_NAMESPACES {
             let path = trans_dir.join(format!("{ns}.json"));
             if let Ok(content) = std::fs::read_to_string(&path) {
                 if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
@@ -139,7 +140,7 @@ pub fn load_english_strings() -> Result<HashMap<String, String>> {
 
     let mut english_strings: HashMap<String, String> = HashMap::new();
 
-    for ns in &["ui", "errors", "signals"] {
+    for ns in &crate::i18n::TRANSLATION_NAMESPACES {
         let path = locales_dir.join(format!("{ns}.json"));
         if let Ok(content) = std::fs::read_to_string(&path) {
             if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
@@ -161,17 +162,31 @@ pub fn load_english_strings() -> Result<HashMap<String, String>> {
 ///
 /// Merges with any existing translations for the language. Returns the number
 /// of new keys written.
+///
+/// # Security
+///
+/// `target_lang` and each namespace become path segments under a directory
+/// this function creates, so both are validated here as well as at the IPC
+/// boundary. The namespace guard matters independently of the caller: the
+/// namespaces are parsed out of translation *keys*, which come back from the
+/// LLM, so a key like `"<segment>:x"` would otherwise steer the write.
 pub fn save_translations(
     translations: &HashMap<String, String>,
     target_lang: &str,
 ) -> Result<usize> {
+    crate::ipc_guard::validate_path_component("target_lang", target_lang)?;
+
     let trans_dir = crate::i18n::translations_dir().join(target_lang);
     std::fs::create_dir_all(&trans_dir)?;
 
-    // Group by namespace
+    // Group by namespace, dropping any the pipeline does not own.
     let mut by_ns: HashMap<String, HashMap<String, String>> = HashMap::new();
     for (k, v) in translations {
         if let Some((ns, key)) = k.split_once(':') {
+            if !crate::i18n::TRANSLATION_NAMESPACES.contains(&ns) {
+                warn!(target: "4da::i18n", lang = target_lang, "Skipped unknown translation namespace");
+                continue;
+            }
             by_ns
                 .entry(ns.to_string())
                 .or_default()
@@ -183,10 +198,22 @@ pub fn save_translations(
     for (ns, map) in &by_ns {
         let path = trans_dir.join(format!("{ns}.json"));
 
-        // Merge with existing translations
+        // Merge with existing translations. A file that does not parse is left
+        // alone rather than silently replaced — see `read_override_map` in
+        // translation_commands for the same rule and why it matters.
         let mut existing: HashMap<String, String> = if path.exists() {
             let content = std::fs::read_to_string(&path).unwrap_or_default();
-            serde_json::from_str(&content).unwrap_or_default()
+            if content.trim().is_empty() {
+                HashMap::new()
+            } else {
+                serde_json::from_str(&content).map_err(|e| {
+                    format!(
+                        "{} is not a valid translation file ({e}); \
+                         move or delete it before translating again",
+                        path.display()
+                    )
+                })?
+            }
         } else {
             HashMap::new()
         };
