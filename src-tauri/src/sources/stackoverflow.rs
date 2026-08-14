@@ -99,9 +99,63 @@ fn now_secs() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
+/// Where the throttle deadline is shared between processes.
+///
+/// Stack Exchange throttles by IP, but on this machine THREE processes drive the
+/// pipeline against one data dir: the GUI, the `4DA Background Refresh` task
+/// (`fourda --engine-once`, every 30min), and the ledger's `run-cycle.mjs`
+/// (`fourda-engine --once`). An in-process breaker alone cannot help the two
+/// short-lived ones — each new process would rediscover the ban by spending a
+/// request into it. Persisting the deadline lets every process inherit it.
+///
+/// Disabled under `cfg(test)` so the unit tests exercise the in-memory logic
+/// hermetically and never touch a real data directory.
+#[cfg(not(test))]
+fn throttle_file() -> Option<std::path::PathBuf> {
+    Some(
+        crate::runtime_paths::RuntimePaths::get()
+            .data_dir
+            .join(".stackoverflow_throttle"),
+    )
+}
+
+/// Read a persisted deadline written by another process. Fail-soft: any error
+/// (missing file, garbage, permissions) simply means "no known throttle".
+#[cfg(not(test))]
+fn load_persisted_deadline() -> u64 {
+    throttle_file()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
+#[cfg(not(test))]
+fn persist_deadline(deadline: u64) {
+    if let Some(path) = throttle_file() {
+        let _ = std::fs::write(path, deadline.to_string());
+    }
+}
+
+#[cfg(test)]
+fn load_persisted_deadline() -> u64 {
+    0
+}
+
+#[cfg(test)]
+fn persist_deadline(_deadline: u64) {}
+
 /// Seconds still remaining on an active throttle, if any.
+///
+/// Consults the shared on-disk deadline as well as this process's own, adopting
+/// whichever is later, so a freshly-spawned `--once` run starts out already
+/// aware of a ban another process discovered.
 fn throttle_remaining() -> Option<u64> {
-    let until = THROTTLED_UNTIL.load(Ordering::Relaxed);
+    let mut until = THROTTLED_UNTIL.load(Ordering::Relaxed);
+    let persisted = load_persisted_deadline();
+    if persisted > until {
+        THROTTLED_UNTIL.fetch_max(persisted, Ordering::Relaxed);
+        until = persisted;
+    }
     until.checked_sub(now_secs()).filter(|&r| r > 0)
 }
 
@@ -110,7 +164,10 @@ fn throttle_remaining() -> Option<u64> {
 fn arm_throttle(secs: u64) -> u64 {
     let clamped = secs.clamp(1, MAX_THROTTLE_SECS);
     let deadline = now_secs().saturating_add(clamped);
-    THROTTLED_UNTIL.fetch_max(deadline, Ordering::Relaxed);
+    let previous = THROTTLED_UNTIL.fetch_max(deadline, Ordering::Relaxed);
+    if deadline > previous {
+        persist_deadline(deadline);
+    }
     clamped
 }
 
