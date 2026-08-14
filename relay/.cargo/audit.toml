@@ -1,0 +1,23 @@
+# Cargo audit advisory ignore list — 4DA Team Relay.
+# Only add entries with clear justification — every ignore weakens the audit.
+#
+# Run from this directory:  cargo audit
+# CI: .github/workflows/nightly-audit.yml audits src-tauri/ and relay/.
+
+[advisories]
+ignore = [
+    # rsa@0.9.10 (RUSTSEC-2023-0071) — Marvin Attack timing sidechannel.
+    # No fixed upstream version exists.
+    #
+    # NOT COMPILED INTO THE RELAY. `rsa` reaches this lockfile only through
+    # `sqlx-mysql`, which is an OPTIONAL sqlx backend. relay enables
+    # `features = ["sqlite", "runtime-tokio-rustls"]` and never `mysql`, so
+    # sqlx-mysql is absent from the build graph — verified with
+    # `cargo tree -i rsa` and `cargo tree -i sqlx-mysql`, both of which report
+    # "nothing to print". A Cargo.lock records the full resolve including
+    # optional backends, which is why `cargo audit -f Cargo.lock` still sees it.
+    #
+    # REVISIT: drop this ignore if sqlx ever stops vendoring the mysql backend
+    # into the resolve, or if rsa ships a constant-time fix.
+    "RUSTSEC-2023-0071",
+]

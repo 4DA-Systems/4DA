@@ -9,6 +9,7 @@
 # directories where it can't find one):
 #   - github-actions (/)                — workflow action pins
 #   - cargo          (/src-tauri)       — Rust crates (Cargo.lock)
+#   - cargo          (/relay)           — Team Relay server (Cargo.lock)
 #   - npm            (/)                — root frontend (pnpm-lock.yaml)
 #   - npm            (/mcp-4da-server)  — MCP server (pnpm-lock.yaml)
 #   - npm            (/mcp-memory-server) — MCP memory server (package-lock.json)
@@ -65,6 +66,33 @@ updates:
       - "runyourempire"
     commit-message:
       prefix: "chore(cargo)"
+      include: "scope"
+
+  # ── Rust (Team Relay server) ──────────────────────────────────────
+  # Separate crate, separate Cargo.lock — NOT a workspace member of
+  # /src-tauri, so the block above never sees it. It terminates TLS and
+  # serves the encrypted metadata sync API, which makes its transitive
+  # rustls / webpki surface security-relevant in a way the desktop app's
+  # is not. Left unwatched until 2026-08-14, by which point it had
+  # accumulated four rustls-webpki certificate-validation advisories.
+  - package-ecosystem: "cargo"
+    directory: "/relay"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "rust"
+      - "relay"
+    assignees:
+      - "runyourempire"
+    reviewers:
+      - "runyourempire"
+    commit-message:
+      prefix: "chore(relay)"
       include: "scope"
 
   # ── Frontend (root pnpm workspace) ────────────────────────────────
