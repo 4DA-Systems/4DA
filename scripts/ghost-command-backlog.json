@@ -1,0 +1,739 @@
+{
+  "$comment": [
+    "Ghost-command backlog allowlist — consumed by scripts/ghost-commands.cjs.",
+    "",
+    "A \"ghost\" is a Tauri command registered in generate_handler![] that no",
+    "frontend code ever calls. Entries here are KNOWN, pre-existing ghosts: the",
+    "gate reports them loudly but does not block on them, so that NEW ghosts fail",
+    "the build from day one while this backlog is worked down.",
+    "",
+    "Seeded 2026-08-14, when the detector was fixed. Until then it had counted a",
+    "command's CommandMap type key as proof the command was called, which another",
+    "blocking gate (scripts/validate-commands.cjs) guarantees always exists — so it",
+    "reported 0 ghosts and \"IPC health 100%\" while 30% of the IPC surface was dead.",
+    "",
+    "TO CLEAR AN ENTRY: either wire the command up in the frontend, or delete it",
+    "from Rust + generate_handler![] + the CommandMap in src/lib/commands.ts. Then",
+    "DELETE its object below. The gate reports entries here that have gone stale.",
+    "",
+    "DO NOT add entries without a specific reason and a review — a new ghost is a",
+    "regression, not a backlog item."
+  ],
+  "seeded": "2026-08-14",
+  "backlog": [
+    {
+      "command": "calculate_electricity_cost",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/streets_localization.rs:208",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "check_daily_streak",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/achievement_commands.rs:22",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "check_synthesis_capability",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/settings_commands_llm/mod.rs:236",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "clear_error_telemetry",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/telemetry.rs:490",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "clear_telemetry",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/telemetry.rs:258",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "delete_translation_override",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/translation_commands.rs:165",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "export_developer_dna_markdown",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/developer_dna.rs:514",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "export_sovereign_profile_json",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/sovereign_developer_profile_intelligence.rs:637",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "export_sovereign_profile_markdown",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/sovereign_developer_profile_intelligence.rs:630",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "format_currency",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/streets_localization.rs:187",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "generate_agent_brief",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/agent_brief.rs:418",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "generate_sovereign_stack_document",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/sovereign_profile.rs:163",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_achievement_state",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/achievement_commands.rs:7",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_achievements",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/achievement_commands.rs:14",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_adoption_curves",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/temporal_graph.rs:344",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_advantage_history",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/decision_advantage_commands.rs:47",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_ai_cost_estimate",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/ai_costs.rs:257",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_alert_policy_cmd",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/team_monitoring.rs:346",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_attention_report",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/attention.rs:272",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_blind_spot_sensitivity",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/settings_commands_context.rs:501",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_calibration_snapshot",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/triage_audit_commands.rs:72",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_capability_summary",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/capabilities.rs:274",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_channel",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/channel_commands.rs:30",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_channel_sources",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/channel_commands.rs:118",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_composed_stack",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/stack_commands.rs:120",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_context_stats",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/settings_commands_context.rs:562",
+      "reason": "no app call site — referenced only from e2e specs"
+    },
+    {
+      "command": "get_delegation_score",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/delegation.rs:355",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_dependency_alerts",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/dependency_commands.rs:194",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_dependency_overview",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/dependency_commands.rs:13",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_developer_dna",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/developer_dna.rs:509",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_diagnostics",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/commands.rs:533",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_digest_config",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/digest_config.rs:27",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_domain_precision_report",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/trust_ledger.rs:656",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_error_summary_cmd",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/telemetry.rs:483",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_error_telemetry",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/telemetry.rs:476",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_execution_log",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/sovereign_profile.rs:251",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_false_positive_analysis",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/trust_ledger.rs:665",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_intelligence_metrics",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/intelligence_metrics.rs:237",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_learning_stats",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/ace_commands/interactions.rs:410",
+      "reason": "diagnostic/observability — invoked via dev tools, not a UI panel"
+    },
+    {
+      "command": "get_lesson_translation_status",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/playbook_commands.rs:445",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_llm_capability_tier",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/llm_capability.rs:432",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_llm_key_for_mcp",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/settings_commands.rs:200",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_llm_usage",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/settings_commands.rs:81",
+      "reason": "no app call site — referenced only from e2e specs"
+    },
+    {
+      "command": "get_missed_intelligence",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/stack_health.rs:397",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_monitoring_summary_cmd",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/team_monitoring.rs:379",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_personalization_context_summary",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/content_personalization/commands.rs:177",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_personalized_lesson",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/content_personalization/commands.rs:24",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_personalized_lessons_batch",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/content_personalization/commands.rs:104",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_playbook_content",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/playbook_commands.rs:232",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_playbook_modules",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/playbook_commands.rs:199",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_playbook_progress",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/playbook_commands.rs:270",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_preference_evidence",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/preference_commands.rs:104",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_project_deps",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/dependency_commands.rs:135",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_project_health",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/project_health.rs:124",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_radar_at_snapshot",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/tech_radar_commands.rs:134",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_radar_entry",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/tech_radar.rs:86",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_radar_entry_detail",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/tech_radar_commands.rs:22",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_radar_snapshots",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/tech_radar_commands.rs:103",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_regional_data",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/streets_localization.rs:164",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_scoring_coverage",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/triage_audit_commands.rs:108",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_scoring_stats",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/analysis_status.rs:913",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_selected_stacks",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/stack_commands.rs:84",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_semantic_shifts",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/semantic_diff.rs:238",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_source_quality",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/health_commands.rs:95",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_sovereign_developer_profile",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/sovereign_developer_profile_intelligence.rs:624",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_sovereign_profile",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/sovereign_profile.rs:63",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_sovereign_profile_completeness",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/sovereign_profile.rs:118",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_stack_health",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/stack_health.rs:389",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_standing_query_matches",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/standing_queries.rs:256",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_street_health",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/suns_commands.rs:37",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_tech_radar",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/tech_radar.rs:80",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_translation_cache_stats",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/content_translation_commands.rs:112",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_translation_overrides",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/translation_commands.rs:159",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_usage_analytics",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/telemetry.rs:252",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "get_watched_items",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/settings_commands_context.rs:447",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "hydrate_lesson_with_llm",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/content_personalization/commands.rs:217",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "list_provider_models",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/settings_commands_llm/mod.rs:84",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "mark_lesson_complete",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/playbook_commands.rs:336",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "measure_noise_prune",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/autophagy_commands.rs:283",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "measure_triage_recall",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/triage_audit_commands.rs:172",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "notification_clicked",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/notification_window.rs:312",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "osv_cache_status",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/osv/mod.rs:63",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "osv_get_matches",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/osv/mod.rs:36",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "osv_get_sync_status",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/osv/mod.rs:44",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "osv_sync_now",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/osv/mod.rs:21",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "osv_update_cache",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/osv/mod.rs:55",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "preview_channel_sources",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/channel_commands.rs:207",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "probe_llm_capability",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/llm_capability.rs:454",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "purge_translation_cache",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/content_translation_commands.rs:120",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "remove_saved_item",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/content_commands.rs:196",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "reset_source_circuit_breaker",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/health_commands.rs:102",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "resolve_dependency_alert",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/dependency_commands.rs:226",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "run_backfill_cycle",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/analysis_backfill.rs:213",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "run_noise_prune",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/autophagy_commands.rs:314",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "save_sovereign_fact",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/sovereign_profile.rs:225",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "score_tuning_snapshot",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/commands.rs:569",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "set_alert_policy_cmd",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/team_monitoring.rs:354",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "set_blind_spot_sensitivity",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/settings_commands_context.rs:483",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "set_digest_config",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/digest_config.rs:48",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "set_digest_email_config",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/digest_email.rs:199",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "set_llm_limits",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/settings_commands.rs:366",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "set_notification_style",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/monitoring_commands.rs:319",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "store_agent_memory",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/agent_memory.rs:273",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "synthesize_search",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/search_synthesis.rs:326",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "test_digest_email",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/digest_email.rs:178",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "toolkit_env_snapshot",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/toolkit.rs:286",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "toolkit_generate_export_pack",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/toolkit_export.rs:29",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "toolkit_get_http_history",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/toolkit_http.rs:178",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "toolkit_http_request",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/toolkit_http.rs:91",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "toolkit_kill_process",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/toolkit.rs:232",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "toolkit_list_ports",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/toolkit.rs:86",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "toolkit_score_sandbox",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/toolkit_intelligence.rs:147",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "translate_content",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/content_translation_commands.rs:20",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "translate_playbook_module",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/playbook_commands.rs:395",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "trigger_autophagy_cycle",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/autophagy_commands.rs:126",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "trigger_notification_preview",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/monitoring_commands.rs:242",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "unwatch_item",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/settings_commands_context.rs:433",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "validate_license",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/settings_commands_license.rs:217",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    },
+    {
+      "command": "validate_sso_callback",
+      "since": "2026-08-14",
+      "rust": "src-tauri/src/sso.rs:570",
+      "reason": "pre-existing backlog — registered but no frontend call site"
+    }
+  ]
+}
