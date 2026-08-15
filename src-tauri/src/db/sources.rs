@@ -114,6 +114,11 @@ impl Database {
 
     /// Store or update a source item (also updates vec0 index).
     /// Language is auto-detected from title text via `whichlang`.
+    ///
+    /// The FTS5 index is NOT touched here: `trg_source_items_fts_*` (schema 104) mirror
+    /// every insert/update/delete on `source_items` into `source_items_fts`. Writing it
+    /// by hand is what diverged the index in the first place — see
+    /// [`Database::install_fts_sync_triggers_and_rebuild`].
     pub fn upsert_source_item(
         &self,
         source_type: &str,
@@ -146,10 +151,6 @@ impl Database {
                 "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
                 params![embedding_blob, id],
             )?;
-            tx.execute(
-                "INSERT OR REPLACE INTO source_items_fts(rowid, title, content) VALUES (?1, ?2, ?3)",
-                params![id, title, content],
-            )?;
             tx.commit()?;
             Ok(id)
         } else {
@@ -158,14 +159,12 @@ impl Database {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))",
                 params![source_type, source_id, url, title, content, content_hash, embedding_blob, detected_lang],
             )?;
+            // Safe under the FTS insert trigger: SQLite restores last_insert_rowid()
+            // to the outer statement's value once a trigger program ends.
             let id = tx.last_insert_rowid();
             tx.execute(
                 "INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
                 params![id, embedding_blob],
-            )?;
-            tx.execute(
-                "INSERT OR REPLACE INTO source_items_fts(rowid, title, content) VALUES (?1, ?2, ?3)",
-                params![id, title, content],
             )?;
             tx.commit()?;
             Ok(id)
@@ -174,6 +173,9 @@ impl Database {
 
     /// Batch upsert source items in a transaction (much faster than individual calls).
     /// Tuple: (source_type, source_id, url, title, content, embedding, detected_lang, content_type, cve_ids, feed_origin, tags).
+    ///
+    /// FTS5 upkeep is the `trg_source_items_fts_*` triggers' job (schema 104), not this
+    /// function's — see [`Database::install_fts_sync_triggers_and_rebuild`].
     #[allow(clippy::type_complexity)]
     pub fn batch_upsert_source_items(
         &self,
@@ -217,9 +219,6 @@ impl Database {
             )?;
             let mut insert_vec_stmt =
                 tx.prepare_cached("INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)")?;
-            let mut upsert_fts_stmt = tx.prepare_cached(
-                "INSERT OR REPLACE INTO source_items_fts(rowid, title, content) VALUES (?1, ?2, ?3)",
-            )?;
 
             for (
                 source_type,
@@ -259,7 +258,6 @@ impl Database {
                         id
                     ])?;
                     update_vec_stmt.execute(params![embedding_blob, id])?;
-                    upsert_fts_stmt.execute(params![id, title, content])?;
                 } else {
                     insert_stmt.execute(params![
                         source_type,
@@ -278,7 +276,6 @@ impl Database {
                     ])?;
                     let id = tx.last_insert_rowid();
                     insert_vec_stmt.execute(params![id, embedding_blob])?;
-                    upsert_fts_stmt.execute(params![id, title, content])?;
                 }
                 count += 1;
             }
@@ -287,7 +284,12 @@ impl Database {
         Ok(count)
     }
 
-    /// Batch upsert source items that failed embedding (stored as pending for retry)
+    /// Batch upsert source items that failed embedding (stored as pending for retry).
+    ///
+    /// This function used to write `source_items` and never touch `source_items_fts`,
+    /// so anything that failed embedding was unsearchable and left the external-content
+    /// index inconsistent with its content table. The `trg_source_items_fts_*` triggers
+    /// (schema 104) now index these rows on the way in, with no statement here to forget.
     #[allow(clippy::type_complexity)]
     pub fn batch_upsert_pending_source_items(
         &self,

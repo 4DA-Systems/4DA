@@ -4,7 +4,7 @@
 //! Reciprocal Rank Fusion (RRF). Provides better recall than either method alone,
 //! especially for developer content with exact technical terms.
 
-use rusqlite::params;
+use rusqlite::{params, Result as SqliteResult};
 use tracing::debug;
 
 use super::{embedding_to_blob, Database};
@@ -213,6 +213,44 @@ impl Database {
         );
 
         results
+    }
+
+    /// Verify that `source_items_fts` still agrees with `source_items`.
+    ///
+    /// `PRAGMA integrity_check` and `PRAGMA quick_check` do **not** cover this: they
+    /// validate the b-trees FTS5 stores its index in, which stay perfectly well-formed
+    /// while the postings inside them describe text the content table no longer holds.
+    /// The same trap exists inside FTS5's own command — for an external-content table
+    /// `('integrity-check', 0)` checks only internal consistency, and **only**
+    /// `('integrity-check', 1)` recomputes the index checksum from `source_items` and
+    /// compares. Rank 0 passed on the founder's corpus while rank 1 failed, so this
+    /// deliberately asks for rank 1.
+    ///
+    /// Cost is a full tokenizing scan of the content table, so this is a diagnostic and
+    /// a test assertion — never a startup or per-cycle check.
+    ///
+    /// Takes the writer connection: the pool is opened `SQLITE_OPEN_READ_ONLY` with
+    /// `query_only=ON`, and FTS5 spells its commands as INSERTs, which SQLite refuses
+    /// on a read-only connection whether or not they modify anything.
+    pub fn fts_integrity_check(&self) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO source_items_fts(source_items_fts, rank) VALUES('integrity-check', 1)",
+            [],
+        )?;
+        Ok(())
+    }
+
+    /// Discard the FTS5 index and regenerate it from `source_items`.
+    ///
+    /// The schema-104 migration runs this once. It stays available because it is the only
+    /// repair for a diverged external-content index — `'delete'` commands carrying values
+    /// that were never indexed make the divergence worse, not better.
+    pub fn rebuild_fts_index(&self) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute_batch("INSERT INTO source_items_fts(source_items_fts) VALUES('rebuild');")?;
+        tracing::info!(target: "4da::hybrid_search", "FTS5 search index rebuilt from source_items");
+        Ok(())
     }
 }
 

@@ -543,6 +543,15 @@ impl Database {
     // ========================================================================
 
     /// Delete source_items older than the given number of days.
+    ///
+    /// `feedback` and `source_vec` are swept by hand below because neither has a cascade.
+    /// `source_items_fts` is deliberately NOT sweepable that way — an external-content
+    /// FTS5 index needs the row's original text to remove its postings, which is gone the
+    /// moment the row is. `trg_source_items_fts_delete` (schema 104) does it from `OLD.*`
+    /// before the values disappear, and covers `run_maintenance` and `prune_noise` too.
+    /// Before that trigger existed, retention had never actually run on the founder's
+    /// machine — the first successful run would have stranded every deleted item's
+    /// postings in the index.
     pub fn cleanup_old_items(&self, max_age_days: u32) -> SqliteResult<usize> {
         let conn = self.conn.lock();
         // Age is measured in whole DAYS, so compare against a DATE (midnight)

@@ -558,7 +558,22 @@ pub fn project_path_missing_on_disk(path: &str) -> bool {
 /// `path_missing` is injected (production: [`project_path_missing_on_disk`])
 /// so tests can simulate deletion. Tier-waived ledger fixture paths (canonical
 /// policy: `project_inclusion` tier-2 + active waiver) are skipped — the
-/// receipts ledger scans fixture stacks on purpose. Single transaction.
+/// receipts ledger scans fixture stacks on purpose.
+///
+/// Runs in three phases — read, stat, write — with **no transaction open across the
+/// filesystem calls**. It used to do all three inside one transaction, which cost twice:
+///
+/// - `path_missing` blocks on `std::fs::metadata` per project path, so a single dead
+///   mapped network drive pinned the transaction for a full SMB timeout. In WAL mode an
+///   open read transaction holds a snapshot, which stalls checkpointing for that whole
+///   window — the same WAL growth this release is fixing elsewhere.
+/// - A deferred transaction that reads first and writes later has to *upgrade* its lock,
+///   and if another connection wrote in between SQLite returns `SQLITE_BUSY_SNAPSHOT`
+///   without invoking the busy handler — `busy_timeout` cannot save it. Phase 3 therefore
+///   opens `BEGIN IMMEDIATE`, which takes the write lock up front where the busy handler
+///   *does* apply, so contention becomes a bounded wait instead of an immediate error.
+///   With three writers on this file (GUI, `fourda-engine`, the MCP server) that is not
+///   hypothetical.
 pub fn prune_orphaned_project_dependencies(
     conn: &rusqlite::Connection,
     path_missing: &dyn Fn(&str) -> bool,
@@ -569,18 +584,22 @@ pub fn prune_orphaned_project_dependencies(
         "dependency_snapshots",
     ];
 
-    let tx = conn.unchecked_transaction()?;
-
+    // Phase 1 — collect candidate paths, then release the read snapshot.
     let mut paths: std::collections::HashSet<String> = std::collections::HashSet::new();
-    for table in TABLES {
-        if !table_exists(&tx, table) {
-            continue;
+    {
+        let tx = conn.unchecked_transaction()?;
+        for table in TABLES {
+            if !table_exists(&tx, table) {
+                continue;
+            }
+            let mut stmt = tx.prepare(&format!("SELECT DISTINCT project_path FROM {table}"))?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+            paths.extend(rows.filter_map(std::result::Result::ok));
         }
-        let mut stmt = tx.prepare(&format!("SELECT DISTINCT project_path FROM {table}"))?;
-        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
-        paths.extend(rows.filter_map(std::result::Result::ok));
+        tx.commit()?;
     }
 
+    // Phase 2 — hit the filesystem with nothing held.
     let orphaned: Vec<String> = paths
         .into_iter()
         .filter(|p| {
@@ -598,6 +617,12 @@ pub fn prune_orphaned_project_dependencies(
         orphaned_paths: orphaned.len(),
         ..Default::default()
     };
+    if orphaned.is_empty() {
+        return Ok(counts);
+    }
+
+    // Phase 3 — deletes only, under an up-front write lock.
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     for path in &orphaned {
         for table in TABLES {
             if !table_exists(&tx, table) {
