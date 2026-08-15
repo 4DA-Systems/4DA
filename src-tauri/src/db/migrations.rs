@@ -404,9 +404,8 @@ mod backup_prune_tests {
             vec![
                 "4da.db.backup.v98".to_string(),
                 "4da.db.bak-pre-a".to_string(),
-                "4da.db.corrupt".to_string(),
             ],
-            "exactly the oldest of each of the three families"
+            "the oldest of each COLLECTABLE family — quarantine copies are never collected"
         );
     }
 
@@ -445,23 +444,32 @@ mod backup_prune_tests {
         }
     }
 
-    /// `.db.corrupt-<unix>` quarantine copies are full-size and written one per
-    /// corruption incident with nothing collecting them.
+    /// Quarantine copies are recognised but NEVER deleted.
+    ///
+    /// An earlier cut of this pruner collected them to reclaim disk. That is unsafe: a
+    /// quarantine copy is a database the app could not open, so it is the user's only
+    /// copy of that data — and when the corrupt-database fallback misfires on a
+    /// perfectly good database (a schema written by a newer 4DA), the quarantined file
+    /// *is* the entire live corpus. Reclaiming 338 MB is not worth a chance of deleting
+    /// 15,659 items.
     #[test]
-    fn quarantine_copies_are_collected() {
+    fn quarantine_copies_are_never_pruned() {
         let files = names(&[
+            ("4da.db.corrupt", 0),
             ("4da.db.corrupt-1", 1),
             ("4da.db.corrupt-2", 2),
             ("4da.db.corrupt-3", 3),
             ("4da.db.corrupt-4", 4),
         ]);
         let doomed = plan_backup_pruning(&files, "4da.db", BACKUP_RETENTION_COUNT, None);
+        assert!(
+            doomed.is_empty(),
+            "quarantined databases must survive the pruner; got {doomed:?}"
+        );
+        // Still classified, so the caller can report the disk they hold.
         assert_eq!(
-            doomed,
-            vec![
-                "4da.db.corrupt-1".to_string(),
-                "4da.db.corrupt-2".to_string()
-            ]
+            classify_backup("4da.db.corrupt-1", "4da.db").map(|(f, _, _)| f),
+            Some(BackupFamily::Quarantine)
         );
     }
 
@@ -532,6 +540,69 @@ mod backup_prune_tests {
             "the versioned backup is a different family and must be untouched"
         );
     }
+}
+
+#[cfg(test)]
+mod schema_version_guard_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    /// A binary older than the database it opens must be refused, not tolerated.
+    ///
+    /// This guard has existed since 2026-03-29 and was never tested, which is worth
+    /// fixing now because schema 104 raised the cost of it failing. `source_items_fts`
+    /// is maintained by triggers from 104 onward; a pre-104 binary still runs its own
+    /// `INSERT OR REPLACE INTO source_items_fts`, and that write landing on top of the
+    /// trigger's leaves the index failing FTS5 `('integrity-check', 1)` **while search
+    /// results still look correct** — measured on a schema-104 fixture, not assumed.
+    ///
+    /// So this refusal is the only thing standing between a stale build and silent index
+    /// divergence. On this fleet that is not hypothetical: the scheduled background
+    /// refresh runs `target/debug/fourda.exe`, which is whatever was last compiled there.
+    #[test]
+    fn a_database_newer_than_the_binary_is_refused() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("4da.db");
+
+        {
+            let db = Database::new(&db_path).expect("first open migrates to current schema");
+            db.conn
+                .lock()
+                .execute(
+                    "UPDATE schema_version SET version = ?1",
+                    [TEST_FUTURE_VERSION],
+                )
+                .expect("stamp a future schema version");
+        }
+
+        // `Database` is not `Debug`, so unwrap the error side by hand rather than
+        // `expect_err`.
+        let refused = Database::new(&db_path);
+        assert!(
+            refused.is_err(),
+            "a database newer than the binary must be refused, not silently accepted"
+        );
+        let msg = refused.err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(
+            msg.contains("newer than this version of 4DA supports"),
+            "the refusal must say WHY, so a stale build is diagnosable from one log line; got: {msg}"
+        );
+    }
+
+    /// The common case must still work: reopening a database this binary wrote is fine.
+    /// Without this, the guard above could pass while being far too aggressive.
+    #[test]
+    fn a_database_at_the_current_schema_reopens_cleanly() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("4da.db");
+        drop(Database::new(&db_path).expect("first open"));
+        let db = Database::new(&db_path).expect("reopen at the same schema must succeed");
+        db.fts_integrity_check()
+            .expect("a reopened database must still have a consistent FTS index");
+    }
+
+    /// Far enough ahead that no future migration can accidentally reach it.
+    const TEST_FUTURE_VERSION: i64 = 9_999;
 }
 
 #[cfg(test)]
@@ -699,6 +770,15 @@ mod recovery_tests {
     }
 }
 
+/// The one phrase that identifies a "database written by a newer 4DA" refusal.
+///
+/// Shared by the producer (`migrate`) and the detector
+/// (`state.rs::is_schema_newer_than_binary`) so the two cannot drift apart. They must not:
+/// if the caller fails to recognise this error it falls into the corrupt-database
+/// fallback, which renames the user's entire corpus to `.db.corrupt` and starts empty.
+/// Measured on a 296 MB / 15,659-item database: it came back as 0 items.
+pub(crate) const SCHEMA_TOO_NEW_PHRASE: &str = "is newer than this version of 4DA supports";
+
 /// How many files of each backup family survive a prune.
 pub(crate) const BACKUP_RETENTION_COUNT: usize = 2;
 
@@ -713,7 +793,14 @@ pub(crate) enum BackupFamily {
     /// risky migration or a dogfood run (the `.gitignore` calls these "operator backups").
     /// No version axis, so ordered by mtime.
     Manual,
-    /// `<db>.corrupt`, `<db>.corrupt-<unix>` — corruption quarantine copies. Ordered by mtime.
+    /// `<db>.corrupt`, `<db>.corrupt-<unix>` — corruption quarantine copies.
+    ///
+    /// **Never auto-pruned.** These are classified so the pruner can *report* the disk
+    /// they hold, not reclaim it. A quarantine copy is by definition a database the app
+    /// could not open, which makes it the user's only copy of that data — and a
+    /// misclassified one can be their entire live corpus (see
+    /// [`SCHEMA_TOO_NEW_PHRASE`]). Deleting it is unrecoverable, so it stays until a
+    /// human decides. Ordered by mtime for reporting only.
     Quarantine,
 }
 
@@ -798,6 +885,9 @@ pub(crate) fn plan_backup_pruning(
         entry.0 = entry.0.max(order);
         entry.1.push(name.as_str());
     }
+
+    // Quarantine copies are classified but never collected — see [`BackupFamily::Quarantine`].
+    families.remove(&BackupFamily::Quarantine);
 
     let mut doomed: Vec<String> = Vec::new();
     for units in families.values() {
@@ -1215,18 +1305,19 @@ impl Database {
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
+        //
+        // The caller MUST distinguish this from corruption — see
+        // [`SCHEMA_TOO_NEW_PHRASE`] and `state.rs::is_schema_newer_than_binary`.
         if current_version > TARGET_VERSION {
-            return Err(rusqlite::Error::QueryReturnedNoRows).map_err(|_| {
-                rusqlite::Error::SqliteFailure(
-                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_MISMATCH),
-                    Some(format!(
-                        "Database schema version {} is newer than this version of 4DA supports (max {}). \
-                         You may be running an older version of 4DA against a newer database. \
-                         Please update 4DA or restore a database backup.",
-                        current_version, TARGET_VERSION
-                    )),
-                )
-            });
+            return Err(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_MISMATCH),
+                Some(format!(
+                    "Database schema version {current_version} {SCHEMA_TOO_NEW_PHRASE} \
+                     (max {TARGET_VERSION}). Your data has NOT been modified. \
+                     You are running an older version of 4DA against a newer database — \
+                     update 4DA to open it."
+                )),
+            ));
         }
 
         if current_version < TARGET_VERSION {

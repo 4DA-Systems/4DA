@@ -335,6 +335,26 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
                     return Err(format!("Database locked by another 4DA process: {e}"));
                 }
 
+                // A database written by a NEWER 4DA is not a corrupt database, and must
+                // never reach the fallback below.
+                //
+                // Measured 2026-08-16 on a copy of the founder's database: an older build
+                // (2026-08-14) opened a schema-104 database, the migration guard correctly
+                // refused it, and the fallback then read that refusal as corruption —
+                // renaming 296 MB / 15,659 items to `4da.db.corrupt` and creating a fresh
+                // 1.3 MB database with **0 items**. The app comes up empty and starts
+                // re-fetching from zero; the only trace is one log line. That is the whole
+                // corpus, and every rollback to a previous release would do it.
+                if is_schema_newer_than_binary(&e) {
+                    tracing::error!(
+                        target: "4da::db",
+                        error = %e,
+                        "Database was written by a NEWER version of 4DA — refusing to start. \
+                         Your data has NOT been touched; update 4DA to open it."
+                    );
+                    return Err(format!("{e}"));
+                }
+
                 // Last-resort recovery — Database::new() still failed even after
                 // the preemptive pass. Rename the offending file to the legacy
                 // single-slot `.db.corrupt` name and create a fresh DB. This
@@ -396,6 +416,21 @@ fn is_database_lock_contention(e: &rusqlite::Error) -> bool {
         e.sqlite_error_code(),
         Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked)
     )
+}
+
+/// Is this the migration guard refusing a database written by a newer 4DA?
+///
+/// Keyed on both the code the guard raises (`SQLITE_MISMATCH`) and the phrase it shares
+/// with the guard, so an unrelated type mismatch cannot suppress genuine corruption
+/// recovery. Getting this wrong in either direction is expensive: too narrow and the
+/// caller destroys the user's corpus, too broad and a real corruption goes unrepaired.
+fn is_schema_newer_than_binary(e: &rusqlite::Error) -> bool {
+    matches!(
+        e.sqlite_error_code(),
+        Some(rusqlite::ErrorCode::TypeMismatch)
+    ) && e
+        .to_string()
+        .contains(crate::db::migrations::SCHEMA_TOO_NEW_PHRASE)
 }
 
 // ============================================================================
@@ -609,5 +644,65 @@ mod tests {
         abort.store(true, Ordering::Relaxed);
         assert!(abort.load(Ordering::Relaxed));
         abort.store(false, Ordering::Relaxed);
+    }
+
+    fn sqlite_failure(code: std::os::raw::c_int, msg: &str) -> rusqlite::Error {
+        rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(code), Some(msg.to_string()))
+    }
+
+    /// The whole point: this error must be routed AWAY from the corrupt-db fallback.
+    #[test]
+    fn a_newer_schema_is_not_corruption() {
+        let err = sqlite_failure(
+            rusqlite::ffi::SQLITE_MISMATCH,
+            &format!(
+                "Database schema version 9999 {} (max 104).",
+                crate::db::migrations::SCHEMA_TOO_NEW_PHRASE
+            ),
+        );
+        assert!(is_schema_newer_than_binary(&err));
+    }
+
+    /// ...and real corruption must still reach it, or a corrupt database never heals.
+    #[test]
+    fn genuine_corruption_still_reaches_the_fallback() {
+        let err = sqlite_failure(
+            rusqlite::ffi::SQLITE_CORRUPT,
+            "database disk image is malformed",
+        );
+        assert!(!is_schema_newer_than_binary(&err));
+    }
+
+    /// An unrelated `SQLITE_MISMATCH` must not suppress corruption recovery — the code
+    /// alone is not enough, which is why the phrase is checked too.
+    #[test]
+    fn an_unrelated_type_mismatch_is_not_version_skew() {
+        let err = sqlite_failure(rusqlite::ffi::SQLITE_MISMATCH, "datatype mismatch");
+        assert!(!is_schema_newer_than_binary(&err));
+    }
+
+    /// End-to-end: the error the migration guard ACTUALLY produces must be the one the
+    /// detector recognises. Testing them apart would let the two drift and silently
+    /// re-arm the corpus-destroying path.
+    #[test]
+    fn the_guards_real_refusal_is_recognised() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("4da.db");
+        {
+            let db = Database::new(&db_path).expect("first open migrates to current schema");
+            db.conn
+                .lock()
+                .execute("UPDATE schema_version SET version = 9999", [])
+                .expect("stamp a future schema");
+        }
+
+        let reopened = Database::new(&db_path);
+        assert!(reopened.is_err(), "a future schema must be refused");
+        let err = reopened.err().expect("checked is_err above");
+        assert!(
+            is_schema_newer_than_binary(&err),
+            "the guard's real error must be recognised, or get_database() renames the \
+             user's corpus to .db.corrupt and starts empty; got: {err}"
+        );
     }
 }

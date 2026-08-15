@@ -111,6 +111,31 @@ Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
   - `pnpm run validate:vite-smoke` does a cold-start and verifies 13 critical routes
   - `pnpm run validate` includes the smoke test
   **If it happens:** `taskkill /F /IM fourda.exe && pnpm install --frozen-lockfile`
+- **Worktree base goes stale — and it reads as YOUR regression.** `main` moves fast
+  (6 merges landed during one agent session). A worktree cut hours earlier still has
+  the old `scripts/ghost-command-backlog.json`, `check-file-sizes.cjs` exceptions and
+  `deny.toml`, so the pre-commit gates fail citing files your branch never touched —
+  e.g. "13 NEW ghost commands" that were simply allowlisted upstream in the meantime.
+  **`git fetch origin` and rebase onto `origin/main` before you commit**, not just when
+  you start. If a gate blames code you did not write, check your base before you touch
+  the allowlist — and never `--no-verify` past it.
+- **Never let an OLD binary open a NEWER database.** `src-tauri/target/debug/fourda.exe`
+  is what the scheduled background refresh runs, and it is whatever was last compiled
+  there — so after a schema migration, rebuild BOTH `fourda` and `fourda-engine` before
+  anything runs. Measured 2026-08-16 on a copy of the live corpus: a 2026-08-14 build
+  opened a schema-104 database, the migration guard correctly refused it, and
+  `get_database()`'s corrupt-db fallback then read that refusal as corruption — renaming
+  296 MB / 15,659 items to `4da.db.corrupt` and creating a fresh **0-item** database.
+  The app comes up empty and re-fetches from zero, with one log line as the only trace.
+  `state.rs::is_schema_newer_than_binary` now routes that error away from the fallback,
+  but the ordering rule stands: **migrate and rebuild together.** Related: from schema
+  104 the FTS index is trigger-maintained, so a pre-104 binary's own `INSERT OR REPLACE
+  INTO source_items_fts` on top of the trigger's write leaves the index failing
+  `('integrity-check', 1)` while search results still look correct.
+- **`*.db.corrupt` files are never auto-deleted** — a quarantined database is the user's
+  only copy of that data, and (per the bug above) can be their entire live corpus. The
+  backup pruner classifies them so their disk cost is visible, and collects only
+  `*.db.backup.vN` and hand-made `*.bak-*` snapshots.
 - **Ghost tray icons** — each `fourda.exe` registers one Windows tray icon at
   startup. Windows removes it only when the process runs its `Drop` (the app
   now does this explicitly on `RunEvent::Exit`, so a clean quit removes it).
