@@ -31,7 +31,15 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const SRC_DIR = path.join(ROOT, 'src-tauri', 'src');
+// Scan roots: everything that ships (or runs on a user/dev machine) and can spawn a process.
+// Widened 2026-08-16 (Screenshot_3751 incident follow-up): previously only src-tauri/src was
+// scanned, leaving build.rs, the relay service, and the fourda-engine binary invisible to the
+// gate — precisely the binary a scheduled task launches.
+const SCAN_DIRS = [
+  path.join(ROOT, 'src-tauri', 'src'),
+  path.join(ROOT, 'relay', 'src'),
+];
+const SCAN_FILES = [path.join(ROOT, 'src-tauri', 'build.rs')];
 
 // Unix-only programs: these are gated to macOS/Linux and can never spawn on Windows, so they cannot
 // flash a Windows console. Keep this list tight — only genuinely non-Windows tools belong here.
@@ -44,13 +52,14 @@ const UNIX_ONLY = new Set([
 
 const EXEMPT_MARKER = 'no-window-ok';
 
-// Files to skip: test files (window flash is irrelevant in tests) and the fourda-engine binary,
-// which is intentionally a console-subsystem binary (it hides its own console at runtime via
-// hide_scheduler_spawned_console(); see headless.rs).
+// Files to skip: test files only (window flash is irrelevant in tests). fourda-engine.rs is
+// deliberately NOT skipped any more (2026-08-16): being a console-subsystem binary that hides
+// its OWN console says nothing about the consoles of processes it might spawn — and it is
+// precisely the binary a scheduled task launches, so an ungated spawn added there would flash
+// on the user's desktop every 30 minutes.
 function isSkippedFile(rel) {
   if (/(^|[\\/])tests?[\\/]/.test(rel)) return true;
   if (/_tests?\.rs$/.test(rel)) return true;
-  if (rel.replace(/\\/g, '/').endsWith('src/bin/fourda-engine.rs')) return true;
   return false;
 }
 
@@ -282,7 +291,10 @@ function analyzeSources(sources) {
 
 /** CLI entry point. Returns the process exit code. */
 function main(argv) {
-  const files = collectRustFiles(SRC_DIR).filter((f) => !isSkippedFile(path.relative(ROOT, f)));
+  const files = SCAN_DIRS.filter((d) => fs.existsSync(d))
+    .flatMap((d) => collectRustFiles(d))
+    .concat(SCAN_FILES.filter((f) => fs.existsSync(f)))
+    .filter((f) => !isSkippedFile(path.relative(ROOT, f)));
   const sources = files.map((f) => ({
     rel: path.relative(ROOT, f).replace(/\\/g, '/'),
     src: fs.readFileSync(f, 'utf8'),
