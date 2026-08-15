@@ -19,7 +19,7 @@
 
 It scans your codebase — `Cargo.toml`, `package.json`, `go.mod`, Git history — and scores every article, advisory, and release from 20+ sources against what you actually build. An item needs 2+ independent signals to survive. Everything else is rejected.
 
-Tested across 9 developer personas: **92% of content is filtered as noise, 98% of actual noise is correctly rejected.** Your real rejection rate — computed from your own data — is shown in the Signal tab.
+Benchmarked across 9 developer personas against a 245-item labeled corpus — 1,997 scored evaluations: **93% of content is rejected, and 98.9% of labeled noise is correctly rejected.** Those are measured numbers, and you can [reproduce them in one command](#benchmarks). Your real rejection rate — computed from your own data, not ours — is shown in the Signal tab.
 
 It learns from how you engage with what it shows you. Saves and dismissals build a preference profile you can inspect, pin, or forget — and teach the Brief what to stop showing you. Relevance scoring itself stays grounded in your actual stack. Yesterday's noise becomes tomorrow's signal.
 
@@ -53,7 +53,7 @@ This scans your project, detects your stack, and gives your AI assistant live vu
 | **Dependency** | Direct matches against your installed packages |
 | **Learned** | Reserved — held out of scoring until it can be validated against your explicit feedback |
 
-What passes the gate goes through 12 quality multipliers: content depth, novelty detection, competing tech penalties, title-body coherence, and intent scoring from recent work. Every constant is calibrated across 9 simulated developer personas with 215 labeled test items.
+What passes the gate goes through 12 quality multipliers: content depth, novelty detection, competing tech penalties, title-body coherence, and intent scoring from recent work. Every constant is calibrated across 9 simulated developer personas with 245 labeled test items.
 
 ### LLM Verification
 
@@ -219,7 +219,7 @@ The [STREETS Playbook](https://4da.ai/streets) — 7 modules on turning develope
 <details>
 <summary><strong>Intelligence</strong></summary>
 
-- 5-axis scoring with multi-signal confirmation gate (92% rejection, 98% noise accuracy across 9 test personas)
+- 5-axis scoring with multi-signal confirmation gate (93% rejection, 98.9% noise accuracy across 9 test personas — [reproducible](#benchmarks))
 - Domain profile: graduated tech identity (primary stack → dependencies → detected → interests)
 - Content DNA: classifies content type (security advisory, release, tutorial, hiring, etc.)
 - Novelty detection: demotes introductory content, boosts new releases and security advisories
@@ -342,15 +342,30 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 
 ### Benchmarks
 
-The scoring claims in this README are tested, not asserted. The benchmark suite runs the full PASIFA pipeline against 9 simulated developer personas (Rust systems, Python ML, fullstack TypeScript, DevOps/SRE, mobile, bootstrap/first-run, power user, stack switcher, niche specialist) with labeled test items scored as relevant or noise.
+The scoring numbers in this README are measured, not asserted — run the suite and check them yourself. The persona simulation scores a 245-item labeled corpus against 9 simulated developer personas (Rust systems, Python ML, fullstack TypeScript, DevOps/SRE, mobile, bootstrap/first-run, power user, stack switcher, niche specialist), skipping items labeled deliberately borderline, for 1,997 scored evaluations.
 
 ```bash
 cd src-tauri
-cargo test scoring::benchmark -- --nocapture    # Full benchmark with output
-cargo test scoring::simulation -- --nocapture   # Persona simulation suite
+cargo test scoring::simulation -- --nocapture   # 9-persona simulation (the headline numbers)
+cargo test scoring::benchmark -- --nocapture    # 2-profile pipeline benchmark
 ```
 
-Source: [`src-tauri/src/scoring/benchmark.rs`](src-tauri/src/scoring/benchmark.rs) (1,335 lines, 27 tests) and [`src-tauri/src/scoring/simulation/`](src-tauri/src/scoring/simulation/) (persona definitions, domain embeddings, enrichment data).
+`scoring::simulation` prints a quality dashboard with the aggregate confusion matrix. On the current pipeline:
+
+| | Value |
+|---|---|
+| Corpus | 245 labeled items, 9 personas, 1,997 scored evaluations (2,205 pairs less the deliberately-borderline ones) |
+| Confusion matrix | TP 119 · FP 19 · TN 1,646 · FN 213 |
+| Rejection rate `(TN+FN)/total` | **93.1%** |
+| Noise accuracy `TN/(TN+FP)` | **98.9%** |
+| Precision `TP/(TP+FP)` | 86.2% |
+| Recall `TP/(TP+FN)` | 35.8% |
+
+Recall is low by design: roughly 70% of the "relevant" denominator is tangential/adjacency content a precision-first brief is meant to drop. The load-bearing figure is recall on items labeled *strongly* relevant — security advisories and releases for declared dependencies — which is 71.3% (72/101) and is reported separately by the same suite.
+
+**What CI enforces is a floor, not the headline.** The suite asserts aggregate precision >= 0.70, aggregate F1 >= 0.40, and noise rejection >= 80% for *every one* of the 9 personas; a regression past any of those fails the build. The percentages above are the measured values on top of those floors, so re-run the command against whatever revision you have checked out rather than trusting this table.
+
+Source: [`src-tauri/src/scoring/simulation/`](src-tauri/src/scoring/simulation/) (corpus, persona definitions, domain embeddings, enrichment data) and [`src-tauri/src/scoring/benchmark.rs`](src-tauri/src/scoring/benchmark.rs).
 
 ---
 
