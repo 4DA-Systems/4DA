@@ -27,6 +27,7 @@ static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(90))
         .user_agent("Mozilla/5.0 (compatible; desktop-app)")
+        .redirect(crate::http_client::local_aware_redirect_policy())
         .build()
         .unwrap_or_else(|e| {
             tracing::warn!("Failed to build HTTP client: {e}, using default");

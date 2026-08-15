@@ -238,6 +238,7 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(std::time::Duration::from_secs(30))
+        .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()
         .unwrap_or_default();
 

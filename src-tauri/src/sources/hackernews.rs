@@ -281,6 +281,19 @@ impl Source for HackerNewsSource {
             return Ok(String::new());
         }
 
+        // SSRF prevention: the story URL is whatever the submitter typed into
+        // HN. `starts_with("http")` does not stop `http://169.254.169.254/`.
+        // The redirect policy on the shared client guards later hops; this
+        // guards the first one.
+        if crate::url_validation::validate_not_internal(url).is_err() {
+            warn!(
+                target: "4da::security",
+                url = %url,
+                "Blocked Hacker News scrape to internal address (SSRF prevention)"
+            );
+            return Ok(String::new());
+        }
+
         // Use shared client with per-request timeout for scraping
         let client = super::shared_client();
 

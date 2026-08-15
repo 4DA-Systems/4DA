@@ -130,6 +130,7 @@ pub fn start_sync_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<TeamSyncSt
             .user_agent("4DA-TeamSync/1.0")
             .timeout(Duration::from_secs(30))
             .connect_timeout(Duration::from_secs(10))
+            .redirect(crate::http_client::ssrf_guarded_redirect_policy())
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
 

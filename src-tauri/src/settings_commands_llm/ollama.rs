@@ -35,6 +35,7 @@ pub(crate) async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<ser
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
         .timeout(std::time::Duration::from_mins(2)) // generous for cold model load
+        .redirect(crate::http_client::local_aware_redirect_policy())
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 
@@ -275,6 +276,7 @@ pub(super) async fn pull_ollama_model_impl(
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_mins(10)) // 10 min timeout for large models
+        .redirect(crate::http_client::local_aware_redirect_policy())
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 

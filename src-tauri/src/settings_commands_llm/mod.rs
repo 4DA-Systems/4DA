@@ -160,6 +160,7 @@ pub async fn detect_local_servers() -> Result<serde_json::Value> {
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(2))
         .timeout(std::time::Duration::from_secs(3))
+        .redirect(crate::http_client::local_aware_redirect_policy())
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 

@@ -6,6 +6,8 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 
+use url::{Host, Url};
+
 use crate::error::Result;
 
 /// Known cloud metadata hostnames that must be blocked.
@@ -105,41 +107,75 @@ fn is_internal_ipv6(ip: Ipv6Addr) -> bool {
     false
 }
 
+/// Error message emitted when a URL resolves to an internal address.
+pub(crate) const INTERNAL_URL_BLOCKED: &str = "URL blocked: cannot target internal/private network addresses (localhost, 10.x.x.x, 172.16-31.x.x, 192.168.x.x, link-local, cloud metadata endpoints)";
+
+/// Error message emitted when a URL carries embedded credentials.
+pub(crate) const CREDENTIALS_IN_URL_BLOCKED: &str =
+    "URL blocked: embedded credentials (`user:pass@host`) are not permitted — they mask the real host from readers and leak on redirect. Use an authenticated proxy or a token header instead.";
+
 /// Check if a URL points to an internal/private network address.
 ///
-/// This validates by:
-/// 1. Checking the hostname string against known internal patterns
-/// 2. Attempting DNS resolution and checking resolved IPs against blocked ranges
+/// Parsing is delegated to the `url` crate (WHATWG URL Standard, the same
+/// parser `reqwest` uses) so that userinfo, IDN, IPv6 brackets, and the
+/// obfuscated IPv4 forms (`http://2130706433/`, `http://0x7f.1/`) are handled
+/// identically here and at request time. A hand-rolled parser gave
+/// `http://evil.com@127.0.0.1/` a host of `evil.com@127.0.0.1`, which failed
+/// the IP parse and sailed through the guard.
 ///
 /// Returns `true` if the URL targets an internal address and should be blocked.
-pub(crate) fn is_internal_url(url: &str) -> bool {
-    // Parse the URL to extract the host
-    let host = match extract_host(url) {
-        Some(h) => h,
-        None => return false, // Can't parse → let the HTTP client handle it
-    };
+///
+/// Production call sites go through `validate_not_internal` (which also
+/// rejects credentials) or, per redirect hop, through
+/// `is_internal_parsed_url`; this string-taking form exists for the tests
+/// that assert the parser's behaviour directly.
+#[cfg(test)]
+fn is_internal_url(url: &str) -> bool {
+    match Url::parse(url) {
+        Ok(parsed) => is_internal_parsed_url(&parsed),
+        // Can't parse → nothing here can be a request either; let the HTTP
+        // client reject it.
+        Err(_) => false,
+    }
+}
 
-    let host_lower = host.to_lowercase();
+/// Check whether an already-parsed URL points at an internal address.
+///
+/// Used directly by the redirect policy in `http_client`, which receives a
+/// parsed `Url` per hop and must not pay for a re-parse.
+pub(crate) fn is_internal_parsed_url(url: &Url) -> bool {
+    match url.host() {
+        Some(Host::Ipv4(v4)) => is_internal_ipv4(v4),
+        Some(Host::Ipv6(v6)) => is_internal_ipv6(v6),
+        Some(Host::Domain(domain)) => is_internal_domain(domain),
+        // Schemes without an authority (`mailto:`, `data:`) have no host to
+        // reach; they are rejected as non-HTTP upstream.
+        None => false,
+    }
+}
 
-    // Check against known blocked hostnames
-    if host_lower == "localhost" {
+/// Check whether a hostname is internal, by name pattern then by DNS.
+fn is_internal_domain(domain: &str) -> bool {
+    // Strip the root label (`localhost.` == `localhost`) and normalise case.
+    let host_lower = domain.trim_end_matches('.').to_lowercase();
+
+    if host_lower == "localhost" || host_lower.ends_with(".localhost") {
         return true;
     }
 
-    for &blocked in BLOCKED_HOSTNAMES {
-        if host_lower == blocked {
-            return true;
-        }
+    if BLOCKED_HOSTNAMES.contains(&host_lower.as_str()) {
+        return true;
     }
 
-    // Try to parse the host directly as an IP address
-    if let Ok(ip) = host.parse::<IpAddr>() {
+    // A bare literal that the URL parser left as a domain (non-special
+    // schemes keep the host verbatim) may still be an IP.
+    if let Ok(ip) = host_lower.parse::<IpAddr>() {
         return is_internal_ip(ip);
     }
 
     // Attempt DNS resolution (best-effort, non-blocking is not feasible here
     // but this runs only at validation time, not in hot paths)
-    if let Ok(addrs) = format!("{host}:80").to_socket_addrs() {
+    if let Ok(addrs) = format!("{host_lower}:80").to_socket_addrs() {
         for addr in addrs {
             if is_internal_ip(addr.ip()) {
                 return true;
@@ -150,49 +186,28 @@ pub(crate) fn is_internal_url(url: &str) -> bool {
     false
 }
 
-/// Extract the hostname from a URL string.
-/// Handles http:// and https:// URLs, stripping port and path.
-fn extract_host(url: &str) -> Option<String> {
-    let after_scheme = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))?;
-
-    // Take everything before the first `/`, `?`, or `#`
-    let host_port = after_scheme
-        .split('/')
-        .next()?
-        .split('?')
-        .next()?
-        .split('#')
-        .next()?;
-
-    // Strip port if present (handle IPv6 bracket notation)
-    let host = if host_port.starts_with('[') {
-        // IPv6: [::1]:8080 → ::1
-        host_port
-            .strip_prefix('[')
-            .and_then(|s| s.split(']').next())
-    } else {
-        // IPv4 or hostname: example.com:8080 → example.com
-        Some(host_port.split(':').next().unwrap_or(host_port))
-    }?;
-
-    if host.is_empty() {
-        return None;
-    }
-
-    Some(host.to_string())
-}
-
-/// Validate that a URL does not target internal network addresses.
+/// Validate that a URL is safe to request: no embedded credentials, and not
+/// pointed at an internal network address.
+///
 /// Returns an error with a clear message if the URL is blocked.
 pub(crate) fn validate_not_internal(url: &str) -> Result<()> {
-    if is_internal_url(url) {
-        return Err(
-            "URL blocked: cannot target internal/private network addresses (localhost, 10.x.x.x, 172.16-31.x.x, 192.168.x.x, link-local, cloud metadata endpoints)"
-                .into(),
-        );
+    let parsed = match Url::parse(url) {
+        Ok(p) => p,
+        // Unparseable input cannot become a request; the HTTP client rejects it.
+        Err(_) => return Ok(()),
+    };
+
+    // Credentials-in-URL are rejected for the same reason `ipc_guard` rejects
+    // them: `http://evil.com@127.0.0.1/` reads as "evil.com" to a human and to
+    // any log line, while the request goes to loopback.
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(CREDENTIALS_IN_URL_BLOCKED.into());
     }
+
+    if is_internal_parsed_url(&parsed) {
+        return Err(INTERNAL_URL_BLOCKED.into());
+    }
+
     Ok(())
 }
 
@@ -201,29 +216,73 @@ mod tests {
     use super::*;
 
     // ================================================================
-    // extract_host tests
+    // Host-extraction regressions (the hand-rolled parser's blind spots)
     // ================================================================
 
+    /// The userinfo bypass. The hand-rolled `extract_host` split on `/`, `?`,
+    /// `#` and `:` but never on `@`, so this URL yielded a "host" of
+    /// `evil.com@127.0.0.1`, which failed `parse::<IpAddr>()`, fell through to
+    /// a DNS lookup that also failed, and returned `false` — request allowed.
     #[test]
-    fn extract_host_basic() {
-        assert_eq!(
-            extract_host("https://example.com/feed"),
-            Some("example.com".into())
-        );
-        assert_eq!(
-            extract_host("http://example.com:8080/path"),
-            Some("example.com".into())
-        );
+    fn blocks_userinfo_masking_loopback() {
+        assert!(is_internal_url("http://evil.com@127.0.0.1/"));
+        assert!(is_internal_url("http://user:pass@127.0.0.1:4446/api/dna"));
+        assert!(is_internal_url(
+            "http://example.com@169.254.169.254/latest/"
+        ));
+        assert!(is_internal_url("http://a@[::1]/feed"));
     }
 
+    /// Credentials are refused outright, even against a public host — the
+    /// same stance `ipc_guard::validate_url_safe_for_request` already takes.
     #[test]
-    fn extract_host_ipv6() {
-        assert_eq!(extract_host("http://[::1]:8080/feed"), Some("::1".into()));
+    fn validate_not_internal_rejects_credentials() {
+        let err = validate_not_internal("https://user:pass@example.com/feed.xml").unwrap_err();
+        assert!(
+            err.to_string().contains("embedded credentials"),
+            "unexpected message: {err}"
+        );
+        assert!(validate_not_internal("https://admin@example.com/feed.xml").is_err());
+        // And the masked-loopback case is refused by whichever check fires first.
+        assert!(validate_not_internal("http://evil.com@127.0.0.1/").is_err());
     }
 
+    /// WHATWG-legal obfuscated IPv4 literals. The old parser handed these to
+    /// `parse::<IpAddr>()`, which rejects them, so they were treated as
+    /// hostnames and allowed.
     #[test]
-    fn extract_host_no_scheme() {
-        assert_eq!(extract_host("example.com/feed"), None);
+    fn blocks_obfuscated_ipv4_literals() {
+        // 2130706433 == 0x7f000001 == 127.0.0.1
+        assert!(is_internal_url("http://2130706433/"));
+        assert!(is_internal_url("http://0x7f000001/"));
+        assert!(is_internal_url("http://127.1/"));
+        assert!(is_internal_url("http://0177.0.0.1/"));
+    }
+
+    /// RFC 6761 reserves `*.localhost` for loopback.
+    #[test]
+    fn blocks_localhost_suffix_and_root_label() {
+        assert!(is_internal_url("http://api.localhost/feed"));
+        assert!(is_internal_url("http://localhost./feed"));
+        assert!(is_internal_url("http://LOCALHOST./feed"));
+    }
+
+    /// Bracketed IPv6 hosts must not leak their brackets into the IP parse.
+    #[test]
+    fn ipv6_hosts_parse_without_brackets() {
+        assert!(is_internal_url("http://[::1]:8080/feed"));
+        assert!(is_internal_url("http://[fd00::1]/feed"));
+        assert!(is_internal_url("http://[fe80::1]/feed"));
+        assert!(!is_internal_url("http://[2606:4700:4700::1111]/feed"));
+    }
+
+    /// Unparseable input is not a request; it must not panic or claim internal.
+    #[test]
+    fn unparseable_input_is_not_internal() {
+        assert!(!is_internal_url("example.com/feed"));
+        assert!(!is_internal_url(""));
+        assert!(!is_internal_url("::::"));
+        assert!(validate_not_internal("example.com/feed").is_ok());
     }
 
     // ================================================================

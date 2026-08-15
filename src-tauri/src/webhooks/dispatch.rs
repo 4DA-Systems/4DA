@@ -262,6 +262,7 @@ async fn deliver_webhook(
 ) -> Result<u16> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
+        .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()
         .context("Build HTTP client")?;
 

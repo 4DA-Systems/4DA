@@ -21,6 +21,31 @@ const MAX_SINGLE_FILE_SIZE: u64 = 10 * 1024 * 1024; // 10MB per file
 const MAX_COMPRESSED_SIZE: u64 = 50 * 1024 * 1024; // 50MB compressed input
 const MAX_COMPRESSION_RATIO: u64 = 100; // Abort if ratio > 100:1 (decompression bomb)
 
+/// Entries *examined* before the walk gives up, whether or not they were read.
+///
+/// `MAX_FILE_COUNT` counts successfully-read files only, so an archive made
+/// entirely of entries the walk skips (directories, over-depth paths,
+/// over-size headers) never increments it and the loop runs once per entry
+/// forever — on the file-watcher thread, holding the DB mutex.
+const MAX_ENTRIES_SCANNED: usize = 100_000;
+
+/// Read at most `budget` bytes from `reader`, returning `None` if the source
+/// had more to give.
+///
+/// Header-declared sizes are attacker-controlled: a ZIP entry can declare 1 MB
+/// and ship 45 MB of DEFLATE, and a TAR header can declare anything at all.
+/// Every size decision in this module is made from what actually came out.
+fn read_capped<R: Read>(reader: &mut R, budget: u64) -> Option<Vec<u8>> {
+    let mut buf = Vec::new();
+    // One byte past the budget, so an over-budget source is detectable rather
+    // than silently truncated into a "valid" partial file.
+    reader.take(budget + 1).read_to_end(&mut buf).ok()?;
+    if buf.len() as u64 > budget {
+        return None;
+    }
+    Some(buf)
+}
+
 pub struct ArchiveExtractor;
 
 impl ArchiveExtractor {
@@ -52,7 +77,7 @@ impl ArchiveExtractor {
         metadata.insert("archive_type".to_string(), "zip".to_string());
         metadata.insert("file_count".to_string(), archive.len().to_string());
 
-        for i in 0..archive.len() {
+        for i in 0..archive.len().min(MAX_ENTRIES_SCANNED) {
             if file_count >= MAX_FILE_COUNT {
                 break;
             }
@@ -75,34 +100,52 @@ impl ArchiveExtractor {
                 continue;
             }
 
-            // Check size + decompression bomb ratio
-            let size = file.size();
-            if size > MAX_SINGLE_FILE_SIZE {
+            // Cheap pre-filter on the declared size. This is a hint only —
+            // `file.size()` comes from the ZIP header, which the archive's
+            // author controls, so it can under-report by any factor. The
+            // binding limit is the capped read below.
+            if file.size() > MAX_SINGLE_FILE_SIZE {
                 continue;
             }
-            if total_size + size > MAX_EXTRACTED_SIZE {
+
+            // Read content, bounded by whichever limit bites first.
+            let budget = MAX_SINGLE_FILE_SIZE.min(MAX_EXTRACTED_SIZE.saturating_sub(total_size));
+            if budget == 0 {
                 break;
             }
+            let content = match read_capped(&mut file, budget) {
+                Some(c) => c,
+                None => {
+                    tracing::warn!(
+                        target: "4da::extract",
+                        entry = %name.display(),
+                        declared = file.size(),
+                        "Skipping ZIP entry: inflated past its declared size (decompression bomb)"
+                    );
+                    continue;
+                }
+            };
+
+            // Decompression-bomb ratio, measured on the bytes that actually
+            // came out rather than on the header's claim.
             let compressed = file.compressed_size();
-            if compressed > 0 && size / compressed > MAX_COMPRESSION_RATIO {
+            let actual = content.len() as u64;
+            if compressed > 0 && actual / compressed > MAX_COMPRESSION_RATIO {
                 tracing::warn!(
                     target: "4da::extract",
-                    "Skipping suspicious entry '{}': compression ratio {}:1 exceeds limit",
-                    name.display(), size / compressed
+                    entry = %name.display(),
+                    ratio = actual / compressed,
+                    "Skipping suspicious entry: compression ratio exceeds limit"
                 );
                 continue;
             }
 
-            // Read content
-            let mut content = Vec::new();
-            if file.read_to_end(&mut content).is_ok() {
-                total_size += content.len() as u64;
-                file_count += 1;
+            total_size += actual;
+            file_count += 1;
 
-                // Try to extract text based on extension
-                if let Some(text) = self.extract_text_from_content(&name, &content) {
-                    all_text.push(format!("=== {} ===\n{}", name.display(), text));
-                }
+            // Try to extract text based on extension
+            if let Some(text) = self.extract_text_from_content(&name, &content) {
+                all_text.push(format!("=== {} ===\n{}", name.display(), text));
             }
         }
 
@@ -130,6 +173,18 @@ impl ArchiveExtractor {
 
     /// Extract a TAR archive (optionally compressed)
     fn extract_tar(&self, path: &Path) -> Result<ExtractedDocument> {
+        // Bound the compressed input, as the ZIP path already did. A `.tar.gz`
+        // had no input cap at all.
+        let compressed_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        if compressed_size > MAX_COMPRESSED_SIZE {
+            return Err(format!(
+                "Archive too large: {}MB exceeds {}MB limit",
+                compressed_size / (1024 * 1024),
+                MAX_COMPRESSED_SIZE / (1024 * 1024)
+            )
+            .into());
+        }
+
         let file = File::open(path).context("Failed to open TAR")?;
 
         // Detect compression based on extension
@@ -139,9 +194,15 @@ impl ArchiveExtractor {
             .unwrap_or("")
             .to_lowercase();
 
+        // Bound the *decompressed* stream globally. A 50 MB gzip member can
+        // inflate to terabytes; `Take` stops the inflater at the total budget
+        // no matter what the tar headers claim, so nothing downstream — entry
+        // walk included — can be driven past it.
         let reader: Box<dyn Read> = match ext.as_str() {
-            "gz" | "tgz" => Box::new(flate2::read::GzDecoder::new(file)),
-            _ => Box::new(file),
+            "gz" | "tgz" => Box::new(
+                flate2::read::GzDecoder::new(file).take(MAX_EXTRACTED_SIZE.saturating_add(1)),
+            ),
+            _ => Box::new(file.take(MAX_EXTRACTED_SIZE.saturating_add(1))),
         };
 
         let mut archive = TarArchive::new(reader);
@@ -154,8 +215,24 @@ impl ArchiveExtractor {
 
         metadata.insert("archive_type".to_string(), "tar".to_string());
 
+        let mut entries_scanned = 0usize;
+
         for entry_result in entries {
             if file_count >= MAX_FILE_COUNT {
+                break;
+            }
+
+            // Every entry the walk *looks at* counts, not just the ones it
+            // reads. Without this an archive of skippable entries (all
+            // directories, all over-depth, all over-size) spins here forever
+            // because `file_count` never moves.
+            entries_scanned += 1;
+            if entries_scanned > MAX_ENTRIES_SCANNED {
+                tracing::warn!(
+                    target: "4da::extract",
+                    scanned = entries_scanned,
+                    "Abandoning TAR walk: entry-scan limit reached"
+                );
                 break;
             }
 
@@ -188,25 +265,36 @@ impl ArchiveExtractor {
                 continue;
             }
 
-            // Check size
-            let size = entry.header().size().unwrap_or(0);
-            if size > MAX_SINGLE_FILE_SIZE {
+            // Cheap pre-filter on the declared size — a hint only, since the
+            // TAR header is written by the archive's author.
+            if entry.header().size().unwrap_or(0) > MAX_SINGLE_FILE_SIZE {
                 continue;
             }
-            if total_size + size > MAX_EXTRACTED_SIZE {
+
+            // Read content, bounded by whichever limit bites first.
+            let budget = MAX_SINGLE_FILE_SIZE.min(MAX_EXTRACTED_SIZE.saturating_sub(total_size));
+            if budget == 0 {
                 break;
             }
-
-            // Read content
-            let mut content = Vec::new();
-            if entry.read_to_end(&mut content).is_ok() {
-                total_size += content.len() as u64;
-                file_count += 1;
-
-                // Try to extract text based on extension
-                if let Some(text) = self.extract_text_from_content(&entry_path, &content) {
-                    all_text.push(format!("=== {} ===\n{}", entry_path.display(), text));
+            let content = match read_capped(&mut entry, budget) {
+                Some(c) => c,
+                None => {
+                    tracing::warn!(
+                        target: "4da::extract",
+                        entry = %entry_path.display(),
+                        declared = entry.header().size().unwrap_or(0),
+                        "Skipping TAR entry: read past its declared size (decompression bomb)"
+                    );
+                    continue;
                 }
+            };
+
+            total_size += content.len() as u64;
+            file_count += 1;
+
+            // Try to extract text based on extension
+            if let Some(text) = self.extract_text_from_content(&entry_path, &content) {
+                all_text.push(format!("=== {} ===\n{}", entry_path.display(), text));
             }
         }
 
@@ -366,16 +454,19 @@ mod tests {
         assert!(result.is_none());
     }
 
-    // Integration tests requiring real archives
-    #[test]
-    #[ignore]
-    fn test_real_zip_extraction() {
-        // Create a test ZIP in temp dir
-        let test_dir = std::env::temp_dir().join("4da_archive_test");
-        fs::create_dir_all(&test_dir).unwrap();
-        let zip_path = test_dir.join("test.zip");
+    // ================================================================
+    // Real-archive integration tests
+    //
+    // Fixtures are built programmatically; nothing large is committed.
+    // ================================================================
 
-        // Create ZIP with test content
+    /// Baseline: an honest ZIP still extracts. (Previously `#[ignore]`d for no
+    /// stated reason — it builds its own fixture and needs nothing external.)
+    #[test]
+    fn test_real_zip_extraction() {
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = dir.path().join("test.zip");
+
         let file = File::create(&zip_path).unwrap();
         let mut zip = zip::ZipWriter::new(file);
         let options =
@@ -390,17 +481,201 @@ mod tests {
 
         zip.finish().unwrap();
 
-        // Test extraction
-        let extractor = ArchiveExtractor::new();
-        let result = extractor.extract(&zip_path);
-        assert!(result.is_ok(), "Should extract ZIP: {:?}", result.err());
-
-        let doc = result.unwrap();
+        let doc = ArchiveExtractor::new()
+            .extract(&zip_path)
+            .expect("honest ZIP should extract");
         assert!(doc.text.contains("test README"));
         assert!(doc.text.contains("fn main"));
         assert_eq!(doc.source_type, "zip");
+    }
 
-        // Cleanup
-        fs::remove_file(zip_path).ok();
+    /// Overwrite the 4-byte little-endian *uncompressed size* in both the
+    /// first local file header and the first central-directory record.
+    ///
+    /// This is what an attacker does by hand: `zip` 0.6 builds the DEFLATE
+    /// reader as `DeflateDecoder::new(take(compressed_size))` (read.rs:277),
+    /// so the declared uncompressed size bounds *nothing* — it is pure
+    /// metadata, and every size decision that trusted `file.size()` trusted
+    /// the attacker.
+    fn forge_declared_size(path: &Path, lie: u32) {
+        let mut bytes = fs::read(path).expect("read fixture");
+        let lie = lie.to_le_bytes();
+
+        // Local file header at offset 0: uncompressed size lives at +22.
+        assert_eq!(&bytes[0..4], b"PK\x03\x04", "expected a local file header");
+        bytes[22..26].copy_from_slice(&lie);
+
+        // End of central directory: scan back for the signature, then read the
+        // central directory offset out of it (+16).
+        let eocd = (0..bytes.len().saturating_sub(21))
+            .rev()
+            .find(|&i| &bytes[i..i + 4] == b"PK\x05\x06")
+            .expect("expected an end-of-central-directory record");
+        let cd_off = u32::from_le_bytes(bytes[eocd + 16..eocd + 20].try_into().unwrap()) as usize;
+
+        // Central directory record: uncompressed size lives at +24.
+        assert_eq!(
+            &bytes[cd_off..cd_off + 4],
+            b"PK\x01\x02",
+            "expected a central directory record"
+        );
+        bytes[cd_off + 24..cd_off + 28].copy_from_slice(&lie);
+
+        fs::write(path, bytes).expect("write forged fixture");
+    }
+
+    /// The ZIP decompression bomb: an entry that declares 1 KB and ships
+    /// 45 MB of DEFLATE.
+    ///
+    /// Before the fix every guard in `extract_zip` read `file.size()` — the
+    /// forged 1 KB — so the entry passed the per-file cap, passed the running
+    /// total, passed the ratio check, and was then read with an unbounded
+    /// `read_to_end`. The archive also carries one honest text file, so the
+    /// extraction succeeds either way and the assertions can distinguish
+    /// "bomb refused" from "archive rejected for some other reason".
+    #[test]
+    fn zip_entry_lying_about_its_size_is_refused() {
+        const BOMB_MB: usize = 45;
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = dir.path().join("bomb.zip");
+
+        {
+            let file = File::create(&zip_path).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let options = zip::write::FileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated)
+                .compression_level(Some(1));
+
+            // Written first so its headers are the ones at the known offsets.
+            zip.start_file("bomb.txt", options).unwrap();
+            let chunk = vec![b'A'; 1024 * 1024];
+            for _ in 0..BOMB_MB {
+                zip.write_all(&chunk).unwrap();
+            }
+
+            zip.start_file("readme.txt", options).unwrap();
+            zip.write_all(b"honest-entry-marker").unwrap();
+
+            zip.finish().unwrap();
+        }
+
+        forge_declared_size(&zip_path, 1024);
+
+        let on_disk = fs::metadata(&zip_path).unwrap().len();
+        assert!(
+            on_disk < MAX_COMPRESSED_SIZE,
+            "fixture must pass the compressed-input cap ({on_disk} bytes)"
+        );
+
+        let doc = ArchiveExtractor::new()
+            .extract(&zip_path)
+            .expect("the honest entry should still extract");
+
+        assert!(
+            doc.text.contains("honest-entry-marker"),
+            "the honest entry must survive the guard"
+        );
+        assert!(
+            !doc.text.contains(&"A".repeat(4096)),
+            "bomb payload reached the output ({} bytes of text)",
+            doc.text.len()
+        );
+        let total: u64 = doc.metadata["total_size"].parse().unwrap();
+        assert!(
+            total < MAX_SINGLE_FILE_SIZE,
+            "accounted {total} bytes — the 45 MB entry was read in full"
+        );
+    }
+
+    /// TAR had no bound on its compressed input at all.
+    #[test]
+    fn tar_input_over_compressed_cap_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let tar_path = dir.path().join("big.tar");
+
+        let mut file = File::create(&tar_path).unwrap();
+        let chunk = vec![0u8; 1024 * 1024];
+        for _ in 0..(MAX_COMPRESSED_SIZE / (1024 * 1024)) + 1 {
+            file.write_all(&chunk).unwrap();
+        }
+        drop(file);
+
+        let err = ArchiveExtractor::new()
+            .extract(&tar_path)
+            .expect_err("oversized TAR input must be refused")
+            .to_string();
+
+        assert!(
+            err.contains("Archive too large"),
+            "expected the input-size guard, got: {err}"
+        );
+    }
+
+    /// A `.tar.gz` whose members inflate far past the extraction budget must
+    /// stop at the budget, not inflate everything the gzip member contains.
+    ///
+    /// Before the fix nothing bounded `GzDecoder`: the middle entry's header
+    /// declared 150 MB, so the walk skipped it — by streaming and discarding
+    /// all 150 MB — and then happily reached the entry after it.
+    #[test]
+    fn targz_decompressed_stream_is_bounded() {
+        let dir = tempfile::tempdir().unwrap();
+        let tgz_path = dir.path().join("bomb.tar.gz");
+
+        {
+            let out = File::create(&tgz_path).unwrap();
+            let gz = flate2::write::GzEncoder::new(out, flate2::Compression::fast());
+            let mut builder = tar::Builder::new(gz);
+
+            let first = b"first-file-marker";
+            let mut header = tar::Header::new_gnu();
+            header.set_size(first.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder
+                .append_data(&mut header, "a-first.txt", &first[..])
+                .unwrap();
+
+            // 150 MB member — past MAX_EXTRACTED_SIZE on its own.
+            const FILLER_MB: u64 = 150;
+            let mut header = tar::Header::new_gnu();
+            header.set_size(FILLER_MB * 1024 * 1024);
+            header.set_mode(0o644);
+            header.set_cksum();
+            let filler = std::io::repeat(b'A').take(FILLER_MB * 1024 * 1024);
+            builder
+                .append_data(&mut header, "b-filler.txt", filler)
+                .unwrap();
+
+            let last = b"third-file-marker";
+            let mut header = tar::Header::new_gnu();
+            header.set_size(last.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder
+                .append_data(&mut header, "c-last.txt", &last[..])
+                .unwrap();
+
+            builder.into_inner().unwrap().finish().unwrap();
+        }
+
+        let on_disk = fs::metadata(&tgz_path).unwrap().len();
+        assert!(
+            on_disk < MAX_COMPRESSED_SIZE,
+            "fixture must pass the compressed-input cap ({on_disk} bytes)"
+        );
+
+        let doc = ArchiveExtractor::new()
+            .extract(&tgz_path)
+            .expect("entries before the budget should still extract");
+
+        assert!(
+            doc.text.contains("first-file-marker"),
+            "content before the budget must survive"
+        );
+        assert!(
+            !doc.text.contains("third-file-marker"),
+            "the walk ran past the extraction budget to reach the trailing entry"
+        );
     }
 }
