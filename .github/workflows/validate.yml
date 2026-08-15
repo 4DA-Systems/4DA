@@ -321,6 +321,28 @@ jobs:
         # what they claim. `pnpm run validate` does not run in CI either.
         run: pnpm run test:scripts
 
+      # Third-party attribution. NOTICE is generated from the real dependency
+      # graphs and raw-imported by the in-app Third-Party Licenses modal, so a
+      # stale NOTICE is a distribution-compliance defect, not a cosmetic one.
+      # This lives in repo-guards (rather than the frontend or rust job) because
+      # this is the only job with no `if:` — it runs on EVERY PR, so a Rust-only
+      # dependency bump cannot slip past it. That costs this job a Rust toolchain
+      # and a dependency install it would not otherwise need; the alternative was
+      # a gate that silently skips on exactly the PRs that move dependencies.
+      - name: Install Rust toolchain (for `cargo metadata`)
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+
+      - name: Install dependencies (for `pnpm licenses list`)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Third-party attribution is current (NOTICE)
+        # --require turns a missing toolchain into a failure. Without it the
+        # check degrades to a skip, which in CI would be a gate that passes by
+        # doing nothing.
+        run: node scripts/generate-notice.cjs --check --require
+
   rust:
     name: Rust (${{ matrix.label }})
     needs: changes
