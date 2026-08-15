@@ -36,7 +36,6 @@ const EXCEPTIONS = {
   'src-tauri/src/db/migrations.rs':        'DB schema migrations — sequential by nature',
   'src-tauri/src/db/sources.rs':           'Source item DB layer — CRUD + batch upsert + circuit breaker',
   'src-tauri/src/lib.rs':                  'App entrypoint — Tauri plugin registration + command wiring',
-  'src-tauri/src/sources/adapter_resilience_tests.rs': 'Resilience tests — 146 edge-case tests across all source adapters',
   'src-tauri/src/scoring/pipeline_v2.rs':  'V2 scoring pipeline — 8-phase architecture',
   'src-tauri/src/scoring/context.rs':      'Scoring context builder + 47 ACE synthesis tests',
   'src-tauri/src/sso.rs':                  'SSO module — enterprise feature-gated, OAuth/SAML + tests',
@@ -51,7 +50,6 @@ const EXCEPTIONS = {
   // Rust — files over error threshold, candidates for splitting
   'src-tauri/src/scoring/simulation/corpus.rs': 'Test corpus data — fixture definitions',
   'src-tauri/src/signals.rs':              'Signal chain detection + tests — split signal types from detection',
-  'src-tauri/src/scoring/pipeline_tests.rs': 'Pipeline tests — consider splitting by phase',
   'src-tauri/src/scoring/benchmark.rs':    'Scoring benchmarks + corpus — split corpus from harness',
   'src-tauri/src/llm.rs':                  'LLM integration — provider logic + prompts + response parsing',
   'src-tauri/src/knowledge_decay.rs':      'Knowledge decay detection + tests',
@@ -63,26 +61,16 @@ const EXCEPTIONS = {
   'src-tauri/src/calibration_fitter.rs':   'Curve fitting algorithm + tests',
   'src-tauri/src/monitoring.rs':           'Background monitoring orchestration',
   'src-tauri/src/signal_terminal.rs':      'Signal terminal processing + tests',
-  'src-tauri/src/settings/types.rs':       'Settings struct (33 fields) + sub-config types + defaults',
   'src-tauri/src/domain_profile.rs':       'Domain profiling — extract data tables from logic',
   'src-tauri/src/source_fetching/mod.rs':  'Source fetching orchestration — scheduler + rate limiting',
   'src-tauri/src/bin/cli.rs':              'Standalone CLI binary — cannot split (cli/ gitignored for workspace)',
-  // NOT a justified exception — a TEMPORARY unblock. #423 grew this file from
-  // 739 to 1032 lines (past the 1000-line hard error) without adding an entry
-  // here, which left main red and blocked every subsequent local commit. Owed
-  // back to #423: split the reranker and DELETE this line. Do not treat the
-  // presence of this entry as permission to keep growing the file.
-  'src-tauri/src/analysis_rerank.rs':      'TEMPORARY — 32 lines over after #423; owed a split, see comment above',
 
   // ── TypeScript — justified large files ────────────────────────────────────
   'src/lib/commands.ts':                   'IPC command registry — all typed Tauri commands',
-  'src/store/slice-types.ts':               'Store slice interfaces — 16 pure type definitions',
   // NOTE: gitignored + auto-generated (~3k lines) — absent in a fresh clone but
   // present after `pnpm run i18n:types`, which `validate:all` runs BEFORE this
   // gate. The entry must stay even though the path does not resolve here.
   'src/types/i18n-resources.d.ts':         'Auto-generated i18n type declarations — regenerated via pnpm i18n:types',
-  'src/components/enterprise/SsoConfigPanel.tsx': 'SSO config form — enterprise feature-gated, 5 lines over',
-  'src/components/preemption/PreemptionCard.tsx': 'Preemption card — single component, 9 lines over',
 };
 
 const SCAN_DIRS = ['src', 'src-tauri/src'];
