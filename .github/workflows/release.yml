@@ -12,6 +12,7 @@ jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       release_id: ${{ steps.create.outputs.result }}
     permissions:
@@ -42,8 +43,18 @@ jobs:
   build-tauri:
     name: Build (${{ matrix.label }})
     needs: create-release
+    # Observed full-matrix run time is ~45-60 min (the last real run failed at
+    # 46m28s). 90 min leaves ~50% headroom for a cold Rust cache and a slow
+    # Apple notarization queue while still catching a genuine hang, instead of
+    # inheriting the 6-hour default and burning a runner all afternoon.
+    timeout-minutes: 90
     permissions:
       contents: write
+      # Required for Sigstore/cosign KEYLESS signing of the SBOMs below.
+      # Without an OIDC token `cosign sign-blob --yes` cannot mint a
+      # certificate and fails - which is exactly why those steps had been
+      # neutered with `|| true` and had never once produced a signature.
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -65,6 +76,79 @@ jobs:
 
     runs-on: ${{ matrix.runner }}
     steps:
+      # ---------------------------------------------------------------------
+      # THE credential gate. There is exactly one, and it fails closed.
+      #
+      # This workflow triggers ONLY on a `v*` tag, so every run publishes a
+      # real release to real users. 4DA does not ship unsigned installers:
+      # an unsigned .exe is flagged by SmartScreen and an unsigned or
+      # un-notarized .app is refused by Gatekeeper.
+      #
+      # Previously the signing steps AND their verification steps were each
+      # gated on `env.SSL_COM_CREDENTIAL_ID != ''` / `env.APPLE_CERTIFICATE
+      # != ''`. A lapsed, rotated or unset secret therefore skipped the
+      # signing AND skipped the check that would have caught it, publishing
+      # unsigned installers under a green tick. Gating a check on the same
+      # condition as the thing it checks makes the check unable to fail.
+      #
+      # So: signing stays conditional on the platform (you cannot sign
+      # without a cert), but the CREDENTIAL requirement is asserted here,
+      # once, up front - in seconds rather than 45 minutes into the build -
+      # and verification below is now unconditional.
+      # ---------------------------------------------------------------------
+      - name: Preflight - require signing credentials
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          SSL_COM_USERNAME: ${{ secrets.SSL_COM_USERNAME }}
+          SSL_COM_PASSWORD: ${{ secrets.SSL_COM_PASSWORD }}
+          SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+          SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          MISSING=()
+          require() { if [ -z "${!1:-}" ]; then MISSING+=("$1"); fi; }
+
+          # Updater manifest signing - required on EVERY platform. Without this
+          # key tauri-action emits no updater artifacts and no latest.json, and
+          # `publish-release` then fails its required-artifact check only AFTER
+          # the entire four-platform matrix has finished building.
+          require TAURI_SIGNING_PRIVATE_KEY
+
+          case "${{ runner.os }}" in
+            Windows)
+              require SSL_COM_USERNAME
+              require SSL_COM_PASSWORD
+              require SSL_COM_CREDENTIAL_ID
+              require SSL_COM_TOTP_SECRET
+              ;;
+            macOS)
+              require APPLE_CERTIFICATE
+              require APPLE_CERTIFICATE_PASSWORD
+              require APPLE_SIGNING_IDENTITY
+              require APPLE_ID
+              require APPLE_PASSWORD
+              require APPLE_TEAM_ID
+              ;;
+          esac
+
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "::error::Signing credentials missing for ${{ matrix.label }} - release blocked."
+            printf '  - %s (unset or empty)\n' "${MISSING[@]}"
+            echo ""
+            echo "Every run of this workflow is a tagged, published release, and 4DA"
+            echo "does not ship unsigned installers. Restore the secrets listed above"
+            echo "and re-run this workflow."
+            exit 1
+          fi
+          echo "All required signing credentials are present for ${{ matrix.label }}."
+
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
 
       - name: Setup pnpm
@@ -127,16 +211,40 @@ jobs:
             https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
           ls -lh src-tauri/models/
 
+      # Supply-chain policy is a release gate, not a suggestion.
+      #
+      # Was: `cargo install cargo-deny --locked --quiet 2>/dev/null || true`
+      # followed by `cargo deny check 2>/dev/null || echo "::warning::"`. That
+      # could not fail the release, and `2>/dev/null` discarded the very
+      # diagnostic a reviewer would need to act on the warning. A policy check
+      # that cannot block and cannot be read is decoration.
+      #
+      # This is safe to harden: validate.yml runs `cargo deny check`
+      # hard-blocking on every PR, so main already satisfies this policy. The
+      # only way it can newly fail at tag time is a fresh advisory or a yanked
+      # crate landing since the last validate run - precisely the case a
+      # release must stop for.
+      #
+      # Runs once, on the cheapest runner: src-tauri/deny.toml pins [graph]
+      # targets to all four release targets, so the verdict is identical on
+      # every leg and running it four times would only burn minutes.
+      - name: Install cargo-deny (prebuilt)
+        if: matrix.label == 'Linux'
+        uses: taiki-e/install-action@50414676f9f5d50a65992c6dd2ed02641263226c # v2
+        with:
+          tool: cargo-deny
+
       - name: Supply chain policy check
-        shell: bash
-        run: |
-          cargo install cargo-deny --locked --quiet 2>/dev/null || true
-          cd src-tauri && cargo deny check 2>/dev/null || echo "::warning::cargo-deny check failed - review supply chain"
+        if: matrix.label == 'Linux'
+        working-directory: src-tauri
+        run: cargo deny check
 
       - name: Install SSL.com CodeSignTool (Windows EV signing)
-        if: runner.os == 'Windows' && env.SSL_COM_CREDENTIAL_ID != ''
-        env:
-          SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+        # Platform-conditional ONLY. Credential presence is already asserted by
+        # the preflight gate, so re-gating on the secret here would recreate the
+        # original defect: two independent steps testing the same condition, one
+        # of which is supposed to police the other.
+        if: runner.os == 'Windows'
         shell: powershell
         run: |
           # Download CodeSignTool for Windows
@@ -181,7 +289,8 @@ jobs:
         # but skips the dylib (already present >1MB), preserving this signature.
         # --keychain is passed explicitly so this does NOT disturb tauri-action's
         # own keychain/search-list used to sign the .app + notarize.
-        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        # Platform-conditional ONLY - see the preflight gate for credentials.
+        if: runner.os == 'macOS'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -259,36 +368,89 @@ jobs:
           fi
 
       - name: Verify Windows Authenticode signature
-        if: runner.os == 'Windows' && env.SSL_COM_CREDENTIAL_ID != ''
-        env:
-          SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+        # UNCONDITIONAL on Windows - this is the whole point of the change.
+        # Verification must never share a condition with the thing it verifies:
+        # gating this on SSL_COM_CREDENTIAL_ID meant a lapsed or rotated secret
+        # skipped signing AND skipped the detection of that skip, publishing
+        # unsigned installers under a green tick.
+        if: runner.os == 'Windows'
         shell: powershell
         run: |
-          $signed = 0; $unsigned = 0; $failed = 0
-          $bundles = Get-ChildItem -Path "src-tauri\target\${{ matrix.target }}\release\bundle" -Recurse -Include *.exe,*.msi
+          $ErrorActionPreference = 'Stop'
+          $bundleDir = "src-tauri\target\${{ matrix.target }}\release\bundle"
+
+          # "I verified nothing" must never be a pass. A missing bundle
+          # directory - or a bundle path change that moves the artifacts out
+          # from under this glob - previously produced a WARNING and a green
+          # step. Both are now hard failures.
+          if (-not (Test-Path $bundleDir)) {
+            Write-Host "::error::Bundle directory not found: $bundleDir - nothing to verify, release blocked"
+            exit 1
+          }
+
+          $bundles = @(Get-ChildItem -Path $bundleDir -Recurse -Include *.exe,*.msi)
+          $signed = 0; $failed = 0
+
           foreach ($f in $bundles) {
             $sig = Get-AuthenticodeSignature -FilePath $f.FullName
             if ($sig.Status -eq 'Valid') {
               Write-Host "  SIGNED: $($f.Name) - $($sig.SignerCertificate.Subject)"
               $signed++
             } else {
-              Write-Error "  UNSIGNED: $($f.Name) - status: $($sig.Status)"
+              # A `::error::` annotation rather than Write-Error, so every
+              # offending file is listed before we exit instead of terminating
+              # on the first one under $ErrorActionPreference = 'Stop'.
+              Write-Host "::error::UNSIGNED: $($f.Name) - status: $($sig.Status)"
               $failed++
             }
           }
+
           Write-Host ""
-          Write-Host "Signature check: $signed signed, $failed unsigned"
-          if ($failed -gt 0) { Write-Error "One or more binaries are unsigned - release blocked"; exit 1 }
-          if ($signed -eq 0) { Write-Warning "No .exe or .msi found in bundle output" }
+          Write-Host "Signature check: $($bundles.Count) inspected, $signed signed, $failed unsigned"
+
+          if ($bundles.Count -eq 0) {
+            Write-Host "::error::No .exe or .msi found under $bundleDir - the build produced no installer, or the bundle layout changed. Release blocked."
+            exit 1
+          }
+          if ($failed -gt 0) {
+            Write-Host "::error::One or more binaries are unsigned - release blocked"
+            exit 1
+          }
+          Write-Host "All $signed Windows artifact(s) carry a valid Authenticode signature."
 
       - name: Verify macOS code signature and notarization
-        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        # UNCONDITIONAL on macOS - gating this on APPLE_CERTIFICATE meant a
+        # missing cert skipped both the signing and the check for it.
+        if: runner.os == 'macOS'
         shell: bash
         run: |
-          set -e
+          # `-eu` but deliberately NOT `pipefail`, matching the original `set
+          # -e`. The `find ... | head -1` lookups below are SIGPIPE-prone: once
+          # a producer outruns the pipe buffer, head closes the read end and the
+          # producer exits 141, which under pipefail+errexit would abort this
+          # step on a perfectly healthy bundle (verified: `seq 1 500000 | head
+          # -1` exits 141 with pipefail, 0 without). A bundle dir holds only a
+          # handful of paths so it would not trip today, but pipefail buys
+          # nothing here - there is no pipeline whose failure we need to catch -
+          # and it would plant a latent, release-only failure.
+          set -eu
           BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle"
+
+          # A missing bundle dir must fail, not silently verify nothing.
+          if [[ ! -d "$BUNDLE_DIR" ]]; then
+            echo "::error::Bundle directory not found: $BUNDLE_DIR - nothing to verify, release blocked"
+            exit 1
+          fi
+
+          # Notarization evidence counter. Apple's proof of notarization is the
+          # STAPLED ticket, which `stapler validate` reads offline and
+          # deterministically. Which artifact carries the ticket depends on the
+          # bundler version (tauri staples the .app; whether the .dmg container
+          # is also stapled varies), so a proof from any legitimate location
+          # counts - but AT LEAST ONE is required. Previously every
+          # notarization signal was `|| echo ::warning`, so a completely
+          # un-notarized build shipped green.
+          NOTARIZED=0
 
           # The .dmg is the shipped, notarized artifact: bundle.targets lists
           # only "dmg" for macOS, so the .app is packaged INSIDE the .dmg and is
@@ -306,9 +468,14 @@ jobs:
               echo "::error::Code signature verification FAILED for the .app bundle"
               exit 1
             fi
-            spctl --assess --verbose --type execute "$APP_PATH" 2>&1 \
-              && echo "  NOTARIZED: Gatekeeper accepts the app" \
-              || echo "::warning::Gatekeeper assessment on .app failed (may still be propagating)"
+            if xcrun stapler validate "$APP_PATH" 2>&1; then
+              echo "  NOTARIZED: stapled ticket valid on the .app"
+              NOTARIZED=1
+            fi
+            if spctl --assess --verbose --type execute "$APP_PATH" 2>&1; then
+              echo "  NOTARIZED: Gatekeeper accepts the .app"
+              NOTARIZED=1
+            fi
           else
             echo "::notice::No standalone .app in $BUNDLE_DIR - expected (only .dmg is targeted; the notarized .app ships inside the .dmg)."
           fi
@@ -326,10 +493,38 @@ jobs:
             echo "::error::DMG signature verification FAILED - $(basename "$DMG_PATH") - release blocked"
             exit 1
           fi
-          spctl --assess --verbose --type install "$DMG_PATH" 2>&1 \
-            && echo "  Gatekeeper accepts the .dmg installer" \
-            || echo "::warning::Gatekeeper assessment on .dmg failed (may still be propagating)"
-          echo "macOS verification passed: .dmg is code-signed."
+          if xcrun stapler validate "$DMG_PATH" 2>&1; then
+            echo "  NOTARIZED: stapled ticket valid on the .dmg"
+            NOTARIZED=1
+          fi
+          if spctl --assess --verbose --type install "$DMG_PATH" 2>&1; then
+            echo "  Gatekeeper accepts the .dmg installer"
+            NOTARIZED=1
+          fi
+
+          # Most authoritative fallback: the .app that actually ships inside the
+          # .dmg is what the user launches, so a stapled ticket there is proof
+          # even when neither container above carries one.
+          if [[ "$NOTARIZED" -eq 0 ]]; then
+            MNT="$(mktemp -d)"
+            if hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$MNT" >/dev/null 2>&1; then
+              INNER_APP="$(find "$MNT" -maxdepth 2 -name '*.app' | head -1)"
+              if [[ -n "$INNER_APP" ]] && xcrun stapler validate "$INNER_APP" 2>&1; then
+                echo "  NOTARIZED: stapled ticket valid on the .app inside the .dmg"
+                NOTARIZED=1
+              fi
+              hdiutil detach "$MNT" >/dev/null 2>&1 || true
+            fi
+          fi
+
+          if [[ "$NOTARIZED" -eq 0 ]]; then
+            echo "::error::No notarization proof found for this build - release blocked."
+            echo "  Checked: stapled ticket on the .app, on the .dmg, and on the .app inside"
+            echo "  the .dmg, plus Gatekeeper assessment of both. An un-notarized build is"
+            echo "  refused by Gatekeeper on end-user machines, so it must not ship."
+            exit 1
+          fi
+          echo "macOS verification passed: .dmg is code-signed and notarization is proven."
 
       - name: Report binary sizes
         shell: bash
@@ -449,10 +644,37 @@ jobs:
 
       - name: Generate npm SBOM
         if: matrix.label == 'Windows'
-        continue-on-error: true
+        # Was `@cyclonedx/cyclonedx-npm` under `continue-on-error: true`. That
+        # tool shells out to `npm ls --json --long --all`, which CANNOT read a
+        # pnpm-installed tree: pnpm does not materialise transitive dev deps, so
+        # npm ls exits ELSPROBLEMS ("missing: <dep>, required by <pkg>") and the
+        # generator dies. Verified reproducible on a two-line pnpm project, with
+        # and without `--omit dev`. This repo has only pnpm-lock.yaml and no
+        # package-lock.json, so the step has never once succeeded - every
+        # release to date shipped with NO npm SBOM, silently, because
+        # continue-on-error made the failure invisible.
+        #
+        # cdxgen reads pnpm-lock.yaml natively. Verified locally against this
+        # repo: exit 0, valid CycloneDX 1.6, 721 components.
+        #
+        # FETCH_LICENSE=false keeps generation offline and deterministic
+        # (no per-package registry lookups to fail or hang mid-release).
+        env:
+          FETCH_LICENSE: 'false'
         shell: bash
         run: |
-          npx --yes @cyclonedx/cyclonedx-npm --output-file sbom-npm.json
+          set -euo pipefail
+          npx --yes @cyclonedx/cdxgen@11 -t pnpm -o sbom-npm.json --no-recurse .
+
+          # An empty or component-less SBOM is not an SBOM. Fail rather than
+          # publish a file that merely looks like a dependency inventory.
+          test -s sbom-npm.json
+          COMPONENTS=$(node -e "process.stdout.write(String((require('./sbom-npm.json').components || []).length))")
+          echo "npm SBOM components: $COMPONENTS"
+          if [ "$COMPONENTS" -lt 1 ]; then
+            echo "::error::npm SBOM contains no components - refusing to publish an empty inventory"
+            exit 1
+          fi
 
       - name: Upload SBOMs
         if: matrix.label == 'Windows'
@@ -460,8 +682,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
+          # Was `... --clobber 2>/dev/null || true`, which hid both the error
+          # text and the failure. A generated-but-unpublished SBOM is the same
+          # as no SBOM, so an upload failure must fail the release.
+          set -euo pipefail
           TAG="${GITHUB_REF#refs/tags/}"
-          gh release upload "$TAG" sbom-rust.json sbom-npm.json --clobber 2>/dev/null || true
+          gh release upload "$TAG" sbom-rust.json sbom-npm.json --clobber
 
       - name: Install Cosign
         if: matrix.label == 'Windows'
@@ -473,15 +699,25 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          cosign sign-blob --yes --bundle sbom-rust.sig.bundle sbom-rust.json 2>/dev/null || true
-          cosign sign-blob --yes --bundle sbom-npm.sig.bundle sbom-npm.json 2>/dev/null || true
+          # All three commands were `2>/dev/null || true`, so this step could
+          # not fail and its errors were discarded. It also could not ever
+          # SUCCEED: keyless `cosign sign-blob` mints a short-lived certificate
+          # from a GitHub OIDC token, and this job did not request
+          # `id-token: write` - so every release published SBOMs with no
+          # signature at all, green. The permission is now granted above and
+          # the failures are surfaced.
+          set -euo pipefail
+          cosign sign-blob --yes --bundle sbom-rust.sig.bundle sbom-rust.json
+          cosign sign-blob --yes --bundle sbom-npm.sig.bundle sbom-npm.json
           TAG="${GITHUB_REF#refs/tags/}"
-          gh release upload "$TAG" sbom-rust.sig.bundle sbom-npm.sig.bundle --clobber 2>/dev/null || true
+          gh release upload "$TAG" sbom-rust.sig.bundle sbom-npm.sig.bundle --clobber
 
   publish-release:
     name: Publish Release
     needs: [create-release, build-tauri]
     runs-on: ubuntu-latest
+    # Pure gh-CLI asset shuffling; minutes, not hours.
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
@@ -596,6 +832,7 @@ jobs:
     name: Publish MCP Server to npm
     needs: create-release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       id-token: write
@@ -626,7 +863,24 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ -n "$NODE_AUTH_TOKEN" ]; then
-            npm publish --access public --provenance || echo "Publish skipped (version may already exist)"
+            # Was `npm publish ... || echo "Publish skipped (version may already
+            # exist)"`, which reported EVERY failure - expired token, 2FA
+            # challenge, provenance/OIDC rejection, network fault, broken
+            # tarball - as a benign version collision, and exited 0. Only a
+            # genuine "already published" is benign; everything else must fail.
+            set -o pipefail
+            if OUTPUT=$(npm publish --access public --provenance 2>&1); then
+              echo "$OUTPUT"
+              echo "Published successfully."
+            else
+              echo "$OUTPUT"
+              if echo "$OUTPUT" | grep -qiE 'EPUBLISHCONFLICT|cannot publish over|previously published version'; then
+                echo "::notice::This version is already on npm - nothing to publish."
+              else
+                echo "::error::npm publish failed for a reason other than an existing version."
+                exit 1
+              fi
+            fi
           else
             echo "NPM_TOKEN secret not set - skipping npm publish."
             echo "To enable: add NPM_TOKEN to repo secrets (npm token create --type granular)"
