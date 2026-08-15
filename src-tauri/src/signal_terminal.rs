@@ -11,11 +11,32 @@
 //! HMR 4445): sharing an origin let the terminal's service worker hijack the
 //! app shell. Keep this range (4446/4447) clear of the frontend dev ports.
 //!
-//! Security model:
-//! - CORS: denies ALL cross-origin requests (no Access-Control-Allow-Origin header)
-//! - Auth: `X-4DA-Token` header required on all `/api/*` routes
-//! - Root `/` serves the terminal HTML without auth (UI shell only)
-//! - Never exposes API keys, file paths, or raw database content
+//! Security model (two independent gates — both must pass):
+//!
+//! 1. **Host allowlist** (`host_guard`, every route including `/`). The `Host`
+//!    header must be `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>`.
+//!    A missing, port-less or foreign `Host` is `403`. This is the DNS-rebinding
+//!    defence: binding to loopback and setting no CORS headers do NOT stop a
+//!    hostile page from re-pointing its own domain at 127.0.0.1, at which point
+//!    it is same-origin and CORS is irrelevant. Checking `Host` does stop it,
+//!    because the browser keeps sending the attacker's domain.
+//! 2. **Bearer token** (`check_auth`, every `/api/*` route). `X-4DA-Token` must
+//!    equal the token in `data/signal_terminal_token.txt`. Missing, empty and
+//!    wrong tokens are all `401` — there is no localhost bypass. Comparison is
+//!    constant-time. This is the defence against other processes and other
+//!    users on the same machine, which the Host check cannot see.
+//!
+//! `/api/stream` additionally accepts `?token=` because `EventSource` cannot set
+//! request headers. Every other route is header-only.
+//!
+//! Unauthenticated routes serve compile-time-constant UI shells only (`/`,
+//! `/setup`, `/score-popup`, `/card`, `/api/docs`, `/manifest.json`, `/icon`,
+//! `/sw.js`, `/offline`). They carry no user data — every byte of intelligence
+//! is behind `check_auth`.
+//!
+//! No route exposes API keys or credentials. Note that `/api/decisions` and
+//! `/api/gaps` DO return local project paths, which is one of the reasons the
+//! token is mandatory rather than advisory.
 
 use axum::{
     extract::{Query, State},
@@ -39,6 +60,37 @@ use tracing::{error, info, warn};
 // Auth Token Management
 // ============================================================================
 
+/// Request header carrying the Signal Terminal bearer token.
+const TOKEN_HEADER: &str = "X-4DA-Token";
+
+/// Token length in characters. 32 chars over a 62-symbol alphabet is ~190 bits.
+const TOKEN_LEN: usize = 32;
+
+/// Symbol set for generated tokens.
+const TOKEN_ALPHABET: &[u8; 62] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+/// Largest multiple of 62 that fits in a `u8` (62 * 4). Bytes at or above this
+/// are discarded during generation — see `generate_token`.
+const TOKEN_REJECT_AT: u8 = 248;
+
+/// Generate a fresh token with uniformly distributed symbols.
+///
+/// Rejection sampling is load-bearing: 256 is not a multiple of 62, so the
+/// obvious `rand::random::<u8>() % 62` maps 5 raw bytes onto the first 8 symbols
+/// and only 4 onto the remaining 54, biasing every character toward `0-7`.
+/// Discarding bytes >= 248 leaves exactly 4 raw bytes per symbol, so each of the
+/// 62 symbols is equally likely.
+fn generate_token() -> String {
+    let mut token = String::with_capacity(TOKEN_LEN);
+    while token.len() < TOKEN_LEN {
+        let byte = rand::random::<u8>();
+        if byte < TOKEN_REJECT_AT {
+            token.push(TOKEN_ALPHABET[(byte % 62) as usize] as char);
+        }
+    }
+    token
+}
+
 /// Get or create the auth token for the Signal Terminal.
 /// Token is stored in the app's data directory as `signal_terminal_token.txt`.
 fn get_or_create_token() -> String {
@@ -55,17 +107,7 @@ fn get_or_create_token() -> String {
         }
     }
 
-    // Generate new 32-character alphanumeric token
-    let token: String = (0..32)
-        .map(|_| {
-            let idx = rand::random::<u8>() % 62;
-            match idx {
-                0..=9 => (b'0' + idx) as char,
-                10..=35 => (b'a' + idx - 10) as char,
-                _ => (b'A' + idx - 36) as char,
-            }
-        })
-        .collect();
+    let token = generate_token();
 
     if let Err(e) = std::fs::write(&token_path, &token) {
         warn!(target: "4da::terminal", error = %e, "Failed to persist terminal token");
@@ -82,36 +124,165 @@ fn get_or_create_token() -> String {
 #[derive(Clone)]
 struct TerminalState {
     token: Arc<String>,
+    /// Port the server is bound to. Used to build the `Host` allowlist, so the
+    /// guard cannot drift out of sync with the listener.
+    port: u16,
 }
 
 // ============================================================================
-// Auth Middleware
+// Auth
 // ============================================================================
+
+/// Error returned by both gates.
+type AuthRejection = (StatusCode, Json<serde_json::Value>);
+
+fn unauthorized() -> AuthRejection {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(serde_json::json!({
+            "error": "Missing or invalid token",
+            "hint": "Send the X-4DA-Token header. The token is in data/signal_terminal_token.txt"
+        })),
+    )
+}
+
+/// Compare two byte strings without leaking the position of the first
+/// difference through timing.
+///
+/// Once the lengths match, every byte pair is inspected — the loop never breaks
+/// early on a mismatch. `black_box` stops LLVM from noticing that the
+/// accumulator can be short-circuited and reintroducing an early exit.
+///
+/// Length is compared first and non-constant-time. That is deliberate and safe:
+/// the token length (32) is a fixed public constant, not a secret.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    std::hint::black_box(diff) == 0
+}
+
+/// Constant-time check of a candidate token against the configured one.
+///
+/// An empty configured token never matches anything, so a failure to generate
+/// or read the token file fails closed rather than open.
+fn token_matches(candidate: &str, state: &TerminalState) -> bool {
+    !state.token.is_empty() && constant_time_eq(candidate.as_bytes(), state.token.as_bytes())
+}
 
 /// Validate the `X-4DA-Token` header against the stored token.
 ///
-/// When the server binds to 127.0.0.1 (current default), all connections are
-/// inherently local and trusted — skip auth if no token header is sent.
-/// Tokens are required when a wrong token is provided (prevents typos).
-/// Future LAN mode (0.0.0.0 binding) will enforce mandatory tokens.
-fn check_auth(
+/// The token is MANDATORY. A missing header, an empty header and a wrong token
+/// are all `401` — identical response, identical shape. There is no
+/// localhost bypass: binding to 127.0.0.1 does not make a caller trustworthy,
+/// it only makes it local, and every other process and every other user account
+/// on the machine is local too.
+fn check_auth(headers: &HeaderMap, state: &TerminalState) -> Result<(), AuthRejection> {
+    let provided = headers
+        .get(TOKEN_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("");
+
+    if token_matches(provided, state) {
+        Ok(())
+    } else {
+        Err(unauthorized())
+    }
+}
+
+/// Auth for `/api/stream` only.
+///
+/// The browser `EventSource` API cannot attach request headers, so the SSE route
+/// also accepts the token as a query parameter. The header is tried first and
+/// wins when both are present. Confined to this one route on purpose — query
+/// strings end up in referrers and shell history, so no other endpoint takes it.
+fn check_auth_sse(
     headers: &HeaderMap,
+    query_token: Option<&str>,
     state: &TerminalState,
-) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
-    match headers.get("X-4DA-Token") {
-        Some(value) => {
-            let provided = value.to_str().unwrap_or("");
-            if provided == state.token.as_str() {
-                Ok(())
-            } else {
-                Err((
-                    StatusCode::UNAUTHORIZED,
-                    Json(serde_json::json!({ "error": "Invalid token" })),
-                ))
-            }
+) -> Result<(), AuthRejection> {
+    if check_auth(headers, state).is_ok() {
+        return Ok(());
+    }
+    match query_token {
+        Some(token) if token_matches(token, state) => Ok(()),
+        _ => Err(unauthorized()),
+    }
+}
+
+// ============================================================================
+// Host Guard (DNS-rebinding defence)
+// ============================================================================
+
+/// Split a `Host` header value into (hostname, port).
+///
+/// Returns `None` when there is no explicit port. That is intentional: the
+/// terminal never listens on 80/443, so a port-less `Host` cannot have come from
+/// a browser addressing this server, and is rejected.
+fn split_host_port(host: &str) -> Option<(&str, u16)> {
+    if let Some(rest) = host.strip_prefix('[') {
+        // IPv6 literal: `[::1]:4446`
+        let (addr, tail) = rest.split_once(']')?;
+        let port = tail.strip_prefix(':')?.parse().ok()?;
+        Some((addr, port))
+    } else {
+        let (name, port) = host.rsplit_once(':')?;
+        Some((name, port.parse().ok()?))
+    }
+}
+
+/// Is this `Host` header one of the loopback names this server answers to?
+///
+/// Strict allowlist. Anything else — an attacker's domain resolved to 127.0.0.1,
+/// a LAN IP, a `.local` mDNS name — is refused. If LAN binding is ever added,
+/// this allowlist is the thing that must be widened, deliberately.
+fn is_allowed_host(host: &str, port: u16) -> bool {
+    match split_host_port(host) {
+        Some((name, host_port)) if host_port == port => {
+            name.eq_ignore_ascii_case("localhost") || name == "127.0.0.1" || name == "::1"
         }
-        // No token header → allow (localhost-only binding = inherently trusted)
-        None => Ok(()),
+        _ => false,
+    }
+}
+
+/// Reject any request whose `Host` header is not a loopback name for our port.
+///
+/// Applied as the OUTERMOST layer, so it covers every route — including the
+/// unauthenticated UI shells and the 404 fallback — before any handler runs.
+async fn host_guard(
+    State(state): State<TerminalState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Result<axum::response::Response, AuthRejection> {
+    // HTTP/1.1 carries the `Host` header; HTTP/2 carries `:authority`, which
+    // hyper surfaces on the URI. Accept either, require one.
+    let host = request
+        .headers()
+        .get(axum::http::header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .or_else(|| request.uri().authority().map(|a| a.as_str().to_owned()));
+
+    match host {
+        Some(host) if is_allowed_host(&host, state.port) => Ok(next.run(request).await),
+        other => {
+            warn!(
+                target: "4da::terminal",
+                host = other.as_deref().unwrap_or("<none>"),
+                "Rejected request with non-loopback Host header (possible DNS rebinding)"
+            );
+            Err((
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": "Forbidden",
+                    "hint": "Signal Terminal only answers to loopback Host headers"
+                })),
+            ))
+        }
     }
 }
 
@@ -753,13 +924,19 @@ async fn api_sources(
 // SSE Live Streaming
 // ============================================================================
 
+/// Query params for /api/stream — `EventSource` cannot send headers.
+#[derive(Deserialize)]
+struct StreamQuery {
+    token: Option<String>,
+}
+
 /// GET /api/stream — Server-Sent Events live stream.
 async fn api_stream(
     headers: HeaderMap,
     State(state): State<TerminalState>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, Json<serde_json::Value>)>
-{
-    check_auth(&headers, &state)?;
+    Query(query): Query<StreamQuery>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, AuthRejection> {
+    check_auth_sse(&headers, query.token.as_deref(), &state)?;
 
     let rx = crate::signal_terminal_events::subscribe();
 
@@ -964,14 +1141,20 @@ async fn serve_icon() -> impl IntoResponse {
 // Router
 // ============================================================================
 
-/// Build the Axum router with all routes, CORS, and auth middleware.
-fn build_router(token: String) -> Router {
+/// Build the Axum router with all routes, CORS, the Host guard, and auth.
+///
+/// `port` must be the port the listener actually binds — it is what the `Host`
+/// allowlist is checked against.
+fn build_router(token: String, port: u16) -> Router {
     let state = TerminalState {
         token: Arc::new(token),
+        port,
     };
 
     // Deny all cross-origin requests: default CorsLayer sends no
     // Access-Control-Allow-Origin header, so browsers block all cross-origin.
+    // This is defence in depth only — it is useless against DNS rebinding,
+    // which makes the attacker same-origin. `host_guard` is what stops that.
     let cors = CorsLayer::new();
 
     Router::new()
@@ -986,7 +1169,8 @@ fn build_router(token: String) -> Router {
         .route("/icon", get(serve_icon))
         .route("/sw.js", get(serve_sw))
         .route("/offline", get(serve_offline))
-        // API routes (localhost auto-trusted, token required for LAN)
+        // API routes — every one of these calls check_auth first.
+        // No token, wrong token, empty token => 401. No localhost bypass.
         .route("/api/boot", get(api_boot))
         .route("/api/status", get(api_status))
         .route("/api/signals", get(api_signals))
@@ -1010,6 +1194,12 @@ fn build_router(token: String) -> Router {
             )
         })
         .layer(cors)
+        // Outermost: runs before routing, so a foreign Host never reaches a
+        // handler — not even the unauthenticated UI shells or the 404 fallback.
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            host_guard,
+        ))
         .with_state(state)
 }
 
@@ -1031,7 +1221,7 @@ pub fn start_signal_terminal() {
     info!(target: "4da::terminal", port = port, "Starting Signal Terminal");
 
     tauri::async_runtime::spawn(async move {
-        let app = build_router(token);
+        let app = build_router(token, port);
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
 
         match tokio::net::TcpListener::bind(addr).await {
@@ -1056,28 +1246,358 @@ pub fn start_signal_terminal() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    const TEST_TOKEN: &str = "test_token_12345";
+
+    fn test_state(port: u16) -> TerminalState {
+        TerminalState {
+            token: Arc::new(TEST_TOKEN.to_string()),
+            port,
+        }
+    }
+
+    fn headers_with(token: Option<&str>) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        if let Some(token) = token {
+            headers.insert(
+                TOKEN_HEADER,
+                axum::http::HeaderValue::from_str(token).expect("valid header value"),
+            );
+        }
+        headers
+    }
+
+    // ── Live server harness ─────────────────────────────────────────────────
+    //
+    // Binds a real socket on an ephemeral port and serves the real router, so
+    // these tests exercise the actual hyper -> middleware -> handler path rather
+    // than a hand-assembled `Request`. The router is built with the port that
+    // was actually bound, which is also what the Host allowlist checks.
+    struct TestServer {
+        port: u16,
+    }
+
+    impl TestServer {
+        async fn start() -> Self {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind ephemeral port");
+            let port = listener.local_addr().expect("local addr").port();
+            let app = build_router(TEST_TOKEN.to_string(), port);
+            tokio::spawn(async move {
+                let _ = axum::serve(listener, app).await;
+            });
+            Self { port }
+        }
+
+        fn url(&self, path: &str) -> String {
+            format!("http://127.0.0.1:{}{path}", self.port)
+        }
+
+        /// Send a request, optionally overriding the token and Host headers.
+        async fn get(
+            &self,
+            path: &str,
+            token: Option<&str>,
+            host: Option<&str>,
+        ) -> reqwest::Response {
+            let mut req = reqwest::Client::new().get(self.url(path));
+            if let Some(token) = token {
+                req = req.header(TOKEN_HEADER, token);
+            }
+            if let Some(host) = host {
+                req = req.header(reqwest::header::HOST, host);
+            }
+            req.send().await.expect("request completes")
+        }
+    }
+
+    // ── Token generation ────────────────────────────────────────────────────
 
     #[test]
     fn test_token_generation_format() {
-        // Token generation logic produces 32 alphanumeric chars
-        let token: String = (0..32)
-            .map(|_| {
-                let idx = rand::random::<u8>() % 62;
-                match idx {
-                    0..=9 => (b'0' + idx) as char,
-                    10..=35 => (b'a' + idx - 10) as char,
-                    _ => (b'A' + idx - 36) as char,
-                }
-            })
-            .collect();
-
-        assert_eq!(token.len(), 32);
+        let token = generate_token();
+        assert_eq!(token.len(), TOKEN_LEN);
         assert!(token.chars().all(|c| c.is_ascii_alphanumeric()));
     }
 
     #[test]
-    fn test_router_builds() {
-        // Smoke test: router construction should not panic
-        let _router = build_router("test_token_12345".to_string());
+    fn test_token_generation_is_not_modulo_biased() {
+        // Exhaustive over the whole u8 range — deterministic, not statistical.
+        //
+        // With rejection sampling every one of the 62 symbols is reachable from
+        // exactly 4 raw bytes, so all are equally likely.
+        let mut counts = [0u32; 62];
+        for byte in 0..=u8::MAX {
+            if byte < TOKEN_REJECT_AT {
+                counts[(byte % 62) as usize] += 1;
+            }
+        }
+        assert!(
+            counts.iter().all(|&c| c == 4),
+            "symbol frequencies must be uniform, got {counts:?}"
+        );
+
+        // The same sweep WITHOUT rejection — i.e. the old `rand::random::<u8>() % 62`
+        // — over-weights the first 8 symbols. Asserting the old behaviour is
+        // genuinely biased is what makes the test above meaningful: it proves
+        // the rejection step is load-bearing and a revert would be caught.
+        let mut biased = [0u32; 62];
+        for byte in 0..=u8::MAX {
+            biased[(byte % 62) as usize] += 1;
+        }
+        assert_eq!(biased[0], 5, "unrejected %62 over-weights low symbols");
+        assert_eq!(biased[61], 4, "...and under-weights high symbols");
+        assert_eq!(
+            TOKEN_REJECT_AT as u32 % 62,
+            0,
+            "threshold must divide evenly"
+        );
+    }
+
+    #[test]
+    fn test_tokens_are_distinct() {
+        let a = generate_token();
+        let b = generate_token();
+        assert_ne!(a, b, "successive tokens must not repeat");
+    }
+
+    // ── Constant-time comparison ────────────────────────────────────────────
+
+    #[test]
+    fn test_constant_time_eq() {
+        assert!(constant_time_eq(b"abc", b"abc"));
+        assert!(!constant_time_eq(b"abc", b"abd"));
+        assert!(!constant_time_eq(b"abc", b"abcd"), "length mismatch");
+        assert!(!constant_time_eq(b"", b"a"));
+        assert!(constant_time_eq(b"", b""));
+    }
+
+    // ── check_auth: the token is MANDATORY ──────────────────────────────────
+
+    #[test]
+    fn test_auth_rejects_missing_token() {
+        // THE regression this whole change exists for. Before the fix a request
+        // with no X-4DA-Token header was allowed straight through.
+        let state = test_state(4447);
+        let result = check_auth(&headers_with(None), &state);
+        let (status, _) = result.expect_err("missing token must be rejected");
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn test_auth_rejects_wrong_token() {
+        let state = test_state(4447);
+        let (status, _) = check_auth(&headers_with(Some("wrong")), &state)
+            .expect_err("wrong token must be rejected");
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn test_auth_rejects_empty_token() {
+        let state = test_state(4447);
+        let (status, _) =
+            check_auth(&headers_with(Some("")), &state).expect_err("empty token must be rejected");
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn test_auth_accepts_correct_token() {
+        let state = test_state(4447);
+        assert!(check_auth(&headers_with(Some(TEST_TOKEN)), &state).is_ok());
+    }
+
+    #[test]
+    fn test_auth_fails_closed_on_empty_configured_token() {
+        // If the token file could not be read or written, nothing authenticates.
+        let state = TerminalState {
+            token: Arc::new(String::new()),
+            port: 4447,
+        };
+        assert!(check_auth(&headers_with(Some("")), &state).is_err());
+        assert!(check_auth(&headers_with(None), &state).is_err());
+    }
+
+    #[test]
+    fn test_sse_auth_accepts_query_token_but_still_requires_one() {
+        let state = test_state(4447);
+        // EventSource cannot set headers, so the query fallback must work...
+        assert!(check_auth_sse(&headers_with(None), Some(TEST_TOKEN), &state).is_ok());
+        // ...but it is a fallback, not a bypass.
+        assert!(check_auth_sse(&headers_with(None), None, &state).is_err());
+        assert!(check_auth_sse(&headers_with(None), Some("wrong"), &state).is_err());
+        // Header still works on its own.
+        assert!(check_auth_sse(&headers_with(Some(TEST_TOKEN)), None, &state).is_ok());
+    }
+
+    // ── Host allowlist (DNS-rebinding defence) ──────────────────────────────
+
+    #[test]
+    fn test_allowed_hosts() {
+        assert!(is_allowed_host("127.0.0.1:4447", 4447));
+        assert!(is_allowed_host("localhost:4447", 4447));
+        assert!(is_allowed_host("LOCALHOST:4447", 4447), "case-insensitive");
+        assert!(is_allowed_host("[::1]:4447", 4447));
+    }
+
+    #[test]
+    fn test_rejected_hosts() {
+        // The rebinding attack: attacker's own domain, our port.
+        assert!(!is_allowed_host("evil.example.com:4447", 4447));
+        // Port-less Host — cannot have come from a browser addressing this server.
+        assert!(!is_allowed_host("localhost", 4447));
+        assert!(!is_allowed_host("127.0.0.1", 4447));
+        // Right name, wrong port.
+        assert!(!is_allowed_host("127.0.0.1:4446", 4447));
+        // Other loopback aliases and LAN addresses are NOT on the allowlist.
+        assert!(!is_allowed_host("127.0.0.2:4447", 4447));
+        assert!(!is_allowed_host("192.168.1.10:4447", 4447));
+        assert!(!is_allowed_host("localhost.evil.com:4447", 4447));
+        assert!(!is_allowed_host("", 4447));
+        // Malformed IPv6.
+        assert!(!is_allowed_host("[::1]", 4447));
+        assert!(!is_allowed_host("[::1:4447", 4447));
+    }
+
+    #[test]
+    fn test_split_host_port() {
+        assert_eq!(split_host_port("localhost:80"), Some(("localhost", 80)));
+        assert_eq!(split_host_port("[::1]:8080"), Some(("::1", 8080)));
+        assert_eq!(split_host_port("localhost"), None);
+        assert_eq!(split_host_port("localhost:notaport"), None);
+    }
+
+    // ── End-to-end over a real socket ───────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_router_builds() {
+        let _router = build_router(TEST_TOKEN.to_string(), 4447);
+    }
+
+    #[tokio::test]
+    async fn test_live_api_requires_token() {
+        let server = TestServer::start().await;
+
+        // No token at all — this returned 200 with the full signal corpus before.
+        let res = server.get("/api/status", None, None).await;
+        assert_eq!(res.status(), 401, "missing token must not be served");
+
+        // Wrong token.
+        let res = server.get("/api/status", Some("wrong-token"), None).await;
+        assert_eq!(res.status(), 401, "wrong token must not be served");
+
+        // Correct token.
+        let res = server.get("/api/status", Some(TEST_TOKEN), None).await;
+        assert_eq!(res.status(), 200, "correct token must be served");
+    }
+
+    #[tokio::test]
+    async fn test_live_every_api_route_requires_token() {
+        let server = TestServer::start().await;
+        // Every data-bearing route, not just a sample — a new route added
+        // without check_auth fails here.
+        for path in [
+            "/api/boot",
+            "/api/status",
+            "/api/signals",
+            "/api/briefing",
+            "/api/score?url=https://example.com",
+            "/api/radar",
+            "/api/decisions",
+            "/api/dna",
+            "/api/gaps",
+            "/api/search?q=rust",
+            "/api/sources",
+            "/api/stream",
+            "/api/simulate?add=python",
+        ] {
+            let res = server.get(path, None, None).await;
+            assert_eq!(res.status(), 401, "{path} must require a token");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_live_foreign_host_is_rejected() {
+        let server = TestServer::start().await;
+
+        // DNS rebinding: attacker's domain resolved to 127.0.0.1, correct port,
+        // and — worst case — a stolen token. The Host check still refuses.
+        let res = server
+            .get("/api/status", Some(TEST_TOKEN), Some("evil.example.com"))
+            .await;
+        assert_eq!(res.status(), 403, "foreign Host must be rejected");
+
+        // The unauthenticated UI shell is behind the same guard.
+        let res = server.get("/", None, Some("evil.example.com")).await;
+        assert_eq!(
+            res.status(),
+            403,
+            "foreign Host must not reach the UI shell"
+        );
+
+        // So is the 404 fallback — no probing the route table from a foreign Host.
+        let res = server.get("/nope", None, Some("evil.example.com")).await;
+        assert_eq!(
+            res.status(),
+            403,
+            "foreign Host must not reach the fallback"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_live_loopback_hosts_are_accepted() {
+        let server = TestServer::start().await;
+        for host in [
+            format!("127.0.0.1:{}", server.port),
+            format!("localhost:{}", server.port),
+            format!("[::1]:{}", server.port),
+        ] {
+            let res = server.get("/", None, Some(&host)).await;
+            assert_eq!(res.status(), 200, "{host} must be accepted");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_live_missing_host_is_rejected() {
+        // reqwest always sets Host, so speak HTTP/1.0 on a raw socket to omit it.
+        // HTTP/1.0 makes Host optional, so hyper passes it to our guard rather
+        // than rejecting it itself.
+        let server = TestServer::start().await;
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", server.port))
+            .await
+            .expect("connect");
+        stream
+            .write_all(b"GET /api/status HTTP/1.0\r\n\r\n")
+            .await
+            .expect("write request");
+
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).await.expect("read");
+        let response = String::from_utf8_lossy(&response);
+
+        assert!(
+            !response.starts_with("HTTP/1.0 200") && !response.starts_with("HTTP/1.1 200"),
+            "a request with no Host header must not be served: {response}"
+        );
+        assert!(
+            response.contains(" 403 "),
+            "missing Host should be refused by host_guard, got: {response}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_live_sse_accepts_query_token() {
+        let server = TestServer::start().await;
+
+        // No token anywhere.
+        let res = server.get("/api/stream", None, None).await;
+        assert_eq!(res.status(), 401);
+
+        // Query token — the EventSource path the terminal UI actually uses.
+        let res = server
+            .get(&format!("/api/stream?token={TEST_TOKEN}"), None, None)
+            .await;
+        assert_eq!(res.status(), 200, "EventSource query token must work");
     }
 }
