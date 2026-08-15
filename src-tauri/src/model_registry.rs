@@ -378,6 +378,7 @@ pub async fn refresh_registry() -> Result<()> {
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
+        .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()
         .context("Failed to build HTTP client for registry refresh")?;
 

@@ -306,6 +306,7 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
 
     let ollama_check = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
+        .redirect(crate::http_client::local_aware_redirect_policy())
         .build()
         .map(|c| c.get(format!("{ollama_url}/api/tags")));
 

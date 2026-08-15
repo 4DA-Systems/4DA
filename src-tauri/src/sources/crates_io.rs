@@ -99,6 +99,7 @@ impl CratesIoSource {
             .user_agent(USER_AGENT)
             .timeout(std::time::Duration::from_secs(30))
             .connect_timeout(std::time::Duration::from_secs(10))
+            .redirect(crate::http_client::ssrf_guarded_redirect_policy())
             .build()
             .unwrap_or_else(|e| {
                 warn!("Failed to build crates.io HTTP client: {e}, using default");

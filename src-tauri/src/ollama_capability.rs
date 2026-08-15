@@ -24,6 +24,7 @@ pub(crate) async fn get_model_params_billions(model: &str, base_url: &str) -> Op
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(3))
         .timeout(std::time::Duration::from_secs(5))
+        .redirect(crate::http_client::local_aware_redirect_policy())
         .build()
         .ok()?;
 

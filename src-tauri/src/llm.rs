@@ -146,6 +146,10 @@ impl LLMClient {
             client: reqwest::Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(10))
                 .timeout(std::time::Duration::from_secs(timeout_secs))
+                // Local-aware: an Ollama/llama-server endpoint the user pointed
+                // at 127.0.0.1 may redirect within loopback, but a cloud
+                // provider can never redirect its way inward.
+                .redirect(crate::http_client::local_aware_redirect_policy())
                 .build()
                 .unwrap_or_else(|e| {
                     warn!("Failed to build HTTP client: {e}, using default");

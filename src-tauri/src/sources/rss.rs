@@ -469,6 +469,19 @@ impl Source for RssSource {
             return Ok(item.content.clone());
         }
 
+        // SSRF prevention: the link comes from the feed, i.e. from whoever
+        // controls the remote XML. `starts_with("http")` does not stop
+        // `http://127.0.0.1:4446/api/dna`. The redirect policy on the shared
+        // client guards later hops; this guards the first one.
+        if crate::url_validation::validate_not_internal(url).is_err() {
+            warn!(
+                target: "4da::security",
+                url = %url,
+                "Blocked RSS scrape to internal address (SSRF prevention)"
+            );
+            return Ok(item.content.clone());
+        }
+
         // Use shared client with per-request timeout for scraping
         let client = super::shared_client();
 

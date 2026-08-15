@@ -145,6 +145,7 @@ fn start_debug_frontend_readiness_gate(app_handle: tauri::AppHandle) {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(2))
             .no_proxy()
+            .redirect(crate::http_client::local_aware_redirect_policy())
             .build()
             .unwrap_or_default();
 

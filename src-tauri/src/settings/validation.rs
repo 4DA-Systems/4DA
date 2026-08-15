@@ -99,6 +99,7 @@ pub async fn validate_and_store_key(
     // Step 2: Connection test with 10s timeout
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
+        .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
 

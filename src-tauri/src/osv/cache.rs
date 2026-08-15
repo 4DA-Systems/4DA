@@ -22,6 +22,22 @@ use super::types::{CacheMeta, CacheUpdateResult, Vulnerability};
 const GCS_BASE_URL: &str = "https://osv-vulnerabilities.storage.googleapis.com";
 const USER_AGENT: &str = "4DA/1.0 (local-osv-cache)";
 
+/// Hard ceiling on a downloaded ecosystem ZIP (1 GiB).
+///
+/// The largest production bucket (npm) is a few hundred MB and growing. The
+/// download previously called `.bytes()`, which buffers the entire body in
+/// memory with no bound at all — whatever the far end sends, we allocate.
+/// Streaming to disk with this cap means a truncated, redirected, or hostile
+/// response costs a bounded amount of disk and no heap.
+const MAX_ECOSYSTEM_ZIP_BYTES: u64 = 1024 * 1024 * 1024;
+
+/// Hard ceiling on a single advisory JSON inside an ecosystem ZIP (8 MiB).
+///
+/// Real OSV records are kilobytes. `read_to_string` on a ZIP entry is
+/// unbounded — the declared size is metadata, and the DEFLATE reader keeps
+/// producing bytes for as long as the compressed stream does.
+const MAX_ADVISORY_JSON_BYTES: u64 = 8 * 1024 * 1024;
+
 /// Canonical ecosystem names as used in the GCS bucket paths.
 /// The GCS bucket uses these exact strings as path segments.
 const KNOWN_ECOSYSTEMS: &[&str] = &[
@@ -72,8 +88,50 @@ fn build_client(timeout_secs: u64) -> Result<reqwest::Client> {
     reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(std::time::Duration::from_secs(timeout_secs))
+        .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()
         .map_err(|e| FourDaError::Internal(format!("Failed to build HTTP client: {e}")))
+}
+
+/// Stream a response body to `dest`, refusing to write more than
+/// `MAX_ECOSYSTEM_ZIP_BYTES`. Returns the number of bytes written.
+///
+/// Nothing is buffered in memory beyond one chunk, and an over-cap body is
+/// abandoned with its partial file removed rather than left to be parsed.
+async fn stream_to_file(
+    response: reqwest::Response,
+    dest: &std::path::Path,
+    ecosystem: &str,
+) -> Result<u64> {
+    use futures::StreamExt;
+    use std::io::Write;
+
+    let mut file = std::fs::File::create(dest)
+        .with_context(|| format!("Failed to create {}", dest.display()))?;
+    let mut written: u64 = 0;
+    let mut stream = response.bytes_stream();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk =
+            chunk.with_context(|| format!("Failed to read response body for {ecosystem}"))?;
+        written = written.saturating_add(chunk.len() as u64);
+
+        if written > MAX_ECOSYSTEM_ZIP_BYTES {
+            drop(file);
+            let _ = std::fs::remove_file(dest);
+            return Err(FourDaError::Internal(format!(
+                "{ecosystem}/all.zip exceeds the {} MB download cap — refusing",
+                MAX_ECOSYSTEM_ZIP_BYTES / (1024 * 1024)
+            )));
+        }
+
+        file.write_all(&chunk)
+            .with_context(|| format!("Failed to write ZIP to {}", dest.display()))?;
+    }
+
+    file.flush()
+        .with_context(|| format!("Failed to flush {}", dest.display()))?;
+    Ok(written)
 }
 
 /// Extract a header value as an owned String.
@@ -117,14 +175,7 @@ pub async fn download_ecosystem_zip(ecosystem: &str) -> Result<PathBuf> {
     let etag = header_str(response.headers(), "etag");
     let last_modified = header_str(response.headers(), "last-modified");
 
-    let bytes = response
-        .bytes()
-        .await
-        .with_context(|| format!("Failed to read response body for {ecosystem}"))?;
-
-    let size_bytes = bytes.len() as u64;
-    std::fs::write(&dest, &bytes)
-        .with_context(|| format!("Failed to write ZIP to {}", dest.display()))?;
+    let size_bytes = stream_to_file(response, &dest, ecosystem).await?;
 
     write_meta(&CacheMeta {
         ecosystem: ecosystem.to_string(),
@@ -270,7 +321,7 @@ fn process_single_entry<R: std::io::Read + std::io::Seek>(
     user_packages: &HashSet<String>,
     seen_ids: &mut HashSet<String>,
 ) -> Result<Option<usize>> {
-    let mut entry = archive.by_index(index).map_err(|e| {
+    let entry = archive.by_index(index).map_err(|e| {
         debug!(target: "4da::osv::cache", index = index, error = %e, "Skipping unreadable ZIP entry");
         FourDaError::Internal(e.to_string())
     })?;
@@ -283,10 +334,30 @@ fn process_single_entry<R: std::io::Read + std::io::Seek>(
         return Ok(None);
     }
 
-    let mut contents = String::new();
-    entry.read_to_string(&mut contents).map_err(|e| {
-        debug!(target: "4da::osv::cache", name = %name, error = %e, "Skipping unreadable entry");
-        FourDaError::Io(e)
+    // Bounded read: one byte past the cap, so an over-cap entry is detectable
+    // rather than silently truncated into "invalid JSON".
+    let mut raw = Vec::new();
+    entry
+        .take(MAX_ADVISORY_JSON_BYTES + 1)
+        .read_to_end(&mut raw)
+        .map_err(|e| {
+            debug!(target: "4da::osv::cache", name = %name, error = %e, "Skipping unreadable entry");
+            FourDaError::Io(e)
+        })?;
+
+    if raw.len() as u64 > MAX_ADVISORY_JSON_BYTES {
+        warn!(
+            target: "4da::osv::cache",
+            name = %name,
+            cap_bytes = MAX_ADVISORY_JSON_BYTES,
+            "Skipping oversized advisory entry (decompression bomb guard)"
+        );
+        return Ok(None);
+    }
+
+    let contents = String::from_utf8(raw).map_err(|e| {
+        debug!(target: "4da::osv::cache", name = %name, error = %e, "Skipping non-UTF8 entry");
+        FourDaError::Internal(format!("non-UTF8 advisory entry: {name}"))
     })?;
 
     let vuln: Vulnerability = serde_json::from_str(&contents).map_err(|e| {

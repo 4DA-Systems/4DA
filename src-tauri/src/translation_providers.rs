@@ -15,6 +15,7 @@ fn translation_client() -> Result<reqwest::Client> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .connect_timeout(Duration::from_secs(10))
+        .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()
         .context("Failed to build translation HTTP client")
 }
