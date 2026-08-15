@@ -34,13 +34,13 @@ code{background:#1A1A1A;padding:2px 6px;border-radius:3px;font-size:12px;color:#
 <a class="bm-link" href="javascript:void(window.open('http://localhost:4447/score-popup?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'4da','width=420,height=500'))">Score This</a>
 <p class="note">Default port is <code>4447</code> (dev) or <code>4446</code> (production). Edit the bookmarklet URL if your port differs.</p>
 
-<h2>LAN Access</h2>
+<h2>Access &amp; Token</h2>
 <div class="token-box" id="token-display">Token: loading...</div>
-<p>To access from another device on your network, use your machine's IP address with the port and set the <code>X-4DA-Token</code> header for API calls.</p>
+<p>Every <code>/api/*</code> route requires the <code>X-4DA-Token</code> header. Your token is in <code>data/signal_terminal_token.txt</code>.</p>
+<p class="note">The terminal listens on loopback only (<code>127.0.0.1</code>) and refuses any request whose <code>Host</code> header is not <code>localhost</code>, <code>127.0.0.1</code> or <code>[::1]</code>. It is not reachable from other machines on your network, by design.</p>
 
 <h2>PWA Installation</h2>
-<p>On mobile browsers, tap the share/menu icon and select <strong>"Add to Home Screen"</strong>. The terminal will launch as a standalone app.</p>
-<p class="note">Requires the terminal to be accessible from the device (see LAN Access above).</p>
+<p>On this machine's browser, open the terminal, tap the share/menu icon and select <strong>"Add to Home Screen"</strong>. The terminal will launch as a standalone app.</p>
 
 <script>
 const p=new URLSearchParams(location.search);

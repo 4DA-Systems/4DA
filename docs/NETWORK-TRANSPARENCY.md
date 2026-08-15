@@ -283,8 +283,22 @@ All clients:
 4DA runs a local HTTP server at `127.0.0.1:4446` (production) for its own UI. This is **inbound only** -- it does not make outbound connections.
 
 - **Binding:** localhost only (not accessible from other machines)
-- **Authentication:** `X-4DA-Token` header required for API routes
-- **No CORS headers:** Prevents cross-origin access from other websites
+- **Host allowlist:** every request must carry a `Host` header of `127.0.0.1:<port>`,
+  `localhost:<port>` or `[::1]:<port>`. Anything else is refused with `403`. This is the
+  DNS-rebinding defence -- without it, a website you visit could point its own domain at
+  `127.0.0.1` and read this server, because at that point it is same-origin and CORS no
+  longer applies.
+- **Authentication:** `X-4DA-Token` header required on every `/api/*` route. Missing, empty
+  and incorrect tokens are all rejected with `401` -- there is no localhost bypass. The token
+  lives in `data/signal_terminal_token.txt` and is compared in constant time.
+  `/api/stream` also accepts `?token=` because the browser `EventSource` API cannot send headers.
+- **Unauthenticated routes:** `/`, `/setup`, `/score-popup`, `/card`, `/api/docs`,
+  `/manifest.json`, `/icon`, `/sw.js`, `/offline` serve static UI shells only. They contain no
+  user data.
+- **What the API does return:** signals, briefings, DNA, decisions, gaps and search results.
+  `/api/decisions` and `/api/gaps` include local project paths. No route returns API keys or
+  credentials.
+- **No CORS headers:** defence in depth against ordinary cross-origin reads.
 - **Source:** `src-tauri/src/signal_terminal.rs`
 
 ---

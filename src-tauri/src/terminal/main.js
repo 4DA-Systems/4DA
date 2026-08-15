@@ -199,9 +199,11 @@ function captureOutputEnd(startIdx){
 }
 
 /* ── API ── */
+/* The token is mandatory on every /api/* route — the server 401s without it.
+   Always send whatever we have; an empty value just fails the same way. */
+function authHeaders(){return{'X-4DA-Token':token}}
 function api(endpoint){
-  var h=token?{'X-4DA-Token':token}:{};
-  return fetch(endpoint,{headers:h}).then(function(r){
+  return fetch(endpoint,{headers:authHeaders()}).then(function(r){
     if(r.status===401){showAuth();throw new Error('auth')}
     return r.json();
   });
@@ -211,9 +213,17 @@ function hideAuth(){authOverlay.style.display='none';inp.focus()}
 
 /* ── Auth handlers ── */
 authInput.addEventListener('keydown',function(e){
-  if(e.key==='Enter'){token=this.value.trim();if(token){localStorage.setItem('4da_term_token',token);hideAuth();refreshStatus()}}
+  if(e.key==='Enter'){
+    token=this.value.trim();
+    if(token){
+      localStorage.setItem('4da_term_token',token);
+      hideAuth();
+      liveDot.className='live-dot on';liveText.textContent='LIVE';
+      refreshStatus();
+      connectStream();
+    }
+  }
 });
-document.getElementById('authSkip').addEventListener('click',function(){token='';hideAuth();refreshStatus()});
 
 /* ── Theme application ── */
 function applyTheme(name){
@@ -428,7 +438,7 @@ function startReconnect(){
   banner.textContent='RECONNECTING...';
   document.body.appendChild(banner);
   reconnectTimer=setInterval(function(){
-    fetch('/api/status',{headers:token?{'X-4DA-Token':token}:{}})
+    fetch('/api/status',{headers:authHeaders()})
     .then(function(r){if(r.ok)return r.json();throw new Error('offline')})
     .then(function(){
       reconnecting=false;
@@ -480,7 +490,10 @@ var eventSource = null;
 
 function connectStream() {
   if (eventSource) { eventSource.close(); eventSource = null; }
-  var url = '/api/stream';
+  if (!token) { showAuth(); return; }
+  /* EventSource cannot set request headers, so /api/stream (and only
+     /api/stream) also accepts the token as a query parameter. */
+  var url = '/api/stream?token=' + encodeURIComponent(token);
   eventSource = new EventSource(url);
 
   eventSource.onmessage = function(e) {
@@ -2146,18 +2159,23 @@ if('Notification' in window && Notification.permission==='default'){
 }
 
 /* ── Init ── */
-/* Auto-auth for localhost: try without token first */
+/* The token is mandatory. With none stored there is nothing to probe with —
+   prompt for it instead of firing a request that can only 401. */
 (function init(){
-  fetch('/api/status',{headers:token?{'X-4DA-Token':token}:{}})
+  if(!token){
+    showAuth();
+    bootSequence();
+    return;
+  }
+  fetch('/api/status',{headers:authHeaders()})
   .then(function(r){
     if(r.ok){
-      /* Authenticated (localhost auto-trust or valid token) */
       liveDot.className='live-dot on';liveText.textContent='LIVE';
       bootSequence();
       refreshStatus();
       connectStream();
     } else if(r.status===401){
-      /* Need auth */
+      /* Stored token is stale or wrong — re-prompt. */
       showAuth();
       bootSequence();
     } else {

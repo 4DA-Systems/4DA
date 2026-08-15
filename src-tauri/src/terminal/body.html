@@ -28,7 +28,7 @@
     <h2>Signal Terminal</h2>
     <p>Paste your authentication token.<br>Find it at <code>data/signal_terminal_token.txt</code></p>
     <input type="password" id="authInput" placeholder="paste token..." autocomplete="off">
-    <div class="skip" id="authSkip">Skip — try without token (localhost only)</div>
+    <div class="skip" id="authHint">Required — no token, no data.</div>
   </div>
 </div>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){})}</script>
