@@ -1,8 +1,10 @@
 # Nightly supply-chain audit for 4DA.
 #
 # Runs every night at 06:00 UTC (≈ early evening AEST) on main. Executes:
-#   1. cargo audit               — RustSec advisories against Cargo.lock
-#   2. cargo deny check          — licence/source/advisory policy
+#   1. cargo audit               — RustSec advisories against EVERY Cargo.lock
+#      in the repo: src-tauri/ (desktop app) and relay/ (Team Relay server,
+#      a standalone crate that is not a src-tauri workspace member).
+#   2. cargo deny check          — licence/source/advisory policy (src-tauri)
 #   3. pnpm audit                — npm advisories against EVERY pnpm-lock.yaml
 #      in the repo: root (production deps only) plus each sub-project with
 #      its own lockfile (site/, paddle-webhook/, mcp-4da-server/).
@@ -69,16 +71,32 @@ jobs:
           cargo install cargo-audit --locked
           cargo install cargo-deny --locked
 
-      - name: cargo audit
+      - name: cargo audit (every Cargo.lock in the repo)
         id: cargo_audit
         continue-on-error: true
-        working-directory: src-tauri
         run: |
           set +e
-          OUTPUT=$(cargo audit 2>&1)
-          EXIT_CODE=$?
+          EXIT_CODE=0
+          OUTPUT=""
+          # Every crate with its own Cargo.lock. `relay/` is NOT a workspace
+          # member of src-tauri, so auditing src-tauri alone left the
+          # TLS-terminating sync server completely unscanned (it had four
+          # rustls-webpki certificate-validation advisories when this was
+          # added, 2026-08-14). cargo-audit resolves its ignore list from
+          # <dir>/.cargo/audit.toml, hence the `cd` per directory.
+          for dir in src-tauri relay; do
+            RESULT=$(cd "$dir" && cargo audit 2>&1)
+            CODE=$?
+            echo "=== cargo audit $dir — exit $CODE ==="
+            echo "$RESULT"
+            if [ "$CODE" -eq 0 ]; then
+              OUTPUT="${OUTPUT}[$dir] clean"$'\n'
+            else
+              EXIT_CODE=1
+              OUTPUT="${OUTPUT}[$dir] FAILED (exit $CODE):"$'\n'"$RESULT"$'\n'
+            fi
+          done
           set -e
-          echo "$OUTPUT"
           # Bound what becomes a step output. The full text is later handed to
           # the issue-reporter through the process environment, and an unbounded
           # value (cargo deny dumps the whole dependency tree) overflows it with
