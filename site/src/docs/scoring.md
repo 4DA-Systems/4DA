@@ -37,9 +37,15 @@ Passing the gate is necessary, not sufficient. Survivors run through 12 multipli
 
 ## Calibration
 
-None of these constants are guesses. The pipeline is benchmarked against **9 simulated developer personas** (Rust systems, Python ML, fullstack TypeScript, DevOps/SRE, mobile, first-run, power user, stack switcher, niche specialist) with **215 labeled test items** scored as relevant or noise.
+None of these constants are guesses. The pipeline is benchmarked against **9 simulated developer personas** (Rust systems, Python ML, fullstack TypeScript, DevOps/SRE, mobile, first-run, power user, stack switcher, niche specialist) with **245 labeled test items** scored as relevant or noise — 1,997 scored evaluations in total.
 
-Measured result across those personas: **92% of content filtered as noise, 98% of actual noise correctly rejected.** Your own rejection rate — computed from your data, not ours — is shown in the app.
+Measured result across those personas: **93% of content filtered as noise, 98.9% of actual noise correctly rejected**, at 86% precision. The suite is in the repo and the numbers regenerate with one command:
+
+```bash
+cd src-tauri && cargo test scoring::simulation -- --nocapture
+```
+
+CI enforces floors rather than the headline figures — aggregate precision at or above 0.70, and at least 80% noise rejection for every one of the nine personas — so a scoring regression fails the build. Your own rejection rate — computed from your data, not ours — is shown in the app.
 
 > **Accurate first.** 4DA never shows intelligence the system can't stand behind. Correct results from a capable model beat fast results from a weak one.
 

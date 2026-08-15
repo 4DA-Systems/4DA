@@ -67,7 +67,7 @@ export function OverviewSection() {
         <Paragraph>
           4DA's thesis: a machine that knows your codebase, your tech stack, your recent work, and
           your declared interests can filter most content and show you only what matters —
-          all on your own machine, with no 4DA server in the loop. Tested at 92% rejection across 9 developer personas.
+          all on your own machine, with no 4DA server in the loop. Tested at 93% rejection across 9 developer personas.
         </Paragraph>
       </Card>
       <Card>

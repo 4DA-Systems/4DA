@@ -13,7 +13,7 @@ templateEngineOverride: md
 
 It scans your codebase — `Cargo.toml`, `package.json`, `go.mod`, Git history — and scores every article, advisory, and release from 20+ sources against what you actually build. An item needs **2 or more independent signals** to survive. Everything else is rejected.
 
-Tested across 9 developer personas: **92% of content is filtered as noise, 98% of actual noise is correctly rejected.** Your real rejection rate — computed from your own data — is shown in the app.
+Benchmarked across 9 developer personas against a 245-item labeled corpus: **93% of content is filtered as noise, 98.9% of actual noise is correctly rejected.** Measured, not asserted — [see the method](/docs/scoring/). Your real rejection rate — computed from your own data — is shown in the app.
 
 It learns from how you engage. Save something and topics boost, source reputation rises, your taste embedding sharpens. Dismiss something and anti-patterns form, future noise drops. Yesterday's noise becomes tomorrow's signal.
 

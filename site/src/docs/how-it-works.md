@@ -49,7 +49,7 @@ Full breakdown: **[The 5 axes](/docs/scoring/)**.
 
 ## Quality multipliers
 
-What clears the gate then runs through 12 multipliers — content depth, novelty detection (introductory content is demoted; new releases and security advisories are boosted), title–body coherence, competing-tech penalties, and intent scoring from your recent work. Every constant is calibrated across 9 simulated developer personas with 215 labeled test items.
+What clears the gate then runs through 12 multipliers — content depth, novelty detection (introductory content is demoted; new releases and security advisories are boosted), title–body coherence, competing-tech penalties, and intent scoring from your recent work. Every constant is calibrated across 9 simulated developer personas with 245 labeled test items.
 
 ## LLM verification
 
