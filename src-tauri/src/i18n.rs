@@ -4,6 +4,7 @@
 //! Loads JSON translation files from `data/translations/{lang}/` at runtime.
 //! Falls back to English if a key is missing in the target language.
 
+use crate::error::{FourDaError, Result};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use serde_json::Value;
@@ -14,6 +15,101 @@ use tracing::debug;
 /// In-memory translation cache: lang -> namespace -> key -> value
 static TRANSLATIONS: Lazy<RwLock<HashMap<String, HashMap<String, Value>>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
+
+// ============================================================================
+// Allowlists — the trust boundary for every locale/namespace that reaches a path
+// ============================================================================
+
+/// Locale codes 4DA ships translation files for — one entry per directory
+/// under `src/locales/`.
+///
+/// This is the allowlist every IPC command taking a language code validates
+/// against. It is deliberately a compile-time constant rather than a directory
+/// listing: an allowlist that widens when someone creates a directory is not an
+/// allowlist. `locale_list_matches_shipped_files` keeps it honest by asserting
+/// it still matches `src/locales/` exactly.
+///
+/// `ar` ships files but is not offered in the language picker (RTL layout
+/// untested — see `SUPPORTED_LANGUAGES` in `src/i18n/index.ts`). It stays here
+/// because the files exist and `t()` resolves them; the picker, not this
+/// constant, gates user-visible activation.
+pub const SUPPORTED_LOCALES: [&str; 13] = [
+    "ar", "de", "en", "es", "fr", "hi", "it", "ja", "ko", "pt-BR", "ru", "tr", "zh",
+];
+
+/// Translation namespaces — one JSON file per namespace per locale.
+///
+/// Single source of truth: the English loader, the untranslated-key diff, and
+/// the override loader all read exactly these, so a namespace cannot be
+/// writable-but-never-read.
+pub const TRANSLATION_NAMESPACES: [&str; 3] = ["ui", "errors", "signals"];
+
+/// Maximum length of a translation key. Keys are dotted identifiers
+/// (`app.title`, `error.db.unavailable`), never prose.
+pub const MAX_TRANSLATION_KEY_LENGTH: usize = 256;
+
+/// Validate a language code against [`SUPPORTED_LOCALES`].
+///
+/// Used at every IPC boundary that accepts a language code, because those codes
+/// are joined into filesystem paths. An allowlist beats a sanitizer here: the
+/// valid set is small, closed, and known at compile time.
+pub(crate) fn validate_locale(field: &str, lang: &str) -> Result<String> {
+    if SUPPORTED_LOCALES.contains(&lang) {
+        return Ok(lang.to_string());
+    }
+    tracing::warn!(
+        target: "4da::security",
+        field,
+        "Rejected unsupported locale code"
+    );
+    Err(FourDaError::Validation(format!(
+        "{field} is not a supported language code"
+    )))
+}
+
+/// Validate a translation namespace against [`TRANSLATION_NAMESPACES`].
+pub(crate) fn validate_namespace(field: &str, namespace: &str) -> Result<String> {
+    if TRANSLATION_NAMESPACES.contains(&namespace) {
+        return Ok(namespace.to_string());
+    }
+    tracing::warn!(
+        target: "4da::security",
+        field,
+        "Rejected unknown translation namespace"
+    );
+    Err(FourDaError::Validation(format!(
+        "{field} is not a known translation namespace"
+    )))
+}
+
+/// Validate a translation key. The key becomes a JSON object key, not a path
+/// segment, so the character rules are looser than
+/// `ipc_guard::validate_path_component` — but it is still attacker-controlled
+/// text that gets persisted and rendered, so it is capped and stripped of
+/// control characters (which subsumes NUL).
+pub(crate) fn validate_translation_key(field: &str, key: &str) -> Result<String> {
+    if key.is_empty() {
+        return Err(FourDaError::Validation(format!(
+            "{field} must not be empty"
+        )));
+    }
+    if key.len() > MAX_TRANSLATION_KEY_LENGTH {
+        return Err(FourDaError::Validation(format!(
+            "{field} exceeds maximum length of {MAX_TRANSLATION_KEY_LENGTH} characters"
+        )));
+    }
+    if key.chars().any(char::is_control) {
+        tracing::warn!(
+            target: "4da::security",
+            field,
+            "Rejected control character in translation key"
+        );
+        return Err(FourDaError::Validation(format!(
+            "{field} contains invalid characters"
+        )));
+    }
+    Ok(key.to_string())
+}
 
 /// Get the translations directory path.
 pub(crate) fn translations_dir() -> PathBuf {
@@ -46,6 +142,18 @@ fn ensure_loaded(lang: &str) {
         if cache.contains_key(lang) {
             return;
         }
+    }
+
+    // `lang` is joined into three separate directory paths below and every
+    // `*.json` found there is parsed and cached for display. It reaches here
+    // from user settings, which the frontend can write, so treat it as
+    // untrusted: an unsafe component would turn `t()` into a read primitive
+    // for arbitrary directories. Not an allowlist check — `t()` is called with
+    // fallback and test codes that are safe but unshipped — just a guarantee
+    // that the value cannot escape the directory it is joined onto.
+    if crate::ipc_guard::validate_path_component("lang", lang).is_err() {
+        debug!(target: "4da::i18n", "Refusing to load translations for an unsafe language code");
+        return;
     }
 
     let dir = translations_dir().join(lang);

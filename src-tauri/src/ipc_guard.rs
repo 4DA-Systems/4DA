@@ -5,7 +5,15 @@
 //! IPC input validation and rate limiting for Tauri commands.
 //!
 //! Provides reusable validation functions for high-risk IPC endpoints
-//! (file paths, URLs, search queries, large text inputs).
+//! (file paths, path components, URLs, search queries, large text inputs).
+//!
+//! Two path guards live here and they are NOT interchangeable — picking the
+//! wrong one is how traversal bugs get written:
+//!
+//! | Guard | Input shape | Accepts separators / absolute? |
+//! |---|---|---|
+//! | [`validate_path_input`] | a WHOLE path the user chose (a project directory) | yes, by design |
+//! | [`validate_path_component`] | ONE segment spliced into a path we build | no, never |
 
 use crate::error::{FourDaError, Result};
 
@@ -20,6 +28,12 @@ pub const MAX_URL_LENGTH: usize = 2_048;
 
 /// Maximum length for file path inputs
 pub const MAX_PATH_LENGTH: usize = 1_024;
+
+/// Maximum length for a single filesystem path component (one directory or
+/// file-name segment). Deliberately far tighter than [`MAX_PATH_LENGTH`]:
+/// every legitimate component in this codebase (locale codes, translation
+/// namespaces, sha256 identity hashes) is comfortably under this.
+pub const MAX_PATH_COMPONENT_LENGTH: usize = 64;
 
 /// Validate a string input doesn't exceed the given max length.
 /// Returns the trimmed input or an error.
@@ -78,7 +92,80 @@ pub(crate) fn validate_url_input(field: &str, url: &str) -> Result<String> {
     Ok(clean)
 }
 
-/// Validate a file path input: length + no null bytes + no traversal.
+/// The character class considered safe for a single filesystem path
+/// component: ASCII alphanumerics plus `_` and `-`.
+///
+/// Single source of truth for "safe component character". Two policies are
+/// built on it and they are deliberately different:
+///
+///   - [`validate_path_component`] **rejects** anything outside the class. Use
+///     it for values that cross a trust boundary (IPC parameters).
+///   - `calibration_store::sanitize_path_component` **replaces** anything
+///     outside the class with `_`. Use it only for internally-derived values
+///     (hashes, hardcoded task names) where a lossy mapping surprises no one.
+pub(crate) fn is_safe_component_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_' || c == '-'
+}
+
+/// Validate that a string is safe to use as a **single** filesystem path
+/// component — a value spliced into a path we build, via `Path::join(value)`
+/// or `format!("{value}.json")`.
+///
+/// Rejects empty, over-long, and every character outside
+/// [`is_safe_component_char`]. That single character-class check subsumes NUL
+/// bytes, control characters, both path separators, `..` traversal, `:` (drive
+/// letters and NTFS alternate data streams), leading `~`, and every non-ASCII
+/// homoglyph — without needing a blocklist that has to anticipate each one.
+///
+/// Rejecting rather than sanitizing matters at a trust boundary: `Path::join`
+/// with an **absolute** component *replaces* the accumulated path instead of
+/// appending to it, so traversal is not even required to escape — and a caller
+/// cannot distinguish "wrote where you asked" from "silently wrote somewhere
+/// else" if the component was quietly mangled instead of refused.
+///
+/// This is NOT a substitute for [`validate_path_input`], and vice versa; see
+/// the module docs for which to use where.
+pub(crate) fn validate_path_component(field: &str, value: &str) -> Result<String> {
+    if value.is_empty() {
+        return Err(FourDaError::Validation(format!(
+            "{field} must not be empty"
+        )));
+    }
+    if value.len() > MAX_PATH_COMPONENT_LENGTH {
+        tracing::warn!(
+            target: "4da::security",
+            field,
+            len = value.len(),
+            max = MAX_PATH_COMPONENT_LENGTH,
+            "Path component exceeds maximum length"
+        );
+        return Err(FourDaError::Validation(format!(
+            "{field} exceeds maximum length of {MAX_PATH_COMPONENT_LENGTH} characters"
+        )));
+    }
+    if !value.chars().all(is_safe_component_char) {
+        // Deliberately does not echo the offending input back to the caller.
+        tracing::warn!(
+            target: "4da::security",
+            field,
+            "Unsafe character in path component — rejected"
+        );
+        return Err(FourDaError::Validation(format!(
+            "{field} may only contain letters, digits, '_' and '-'"
+        )));
+    }
+    Ok(value.to_string())
+}
+
+/// Validate a **whole** user-chosen file path: length + no null bytes + no
+/// traversal.
+///
+/// Absolute paths are accepted **by design** — every production caller
+/// (`dependency_commands`, `toolkit`) takes a project directory the user picked
+/// with a native folder dialog, and those are always absolute. Do not "harden"
+/// this by rejecting absolute paths; that breaks the real callers and does not
+/// address the actual hazard, which is *path components*. For a value that must
+/// be one path segment, use [`validate_path_component`] instead.
 pub(crate) fn validate_path_input(field: &str, path: &str) -> Result<String> {
     let clean = validate_length(field, path, MAX_PATH_LENGTH)?;
     validate_no_null_bytes(field, &clean)?;
@@ -206,10 +293,16 @@ const OLLAMA_PORT: u16 = 11434;
 ///
 /// Exception: `127.0.0.1:11434` (Ollama) is explicitly allowed.
 ///
-/// NO PRODUCTION CALLER TODAY — exercised only by `ipc_guard_tests`.
+/// WIRED, BUT ONLY BEHIND A NON-DEFAULT FEATURE (corrected 2026-08-15): the one
+/// production caller is `webhooks::commands::register_webhook_cmd`, gated on
+/// `feature = "enterprise"`. The default build compiles the `webhooks_stub`
+/// instead, so under default features this genuinely has no caller — which is
+/// why the dead-code allowance below must stay until `enterprise` ships on by
+/// default. The previous "NO PRODUCTION CALLER TODAY" note predated that caller
+/// and was stale.
 ///
-/// WHY IT IS UNWIRED, and what to do about it (recorded 2026-08-13 after an
-/// audit flagged it as orphaned hardening):
+/// WHY IT IS NOT WIRED MORE WIDELY (recorded 2026-08-13 after an audit flagged
+/// it as orphaned hardening):
 ///
 /// This policy is deliberately stricter than 4DA's actual use cases, and
 /// wiring it into the outbound-fetch paths as-is WOULD BREAK legitimate,
