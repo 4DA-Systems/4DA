@@ -148,7 +148,13 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
             tauri::async_runtime::block_on(run_daemon_loop(&handle, force));
             0
         }
-        HeadlessMode::Drain => tauri::async_runtime::block_on(run_drain_to_completion()),
+        HeadlessMode::Drain => {
+            let code = tauri::async_runtime::block_on(run_drain_to_completion());
+            // A full-corpus drain is the single biggest write burst the engine makes;
+            // leaving its WAL uncheckpointed is what makes the next launch slow.
+            run_cycle_maintenance();
+            code
+        }
     };
 
     // Hold `app` until all work is done, then exit explicitly — there is no event loop to spin.
@@ -167,8 +173,14 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
 async fn run_drain_to_completion() -> i32 {
     const CHUNK: usize = 2000;
     const MAX_CYCLES: usize = 500; // 1M items ceiling — far above any real corpus
+    /// Checkpoint every this many drain cycles so a long drain does not append its whole
+    /// output to the WAL before anything moves it into the main database file.
+    const MAINTENANCE_EVERY_N_CYCLES: usize = 10;
     let mut total = 0usize;
     for cycle in 0..MAX_CYCLES {
+        if cycle > 0 && cycle % MAINTENANCE_EVERY_N_CYCLES == 0 {
+            run_cycle_maintenance();
+        }
         match crate::analysis_backfill::drain_stale_version_cycle(CHUNK).await {
             Ok(p) => {
                 total += p.scored_this_cycle;
@@ -194,6 +206,23 @@ async fn run_drain_to_completion() -> i32 {
     }
     warn!(target: "4da::headless", rescored_total = total, "Stale-version drain hit MAX_CYCLES guard before fully draining");
     0
+}
+
+/// Checkpoint the WAL and refresh SQLite's planner statistics after a batch of engine
+/// writes. Never fails the cycle: a busy checkpoint means another process holds the file,
+/// which the next cycle retries — that is a worse outcome to report as a run failure than
+/// to log.
+fn run_cycle_maintenance() {
+    match crate::get_database() {
+        Ok(db) => {
+            if let Err(e) = db.run_scheduled_maintenance() {
+                warn!(target: "4da::headless", error = %e, "Post-cycle DB maintenance failed");
+            }
+        }
+        Err(e) => {
+            warn!(target: "4da::headless", error = %e, "Post-cycle DB maintenance could not access database");
+        }
+    }
 }
 
 async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: bool) -> i32 {
@@ -367,6 +396,16 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
         crate::evidence::persist_upgrade_plan(&db, &plan, drops, run_id);
         info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed");
     }
+
+    // Step 3c — DB maintenance. Every other caller of `run_scheduled_maintenance` lives in
+    // the GUI's monitoring loop, so a headless-only deployment did all of the writing and
+    // none of the upkeep: `scheduler_state` froze at 2026-08-12 13:54 while `fourda-engine`
+    // kept appending until 08-13 14:05, and the WAL reached 25.9 MB against a ~4 MB
+    // autocheckpoint threshold with no checkpoint, no `PRAGMA optimize`, and no VACUUM in
+    // that entire 24-hour window. Cheap (a checkpoint + optimize), best-effort, and it runs
+    // after the cycle's writes rather than before them so it actually has something to
+    // checkpoint.
+    run_cycle_maintenance();
 
     // Log the resulting ground-truth freshness so a tail of the run shows the real DB state — this
     // is what an external verifier asserts against (count moved / watermark advanced / fingerprint changed).

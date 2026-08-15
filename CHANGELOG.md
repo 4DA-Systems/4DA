@@ -61,6 +61,9 @@ from a large body of work — this is a selection, not an exhaustive commit log.
 - Unchanged advisories collapse instead of re-alerting daily; ungrounded security alerts cap at advisory level; a misleading "Update" action was replaced with an honest "View advisory".
 - OSV advisories were being dropped at intake; C#, PHP, and Dart stacks surfaced no vulnerabilities at all due to an ecosystem mapping gap.
 - **The pre-migration backup was deleting itself, leaving migrations with no rollback point.**
+- **Keyword search had drifted out of sync with the corpus.** The full-text index was maintained by hand, and the hand-maintenance was incomplete: items whose embedding failed were never indexed at all, edited items kept matching words they no longer contained, and nothing removed an item's index entries when it was deleted — so the first retention run would have made it worse. The index is now maintained by the database itself and is rebuilt once on upgrade.
+- Backup pruning only ever collected one naming scheme, so manual pre-migration snapshots and corruption quarantine copies accumulated without limit — roughly 10 GB of them beside a 203 MB database.
+- The headless engine did all of the writing and none of the database upkeep, so a machine running without the window open went a full day with no checkpoint, leaving a write-ahead log six times its intended ceiling.
 - The re-embed repair pipeline was entirely non-functional.
 - Corpus durability: atomic rebuild and collapse detection.
 - Out-of-memory crashes in the cross-encoder reranker that killed background analysis.

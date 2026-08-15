@@ -14,6 +14,8 @@ mod context_rebuild_tests;
 pub(crate) mod dep_snapshots;
 mod dependencies;
 pub(crate) mod encryption;
+#[cfg(test)]
+mod fts_sync_tests;
 mod helpers;
 mod history;
 pub(crate) mod hybrid_search;
@@ -167,6 +169,20 @@ pub struct Database {
 /// (`analysis_backfill::score_chunk`), so more threads would serialize on the writer.
 pub(crate) const READ_POOL_SIZE: usize = 3;
 
+/// WAL size above which a checkpoint is escalated from PASSIVE to TRUNCATE.
+///
+/// PASSIVE cannot reset the WAL while any reader holds a snapshot — with a read pool of
+/// three plus a second process, the file only ever grows to its high-water mark. TRUNCATE
+/// does reset it, but takes a brief exclusive lock (bounded by `busy_timeout`), so it is
+/// gated on size rather than run every time.
+///
+/// This gate was 50 MB, which the engine could not reach in practice: `wal_autocheckpoint
+/// = 1000` at a 4 KiB page size keeps the file churning around 4 MB, so a WAL that was
+/// never getting truncated sat between the two numbers indefinitely — 25.9 MB when the
+/// defect was reported, 47.7 MB a day later. 16 MB is 4x the autocheckpoint threshold:
+/// high enough that a healthy WAL never trips it, low enough that a real backlog does.
+pub(crate) const WAL_TRUNCATE_THRESHOLD_BYTES: u64 = 16 * 1024 * 1024;
+
 impl Database {
     /// Initialize database with sqlite-vec extension
     pub fn new(db_path: &Path) -> SqliteResult<Self> {
@@ -204,7 +220,7 @@ impl Database {
         if db_path.to_string_lossy() != ":memory:" {
             let wal_path = db_path.with_extension("db-wal");
             let wal_large = std::fs::metadata(&wal_path)
-                .map(|m| m.len() > 50 * 1024 * 1024)
+                .map(|m| m.len() > WAL_TRUNCATE_THRESHOLD_BYTES)
                 .unwrap_or(false);
             if wal_large {
                 let wal_mb = std::fs::metadata(&wal_path)
@@ -311,20 +327,30 @@ impl Database {
     /// Run lightweight scheduled maintenance (safe to call frequently).
     /// - WAL checkpoint (TRUNCATE if large, else PASSIVE)
     /// - PRAGMA optimize (SQLite auto-tune)
+    ///
     /// Does NOT VACUUM (too heavy for frequent runs).
+    ///
+    /// Called from the GUI monitoring loop hourly **and** from the end of every headless
+    /// engine cycle. The second caller is the point: for 24 hours `fourda-engine` wrote
+    /// continuously while the GUI was closed, so nothing here ever ran and the WAL grew
+    /// unbounded. Maintenance must belong to whoever is doing the writing, not to whoever
+    /// happens to have a window open.
     pub fn run_scheduled_maintenance(&self) -> SqliteResult<()> {
         let conn = self.conn.lock();
         let wal_path = self.db_path.with_extension("db-wal");
-        let wal_large = std::fs::metadata(&wal_path)
-            .map(|m| m.len() > 50 * 1024 * 1024)
-            .unwrap_or(false);
-        if wal_large {
+        let wal_bytes = std::fs::metadata(&wal_path).map(|m| m.len()).unwrap_or(0);
+        if wal_bytes > WAL_TRUNCATE_THRESHOLD_BYTES {
             conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
         } else {
             conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);")?;
         }
         conn.execute_batch("PRAGMA optimize;")?;
-        tracing::info!(target: "4da::db", "Scheduled maintenance: WAL checkpoint + optimize complete");
+        tracing::info!(
+            target: "4da::db",
+            wal_mb = wal_bytes / (1024 * 1024),
+            truncated = wal_bytes > WAL_TRUNCATE_THRESHOLD_BYTES,
+            "Scheduled maintenance: WAL checkpoint + optimize complete"
+        );
         Ok(())
     }
 

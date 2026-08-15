@@ -4,6 +4,7 @@
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use rusqlite::{params, Connection, Result as SqliteResult};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::info;
 
@@ -354,6 +355,183 @@ mod backup_prune_tests {
 
         assert!(odd.exists(), "unparseable backup name must not be deleted");
     }
+
+    fn names(files: &[(&str, i64)]) -> Vec<(String, i64)> {
+        files.iter().map(|(n, t)| ((*n).to_string(), *t)).collect()
+    }
+
+    /// Hand-made `.bak-pre-*` snapshots were invisible to the pruner, which only ever
+    /// understood `.db.backup.vN`. Eight of them accumulated (up to 1.57 GB each) beside
+    /// a 203 MB database; D: hit zero bytes free and killed a build.
+    #[test]
+    fn manual_bak_pre_snapshots_are_pruned_newest_first() {
+        let files = names(&[
+            ("4da.db.bak-pre-v5-20260801", 100),
+            ("4da.db.bak-pre-v6-20260805", 200),
+            ("4da.db.bak-pre-v7-20260809", 300),
+            ("4da.db.bak-pre-v8-20260812", 400),
+        ]);
+        let doomed = plan_backup_pruning(&files, "4da.db", BACKUP_RETENTION_COUNT, None);
+        assert_eq!(
+            doomed,
+            vec![
+                "4da.db.bak-pre-v5-20260801".to_string(),
+                "4da.db.bak-pre-v6-20260805".to_string()
+            ],
+            "the two oldest manual snapshots go, the two newest stay"
+        );
+    }
+
+    /// Each family gets its own retention slots — a full `.bak-pre-*` shelf must never
+    /// evict the versioned backups a migration rolls back to, or vice versa.
+    #[test]
+    fn families_are_pruned_independently() {
+        let files = names(&[
+            ("4da.db.backup.v98", 0),
+            ("4da.db.backup.v99", 0),
+            ("4da.db.backup.v100", 0),
+            ("4da.db.bak-pre-a", 100),
+            ("4da.db.bak-pre-b", 200),
+            ("4da.db.bak-pre-c", 300),
+            ("4da.db-wal.bak-pre-c", 350),
+            ("4da.db.corrupt", 10),
+            ("4da.db.corrupt-1754000000", 20),
+            ("4da.db.corrupt-1755000000", 30),
+        ]);
+        let doomed = plan_backup_pruning(&files, "4da.db", BACKUP_RETENTION_COUNT, None);
+        assert_eq!(
+            doomed,
+            vec![
+                "4da.db.backup.v98".to_string(),
+                "4da.db.bak-pre-a".to_string(),
+                "4da.db.corrupt".to_string(),
+            ],
+            "exactly the oldest of each of the three families"
+        );
+    }
+
+    /// A hand-made snapshot and its `-wal` sibling are one backup and must be kept or
+    /// dropped together — restoring a database without its WAL, or a WAL without its
+    /// database, is worse than having neither. Counting the sibling as its own retention
+    /// slot (the first cut of this pruner) both split pairs and silently halved how many
+    /// real backups survived.
+    #[test]
+    fn a_snapshot_and_its_wal_sibling_prune_as_one_unit() {
+        let files = names(&[
+            ("4da.db.bak-pre-a", 100),
+            ("4da.db-wal.bak-pre-a", 110),
+            ("4da.db.bak-pre-b", 200),
+            ("4da.db-wal.bak-pre-b", 210),
+            ("4da.db.bak-pre-c", 300),
+            ("4da.db-wal.bak-pre-c", 310),
+        ]);
+        let doomed = plan_backup_pruning(&files, "4da.db", BACKUP_RETENTION_COUNT, None);
+        assert_eq!(
+            doomed,
+            vec![
+                "4da.db-wal.bak-pre-a".to_string(),
+                "4da.db.bak-pre-a".to_string()
+            ],
+            "the oldest PAIR goes whole; two complete pairs survive"
+        );
+
+        // Same tag from every spelling the operator uses lands in one unit.
+        for name in ["4da.db.bak-pre-a", "4da.db-wal.bak-pre-a", "4da.bak-pre-a"] {
+            assert_eq!(
+                classify_backup(name, "4da.db").map(|(_, _, unit)| unit),
+                Some("-pre-a".to_string()),
+                "{name} must share the -pre-a retention unit"
+            );
+        }
+    }
+
+    /// `.db.corrupt-<unix>` quarantine copies are full-size and written one per
+    /// corruption incident with nothing collecting them.
+    #[test]
+    fn quarantine_copies_are_collected() {
+        let files = names(&[
+            ("4da.db.corrupt-1", 1),
+            ("4da.db.corrupt-2", 2),
+            ("4da.db.corrupt-3", 3),
+            ("4da.db.corrupt-4", 4),
+        ]);
+        let doomed = plan_backup_pruning(&files, "4da.db", BACKUP_RETENTION_COUNT, None);
+        assert_eq!(
+            doomed,
+            vec![
+                "4da.db.corrupt-1".to_string(),
+                "4da.db.corrupt-2".to_string()
+            ]
+        );
+    }
+
+    /// The pruner only ever considers copies of THIS database. A sibling backup of some
+    /// other file in the data directory is not ours to delete.
+    #[test]
+    fn unrelated_siblings_are_never_candidates() {
+        for name in [
+            "settings.json.bak-pre-v8",
+            "settings.json.corrupt",
+            "4da.db",
+            "4da.db-wal",
+            "4da.db-shm",
+            "4da.db.bakery",
+            "notes.txt",
+        ] {
+            assert!(
+                classify_backup(name, "4da.db").is_none(),
+                "{name} must not be classified as a prunable backup"
+            );
+        }
+    }
+
+    /// Whatever the ordering says, the file the caller just wrote is off limits.
+    #[test]
+    fn protected_name_is_never_pruned() {
+        let files = names(&[
+            ("4da.db.bak-pre-a", 100),
+            ("4da.db.bak-pre-b", 200),
+            ("4da.db.bak-pre-c", 300),
+        ]);
+        let doomed = plan_backup_pruning(
+            &files,
+            "4da.db",
+            BACKUP_RETENTION_COUNT,
+            Some("4da.db.bak-pre-a"),
+        );
+        assert!(doomed.is_empty(), "protected file must survive: {doomed:?}");
+    }
+
+    /// End-to-end through the filesystem: the manual family really is collected now.
+    #[test]
+    fn manual_snapshots_are_pruned_on_disk() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("4da.db");
+        let db = Database::new(&db_path).expect("open temp db");
+
+        for n in ["a", "b", "c"] {
+            std::fs::write(dir.path().join(format!("4da.db.bak-pre-{n}")), b"snap").unwrap();
+            // Distinct mtimes so "newest" is well-defined. The planner orders on
+            // milliseconds, so a short sleep is enough.
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+
+        db.backup_before_migration(100);
+
+        let survivors: Vec<bool> = ["a", "b", "c"]
+            .iter()
+            .map(|n| dir.path().join(format!("4da.db.bak-pre-{n}")).exists())
+            .collect();
+        assert_eq!(
+            survivors,
+            vec![false, true, true],
+            "oldest manual snapshot pruned, two newest kept"
+        );
+        assert!(
+            dir.path().join("4da.db.backup.v100").exists(),
+            "the versioned backup is a different family and must be untouched"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -521,9 +699,134 @@ mod recovery_tests {
     }
 }
 
+/// How many files of each backup family survive a prune.
+pub(crate) const BACKUP_RETENTION_COUNT: usize = 2;
+
+/// The families of database-sized files that accumulate next to `4da.db`, each pruned
+/// independently so a full slot in one never evicts the others.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum BackupFamily {
+    /// `<db>.backup.v<N>` — written automatically by [`Database::backup_before_migration`].
+    /// Ordered by the parsed schema version.
+    Versioned,
+    /// `<db>.bak-*`, `<db>-wal.bak*`, `<db>-shm.bak*` — snapshots taken by hand before a
+    /// risky migration or a dogfood run (the `.gitignore` calls these "operator backups").
+    /// No version axis, so ordered by mtime.
+    Manual,
+    /// `<db>.corrupt`, `<db>.corrupt-<unix>` — corruption quarantine copies. Ordered by mtime.
+    Quarantine,
+}
+
+/// Classify a file name in the data directory, returning its family, the schema version
+/// encoded in the name (`Versioned` only, `0` otherwise), and the **retention unit** it
+/// belongs to — the set of files that are kept or deleted together.
+///
+/// Everything is matched against the live database's own file name, so a sibling like
+/// `settings.json.bak-2026-08-12` is never a candidate — only copies of *this* database.
+/// `4da.db`, `4da.db-wal` and `4da.db-shm` themselves match nothing.
+pub(crate) fn classify_backup(
+    name: &str,
+    db_file_name: &str,
+) -> Option<(BackupFamily, i64, String)> {
+    if let Some(rest) = name.strip_prefix(&format!("{db_file_name}.backup.v")) {
+        let version: i64 = rest.parse().ok()?;
+        return Some((BackupFamily::Versioned, version, name.to_string()));
+    }
+
+    // A hand-made snapshot and its `-wal`/`-shm` siblings share everything after the
+    // `.bak` marker (`4da.db.bak-pre-v8-…` next to `4da.db-wal.bak-pre-v8-…`), so that
+    // shared tag is the retention unit: half a backup restores worse than none. The
+    // shorter `4da.bak-…` spelling the operator has also used lands in the same unit.
+    let stem = db_file_name
+        .rsplit_once('.')
+        .map_or(db_file_name, |(s, _)| s);
+    for prefix in [
+        format!("{db_file_name}.bak"),
+        format!("{db_file_name}-wal.bak"),
+        format!("{db_file_name}-shm.bak"),
+        format!("{stem}.bak"),
+    ] {
+        if let Some(tag) = name.strip_prefix(&prefix) {
+            // Require a separator so `4da.db.bakery` is not mistaken for a backup.
+            if tag.is_empty() || tag.starts_with(['-', '.', '_']) {
+                return Some((BackupFamily::Manual, 0, tag.to_string()));
+            }
+        }
+    }
+
+    if name == format!("{db_file_name}.corrupt")
+        || name.starts_with(&format!("{db_file_name}.corrupt-"))
+    {
+        return Some((BackupFamily::Quarantine, 0, name.to_string()));
+    }
+    None
+}
+
+/// Decide which backup files to remove, keeping the newest `keep` retention *units* of
+/// each family. A unit is usually one file; for a hand-made snapshot it is the snapshot
+/// plus its `-wal`/`-shm` siblings, which are only useful together.
+///
+/// Pure so the retention rule can be tested without a filesystem — the previous prune bug
+/// (lexicographic sort silently deleting the backup it had just written, from schema 100
+/// onward) survived because the rule was only reachable through real `read_dir` output.
+///
+/// `files` is `(file_name, mtime_millis)`; a unit is ordered by its newest member.
+/// `protect` is never returned, whatever the ordering says. Output is sorted for
+/// determinism.
+pub(crate) fn plan_backup_pruning(
+    files: &[(String, i64)],
+    db_file_name: &str,
+    keep: usize,
+    protect: Option<&str>,
+) -> Vec<String> {
+    // family -> unit key -> (newest order key, member file names)
+    let mut families: HashMap<BackupFamily, HashMap<String, (i64, Vec<&str>)>> = HashMap::new();
+    for (name, mtime) in files {
+        let Some((family, version, unit)) = classify_backup(name, db_file_name) else {
+            continue;
+        };
+        let order = if family == BackupFamily::Versioned {
+            version
+        } else {
+            *mtime
+        };
+        let entry = families
+            .entry(family)
+            .or_default()
+            .entry(unit)
+            .or_insert((i64::MIN, Vec::new()));
+        entry.0 = entry.0.max(order);
+        entry.1.push(name.as_str());
+    }
+
+    let mut doomed: Vec<String> = Vec::new();
+    for units in families.values() {
+        let mut ordered: Vec<(i64, &str, &[&str])> = units
+            .iter()
+            .map(|(unit, (order, members))| (*order, unit.as_str(), members.as_slice()))
+            .collect();
+        // Newest last. Tie-break on the unit key so equal mtimes prune deterministically.
+        ordered.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(b.1)));
+        if ordered.len() <= keep {
+            continue;
+        }
+        let cutoff = ordered.len() - keep;
+        for (_, _, members) in &ordered[..cutoff] {
+            for name in *members {
+                if Some(*name) == protect {
+                    continue;
+                }
+                doomed.push((*name).to_string());
+            }
+        }
+    }
+    doomed.sort();
+    doomed
+}
+
 impl Database {
     /// Create a pre-migration backup of the database file.
-    /// Keeps only the last 2 backups to avoid disk bloat.
+    /// Keeps only the last [`BACKUP_RETENTION_COUNT`] backups of each family.
     pub(crate) fn backup_before_migration(&self, current_version: i64) {
         let backup_path = self
             .db_path
@@ -542,65 +845,180 @@ impl Database {
                 tracing::warn!(target: "4da::db", error = %e, "Pre-migration backup failed (continuing anyway)");
             }
         }
-        // Prune old backups: keep only the 2 most recent BY VERSION NUMBER.
-        //
-        // This sorted PATHS lexicographically, which is correct only while every
-        // version has the same digit count. As strings, "…v100" < "…v98" <
-        // "…v99", so from schema 100 onward the newest backup sorted FIRST and
-        // the prune deleted the very file it had just written, keeping two older
-        // ones. Live evidence (2026-07-26, Phase 101 on the 2.4 GB corpus): the
-        // log reads `Pre-migration backup created … v100 bytes=2451460096` and
-        // then `Pruned old backup … v100` 216 ms later — the migration ran with
-        // NO rollback point while v98 (4 days old) and v99 survived. Silent,
-        // because the two log lines never mention each other and the removal
-        // result was discarded.
-        //
-        // Two guards now: sort on the parsed integer, and never prune the backup
-        // this call just created, whatever the ordering says.
-        if let Some(parent) = self.db_path.parent() {
-            if let Ok(entries) = std::fs::read_dir(parent) {
-                let mut backups: Vec<(i64, PathBuf)> = entries
-                    .filter_map(|e| match e {
-                        Ok(v) => Some(v),
-                        Err(e) => {
-                            tracing::warn!("Row processing failed in db_migrations: {e}");
-                            None
-                        }
-                    })
-                    .map(|e| e.path())
-                    .filter_map(|p| {
-                        // Keep only files we can place on the version axis. An
-                        // unparseable suffix is left ALONE rather than sorted to
-                        // an arbitrary position where it could be deleted.
-                        let name = p.file_name()?.to_string_lossy().into_owned();
-                        let version: i64 = name.rsplit_once(".db.backup.v")?.1.parse().ok()?;
-                        Some((version, p))
-                    })
-                    .collect();
-                backups.sort_by_key(|(version, _)| *version);
-                if backups.len() > 2 {
-                    let cutoff = backups.len() - 2;
-                    for (_, old) in &backups[..cutoff] {
-                        if *old == backup_path {
-                            continue; // never delete the backup we just wrote
-                        }
-                        match std::fs::remove_file(old) {
-                            Ok(()) => {
-                                info!(target: "4da::db", path = %old.display(), "Pruned old backup");
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    target: "4da::db",
-                                    path = %old.display(),
-                                    error = %e,
-                                    "Failed to prune old backup"
-                                );
-                            }
-                        }
-                    }
+        self.prune_old_backups(
+            backup_path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned()),
+        );
+    }
+
+    /// Prune stale database-sized files beside `4da.db`, keeping the newest
+    /// [`BACKUP_RETENTION_COUNT`] of each [`BackupFamily`].
+    ///
+    /// Historically this only understood `<db>.backup.v<N>` and sorted PATHS
+    /// lexicographically — correct only while every version had the same digit count. As
+    /// strings, "…v100" < "…v98" < "…v99", so from schema 100 onward the newest backup
+    /// sorted FIRST and the prune deleted the very file it had just written. Live evidence
+    /// (2026-07-26, Phase 101 on the 2.4 GB corpus): `Pre-migration backup created … v100
+    /// bytes=2451460096`, then `Pruned old backup … v100` 216 ms later — the migration ran
+    /// with NO rollback point while v98 (4 days old) and v99 survived.
+    ///
+    /// It also collected *only* that one family, so the two unbounded ones grew forever:
+    /// hand-made `.bak-pre-*` snapshots (eight of them, up to 1.57 GB each) and
+    /// `.db.corrupt-<unix>` quarantine copies, which the corruption-recovery path writes
+    /// one of per incident. Roughly 10 GB of them sat beside a 203 MB database, and D:
+    /// reached zero bytes free and killed a build.
+    ///
+    /// Deliberately conservative: matched strictly against this database's own file name
+    /// (a sibling `settings.json.bak-…` is never a candidate), an unparseable suffix is
+    /// left alone rather than sorted to an arbitrary position, a file whose mtime cannot
+    /// be read is treated as newest rather than oldest, and the backup this migration just
+    /// wrote is protected whatever the ordering says.
+    fn prune_old_backups(&self, protect: Option<String>) {
+        let Some(parent) = self.db_path.parent() else {
+            return;
+        };
+        let Some(db_file_name) = self.db_path.file_name().map(|n| n.to_string_lossy()) else {
+            return;
+        };
+        let Ok(entries) = std::fs::read_dir(parent) else {
+            return;
+        };
+
+        let files: Vec<(String, i64)> = entries
+            .filter_map(|e| match e {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in db_migrations: {e}");
+                    None
+                }
+            })
+            .map(|entry| {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                // An unreadable mtime sorts NEWEST (i64::MAX), so an unreadable file is
+                // kept rather than deleted.
+                let mtime = entry
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map_or(i64::MAX, |d| d.as_millis() as i64);
+                (name, mtime)
+            })
+            .collect();
+
+        for name in plan_backup_pruning(
+            &files,
+            &db_file_name,
+            BACKUP_RETENTION_COUNT,
+            protect.as_deref(),
+        ) {
+            let path = parent.join(&name);
+            match std::fs::remove_file(&path) {
+                Ok(()) => {
+                    info!(target: "4da::db", path = %path.display(), "Pruned old backup");
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        target: "4da::db",
+                        path = %path.display(),
+                        error = %e,
+                        "Failed to prune old backup"
+                    );
                 }
             }
         }
+    }
+
+    /// Install the three triggers that keep `source_items_fts` in lockstep with
+    /// `source_items`, then rebuild the index from scratch.
+    ///
+    /// `source_items_fts` is an **external content** FTS5 table (`content='source_items'`),
+    /// which means SQLite stores only the inverted index — never the text — and does
+    /// **nothing** automatically. Every insert, update and delete on `source_items` has
+    /// to be mirrored into the index by hand, and until now that was done by hand:
+    ///
+    /// - `batch_upsert_pending_source_items` wrote rows with no FTS statement at all,
+    ///   so anything that failed embedding was invisible to search forever.
+    /// - Nothing anywhere issued an FTS `'delete'`. Retention (`cleanup_old_items`,
+    ///   `run_maintenance`, `prune_noise`) and the cascade trigger all removed rows
+    ///   from `source_items` and left their postings behind.
+    /// - The paths that *did* write used `INSERT OR REPLACE` **after** updating
+    ///   `source_items`. On an external-content table the implicit REPLACE-delete reads
+    ///   the old values back **from the content table**, which by then already held the
+    ///   NEW text — so it deleted the new postings and stranded the old ones. Measured on
+    ///   the founder's live 247 MB corpus: 2,631 divergent terms over 38 rows, and a
+    ///   search for a word that had been *edited out* of an item still returned it.
+    ///
+    /// Hand-maintenance of an external-content index is a standing invitation to forget
+    /// one path, and three paths were already forgotten. Triggers are the fix SQLite
+    /// itself documents for this table type: they cannot be bypassed by a new call site,
+    /// they see the pre-update values the `'delete'` command requires, and they let every
+    /// upsert/cleanup function drop its FTS bookkeeping entirely.
+    ///
+    /// Two deliberate narrowings on the UPDATE trigger:
+    /// - `OF title, content` — scoring stamps thousands of `relevance_score` /
+    ///   `scored_pipeline_version` updates per drain and must not reindex anything.
+    /// - `WHEN old IS NOT new` — a re-fetch rewrites identical text on nearly every
+    ///   cycle; skipping those makes this strictly less write amplification than the
+    ///   unconditional `INSERT OR REPLACE` it replaces.
+    ///
+    /// The closing `'rebuild'` discards the diverged index and regenerates it from
+    /// `source_items`, so the triggers start from a correct index — an FTS `'delete'`
+    /// carrying values that were never indexed would otherwise corrupt it further.
+    /// Measured against a copy of the founder's 12,273-row / 247 MB database, the whole
+    /// `Database::new` path (pre-migration backup copy included) took 5.9 s.
+    pub(crate) fn install_fts_sync_triggers_and_rebuild(c: &Connection) -> SqliteResult<()> {
+        // Defensive: Phase 78 creates this, but a trigger body referencing a missing
+        // table fails at CREATE time and would wedge the migration in a retry loop.
+        c.execute_batch(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS source_items_fts USING fts5(
+                 title,
+                 content,
+                 content='source_items',
+                 content_rowid='id',
+                 tokenize='porter unicode61'
+             );",
+        )?;
+
+        c.execute_batch(
+            "DROP TRIGGER IF EXISTS trg_source_items_fts_insert;
+             DROP TRIGGER IF EXISTS trg_source_items_fts_update;
+             DROP TRIGGER IF EXISTS trg_source_items_fts_delete;
+
+             CREATE TRIGGER trg_source_items_fts_insert
+             AFTER INSERT ON source_items
+             BEGIN
+                 INSERT INTO source_items_fts(rowid, title, content)
+                 VALUES (NEW.id, COALESCE(NEW.title, ''), COALESCE(NEW.content, ''));
+             END;
+
+             CREATE TRIGGER trg_source_items_fts_update
+             AFTER UPDATE OF title, content ON source_items
+             WHEN OLD.title IS NOT NEW.title OR OLD.content IS NOT NEW.content
+             BEGIN
+                 INSERT INTO source_items_fts(source_items_fts, rowid, title, content)
+                 VALUES ('delete', OLD.id, COALESCE(OLD.title, ''), COALESCE(OLD.content, ''));
+                 INSERT INTO source_items_fts(rowid, title, content)
+                 VALUES (NEW.id, COALESCE(NEW.title, ''), COALESCE(NEW.content, ''));
+             END;
+
+             CREATE TRIGGER trg_source_items_fts_delete
+             AFTER DELETE ON source_items
+             BEGIN
+                 INSERT INTO source_items_fts(source_items_fts, rowid, title, content)
+                 VALUES ('delete', OLD.id, COALESCE(OLD.title, ''), COALESCE(OLD.content, ''));
+             END;",
+        )?;
+
+        let started = std::time::Instant::now();
+        c.execute_batch("INSERT INTO source_items_fts(source_items_fts) VALUES('rebuild');")?;
+        info!(
+            target: "4da::db",
+            rebuild_ms = started.elapsed().as_millis() as i64,
+            "Phase 104: FTS5 sync triggers installed and search index rebuilt"
+        );
+        Ok(())
     }
 
     /// Run a migration step inside a transaction with history recording.
@@ -793,7 +1211,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 103;
+        const TARGET_VERSION: i64 = 104;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3991,6 +4409,16 @@ impl Database {
                         );
                         Ok(())
                     },
+                )?;
+            }
+
+            if current_version < 104 {
+                Self::run_versioned_migration(
+                    &conn,
+                    103,
+                    104,
+                    "Phase 104: FTS5 sync triggers + index rebuild (search index had diverged)",
+                    Self::install_fts_sync_triggers_and_rebuild,
                 )?;
             }
 
