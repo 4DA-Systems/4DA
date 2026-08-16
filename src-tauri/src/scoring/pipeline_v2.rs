@@ -1850,6 +1850,42 @@ pub(crate) fn finalize_scores(results: &mut [crate::SourceRelevance]) {
 // Signal classification (mirrors V1 logic)
 // ============================================================================
 
+/// Build the action line for a Critical security alert.
+///
+/// The action line is EVIDENCE rendered inside a Critical alert, so it may only
+/// name a package the item demonstrably corroborates. The escalation gate above
+/// tests `grounding.strong`, which is a DIFFERENT source of truth from
+/// `is_strong_grounding_match`: on the registry-subject route
+/// `compute_grounding_verdict` returns `strong: !info.is_dev` WITHOUT inspecting
+/// `deps` at all, so `strong` can be true while zero `DepMatch` passes the
+/// filter here. The previous code closed that case with
+/// `.unwrap_or(&matched_deps[0])` — an arbitrary positional pick, in practice an
+/// uncorroborated alias/subterm hit ("tauri-apps-plugin-opener" on an article
+/// that never mentions Tauri) — and printed it as the affected dependency.
+///
+/// When nothing passes the filter, OMIT the name rather than guess one. The
+/// alert is still true (the item's registry subject is one of the user's non-dev
+/// dependencies, which is what made grounding strong); only the identification
+/// is unavailable. This mirrors the trigger-chip rule a few lines below, which
+/// filters on `corroborated` and emits nothing rather than falling back.
+fn critical_security_action(matched_deps: &[dependencies::DepMatch]) -> String {
+    let best_dep = matched_deps
+        .iter()
+        .filter(|d| dependencies::is_strong_grounding_match(d))
+        .max_by(|a, b| {
+            a.confidence
+                .partial_cmp(&b.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    match best_dep {
+        Some(dep) => format!(
+            "Critical: Security issue affects your dependency {}",
+            dep.package_name
+        ),
+        None => "Critical: Security issue affects one of your dependencies".to_string(),
+    }
+}
+
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn classify_signals(
     relevant: bool,
@@ -1920,22 +1956,7 @@ fn classify_signals(
                 let has_strong_dep = grounding.strong;
                 if c.signal_type == signals::SignalType::SecurityAlert && has_strong_dep {
                     c.priority = signals::SignalPriority::Critical;
-                    // Name the highest-confidence GROUNDED match — the action
-                    // line is evidence, so it must never name an alias/subterm
-                    // hit the item doesn't actually mention.
-                    let best_dep = matched_deps
-                        .iter()
-                        .filter(|d| dependencies::is_strong_grounding_match(d))
-                        .max_by(|a, b| {
-                            a.confidence
-                                .partial_cmp(&b.confidence)
-                                .unwrap_or(std::cmp::Ordering::Equal)
-                        })
-                        .unwrap_or(&matched_deps[0]);
-                    c.action = format!(
-                        "Critical: Security issue affects your dependency {}",
-                        best_dep.package_name
-                    );
+                    c.action = critical_security_action(matched_deps);
                 } else if c.signal_type == signals::SignalType::BreakingChange
                     && matched_deps
                         .iter()
@@ -2946,6 +2967,62 @@ mod tests {
         assert!(
             display_worthy_deps(&raw, &[]).is_empty(),
             "high confidence without corroboration is still not display evidence"
+        );
+    }
+
+    // ========================================================================
+    // critical_security_action — a Critical alert may only name a VERIFIED dep
+    // ========================================================================
+
+    #[test]
+    fn critical_action_names_the_highest_confidence_grounded_dep() {
+        let deps = vec![
+            disp_dep("axios", 0.55, true),
+            disp_dep("lodash", 0.92, true),
+            disp_dep("sentry-react", 0.35, false),
+        ];
+        assert_eq!(
+            critical_security_action(&deps),
+            "Critical: Security issue affects your dependency lodash"
+        );
+    }
+
+    /// The reachable defect: `compute_grounding_verdict` returns `strong: true`
+    /// on the registry-subject route without ever inspecting `deps`, so this
+    /// escalation can fire with a `matched_deps` list in which NOTHING passes
+    /// `is_strong_grounding_match`. The old positional `matched_deps[0]`
+    /// fallback then named an arbitrary uncorroborated alias hit inside a
+    /// Critical alert. No name is better than the wrong name.
+    #[test]
+    fn critical_action_omits_the_name_when_no_dep_is_verified() {
+        let deps = vec![
+            // Uncorroborated: the item never names this package (alias/subterm
+            // expansion), so it is not grounding evidence at any confidence.
+            disp_dep("tauri-apps-plugin-opener", 0.95, false),
+            disp_dep("tauri-apps-plugin-updater", 0.35, false),
+        ];
+        let action = critical_security_action(&deps);
+        assert_eq!(
+            action, "Critical: Security issue affects one of your dependencies",
+            "an unverified match must never be named in a Critical alert"
+        );
+        for dep in &deps {
+            assert!(
+                !action.contains(dep.package_name.as_str()),
+                "action must not name {}",
+                dep.package_name
+            );
+        }
+    }
+
+    /// Below the STRONG_GROUNDING_CONFIDENCE floor, corroboration alone is not
+    /// enough either — the same no-name rule applies.
+    #[test]
+    fn critical_action_omits_the_name_below_the_grounding_confidence_floor() {
+        let deps = vec![disp_dep("react", 0.20, true)];
+        assert_eq!(
+            critical_security_action(&deps),
+            "Critical: Security issue affects one of your dependencies"
         );
     }
 

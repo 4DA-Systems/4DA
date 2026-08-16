@@ -41,6 +41,35 @@ pub(crate) struct BackfillProgress {
 /// both clear this comfortably; only tiny probe/tail batches fall through.
 const PARALLEL_SCORE_MIN_ITEMS: usize = 64;
 
+/// Reduce ONE freshly-scored item to the tuple `persist_analysis_scores` writes,
+/// applying THE canonical score-shaping boundary (`scoring::finalize_scores`)
+/// first.
+///
+/// `finalize_scores` documents itself as "call at the end of EVERY analysis path
+/// (cached, fresh, deep-scan, backfill, headless)", but neither backfill cycle
+/// called it — `backfill_unscored_cycle` and `drain_stale_version_cycle` both
+/// went straight from `score_chunk` to `db.persist_analysis_scores`. Only
+/// `analysis_deep_scan.rs` and `scoring/analyzer.rs` honoured the contract.
+///
+/// The gap is LATENT, not live: `score_item` already applies both
+/// `apply_final_soft_ceiling` and the categorical `score_ceiling` internally,
+/// and this path deliberately runs no post-pipeline reranker, so nothing here
+/// currently exceeds the invariant. It was unguarded, though — the two paths
+/// that DO call `finalize_scores` acquired their rerankers and cluster boosts
+/// after their scores were computed, and the first boost added to the backfill
+/// path would have persisted unbounded. Funnelling every persisted tuple
+/// through this one function makes the boundary impossible to skip by
+/// construction: `score_chunk` has no other way to build the tuple.
+fn persistable(
+    item_id: i64,
+    mut r: crate::SourceRelevance,
+) -> Option<(i64, f32, Option<String>, Option<String>)> {
+    scoring::finalize_scores(std::slice::from_mut(&mut r));
+    // persist_analysis_scores only writes top_score > 0; the caller returns the
+    // id unconditionally so mark_items_scored_version stamps even re-scored noise.
+    (r.top_score > 0.0).then_some((item_id, r.top_score, r.signal_type, r.signal_priority))
+}
+
 /// Score a batch of items through the cheap PASIFA pipeline, in parallel across
 /// up to `READ_POOL_SIZE` OS threads. Both backfill (never-scored) and the
 /// stale-version drain run this identical per-item loop; extracting it keeps
@@ -88,17 +117,7 @@ fn score_chunk(
             options,
             classifier,
         );
-        // persist_analysis_scores only writes top_score > 0; the id is always
-        // returned so mark_items_scored_version stamps even re-scored noise.
-        let scored = (r.top_score > 0.0).then(|| {
-            (
-                item.id,
-                r.top_score,
-                r.signal_type.clone(),
-                r.signal_priority.clone(),
-            )
-        });
-        (scored, item.id)
+        (persistable(item.id, r), item.id)
     };
 
     let threads = std::thread::available_parallelism()
@@ -218,6 +237,73 @@ pub(crate) async fn run_backfill_cycle(chunk_size: Option<usize>) -> Result<Back
 mod tests {
     use super::*;
     use crate::scoring::ScoringContext;
+
+    /// Minimal `SourceRelevance` via serde defaults, with an optional
+    /// categorical `score_ceiling` in the breakdown.
+    fn relevance(top_score: f32, score_ceiling: Option<f32>) -> crate::SourceRelevance {
+        let mut r: crate::SourceRelevance = serde_json::from_value(serde_json::json!({
+            "id": 7,
+            "title": "item-7",
+            "url": null,
+            "top_score": top_score,
+            "matches": [],
+            "relevant": true,
+            "source_type": "test",
+        }))
+        .expect("SourceRelevance from JSON");
+        if let Some(ceiling) = score_ceiling {
+            r.score_breakdown = Some(
+                serde_json::from_value(serde_json::json!({
+                    "context_score": 0.0,
+                    "interest_score": 0.0,
+                    "ace_boost": 0.0,
+                    "affinity_mult": 1.0,
+                    "anti_penalty": 0.0,
+                    "confidence_by_signal": {},
+                    "score_ceiling": ceiling,
+                }))
+                .expect("ScoreBreakdown from JSON"),
+            );
+        }
+        r
+    }
+
+    /// The backfill persist path must honour the categorical `score_ceiling`.
+    /// Without `finalize_scores` a 0.99 overwrite on a 0.60-capped item is
+    /// persisted verbatim.
+    #[test]
+    fn persistable_reasserts_the_categorical_score_ceiling() {
+        let (id, score, _, _) =
+            persistable(7, relevance(0.99, Some(0.60))).expect("positive score is persistable");
+        assert_eq!(id, 7);
+        assert!(
+            score <= 0.60 + f32::EPSILON,
+            "capped item must not be persisted above its ceiling, got {score}"
+        );
+    }
+
+    /// …and the absolute-max boundary, which is the invariant
+    /// `final_ceiling.absolute_max` in `scoring/pipeline.scoring`.
+    #[test]
+    fn persistable_holds_the_absolute_max_boundary() {
+        let (_, score, _, _) =
+            persistable(7, relevance(0.99, None)).expect("positive score is persistable");
+        assert!(
+            score < 0.99,
+            "a score above the boundary knee must be compressed, got {score}"
+        );
+        assert!(
+            score <= crate::scoring_config::FINAL_CEILING_ABSOLUTE_MAX,
+            "persisted score must honour final_ceiling.absolute_max, got {score}"
+        );
+    }
+
+    /// Noise (score 0) is never persisted — the caller still returns the id so
+    /// `mark_items_scored_version` stamps it and the drain converges.
+    #[test]
+    fn persistable_drops_zero_scores() {
+        assert!(persistable(7, relevance(0.0, None)).is_none());
+    }
 
     fn item(id: i64) -> crate::db::StoredSourceItem {
         crate::db::StoredSourceItem {

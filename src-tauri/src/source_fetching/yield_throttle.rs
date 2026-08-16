@@ -10,7 +10,7 @@
 //! gate has no good operating point, it shreds recall — see
 //! `project_scoring_relevance_funnel`), we throttle at the SOURCE: a source that
 //! consistently yields little relevance for this user gets fetched less. This is
-//! the "gets sharper every day" thesis applied to acquisition — and it is
+//! relevance-yield adaptation applied to acquisition — and it is
 //! self-correcting, because:
 //!   - the yield is measured over a RECENT window, so if the user's interests
 //!     shift (or a quiet source starts producing signal) its yield rises and

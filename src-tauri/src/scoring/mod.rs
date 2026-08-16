@@ -57,7 +57,7 @@ pub(crate) use context::{
 };
 pub(crate) use dedup::{
     apply_domain_diversity, apply_source_topic_diversity, compute_serendipity_candidates,
-    dedup_results, fuzzy_dedup_results, sort_results, topic_dedup_results,
+    dedup_results, fuzzy_dedup_results, normalize_result_url, sort_results, topic_dedup_results,
 };
 pub(crate) use dependencies::{
     is_ambiguous_dep_name, is_generic_topic_token, match_dependencies, STRONG_GROUNDING_CONFIDENCE,
@@ -260,6 +260,14 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 //     curated feed vs 8% configured).
 // (e) Threshold auto-tuners frozen (two conflicting tuners + a kv
 //     resurrection path); threshold is the fixed default.
+//
+// NO bump for the 2026-08-12 negative-stack change (AD-030 arc): the
+// auto-detected anti-topic input to `build_negative_stack` was removed —
+// the last behavioral scoring path after v19. Checked against the live
+// corpus by read-only probe: `anti_topics` has 0 rows, so the priors the
+// builder produces are byte-identical with and without the input; stored
+// scores cannot differ and a corpus re-stamp would be a no-op. If a
+// corpus with populated anti_topics ever needs converging, bump then.
 pub(crate) const PIPELINE_VERSION: i32 = 19;
 
 /// Score a single item through the PASIFA V2 pipeline.

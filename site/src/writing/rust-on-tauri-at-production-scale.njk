@@ -111,7 +111,7 @@ CRITICAL: Never hold a MutexGuard&lt;T&gt; across an .await point.</code></pre>
       <p>Tauri 2.0&rsquo;s real promise at this scale isn&rsquo;t the small binary. It&rsquo;s that <strong>the backend is a first-class Rust process that happens to know how to open windows</strong> &mdash; which meant that when we needed a windowless engine, signed background receipts, and an in-process test harness, the framework didn&rsquo;t fight us. We cleared a window list and kept building.</p>
       <p>5,676 tests pass as of publication &mdash; 4,326 Rust, 1,350 frontend. The webview never met most of them.</p>
 
-      <p style="color: var(--text-muted); font-style: italic; border-top: 1px solid var(--border); padding-top: 20px;">4DA reads the internet for developers &mdash; privately, locally &mdash; and gets sharper every day. The engine described here is at <a href="/">4da.ai</a> (every network call it makes is enumerated in <a href="https://github.com/4DA-Systems/4DA/blob/main/NETWORK.md">NETWORK.md</a>); the in-process testing framework is <a href="https://github.com/4DA-Systems/Victauri">open source</a>.</p>
+      <p style="color: var(--text-muted); font-style: italic; border-top: 1px solid var(--border); padding-top: 20px;">4DA reads the internet for developers &mdash; privately, locally. Your codebase decides what's relevant. The engine described here is at <a href="/">4da.ai</a> (every network call it makes is enumerated in <a href="https://github.com/4DA-Systems/4DA/blob/main/NETWORK.md">NETWORK.md</a>); the in-process testing framework is <a href="https://github.com/4DA-Systems/Victauri">open source</a>.</p>
     </article>
   </div>
 

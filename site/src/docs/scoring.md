@@ -14,10 +14,10 @@ Every item is scored on five independent axes. This is the core of what 4DA call
 | Axis | What it measures |
 |---|---|
 | **Context** | Semantic similarity to your active codebase |
-| **Interest** | Alignment with your declared and learned topics |
+| **Interest** | Alignment with your declared topics |
 | **ACE** | Real-time signals from your Git commits and file edits |
 | **Dependency** | Direct matches against your installed packages |
-| **Learned** | Save / dismiss feedback that boosts or suppresses future scores |
+| **Learned** | Reserved — held out of scoring until it can be validated against your explicit feedback |
 
 ## The 2-of-5 gate
 

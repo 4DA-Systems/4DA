@@ -43,6 +43,7 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       frontend: ${{ steps.filter.outputs.frontend }}
       mcp: ${{ steps.filter.outputs.mcp }}
+      relay: ${{ steps.filter.outputs.relay }}
       workflows: ${{ steps.filter.outputs.workflows }}
       uncovered: ${{ steps.uncovered.outputs.uncovered }}
     steps:
@@ -119,6 +120,12 @@ jobs:
               - 'public/**'
             mcp:
               - 'mcp-4da-server/**'
+            relay:
+              # relay/ carried its own .github/workflows/ci.yml, nested where
+              # GitHub never looks — only the repository root is read — so the
+              # relay's CI had never executed once. It is a standalone crate
+              # outside the src-tauri filter, so it needs its own trigger.
+              - 'relay/**'
 
   frontend:
     name: Frontend
@@ -270,6 +277,48 @@ jobs:
       - name: Run tests
         working-directory: mcp-4da-server
         run: pnpm run test
+
+  relay:
+    name: Relay
+    needs: changes
+    # See the `!cancelled()` note on the frontend job — without it the
+    # workflow_dispatch clause is unreachable.
+    if: ${{ !cancelled() && (needs.changes.outputs.relay == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: relay
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
+        with:
+          workspaces: relay
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      # --locked, not a bare build: relay/Dockerfile used to fall back to an
+      # unlocked build on any failure, so the deployed binary need not have
+      # matched relay/Cargo.lock. CI now proves the lockfile actually resolves.
+      - name: Test
+        run: cargo test --locked
+
+      - name: Advisory audit
+        run: |
+          cargo install cargo-audit --locked --quiet 2>/dev/null || true
+          cargo audit
 
   # ─────────────────────────────────────────────────────────────────────
   # Repo-wide invariants. NO path filter and NO `needs:` — these must run on
@@ -593,7 +642,7 @@ jobs:
     # `repo-guards` is unfiltered and therefore never skips — it is the only leg
     # guaranteed to have actually run, and it must gate the merge (this job is
     # the sole required status check).
-    needs: [changes, repo-guards, frontend, mcp-server, rust]
+    needs: [changes, repo-guards, frontend, mcp-server, relay, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

@@ -48,7 +48,7 @@ Now apply that to your professional life as a developer:
 1. **Know what you're working on.** Scan your projects, parse your manifests, read your git history, detect your tech stack. Automatically. Without you configuring anything.
 2. **Route the right information to you.** Score every piece of content from every source against your actual context. Show only what passes the threshold. Reject everything else.
 3. **Protect against threats.** Monitor CVE feeds. Cross-reference against your installed dependencies. Alert you within minutes of a vulnerability publication — before you see it on Twitter, before your security team sends the email.
-4. **Learn from your behavior.** Track what you save, what you dismiss, what you read. Get more accurate every week. After 3 months, know your taste better than any algorithm trained on someone else's data.
+4. **Use your behavior — under your control.** Record what you save, what you dismiss, what you read, into a preference profile you can inspect, pin, or forget. Let dismissals teach the Brief what to stop showing you. Keep all of it local.
 
 That's a Developer Operating System. Not a feed reader. Not a dashboard. Not a search engine. An intelligence framework for your attention.
 
@@ -68,15 +68,15 @@ This isn't a privacy feature. It's an architecture constraint. The system can't 
 
 Here's what makes this different from every tool that came before it.
 
-A feed reader shows you the same quality of content on day 1 and day 100. It doesn't learn. It doesn't improve. It doesn't know you any better after a year than it did after an hour.
+A feed reader shows you whatever arrived today, on day 1 and on day 100. It holds nothing, connects nothing, and knows nothing about the code you ship.
 
-A Developer Operating System compounds. Every piece of feedback makes the scoring more accurate. Every week adds a snapshot to your technology evolution timeline. Every save, every dismiss, every "not relevant" click refines the model.
+A Developer Operating System accumulates. Every week adds a snapshot to your technology evolution timeline. Every save and dismissal builds a preference profile you can inspect — and teaches the Brief what to stop showing you. Every item scored joins a local corpus that Signal Chains connect and engine updates re-judge.
 
-After 30 days, your system is noticeably smarter than it was on day 1. After 90 days, it catches things you would have missed. After 180 days, it has a richer understanding of your professional identity than LinkedIn, GitHub, and Stack Overflow combined.
+After 30 days, you have a scored archive of your ecosystem that no search engine can reconstruct. After 90 days, blind-spot analysis has caught risks you would have missed. After 180 days, your machine holds a richer record of your professional attention than LinkedIn, GitHub, and Stack Overflow combined.
 
 And unlike those platforms, you own that data. It lives on your machine. It's not training someone else's model. It's not selling your attention to advertisers. It's yours.
 
-The compound effect creates switching cost — but not through lock-in. Through *investment.* Leaving means losing the model that took 6 months to train. Not because the vendor won't let you export it, but because no other system knows how to use it. It's like leaving a house you built yourself. You're not locked in. You just don't want to leave.
+The compound effect creates switching cost — but not through lock-in. Through *accumulation.* Leaving means leaving a personal archive: the scored corpus, the decision history, the configuration shaped to your stack. Not because the vendor won't let you export it, but because it exists nowhere else. It's like leaving a house you built yourself. You're not locked in. You just don't want to leave.
 
 ## What This Means for Teams
 
@@ -98,7 +98,7 @@ Wrong because the value proposition collapses the moment you ask a developer to 
 
 The hard path — local-first, desktop-native, Rust backend, zero telemetry, bring-your-own-keys — is harder to build and harder to monetize. But it's the only path that produces a system developers actually trust.
 
-Trust compounds just like accuracy does. Every day the system runs on your machine without phoning home, without leaking data, without surprising you with a privacy policy change — that's another day of trust deposited. After 6 months, you don't think about it anymore. It's just there. Part of your workflow. Part of your operating system.
+Trust compounds just like the corpus does. Every day the system runs on your machine without phoning home, without leaking data, without surprising you with a privacy policy change — that's another day of trust deposited. After 6 months, you don't think about it anymore. It's just there. Part of your workflow. Part of your operating system.
 
 ## What Comes Next
 
@@ -113,13 +113,13 @@ On top of this layer, you can build:
 - **Standing queries** that persistently watch for topics, packages, or authors you care about
 - **Source plugins** that let the community add new content sources without modifying the core
 
-All of these run locally. All of them get better with time. All of them are impossible to replicate in a cloud-only architecture because they require the context that only exists on your machine.
+All of these run locally. All of them deepen as the corpus grows. All of them are impossible to replicate in a cloud-only architecture because they require the context that only exists on your machine.
 
 ---
 
 *The question isn't whether developers need an operating system for their professional cognition. They clearly do — they've been building ad hoc versions of it with bookmarks, RSS feeds, newsletters, and Slack channels for decades.*
 
-*The question is whether someone would build it properly. Local-first. Privacy-respecting. Compound-learning. Open enough to trust, closed enough to sustain.*
+*The question is whether someone would build it properly. Local-first. Privacy-respecting. Corpus-owning. Open enough to trust, closed enough to sustain.*
 
 *We did.*
 
@@ -127,7 +127,7 @@ All of these run locally. All of them get better with time. All of them are impo
 
 4DA is the implementation of this vision. A privacy-first developer intelligence framework built on an Authority Stack -- a hierarchy of principles, invariants, and architectural decisions that govern how intelligence flows from raw content to actionable signal.
 
-The framework encompasses PASIFA (the 5-axis scoring methodology), ACE (the Autonomous Context Engine that understands your codebase), and a compound learning system that gets measurably better every week. It is not a product bolted together from features. It is a system designed from first principles to solve the developer cognition problem.
+The framework encompasses PASIFA (the 5-axis scoring methodology), ACE (the Autonomous Context Engine that understands your codebase), and a local corpus that every engine update re-judges end to end. It is not a product bolted together from features. It is a system designed from first principles to solve the developer cognition problem.
 
 Explore the full framework at [4da.ai/framework](https://4da.ai/framework).
 

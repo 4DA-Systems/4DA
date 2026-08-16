@@ -8,7 +8,7 @@
 //! and emits `SeededDecision`s that give the intelligence pipeline
 //! meaningful personal priors from Day 0.
 //!
-//! **Why this matters:** Intelligence compounds with every decision and
+//! **Why this matters:** the decision record grows with every decision and
 //! outcome fed to it. A fresh install with zero decisions produces
 //! generic output. But every developer who has shipped anything has
 //! *already made* dozens of decisions; they're just sitting in git

@@ -540,7 +540,14 @@ pub struct PrivacyConfig {
     #[serde(default = "default_llm_content_level")]
     pub llm_content_level: String,
     /// Whether the user has acknowledged the cloud LLM data sharing disclosure.
-    /// Must be true before cloud providers (Anthropic/OpenAI) can be used.
+    ///
+    /// **This is a record, not a gate.** Nothing checks it before a cloud call —
+    /// `settings/manager.rs` sets it to `true` at configure-time, when the BYOK setup
+    /// UI has shown what gets sent, and no call site reads it as a precondition. That
+    /// is the deliberate design recorded in `.ai/INVARIANTS.md` INV-031: it is the
+    /// user's own key and data with no third-party recipient, so a hard acknowledgment
+    /// gate would add friction to the recommended path for no protective benefit.
+    /// Do not describe it as an enforced gate; it isn't one.
     #[serde(default)]
     pub cloud_llm_disclosure_accepted: bool,
     /// Whether the user has opted in to local activity tracking.

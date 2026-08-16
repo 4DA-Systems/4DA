@@ -7,6 +7,7 @@ use sqlx::SqlitePool;
 
 use crate::auth::{issue_token, AuthTeam};
 use crate::error::RelayError;
+use crate::license;
 
 #[derive(Serialize)]
 pub struct ClientInfo {
@@ -31,7 +32,14 @@ pub struct CreateTeamRequest {
     pub client_id: String,
     pub display_name: String,
     pub public_key: Vec<u8>,
-    pub license_key_hash: String,
+    /// The full `4DA-` licence key, NOT a hash.
+    ///
+    /// This used to be `license_key_hash`, which the relay accepted from the
+    /// client and never checked — so any non-empty string created a team and got
+    /// an admin token back. A hash proves nothing; only the signature does, and
+    /// only the holder of the key can produce one. The relay derives the stored
+    /// hash itself from the verified key.
+    pub license_key: String,
 }
 
 #[derive(Serialize)]
@@ -69,15 +77,31 @@ pub struct JoinTeamResponse {
 }
 
 /// POST /teams -- create a new team (admin).
+///
+/// This is the bootstrap endpoint: it issues the caller's first JWT, so it cannot
+/// take an `AuthTeam` extractor. Entitlement is proved instead by an Ed25519
+/// signature over the licence payload, verified against the same authority the
+/// desktop app trusts.
 pub async fn create_team(
     State(pool): State<SqlitePool>,
     Json(body): Json<CreateTeamRequest>,
 ) -> Result<Json<CreateTeamResponse>, RelayError> {
-    // Validate license key hash is provided
-    if body.license_key_hash.is_empty() {
-        return Err(RelayError::BadRequest(
-            "License key required to create a team".to_string(),
-        ));
+    // Proof of entitlement. Rejects unsigned strings, forged signatures, expired
+    // keys and non-team tiers. The hash is derived here, never taken from the body.
+    let verified = license::verify_team_license(&body.license_key)?;
+
+    // One team per licence. Without this, a single valid Team key mints unlimited
+    // teams, each with its own admin token and storage — the licence would gate
+    // who can create a team but not how many.
+    let existing: Option<(String,)> =
+        sqlx::query_as("SELECT team_id FROM teams WHERE license_key_hash = $1")
+            .bind(&verified.key_hash)
+            .fetch_optional(&pool)
+            .await?;
+    if let Some((existing_team,)) = existing {
+        return Err(RelayError::BadRequest(format!(
+            "This license already has a team ({existing_team}). Join it with an invite code instead."
+        )));
     }
 
     // Insert into teams table
@@ -87,7 +111,7 @@ pub async fn create_team(
     )
     .bind(&body.team_id)
     .bind(&body.client_id)
-    .bind(&body.license_key_hash)
+    .bind(&verified.key_hash)
     .execute(&pool)
     .await?;
 
@@ -105,7 +129,12 @@ pub async fn create_team(
 
     let token = issue_token(&body.team_id, &body.client_id, "admin")?;
 
-    tracing::info!(target: "relay::clients", team_id = %body.team_id, "Team created");
+    tracing::info!(
+        target: "relay::clients",
+        team_id = %body.team_id,
+        tier = %verified.payload.tier,
+        "Team created"
+    );
 
     Ok(Json(CreateTeamResponse {
         token,

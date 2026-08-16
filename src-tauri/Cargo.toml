@@ -121,10 +121,16 @@ tauri-plugin-autostart = "2"
 # System hardware detection (RAM, CPU) for model recommendations
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
-# AI agent introspection & control (MCP server, zero-cost in release builds)
+# AI agent introspection & control (MCP server).
 # Caret-compatible (not "=") so patch/minor Victauri releases flow in via
-# `cargo update` without a manual Cargo.toml edit. It's a debug-only dependency
-# (stripped from release builds), so updates only affect the local dev loop.
+# `cargo update` without a manual Cargo.toml edit.
+# NOT a debug-only dependency: it sits in [dependencies], under no
+# cfg(debug_assertions) target table, and `lib.rs` registers VictauriBuilder
+# unconditionally (unlike tauri_plugin_updater a few lines above it, which IS
+# cfg-gated). It is therefore compiled into and registered by release builds.
+# Whatever inertness release builds get comes from the crate's own internal
+# gating, not from anything in this manifest — so treat a Victauri advisory as
+# affecting the shipped binary until proven otherwise.
 # 2026-06-14: bumped 0.7 -> 0.8 (0.8.0 "command catalog, cross-engine, robustness"
 # release crosses the caret-0.7 ceiling, so the minor bump needs this manual edit).
 victauri-plugin = "0.8"
