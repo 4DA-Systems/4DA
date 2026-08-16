@@ -2,24 +2,24 @@
 layout: docs.njk
 eyebrow: "How it works"
 title: "Sources — 4DA Docs"
-description: "The 20+ content sources 4DA reads, all fetched locally from public endpoints you configure."
+description: "The 22 content sources 4DA reads, all fetched locally from public endpoints you configure."
 permalink: "/docs/sources/"
 templateEngineOverride: md
 ---
 
 # Sources
 
-4DA reads from **20+ source adapters**, all running locally in the background. Each one fetches public content from an endpoint you configured — there is no 4DA-operated relay in between.
+4DA reads from **22 source adapters**, all running locally in the background. Each one fetches public content from an endpoint you configured — there is no 4DA-operated relay in between.
 
 ## What's covered
 
 | Category | Sources |
 |---|---|
-| **Community** | Hacker News, Reddit, Lobsters, DEV.to, Stack Overflow |
+| **Community** | Hacker News, Reddit, Lobsters, DEV.to, Stack Overflow, Lemmy |
 | **Code & releases** | GitHub, crates.io, npm, PyPI, Go modules |
 | **Research** | arXiv, Papers with Code, Hugging Face |
-| **Security** | CVE / OSV vulnerability databases |
-| **Social & video** | Twitter/X, Bluesky, YouTube |
+| **Security** | CVE, OSV |
+| **Social & video** | Twitter/X, Bluesky, Mastodon, YouTube |
 | **Launches** | Product Hunt |
 | **Anything else** | Custom RSS feeds |
 
