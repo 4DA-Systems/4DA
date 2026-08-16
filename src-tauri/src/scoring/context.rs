@@ -224,19 +224,6 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     // no longer reads it.
     let taste_embedding: Option<Vec<f32>> = None;
 
-    // Detect contradicted topics (both high affinity AND anti-topic).
-    // Lightweight query — just topic names for necessity scoring.
-    let contradicted_topics = {
-        let conn = db.conn.lock();
-        crate::anomaly::get_contradicted_topics(&conn).unwrap_or_default()
-    };
-    if !contradicted_topics.is_empty() {
-        info!(target: "4da::scoring",
-            count = contradicted_topics.len(),
-            "Contradicted topics detected for necessity boosting"
-        );
-    }
-
     info!(target: "4da::ace",
         topics = ace_ctx.active_topics.len(),
         tech = ace_ctx.detected_tech.len(),
@@ -286,7 +273,6 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         topic_half_lives,
         anti_pattern_penalties,
         archetype_penalties,
-        contradicted_topics,
         sovereign_profile,
         user_role,
         experience_level,

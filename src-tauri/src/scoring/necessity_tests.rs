@@ -18,7 +18,6 @@ fn default_inputs() -> NecessityInputs {
         matched_window_label: None,
         age_hours: 0.0,
         content_type: None,
-        contradiction_boost: 0.0,
         strongly_grounded: false,
         version_affected: None,
     }
@@ -483,70 +482,6 @@ fn test_security_takes_priority_over_breaking_change() {
         result.category,
         NecessityCategory::SecurityVulnerability,
         "Security should take priority"
-    );
-    assert!(result.score > 0.90);
-}
-
-#[test]
-fn test_contradiction_boost_triggers() {
-    let inputs = NecessityInputs {
-        contradiction_boost: 0.5, // single topic match
-        ..default_inputs()
-    };
-    let result = compute_necessity(&inputs);
-    assert!(
-        result.score > 0.40,
-        "Contradiction with 0.5 boost should score > 0.40, got {}",
-        result.score
-    );
-    assert_eq!(result.category, NecessityCategory::BlindSpot);
-    assert_eq!(result.urgency, Urgency::Awareness);
-    assert!(result.reason.contains("conflicting signals"));
-}
-
-#[test]
-fn test_contradiction_strong_boost() {
-    let inputs = NecessityInputs {
-        contradiction_boost: 1.0, // multiple topic matches
-        ..default_inputs()
-    };
-    let result = compute_necessity(&inputs);
-    assert!(
-        result.score >= 0.65,
-        "Strong contradiction should score >= 0.65, got {}",
-        result.score
-    );
-}
-
-#[test]
-fn test_contradiction_no_boost() {
-    let inputs = NecessityInputs {
-        contradiction_boost: 0.0,
-        ..default_inputs()
-    };
-    let result = compute_necessity(&inputs);
-    assert!(
-        result.score < 0.01,
-        "No contradiction boost should not trigger, got {}",
-        result.score
-    );
-}
-
-#[test]
-fn test_security_takes_priority_over_contradiction() {
-    let inputs = NecessityInputs {
-        dep_match_score: 0.5,
-        matched_deps: vec!["openssl".to_string()],
-        signal_type: Some("security_alert".to_string()),
-        cve_severity: Some("CRITICAL".to_string()),
-        contradiction_boost: 1.0, // also has contradiction
-        ..default_inputs()
-    };
-    let result = compute_necessity(&inputs);
-    assert_eq!(
-        result.category,
-        NecessityCategory::SecurityVulnerability,
-        "Security should take priority over contradiction"
     );
     assert!(result.score > 0.90);
 }
