@@ -13,8 +13,9 @@ use super::{
 
 const NUM_PERSONAS: usize = 9;
 /// Number of calibration items. `pub(crate)` because the IPC boundary
-/// (`taste_test_commands::taste_test_respond`) must validate against it —
-/// see the `debug_assert!` in `update_with_latency`.
+/// (`taste_test_commands::taste_test_respond`) validates against it via
+/// `ipc_guard::validate_range` — that is where an out-of-range slot is
+/// REJECTED; `update_with_latency` only degrades gracefully behind it.
 pub(crate) const NUM_ITEMS: usize = 15;
 const EARLY_TERMINATION_MIN_ITEMS: usize = 7;
 const EARLY_TERMINATION_ENTROPY_THRESHOLD: f64 = 1.2;
@@ -68,16 +69,24 @@ impl InferenceState {
         response: &TasteResponse,
         response_time_ms: Option<u64>,
     ) {
-        // Downgraded from `assert!` once the IPC boundary started validating.
-        // As an `assert!` this was live in RELEASE and took the whole process
-        // down on unvalidated frontend input; the range now belongs to
-        // `ipc_guard::validate_range` in `taste_test_respond`, and this is a
-        // development-time contract check for in-process callers.
-        debug_assert!(item_slot < NUM_ITEMS, "item_slot out of range");
-
+        // This was `assert!(item_slot < NUM_ITEMS)` — live in RELEASE, directly
+        // above `LIKELIHOOD_MATRIX[item_slot]`, fed straight from IPC. The range
+        // check now lives at the trust boundary (`ipc_guard::validate_range` in
+        // `taste_test_respond`).
+        //
+        // What remains here is a graceful fallback, NOT a `debug_assert!`. Two
+        // reasons the intermediate `debug_assert!` was wrong:
+        //   1. It panics in debug builds — which is what the founder dogfoods,
+        //      so "a development-time contract check" means "crashes the app I
+        //      use daily" for a condition the boundary already rejects.
+        //      CLAUDE.md: never panic in production Rust, use graceful
+        //      fallbacks.
+        //   2. It made this fallback untestable. Any test proving the release
+        //      behaviour tripped the assert first, so the branch below could
+        //      never be exercised — and an untested backstop is a guess.
         let Some(likelihoods) = LIKELIHOOD_MATRIX.get(item_slot) else {
-            // Release-build backstop: an out-of-range slot is a no-op update
-            // rather than an index panic. The posterior is simply unchanged.
+            // No-op update: posterior, history and shown_slots are all left
+            // exactly as they were, so a bad slot cannot corrupt the inference.
             tracing::warn!(
                 target: "4da::taste_test",
                 item_slot,
@@ -357,6 +366,40 @@ mod tests {
         for &w in state.posterior() {
             assert!((w - expected).abs() < 1e-10);
         }
+    }
+
+    /// The defence-in-depth layer behind `ipc_guard::validate_range`.
+    ///
+    /// `update_with_latency` used to `assert!(item_slot < NUM_ITEMS)` — live in
+    /// release — immediately before `LIKELIHOOD_MATRIX[item_slot]`. An
+    /// out-of-range slot must now be a NO-OP: no panic, and no corruption of
+    /// the inference state either. This test is only writable because the
+    /// intermediate `debug_assert!` was removed; with it, the assert fired
+    /// first and this branch could never be reached.
+    #[test]
+    fn out_of_range_slot_is_a_no_op_not_a_panic() {
+        let mut state = InferenceState::new();
+        let before = *state.posterior();
+
+        for slot in [NUM_ITEMS, NUM_ITEMS + 1, 9_999, usize::MAX] {
+            state.update(slot, &TasteResponse::StrongInterest);
+        }
+
+        assert_eq!(
+            *state.posterior(),
+            before,
+            "an out-of-range slot must leave the posterior untouched"
+        );
+        assert!(
+            state.responses().is_empty(),
+            "an out-of-range slot must not be recorded as an observation"
+        );
+
+        // A valid slot still works afterwards — the guard rejects the bad input
+        // without poisoning the session.
+        state.update(0, &TasteResponse::Interested);
+        assert_eq!(state.responses().len(), 1);
+        assert_ne!(*state.posterior(), before);
     }
 
     #[test]
