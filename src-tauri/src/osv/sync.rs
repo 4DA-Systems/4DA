@@ -256,7 +256,15 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
             // so it can never populate the mirror on its own. Fall back to the
             // cached ZIP mirror (full advisory JSON, matched locally). This — not
             // the batch query — is what actually fills `osv_advisories` for
-            // npm/crates.io, and it never sends the user's dependency set anywhere.
+            // npm/crates.io.
+            //
+            // The ZIP path itself sends no package names: it downloads the whole
+            // ecosystem archive and matches locally. That is NOT a privacy property
+            // of OSV sync as a whole — `sync_ecosystem` above already POSTed the
+            // user's package names to `OSV_BATCH_URL` (up to 1000 per request), and
+            // it is attempted first on every cycle. Reaching this branch means the
+            // dependency set has already been disclosed to api.osv.dev. Only a
+            // ZIP-only configuration would keep it local.
             Ok(_) => match populate_from_zip_mirror(db, ecosystem, packages).await {
                 Ok(zip_count) if zip_count > 0 => {
                     info!(
