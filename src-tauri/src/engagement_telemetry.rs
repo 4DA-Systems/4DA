@@ -5,8 +5,9 @@
 //!
 //! Every click, save, dismiss, and explicit feedback event flows through here
 //! to record evidence for learned preferences. This is the wire that makes
-//! preference profile real: interactions become evidence, evidence
-//! accumulates into facets, facets influence scoring.
+//! the preference profile real: interactions become evidence, evidence
+//! accumulates into facets, facets feed the user-facing preference surfaces
+//! (never scores or verdicts — INV-023).
 
 use rusqlite::{params, Connection};
 use tracing::debug;

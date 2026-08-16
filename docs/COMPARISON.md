@@ -154,7 +154,7 @@ This would give OpenClaw users ambient intelligence without leaving chat, and gi
 - You're not time-constrained
 
 #### When to Choose 4DA
-- You want only relevant items (92% of incoming content filtered, measured across 9 developer personas)
+- You want only relevant items (93% of incoming content filtered, measured across 9 developer personas)
 - You're working on specific projects
 - You want ambient monitoring, not manual checking
 - You value your time highly
