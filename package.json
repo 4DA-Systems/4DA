@@ -45,7 +45,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:scripts": "node --test scripts/check-vanity-metrics.test.cjs scripts/check-llm-gate-honesty.test.cjs scripts/check-no-window-spawns.test.cjs scripts/check-release-channel.test.cjs scripts/generate-notice.test.cjs scripts/ghost-commands.test.cjs scripts/kill-fourda.test.cjs scripts/kill-port.test.cjs site/lib/entitlement.test.mjs",
+    "test:scripts": "node --test scripts/check-vanity-metrics.test.cjs scripts/check-llm-gate-honesty.test.cjs scripts/check-no-window-spawns.test.cjs scripts/check-release-channel.test.cjs scripts/gate-hook.test.cjs scripts/gate-jobs.test.cjs scripts/generate-notice.test.cjs scripts/ghost-commands.test.cjs scripts/kill-fourda.test.cjs scripts/kill-port.test.cjs site/lib/entitlement.test.mjs",
     "validate:sizes": "node scripts/check-file-sizes.cjs",
     "validate:coverage": "node scripts/coverage-map.cjs",
     "validate:coverage-gate": "node scripts/coverage-gate.cjs",

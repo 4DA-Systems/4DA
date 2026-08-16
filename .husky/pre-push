@@ -4,6 +4,20 @@
 
 echo "Running CADE pre-push validation..."
 
+# ── Capture the pushed refs ONCE, before anything consumes them ────────────
+# git feeds `<local-ref> <local-sha> <remote-ref> <remote-sha>` lines on stdin,
+# and stdin is readable exactly once. The secret-scan loop near the bottom of
+# this file used to `while read` straight off stdin, which drained it — so any
+# hook CHAINED after that loop (tools/install-gate.sh appends the local gate's
+# delegate block to the end of THIS file) got an empty stdin. .githooks/pre-push
+# then found no refs, skipped GATE 1 entirely, and still printed success.
+#
+# Reading once into a variable fixes both halves: the loop below is fed from the
+# variable, and GATE_PUSH_REFS is exported so the chained delegate can forward
+# the same refs explicitly instead of relying on a stream that is already at EOF.
+GATE_PUSH_REFS="$(cat)"
+export GATE_PUSH_REFS
+
 # ── Path-aware gating ──────────────────────────────────────────────────────
 # The two heavy local checks (full frontend tests, cargo clippy) are an exact
 # duplicate of jobs that now run as REQUIRED, branch-protected CI gates
@@ -116,6 +130,11 @@ echo "Scanning for secrets in push range..."
 REMOTE="$1"
 URL="$2"
 while read LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+    # The loop is now fed from a here-doc (see GATE_PUSH_REFS above), and an
+    # empty variable yields one blank line where an empty stdin yielded none.
+    # Without this guard that blank line passes the != all-zeros test below and
+    # the scan runs with an empty range.
+    [ -n "$LOCAL_SHA" ] || continue
     if [ "$LOCAL_SHA" != "0000000000000000000000000000000000000000" ]; then
         # Scan exactly the commits this push contributes — no more, no less.
         #
@@ -188,5 +207,7 @@ while read LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
             fi
         fi
     fi
-done
+done <<GATE_PUSH_REFS_EOF
+$GATE_PUSH_REFS
+GATE_PUSH_REFS_EOF
 echo "Pre-push validation passed!"
