@@ -429,44 +429,6 @@ fn prune_stale_evidence(conn: &Connection) {
 // Queries
 // ============================================================================
 
-pub fn get_active_facets(conn: &Connection, class: FacetClass) -> Vec<LearnedFacet> {
-    load_facets_by_state(conn, class, FacetState::Active)
-}
-
-pub fn get_active_and_provisional(conn: &Connection) -> Vec<LearnedFacet> {
-    let mut stmt = match conn.prepare(
-        "SELECT facet_id, class, key, value, stability, state, user_state, evidence_count, first_seen_at, last_seen_at
-         FROM learned_facets
-         WHERE state IN ('active', 'provisional')
-         ORDER BY stability DESC",
-    ) {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
-
-    stmt.query_map([], |row| {
-        Ok(LearnedFacet {
-            facet_id: row.get(0)?,
-            class: FacetClass::from_str(&row.get::<_, String>(1)?).unwrap_or(FacetClass::Interest),
-            key: row.get(2)?,
-            value: row.get(3)?,
-            stability: row.get(4)?,
-            state: FacetState::from_str(&row.get::<_, String>(5)?),
-            user_state: UserState::from_str(&row.get::<_, String>(6)?),
-            evidence_count: row.get(7)?,
-            first_seen_at: row.get(8)?,
-            last_seen_at: row.get(9)?,
-        })
-    })
-    .ok()
-    .map(|rows| rows.flatten().collect())
-    .unwrap_or_default()
-}
-
-pub fn get_vetoes(conn: &Connection) -> Vec<LearnedFacet> {
-    get_active_facets(conn, FacetClass::Veto)
-}
-
 pub fn set_user_state(conn: &Connection, facet_id: &str, state: UserState) -> bool {
     conn.execute(
         "UPDATE learned_facets SET user_state = ?1 WHERE facet_id = ?2",
@@ -562,40 +524,6 @@ fn load_all_facets(conn: &Connection) -> rusqlite::Result<Vec<LearnedFacet>> {
         .collect();
 
     Ok(facets)
-}
-
-fn load_facets_by_state(
-    conn: &Connection,
-    class: FacetClass,
-    state: FacetState,
-) -> Vec<LearnedFacet> {
-    let mut stmt = match conn.prepare(
-        "SELECT facet_id, class, key, value, stability, state, user_state, evidence_count, first_seen_at, last_seen_at
-         FROM learned_facets
-         WHERE class = ?1 AND state = ?2
-         ORDER BY stability DESC",
-    ) {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
-
-    stmt.query_map(params![class.as_str(), state.as_str()], |row| {
-        Ok(LearnedFacet {
-            facet_id: row.get(0)?,
-            class: FacetClass::from_str(&row.get::<_, String>(1)?).unwrap_or(FacetClass::Interest),
-            key: row.get(2)?,
-            value: row.get(3)?,
-            stability: row.get(4)?,
-            state: FacetState::from_str(&row.get::<_, String>(5)?),
-            user_state: UserState::from_str(&row.get::<_, String>(6)?),
-            evidence_count: row.get(7)?,
-            first_seen_at: row.get(8)?,
-            last_seen_at: row.get(9)?,
-        })
-    })
-    .ok()
-    .map(|rows| rows.flatten().collect())
-    .unwrap_or_default()
 }
 
 fn load_evidence(conn: &Connection, facet_id: &str) -> rusqlite::Result<Vec<FacetEvidence>> {
@@ -851,7 +779,10 @@ mod tests {
         let updated = rebuild_all(&conn);
         assert_eq!(updated, 1);
 
-        let facets = get_active_facets(&conn, FacetClass::Interest);
+        let facets: Vec<_> = get_all_learned_facets(&conn)
+            .into_iter()
+            .filter(|f| f.class == FacetClass::Interest && f.state == FacetState::Active)
+            .collect();
         assert_eq!(facets.len(), 1);
         assert_eq!(facets[0].key, "rust");
         assert_eq!(facets[0].state, FacetState::Active);
@@ -981,23 +912,6 @@ mod tests {
     }
 
     #[test]
-    fn test_veto_query() {
-        let conn = setup_db();
-        let now = now_unix();
-
-        conn.execute(
-            "INSERT INTO learned_facets (facet_id, class, key, value, stability, state, user_state, evidence_count, first_seen_at, last_seen_at)
-             VALUES ('veto:crypto', 'veto', 'crypto', 'never', 2.0, 'active', 'auto', 3, ?1, ?1)",
-            params![now],
-        )
-        .unwrap();
-
-        let vetoes = get_vetoes(&conn);
-        assert_eq!(vetoes.len(), 1);
-        assert_eq!(vetoes[0].key, "crypto");
-    }
-
-    #[test]
     fn test_user_state_toggle() {
         let conn = setup_db();
         let now = now_unix();
@@ -1011,7 +925,7 @@ mod tests {
 
         assert!(set_user_state(&conn, "interest:rust", UserState::Pinned));
 
-        let facets = get_active_and_provisional(&conn);
+        let facets = get_all_learned_facets(&conn);
         assert_eq!(facets[0].user_state, UserState::Pinned);
     }
 

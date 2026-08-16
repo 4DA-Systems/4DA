@@ -18,7 +18,6 @@ use super::persona_data::PersonaEnrichment;
 /// its individual contribution to scoring quality.
 pub(super) struct EnrichmentConfig {
     pub enable_topic_confidence: bool,
-    pub enable_topic_affinities: bool,
     pub enable_anti_topics: bool,
     pub enable_topic_embeddings: bool,
     pub enable_source_quality: bool,
@@ -37,7 +36,6 @@ impl EnrichmentConfig {
     pub fn all() -> Self {
         Self {
             enable_topic_confidence: true,
-            enable_topic_affinities: true,
             enable_anti_topics: true,
             enable_topic_embeddings: true,
             enable_source_quality: true,
@@ -56,7 +54,6 @@ impl EnrichmentConfig {
     pub fn none() -> Self {
         Self {
             enable_topic_confidence: false,
-            enable_topic_affinities: false,
             enable_anti_topics: false,
             enable_topic_embeddings: false,
             enable_source_quality: false,
@@ -76,7 +73,6 @@ impl EnrichmentConfig {
         let mut cfg = Self::none();
         match field {
             EnrichmentField::TopicConfidence => cfg.enable_topic_confidence = true,
-            EnrichmentField::TopicAffinities => cfg.enable_topic_affinities = true,
             EnrichmentField::AntiTopics => cfg.enable_anti_topics = true,
             EnrichmentField::TopicEmbeddings => cfg.enable_topic_embeddings = true,
             EnrichmentField::SourceQuality => cfg.enable_source_quality = true,
@@ -97,7 +93,6 @@ impl EnrichmentConfig {
 #[derive(Debug, Clone, Copy)]
 pub(super) enum EnrichmentField {
     TopicConfidence,
-    TopicAffinities,
     AntiTopics,
     TopicEmbeddings,
     SourceQuality,
@@ -116,7 +111,6 @@ impl EnrichmentField {
     pub fn all_variants() -> &'static [EnrichmentField] {
         &[
             EnrichmentField::TopicConfidence,
-            EnrichmentField::TopicAffinities,
             EnrichmentField::AntiTopics,
             EnrichmentField::TopicEmbeddings,
             EnrichmentField::SourceQuality,
@@ -134,7 +128,6 @@ impl EnrichmentField {
     pub fn name(&self) -> &'static str {
         match self {
             Self::TopicConfidence => "topic_confidence",
-            Self::TopicAffinities => "topic_affinities",
             Self::AntiTopics => "anti_topics",
             Self::TopicEmbeddings => "topic_embeddings",
             Self::SourceQuality => "source_quality",
@@ -158,7 +151,7 @@ impl EnrichmentField {
 ///
 /// Merges enrichment fields into the base context according to config toggles.
 /// Base fields (interests, domain_profile, declared_tech, composed_stack,
-/// feedback_boosts, feedback_interaction_count) are preserved from the original.
+/// feedback_interaction_count) are preserved from the original.
 pub(super) fn enrich_persona(
     base: ScoringContext,
     data: &PersonaEnrichment,
@@ -187,14 +180,6 @@ pub(super) fn enrich_persona(
                 .entry(topic.clone())
                 .and_modify(|existing| *existing = existing.max(conf))
                 .or_insert(conf);
-        }
-    }
-
-    if config.enable_topic_affinities {
-        for (topic, &(aff, conf)) in &data.topic_affinities {
-            ace.topic_affinities
-                .entry(topic.clone())
-                .or_insert((aff, conf));
         }
     }
 
@@ -309,7 +294,6 @@ pub(super) fn enrich_persona(
         .exclusions(exclusions)
         .ace_ctx(ace)
         .topic_embeddings(topic_embeddings)
-        .feedback_boosts(base.feedback_boosts)
         .source_quality(source_quality)
         .declared_tech(base.declared_tech)
         .domain_profile(base.domain_profile)

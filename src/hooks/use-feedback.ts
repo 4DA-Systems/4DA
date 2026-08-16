@@ -6,33 +6,24 @@ import { runWhenIdle } from '../lib/defer';
 /**
  * Feedback hook — thin wrapper around Zustand store.
  * All state and actions (including recordInteraction) live in the store.
- * This hook triggers loadLearnedBehavior on mount.
+ * This hook triggers loadPersistedSavedIds on mount.
  */
 export function useFeedback() {
   const feedbackGiven = useAppStore(s => s.feedbackGiven);
-  const learnedAffinities = useAppStore(s => s.learnedAffinities);
-  const antiTopics = useAppStore(s => s.antiTopics);
-  const lastLearnedTopic = useAppStore(s => s.lastLearnedTopic);
-  const loadLearnedBehavior = useAppStore(s => s.loadLearnedBehavior);
   const loadPersistedSavedIds = useAppStore(s => s.loadPersistedSavedIds);
   const recordInteraction = useAppStore(s => s.recordInteraction);
 
-  // Deferred to idle: learned affinities + persisted saved-item ids influence
-  // ranking/badging but are not first-paint-critical, so they stay off the mount
-  // IPC stampede (see src/lib/defer.ts).
+  // Deferred to idle: persisted saved-item ids influence badging but are not
+  // first-paint-critical, so they stay off the mount IPC stampede (see
+  // src/lib/defer.ts).
   useEffect(() => {
     return runWhenIdle(() => {
-      void loadLearnedBehavior();
       void loadPersistedSavedIds();
     });
-  }, [loadLearnedBehavior, loadPersistedSavedIds]);
+  }, [loadPersistedSavedIds]);
 
   return {
     feedbackGiven,
-    learnedAffinities,
-    antiTopics,
-    lastLearnedTopic,
-    loadLearnedBehavior,
     recordInteraction,
   };
 }

@@ -16,8 +16,6 @@ struct Fixture {
     interest_score: f32,
     keyword_score: f32,
     ace_boost: f32,
-    feedback_boost: f32,
-    affinity_mult: f32,
     window_boost: f32,
     matched_window_label: Option<String>,
     skill_gap_boost: f32,
@@ -47,8 +45,6 @@ impl Default for Fixture {
             interest_score: 0.0,
             keyword_score: 0.0,
             ace_boost: 0.0,
-            feedback_boost: 0.0,
-            affinity_mult: 1.0,
             window_boost: 0.0,
             matched_window_label: None,
             skill_gap_boost: 0.0,
@@ -80,8 +76,6 @@ impl Fixture {
             interest_score: self.interest_score,
             keyword_score: self.keyword_score,
             ace_boost: self.ace_boost,
-            feedback_boost: self.feedback_boost,
-            affinity_mult: self.affinity_mult,
             window_boost: self.window_boost,
             matched_window_label: self.matched_window_label.as_deref(),
             skill_gap_boost: self.skill_gap_boost,
@@ -201,16 +195,6 @@ fn corpus() -> Vec<Fixture> {
     let mut f = Fixture::default();
     f.title = "A story about programming".to_string();
     f.item_topics = vec!["programming".to_string()];
-    out.push(f);
-
-    // Learned-preference item
-    let mut f = Fixture::default();
-    f.title = "Zig comptime deep dive".to_string();
-    f.item_topics = vec!["zig".to_string()];
-    f.affinity_mult = 1.4;
-    f.ace_ctx
-        .topic_affinities
-        .insert("zig".to_string(), (0.7, 0.8));
     out.push(f);
 
     out

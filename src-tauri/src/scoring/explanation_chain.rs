@@ -56,8 +56,6 @@ pub(crate) struct ChainInputs<'a> {
     pub interest_score: f32,
     pub keyword_score: f32,
     pub ace_boost: f32,
-    pub feedback_boost: f32,
-    pub affinity_mult: f32,
     pub window_boost: f32,
     pub matched_window_label: Option<&'a str>,
     pub skill_gap_boost: f32,
@@ -111,7 +109,6 @@ fn trust_rank(kind: FactorKind) -> u8 {
         FactorKind::DecisionWindow => 3,
         FactorKind::SkillGap => 4,
         FactorKind::InterestMatch => 5,
-        FactorKind::LearnedPreference => 6,
         FactorKind::TopicMatch => 7,
         FactorKind::CommunitySignal => 8,
     }
@@ -459,25 +456,6 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
                     gaps.join(", ")
                 ),
                 weight: inp.skill_gap_boost,
-            });
-        }
-    }
-
-    // ── 10. Learned preference (must name the topic it learned from) ─────
-    let learned_weight = inp.feedback_boost.max(inp.affinity_mult - 1.0);
-    if learned_weight > 0.05 {
-        let learned_topic = inp.item_topics.iter().find(|t| {
-            inp.ace_ctx
-                .topic_affinities
-                .get(t.as_str())
-                .is_some_and(|(score, _)| *score > 0.3)
-        });
-        if let Some(topic) = learned_topic {
-            factors.push(WeightedFactor {
-                kind: FactorKind::LearnedPreference,
-                display: format!("You engage with {topic} content"),
-                evidence: format!("learned affinity for {topic} from your reading history"),
-                weight: learned_weight,
             });
         }
     }

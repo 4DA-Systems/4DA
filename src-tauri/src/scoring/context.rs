@@ -110,13 +110,12 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     let topic_embeddings = get_topic_embeddings(&ace_ctx).await;
     crate::diagnostics::log_rss("ctx:after_topic_embeddings");
 
-    // Load feedback-derived topic boosts (Phase 9: feedback learning loop)
     // Behavioral scoring inputs DEMOTED in v19 (AD-029): feedback-derived
     // topic boosts and learned per-source quality no longer enter scoring.
     // The capture pipeline keeps writing (preferences UI, engagement
     // dashboard); the scoring context simply stops consuming it. Re-enable
-    // criteria live in AD-029.
-    let feedback_boosts: HashMap<String, f64> = HashMap::new();
+    // criteria live in AD-029. (v20a: the pinned-empty feedback_boosts field
+    // was deleted outright with its dead pipeline reader.)
     let source_quality: HashMap<String, f32> = HashMap::new();
 
     // Open a single shared connection for all DB queries in context building
@@ -242,7 +241,6 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         topics = ace_ctx.active_topics.len(),
         tech = ace_ctx.detected_tech.len(),
         embeddings = topic_embeddings.len(),
-        feedback_topics = feedback_boosts.len(),
         source_prefs = source_quality.len(),
         domain_primary = domain_profile.primary_stack.len(),
         domain_all = domain_profile.all_tech.len(),
@@ -276,7 +274,6 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         exclusions: static_identity.exclusions,
         ace_ctx,
         topic_embeddings,
-        feedback_boosts,
         source_quality,
         declared_tech,
         domain_profile,

@@ -93,17 +93,6 @@ pub async fn toolkit_generate_export_pack() -> Result<ExportPackResult> {
                 }
             }
 
-            // Blind spots
-            if !dna.blind_spots.is_empty() {
-                s.push_str("\n### Knowledge Blind Spots\n\n");
-                for spot in &dna.blind_spots {
-                    s.push_str(&format!(
-                        "- **{}** — {} severity, {} days stale\n",
-                        spot.dependency, spot.severity, spot.days_stale
-                    ));
-                }
-            }
-
             s.push('\n');
             sections.push(s);
         }

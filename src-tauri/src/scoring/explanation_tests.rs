@@ -168,18 +168,3 @@ fn test_calculate_confidence_clamped() {
     assert!(confidence <= 1.0, "Confidence should not exceed 1.0");
     assert!(confidence >= 0.0, "Confidence should not be negative");
 }
-
-#[test]
-fn test_calculate_confidence_with_topic_affinities() {
-    let mut ctx = ACEContext::default();
-    ctx.topic_affinities.insert("rust".to_string(), (0.8, 0.9));
-    let topics = vec!["rust".to_string()];
-    let confidence = calculate_confidence(0.5, 0.0, 0.0, &ctx, &topics, 10, 0, 2);
-    // Should be higher than without affinities since we have an additional signal
-    let conf_no_aff =
-        calculate_confidence(0.5, 0.0, 0.0, &ACEContext::default(), &topics, 10, 0, 2);
-    assert!(
-        confidence >= conf_no_aff,
-        "Topic affinities should boost or maintain confidence"
-    );
-}

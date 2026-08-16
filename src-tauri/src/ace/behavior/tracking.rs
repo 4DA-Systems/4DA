@@ -322,7 +322,7 @@ impl ACE {
             // Structured observability for the preference-profile capture loop:
             // every affinity change is traceable. Emitted on the "4da::learning"
             // target so it can be filtered independently of the noisier
-            // ace::behavior debug stream and aggregated by get_learning_stats.
+            // ace::behavior debug stream.
             if let Ok((score, confidence, exposures)) = conn.query_row(
                 "SELECT affinity_score, confidence, total_exposures FROM topic_affinities WHERE topic = ?1",
                 rusqlite::params![topic],
@@ -395,21 +395,19 @@ impl ACE {
 mod learning_loop_tests {
     use super::*;
     use crate::ace::create_test_ace;
-    use crate::scoring::{compute_affinity_multiplier, ACEContext};
 
     /// End-to-end proof of the capture half of the learning loop: positive
     /// feedback on a topic must raise its affinity, negative feedback must
-    /// lower it, and the learned values must flow to their remaining
-    /// consumers (Learned Preferences panel, breakdown display,
-    /// channel-render context).
+    /// lower it, and the learned values must stay readable through the
+    /// bootstrap path their remaining consumers (Learned Preferences panel)
+    /// use.
     ///
     /// v19 (AD-029): learned affinities NO LONGER shift feed scoring — the
     /// scoring pipeline pins affinity_mult to 1.0 and the gate's learned
-    /// axis never confirms (see pipeline_v2.rs and gate.rs). This test used
-    /// to assert the opposite ("learned affinities must shift downstream
-    /// scoring"); that assertion now runs against the legacy V1 helper only,
-    /// as a guard that the capture→affinity→display chain stays alive for
-    /// the surfaces that still read it.
+    /// axis never confirms (see pipeline_v2.rs and gate.rs). The former
+    /// display consumer (`compute_affinity_multiplier`) was deleted in the
+    /// v20a dead-code removal; this test now guards the capture→affinity
+    /// chain only.
     #[test]
     fn feedback_shifts_affinities_and_scoring() {
         let ace = create_test_ace();
@@ -457,27 +455,10 @@ mod learning_loop_tests {
             java.affinity_score
         );
 
-        // The learned affinities must still move their DISPLAY consumer —
-        // `compute_affinity_multiplier`, used by channel_render.rs — NOT the V2
-        // feed pipeline, which pins affinity to neutral (AD-029).
-        let mut ctx = ACEContext::default();
-        ctx.topic_affinities
-            .insert("rust".to_string(), (rust.affinity_score, rust.confidence));
-        ctx.topic_affinities
-            .insert("java".to_string(), (java.affinity_score, java.confidence));
-
-        let base = 0.5;
-        let rust_score = base * compute_affinity_multiplier(&["rust".to_string()], &ctx);
-        let java_score = base * compute_affinity_multiplier(&["java".to_string()], &ctx);
-
         assert!(
-            rust_score > java_score,
-            "learned affinity should rank rust above java ({rust_score} vs {java_score})"
-        );
-        assert!(
-            rust_score - java_score >= 0.03,
-            "learning effect should be meaningful, got margin {}",
-            rust_score - java_score
+            rust.affinity_score - java.affinity_score >= 0.1,
+            "learning effect should separate liked from disliked topics, got margin {}",
+            rust.affinity_score - java.affinity_score
         );
     }
 

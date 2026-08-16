@@ -8,4 +8,4 @@
  * self-disclose when it is the ONLY evidence (see the honesty-tail rule in
  * `scoring::explanation_chain`).
  */
-export type FactorKind = "DependencyMatch" | "SecurityAdvisory" | "ContextMatch" | "InterestMatch" | "TopicMatch" | "DecisionWindow" | "SkillGap" | "LearnedPreference" | "CommunitySignal";
+export type FactorKind = "DependencyMatch" | "SecurityAdvisory" | "ContextMatch" | "InterestMatch" | "TopicMatch" | "DecisionWindow" | "SkillGap" | "CommunitySignal";

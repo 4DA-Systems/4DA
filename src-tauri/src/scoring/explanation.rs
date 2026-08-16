@@ -125,9 +125,6 @@ pub(crate) fn calculate_confidence(
         if let Some(&conf) = ace_ctx.topic_confidence.get(topic.as_str()) {
             topic_confidences.push(conf);
         }
-        if let Some(&(_affinity, conf)) = ace_ctx.topic_affinities.get(topic.as_str()) {
-            topic_confidences.push(conf);
-        }
     }
 
     if !topic_confidences.is_empty() {

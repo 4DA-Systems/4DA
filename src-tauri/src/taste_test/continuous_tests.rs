@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use super::*;
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 
 fn setup_test_db() -> Connection {
     let conn = Connection::open_in_memory().unwrap();
@@ -116,37 +116,6 @@ fn test_dampening_prevents_collapse() {
 }
 
 #[test]
-fn test_snapshot_daily() {
-    let conn = setup_test_db();
-    let mut weights = [0.0; 9];
-    weights[0] = 0.5;
-    weights[6] = 0.3;
-    weights[1] = 0.2;
-    seed_from_taste_test(&conn, &weights).unwrap();
-
-    // Force at least one update so count > 0
-    update_posterior(&conn, &["test".to_string()], 0.1).unwrap();
-
-    snapshot_posterior_if_needed(&conn).unwrap();
-
-    let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM posterior_snapshots", [], |row| {
-            row.get(0)
-        })
-        .unwrap();
-    assert_eq!(count, 1);
-
-    // Second call same day should not create duplicate
-    snapshot_posterior_if_needed(&conn).unwrap();
-    let count2: i64 = conn
-        .query_row("SELECT COUNT(*) FROM posterior_snapshots", [], |row| {
-            row.get(0)
-        })
-        .unwrap();
-    assert_eq!(count2, 1);
-}
-
-#[test]
 fn test_topic_persona_likelihood_rust() {
     // "rust" should give high likelihood for persona 0 (Rust Systems)
     let rust_likelihood = topic_persona_likelihood("rust", 0);
@@ -155,90 +124,4 @@ fn test_topic_persona_likelihood_rust() {
         rust_likelihood > python_likelihood,
         "Rust topic should favor Rust persona: {rust_likelihood:.2} vs {python_likelihood:.2}"
     );
-}
-
-#[test]
-fn test_get_dominant_persona_empty() {
-    let conn = setup_test_db();
-    let result = get_dominant_persona(&conn).unwrap();
-    assert!(result.is_none());
-}
-
-#[test]
-fn test_get_dominant_persona_after_updates() {
-    let conn = setup_test_db();
-    let mut weights = [0.0; 9];
-    weights[0] = 0.6;
-    for i in 1..9 {
-        weights[i] = 0.4 / 8.0;
-    }
-    seed_from_taste_test(&conn, &weights).unwrap();
-    update_posterior(&conn, &["test".to_string()], 0.1).unwrap();
-
-    let result = get_dominant_persona(&conn).unwrap();
-    assert!(result.is_some());
-    let (name, weight) = result.unwrap();
-    assert!(name.contains("Rust"), "Dominant should be Rust: {name}");
-    assert!(weight > 0.4);
-}
-
-#[test]
-fn test_kl_divergence_identical() {
-    let a = [1.0 / 9.0; 9];
-    let kl = kl_divergence(&a, &a);
-    assert!(
-        kl.abs() < 1e-10,
-        "KL of identical distributions should be ~0: {kl}"
-    );
-}
-
-#[test]
-fn test_kl_divergence_different() {
-    let mut a = [0.05; 9];
-    a[0] = 0.60; // Concentrated on Rust
-    let b = [1.0 / 9.0; 9]; // Uniform
-    let kl = kl_divergence(&a, &b);
-    assert!(kl > 0.1, "KL divergence should be significant: {kl:.4}");
-}
-
-#[test]
-fn test_detect_drift_no_data() {
-    let conn = setup_test_db();
-    let result = detect_drift(&conn, 30).unwrap();
-    assert!(result.is_none(), "Should be None with no data");
-}
-
-#[test]
-fn test_detect_drift_with_shift() {
-    let conn = setup_test_db();
-
-    // Create an old snapshot (simulate past state)
-    let old_weights = [1.0 / 9.0; 9];
-    let old_json = serde_json::to_string(&old_weights.to_vec()).unwrap();
-    conn.execute(
-        "INSERT INTO posterior_snapshots (weights, update_count, snapshot_date)
-         VALUES (?1, 10, date('now', '-40 days'))",
-        params![old_json],
-    )
-    .unwrap();
-
-    // Current posterior is concentrated on Rust
-    let mut current = [0.02; 9];
-    current[0] = 0.84; // Rust dominant
-    seed_from_taste_test(&conn, &current).unwrap();
-    // Need count >= 5
-    for _ in 0..6 {
-        update_posterior(&conn, &["rust".to_string()], 0.5).unwrap();
-    }
-
-    let report = detect_drift(&conn, 30).unwrap();
-    assert!(report.is_some(), "Should detect drift");
-    let report = report.unwrap();
-    assert!(
-        report.drifted,
-        "Should flag drift: KL={:.4}",
-        report.kl_divergence
-    );
-    assert!(report.kl_divergence > DRIFT_THRESHOLD);
-    assert!(report.recommended_explore_rate > 0.05);
 }

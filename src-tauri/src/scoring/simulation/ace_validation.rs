@@ -2,10 +2,9 @@
 //! ACE Context Validation Tests
 //!
 //! Isolates the ACE axis contributions to scoring:
-//! - Anti-topic exclusion (compute_anti_penalty)
+//! - Anti-topic exclusion
 //! - Dependency matching (match_dependencies)
 //! - Detected tech influence
-//! - Topic affinity amplification (compute_semantic_ace_boost)
 
 use super::super::{score_item, ScoringContext};
 use super::corpus::corpus;
@@ -206,108 +205,7 @@ fn ace_detected_tech_influences_scoring() {
 }
 
 // ============================================================================
-// Test 4: Topic affinities amplify scores
-// ============================================================================
-
-#[test]
-fn ace_topic_affinities_amplify_scores() {
-    let interests = make_interests(&[("Rust", 1.0), ("systems programming", 0.9)]);
-
-    // Persona with POSITIVE affinity for "rust"
-    let mut ace_positive = ACEContext::default();
-    ace_positive.active_topics.push("rust".to_string());
-    ace_positive.detected_tech.push("rust".to_string());
-    ace_positive
-        .topic_affinities
-        .insert("rust".to_string(), (1.0, 0.9)); // strong positive
-
-    let ctx_positive = ScoringContext::builder()
-        .interest_count(2)
-        .interests(interests.clone())
-        .ace_ctx(ace_positive)
-        .feedback_interaction_count(50)
-        .build();
-
-    // Persona with NEGATIVE affinity for "rust"
-    let mut ace_negative = ACEContext::default();
-    ace_negative.active_topics.push("rust".to_string());
-    ace_negative.detected_tech.push("rust".to_string());
-    ace_negative
-        .topic_affinities
-        .insert("rust".to_string(), (-0.5, 0.9)); // negative
-
-    let ctx_negative = ScoringContext::builder()
-        .interest_count(2)
-        .interests(interests.clone())
-        .ace_ctx(ace_negative)
-        .feedback_interaction_count(50)
-        .build();
-
-    let db = sim_db();
-    let opts = sim_no_freshness();
-
-    // Use domain embeddings for non-zero vectors to activate semantic path
-    let embeddings = super::domain_embeddings::corpus_embeddings();
-
-    {
-        let fallback = vec![0.0_f32; crate::EMBEDDING_DIMS];
-        let items = corpus();
-        let rust_item = items
-            .iter()
-            .find(|i| i.title.to_lowercase().contains("rust"));
-
-        if let Some(item) = rust_item {
-            let emb = embeddings.get((item.id - 1) as usize).unwrap_or(&fallback);
-
-            let input = sim_input(item.id, item.title, item.content, emb);
-            let result_pos = score_item(&input, &ctx_positive, &db, &opts, None);
-            let result_neg = score_item(&input, &ctx_negative, &db, &opts, None);
-
-            assert!(
-                result_pos.top_score >= result_neg.top_score,
-                "Positive affinity ({:.3}) should score >= negative affinity ({:.3})",
-                result_pos.top_score,
-                result_neg.top_score,
-            );
-
-            // Verify breakdown affinity_mult reflects the polarity
-            if let Some(ref bd_pos) = result_pos.score_breakdown {
-                if let Some(ref bd_neg) = result_neg.score_breakdown {
-                    assert!(
-                        bd_pos.affinity_mult >= bd_neg.affinity_mult,
-                        "Positive affinity mult ({:.3}) should >= negative ({:.3})",
-                        bd_pos.affinity_mult,
-                        bd_neg.affinity_mult
-                    );
-                }
-            }
-        }
-    }
-
-    // Also test with zero vectors — keyword path still uses affinities
-    let emb_zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
-    let items = corpus();
-    let rust_item = items
-        .iter()
-        .find(|i| i.title.to_lowercase().contains("rust"));
-
-    if let Some(item) = rust_item {
-        let input = sim_input(item.id, item.title, item.content, &emb_zero);
-        let result_pos = score_item(&input, &ctx_positive, &db, &opts, None);
-        let result_neg = score_item(&input, &ctx_negative, &db, &opts, None);
-
-        // With the keyword path, positive affinity should produce >= scores
-        assert!(
-            result_pos.top_score >= result_neg.top_score,
-            "Positive affinity keyword path ({:.3}) should score >= negative ({:.3})",
-            result_pos.top_score,
-            result_neg.top_score,
-        );
-    }
-}
-
-// ============================================================================
-// Test 5: ACE boost is non-zero with calibrated embeddings
+// Test 4: ACE boost is non-zero with calibrated embeddings
 // ============================================================================
 
 #[test]
@@ -318,7 +216,6 @@ fn ace_semantic_boost_nonzero_with_embeddings() {
     ace.active_topics.push("rust".to_string());
     ace.detected_tech.push("rust".to_string());
     ace.detected_tech.push("tauri".to_string());
-    ace.topic_affinities.insert("rust".to_string(), (0.8, 0.9));
 
     let ctx = ScoringContext::builder()
         .interest_count(3)
@@ -367,7 +264,7 @@ fn ace_semantic_boost_nonzero_with_embeddings() {
 }
 
 // ============================================================================
-// Test 6: ACE context increases confirmation signal count
+// Test 5: ACE context increases confirmation signal count
 // ============================================================================
 
 #[test]
@@ -392,9 +289,6 @@ fn ace_context_increases_confirmation_signals() {
             ecosystem: "rust".to_string(),
         },
     );
-    ace_full
-        .topic_affinities
-        .insert("rust".to_string(), (0.8, 0.9));
 
     let ctx_full = ScoringContext::builder()
         .interest_count(3)

@@ -1040,32 +1040,13 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             }
                         }
 
-                        // ── Threshold auto-tuning: FROZEN (v19, AD-029) ────────
-                        // This was one of TWO independent tuners writing the same
-                        // global threshold (the other: ace::compute_threshold_
-                        // adjustment, driven by click-rate) with CONFLICTING
-                        // clamps ([0.15,0.65] here vs [0.30,0.50] there vs the
-                        // setter's [0.30,0.70]) — they could walk the pass/fail
-                        // line across a third of its range in days, anchored to
-                        // nothing. The threshold is now fixed at its default
-                        // (0.40); the delta computation is kept as observability
-                        // so a future re-enable has evidence to argue from.
-                        {
-                            let deltas = crate::autophagy::load_calibration_deltas(&daily_conn);
-                            if !deltas.is_empty() {
-                                let mean_delta = deltas.values().sum::<f32>() / deltas.len() as f32;
-                                let would_be = (mean_delta * 0.1).clamp(-0.03, 0.03);
-                                if would_be.abs() > 0.001 {
-                                    info!(
-                                        target: "4da::monitor",
-                                        mean_delta = format!("{:.4}", mean_delta),
-                                        would_be_adjustment = format!("{:+.3}", would_be),
-                                        deltas = deltas.len(),
-                                        "Threshold auto-tune FROZEN — logging what it would have done (AD-029)"
-                                    );
-                                }
-                            }
-                        }
+                        // Threshold auto-tuning was FROZEN in v19 (AD-029) and its
+                        // "what it would have done" observability log deleted in
+                        // v20a: two independent tuners once wrote the same global
+                        // threshold with conflicting clamps, walking the pass/fail
+                        // line across a third of its range in days. The threshold
+                        // stays fixed at its default (0.40). Calibration deltas
+                        // themselves remain live in scoring.
                     }
                     // Still run the actual prune after autophagy extracted intelligence
                     if let Ok(db) = crate::get_database() {

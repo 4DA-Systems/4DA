@@ -110,6 +110,8 @@ fn extract_project_name_from_evidence(evidence: &str) -> Option<String> {
 /// the engagement dashboard read the table directly), so nothing is lost that
 /// re-enabling could not restore. Re-enable criteria live in AD-029; doing so
 /// means deleting `ace_context_quarantines_topic_affinities`, not editing it.
+/// (v20a: `compute_affinity_multiplier` and the other structurally-dead readers
+/// of this map were deleted outright; this loader stays as the quarantine.)
 fn load_topic_affinities(_ace: &crate::ace::ACE) -> HashMap<String, (f32, f32)> {
     HashMap::new()
 }
@@ -304,8 +306,8 @@ mod tests {
 
     /// AD-029 quarantine guard. An ACE carrying STRONG, well-evidenced learned
     /// affinities must still hand the scoring context an EMPTY map — that is
-    /// what keeps `compute_affinity_multiplier` at its neutral 1.0 for every
-    /// consumer, including `channel_render.rs`, which persists the product.
+    /// what guarantees no scoring consumer can ever see a learned affinity
+    /// (the former reader, `compute_affinity_multiplier`, was deleted in v20a).
     ///
     /// This test fails the moment the loader starts populating the map again.
     /// Re-enabling affinities means DELETING this test as a deliberate act (and
