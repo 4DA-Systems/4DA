@@ -2,14 +2,16 @@
 
 ## What Is 4DA
 
-**4DA reads the internet for developers — privately, locally — and gets sharper every day.**
+**4DA reads the internet for developers — privately, locally. Your codebase decides what's relevant.**
 
-That's the one-sentence description. Use it verbatim in marketing, onboarding, about dialogs, and any
-surface where someone asks "what is 4DA?". The follow-up beat (held in reserve, used when asked
-"how does it get sharper?") is: *It learns from how you engage with what it shows you. Yesterday's noise
-becomes tomorrow's signal.*
+That's the one-sentence description (AD-030). Use it verbatim in marketing, onboarding, about dialogs,
+and any surface where someone asks "what is 4DA?". The follow-up beat (held in reserve, used when asked
+"how does it stay relevant?") is: *Every item is scored against your actual stack, and everything else
+is rejected. When the engine improves, it re-judges everything it already holds — yesterday's noise
+becomes tomorrow's signal.* Never revive the retired promise family — `scripts/check-retired-claims.cjs`
+enumerates the banned phrases and fails the build on any of them.
 
-4DA (4 Dimensional Autonomy) is the Tauri 2.0 desktop app that delivers on that promise.
+4DA (4 Dimensional Autonomy) is the Tauri 2.0 desktop app that delivers on that description.
 
 **Stack:** Rust backend + React/TypeScript frontend + SQLite (with sqlite-vec for vector search)
 **Dev server:** localhost:4444 | **Package manager:** pnpm
