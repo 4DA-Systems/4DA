@@ -75,14 +75,11 @@ The MCP server works standalone — no desktop app required. 14 tools for vulner
 | Developer DNA | Included (BYOK) | Included |
 | Signal Chains | Included | Included |
 | Score Autopsy | Included | Included |
-| Blind Spots | — | Included |
+| Blind Spots (with AI assessment) | — | Included |
 | Knowledge Gaps | — | Included |
-| Standing Queries | — | Included |
-| Semantic Shifts | — | Included |
-| Cross-project intelligence | — | Included |
 | Natural Language Search | Included (BYOK) | Included |
 
-Free is not a demo. It's the full intelligence engine with 20+ sources, AI briefings, and MCP integration. Signal adds the analysis layer — Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts, cross-project intelligence — for developers who want the deeper read.
+Free is not a demo. It's the full intelligence engine with 20+ sources, AI briefings, and MCP integration. Signal adds the analysis layer — Blind Spots and Knowledge Gaps — for developers who want the deeper read.
 
 **14-day free trial** of Signal — no credit card required.
 

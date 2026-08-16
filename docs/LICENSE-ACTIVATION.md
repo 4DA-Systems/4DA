@@ -7,13 +7,13 @@ This guide covers how to activate a 4DA Signal or Team license. If you are using
 | Tier | Key Required | Includes |
 |------|-------------|----------|
 | **Free** | No | All core features, relevance scoring, multi-source analysis, ACE context engine, the OSV security floor, Score Autopsy, signal chain analysis, channels, and — on your own API key or Ollama — AI briefings, natural language search, and Developer DNA |
-| **Signal** | Yes | Everything in Free + Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts, Project Health, Attention Report, Decision Health, cross-project intelligence (Tech Convergence, Cross-Project Dependencies), and Trust Ledger analytics |
+| **Signal** | Yes | Everything in Free + Blind Spots (with AI assessment) and Knowledge Gaps — the analysis layer computed from your dependency graph and reading history |
 | **Team** | Yes | Everything in Signal + team-scoped context sharing, centralized configuration |
 
 The free tier is fully functional. Security baselines are never paywalled, and the BYOK
 features above stay free because they run on your own key at no cost to us. Signal and Team
-unlock the intelligence analysis layer — Blind Spots, Knowledge Gaps, Standing Queries,
-cross-project intelligence — for users who want deeper analysis of their content.
+unlock the intelligence analysis layer — Blind Spots and Knowledge Gaps — for users who
+want deeper analysis of their content.
 
 ## Getting Your License Key
 
@@ -45,7 +45,7 @@ The key is persisted in your local settings. You will not need to re-enter it af
 After activation, confirm the following:
 
 - **Settings > Intelligence**: The License section displays your active tier as "Signal" or "Team."
-- **Feature availability**: Signal-only features (Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts, Project Health, Attention Report, cross-project intelligence, and Trust Ledger analytics) are accessible without restriction.
+- **Feature availability**: Signal-only features (Blind Spots and Knowledge Gaps) are accessible without restriction.
 
   Note that Developer DNA (AD-026) and natural language search and AI briefings (AD-025) are **not** Signal-gated — they are free-tier features that run on your own API key or Ollama at no cost to us.
 - **Status bar**: The app may display a tier badge in the UI confirming your active plan.

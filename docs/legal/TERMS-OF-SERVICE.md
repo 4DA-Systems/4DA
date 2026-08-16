@@ -67,11 +67,8 @@ The Free tier is provided at no cost and may be used indefinitely. We reserve th
 
 The Signal tier includes everything in the Free tier, plus:
 
-- LLM-powered content re-ranking and analysis
-- Standing queries (persistent, automated searches)
-- Channels (curated content streams)
-- Semantic analysis and trend detection
-- Audio briefings
+- Blind spot detection, including AI-powered assessment
+- Knowledge gap detection
 - Additional Signal features as released
 
 ### 3.3 Additional Tiers
@@ -115,7 +112,7 @@ You may cancel your Signal subscription at any time. Upon cancellation:
 
 If your subscription lapses due to cancellation, non-payment, or expiry:
 
-- All Signal tier features (Blind Spots, Knowledge Gaps, standing queries, Semantic Shifts, Project Health, Attention Report, Decision Health, cross-project intelligence, and Trust Ledger analytics) will become unavailable. AI briefings, natural language search, Developer DNA, Score Autopsy, signal chain analysis, and channels remain available as free tier features.
+- All Signal tier features (Blind Spots and Knowledge Gaps) will become unavailable. AI briefings, natural language search, Developer DNA, Score Autopsy, signal chain analysis, and channels remain available as free tier features.
 - Your local data, including all previously scored and saved content, remains on your device and is not deleted
 - Free tier functionality continues to operate as normal
 - You may re-subscribe at any time to restore Signal features

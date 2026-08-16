@@ -298,7 +298,7 @@ This panel only appears once the rejection rate is high enough to tell a meaning
 | Tier | Price | Features |
 |------|-------|----------|
 | **Free** | $0 | All sources, scoring, learning, the OSV security floor, plus AI briefings, natural language search, Developer DNA (BYOK), Score Autopsy, signal chains, and channels |
-| **Signal** | Paid | Everything in Free + Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts, Project Health, Attention Report, Decision Health, cross-project intelligence, Trust Ledger analytics |
+| **Signal** | Paid | Everything in Free + Blind Spots (with AI assessment) and Knowledge Gaps |
 | **Team** | Paid | Everything in Signal + team features |
 
 ### Activating a License Key

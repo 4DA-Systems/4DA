@@ -206,7 +206,7 @@ Your Codebase                    External Sources
 - All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), Developer DNA profiling, Score Autopsy (5-axis breakdown), signal chain analysis, channels, the OSV security floor, Learned Preferences, MCP server (14 tools), CLI
 
 **Signal** — $12 AUD/month, $99 AUD/year, or $299 AUD once for a Lifetime license (14-day free trial).
-- Everything in Free, plus: blind spot detection, knowledge gap detection, standing queries, semantic shift tracking, project health radar, attention analytics, decision health, cross-project intelligence, and Trust Ledger analytics
+- Everything in Free, plus: blind spot detection with AI assessment, and knowledge gap detection — the analysis layer computed from your dependency graph and reading history
 
 Free is not a demo. It's the full scoring engine, all sources, Learned Preferences, and MCP integration.
 
@@ -244,10 +244,7 @@ The [STREETS Playbook](https://4da.ai/streets) — 7 modules on turning develope
 <summary><strong>Analysis</strong></summary>
 
 - Signal chains: tracks evolving stories across sources
-- Semantic shift detection: notices when topics you follow are changing
 - Reverse mentions: finds where your projects are discussed
-- Project health radar: dependency freshness + security monitoring
-- Attention dashboard: where you spend time vs. where you should
 
 </details>
 
