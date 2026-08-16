@@ -136,6 +136,16 @@ pub struct FileWatcher {
     last_batch_time: Arc<Mutex<Instant>>,
     callback: Arc<Mutex<Option<ChangeCallback>>>,
     running: Arc<Mutex<bool>>,
+    /// Has the event thread ever been started on this watcher?
+    ///
+    /// `running` alone cannot answer "is this watcher dead", because a watcher
+    /// that was constructed but never started reads `false` exactly like one
+    /// whose thread died. `ACE::new` constructs a `FileWatcher` eagerly while
+    /// `start_watching` runs late (after frontend-ready, a grace sleep, a
+    /// project scan and git mining) — and never at all when no context dirs are
+    /// configured or every watch path is missing. Reporting those as a failed
+    /// watcher would tell a healthy cold-start user to restart the app.
+    started: Arc<Mutex<bool>>,
 }
 
 impl FileWatcher {
@@ -149,6 +159,7 @@ impl FileWatcher {
             last_batch_time: Arc::new(Mutex::new(Instant::now())),
             callback: Arc::new(Mutex::new(None)),
             running: Arc::new(Mutex::new(false)),
+            started: Arc::new(Mutex::new(false)),
         }
     }
 
@@ -210,6 +221,7 @@ impl FileWatcher {
 
         self.watcher = Some(watcher);
         *running.lock() = true;
+        *self.started.lock() = true;
 
         // Spawn event processing thread
         std::thread::spawn(move || {
@@ -275,12 +287,19 @@ impl FileWatcher {
                             "File-change callback panicked — watcher thread stopping; \
                              file-derived context will go stale until restart"
                         );
-                        *running.lock() = false;
                         break;
                     }
                 }
             }
 
+            // Cleared here rather than in the panic arm above so it covers EVERY
+            // exit from the loop. The `Disconnected` arm is the one that matters:
+            // if the notify backend drops its sender (OS handle closed, backend
+            // thread gone) the loop breaks with no panic at all, and clearing the
+            // flag only on the panic path would leave `is_running()` reporting
+            // true for a thread that has stopped — the same silently-dead watcher
+            // this guard exists to eliminate, reached by a different door.
+            *running.lock() = false;
             debug!(target: "ace::watcher", "Event processing thread stopped");
         });
 
@@ -370,10 +389,18 @@ impl FileWatcher {
     /// `running` existed since the watcher was written but was private with no
     /// reader, so nothing in the process could observe a dead watcher. It is
     /// set true when the thread starts, and cleared by [`Self::stop`] OR by the
-    /// thread itself when a file-change callback panics. `false` therefore
+    /// thread itself on every exit from its event loop. `false` therefore
     /// means "not processing events", whether that was deliberate or not.
+    ///
+    /// Check [`Self::has_started`] before reading this as a fault: a watcher
+    /// that was constructed but never started also reports `false`.
     pub fn is_running(&self) -> bool {
         *self.running.lock()
+    }
+
+    /// Has the event thread ever been started? See the `started` field.
+    pub fn has_started(&self) -> bool {
+        *self.started.lock()
     }
 }
 
@@ -1245,5 +1272,52 @@ impl ValidationError {
         assert!(config.watched_extensions.contains("ts"));
         assert!(config.skip_dirs.contains("node_modules"));
         assert!(config.skip_dirs.contains("target"));
+    }
+}
+
+#[cfg(test)]
+mod liveness_tests {
+    use super::*;
+
+    /// The health check treats `Some(false)` as a hard failure that tells the
+    /// user to restart the app. A watcher that was never started must not
+    /// report that: `ACE::new` builds one eagerly, while `start_watching` runs
+    /// late and sometimes never (no context dirs, or every watch path missing).
+    #[test]
+    fn a_constructed_but_unstarted_watcher_is_not_reported_as_dead() {
+        let watcher = FileWatcher::new(WatcherConfig::default());
+        assert!(
+            !watcher.has_started(),
+            "a fresh watcher has not started its event thread"
+        );
+        assert!(
+            !watcher.is_running(),
+            "and is therefore not running — which on its own is indistinguishable from dead"
+        );
+        // has_started() is what lets the caller tell those two apart.
+    }
+
+    /// Every exit from the event loop must clear `running`, not just the panic
+    /// arm. The `Disconnected` arm breaks with no panic at all: if the notify
+    /// backend drops its sender, the thread stops while `is_running()` would
+    /// still report true — a silently dead watcher reached by a different door
+    /// than the one INV-003 was closed against.
+    #[test]
+    fn stop_clears_running_but_leaves_started_set() {
+        let mut watcher = FileWatcher::new(WatcherConfig::default());
+        // Simulate a started thread without depending on a real OS watcher,
+        // which is unavailable on a CI box with exhausted inotify capacity.
+        *watcher.running.lock() = true;
+        *watcher.started.lock() = true;
+        assert!(watcher.is_running());
+
+        watcher.stop();
+
+        assert!(!watcher.is_running(), "stop() clears running");
+        assert!(
+            watcher.has_started(),
+            "started is a latch: it records that liveness is a meaningful \
+             question for this watcher, so a stopped one still reports Some(false)"
+        );
     }
 }
