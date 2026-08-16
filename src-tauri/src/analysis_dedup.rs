@@ -56,20 +56,16 @@ fn normalize_title_for_dedup(title: &str) -> String {
         .to_lowercase()
 }
 
-/// Normalize a URL for dedup: strip www, trailing slash, query params, fragments, protocol
+/// Normalize a URL for dedup.
+///
+/// Delegates to THE canonical implementation in `scoring::dedup` — the same key
+/// the post-scoring pass (`dedup_results`) uses. This module used to carry its
+/// own byte-identical copy, and that is precisely how the whole-query-stripping
+/// defect came to live in two places at once: fixing one would have left
+/// YouTube (and every other `?id=`-style permalink source) still collapsed to a
+/// single item per batch on the other path.
 fn normalize_url(url: &str) -> String {
-    let url = url.trim();
-    let base = url
-        .split('#')
-        .next()
-        .unwrap_or(url)
-        .split('?')
-        .next()
-        .unwrap_or(url);
-    base.replace("http://", "https://")
-        .replace("://www.", "://")
-        .trim_end_matches('/')
-        .to_lowercase()
+    crate::scoring::normalize_result_url(url)
 }
 
 #[cfg(test)]
@@ -95,10 +91,43 @@ mod tests {
             "https://example.com/page"
         );
 
-        // Query parameter stripping
+        // TRACKING parameters are stripped — and only those. This assertion used
+        // to read "query parameter stripping" and locked in the bug: the whole
+        // query string was discarded, so every distinct `?v=` permalink from the
+        // same host collapsed onto one dedup key.
         assert_eq!(
             normalize_url("https://example.com/page?utm_source=twitter&ref=123"),
             "https://example.com/page"
+        );
+
+        // …content-bearing parameters SURVIVE.
+        assert_eq!(
+            normalize_url("https://youtube.com/watch?v=dQw4w9WgXcQ"),
+            "https://youtube.com/watch?v=dQw4w9WgXcQ"
+        );
+
+        // Mixed: tracking dropped, content kept.
+        assert_eq!(
+            normalize_url("https://youtube.com/watch?v=abc123&si=Xy_9&utm_medium=social"),
+            "https://youtube.com/watch?v=abc123"
+        );
+
+        // Parameter ORDER must not defeat dedup — both normalize identically.
+        assert_eq!(
+            normalize_url("https://example.com/p?b=2&a=1"),
+            normalize_url("https://example.com/p?a=1&b=2")
+        );
+
+        // Value case is identity, not noise: two different YouTube videos.
+        assert_ne!(
+            normalize_url("https://youtube.com/watch?v=AbCdEf"),
+            normalize_url("https://youtube.com/watch?v=abcdef")
+        );
+
+        // A valueless parameter survives without gaining a spurious "=".
+        assert_eq!(
+            normalize_url("https://example.com/p?debug"),
+            "https://example.com/p?debug"
         );
 
         // Fragment stripping
@@ -220,6 +249,61 @@ mod tests {
         let kept = dedup_stored_items(&items);
         // Item 2 has the same normalized URL as item 1, so only items 1 and 3 should remain
         assert_eq!(kept, vec![0, 2]);
+    }
+
+    /// Regression: two DIFFERENT YouTube videos must both survive dedup. Under
+    /// whole-query stripping they shared the key `https://youtube.com/watch`, so
+    /// the source could contribute at most one item per scoring batch.
+    #[test]
+    fn test_dedup_keeps_distinct_youtube_videos() {
+        let items = vec![
+            make_item(
+                1,
+                "Rust async deep dive",
+                Some("https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
+            ),
+            make_item(
+                2,
+                "Tauri IPC internals",
+                Some("https://www.youtube.com/watch?v=9bZkp7q19f0"),
+            ),
+            make_item(
+                3,
+                "SQLite vector search",
+                Some("https://www.youtube.com/watch?v=kJQP7kiw5Fk"),
+            ),
+        ];
+
+        let kept = dedup_stored_items(&items);
+        assert_eq!(
+            kept,
+            vec![0, 1, 2],
+            "distinct video ids are distinct pages and must all survive"
+        );
+    }
+
+    /// …while the same video reached through two campaign links still dedupes.
+    #[test]
+    fn test_dedup_collapses_tracking_variants_of_one_url() {
+        let items = vec![
+            make_item(
+                1,
+                "Rust async deep dive",
+                Some("https://www.youtube.com/watch?v=dQw4w9WgXcQ&utm_source=newsletter"),
+            ),
+            make_item(
+                2,
+                "Rust async deep dive (mirror)",
+                Some("http://youtube.com/watch?si=AbC123&v=dQw4w9WgXcQ"),
+            ),
+        ];
+
+        let kept = dedup_stored_items(&items);
+        assert_eq!(
+            kept,
+            vec![0],
+            "utm_source / si differences are campaign noise, not identity"
+        );
     }
 
     #[test]
