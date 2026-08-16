@@ -61,11 +61,17 @@ pub struct SystemHealthReport {
 /// Check all system components and return a health report.
 ///
 /// Accepts a borrowed rusqlite Connection (from ACE engine's conn.lock()).
-pub fn check_all_components(conn: &Connection) -> Result<SystemHealthReport> {
+/// `watcher_alive` comes from `ACE::watcher_is_running` — passed in rather
+/// than fetched here because the caller already holds the engine's read guard
+/// and its `conn` lock.
+pub fn check_all_components(
+    conn: &Connection,
+    watcher_alive: Option<bool>,
+) -> Result<SystemHealthReport> {
     let now = chrono::Utc::now().to_rfc3339();
     let components = vec![
         health_checks::check_scanner(conn, &now),
-        health_checks::check_watcher(conn, &now),
+        health_checks::check_watcher(conn, &now, watcher_alive),
         health_checks::check_git(conn, &now),
         health_checks::check_database(conn, &now),
         health_checks::check_embedding(&now),
@@ -320,7 +326,7 @@ mod tests {
             [],
         )
         .unwrap();
-        let result = check_watcher(&conn, "2026-01-01T00:00:00Z");
+        let result = check_watcher(&conn, "2026-01-01T00:00:00Z", Some(true));
         assert_eq!(result.status, HealthStatus::Healthy);
     }
 
@@ -333,15 +339,59 @@ mod tests {
             [],
         )
         .unwrap();
-        let result = check_watcher(&conn, "2026-01-01T00:00:00Z");
+        let result = check_watcher(&conn, "2026-01-01T00:00:00Z", Some(true));
         assert_eq!(result.status, HealthStatus::Degraded);
     }
 
     #[test]
     fn test_watcher_empty() {
         let conn = setup_test_db();
-        let result = check_watcher(&conn, "2026-01-01T00:00:00Z");
+        let result = check_watcher(&conn, "2026-01-01T00:00:00Z", Some(true));
         assert_eq!(result.status, HealthStatus::Failed);
+    }
+
+    /// INV-003 regression. A watcher thread killed by a panic in a file-change
+    /// callback used to be invisible: the check counted `file_signals` rows, so
+    /// a dead thread read as Healthy for up to an hour, then Degraded — the
+    /// same verdict a quiet afternoon produces. Liveness must be decisive and
+    /// must override the row-count proxy in BOTH directions.
+    #[test]
+    fn test_watcher_dead_thread_fails_even_with_recent_signals() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO file_signals (path, timestamp, event_type) VALUES ('/test/file.rs', datetime('now'), 'modify')",
+            [],
+        )
+        .unwrap();
+
+        // The proxy alone says Healthy...
+        let proxy = check_watcher(&conn, "now", Some(true));
+        assert_eq!(proxy.status, HealthStatus::Healthy);
+
+        // ...but the thread is dead, and that is what the user needs to know.
+        let result = check_watcher(&conn, "now", Some(false));
+        assert_eq!(result.status, HealthStatus::Failed);
+        let msg = result.error_message.expect("must explain the failure");
+        assert!(
+            msg.contains("not running"),
+            "message must name the real fault, not row counts: {msg}"
+        );
+    }
+
+    /// `None` (no watcher constructed — headless engine, tests) must not be
+    /// read as "dead"; it falls through to the pre-existing row-count probe.
+    #[test]
+    fn test_watcher_unknown_liveness_falls_back_to_row_counts() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO file_signals (path, timestamp, event_type) VALUES ('/test/file.rs', datetime('now'), 'modify')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            check_watcher(&conn, "now", None).status,
+            HealthStatus::Healthy
+        );
     }
 
     #[test]
@@ -394,7 +444,7 @@ mod tests {
         // individual components + quality/fallback computations directly
         let components = [
             check_scanner(&conn, "now"),
-            check_watcher(&conn, "now"),
+            check_watcher(&conn, "now", Some(true)),
             check_git(&conn, "now"),
             check_database(&conn, "now"),
         ];
@@ -411,7 +461,7 @@ mod tests {
         let conn = setup_test_db();
         let components = [
             check_scanner(&conn, "now"),
-            check_watcher(&conn, "now"),
+            check_watcher(&conn, "now", Some(true)),
             check_git(&conn, "now"),
             check_database(&conn, "now"),
         ];

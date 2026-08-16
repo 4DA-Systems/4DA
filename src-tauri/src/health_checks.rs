@@ -4,6 +4,14 @@
 //! Extracted from `health.rs` — each function probes a single subsystem
 //! (scanner, watcher, git, database, embedding) and returns a `ComponentHealth`.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use rusqlite::Connection;
 use tracing::{debug, warn};
 
@@ -49,8 +57,37 @@ pub(super) fn check_scanner(conn: &Connection, now: &str) -> ComponentHealth {
     }
 }
 
-/// Check file watcher health: recent file_signals
-pub(super) fn check_watcher(conn: &Connection, now: &str) -> ComponentHealth {
+/// Check file watcher health.
+///
+/// `watcher_alive` is the watcher thread's actual liveness
+/// (`ACE::watcher_is_running`): `Some(false)` means the event thread is not
+/// running, `None` means no watcher was constructed on this engine.
+///
+/// Liveness is checked FIRST and is decisive. The row-count probe below is a
+/// proxy — it counts `file_signals` in the last hour — and a proxy cannot
+/// distinguish a dead watcher thread from a developer who has not saved a file.
+/// Before this, a watcher killed by a panic in an extractor reported Healthy
+/// for up to an hour and Degraded ("No file signals in last hour") thereafter,
+/// which is the same thing it says about a quiet afternoon. That is the INV-003
+/// violation: the failure was real, reported, and indistinguishable from normal.
+pub(super) fn check_watcher(
+    conn: &Connection,
+    now: &str,
+    watcher_alive: Option<bool>,
+) -> ComponentHealth {
+    if watcher_alive == Some(false) {
+        warn!(target: "4da::health", "Watcher failed: event thread is not running");
+        return ComponentHealth {
+            name: "watcher".into(),
+            status: HealthStatus::Failed,
+            last_check: now.into(),
+            error_message: Some(
+                "Watcher thread is not running — file-derived context is stale. Restart 4DA."
+                    .into(),
+            ),
+        };
+    }
+
     // Check for signals in the last hour
     let recent: std::result::Result<i64, _> = conn.query_row(
         "SELECT COUNT(*) FROM file_signals WHERE timestamp > datetime('now', '-1 hour')",

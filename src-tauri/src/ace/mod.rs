@@ -185,6 +185,16 @@ impl ACE {
         &self.conn
     }
 
+    /// Liveness of the file-watcher thread, for the health report.
+    ///
+    /// `None` = no watcher was ever constructed on this engine (headless
+    /// engine, tests). `Some(false)` = a watcher exists but its event thread
+    /// is not running — either stopped deliberately or killed by a panic in a
+    /// file-change callback. See `FileWatcher::is_running`.
+    pub fn watcher_is_running(&self) -> Option<bool> {
+        self.watcher.as_ref().map(|w| w.lock().is_running())
+    }
+
     /// Start file watching for real-time context updates
     pub fn start_watching(&mut self, paths: &[PathBuf]) -> Result<()> {
         let config = WatcherConfig::default();

@@ -5,6 +5,14 @@
 //! Uses debouncing to prevent excessive processing during rapid saves.
 //! Includes state persistence for restart recovery.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use rusqlite::Connection;
@@ -245,8 +253,30 @@ impl FileWatcher {
 
                 if let Some(changes) = changes_to_flush {
                     *last_batch_time.lock() = Instant::now();
-                    if let Some(ref cb) = *callback.lock() {
-                        cb(changes);
+                    // INV-003 ("never fails silently"). The callback chain runs
+                    // `ace::context::process_file_changes` -> ExtractorRegistry
+                    // -> the PDF/Office/archive extractors, i.e. arbitrary
+                    // parsing of arbitrary user files. A panic anywhere in
+                    // there unwinds straight out of `thread::spawn` and kills
+                    // this thread — silently, because `running` had no reader
+                    // and the only health surface counted `file_signals` rows,
+                    // which cannot tell a dead thread from an idle developer
+                    // for up to an hour.
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        if let Some(ref cb) = *callback.lock() {
+                            cb(changes);
+                        }
+                    }));
+                    if let Err(payload) = result {
+                        let detail = panic_message(payload.as_ref());
+                        tracing::error!(
+                            target: "ace::watcher",
+                            panic = %detail,
+                            "File-change callback panicked — watcher thread stopping; \
+                             file-derived context will go stale until restart"
+                        );
+                        *running.lock() = false;
+                        break;
                     }
                 }
             }
@@ -334,6 +364,26 @@ impl FileWatcher {
     pub fn watched_paths(&self) -> Vec<PathBuf> {
         self.watched_paths.lock().iter().cloned().collect()
     }
+
+    /// Is the event-processing thread alive?
+    ///
+    /// `running` existed since the watcher was written but was private with no
+    /// reader, so nothing in the process could observe a dead watcher. It is
+    /// set true when the thread starts, and cleared by [`Self::stop`] OR by the
+    /// thread itself when a file-change callback panics. `false` therefore
+    /// means "not processing events", whether that was deliberate or not.
+    pub fn is_running(&self) -> bool {
+        *self.running.lock()
+    }
+}
+
+/// Best-effort text of a caught panic payload, for logging.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(std::string::ToString::to_string)
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "non-string panic payload".to_string())
 }
 
 impl Drop for FileWatcher {
@@ -478,6 +528,11 @@ fn extract_js_topics(content: &str, topics: &mut HashSet<String>) {
                 // strips quotes from BOTH ends — and stepping one byte past an
                 // ASCII match panics when the next char is multi-byte (curly
                 // quotes in copy-pasted code: `import x from 'pkg'`).
+                //
+                // SAFE: `from_idx` is the byte offset of the all-ASCII 6-byte
+                // needle `" from "`, so `from_idx + 6` is its end — a char
+                // boundary. That is precisely what the `+ 7` bug violated.
+                #[allow(clippy::string_slice)]
                 let module = &trimmed[from_idx + 6..];
                 let module = module.trim_matches(&['"', '\'', ';'][..]);
                 if !module.starts_with('.') && !module.starts_with('/') {
@@ -492,7 +547,12 @@ fn extract_js_topics(content: &str, topics: &mut HashSet<String>) {
         // require()
         if trimmed.contains("require(") {
             if let Some(start) = trimmed.find("require(") {
+                // SAFE: `start + 8` is the end of the all-ASCII 8-byte needle
+                // `"require("`, and `end` is the offset of an ASCII ')' found
+                // by `find` — both are char boundaries.
+                #[allow(clippy::string_slice)]
                 let rest = &trimmed[start + 8..];
+                #[allow(clippy::string_slice)]
                 if let Some(end) = rest.find(')') {
                     let module = rest[..end].trim_matches(&['"', '\''][..]);
                     if !module.starts_with('.') && !module.starts_with('/') {
@@ -1083,6 +1143,99 @@ impl ValidationError {
         let content = "class PaymentProcessor:\n    def restore_backup(self):\n        pass\n";
         let topics = extract_rich_topics(content, "py");
         assert!(topics.is_empty());
+    }
+
+    /// INV-003 regression. `cb(changes)` ran unguarded inside the spawned
+    /// event thread. The chain behind it is `ace::context::process_file_changes`
+    /// -> `ExtractorRegistry` -> the PDF/Office/archive extractors, so a panic
+    /// on one malformed user file unwound out of `thread::spawn` and killed the
+    /// watcher. Nothing observed it: `running` was private with no reader, and
+    /// the health check counted `file_signals` rows.
+    ///
+    /// The thread must survive to record its own death: `is_running()` false.
+    #[test]
+    #[allow(clippy::panic)] // Deliberate: the panic IS the input under test.
+    fn callback_panic_is_caught_and_marks_the_watcher_not_running() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let mut watcher = FileWatcher::new(WatcherConfig {
+            debounce_ms: 0,
+            ..WatcherConfig::default()
+        });
+
+        let fired = Arc::new(AtomicBool::new(false));
+        let fired_cb = fired.clone();
+        watcher.set_callback(move |_changes| {
+            fired_cb.store(true, Ordering::SeqCst);
+            panic!("extractor blew up on a malformed file");
+        });
+
+        // Start the event thread, then queue a change for it to flush.
+        watcher
+            .start_watcher()
+            .expect("watcher thread should start");
+        assert!(watcher.is_running(), "thread is running once started");
+
+        watcher.pending_changes.lock().insert(
+            PathBuf::from("/tmp/whatever.rs"),
+            FileChange {
+                path: PathBuf::from("/tmp/whatever.rs"),
+                change_type: FileChangeType::Modified,
+            },
+        );
+
+        // Wait for the flush + panic to be observed.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline && watcher.is_running() {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        assert!(
+            fired.load(Ordering::SeqCst),
+            "the callback must actually have run"
+        );
+        assert!(
+            !watcher.is_running(),
+            "a panicking callback must mark the watcher dead, not vanish silently"
+        );
+    }
+
+    /// A callback that does NOT panic leaves the watcher running.
+    #[test]
+    fn healthy_callback_leaves_the_watcher_running() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let mut watcher = FileWatcher::new(WatcherConfig {
+            debounce_ms: 0,
+            ..WatcherConfig::default()
+        });
+
+        let count = Arc::new(AtomicUsize::new(0));
+        let count_cb = count.clone();
+        watcher.set_callback(move |changes| {
+            count_cb.fetch_add(changes.len(), Ordering::SeqCst);
+        });
+
+        watcher
+            .start_watcher()
+            .expect("watcher thread should start");
+        watcher.pending_changes.lock().insert(
+            PathBuf::from("/tmp/whatever.rs"),
+            FileChange {
+                path: PathBuf::from("/tmp/whatever.rs"),
+                change_type: FileChangeType::Modified,
+            },
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline && count.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        assert_eq!(count.load(Ordering::SeqCst), 1, "callback should have run");
+        assert!(watcher.is_running(), "no panic — watcher stays alive");
+        watcher.stop();
+        assert!(!watcher.is_running(), "stop() clears the flag too");
     }
 
     #[test]
