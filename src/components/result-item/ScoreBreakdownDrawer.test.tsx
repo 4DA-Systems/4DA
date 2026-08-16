@@ -158,8 +158,12 @@ describe('ScoreBreakdownDrawer', () => {
   // 7. Penalty factors are shown
   // =========================================================================
   it('shows penalty factors for low values', () => {
+    // AD-030: the anti-topic factor was removed (behavioral signals carry
+    // no scoring authority post-AD-029, and its render condition had
+    // inverted magnitude-vs-multiplier semantics). Even a fixture with a
+    // non-neutral anti_penalty must NOT render a learned factor.
     const penaltyBreakdown = makeBreakdown({
-      anti_penalty: 0.7, // < 0.95 => penalty
+      anti_penalty: 0.7,
       competing_mult: 0.5, // < 0.95 => penalty
     });
     render(
@@ -168,7 +172,7 @@ describe('ScoreBreakdownDrawer', () => {
         breakdown={penaltyBreakdown}
       />,
     );
-    expect(screen.getByText('scoreDrawer.factor.anti')).toBeInTheDocument();
+    expect(screen.queryByText('scoreDrawer.factor.anti')).not.toBeInTheDocument();
     expect(screen.getByText('scoreDrawer.factor.competing')).toBeInTheDocument();
   });
 

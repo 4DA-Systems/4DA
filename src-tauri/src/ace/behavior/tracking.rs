@@ -320,7 +320,7 @@ impl ACE {
             conn.execute(RECOMPUTE_AFFINITY_SQL, rusqlite::params![topic])?;
 
             // Structured observability for the compound-learning loop. This is the
-            // single source of truth for the "4DA gets sharper every day" promise —
+            // single source of truth for the preference-profile capture loop (AD-030:
             // every affinity change is traceable. Emitted on the "4da::learning"
             // target so it can be filtered independently of the noisier
             // ace::behavior debug stream and aggregated by get_learning_stats.

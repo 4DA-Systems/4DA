@@ -205,8 +205,8 @@
   - **The published MCP server is Apache-2.0, not MIT.** `@4da/mcp-server` (`mcp-4da-server/package.json`) ships `"license": "Apache-2.0"`. The split is deliberate: the app is FSL-1.1-Apache-2.0; the published npm MCP server is Apache-2.0 for maximum ecosystem adoption. Do not "fix" this to MIT.
 
 ### AD-017: Signal Tier Feature Gate ($12/mo, $99/yr)
-- **Decision:** Gate compound-intelligence features behind a Signal tier. The free tier retains all source adapters, the scoring engine, the feed UI, and basic signal detection.
-- **Rationale:** The free tier must remain genuinely useful (sources + scoring + feed + BYOK-run AI) to drive adoption; Signal sells the proprietary intelligence that compounds over time. License key stored locally (BYOK philosophy extends to licensing).
+- **Decision:** Gate the Signal analysis layer behind a paid tier. The free tier retains all source adapters, the scoring engine, the feed UI, and basic signal detection.
+- **Rationale:** The free tier must remain genuinely useful (sources + scoring + feed + BYOK-run AI) to drive adoption; Signal sells the analysis layer — the derived intelligence (Signal Chains, Knowledge Gaps, Semantic Shifts, temporal and identity analysis, persistent watchers) that the free engine does not compute. License key stored locally (BYOK philosophy extends to licensing).
 - **Considered:**
   - Usage-based pricing: Rejected — unpredictable costs scare BYOK users.
   - Open core with a separate repo: Rejected — maintenance overhead of two codebases.
@@ -299,19 +299,20 @@
 - **Status:** Final
 
 ### AD-025: BYOK-Aware Tier Recalibration
-- **Decision:** Recalibrate Free vs Signal around BYOK reality. Free gets the engine *including* AI features that run on the user's own key (daily AI briefing, basic NL search, behavior learning) at zero marginal cost. Signal sells compound intelligence (temporal analysis, identity intelligence, persistent watchers, "what you would have missed" analytics, Key Signals categorization, signal-classification labels).
-- **Rationale:** The previous split gated AI features that cost 4DA nothing to provide (BYOK), which felt extractive and misaligned with privacy-first values. The new split gates proprietary intelligence that compounds over accumulated data — defensible value the user cannot replicate.
+- **Decision:** Recalibrate Free vs Signal around BYOK reality. Free gets the engine *including* AI features that run on the user's own key (daily AI briefing, basic NL search, Learned Preferences — user-controlled filtering) at zero marginal cost. Signal sells the analysis layer (temporal analysis, identity intelligence, persistent watchers, "what you would have missed" analytics, Key Signals categorization, signal-classification labels).
+- **Rationale:** The previous split gated AI features that cost 4DA nothing to provide (BYOK), which felt extractive and misaligned with privacy-first values. The new split gates the derived analysis layer — work the free engine does not perform — rather than a forward-looking claim about accumulated learning.
 - **Considered:**
   - Keep AI features gated: Rejected — BYOK means zero marginal cost; gating pass-through compute feels extractive.
-  - Make everything free: Rejected — compound intelligence is real proprietary value worth paying for.
+  - Make everything free: Rejected — the analysis layer is real proprietary value worth paying for.
   - Usage-based pricing for AI: Rejected — unpredictable costs scare BYOK users.
 - **Date:** 2026-04-05
 - **Status:** Final
+- **Amended:** 2026-08-12 (AD-030) — "compound intelligence"/"behavior learning" framing replaced; the free/paid boundary itself is unchanged.
 - **Code:** `src-tauri/src/settings/license/gating.rs` — `natural_language_query` and `generate_ai_briefing` run on the user's key and are intentionally *not* in `SIGNAL_FEATURES`.
 
 ### AD-026: Developer DNA Un-gated — Free-Tier Viral Sharing
 - **Decision:** Leave Developer DNA cards un-gated and free (deliberately excluded from the `SIGNAL_FEATURES` list).
-- **Rationale:** Developer DNA is a viral growth loop — shareable DNA cards drive word-of-mouth and team adoption. Paywalling a core identity/sharing feature would suppress the network effect that brings new users in. The compounding value (and the paid surface) lives in the Signal-tier intelligence that DNA feeds into (AD-025), not in the shareable card itself.
+- **Rationale:** Developer DNA is a viral growth loop — shareable DNA cards drive word-of-mouth and team adoption. Paywalling a core identity/sharing feature would suppress the network effect that brings new users in. The paid surface is the Signal-tier analysis that DNA feeds into (AD-025), not the shareable card itself. *(Amended 2026-08-12, AD-030.)*
 - **Considered:**
   - Gate DNA behind Signal: Rejected — kills the free viral sharing loop that drives acquisition.
   - Gate only DNA *export/sharing*: Rejected — friction on the exact action that creates the growth loop.
@@ -333,7 +334,7 @@
 
 ### AD-028: Signal Lifetime Plan — Included, Priced at 3× Annual ($299 AUD)
 - **Decision:** Sell a Signal Lifetime license: $299 AUD one-time (3.0× annual), alongside monthly ($12) and annual ($99). Lifetime = all Signal features and all future Signal updates for the lifetime of the 4DA product; the signed key verifies offline (2099 expiry), so the license keeps working even if 4DA is discontinued. Defined in TOS §4.1; 14-day money-back in TOS §5.3.
-- **Rationale:** 4DA has zero marginal cost per Signal user (BYOK + local-first + stateless Cloudflare licensing), so lifetime carries none of the hosted-SaaS liability. The "sharper every day" compounding is delivered by the user's own machine, not perpetual vendor labor — making a lifetime promise unusually honest here. The buyer psychographic (privacy-first, local-first developers) is the most subscription-averse segment in software; a buy-once option answers the "why does local software need rent?" objection that otherwise dominates launch threads. Priced at 3.0× annual (low end of the credible 3–5× band) rather than the un-decided $249 (2.5×) that had sat on the page since 2026-03-23, which over-cannibalized annual.
+- **Rationale:** 4DA has zero marginal cost per Signal user (BYOK + local-first + stateless Cloudflare licensing), so lifetime carries none of the hosted-SaaS liability. The lifetime promise is unusually honest here because the cost structure carries it, not a forward-looking product claim: zero marginal cost per Signal user, and a signed key that verifies offline to 2099 — so the license keeps working even if 4DA is discontinued. The buyer psychographic (privacy-first, local-first developers) is the most subscription-averse segment in software; a buy-once option answers the "why does local software need rent?" objection that otherwise dominates launch threads. Priced at 3.0× annual (low end of the credible 3–5× band) rather than the un-decided $249 (2.5×) that had sat on the page since 2026-03-23, which over-cannibalized annual.
 - **Considered:**
   - No lifetime (subscription only): Rejected — brand-dissonant for local-first; loses the anti-subscription buyer entirely.
   - Keep $249 (2.5× annual): Rejected — below the credible ratio band; converts the highest-LTV cohort at a discount.
@@ -342,6 +343,7 @@
 - **Context:** The lifetime toggle shipped 2026-03-23 inside an unrelated bulk commit with no decision record, and the Stripe price was never provisioned — the buy button 500'd until found by live E2E verification on 2026-07-26. This AD retroactively makes the call explicit.
 - **Date:** 2026-07-26
 - **Status:** Final
+- **Amended:** 2026-08-12 (AD-030) — compounding rationale replaced; the $299 price and lifetime terms are unchanged.
 - **Code:** `site/src/signal.njk` (plan toggle), `site/functions/api/signal/checkout.js` (payment mode), `site/functions/api/license/refresh.js` (lifetime entitlement), `site/functions/api/streets/activate.js` (2099 expiry), `site/setup-signal.mjs` (price provisioning), TOS §4.1/§4.2/§5.3.
 
 ### AD-029: Behavioral Learning Demoted from Scoring Authority
@@ -354,6 +356,21 @@
 - **Date:** 2026-08-11
 - **Status:** Final
 - **Code:** `scoring/pipeline_v2.rs`, `scoring/gate.rs`, `scoring/context.rs`, `scoring/semantic/boost.rs`, `scoring/triage.rs`, `scoring/affinity.rs` (now display-only), `monitoring.rs` + `ace/mod.rs` + `commands.rs` + `ace_commands/scanning.rs` (tuner freeze), `analysis_status.rs` (seed removal), `calibration.rs`/`calibration_store.rs`/`analysis_rerank.rs` (mesh guards), `db/migrations.rs` Phase 103, `mcp-4da-server/src/db.ts`. Amends INV-023.
+
+### AD-030: Retire the "Gets Sharper Every Day" Product Promise
+- **Decision:** Retire "gets sharper every day" as the canonical one-sentence description, and remove derivative compounding / behavioural-learning promises from all user-facing surfaces. New canonical: **"4DA reads the internet for developers — privately, locally. Your codebase decides what's relevant."** KEPT: "All signal. No feed." (brand line); "Yesterday's noise becomes tomorrow's signal" **re-attributed** to corpus re-judging (verdict epochs + `scoring/reexamination.rs`), never to user engagement; factual description of Learned Preferences as a user-controlled filter; ACE stack/dependency context learning; the 92%/98% benchmark with its methodology intact as body copy (never headline); "compound knowledge" in THE-4DA-FRAMEWORK's authority-stack sense (developer process, not scoring accuracy).
+- **Rationale:** Accuracy first (Principle 5). AD-029 removed the mechanism the promise described, and INV-023 now fixes the Learned Behavior weight at 0.0, stating learned behavior "feeds ONLY user-facing surfaces — never scores or verdicts." Roughly 30 in-app strings, the installer metadata, the homepage JSON-LD and a published npm README still assert the removed mechanism — several inside Score Autopsy, the explainability surface, which makes them live INV-023 violations rather than marketing taste. The claim was unsupportable even before v19: AD-029 records the loop as "permanently starved… all risk, no demonstrated lift." Partial softening (PR #414) left ~100 instances standing and produced live self-contradiction: `README.md` says the Learned axis is "Reserved — held out of scoring" while `site/src/docs/scoring.md` on the same domain said it "boosts or suppresses future scores." Pre-launch (public but unadvertised) is the only cheap moment to fix this; after launch it is a retraction.
+- **Considered:**
+  - Keep the tagline and rely on the v19 softening: Rejected — softened and un-softened copy sat on the same domain contradicting each other; "every day" remains false on cadence (improvement is per engine-update) and agency (it implies the user's usage drives it).
+  - Keep it as aspirational marketing: Rejected — an unmeasurable headline claim baked into installer metadata and search-indexed structured data is exposure, not aspiration.
+  - Delete the whole arc including "yesterday's noise becomes tomorrow's signal": Rejected — that line is true and implemented (re-examination + verdict epochs); deleting true differentiators to atone for false ones is over-correction.
+  - "…and rejects 92% of it" as the new tagline: Rejected — a simulation-derived figure in the headline slot immediately after retiring a claim for being unmeasurable repeats the original error. 92%/98% stays in body copy with methodology.
+  - Rename the `compound_advantage` metric and MCP tool: Rejected — it measures realized outcomes (window response rate, lead time, knowledge-gap closure), not accumulated learning, and it is a published MCP tool name. UI labels change; the API name does not.
+- **House rewrite rule:** replace forward-looking promises with present-tense verifiable statements; re-attribute improvement from "your engagement" to "engine updates and your codebase."
+- **Re-claim criteria:** An "improves with use" claim may be made only after the AD-029 re-enable criteria are met AND a `/calibrate`-measured lift over the neutral baseline is published. At that point the claim would be made for the first time with evidence behind it.
+- **Enforcement:** `scripts/check-retired-claims.cjs` (wired into `test:scripts` + `validate`) fails the build on retired phrases outside allowlisted historical-record files.
+- **Date:** 2026-08-12
+- **Status:** Final — amends AD-017, AD-025, AD-026, AD-028.
 
 ---
 

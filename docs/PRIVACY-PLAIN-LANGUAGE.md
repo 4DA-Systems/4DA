@@ -23,7 +23,7 @@ Nothing, by default.
 
 4DA Systems does not operate a server, an analytics pipeline, or a user account system. There is no 4DA-operated tracking, cookies, fingerprinting, or sign-up.
 
-The app learns from what you click and save to improve your recommendations — all of that stays on your machine in a local SQLite database.
+The app records what you click and save to build a preference profile you can inspect and delete; relevance comes from your local codebase. All of that stays on your machine in a local SQLite database.
 
 **No telemetry, no exceptions**: 4DA sends no crash reports and no analytics to any server — there is no toggle that turns that on, because there is nothing to turn on. If something breaks, **Settings → Privacy → Export diagnostics** builds a scrubbed, local report (file paths, API keys, and PII redacted) that you review and choose whether to attach to a bug report. Nothing leaves your machine unless you send it yourself.
 

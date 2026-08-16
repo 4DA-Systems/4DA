@@ -16,18 +16,23 @@ pub struct NegativeStackContext {
 ///
 /// Logic:
 /// - For each tech in COMPETING_TECH: if user HAS a competitor but NOT this tech -> prior = 0.15
-/// - For each anti-topic with confidence >= 0.5 -> prior = 0.30
 /// - Everything else -> 1.0 (neutral)
 ///
 /// Bounded to direct deps only — transitive deps don't create negative inferences.
+///
+/// v19.1 (AD-029/AD-030): the auto-detected anti-topic input was REMOVED.
+/// It injected 0.30 suppression priors from `anti_topics` rows whose
+/// confidence was pure dismissal count (rejection_count/10 — five
+/// dismissals auto-banned a topic to ×0.30 composite authority), the last
+/// behavioral scoring path left after the v19 demotion. Explicit topic
+/// suppression is user-authored `exclusions`, which hard-filter upstream.
 pub fn build_negative_stack<S: std::hash::BuildHasher>(
     user_direct_deps: &HashSet<String, S>,
     competing_pairs: &[(&str, &[&str])],
-    anti_topics: &[(String, f32)], // (topic, confidence)
 ) -> NegativeStackContext {
     let mut priors = HashMap::new();
 
-    // Phase 1: Infer competing-absent technologies
+    // Infer competing-absent technologies
     for &(tech, competitors) in competing_pairs {
         let tech_lower = tech.to_lowercase();
 
@@ -44,16 +49,6 @@ pub fn build_negative_stack<S: std::hash::BuildHasher>(
         if has_competitor {
             // User has a competitor but NOT this tech -> strong negative
             priors.insert(tech_lower, 0.15);
-        }
-    }
-
-    // Phase 2: Incorporate anti-topics (user explicitly dismissed content about these)
-    for (topic, confidence) in anti_topics {
-        if *confidence >= 0.5 {
-            let topic_lower = topic.to_lowercase();
-            // Anti-topic prior: 0.30 (less severe than competing-absent)
-            // Don't override if competing-absent already set a stronger prior
-            priors.entry(topic_lower).or_insert(0.30);
         }
     }
 
@@ -114,7 +109,7 @@ mod tests {
         deps.insert("react".to_string());
         deps.insert("tauri".to_string());
 
-        let ctx = build_negative_stack(&deps, &competing_pairs(), &[]);
+        let ctx = build_negative_stack(&deps, &competing_pairs());
 
         // Vue should be suppressed (competing with react)
         assert!(ctx.priors.get("vue").copied().unwrap_or(1.0) < 0.20);
@@ -132,7 +127,7 @@ mod tests {
         deps.insert("react".to_string());
         deps.insert("vue".to_string()); // Monorepo with both
 
-        let ctx = build_negative_stack(&deps, &competing_pairs(), &[]);
+        let ctx = build_negative_stack(&deps, &competing_pairs());
 
         // Neither should be suppressed
         assert!(ctx.priors.get("react").is_none());
@@ -140,17 +135,18 @@ mod tests {
     }
 
     #[test]
-    fn test_anti_topics_applied() {
+    fn anti_topics_no_longer_feed_the_negative_stack() {
+        // v19.1 (AD-029/AD-030): dismissal-derived anti-topics were the last
+        // behavioral scoring path — a 0.30 suppression prior from rejection
+        // counts alone. The builder no longer accepts them; only
+        // competing-tech inference from the actual dependency graph
+        // produces priors.
         let deps = HashSet::new();
-        let anti = vec![
-            ("blockchain".to_string(), 0.8),
-            ("web3".to_string(), 0.3), // Low confidence — should NOT apply
-        ];
-
-        let ctx = build_negative_stack(&deps, &competing_pairs(), &anti);
-
-        assert!(ctx.priors.get("blockchain").copied().unwrap_or(1.0) <= 0.30);
-        assert!(ctx.priors.get("web3").is_none()); // Below 0.5 confidence threshold
+        let ctx = build_negative_stack(&deps, &competing_pairs());
+        assert!(
+            ctx.priors.is_empty(),
+            "no deps and no competing evidence must mean no suppression priors"
+        );
     }
 
     #[test]
@@ -158,7 +154,7 @@ mod tests {
         let mut deps = HashSet::new();
         deps.insert("react".to_string());
 
-        let ctx = build_negative_stack(&deps, &competing_pairs(), &[]);
+        let ctx = build_negative_stack(&deps, &competing_pairs());
 
         // Direct match
         let topics = vec!["vue".to_string(), "frontend".to_string()];
@@ -182,7 +178,7 @@ mod tests {
         let mut deps = HashSet::new();
         deps.insert("react".to_string());
 
-        let ctx = build_negative_stack(&deps, &competing_pairs(), &[]);
+        let ctx = build_negative_stack(&deps, &competing_pairs());
 
         // Neutral topics
         let topics = vec!["rust".to_string(), "performance".to_string()];
@@ -193,7 +189,7 @@ mod tests {
         );
 
         // Empty deps -> no suppression at all
-        let empty_ctx = build_negative_stack(&HashSet::new(), &competing_pairs(), &[]);
+        let empty_ctx = build_negative_stack(&HashSet::new(), &competing_pairs());
         assert!(empty_ctx.priors.is_empty());
     }
 }

@@ -1,0 +1,108 @@
+---
+title: "Retiring a claim we couldn't measure — 4DA"
+description: "4DA shipped with the promise that it 'gets sharper every day — it learns from how you engage.' An audit found four incidents in two months and no way to measure a benefit. So we removed the mechanism's authority, and then the promise."
+permalink: "/writing/retiring-a-claim-we-could-not-measure/"
+---
+{% extends "base.njk" %}
+
+{% block head %}
+  <link rel="canonical" href="https://4da.ai/writing/retiring-a-claim-we-could-not-measure/">
+  <meta property="og:title" content="Retiring a claim we couldn't measure">
+  <meta property="og:description" content="Four incidents in two months, zero measurable benefit. The engineering record of why 4DA retired 'gets sharper every day.'">
+  <meta property="og:url" content="https://4da.ai/writing/retiring-a-claim-we-could-not-measure/">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <meta property="og:type" content="article">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --bg: #0A0A0A; --bg-card: #141414; --text: #FFFFFF; --text-secondary: #A0A0A0; --text-muted: #666666; --accent: #F97316; --border: #2A2A2A; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.65; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; }
+    code { font-family: 'JetBrains Mono', monospace; font-size: .92em; background: var(--bg-card); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; }
+    .container { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+    .w-nav { height: 56px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+    .w-nav .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; color: var(--text); }
+    .w-nav .brand .dot { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; font-weight: 600; }
+    .w-nav .links { display: flex; gap: 22px; }
+    .w-nav .links a { color: var(--text-muted); font-size: 14px; }
+    .w-nav .links a:hover { color: var(--text); }
+    article { max-width: 720px; margin: 0 auto; padding: 56px 0 40px; }
+    article h1 { font-size: 34px; font-weight: 600; letter-spacing: -.02em; line-height: 1.25; margin-bottom: 24px; }
+    article h2 { font-size: 22px; font-weight: 600; margin: 36px 0 12px; }
+    article p { color: var(--text-secondary); margin: 0 0 16px; }
+    article strong { color: var(--text); }
+    article ol, article ul { color: var(--text-secondary); margin: 0 0 16px 22px; }
+    article li { margin-bottom: 8px; }
+    .close-card { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); padding: 20px 24px; margin: 32px 0; }
+    .close-card a.btn { display: inline-block; background: var(--text); color: var(--bg); font-weight: 600; font-size: 14px; padding: 10px 18px; border-radius: 8px; margin-top: 10px; }
+    .close-card a.btn:hover { opacity: .9; }
+    footer.w-footer { border-top: 1px solid var(--border); padding: 24px 0 60px; text-align: center; font-size: 13px; color: var(--text-muted); }
+    footer.w-footer a { color: var(--text-muted); margin: 0 10px; }
+    footer.w-footer a:hover { color: var(--text); }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <div class="container">
+    <nav class="w-nav">
+      <a href="/" class="brand"><span class="dot">4</span> 4DA</a>
+      <div class="links"><a href="/">Home</a><a href="/scan/">Stack Scan</a><a href="/mcp/">MCP</a><a href="/download/">Download</a></div>
+    </nav>
+  </div>
+
+  <div class="container">
+    <article>
+      <h1>Retiring a claim we couldn&rsquo;t measure</h1>
+
+      <p>Until this week, 4DA&rsquo;s one-sentence description ended with a promise: it &ldquo;gets sharper every day.&rdquo; The follow-up line explained how: &ldquo;it learns from how you engage with what it shows you.&rdquo; That promise is now retired. Not softened &mdash; removed, from the app, the installer metadata, the site&rsquo;s structured data, and a published npm README, with a build check that fails if the phrase comes back.</p>
+
+      <p>This is the engineering record of why. The short version: an audit of the learning loop behind the promise found four incidents in two months, and a data-starvation problem that meant the loop&rsquo;s benefit was never measurable in the first place. A mechanism whose costs we could measure and whose benefit we couldn&rsquo;t doesn&rsquo;t keep authority over scoring. And a claim we can&rsquo;t measure doesn&rsquo;t stay on the homepage.</p>
+
+      <h2>What the promise was, mechanically</h2>
+      <p>The engine watched how you engaged with what it surfaced &mdash; what you read, dismissed, scrolled past &mdash; and fed that back into relevance scoring: a per-topic affinity multiplier with &times;0.3&ndash;1.7 authority over an item&rsquo;s score, a learned axis in the confirmation gate, learned source-quality weights, auto-tuned thresholds, and a calibration curve that reshaped the LLM judge&rsquo;s output. Yesterday&rsquo;s noise becomes tomorrow&rsquo;s signal &mdash; via your behavior.</p>
+
+      <h2>What two months of it actually did</h2>
+      <p>Four incidents, in the order we found them:</p>
+      <ol>
+        <li><strong>It learned to suppress the user&rsquo;s own stack.</strong> Passive scrolling was recorded as negative engagement. On a Rust + Tauri + TypeScript codebase, the loop drove the topics <code>rust</code>, <code>tauri</code>, and <code>typescript</code> to &minus;1.0 affinity &mdash; the floor &mdash; and with &times;0.3&ndash;1.7 authority over scores, the engine started suppressing exactly the content the product exists to surface. The promise, running in reverse.</li>
+        <li><strong>A boost bypassed a cap.</strong> The pipeline puts a categorical ceiling on look-alike package releases &mdash; name-similar crates that resemble your dependencies but aren&rsquo;t them. An attention-gap boost (&ldquo;you haven&rsquo;t seen much of this topic lately&rdquo;) applied <em>after</em> the cap and pushed 145 of them back over the relevance threshold and into the feed.</li>
+        <li><strong>The capture wiring was dead &mdash; and when it wasn&rsquo;t, it disagreed with itself.</strong> The feedback-capture path was silently broken for weeks before anything noticed, which is its own indictment: a learning loop whose input can flatline without a symptom isn&rsquo;t load-bearing. When it was alive, three code paths recorded feedback on three incompatible strength scales. One of them recorded dismissals as +0.3 &mdash; a positive.</li>
+        <li><strong>A calibration curve outlived its own training data.</strong> The most instructive one. A curve fit in June from 50 mislabeled samples was degenerate &mdash; every input bucket mapped to certainty. A later database reset wiped the training tables, but the curve survived, because it lived as a file on disk, outside the database: the reset destroyed the evidence and kept the conclusion. Every cycle after that, the LLM judge&rsquo;s honest 1-out-of-5 relevance scores were remapped to 5-out-of-5, a reconciler added +0.15 to 48 items per cycle, and each remapped score was re-persisted as a &ldquo;raw&rdquo; training sample for the next fit. A fitted artifact certifying its own output as ground truth.</li>
+      </ol>
+
+      <h2>The number that decided it</h2>
+      <p>Explicit feedback signals in the entire instance: <strong>7</strong>. Corpus scored against: roughly <strong>200,000 items</strong>. You cannot fit a per-user model on seven labels &mdash; and you cannot measure whether it helped, either. The loop wasn&rsquo;t underperforming; it was unmeasurable. Every cost above is a number in an incident record. The benefit never produced a number at all.</p>
+      <p>That starvation isn&rsquo;t an implementation bug. A local-first, zero-telemetry app has exactly one user&rsquo;s signals to learn from, and one developer produces single-digit explicit labels while the engine scores hundreds of thousands of items. The standard fix &mdash; pool engagement data across users &mdash; is the thing we refuse to build. So the honest conclusion is that this mechanism, in this product, cannot currently earn its authority.</p>
+      <p>One mitigating fact, stated plainly: 4DA is pre-launch, and the instance in every incident above is our own. The only feed this corrupted was ours. That made now the cheap moment to fix it &mdash; after launch, this post would be a retraction.</p>
+
+      <h2>What we changed</h2>
+      <p>Two decisions, in order.</p>
+      <p><strong>First, the mechanism lost its authority</strong> (pipeline v19). Engagement-derived signals no longer move scores or verdicts &mdash; the learned-behavior weight is pinned at 0.0 by a written invariant. The attention-gap boost is deleted. The threshold auto-tuners are frozen at the neutral default. Calibration curves are refused if degenerate, at save <em>and</em> at load, and samples now persist the raw pre-transform score so a bad curve can&rsquo;t launder its output into future training data; the 3,028 poisoned samples were purged. Score ceilings are re-asserted in the one pass that runs after every writer, so nothing downstream can un-cap an item again. What stayed: everything user-controlled and visible &mdash; the preferences panel (pin, forget, reset), the engagement dashboards, and all of the codebase-context learning, which was never the problem.</p>
+      <p><strong>Then the promise itself was retired.</strong> Around 30 in-app strings, the installer metadata, the homepage&rsquo;s JSON-LD, and an npm README still asserted the removed mechanism &mdash; several inside the score-explainability surface, where describing a scoring input that no longer exists isn&rsquo;t marketing taste, it&rsquo;s a false explanation. All of it is replaced with what is permanently true and verifiable: <strong>relevance is derived from your manifests, dependencies, and commits; when the engine improves, it re-judges the whole corpus.</strong> &ldquo;Yesterday&rsquo;s noise becomes tomorrow&rsquo;s signal&rdquo; survives, because that re-judging mechanism actually exists &mdash; it&rsquo;s just no longer attributed to your engagement. And a check in the build now fails on the retired phrases anywhere outside the historical record.</p>
+
+      <h2>What did not change</h2>
+      <ul>
+        <li><strong>Local-first.</strong> Everything runs on your machine. Raw data never leaves it.</li>
+        <li><strong>BYOK.</strong> Your API keys, your models, never stored remotely.</li>
+        <li><strong>Zero telemetry.</strong> We don&rsquo;t collect engagement data across users &mdash; which, as covered above, is precisely why the learning loop was starved. We&rsquo;re keeping the constraint and dropping the claim, not the reverse.</li>
+        <li><strong>Dependency grounding.</strong> Relevance was always primarily driven by your actual manifests, lockfiles, and commit history. That part was never the learned behavior, and it&rsquo;s what carries the product.</li>
+        <li><strong>The benchmark.</strong> The scoring pipeline&rsquo;s published result &mdash; 92% of content filtered as noise, 98% of actual noise correctly rejected, measured across 9 simulated developer personas on 215 labeled items &mdash; stands, with its methodology attached, in body copy where a number can carry its context. Never as a headline.</li>
+      </ul>
+
+      <h2>The bar for ever saying it again</h2>
+      <p>&ldquo;Improves with use&rdquo; is a measurable claim, so the bar for making it is a measurement. The decision record spells it out: one unified feedback scale with no positive-valued negative gestures; degeneracy guards on every fitted artifact; fitted state bound to the corpus it was fit on, so no artifact outlives its data again; a user-visible off switch; and &mdash; the actual gate &mdash; a measured lift over the neutral baseline on labeled data, published. If that lift ever exists, the claim returns for the first time with evidence behind it.</p>
+      <p>We&rsquo;ll make the claim when we can prove it.</p>
+
+      <div class="close-card">
+        <p style="margin-bottom: 0;"><strong>4DA reads the internet for developers &mdash; privately, locally. Your codebase decides what&rsquo;s relevant.</strong></p>
+        <a class="btn" href="/scan/">Try Stack Scan &rarr;</a>
+        <span style="font-size: 13px; color: var(--text-muted);">&nbsp; or read <a href="/docs/scoring/">how scoring works</a></span>
+      </div>
+    </article>
+  </div>
+
+  <footer class="w-footer">
+    <div class="container">
+      <a href="/">4DA</a><a href="/scan/">Stack Scan</a><a href="/mcp/">MCP Server</a><a href="/download/">Download</a><a href="/privacy">Privacy</a>
+    </div>
+  </footer>
+{% endblock %}

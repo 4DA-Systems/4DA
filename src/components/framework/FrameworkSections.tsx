@@ -272,10 +272,10 @@ export function CompoundSection() {
       <Card>
         <div className="space-y-2">
           {[
-            { month: 'Month 1', state: 'System knows your declared interests' },
-            { month: 'Month 3', state: 'Feedback patterns learned, scoring adjusted' },
-            { month: 'Month 6', state: 'Taste embedding captures holistic preferences' },
-            { month: 'Month 12', state: 'Calibration deltas correct domain-specific biases' },
+            { month: 'Month 1', state: 'System knows your declared interests and detected stack' },
+            { month: 'Month 3', state: 'The corpus spans whole narratives — connected items, watch history, gaps identified and closed' },
+            { month: 'Month 6', state: 'Half a year of scored coverage, decision records, and configuration shaped to your stack' },
+            { month: 'Month 12', state: "Engine updates have re-judged the full corpus — yesterday's noise reclassified as today's signal" },
           ].map(({ month, state }) => (
             <div key={month} className="flex items-center gap-3">
               <span className="text-xs font-mono text-text-muted w-16 flex-shrink-0">{month}</span>
@@ -286,8 +286,9 @@ export function CompoundSection() {
         </div>
       </Card>
       <Paragraph>
-        A competitor who clones the code gets the algorithm but not the calibration. The compound
-        advantage is <Highlight>personal and non-transferable</Highlight>.
+        A competitor who clones the code gets the algorithm, not your data: the scored corpus, the
+        decision records, and the configuration are personal and local. The advantage is{' '}
+        <Highlight>personal and non-transferable</Highlight>.
       </Paragraph>
       <SubHeading>The Network Extension</SubHeading>
       <Card>

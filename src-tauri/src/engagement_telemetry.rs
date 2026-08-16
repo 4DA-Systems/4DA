@@ -5,7 +5,7 @@
 //!
 //! Every click, save, dismiss, and explicit feedback event flows through here
 //! to record evidence for learned preferences. This is the wire that makes
-//! "gets sharper every day" real: interactions become evidence, evidence
+//! preference profile real: interactions become evidence, evidence
 //! accumulates into facets, facets influence scoring.
 
 use rusqlite::{params, Connection};
