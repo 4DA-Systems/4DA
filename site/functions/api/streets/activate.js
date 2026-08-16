@@ -9,6 +9,8 @@
 //   - checkout.session.completed   -> initial license generation
 //   - invoice.paid                 -> subscription renewal (fresh key + extended expiry)
 //   - customer.subscription.deleted -> cancellation (mark metadata)
+//   - charge.refunded              -> refund (mark metadata terminal)
+//   - charge.dispute.created       -> chargeback (mark metadata terminal)
 // GET:  Retrieve license by checkout session_id (returns the key — the session id
 //       proves the purchase) or recover by email (MAILS the key to the address on
 //       file; never returns it). See the GET block for the security rationale.
@@ -24,6 +26,7 @@
 import Stripe from 'stripe';
 import * as ed from '@noble/ed25519';
 import { generateRefreshKey } from '../../../lib/ed25519-license.js';
+import { resolveCustomerId, stripeIdOf, terminalStatusPatch } from '../../../lib/entitlement.js';
 import {
   deliverRecoveryEmail,
   isPlausibleEmail,
@@ -175,19 +178,11 @@ async function generateAndStoreLicense(env, stripe, customerId, email, tier, bil
   return { licenseKey, expiresAt };
 }
 
-// ---------------------------------------------------------------------------
-// Shared: resolve customer ID (find or create)
-// ---------------------------------------------------------------------------
-
-async function resolveCustomerId(stripe, customerId, email) {
-  if (customerId) return customerId;
-
-  const existing = await stripe.customers.list({ email: email.toLowerCase(), limit: 1 });
-  if (existing.data.length > 0) return existing.data[0].id;
-
-  const created = await stripe.customers.create({ email: email.toLowerCase() });
-  return created.id;
-}
+// resolveCustomerId now lives in ../../../lib/entitlement.js — dependency-free
+// so it can be regression-tested (site/ has no installed dependency tree in CI).
+// The move fixed an ordering bug: it lower-cased `email` BEFORE the caller's
+// `if (!email)` guard ran, so a session with no email threw a TypeError and the
+// webhook answered a bare 500 that Stripe then retried.
 
 // Lease model: ensure the customer has a STABLE, unguessable refresh credential
 // stored in metadata (generated once, reused forever). The desktop lease client
@@ -214,17 +209,33 @@ async function ensureRefreshKey(stripe, customerId) {
 // Webhook event handlers
 // ---------------------------------------------------------------------------
 
-const HANDLED_EVENTS = ['checkout.session.completed', 'invoice.paid', 'customer.subscription.deleted'];
+const HANDLED_EVENTS = [
+  'checkout.session.completed',
+  'invoice.paid',
+  'customer.subscription.deleted',
+  // Money going BACK to the customer used to be invisible to this webhook. See
+  // the honesty note above handleChargeRefunded for exactly what these do and,
+  // more importantly, what they do not do.
+  'charge.refunded',
+  'charge.dispute.created',
+];
 
 async function handleCheckoutCompleted(env, stripe, session) {
   const email = session.customer_email || session.customer_details?.email;
-  const customerId = await resolveCustomerId(stripe, session.customer, email);
   const tier = session.metadata?.streets_tier || 'signal';
   const billingPeriod = session.metadata?.billing_period;
 
+  // ORDERING: this guard must run BEFORE resolveCustomerId, which normalises
+  // the address with `.toLowerCase()`. The two used to be the other way round,
+  // so a session carrying neither a customer id nor an email produced
+  // `TypeError: Cannot read properties of null (reading 'toLowerCase')` and a
+  // generic 500 that named nothing, instead of this diagnosable error. The
+  // licence payload embeds the email, so there is no path that needs it later.
   if (!email) {
     throw new Error(`No customer email in session ${session.id}`);
   }
+
+  const customerId = await resolveCustomerId(stripe, session.customer, email);
 
   const { licenseKey } = await generateAndStoreLicense(env, stripe, customerId, email, tier, billingPeriod);
   // Lease model: back the account with a stable refresh credential for the
@@ -266,27 +277,109 @@ async function handleInvoicePaid(env, stripe, invoice) {
   return { license_renewed: true };
 }
 
+// ---------------------------------------------------------------------------
+// Terminal entitlement transitions: cancellation, refund, chargeback.
+//
+// READ THIS BEFORE BELIEVING THE WORD "REVOKE" ANYWHERE NEAR THIS CODE.
+//
+// These handlers do NOT revoke an already-issued licence key, and nothing here
+// can. Keys are Ed25519-signed and verified OFFLINE by the desktop app against
+// a public key embedded in the binary (src-tauri/src/settings/license/
+// verify.rs). Once a key is on a user's machine it keeps working, with zero
+// server contact, until the `expires_at` INSIDE the signed payload passes:
+//
+//     monthly   ~35 days      annual   ~1 year + 7 days      lifetime   2099
+//
+// What writing a terminal status here DOES achieve:
+//   * invoice.paid stops re-issuing a fresh key with a fresh expiry;
+//   * /api/license/refresh stops minting new lease tokens for the lifetime tier
+//     (functions/api/license/refresh.js, via isLifetimeEntitled());
+//   * the session_id GET path reports the status to the buyer.
+//
+// So a refunded MONTHLY customer loses access within ~35 days, and a refunded
+// LIFETIME customer keeps the key they are already holding until 2099. That is
+// the honest statement of the current position. Before this change there was no
+// refund or chargeback handler at all, so a refunded customer was never even
+// marked, and `refresh.js` gated on a 'refunded' status that no writer produced.
+//
+// RECOMMENDATION, deliberately NOT implemented here because it is a licence
+// FORMAT change and needs its own review: issue lifetime purchases a
+// short-dated key like every other tier and let the refresh endpoint renew it.
+// That makes refresh.js load-bearing for all tiers and turns this metadata
+// write into real revocation with a bounded window, instead of a 73-year one.
+// ---------------------------------------------------------------------------
+
+async function applyTerminalStatus(stripe, customerId, status, context) {
+  const customer = await stripe.customers.retrieve(customerId);
+  if (customer?.deleted) {
+    return { skipped: 'customer deleted' };
+  }
+
+  // terminalStatusPatch is idempotent by construction: it preserves the
+  // first-seen timestamp and never downgrades severity, so a duplicate Stripe
+  // delivery writes exactly the same bytes. Stripe MERGES customer metadata on
+  // update, so naming only the changed keys is both the smallest write and the
+  // one that cannot clobber the licence stored alongside it.
+  const patch = terminalStatusPatch(customer.metadata, status, new Date().toISOString());
+  await stripe.customers.update(customerId, { metadata: patch });
+
+  const effective = patch.streets_status || customer.metadata?.streets_status || status;
+  console.log(
+    'Entitlement terminated:',
+    status,
+    'effective:',
+    effective,
+    'customer:',
+    customerId,
+    'context:',
+    JSON.stringify(context),
+  );
+  return { entitlement_status: effective };
+}
+
 async function handleSubscriptionDeleted(stripe, subscription) {
-  const customerId = subscription.customer;
+  const customerId = stripeIdOf(subscription.customer);
   if (!customerId) {
     return { skipped: 'no customer ID' };
   }
+  return applyTerminalStatus(stripe, customerId, 'cancelled', { subscription: subscription.id });
+}
 
-  const customer = await stripe.customers.retrieve(customerId);
+async function handleChargeRefunded(stripe, charge) {
+  // Stripe fires charge.refunded for PARTIAL refunds too, and sets
+  // `charge.refunded === true` only once the charge is fully refunded. A $5
+  // goodwill credit on an annual plan is not a cancelled purchase, so a partial
+  // refund must leave entitlement exactly where it is.
+  if (charge.refunded !== true) {
+    return { skipped: 'partial refund — entitlement unchanged' };
+  }
 
-  // Don't revoke immediately — the existing license key is still valid until
-  // its embedded expires_at date. Just mark the status so the app can show a
-  // "subscription cancelled" message and the GET endpoint can inform the user.
-  await stripe.customers.update(customerId, {
-    metadata: {
-      ...customer.metadata,
-      streets_status: 'cancelled',
-      streets_cancelled_at: new Date().toISOString(),
-    },
-  });
+  const customerId = stripeIdOf(charge.customer);
+  if (!customerId) {
+    return { skipped: 'no customer on charge' };
+  }
+  return applyTerminalStatus(stripe, customerId, 'refunded', { charge: charge.id });
+}
 
-  console.log('Subscription cancelled:', customer.email, 'customer:', customerId);
-  return { subscription_cancelled: true };
+async function handleDisputeCreated(stripe, dispute) {
+  // The Dispute object carries no `customer` field, and `dispute.charge` is an
+  // id string on most API versions and an expanded object on some. Resolve
+  // through whichever we were handed rather than assuming.
+  let customerId = null;
+  if (dispute.charge && typeof dispute.charge === 'object') {
+    customerId = stripeIdOf(dispute.charge.customer);
+  }
+  if (!customerId) {
+    const chargeId = stripeIdOf(dispute.charge);
+    if (chargeId) {
+      const charge = await stripe.charges.retrieve(chargeId);
+      customerId = stripeIdOf(charge?.customer);
+    }
+  }
+  if (!customerId) {
+    return { skipped: 'no customer resolvable from dispute' };
+  }
+  return applyTerminalStatus(stripe, customerId, 'chargeback', { dispute: dispute.id });
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +426,38 @@ export async function onRequest({ request, env, waitUntil }) {
       return json({ received: true }, 200, headers);
     }
 
+    // -----------------------------------------------------------------------
+    // DUPLICATE DELIVERIES — what protects us, and what does not.
+    //
+    // Stripe retries a webhook until it gets a 2xx and can re-send the same
+    // event id. There is NO event-id dedup store here, because there is nowhere
+    // to put one: site/wrangler.toml declares no KV, D1 or Durable Object
+    // binding, and a binding cannot be invented in code — it has to be
+    // provisioned on the Pages project first, and naming one that does not
+    // exist fails closed at request time on the LIVE payment path.
+    //
+    // What bounds the exposure today:
+    //   * constructEventAsync above enforces Stripe's 300s signature replay
+    //     tolerance, so a captured request body cannot be replayed by a third
+    //     party indefinitely. Only Stripe's own retries reach these handlers
+    //     twice, and only on its retry schedule.
+    //   * The three TERMINAL handlers (customer.subscription.deleted,
+    //     charge.refunded, charge.dispute.created) are idempotent BY
+    //     CONSTRUCTION: terminalStatusPatch() preserves the first-seen
+    //     timestamp and never downgrades severity, so re-delivery — in any
+    //     order — writes identical bytes.
+    //
+    // What is NOT idempotent, and what only a dedup store can fix:
+    //   * checkout.session.completed and invoice.paid MINT a new signed licence
+    //     key on every delivery. A duplicate therefore issues a second valid
+    //     key with a fresh expiry window. Minting cannot be made idempotent by
+    //     construction; it needs a persisted record of processed event ids.
+    //
+    // OPERATOR ACTION: create a KV namespace on the `4da-site` Pages project,
+    // add the binding to site/wrangler.toml, then gate this dispatch on
+    // `event.id` with a TTL comfortably longer than Stripe's retry window (72h).
+    // -----------------------------------------------------------------------
+
     try {
       let result;
       switch (event.type) {
@@ -344,6 +469,12 @@ export async function onRequest({ request, env, waitUntil }) {
           break;
         case 'customer.subscription.deleted':
           result = await handleSubscriptionDeleted(stripe, event.data.object);
+          break;
+        case 'charge.refunded':
+          result = await handleChargeRefunded(stripe, event.data.object);
+          break;
+        case 'charge.dispute.created':
+          result = await handleDisputeCreated(stripe, event.data.object);
           break;
       }
       return json({ received: true, ...result }, 200, headers);
