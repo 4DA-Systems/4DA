@@ -306,6 +306,65 @@ jobs:
           corepack disable
           npm install -g --force pnpm@9.15.0
 
+      # ── Supply chain: EVERY lockfile, not just the root one ──────────────
+      # `Security audit (npm)` existed in exactly one place — the Frontend job —
+      # and audited the root only. site/, paddle-webhook/ and mcp-4da-server/
+      # each have their own pnpm-lock.yaml and were audited ONLY by the
+      # nightly, which cannot block anything. So an advisory in the Cloudflare
+      # payment path (site/functions/api/streets/activate.js) could never fail a
+      # PR. When this was written those three lockfiles carried 12, 20 and 4
+      # advisories respectively while `Validate Success` stayed green.
+      #
+      # This belongs HERE rather than in `frontend` for the same reason
+      # check-file-sizes moved here on 2026-08-14: the frontend job is path
+      # filtered, so a Rust-only or workflow-only PR skips it entirely, and a
+      # gate reachable only through a filter that excludes half the repo is not
+      # a gate. `repo-guards` has no path filter and no `needs:`, and
+      # `Validate Success` depends on it, so this runs on every PR.
+      #
+      # Root is audited --prod (its dev tree is huge and already covered by the
+      # frontend job); the sub-projects include dev deps because their trees are
+      # almost entirely devDependencies and that build/deploy tooling IS their
+      # supply chain. Same policy as nightly-audit.yml — deliberately, so the
+      # nightly can never report something the merge gate would have allowed.
+      - name: Security audit (all pnpm lockfiles)
+        # npm retired the legacy audit endpoint on 2026-07-14 (HTTP 410), so
+        # pnpm <=10 cannot audit at all; only pnpm 11+ speaks the replacement
+        # bulk advisory endpoint. One-shot via npx, leaving the global 9.15.0
+        # pin untouched. pm_on_fail=ignore stops pnpm 11 re-executing that pin.
+        env:
+          pnpm_config_pm_on_fail: ignore
+        shell: bash
+        run: |
+          set +e
+          FAILED=0
+          for entry in ".:--prod" "site:" "paddle-webhook:" "mcp-4da-server:"; do
+            dir="${entry%%:*}"
+            flags="${entry#*:}"
+            # shellcheck disable=SC2086 # $flags must word-split (it is empty for sub-projects)
+            OUTPUT=$(npx -y pnpm@11.13.0 --dir "$dir" audit $flags --audit-level=high 2>&1)
+            CODE=$?
+            echo "=== pnpm audit $dir ${flags:+($flags)} — exit $CODE ==="
+            echo "$OUTPUT"
+            if [ "$CODE" -ne 0 ]; then
+              FAILED=1
+              # An annotation per directory, so `gh run view --log-failed` and
+              # the PR checks tab both name WHICH lockfile is dirty instead of
+              # leaving a reader to scroll the raw log. Annotations are
+              # single-line, so newlines are folded into the literal %0A the
+              # Actions viewer renders as a break — without this the annotation
+              # is silently truncated at the first newline.
+              SUMMARY=$(printf '%s' "$OUTPUT" | grep -E 'Severity:|vulnerabilities found|Package |Patched versions' | tail -c 900 | sed ':a;N;$!ba;s/\n/%0A/g')
+              echo "::error title=npm advisories in ${dir}::${SUMMARY}"
+            fi
+          done
+          set -e
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::High-or-worse npm advisories found. Raise the affected pnpm override floor in that project's package.json and regenerate its lockfile with the pinned pnpm (pnpm@9.15.0)."
+            exit 1
+          fi
+          echo "All pnpm lockfiles clean at --audit-level=high."
+
       - name: Check file sizes
         run: node scripts/check-file-sizes.cjs --ci
 
