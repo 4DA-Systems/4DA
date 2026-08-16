@@ -201,14 +201,20 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download OCR models
+      - name: Download and verify OCR models (SHA-256 pinned)
+        # Was two bare `curl -sSL` calls with NO integrity check whatsoever,
+        # feeding two multi-megabyte third-party blobs straight into the bundle
+        # that this workflow then EV-signs and notarizes. The signature attested
+        # to bytes nobody had verified. Three lines above, the same workflow
+        # SHA-256-pins CodeSignTool and hard-fails on mismatch; the models now
+        # get the same treatment, through the one script that owns the pins
+        # (scripts/fetch-ocr-models.cjs) so the dev and release paths cannot
+        # drift apart. `--require` makes a network failure fatal here — a
+        # release must not proceed without verified models — while a developer's
+        # offline `pnpm install` stays non-fatal.
         shell: bash
         run: |
-          mkdir -p src-tauri/models
-          curl -sSL -o src-tauri/models/text-detection.rten \
-            https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
-          curl -sSL -o src-tauri/models/text-recognition.rten \
-            https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
+          node scripts/fetch-ocr-models.cjs --require
           ls -lh src-tauri/models/
 
       # Supply-chain policy is a release gate, not a suggestion.
