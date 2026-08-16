@@ -4,11 +4,64 @@
 //! Extracted from `llm.rs` to keep file sizes within limits.
 //! Supports SSE (Anthropic, OpenAI) and NDJSON (Ollama) streaming formats.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use crate::error::{Result, ResultExt};
 use crate::llm::{sanitize_api_error, LLMResponse, Message};
 use crate::settings::LLMProvider;
 use futures::StreamExt;
 use tracing::debug;
+
+// ============================================================================
+// Chunk reassembly
+// ============================================================================
+
+/// Accumulates raw network bytes and yields complete lines.
+///
+/// All three streaming paths used to do `buffer.push_str(&String::
+/// from_utf8_lossy(&bytes))` **per network chunk**. TCP does not respect
+/// character boundaries: a multi-byte char whose bytes land in two chunks is
+/// decoded as an incomplete sequence in each half, so `from_utf8_lossy`
+/// replaces BOTH halves with U+FFFD and the character is gone before any parser
+/// sees it. Not a panic — silent corruption of user-visible LLM output, and it
+/// only shows up on non-English text and emoji, which is exactly the content
+/// least likely to be in anyone's test fixture.
+///
+/// Decoding is therefore deferred to a line boundary, where a
+/// well-formed stream always has whole characters. `from_utf8_lossy` is still
+/// the decoder for the completed line — a genuinely malformed line degrades to
+/// U+FFFD rather than dropping the line.
+#[derive(Default)]
+pub(crate) struct StreamLineBuffer {
+    buf: Vec<u8>,
+}
+
+impl StreamLineBuffer {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// Append one raw network chunk. No decoding happens here.
+    pub(crate) fn push_chunk(&mut self, bytes: &[u8]) {
+        self.buf.extend_from_slice(bytes);
+    }
+
+    /// Pop the next complete line (up to and including `\n`), decoded.
+    /// Returns `None` while the buffer holds no newline — the partial line
+    /// stays buffered until the chunk carrying its terminator arrives.
+    pub(crate) fn next_line(&mut self) -> Option<String> {
+        let newline = self.buf.iter().position(|b| *b == b'\n')?;
+        let line: Vec<u8> = self.buf.drain(..=newline).collect();
+        // Exclude the trailing '\n' from the decoded line.
+        Some(String::from_utf8_lossy(&line[..newline]).into_owned())
+    }
+}
 
 // ============================================================================
 // SSE / NDJSON Parsing Helpers (pub for testing)
@@ -142,19 +195,18 @@ where
     }
 
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut lines = StreamLineBuffer::new();
     let mut full_text = String::new();
     let mut input_tokens: u64 = 0;
     let mut output_tokens: u64 = 0;
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.context("Stream read error")?;
-        buffer.push_str(&String::from_utf8_lossy(&bytes));
+        lines.push_chunk(&bytes);
 
         // Process complete lines
-        while let Some(newline_pos) = buffer.find('\n') {
-            let line = buffer[..newline_pos].trim().to_string();
-            buffer = buffer[newline_pos + 1..].to_string();
+        while let Some(raw) = lines.next_line() {
+            let line = raw.trim();
 
             if line.is_empty() || line.starts_with(':') {
                 continue;
@@ -267,16 +319,15 @@ where
     }
 
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut lines = StreamLineBuffer::new();
     let mut full_text = String::new();
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.context("Stream read error")?;
-        buffer.push_str(&String::from_utf8_lossy(&bytes));
+        lines.push_chunk(&bytes);
 
-        while let Some(newline_pos) = buffer.find('\n') {
-            let line = buffer[..newline_pos].trim().to_string();
-            buffer = buffer[newline_pos + 1..].to_string();
+        while let Some(raw) = lines.next_line() {
+            let line = raw.trim();
 
             if line.is_empty() {
                 continue;
@@ -370,24 +421,23 @@ where
     }
 
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut lines = StreamLineBuffer::new();
     let mut full_text = String::new();
     let mut input_tokens: u64 = 0;
     let mut output_tokens: u64 = 0;
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.context("Stream read error")?;
-        buffer.push_str(&String::from_utf8_lossy(&bytes));
+        lines.push_chunk(&bytes);
 
-        while let Some(newline_pos) = buffer.find('\n') {
-            let line = buffer[..newline_pos].trim().to_string();
-            buffer = buffer[newline_pos + 1..].to_string();
+        while let Some(raw) = lines.next_line() {
+            let line = raw.trim();
 
             if line.is_empty() {
                 continue;
             }
 
-            let (token, done, in_tok, out_tok) = parse_ollama_ndjson(&line);
+            let (token, done, in_tok, out_tok) = parse_ollama_ndjson(line);
 
             if let Some(t) = token {
                 full_text.push_str(&t);
@@ -423,6 +473,101 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- Chunk reassembly (StreamLineBuffer) ---
+
+    /// Drain every line the buffer currently holds.
+    fn drain(buf: &mut StreamLineBuffer) -> Vec<String> {
+        std::iter::from_fn(|| buf.next_line()).collect()
+    }
+
+    /// THE corruption case: a multi-byte char split across two network chunks.
+    ///
+    /// The old code decoded each chunk independently with
+    /// `String::from_utf8_lossy`, so both halves of the split char became
+    /// U+FFFD and the character was destroyed before any parser ran. Byte
+    /// boundaries in a TCP stream are arbitrary; character boundaries are not.
+    #[test]
+    fn multibyte_char_split_across_chunks_is_reassembled() {
+        let line = "data: {\"text\":\"héllo 世界 🦀\"}\n";
+        let bytes = line.as_bytes();
+
+        // Split at every byte offset — most of them land mid-character.
+        for split in 1..bytes.len() {
+            let mut buf = StreamLineBuffer::new();
+            buf.push_chunk(&bytes[..split]);
+            // The newline is the final byte, so no split can complete a line.
+            assert!(
+                drain(&mut buf).is_empty(),
+                "no line before the newline (split {split})"
+            );
+            buf.push_chunk(&bytes[split..]);
+            let out = drain(&mut buf);
+            assert_eq!(out.len(), 1, "one complete line (split {split})");
+            assert_eq!(
+                out[0],
+                line.trim_end(),
+                "char split at byte {split} must survive"
+            );
+            assert!(
+                !out[0].contains('\u{FFFD}'),
+                "no replacement char (split {split})"
+            );
+        }
+    }
+
+    /// One byte at a time — the pathological case for per-chunk decoding.
+    #[test]
+    fn byte_at_a_time_stream_reassembles() {
+        let payload = "héllo\nsecond 世界 line\n🦀 third\n";
+        let mut buf = StreamLineBuffer::new();
+        let mut out = Vec::new();
+        for b in payload.as_bytes() {
+            buf.push_chunk(&[*b]);
+            out.extend(drain(&mut buf));
+        }
+        assert_eq!(out, vec!["héllo", "second 世界 line", "🦀 third"]);
+    }
+
+    /// End-to-end through the parser a streaming path actually calls.
+    #[test]
+    fn ollama_token_survives_a_chunk_split_mid_char() {
+        let line = "{\"message\":{\"content\":\"héllo 🦀\"},\"done\":false}\n";
+        let bytes = line.as_bytes();
+        // Split inside the 'é' (its 2 bytes straddle this offset).
+        let split = line.find('é').expect("é present") + 1;
+        let mut buf = StreamLineBuffer::new();
+        buf.push_chunk(&bytes[..split]);
+        buf.push_chunk(&bytes[split..]);
+        let decoded = buf.next_line().expect("complete line");
+        let (token, _, _, _) = parse_ollama_ndjson(&decoded);
+        assert_eq!(token, Some("héllo 🦀".to_string()));
+    }
+
+    #[test]
+    fn partial_line_without_newline_is_held_not_emitted() {
+        let mut buf = StreamLineBuffer::new();
+        buf.push_chunk(b"data: partial");
+        assert!(buf.next_line().is_none());
+        buf.push_chunk(b" rest\n");
+        assert_eq!(buf.next_line(), Some("data: partial rest".to_string()));
+        assert!(buf.next_line().is_none());
+    }
+
+    #[test]
+    fn multiple_lines_in_one_chunk_all_emit() {
+        let mut buf = StreamLineBuffer::new();
+        buf.push_chunk("a\nb\n\nc\n".as_bytes());
+        assert_eq!(drain(&mut buf), vec!["a", "b", "", "c"]);
+    }
+
+    #[test]
+    fn crlf_terminated_lines_keep_the_cr_for_trim() {
+        // SSE may use CRLF; callers `.trim()` the returned line.
+        let mut buf = StreamLineBuffer::new();
+        buf.push_chunk(b"data: x\r\n");
+        assert_eq!(buf.next_line().as_deref().map(str::trim), Some("data: x"));
+    }
 
     // --- Anthropic SSE parsing ---
 
