@@ -191,13 +191,15 @@ if confidence < 0.3 {
 - **The rule that follows from those exceptions:** any state kept outside SQLite MUST be
   bound to the data it was derived from, or a database reset leaves a stale conclusion
   behind with its evidence gone. This is not hypothetical — see
-  `FAILURE_MODES.md` → "Fitted artifact outlives the data it was fit on" for the
-  2026-08-11 incident where exactly this split poisoned scoring for weeks.
+  `FAILURE_MODES.md` → "Fitted artifact outlives the data it was fit on": a calibration
+  curve fit on 2026-06-19 kept loading from disk after the 07-31 database reset wiped
+  the samples it was fit from, and went undetected until 08-11.
 - **Verification:** State audit. Any new out-of-DB persistence needs an entry above.
 - **What this used to say:** "ALL persistent state MUST live in SQLite database. No state
-  split across multiple storage mechanisms." That was false on the day it was written and
-  is false in four places today. An invariant contradicted by shipped code teaches readers
-  to discount the file.
+  split across multiple storage mechanisms." It is false in four places, three of which
+  document their own reasoning in the module that implements them — so the invariant was
+  not describing a rule anyone intended to follow. An invariant contradicted by shipped
+  code teaches readers to discount the file.
 
 ### INV-042: Error Handling Hierarchy
 - Use `thiserror` for all custom error types
