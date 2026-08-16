@@ -36,10 +36,39 @@
 
 const fs = require('fs');
 
-// argv[0] must be one of these. Deliberately short: this is the set of build
-// tools the gate legitimately drives. Adding to it is a reviewable change to
-// THIS file, not a silent edit to a data file.
-const ALLOWED_EXECUTABLES = ['node', 'npm', 'npx', 'pnpm', 'cargo'];
+// Allowed command FORMS, not merely allowed executables.
+//
+// An argv[0] allowlist is not sufficient. `npx -y attacker-pkg` and `pnpm dlx
+// attacker-pkg` contain no shell metacharacter, pass an argv[0] check
+// unchanged, and fetch and execute arbitrary code from the registry — so a
+// merged edit to the tracked tools/gate-jobs.json would still be a code
+// execution primitive on every developer's machine at push time, which is the
+// exact property this module exists to remove.
+//
+// Every job the gate actually declares is one of two shapes, so the validator
+// pins those shapes instead:
+//
+//     pnpm run <script>            -> a script defined in this repo's package.json
+//     node scripts/<name>.cjs [--flag ...]
+//
+// `npx`, `npm` and `cargo` are deliberately absent: no declared job uses them,
+// and `npx`/`npm exec` are the registry-fetch forms above. Widening this is a
+// reviewable change to THIS file, not a silent edit to a data file.
+const ALLOWED_FORMS = [
+  {
+    label: 'pnpm run <script>',
+    test: (argv) =>
+      argv.length === 3 && argv[0] === 'pnpm' && argv[1] === 'run' && /^[a-z0-9][a-z0-9:_-]*$/.test(argv[2]),
+  },
+  {
+    label: 'node scripts/<name>.cjs [--flag ...]',
+    test: (argv) =>
+      argv.length >= 2 &&
+      argv[0] === 'node' &&
+      /^scripts\/[a-z0-9][a-z0-9._-]*\.cjs$/.test(argv[1]) &&
+      argv.slice(2).every((a) => /^--[a-z0-9][a-z0-9-]*$/.test(a)),
+  },
+];
 
 // Anything that only means something to a shell. Present => refuse, do not try
 // to interpret. Covers command substitution, chaining, redirection, globbing,
@@ -73,14 +102,16 @@ function toArgv(id, cmd) {
     );
   }
   const argv = cmd.trim().split(/ +/);
-  if (!ALLOWED_EXECUTABLES.includes(argv[0])) {
+  if (!ALLOWED_FORMS.some((form) => form.test(argv))) {
     throw new Refusal(
-      `job "${id}": executable ${JSON.stringify(argv[0])} is not on the gate allowlist ` +
-        `[${ALLOWED_EXECUTABLES.join(', ')}] — refused.\n` +
+      `job "${id}": cmd does not match an allowed command form — refused.\n` +
         `    cmd: ${JSON.stringify(cmd)}\n` +
+        `    allowed: ${ALLOWED_FORMS.map((f) => f.label).join('  |  ')}\n` +
         `    tools/gate-jobs.json is a tracked file that runs on every developer's ` +
-        `machine at push\n    time. Widening this list is a reviewable change to ` +
-        `scripts/gate-jobs.cjs.`,
+        `machine at push\n    time, so the gate pins whole command shapes rather than ` +
+        `just the executable:\n    "npx -y attacker-pkg" has no shell metacharacter and ` +
+        `would pass an executable-only\n    allowlist. Widening this is a reviewable ` +
+        `change to scripts/gate-jobs.cjs.`,
     );
   }
   return argv;
@@ -164,7 +195,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  ALLOWED_EXECUTABLES,
+  ALLOWED_FORMS,
   Refusal,
   loadJobs,
   main,

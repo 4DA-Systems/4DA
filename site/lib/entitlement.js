@@ -54,6 +54,59 @@ export function isLifetimeEntitled(metadata) {
   return md.streets_billing_period === 'lifetime' && !TERMINAL_STATUSES.includes(md.streets_status);
 }
 
+/** Is this customer already in a terminal state? */
+export function isTerminal(metadata) {
+  return TERMINAL_STATUSES.includes((metadata || {}).streets_status);
+}
+
+/**
+ * Does this customer still hold a paid charge OTHER than the one being
+ * processed — one that succeeded, was not refunded and is not disputed?
+ *
+ * Terminal status is written on the CUSTOMER, but a refund happens to a
+ * CHARGE, and the two are not the same thing. Without this check, refunding
+ * any one charge revokes the customer's entire entitlement:
+ *
+ *   - a buyer double-charged for Signal Lifetime has the duplicate refunded as
+ *     support intended, and loses the $299 they legitimately paid;
+ *   - a monthly subscriber who upgrades to lifetime and gets the leftover
+ *     monthly charge refunded as a courtesy loses the lifetime purchase.
+ *
+ * Neither recovers on its own — only a fresh `checkout.session.completed`
+ * resets the customer to 'active'.
+ *
+ * Deliberately charge-based rather than keyed off a recorded entitling charge:
+ * customers issued before this code shipped have no such record, and a rule
+ * that only protects new customers is the wrong half to protect. "Any payment
+ * still standing" needs no migration and reads the same for everyone.
+ *
+ * Fails CLOSED on an API error — if we cannot establish that another payment
+ * survives, we do not revoke. Wrongly keeping a refunded customer's access is
+ * a support ticket; wrongly revoking a paying customer's is a refund request
+ * and a lost customer.
+ *
+ * @param {{charges:{list:Function}}} stripe
+ * @param {string} customerId
+ * @param {string|null} excludeChargeId the charge being refunded/disputed
+ * @returns {Promise<boolean>}
+ */
+export async function hasOtherStandingCharge(stripe, customerId, excludeChargeId) {
+  try {
+    const charges = await stripe.charges.list({ customer: customerId, limit: 100 });
+    return (charges.data || []).some(
+      (c) =>
+        c.id !== excludeChargeId &&
+        c.paid === true &&
+        c.status === 'succeeded' &&
+        c.refunded !== true &&
+        c.disputed !== true,
+    );
+  } catch (err) {
+    console.error('charge lookup failed; not revoking', customerId, err?.message);
+    return true;
+  }
+}
+
 /**
  * Build the metadata patch that moves a customer into a terminal status.
  *

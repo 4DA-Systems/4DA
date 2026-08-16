@@ -80,9 +80,15 @@ function makeRepo({ jobs } = {}) {
   fs.copyFileSync(path.join(REPO_ROOT, 'tools', 'install-gate.sh'), path.join(dir, 'tools', 'install-gate.sh'));
   fs.copyFileSync(path.join(REPO_ROOT, 'scripts', 'gate-jobs.cjs'), path.join(dir, 'scripts', 'gate-jobs.cjs'));
 
+  // A real, trivial repo script. The validator pins whole command SHAPES
+  // (`node scripts/<name>.cjs`), not just argv[0], so the harness has to
+  // declare a job in the same shape a real one takes — `node --version` is
+  // correctly refused now and would only ever prove the refusal path.
+  fs.writeFileSync(path.join(dir, 'scripts', 'noop.cjs'), 'process.exit(0);\n');
+
   fs.writeFileSync(
     path.join(dir, 'tools', 'gate-jobs.json'),
-    JSON.stringify({ jobs: jobs || [{ id: 'noop', cmd: 'node --version' }] }, null, 2),
+    JSON.stringify({ jobs: jobs || [{ id: 'noop', cmd: 'node scripts/noop.cjs' }] }, null, 2),
   );
 
   // Host hook: captures stdin ONCE, exports it, feeds its own loop from the
@@ -216,7 +222,7 @@ test('a poisoned tools/gate-jobs.json blocks the push and never executes', () =>
       // Plain, valid shell. Under `eval "$cmd"` this ran and wrote the marker
       // file on every developer's machine at push time — verified against the
       // pre-fix hook. Now it is refused before anything is executed.
-      { id: 'evil', cmd: 'node --version; echo pwned > PWNED' },
+      { id: 'evil', cmd: 'node scripts/noop.cjs; echo pwned > PWNED' },
     ],
   });
   installGate(dir);
@@ -242,5 +248,5 @@ test('a non-allowlisted executable in the spec blocks the push', () => {
 
   const r = runHook(dir, `refs/heads/main ${sha} refs/heads/main ${ZERO}\n`);
   assert.equal(r.status, 1);
-  assert.match(r.stdout + r.stderr, /not on the gate allowlist/);
+  assert.match(r.stdout + r.stderr, /allowed command form/);
 });

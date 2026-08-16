@@ -26,7 +26,13 @@
 import Stripe from 'stripe';
 import * as ed from '@noble/ed25519';
 import { generateRefreshKey } from '../../../lib/ed25519-license.js';
-import { resolveCustomerId, stripeIdOf, terminalStatusPatch } from '../../../lib/entitlement.js';
+import {
+  hasOtherStandingCharge,
+  isTerminal,
+  resolveCustomerId,
+  stripeIdOf,
+  terminalStatusPatch,
+} from '../../../lib/entitlement.js';
 import {
   deliverRecoveryEmail,
   isPlausibleEmail,
@@ -267,6 +273,21 @@ async function handleInvoicePaid(env, stripe, invoice) {
   // Preserve the billing period across renewals so annual keys stay annual.
   const billingPeriod = customer.metadata?.streets_billing_period;
 
+  // A renewal must not resurrect a terminated customer. `generateAndStoreLicense`
+  // writes `streets_status: 'active'` unconditionally, so without this guard the
+  // sequence [invoice.paid -> charge.refunded -> invoice.paid re-delivered] ends
+  // with the customer active again holding a brand-new key on a fresh expiry —
+  // which is the exact defect this file's refund handling exists to close, and
+  // Stripe re-delivering an already-processed event is the ordinary case, not an
+  // edge one (there is no event-id dedup store; see the dispatch note below).
+  //
+  // Recovery is deliberately narrow: only a fresh `checkout.session.completed`
+  // clears a terminal status, because that is someone actually paying again.
+  if (isTerminal(customer.metadata)) {
+    console.log('Renewal ignored for terminated customer:', customerId, 'status:', customer.metadata?.streets_status);
+    return { skipped: `customer is ${customer.metadata.streets_status} — renewal does not re-issue` };
+  }
+
   if (!email) {
     throw new Error(`No email for customer ${customerId}`);
   }
@@ -291,7 +312,11 @@ async function handleInvoicePaid(env, stripe, invoice) {
 //     monthly   ~35 days      annual   ~1 year + 7 days      lifetime   2099
 //
 // What writing a terminal status here DOES achieve:
-//   * invoice.paid stops re-issuing a fresh key with a fresh expiry;
+//   * invoice.paid stops re-issuing a fresh key with a fresh expiry — enforced
+//     by the isTerminal() guard in handleInvoicePaid, NOT by the status write
+//     on its own: generateAndStoreLicense sets `streets_status: 'active'`
+//     unconditionally, so without that guard a re-delivered renewal silently
+//     un-terminates the customer;
 //   * /api/license/refresh stops minting new lease tokens for the lifetime tier
 //     (functions/api/license/refresh.js, via isLifetimeEntitled());
 //   * the session_id GET path reports the status to the buyer.
@@ -358,6 +383,14 @@ async function handleChargeRefunded(stripe, charge) {
   if (!customerId) {
     return { skipped: 'no customer on charge' };
   }
+
+  // Terminal status lands on the CUSTOMER; the refund happened to a CHARGE.
+  // If any other payment of theirs is still standing, this refund did not end
+  // their entitlement — see hasOtherStandingCharge for the cases this protects.
+  if (await hasOtherStandingCharge(stripe, customerId, charge.id)) {
+    return { skipped: 'another paid charge still stands — entitlement unchanged' };
+  }
+
   return applyTerminalStatus(stripe, customerId, 'refunded', { charge: charge.id });
 }
 
@@ -379,6 +412,13 @@ async function handleDisputeCreated(stripe, dispute) {
   if (!customerId) {
     return { skipped: 'no customer resolvable from dispute' };
   }
+
+  // Same purchase-vs-customer distinction as a refund. A dispute on one charge
+  // does not end an entitlement another, undisputed payment still covers.
+  if (await hasOtherStandingCharge(stripe, customerId, stripeIdOf(dispute.charge))) {
+    return { skipped: 'another paid charge still stands — entitlement unchanged' };
+  }
+
   return applyTerminalStatus(stripe, customerId, 'chargeback', { dispute: dispute.id });
 }
 
