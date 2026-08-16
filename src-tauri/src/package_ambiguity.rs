@@ -11,29 +11,23 @@
 //! "does this text actually talk about this package?" and are used by
 //! blind_spots, decision_advantage window detection, and win validation.
 
-/// Check whether `text` contains `term` at a word boundary.
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
+/// Check whether `text` contains `term` at a word boundary, accepting a
+/// `.js`/`.ts`/`.rs` suffix as a boundary ("next.js" IS the `next` package).
 /// Case-sensitive; pass already-lowercased strings for case-insensitive matching.
+///
+/// Delegates to the shared UTF-8-safe helper — this copy advanced its cursor by
+/// one byte from the START of a failed match, which splits a multi-byte first
+/// char. `term` here is a dependency name.
 pub(crate) fn has_word_boundary_match(text: &str, term: &str) -> bool {
-    if term.is_empty() {
-        return false;
-    }
-    let bytes = text.as_bytes();
-    let mut search_from = 0;
-    while let Some(pos) = text[search_from..].find(term) {
-        let abs = search_from + pos;
-        let before_ok = abs == 0 || !bytes[abs - 1].is_ascii_alphanumeric();
-        let after = abs + term.len();
-        let after_ok = after >= bytes.len()
-            || !bytes[after].is_ascii_alphanumeric()
-            || text[after..].starts_with(".js")
-            || text[after..].starts_with(".ts")
-            || text[after..].starts_with(".rs");
-        if before_ok && after_ok {
-            return true;
-        }
-        search_from = abs + 1;
-    }
-    false
+    crate::utils::has_word_boundary_match_with_ext(text, term)
 }
 
 /// Package names that are common English words AND real package names.
@@ -336,6 +330,23 @@ mod tests {
         assert!(!has_word_boundary_match("unexpected happens here", "next")); // embedded in word
         assert!(!has_word_boundary_match("configuring app", "conf")); // substring of config
         assert!(!has_word_boundary_match("anything", ""));
+    }
+
+    /// Regression: the cursor advanced to `abs + 1` — one byte past the START
+    /// of a failed match — so a dependency name whose first char is multi-byte
+    /// panicked whenever the match abutted an alphanumeric char. That is the
+    /// ONLY path to the advance, so ASCII-only tests could never reach it.
+    #[test]
+    fn word_boundary_multibyte_term_does_not_panic() {
+        // The term's FIRST char must be multi-byte for `abs + 1` to split it.
+        assert!(!has_word_boundary_match("éclair2 release", "éclair"));
+        assert!(!has_word_boundary_match("привет9 build", "привет"));
+        assert!(!has_word_boundary_match("我们1", "我们"));
+        assert!(has_word_boundary_match("éclair2 and éclair ship", "éclair"));
+        // .js/.ts/.rs suffix acceptance survives the multi-byte path.
+        assert!(has_word_boundary_match("éclair.js released", "éclair"));
+        // Bug E: a non-ASCII letter glued to an ASCII term is not a boundary.
+        assert!(!has_word_boundary_match("иreact", "react"));
     }
 
     // -- requires_strict_proof --

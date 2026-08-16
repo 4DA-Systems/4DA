@@ -1274,24 +1274,22 @@ fn truncate(s: &str, max_len: usize) -> String {
 /// title. E.g. "i18next" inside "i18next-http-middleware" — the hyphen after
 /// the match means it's a DIFFERENT package, not a standalone mention.
 /// Returns true when ALL occurrences of `dep` in `text` are compound-prefixes.
+///
+/// Not expressible as [`crate::utils::has_word_boundary_match`]: the boundary
+/// test is asymmetric — the LEFT side must be a non-alphanumeric, the RIGHT side
+/// need only not be a hyphen. So it keeps its own loop, but takes the cursor and
+/// the neighbour lookups from the shared UTF-8-safe primitives instead of
+/// hand-rolling `search_from = abs + 1` (which splits a multi-byte first char
+/// on every failed match — and `dep` is a dependency name).
 fn is_compound_prefix_match(text: &str, dep: &str) -> bool {
     if dep.is_empty() {
         return false;
     }
-    let bytes = text.as_bytes();
-    let mut found_standalone = false;
-    let mut search_from = 0;
-    while let Some(pos) = text[search_from..].find(dep) {
-        let abs = search_from + pos;
-        let before_ok = abs == 0 || !bytes[abs - 1].is_ascii_alphanumeric();
-        let after = abs + dep.len();
-        let after_is_hyphen = after < bytes.len() && bytes[after] == b'-';
-        if before_ok && !after_is_hyphen {
-            found_standalone = true;
-            break;
-        }
-        search_from = abs + 1;
-    }
+    let found_standalone = crate::utils::match_offsets(text, dep).any(|pos| {
+        let before_ok = crate::utils::char_before(text, pos).is_none_or(|c| !c.is_alphanumeric());
+        let after_is_hyphen = crate::utils::char_at(text, pos + dep.len()) == Some('-');
+        before_ok && !after_is_hyphen
+    });
     // If we never found a standalone (non-prefix) occurrence, it's compound-prefix only
     !found_standalone && text.contains(dep)
 }
@@ -1903,6 +1901,32 @@ mod tests {
             "i18next-http-middleware bypasses i18next sanitization",
             "i18next"
         ));
+    }
+
+    /// Regression: the cursor advanced to `abs + 1` — one byte past the START
+    /// of a non-standalone match — splitting a multi-byte first char. The
+    /// compound-prefix shape is precisely what reaches that advance, so a
+    /// dependency name with a multi-byte first char panicked on exactly the
+    /// input this function exists to classify.
+    #[test]
+    fn compound_prefix_multibyte_dep_does_not_panic() {
+        // The dep's FIRST char must be multi-byte for `abs + 1` to split it.
+        assert!(is_compound_prefix_match(
+            "[cve-2026-1] éclair-http-middleware has path traversal",
+            "éclair"
+        ));
+        assert!(is_compound_prefix_match(
+            "привет-core has a path traversal bug",
+            "привет"
+        ));
+        // A standalone occurrence after the compound one still wins.
+        assert!(!is_compound_prefix_match(
+            "éclair-http-middleware bypasses éclair sanitization",
+            "éclair"
+        ));
+        // Bug E: a non-ASCII letter glued to the dep is not a left boundary,
+        // so this is not a standalone mention.
+        assert!(is_compound_prefix_match("иi18next-http bug", "i18next"));
     }
 
     // ─── Advisory-subject extraction ─────────────────────────────────

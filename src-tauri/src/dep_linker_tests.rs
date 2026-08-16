@@ -903,21 +903,49 @@ fn test_advisory_affected_status_edge_cases() {
 #[test]
 fn test_is_package_boundary_chars() {
     // These are package-internal (NOT boundaries)
-    assert!(!is_package_boundary(b'-'));
-    assert!(!is_package_boundary(b'_'));
-    assert!(!is_package_boundary(b'.'));
-    assert!(!is_package_boundary(b'@'));
-    assert!(!is_package_boundary(b'a'));
-    assert!(!is_package_boundary(b'Z'));
-    assert!(!is_package_boundary(b'9'));
+    assert!(is_package_name_char('-'));
+    assert!(is_package_name_char('_'));
+    assert!(is_package_name_char('.'));
+    assert!(is_package_name_char('@'));
+    assert!(is_package_name_char('a'));
+    assert!(is_package_name_char('Z'));
+    assert!(is_package_name_char('9'));
+    // Char-based, so a non-ASCII letter is a name char too — the previous
+    // `u8` form read every UTF-8 continuation byte as a boundary.
+    assert!(is_package_name_char('é'));
+    assert!(is_package_name_char('中'));
 
     // These ARE valid boundaries
-    assert!(is_package_boundary(b' '));
-    assert!(is_package_boundary(b'/'));
-    assert!(is_package_boundary(b'('));
-    assert!(is_package_boundary(b')'));
-    assert!(is_package_boundary(b':'));
-    assert!(is_package_boundary(b','));
-    assert!(is_package_boundary(b'['));
-    assert!(is_package_boundary(b']'));
+    assert!(!is_package_name_char(' '));
+    assert!(!is_package_name_char('/'));
+    assert!(!is_package_name_char('('));
+    assert!(!is_package_name_char(')'));
+    assert!(!is_package_name_char(':'));
+    assert!(!is_package_name_char(','));
+    assert!(!is_package_name_char('['));
+    assert!(!is_package_name_char(']'));
+}
+
+/// Regression: `matches_dep_in_title` advanced its cursor to `pos + 1` — one
+/// byte past the START of a failed match — so a dependency name whose first
+/// char is multi-byte panicked whenever it abutted a package-name char. The
+/// advance is reached only on a failed boundary test, which is exactly what a
+/// compound name produces.
+#[test]
+fn test_matches_dep_in_title_multibyte_dep_does_not_panic() {
+    // "éclair-ui" is a compound, so the "éclair" match fails its right
+    // boundary and the loop advances into the middle of the leading 'é'.
+    // The dep's FIRST char must be multi-byte for `pos + 1` to split it.
+    assert_eq!(
+        matches_dep_in_title("using éclair-ui today", "éclair"),
+        None
+    );
+    assert_eq!(matches_dep_in_title("привет-core release", "привет"), None);
+    // A genuine standalone occurrence after the failed one still matches.
+    assert_eq!(
+        matches_dep_in_title("éclair-ui and éclair ship", "éclair"),
+        Some(0.50)
+    );
+    // A non-ASCII letter glued to an ASCII dep is NOT a boundary (bug E).
+    assert_eq!(matches_dep_in_title("иreact rules", "react"), None);
 }

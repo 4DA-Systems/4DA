@@ -4,6 +4,14 @@
 //! Cross-references project dependencies with source items to detect
 //! knowledge gaps - things you should know about but haven't engaged with.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -573,25 +581,14 @@ fn find_keyword_misses(conn: &rusqlite::Connection, package_name: &str) -> Resul
     Ok(items)
 }
 
-/// Check if `text` contains `term` at a word boundary (not embedded in a larger word)
+/// Check if `text` contains `term` at a word boundary (not embedded in a larger
+/// word). Lowercases `text` first; `term` must already be lowercase.
+///
+/// Delegates to the shared UTF-8-safe helper. This copy walked its cursor one
+/// byte past the START of a failed match — and `term` here is either a
+/// dependency name or a primary-stack technology the user typed at onboarding.
 pub(crate) fn has_word_boundary_match(text: &str, term: &str) -> bool {
-    let lower = text.to_lowercase();
-    let mut search_from = 0;
-    while let Some(pos) = lower[search_from..].find(term) {
-        let abs_pos = search_from + pos;
-        let before_ok = abs_pos == 0 || !lower.as_bytes()[abs_pos - 1].is_ascii_alphanumeric();
-        let after_pos = abs_pos + term.len();
-        let after_ok = after_pos >= lower.len()
-            || !lower.as_bytes()[after_pos].is_ascii_alphanumeric()
-            || lower[after_pos..].starts_with(".js")
-            || lower[after_pos..].starts_with(".ts")
-            || lower[after_pos..].starts_with(".rs");
-        if before_ok && after_ok {
-            return true;
-        }
-        search_from = abs_pos + 1;
-    }
-    false
+    crate::utils::has_word_boundary_match_with_ext(&text.to_lowercase(), term)
 }
 
 /// Reject low-value content that adds noise to missed-signal feeds.
@@ -1192,6 +1189,22 @@ mod tests {
             "Unexpected behavior in Node",
             "next"
         ));
+    }
+
+    /// Regression: the cursor advanced to `abs_pos + 1` — one byte past the
+    /// START of a failed match — splitting a multi-byte first char. `term` here
+    /// is a dependency name or a primary-stack technology the user typed at
+    /// onboarding, and the advance is reached only when the match abuts an
+    /// alphanumeric char.
+    #[test]
+    fn test_word_boundary_multibyte_term_does_not_panic() {
+        // The term's FIRST char must be multi-byte for `abs_pos + 1` to split it.
+        assert!(!has_word_boundary_match("Éclair2 Released", "éclair"));
+        assert!(!has_word_boundary_match("привет9", "привет"));
+        assert!(has_word_boundary_match("Éclair2 and Éclair ship", "éclair"));
+        // Lowercasing of `text` is still applied.
+        assert!(has_word_boundary_match("ÉCLAIR ships", "éclair"));
+        assert!(!has_word_boundary_match("aé bé", ""));
     }
 
     // ========================================================================

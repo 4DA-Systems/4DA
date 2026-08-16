@@ -5,6 +5,14 @@
 //! the user's chosen stack. Electron content for a Tauri developer, Vue content
 //! for a React developer, etc.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use std::collections::HashSet;
 
 /// Ecosystem map: (technology, &[its competitors])
@@ -166,6 +174,8 @@ pub fn compute_competing_penalty(
 ) -> f32 {
     let title_lower = title.to_lowercase();
     // Limit content scan to first 2000 chars for performance
+    // SAFE: `floor_char_boundary` returns a char boundary by definition.
+    #[allow(clippy::string_slice)]
     let content_lower = content[..content.floor_char_boundary(2000)].to_lowercase();
 
     for user_tech in user_primary_stack {
@@ -233,8 +243,10 @@ pub fn compute_competing_penalty(
             "benchmark",
         ];
         let is_comparative = comparative_markers.iter().any(|m| {
-            has_word_boundary(&title_lower, m)
-                || content_lower[..content_lower.floor_char_boundary(500)].contains(m)
+            // SAFE: `floor_char_boundary` returns a char boundary by definition.
+            #[allow(clippy::string_slice)]
+            let head = &content_lower[..content_lower.floor_char_boundary(500)];
+            has_word_boundary(&title_lower, m) || head.contains(m)
         });
         if is_comparative {
             return 0.85;
@@ -270,21 +282,14 @@ pub fn get_anti_dependencies(primary_stack: &HashSet<String>) -> HashSet<String>
     anti
 }
 
-/// Check if `text` contains `term` at a word boundary
+/// Check if `text` contains `term` at a word boundary.
+///
+/// Delegates to the shared UTF-8-safe helper. `term` here comes only from the
+/// const competitor table, so the byte-arithmetic cursor this replaces was
+/// latent rather than live — but a single non-ASCII entry added to that table
+/// would have armed it silently.
 fn has_word_boundary(text: &str, term: &str) -> bool {
-    let mut search_from = 0;
-    while let Some(pos) = text[search_from..].find(term) {
-        let abs_pos = search_from + pos;
-        let before_ok = abs_pos == 0 || !text.as_bytes()[abs_pos - 1].is_ascii_alphanumeric();
-        let after_pos = abs_pos + term.len();
-        let after_ok =
-            after_pos >= text.len() || !text.as_bytes()[after_pos].is_ascii_alphanumeric();
-        if before_ok && after_ok {
-            return true;
-        }
-        search_from = abs_pos + 1;
-    }
-    false
+    crate::utils::has_word_boundary_match(text, term)
 }
 
 #[cfg(test)]
@@ -297,6 +302,36 @@ mod tests {
 
     fn topics(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Regression: the cursor advanced to `abs_pos + 1` — one byte past the
+    /// START of a failed match — which splits a multi-byte first char. Latent
+    /// while `term` comes only from the const competitor table, live the moment
+    /// a non-ASCII entry is added or the caller's `user_lower` (a user stack
+    /// entry, see `compute_competing_penalty`) is non-ASCII.
+    #[test]
+    fn word_boundary_multibyte_term_does_not_panic() {
+        // The term's FIRST char must be multi-byte for `abs_pos + 1` to split it.
+        assert!(!has_word_boundary("éclair2 released", "éclair"));
+        assert!(!has_word_boundary("привет9", "привет"));
+        assert!(has_word_boundary("éclair2 and éclair ship", "éclair"));
+        assert!(!has_word_boundary("anything", ""));
+        // Bug E: a non-ASCII letter glued to the term is not a boundary.
+        assert!(!has_word_boundary("иtauri", "tauri"));
+    }
+
+    /// The same input through the public entry point — `primary_stack` is the
+    /// user's declared stack and reaches `has_word_boundary` as `user_lower`.
+    #[test]
+    fn compute_competing_penalty_survives_non_ascii_stack() {
+        let primary = stack(&["éclair", "中文", ""]);
+        let mult = compute_competing_penalty(
+            &topics(&["electron"]),
+            "éclair2 vs 中文9: a comparison",
+            "",
+            &primary,
+        );
+        assert!(mult > 0.0, "must return rather than unwind");
     }
 
     #[test]
