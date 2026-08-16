@@ -29,12 +29,21 @@ pub(super) fn compute_intelligence(
     }
 }
 
-/// Dependencies used but never engaged with in content.
+/// Dependencies used but never EXPLICITLY engaged with in content.
+///
+/// v20 (AD-029/AD-030): the engaged-set is sourced from explicit engagement
+/// only (clicks/saves) — behavioral affinities carry no scoring authority
+/// (INV-023). Cold start: with zero explicit engagement recorded, "you never
+/// engaged with X" is vacuously true for every dependency — no gap is
+/// assertable, so none is emitted until explicit data exists.
 pub(super) fn detect_skill_gaps(stack: &StackDimension, skills: &SkillsDimension) -> Vec<SkillGap> {
+    if skills.explicit_engaged_topics.is_empty() {
+        return Vec::new();
+    }
     let engaged: HashSet<String> = skills
-        .top_affinities
+        .explicit_engaged_topics
         .iter()
-        .map(|a| a.topic.to_lowercase())
+        .map(|t| t.to_lowercase())
         .collect();
 
     let mut gaps = Vec::new();
@@ -645,28 +654,21 @@ mod skill_gap_tests {
         }
     }
 
-    fn skills_with_affinities(topics: &[&str]) -> SkillsDimension {
+    fn skills_with_explicit(topics: &[&str]) -> SkillsDimension {
         SkillsDimension {
-            top_affinities: topics
-                .iter()
-                .map(|t| AffinityEntry {
-                    topic: (*t).to_string(),
-                    score: 0.8,
-                })
-                .collect(),
+            explicit_engaged_topics: topics.iter().map(|t| (*t).to_string()).collect(),
             ..Default::default()
         }
     }
 
-    /// The blind-spot necessity path is fed by detect_skill_gaps. This is the
-    /// linchpin: if it silently returns empty, blind_spot necessity dies app-wide
-    /// without any error. A dependency the user has but has not engaged with must
-    /// surface as a gap.
+    /// The blind-spot necessity path is fed by detect_skill_gaps. Once ANY
+    /// explicit engagement exists, a dependency the user has but has not
+    /// engaged with must surface as a gap.
     #[test]
     fn unengaged_dependency_becomes_a_skill_gap() {
         let gaps = detect_skill_gaps(
             &stack_with_deps(&["tokio", "axum"]),
-            &skills_with_affinities(&[]),
+            &skills_with_explicit(&["react"]),
         );
         let names: Vec<&str> = gaps.iter().map(|g| g.dependency.as_str()).collect();
         assert!(
@@ -679,13 +681,13 @@ mod skill_gap_tests {
         );
     }
 
-    /// A dependency the user actively engages with is NOT a gap — engagement
+    /// A dependency the user EXPLICITLY engages with is NOT a gap — engagement
     /// closes the loop, so the blind-spot signal must not keep firing for it.
     #[test]
     fn engaged_dependency_is_not_a_skill_gap() {
         let gaps = detect_skill_gaps(
             &stack_with_deps(&["tokio", "axum"]),
-            &skills_with_affinities(&["tokio"]),
+            &skills_with_explicit(&["tokio"]),
         );
         let names: Vec<&str> = gaps.iter().map(|g| g.dependency.as_str()).collect();
         assert!(
@@ -698,13 +700,48 @@ mod skill_gap_tests {
         );
     }
 
+    /// v20 cold-start floor: with ZERO explicit engagement recorded, "never
+    /// engaged with X" is vacuously true for every dependency — no gap is
+    /// assertable, so none may be emitted (and skill_gap_boost stays 0.0).
+    #[test]
+    fn no_explicit_engagement_means_no_gaps() {
+        let gaps = detect_skill_gaps(
+            &stack_with_deps(&["tokio", "axum", "serde"]),
+            &skills_with_explicit(&[]),
+        );
+        assert!(
+            gaps.is_empty(),
+            "no explicit engagement -> no assertable gaps, got {gaps:?}"
+        );
+    }
+
+    /// INV-023 regression guard: behavioral affinities must NOT exclude a
+    /// dependency from the gap set — only explicit engagement may.
+    #[test]
+    fn behavioral_affinities_do_not_exclude_gaps() {
+        let skills = SkillsDimension {
+            top_affinities: vec![AffinityEntry {
+                topic: "tokio".to_string(),
+                score: 0.9,
+            }],
+            explicit_engaged_topics: vec!["react".to_string()],
+            ..Default::default()
+        };
+        let gaps = detect_skill_gaps(&stack_with_deps(&["tokio"]), &skills);
+        let names: Vec<&str> = gaps.iter().map(|g| g.dependency.as_str()).collect();
+        assert!(
+            names.contains(&"tokio"),
+            "a behavioral affinity must not close a gap (INV-023), got {names:?}"
+        );
+    }
+
     /// Very short dependency names are skipped to avoid false-positive gaps from
     /// noisy two/three-letter tokens.
     #[test]
     fn short_dependency_names_are_skipped() {
         let gaps = detect_skill_gaps(
             &stack_with_deps(&["ws", "rs"]),
-            &skills_with_affinities(&[]),
+            &skills_with_explicit(&["react"]),
         );
         assert!(
             gaps.is_empty(),

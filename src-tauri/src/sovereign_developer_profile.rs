@@ -75,6 +75,12 @@ pub struct DetectedTechEntry {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SkillsDimension {
     pub top_affinities: Vec<AffinityEntry>,
+    /// Topics the user has EXPLICITLY engaged with (click/save/share/briefing
+    /// click/engagement-complete). This — never the behavioral affinities
+    /// above — is the engaged-set that skill-gap detection may consume
+    /// (INV-023: learned behavior feeds only user-facing surfaces).
+    #[serde(default)]
+    pub explicit_engaged_topics: Vec<String>,
     pub playbook_progress: PlaybookProgressSummary,
     pub engagement_sources: Vec<SourceEngagementEntry>,
 }
@@ -373,6 +379,26 @@ fn assemble_skills(conn: &Connection) -> SkillsDimension {
         })
         .unwrap_or_default();
 
+    // Topics with EXPLICIT engagement — the only engaged-set that scoring
+    // (skill-gap detection) is allowed to consume. Implicit signals (scroll,
+    // ignore) are deliberately excluded: they are the capture class that
+    // poisoned the affinity table (AD-029).
+    let explicit_engaged_topics = conn
+        .prepare(
+            "SELECT DISTINCT LOWER(je.value)
+             FROM interactions i, json_each(i.item_topics) je
+             WHERE i.item_topics IS NOT NULL
+               AND json_valid(i.item_topics)
+               AND i.action_type IN ('click','save','share','briefing_click','engagement_complete','save_with_context')",
+        )
+        .and_then(|mut stmt| {
+            stmt.query_map([], |row| row.get::<_, String>(0)).map(|rows| {
+                rows.filter_map(std::result::Result::ok)
+                    .collect::<Vec<_>>()
+            })
+        })
+        .unwrap_or_default();
+
     // Playbook progress
     let playbook_progress = assemble_playbook_progress(conn);
 
@@ -403,6 +429,7 @@ fn assemble_skills(conn: &Connection) -> SkillsDimension {
 
     SkillsDimension {
         top_affinities,
+        explicit_engaged_topics,
         playbook_progress,
         engagement_sources,
     }

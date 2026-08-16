@@ -64,11 +64,10 @@ mod tests {
             dependencies: vec!["tokio".to_string(), "serde".to_string(), "axum".to_string()],
             ..Default::default()
         };
+        // v20: only EXPLICIT engagement closes a gap (INV-023) — behavioral
+        // affinities are ignored by gap detection.
         let skills = SkillsDimension {
-            top_affinities: vec![AffinityEntry {
-                topic: "tokio".to_string(),
-                score: 5.0,
-            }],
+            explicit_engaged_topics: vec!["tokio".to_string()],
             ..Default::default()
         };
         let gaps = detect_skill_gaps(&stack, &skills);

@@ -49,8 +49,6 @@ pub(crate) struct NecessityInputs {
     pub age_hours: f64,
     /// Content type classification
     pub content_type: Option<String>,
-    /// Contradiction boost: how much this item overlaps with contradicted topics (0.0-1.0)
-    pub contradiction_boost: f32,
     /// The canonical grounding verdict (`dependencies::compute_grounding_verdict`).
     /// A weak text match (`dep_match_score > 0`) is NOT stack membership — the
     /// stack-update path requires this, so a third-party release that merely
@@ -184,8 +182,6 @@ pub(crate) fn compute_necessity(inputs: &NecessityInputs) -> NecessityResult {
         } else if let Some(result) = try_deprecation_path(inputs, has_dep_match, &dep_names) {
             result
         } else if let Some(result) = try_stack_update_path(inputs, has_dep_match, &dep_names) {
-            result
-        } else if let Some(result) = try_contradiction_path(inputs) {
             result
         } else if let Some(result) = try_decision_relevant_path(inputs) {
             result
@@ -438,28 +434,6 @@ fn try_stack_update_path(
         score,
         format!("New release in your stack: {dep_names}"),
         NecessityCategory::EcosystemShift,
-        Urgency::Awareness,
-    ))
-}
-
-/// Contradiction resolution path — content touches a topic the user has conflicting signals about.
-///
-/// When the user both likes and dislikes a topic (high affinity AND anti-topic), content
-/// that could resolve the confusion is moderately necessary. Scored between deprecation
-/// and decision-relevant because resolving confusion has lasting value.
-fn try_contradiction_path(
-    inputs: &NecessityInputs,
-) -> Option<(f32, String, NecessityCategory, Urgency)> {
-    if inputs.contradiction_boost <= 0.0 {
-        return None;
-    }
-
-    // Base score 0.45, boosted by contradiction strength (max 0.70)
-    let score = (0.45 + inputs.contradiction_boost * 0.25).min(0.70);
-    Some((
-        score,
-        "Touches a topic with conflicting signals in your profile".to_string(),
-        NecessityCategory::BlindSpot, // Contradictions are a form of blind spot
         Urgency::Awareness,
     ))
 }

@@ -268,7 +268,26 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // builder produces are byte-identical with and without the input; stored
 // scores cannot differ and a corpus re-stamp would be a no-op. If a
 // corpus with populated anti_topics ever needs converging, bump then.
-pub(crate) const PIPELINE_VERSION: i32 = 19;
+//
+// v20 (2026-08-17, AD-029/AD-030 arc): the two behavioral scoring inputs
+// that survived the v19 quarantine are closed.
+// (a) `contradiction_boost` (necessity path fed by `topic_affinities` JOIN
+//     `anti_topics` via `anomaly::get_contradicted_topics`) REMOVED.
+//     Live-corpus probe: `anti_topics` = 0 rows → the JOIN is empty → this
+//     removal is byte-identical on the live corpus; the bump is carried
+//     by (b).
+// (b) Skill-gap detection re-sourced: the engaged-set exclusion now uses
+//     EXPLICIT engagement only (click/save/share/briefing_click/
+//     engagement_complete), never `topic_affinities`, and emits NO gaps
+//     when zero explicit engagement exists (a gap claim with no
+//     engagement data is vacuous). Live probe: `interactions` held ONLY
+//     scroll/ignore rows, so the old engaged-set was 15 scroll-noise
+//     topics — gap sets, and `skill_gap_boost` (+0.15/0.20), change.
+// UNREGISTERED bump (full drain): affected items are not expressible as a
+// stored-column predicate (breakdowns are computed on demand), and the
+// corpus is ~15.6k items — the recency-first parallel drain converges it
+// in minutes.
+pub(crate) const PIPELINE_VERSION: i32 = 20;
 
 /// Score a single item through the PASIFA V2 pipeline.
 ///
@@ -340,7 +359,6 @@ pub(crate) struct ScoringContext {
     pub sovereign_profile: Option<crate::sovereign_developer_profile::SovereignDeveloperProfile>,
     /// Topics with contradictory signals (both high affinity AND anti-topic).
     /// Content touching these topics gets a necessity boost to help resolve confusion.
-    pub contradicted_topics: std::collections::HashSet<String>,
     // dominant_persona removed at its 2026-08-10 deadline (v19/AD-029: the
     // persona posterior no longer feeds scoring; the diagnostic field was
     // never wired into the breakdown UI).

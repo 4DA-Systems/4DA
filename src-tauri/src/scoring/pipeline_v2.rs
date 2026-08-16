@@ -2531,23 +2531,6 @@ pub(crate) fn score_item(
         (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
     });
 
-    // Contradiction boost: check if item topics overlap with contradicted topics
-    let contradiction_boost = if ctx.contradicted_topics.is_empty() {
-        0.0
-    } else {
-        let overlap_count = raw
-            .topics
-            .iter()
-            .filter(|t| ctx.contradicted_topics.contains(t.as_str()))
-            .count();
-        // Normalize: 1 match = 0.5, 2+ = 1.0
-        match overlap_count {
-            0 => 0.0,
-            1 => 0.5,
-            _ => 1.0,
-        }
-    };
-
     // Security severity evidence feeds the necessity bucket below, so extract it
     // BEFORE building NecessityInputs. Previously it was computed afterward, so a real
     // critical CVE on a dev-only dep (which can reach the security path with no signal
@@ -2582,7 +2565,6 @@ pub(crate) fn score_item(
         matched_window_label: matched_window_label.clone(),
         age_hours,
         content_type: Some(content_type.slug().to_string()),
-        contradiction_boost,
         strongly_grounded: grounding.strong,
         version_affected: is_version_affected,
     };
