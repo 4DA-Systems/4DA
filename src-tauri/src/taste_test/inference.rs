@@ -12,7 +12,10 @@ use super::{
 };
 
 const NUM_PERSONAS: usize = 9;
-const NUM_ITEMS: usize = 15;
+/// Number of calibration items. `pub(crate)` because the IPC boundary
+/// (`taste_test_commands::taste_test_respond`) must validate against it —
+/// see the `debug_assert!` in `update_with_latency`.
+pub(crate) const NUM_ITEMS: usize = 15;
 const EARLY_TERMINATION_MIN_ITEMS: usize = 7;
 const EARLY_TERMINATION_ENTROPY_THRESHOLD: f64 = 1.2;
 
@@ -65,9 +68,24 @@ impl InferenceState {
         response: &TasteResponse,
         response_time_ms: Option<u64>,
     ) {
-        assert!(item_slot < NUM_ITEMS, "item_slot out of range");
+        // Downgraded from `assert!` once the IPC boundary started validating.
+        // As an `assert!` this was live in RELEASE and took the whole process
+        // down on unvalidated frontend input; the range now belongs to
+        // `ipc_guard::validate_range` in `taste_test_respond`, and this is a
+        // development-time contract check for in-process callers.
+        debug_assert!(item_slot < NUM_ITEMS, "item_slot out of range");
 
-        let likelihoods = &LIKELIHOOD_MATRIX[item_slot];
+        let Some(likelihoods) = LIKELIHOOD_MATRIX.get(item_slot) else {
+            // Release-build backstop: an out-of-range slot is a no-op update
+            // rather than an index panic. The posterior is simply unchanged.
+            tracing::warn!(
+                target: "4da::taste_test",
+                item_slot,
+                num_items = NUM_ITEMS,
+                "item_slot out of range — update skipped"
+            );
+            return;
+        };
 
         // Latency-based signal strength: instant responses are more decisive
         let latency_power = match response_time_ms {
