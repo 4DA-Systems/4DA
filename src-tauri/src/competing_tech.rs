@@ -320,18 +320,34 @@ mod tests {
         assert!(!has_word_boundary("иtauri", "tauri"));
     }
 
-    /// The same input through the public entry point — `primary_stack` is the
-    /// user's declared stack and reaches `has_word_boundary` as `user_lower`.
+    /// Why this site is LATENT rather than live, pinned rather than assumed.
+    ///
+    /// `compute_competing_penalty` only reaches `has_word_boundary` when the
+    /// user's stack entry is a key of `COMPETING_TECH` (otherwise it
+    /// `continue`s), and the term on the other call is a competitor from the
+    /// same const table. So no user-supplied non-ASCII string can reach the
+    /// helper through this entry point *today* — an end-to-end panic test here
+    /// would pass whether the helper were fixed or not, which is worse than no
+    /// test.
+    ///
+    /// What is worth pinning is the premise. The day a non-ASCII entry is added
+    /// to the table this test fails and points at the unit test above, which is
+    /// where the real guarantee lives.
     #[test]
-    fn compute_competing_penalty_survives_non_ascii_stack() {
-        let primary = stack(&["éclair", "中文", ""]);
-        let mult = compute_competing_penalty(
-            &topics(&["electron"]),
-            "éclair2 vs 中文9: a comparison",
-            "",
-            &primary,
-        );
-        assert!(mult > 0.0, "must return rather than unwind");
+    fn competing_tech_table_is_ascii_which_is_why_this_site_was_latent() {
+        for (tech, competitors) in COMPETING_TECH {
+            assert!(
+                tech.is_ascii(),
+                "non-ASCII COMPETING_TECH key {tech:?}: this site is no longer \
+                 latent — confirm has_word_boundary is still the shared helper"
+            );
+            for comp in *competitors {
+                assert!(
+                    comp.is_ascii(),
+                    "non-ASCII competitor {comp:?} under {tech:?}"
+                );
+            }
+        }
     }
 
     #[test]
