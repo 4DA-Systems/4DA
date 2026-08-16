@@ -8,6 +8,8 @@
 //   SIGNAL_PRICE_MONTHLY  — Stripe price ID for Signal monthly ($12/mo AUD)
 //   SIGNAL_PRICE_ANNUAL   — Stripe price ID for Signal annual ($99/yr AUD)
 //   SIGNAL_PRICE_LIFETIME — Stripe price ID for Signal lifetime ($299 AUD one-time)
+//   SIGNAL_LAUNCH_COUPON  — Optional, launch-day only: Stripe coupon ID auto-applied to
+//                           lifetime checkouts while the coupon is valid; unset = no discount
 //   SITE_URL              — Base URL for redirects (e.g. https://4da.ai)
 //   ENVIRONMENT           — "production" in prod; anything else enables localhost CORS
 
@@ -93,6 +95,20 @@ export async function onRequest({ request, env }) {
     };
     if (config.mode === 'payment') {
       sessionParams.customer_creation = 'always';
+      // Launch special: auto-apply the launch coupon while Stripe reports it valid.
+      // Stripe flips valid to false once max_redemptions is reached, so the standing
+      // price takes over mechanically. A coupon problem never blocks a full-price sale.
+      const coupon = env.SIGNAL_LAUNCH_COUPON;
+      if (coupon) {
+        try {
+          const retrieved = await stripe.coupons.retrieve(coupon);
+          if (retrieved.valid === true) {
+            sessionParams.discounts = [{ coupon }];
+          }
+        } catch (err) {
+          console.error('Launch coupon lookup failed, proceeding at full price:', err.message);
+        }
+      }
     }
     const session = await stripe.checkout.sessions.create(sessionParams);
 
