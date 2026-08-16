@@ -211,10 +211,76 @@ fn test_normalize_url_strips_fragment() {
 }
 
 #[test]
-fn test_normalize_url_strips_query() {
+fn test_normalize_url_strips_tracking_query_params() {
+    // TRACKING params are campaign noise and are dropped…
     assert_eq!(
         normalize_result_url("https://example.com/page?ref=hn"),
         "https://example.com/page"
+    );
+    assert_eq!(
+        normalize_result_url("https://example.com/page?utm_source=x&fbclid=abc&gclid=def"),
+        "https://example.com/page"
+    );
+}
+
+/// Regression: this pass used to discard the ENTIRE query string, which is the
+/// identity of the page for `?v=` / `?p=` / `?id=` permalinks. Every YouTube
+/// video collapsed onto `https://youtube.com/watch`, so `dedup_results` kept
+/// exactly one of them per scored batch.
+#[test]
+fn test_normalize_url_keeps_content_query_params() {
+    assert_eq!(
+        normalize_result_url("https://youtube.com/watch?v=dQw4w9WgXcQ"),
+        "https://youtube.com/watch?v=dQw4w9WgXcQ"
+    );
+    assert_ne!(
+        normalize_result_url("https://youtube.com/watch?v=dQw4w9WgXcQ"),
+        normalize_result_url("https://youtube.com/watch?v=9bZkp7q19f0"),
+        "distinct videos must not share a dedup key"
+    );
+}
+
+#[test]
+fn test_normalize_url_param_order_does_not_defeat_dedup() {
+    assert_eq!(
+        normalize_result_url("https://example.com/p?b=2&a=1"),
+        normalize_result_url("https://example.com/p?a=1&b=2")
+    );
+}
+
+/// End-to-end through `dedup_results`: distinct videos survive, campaign
+/// variants of one video do not. This is the pass that decides what reaches the
+/// feed, so the collapse was directly visible to the user as "YouTube only ever
+/// shows one item".
+#[test]
+fn test_dedup_results_keeps_distinct_videos_and_folds_tracking_variants() {
+    let mut items = vec![
+        make_item(
+            "Rust async deep dive",
+            Some("https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
+            0.9,
+        ),
+        make_item(
+            "Tauri IPC internals",
+            Some("https://www.youtube.com/watch?v=9bZkp7q19f0"),
+            0.8,
+        ),
+        make_item(
+            "Rust async deep dive (newsletter link)",
+            Some("http://youtube.com/watch?utm_source=nl&v=dQw4w9WgXcQ"),
+            0.7,
+        ),
+    ];
+    dedup_results(&mut items);
+
+    let urls: Vec<&str> = items.iter().filter_map(|i| i.url.as_deref()).collect();
+    assert_eq!(
+        urls,
+        vec![
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://www.youtube.com/watch?v=9bZkp7q19f0",
+        ],
+        "two distinct videos survive; the campaign variant of the first does not"
     );
 }
 

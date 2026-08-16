@@ -57,7 +57,7 @@ pub(crate) use context::{
 };
 pub(crate) use dedup::{
     apply_domain_diversity, apply_source_topic_diversity, compute_serendipity_candidates,
-    dedup_results, fuzzy_dedup_results, sort_results, topic_dedup_results,
+    dedup_results, fuzzy_dedup_results, normalize_result_url, sort_results, topic_dedup_results,
 };
 pub(crate) use dependencies::{
     is_ambiguous_dep_name, is_generic_topic_token, match_dependencies, STRONG_GROUNDING_CONFIDENCE,

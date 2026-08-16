@@ -83,18 +83,78 @@ pub(crate) fn dedup_results(results: &mut Vec<SourceRelevance>) {
     }
 }
 
-fn normalize_result_url(url: &str) -> String {
-    url.trim()
-        .split('#')
-        .next()
-        .unwrap_or(url)
-        .split('?')
-        .next()
-        .unwrap_or(url)
+/// Query parameters that identify the CAMPAIGN or the referrer, not the CONTENT.
+///
+/// Only these may be discarded. Both dedup passes used to throw the WHOLE query
+/// string away, which meant every `youtube.com/watch?v=...` — where the query IS
+/// the identity of the page — normalized to the single key
+/// `https://youtube.com/watch`, so YouTube could contribute at most ONE item to
+/// any batch. The same collapse hit every `?p=` / `?id=` / `?story_fbid=` style
+/// permalink.
+fn is_tracking_param(key: &str) -> bool {
+    key.starts_with("utm_")
+        || matches!(
+            key,
+            "ref" | "ref_src" | "fbclid" | "gclid" | "si" | "igshid"
+        )
+}
+
+/// THE canonical URL identity for deduplication. Shared by BOTH passes: this
+/// post-scoring one (`dedup_results`) and the pre-scoring one
+/// (`analysis_rerank::analysis_dedup::dedup_stored_items`). They were two
+/// independent copies of the same logic, which is how the same defect came to
+/// sit in both; there is now one implementation and one place to fix.
+///
+/// Strips protocol variance, `www.`, trailing slash, fragment, and tracking
+/// parameters — but PRESERVES content-bearing query parameters, sorted by key so
+/// that parameter order cannot defeat dedup.
+///
+/// Keys are lowercased (servers treat them case-insensitively in practice);
+/// VALUES keep their case, because they are identifiers — YouTube's
+/// `v=dQw4w9WgXcQ` is a different video from `v=dqw4w9wgxcq`, and folding them
+/// together would silently drop a real item.
+pub(crate) fn normalize_result_url(url: &str) -> String {
+    let url = url.trim();
+    let without_fragment = url.split('#').next().unwrap_or(url);
+    let (path_part, query_part) = match without_fragment.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (without_fragment, None),
+    };
+
+    let base = path_part
         .replace("http://", "https://")
         .replace("://www.", "://")
         .trim_end_matches('/')
-        .to_lowercase()
+        .to_lowercase();
+
+    let Some(query) = query_part else {
+        return base;
+    };
+    let mut params: Vec<(String, Option<&str>)> = query
+        .split('&')
+        .filter(|pair| !pair.is_empty())
+        .map(|pair| match pair.split_once('=') {
+            Some((key, value)) => (key.to_lowercase(), Some(value)),
+            None => (pair.to_lowercase(), None),
+        })
+        .filter(|(key, _)| !is_tracking_param(key))
+        .collect();
+
+    if params.is_empty() {
+        return base;
+    }
+
+    params.sort_unstable();
+    let normalized_query = params
+        .iter()
+        .map(|(key, value)| match value {
+            Some(v) => format!("{key}={v}"),
+            None => key.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join("&");
+
+    format!("{base}?{normalized_query}")
 }
 
 fn normalize_result_title(title: &str) -> String {
