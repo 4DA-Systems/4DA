@@ -8,6 +8,14 @@
 //! project health, knowledge gaps, and attention analysis into ranked
 //! preemptive alerts. Tells the user what matters BEFORE it becomes painful.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use std::time::{Duration, Instant};
 
 use once_cell::sync::Lazy;
@@ -1184,7 +1192,15 @@ fn extract_advisory_id(text: &str) -> Option<String> {
     // panic, or a silently byte-shifted advisory id that corrupts the
     // cross-tier dedup key. Both prefixes are pure ASCII, so ASCII folding is
     // sufficient AND keeps byte offsets identical between the two strings.
+    //
+    // SAFE (both slices): `to_ascii_uppercase` preserves byte length AND byte
+    // offsets, and the prefixes are ASCII, so `start` is a char boundary in
+    // `text`. `end` is either `start + i` where `i` came from a `char`-based
+    // `find` on `text[start..]`, or an explicit `floor_char_boundary` — and
+    // both are >= `start`.
+    #[allow(clippy::string_slice)]
     let text_upper = text.to_ascii_uppercase();
+    #[allow(clippy::string_slice)]
     for prefix in &["GHSA-", "CVE-"] {
         if let Some(start) = text_upper.find(prefix) {
             let end = text[start..]
@@ -1266,7 +1282,12 @@ fn truncate(s: &str, max_len: usize) -> String {
             .nth(max_len.saturating_sub(3))
             .map(|(i, _)| i)
             .unwrap_or_else(|| s.floor_char_boundary(max_len.saturating_sub(3)));
-        format!("{}...", &s[..end])
+        // SAFE: `end` is a `char_indices` offset or a `floor_char_boundary`.
+        // Bound to a `let` because an attribute on a macro invocation is
+        // silently ignored.
+        #[allow(clippy::string_slice)]
+        let head = &s[..end];
+        format!("{head}...")
     }
 }
 
@@ -1311,6 +1332,9 @@ fn is_advisory_subject_match(title_lower: &str, dep: &str) -> bool {
         return true; // No structured prefix — can't extract subject, allow match
     };
 
+    // SAFE: `bracket_end` is the offset of the all-ASCII 2-byte needle `"] "`,
+    // so `bracket_end + 2` is its end — a char boundary.
+    #[allow(clippy::string_slice)]
     let remainder = &title_lower[subject_start..];
     if remainder.is_empty() {
         return true;
@@ -1341,6 +1365,9 @@ fn is_advisory_subject_match(title_lower: &str, dep: &str) -> bool {
         // carry accented names and CJK). Also subsumes the old `.len()` clamp.
         .unwrap_or_else(|| remainder.floor_char_boundary(80));
 
+    // SAFE: `subject_end` is a `find` offset for an ASCII marker or an explicit
+    // `floor_char_boundary`.
+    #[allow(clippy::string_slice)]
     let subject = &remainder[..subject_end];
 
     // If the dep name appears as a word boundary in the subject, it's the target

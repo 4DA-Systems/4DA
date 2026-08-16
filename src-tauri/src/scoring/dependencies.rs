@@ -1,4 +1,12 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
@@ -663,6 +671,8 @@ fn has_language_context_nearby(text: &str, position: usize, window: usize) -> bo
     // Snap to char boundaries to avoid panicking on multi-byte UTF-8
     let start = snap_to_char_boundary(text, start, false);
     let end = snap_to_char_boundary(text, end, true);
+    // SAFE: both ends explicitly snapped on the line above.
+    #[allow(clippy::string_slice)]
     let context = &text[start..end];
     LANGUAGE_CONTEXT_WORDS.iter().any(|w| context.contains(w))
 }
@@ -696,6 +706,8 @@ const SECURITY_CONTEXT_MARKERS: &[&str] = &[
 fn has_security_context_nearby(text: &str, position: usize, window: usize) -> bool {
     let start = snap_to_char_boundary(text, position.saturating_sub(window), false);
     let end = snap_to_char_boundary(text, (position + window).min(text.len()), true);
+    // SAFE: both ends explicitly snapped on the lines above.
+    #[allow(clippy::string_slice)]
     let context = &text[start..end];
     SECURITY_CONTEXT_MARKERS.iter().any(|m| context.contains(m))
 }
@@ -753,6 +765,10 @@ fn package_name_positions(
             let after_ok = match rest.chars().next() {
                 None => true,
                 Some(c) if is_package_boundary_char(c) => true,
+                // SAFE: this arm matched `Some('.')`, so `rest` starts with the
+                // 1-byte '.' and index 1 is a char boundary. The proof is the
+                // match arm — moving this body out of it breaks the slice.
+                #[allow(clippy::string_slice)]
                 Some('.') => {
                     rest.starts_with(".js")
                         || rest.starts_with(".ts")
@@ -858,6 +874,8 @@ fn has_adjacent_version_literal(text: &str, positions: &[(usize, usize)]) -> boo
         // edit would have to re-derive.
         let start = snap_to_char_boundary(text, after_start, true);
         let end = snap_to_char_boundary(text, (start + 40).min(text.len()), true);
+        // SAFE: both ends explicitly snapped on the lines above.
+        #[allow(clippy::string_slice)]
         version_literal_at_start(&text[start..end])
     })
 }
@@ -893,6 +911,8 @@ fn version_literal_at_start(after_name: &str) -> bool {
             // decides, as in find_mentioned_version.
             return false;
         }
+        // SAFE: `i` comes from `char_indices()`, so it is a char boundary.
+        #[allow(clippy::string_slice)]
         let token: String = after_name[i..]
             .chars()
             .take_while(|c| c.is_ascii_digit() || *c == '.')
@@ -1014,11 +1034,19 @@ fn find_mentioned_version(text_lower: &str, pkg_lower: &str) -> Option<(u32, u32
         let start = idx;
         let end = (idx + pkg_lower.len() + 40).min(text_lower.len());
         let end = snap_to_char_boundary(text_lower, end, true);
+        // SAFE: `start` is a `match_indices` offset and `end` is snapped.
+        #[allow(clippy::string_slice)]
         let nearby = &text_lower[start..end];
 
         // Match patterns: "React 19", "tokio 2.0", "gtk 0.18", "v3", "version 5.1".
         // Grab the first version-like token (digits + dots) after the package name
         // so 0.x lines ("0.18" vs "0.20") are distinguishable, not collapsed to "0".
+        //
+        // SAFE: `nearby` starts at a `match_indices(pkg_lower)` offset, so its
+        // first `pkg_lower.len()` bytes ARE that occurrence — the index is the
+        // end of an exact byte match, hence a char boundary, and `end` is never
+        // below `start + pkg_lower.len()`.
+        #[allow(clippy::string_slice)]
         let after_name = &nearby[pkg_lower.len()..];
         for (i, ch) in after_name.char_indices() {
             if ch.is_ascii_digit() && i < 20 {
@@ -1029,6 +1057,8 @@ fn find_mentioned_version(text_lower: &str, pkg_lower: &str) -> Option<(u32, u32
                         .get(i - 1)
                         .is_none_or(|&b| !b.is_ascii_alphanumeric() || b == b'v' || b == b'V')
                 {
+                    // SAFE: `i` comes from `char_indices()`.
+                    #[allow(clippy::string_slice)]
                     let token: String = after_name[i..]
                         .chars()
                         .take_while(|c| c.is_ascii_digit() || *c == '.')
@@ -1159,7 +1189,11 @@ fn classify_term_occurrence(text: &str, term: &str) -> TermOccurrence {
     }
     let mut any_boundary_hit = false;
     for (pos, _) in text.match_indices(term) {
+        // SAFE: `pos` is a `match_indices` offset and `pos + term.len()` is the
+        // end of an exact byte match — both char boundaries.
+        #[allow(clippy::string_slice)]
         let before = text[..pos].chars().next_back();
+        #[allow(clippy::string_slice)]
         let after_str = &text[pos + term.len()..];
         let after = after_str.chars().next();
         // Word boundary in the has_word_boundary_match sense.
@@ -1169,6 +1203,12 @@ fn classify_term_occurrence(text: &str, term: &str) -> TermOccurrence {
         }
         any_boundary_hit = true;
 
+        // SAFE in BOTH arms below, and the proof is the match arm itself — the
+        // matched char is the 1-byte '.', so `pos - 1` (the offset of that '.')
+        // and index 1 of `after_str` are char boundaries. Neither slice is safe
+        // outside its arm: hoisting either one out of the `Some('.')` pattern
+        // re-arms the panic this branch exists to remove.
+        #[allow(clippy::string_slice)]
         let glue_before = match before {
             Some('-') | Some('_') => true,
             Some('.') => text[..pos.saturating_sub(1)]
@@ -1177,6 +1217,7 @@ fn classify_term_occurrence(text: &str, term: &str) -> TermOccurrence {
                 .is_some_and(|c| c.is_alphanumeric()),
             _ => false,
         };
+        #[allow(clippy::string_slice)]
         let glue_after = match after {
             Some('-') | Some('_') => true,
             Some('.') => {
@@ -1419,7 +1460,10 @@ mod tests {
         assert_eq!(positions.len(), 1, "only the scoped form is bounded here");
         let (pos, len) = positions[0];
         assert_eq!(len, "@fooé".len(), "6 bytes, not the normalized name's 5");
-        assert_eq!(&"the @fooé 1.2.3 shipped"[pos..pos + len], "@fooé");
+        // `get` rather than `[..]`: it returns None on a non-boundary range, so
+        // this asserts the offset/length pair is a VALID char range as well as
+        // the right one — which is the whole point of carrying the length.
+        assert_eq!("the @fooé 1.2.3 shipped".get(pos..pos + len), Some("@fooé"));
     }
 
     /// N10 regression: `has_adjacent_version_literal` computed
