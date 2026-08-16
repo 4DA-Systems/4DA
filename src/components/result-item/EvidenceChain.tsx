@@ -20,7 +20,6 @@ const KIND_COLORS: Record<FactorKind, string> = {
   TopicMatch: 'bg-zinc-400',
   DecisionWindow: 'bg-purple-400',
   SkillGap: 'bg-cyan-400',
-  LearnedPreference: 'bg-amber-400',
   CommunitySignal: 'bg-teal-400',
 };
 

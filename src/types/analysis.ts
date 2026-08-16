@@ -62,7 +62,6 @@ export type FactorKind =
   | 'TopicMatch'
   | 'DecisionWindow'
   | 'SkillGap'
-  | 'LearnedPreference'
   | 'CommunitySignal';
 
 /**

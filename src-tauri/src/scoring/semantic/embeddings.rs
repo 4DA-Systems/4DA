@@ -56,11 +56,6 @@ pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String
                 needed.push(tech.clone());
             }
         }
-        for topic in ace_ctx.topic_affinities.keys() {
-            if !cache_guard.contains_key(topic) {
-                needed.push(topic.clone());
-            }
-        }
         for dep_name in ace_ctx.dependency_info.keys() {
             if !cache_guard.contains_key(dep_name) {
                 needed.push(dep_name.clone());
@@ -114,11 +109,6 @@ pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String
     for tech in &ace_ctx.detected_tech {
         if let Some(emb) = cache_guard.get(tech) {
             result.insert(tech.clone(), emb.clone());
-        }
-    }
-    for topic in ace_ctx.topic_affinities.keys() {
-        if let Some(emb) = cache_guard.get(topic) {
-            result.insert(topic.clone(), emb.clone());
         }
     }
     for dep_name in ace_ctx.dependency_info.keys() {

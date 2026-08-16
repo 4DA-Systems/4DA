@@ -30,9 +30,11 @@ pub(super) struct FeedbackEvent {
 // Persona context factories with feedback boosts
 // ============================================================================
 
-/// Build a Rust systems dev context with the given feedback boosts
+/// Build a Rust systems dev context. Post-AD-029 the accumulated feedback
+/// boosts no longer enter the scoring context; the parameter is kept so the
+/// session loop's rebuild-per-session shape (and its call sites) stay intact.
 pub(super) fn rust_ctx_with_boosts(
-    boosts: &HashMap<String, f64>,
+    _boosts: &HashMap<String, f64>,
     interaction_count: i64,
 ) -> ScoringContext {
     let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
@@ -59,16 +61,6 @@ pub(super) fn rust_ctx_with_boosts(
     ace.detected_tech.push("rust".to_string());
     ace.detected_tech.push("tauri".to_string());
     ace.detected_tech.push("sqlite".to_string());
-
-    // Derive topic affinities from accumulated feedback boosts
-    for (topic, &boost) in boosts {
-        if boost.abs() > 0.05 {
-            let affinity = boost.clamp(-1.0, 1.0) as f32;
-            let confidence = (boost.abs() as f32).min(0.9);
-            ace.topic_affinities
-                .insert(topic.clone(), (affinity, confidence));
-        }
-    }
 
     let domain = crate::domain_profile::DomainProfile {
         primary_stack: ["rust", "tauri", "sqlite"]
@@ -116,14 +108,14 @@ pub(super) fn rust_ctx_with_boosts(
             "sqlite".to_string(),
         ])
         .composed_stack(stack)
-        .feedback_boosts(boosts.clone())
         .feedback_interaction_count(interaction_count)
         .build()
 }
 
-/// Build a Python ML context with the given feedback boosts
+/// Build a Python ML context. Post-AD-029 the accumulated feedback boosts no
+/// longer enter the scoring context; see `rust_ctx_with_boosts`.
 pub(super) fn python_ctx_with_boosts(
-    boosts: &HashMap<String, f64>,
+    _boosts: &HashMap<String, f64>,
     interaction_count: i64,
 ) -> ScoringContext {
     let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
@@ -149,16 +141,6 @@ pub(super) fn python_ctx_with_boosts(
     ace.active_topics.push("machine learning".to_string());
     ace.detected_tech.push("python".to_string());
     ace.detected_tech.push("pytorch".to_string());
-
-    // Derive topic affinities from accumulated feedback boosts
-    for (topic, &boost) in boosts {
-        if boost.abs() > 0.05 {
-            let affinity = boost.clamp(-1.0, 1.0) as f32;
-            let confidence = (boost.abs() as f32).min(0.9);
-            ace.topic_affinities
-                .insert(topic.clone(), (affinity, confidence));
-        }
-    }
 
     let domain = crate::domain_profile::DomainProfile {
         primary_stack: ["python", "pytorch", "tensorflow"]
@@ -206,7 +188,6 @@ pub(super) fn python_ctx_with_boosts(
             "tensorflow".to_string(),
         ])
         .composed_stack(stack)
-        .feedback_boosts(boosts.clone())
         .feedback_interaction_count(interaction_count)
         .build()
 }

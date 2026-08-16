@@ -28,18 +28,6 @@ describe('feedback-slice', () => {
     it('has empty feedbackGiven map', () => {
       expect(useAppStore.getState().feedbackGiven).toEqual({});
     });
-
-    it('has empty learnedAffinities array', () => {
-      expect(useAppStore.getState().learnedAffinities).toEqual([]);
-    });
-
-    it('has empty antiTopics array', () => {
-      expect(useAppStore.getState().antiTopics).toEqual([]);
-    });
-
-    it('has lastLearnedTopic null', () => {
-      expect(useAppStore.getState().lastLearnedTopic).toBeNull();
-    });
   });
 
   // ---------------------------------------------------------------------------
@@ -120,46 +108,6 @@ describe('feedback-slice', () => {
       useAppStore.getState().setFeedbackGivenFull({});
 
       expect(useAppStore.getState().feedbackGiven).toEqual({});
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // setLastLearnedTopic
-  // ---------------------------------------------------------------------------
-  describe('setLastLearnedTopic', () => {
-    it('sets a positive learned topic', () => {
-      const topic = { topic: 'rust', direction: 'positive' as const, timestamp: Date.now() };
-      useAppStore.getState().setLastLearnedTopic(topic);
-
-      const result = useAppStore.getState().lastLearnedTopic;
-      expect(result).not.toBeNull();
-      expect(result!.topic).toBe('rust');
-      expect(result!.direction).toBe('positive');
-    });
-
-    it('sets a negative learned topic', () => {
-      const topic = { topic: 'spam', direction: 'negative' as const, timestamp: 1700000000000 };
-      useAppStore.getState().setLastLearnedTopic(topic);
-
-      const result = useAppStore.getState().lastLearnedTopic;
-      expect(result!.topic).toBe('spam');
-      expect(result!.direction).toBe('negative');
-      expect(result!.timestamp).toBe(1700000000000);
-    });
-
-    it('can clear the learned topic by setting null', () => {
-      useAppStore.getState().setLastLearnedTopic({ topic: 'test', direction: 'positive', timestamp: 0 });
-      useAppStore.getState().setLastLearnedTopic(null);
-      expect(useAppStore.getState().lastLearnedTopic).toBeNull();
-    });
-
-    it('replaces previous learned topic', () => {
-      useAppStore.getState().setLastLearnedTopic({ topic: 'first', direction: 'positive', timestamp: 1 });
-      useAppStore.getState().setLastLearnedTopic({ topic: 'second', direction: 'negative', timestamp: 2 });
-
-      const result = useAppStore.getState().lastLearnedTopic;
-      expect(result!.topic).toBe('second');
-      expect(result!.direction).toBe('negative');
     });
   });
 

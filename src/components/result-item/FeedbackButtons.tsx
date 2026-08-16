@@ -110,7 +110,6 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
     const topic = extractTopic();
     void cmd('add_exclusion', { topic }).then(() => {
       useAppStore.getState().addToast('success', t('feedback.topicSuppressed', { topic }));
-      void useAppStore.getState().loadLearnedBehavior();
     }).catch(() => {
       useAppStore.getState().addToast('warning', t('feedback.suppressFailed'));
     });

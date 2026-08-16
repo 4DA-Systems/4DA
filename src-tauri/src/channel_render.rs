@@ -17,7 +17,7 @@ use crate::channels::{Channel, ChannelRender};
 use crate::db::{Database, StoredSourceItem};
 use crate::error::{Result, ResultExt};
 use crate::extract_topics;
-use crate::scoring::{compute_affinity_multiplier, get_ace_context};
+use crate::scoring::get_ace_context;
 
 // ============================================================================
 // Source Gathering
@@ -43,7 +43,6 @@ pub(crate) fn gather_channel_sources(
     let items = db.get_items_tiered(30 * 24, 500)?;
 
     let mut scored: Vec<(StoredSourceItem, f64)> = Vec::new();
-    let ace_ctx = get_ace_context();
 
     for item in items {
         let item_topics = extract_topics(&item.title, &item.content, &[]);
@@ -60,9 +59,7 @@ pub(crate) fn gather_channel_sources(
 
         if matched > 0 {
             let base_score = matched as f64 / channel_topics.len().max(1) as f64;
-            // Apply affinity boost from learned topic preferences
-            let affinity_mult = compute_affinity_multiplier(&item_topics_lower, &ace_ctx);
-            let score = (base_score * affinity_mult as f64).min(1.0);
+            let score = base_score.min(1.0);
             scored.push((item, score));
         }
     }
@@ -132,7 +129,6 @@ fn build_channel_prompt(
     tech_stack: &str,
     active_topics: &str,
     sovereign_profile: &str,
-    affinity_summary: &str,
     previous_render: Option<&ChannelRender>,
 ) -> (String, String) {
     let system_prompt = format!(
@@ -191,14 +187,12 @@ fn build_channel_prompt(
     let user_prompt = format!(
         "User's tech stack: {tech}\n\
          User's active topics: {topics}\n\
-         User's learned preferences: {affinities}\n\
          User's system profile: {sovereign}\n\n\
          {count} sources for channel \"{title}\":\n\n\
          {items}{previous}\n\n\
          Generate the intelligence document.",
         tech = tech_stack,
         topics = active_topics,
-        affinities = affinity_summary,
         sovereign = sovereign_profile,
         count = items.len().min(20),
         title = channel.title,
@@ -317,31 +311,6 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
             .join(", ")
     };
 
-    // Build affinity summary from learned topic preferences (confidence > 0.15, top 5)
-    let affinity_summary = {
-        let mut affinities: Vec<(&String, &(f32, f32))> = ace_ctx
-            .topic_affinities
-            .iter()
-            .filter(|(_, (_, confidence))| *confidence > 0.15)
-            .collect();
-        affinities.sort_by(|a, b| {
-            b.1 .0
-                .abs()
-                .partial_cmp(&a.1 .0.abs())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        let top: Vec<String> = affinities
-            .iter()
-            .take(5)
-            .map(|(topic, (score, _))| format!("{}: {:.0}%", topic, score * 100.0))
-            .collect();
-        if top.is_empty() {
-            "Not yet learned".to_string()
-        } else {
-            top.join(", ")
-        }
-    };
-
     // Load sovereign profile for hardware/environment context
     let sovereign_summary = {
         let conn = crate::open_db_connection().ok();
@@ -384,7 +353,6 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
         &tech_summary,
         &topics_summary,
         &sovereign_summary,
-        &affinity_summary,
         previous_render.as_ref(),
     );
 

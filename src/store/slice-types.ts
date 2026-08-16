@@ -20,8 +20,6 @@ import type {
   OllamaStatus,
   AppState,
   DiscoveredContext,
-  TopicAffinity,
-  AntiTopic,
   SimilarTopicResult,
   BriefingState,
 } from './types';
@@ -159,30 +157,15 @@ export interface FiltersSlice {
 
 export interface FeedbackSlice {
   feedbackGiven: FeedbackGiven;
-  learnedAffinities: TopicAffinity[];
-  antiTopics: AntiTopic[];
   /** Item ids under an active snooze — filtered out of the Signal list (the
    *  graph filters backend-side). Loaded once per session, updated
    *  optimistically on snooze. */
   snoozedItemIds: Set<number>;
   loadSnoozedIds: () => Promise<void>;
   markSnoozed: (itemId: number) => void;
-  lastLearnedTopic: {
-    topic: string;
-    direction: 'positive' | 'negative';
-    timestamp: number;
-  } | null;
-  setLastLearnedTopic: (
-    topic: {
-      topic: string;
-      direction: 'positive' | 'negative';
-      timestamp: number;
-    } | null,
-  ) => void;
   setFeedbackGivenFull: (
     updater: FeedbackGiven | ((prev: FeedbackGiven) => FeedbackGiven),
   ) => void;
-  loadLearnedBehavior: () => Promise<void>;
   loadPersistedSavedIds: () => Promise<void>;
   recordInteraction: (
     itemId: number,

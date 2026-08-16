@@ -31,7 +31,6 @@ interface AutopsyResult {
     interests: string[];
     tech_stack: string[];
     active_topics: string[];
-    learned_affinities: string[];
     exclusions_hit: string[];
   };
   similar_items: Array<{
@@ -194,14 +193,6 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
             <strong className="text-text-primary">{t('autopsy.recentWork')}:</strong>{' '}
             <span className="text-text-secondary">
               {autopsy.matching_context.active_topics.join(', ')}
-            </span>
-          </div>
-        )}
-        {autopsy.matching_context.learned_affinities.length > 0 && (
-          <div className="context-group mb-2 text-xs">
-            <strong className="text-text-primary">{t('autopsy.learnedPreferences')}:</strong>{' '}
-            <span className="text-text-secondary">
-              {autopsy.matching_context.learned_affinities.join(', ')}
             </span>
           </div>
         )}

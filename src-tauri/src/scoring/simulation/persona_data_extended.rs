@@ -15,7 +15,6 @@ pub(super) fn bootstrap_enrichment() -> PersonaEnrichment {
     // MINIMAL enrichment — tests bootstrap path fidelity
     PersonaEnrichment {
         topic_confidence: confidence_map(&[("typescript", 0.60)]),
-        topic_affinities: HashMap::new(),
         anti_topics: vec![],
         anti_topic_confidence: HashMap::new(),
         topic_embeddings: topic_embedding_map(&["typescript"]),
@@ -46,13 +45,6 @@ pub(super) fn power_user_enrichment() -> PersonaEnrichment {
             ("ai", 0.75),
             ("wasm", 0.70),
             ("databases", 0.80),
-        ]),
-        topic_affinities: affinity_map(&[
-            ("rust", 0.6, 0.85),
-            ("python", 0.5, 0.8),
-            ("distributed systems", 0.7, 0.85),
-            ("performance", 0.4, 0.7),
-            ("architecture", 0.5, 0.75),
         ]),
         anti_topics: string_vec(&["crypto", "nft", "web3"]),
         anti_topic_confidence: confidence_map(&[("crypto", 0.7), ("nft", 0.8), ("web3", 0.6)]),
@@ -144,12 +136,6 @@ pub(super) fn context_switcher_enrichment() -> PersonaEnrichment {
             ("microservices", 0.75),
             ("grpc", 0.70),
         ]),
-        topic_affinities: affinity_map(&[
-            ("rust", 0.5, 0.8),
-            ("go", 0.5, 0.8),
-            ("microservices", 0.4, 0.7),
-            ("grpc", 0.3, 0.6),
-        ]),
         anti_topics: string_vec(&["frontend", "css"]),
         anti_topic_confidence: confidence_map(&[("frontend", 0.5), ("css", 0.5)]),
         topic_embeddings: topic_embedding_map(&["rust", "go", "backend", "microservices", "grpc"]),
@@ -206,12 +192,6 @@ pub(super) fn niche_specialist_enrichment() -> PersonaEnrichment {
             ("type theory", 0.90),
             ("category theory", 0.80),
             ("nix", 0.85),
-        ]),
-        topic_affinities: affinity_map(&[
-            ("haskell", 0.9, 0.95),
-            ("functional programming", 0.8, 0.9),
-            ("type theory", 0.7, 0.85),
-            ("nix", 0.5, 0.7),
         ]),
         anti_topics: string_vec(&["javascript", "python", "java"]),
         anti_topic_confidence: confidence_map(&[
