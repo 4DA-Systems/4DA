@@ -70,13 +70,9 @@ export function extractFactors(b: ScoreBreakdown): Factor[] {
       effect: 'boost', format: 'raw', max: 0.20,
     });
   }
-  if ((b.feedback_boost ?? 0) !== 0) {
-    const fb = b.feedback_boost ?? 0;
-    factors.push({
-      key: 'feedback', labelKey: 'scoreDrawer.factor.feedback', label: 'Learned preference', value: Math.abs(fb),
-      effect: fb > 0 ? 'boost' : 'penalty', format: 'raw', max: 0.20,
-    });
-  }
+  // The "Learned preference" factor was removed in AD-030: feedback_boost
+  // is permanently 0 post-AD-029 (behavioral signals carry no scoring
+  // authority), so the factor could never honestly render.
 
   // Multipliers
   if ((b.freshness_mult ?? 1) !== 1) {
@@ -112,18 +108,11 @@ export function extractFactors(b: ScoreBreakdown): Factor[] {
       effect: 'penalty', format: 'mult', max: 1,
     });
   }
-  if (b.affinity_mult > 1.05) {
-    factors.push({
-      key: 'affinity', labelKey: 'scoreDrawer.factor.affinity', label: 'Topic affinity', value: b.affinity_mult,
-      effect: 'boost', format: 'mult', max: 1.7,
-    });
-  }
-  if (b.anti_penalty < 0.95) {
-    factors.push({
-      key: 'anti', labelKey: 'scoreDrawer.factor.anti', label: 'Anti-topic penalty', value: b.anti_penalty,
-      effect: 'penalty', format: 'mult', max: 1,
-    });
-  }
+  // "Topic affinity" and "Anti-topic penalty" factors removed in AD-030:
+  // affinity_mult is pinned at 1.0 and anti_penalty at 0.0 post-AD-029.
+  // The anti check also had inverted semantics (anti_penalty is a
+  // magnitude where 0.0 = none, but the condition treated it as a
+  // multiplier), so post-v19 it rendered a false penalty on every item.
   if ((b.confirmation_mult ?? 1) !== 1) {
     factors.push({
       key: 'confirmation', labelKey: 'scoreDrawer.factor.confirmation', label: 'Signal confirmation gate', value: b.confirmation_mult ?? 1,

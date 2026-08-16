@@ -344,7 +344,13 @@ CREATE TABLE shadow_runs (
 
 ### Layer 7 — Compound Substrate
 
-**What it does:** Learns from user behavior, never from LLM output. Trains pipeline weights and threshold tuning on deterministic signals only.
+> **Status (AD-029/AD-030, 2026-08-11/12):** this layer is RESERVED. Behavioral signals no
+> longer train pipeline weights or threshold tuning (both auto-tuners frozen); the design below
+> is retained for re-enablement under the AD-029 criteria (unified capture scale, measured lift
+> over baseline, degeneracy guards, corpus-bound artifacts, user off switch). Judge calibration
+> (Layer 5b) remains active with raw-score persistence and degenerate-curve refusal.
+
+**What it does (as designed):** Learns from user behavior, never from LLM output. Trains pipeline weights and threshold tuning on deterministic signals only.
 
 **Signals (all deterministic, none LLM-derived):**
 - Explicit feedback (thumbs)

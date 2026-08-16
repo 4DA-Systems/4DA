@@ -1,12 +1,12 @@
 # 4DA v1.0.0 — All signal. No feed.
 
-4DA reads the internet for developers — privately, locally — and gets sharper every day.
+4DA reads the internet for developers — privately, locally. Your codebase decides what's relevant.
 
 Every piece of content is scored against your actual codebase using PASIFA, a 5-axis relevance engine that runs entirely on your machine. No feeds to scroll. No algorithms optimizing for engagement. Just the signals that matter to the code you're writing right now.
 
 ## What's Inside
 
-- **5-axis relevance scoring** — PASIFA rates every item against your local projects (context, interest, dependencies, learned patterns, ACE codebase scan)
+- **5-axis relevance scoring** — PASIFA rates every item against your local projects (context, interest, dependencies, ACE codebase scan, and a reserved learned axis)
 - **20+ built-in content sources** — Hacker News, Reddit, GitHub, arXiv, CVE/OSV, Stack Overflow, crates.io, PyPI, npm, Lobsters, Product Hunt, Bluesky, Dev.to, Hugging Face, YouTube, Go Modules, RSS, and more
 - **14 MCP tools** — `npx @4da/mcp-server --setup` installs in one command. Works standalone or with the desktop app. Claude Code, Cursor, Windsurf, GitHub Copilot compatible.
 - **AI briefings** — daily and weekly intelligence summaries generated locally via your own API key
@@ -72,13 +72,17 @@ The MCP server works standalone — no desktop app required. 14 tools for vulner
 | PASIFA scoring | Full engine | Full engine |
 | AI briefings | Included | Included |
 | MCP tools | All 14 | All 14 |
-| Developer DNA | — | Included |
-| Signal Chains | — | Included |
+| Developer DNA | Included (BYOK) | Included |
+| Signal Chains | Included | Included |
+| Score Autopsy | Included | Included |
+| Blind Spots | — | Included |
 | Knowledge Gaps | — | Included |
-| Score Autopsy | — | Included |
+| Standing Queries | — | Included |
+| Semantic Shifts | — | Included |
+| Cross-project intelligence | — | Included |
 | Natural Language Search | Included (BYOK) | Included |
 
-Free is not a demo. It's the full intelligence engine with 20+ sources, AI briefings, and MCP integration. Signal adds compound intelligence features for developers who want the system to learn faster.
+Free is not a demo. It's the full intelligence engine with 20+ sources, AI briefings, and MCP integration. Signal adds the analysis layer — Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts, cross-project intelligence — for developers who want the deeper read.
 
 **14-day free trial** of Signal — no credit card required.
 

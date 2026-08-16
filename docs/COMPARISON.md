@@ -11,11 +11,11 @@ This document provides a detailed comparison of the 4DA framework against tradit
 | Feature | 4DA | Feedly | OpenClaw | Perplexity | Hacker News |
 |---------|-----|--------|----------|------------|-------------|
 | **Auto context discovery** | ✅ Codebase scanning | ❌ Manual keywords | ❌ Manual | ❌ Manual | ❌ None |
-| **Semantic relevance** | ✅ KNN + LLM + behavior | ⚠️ Keywords only | ❌ None | ⚠️ Search-based | ❌ Votes only |
+| **Semantic relevance** | ✅ KNN + LLM + codebase context | ⚠️ Keywords only | ❌ None | ⚠️ Search-based | ❌ Votes only |
 | **Privacy (BYOK)** | ✅ Local + BYOK | ❌ Cloud service | ⚠️ Local + BYOK | ❌ Cloud service | ✅ Public data |
 | **Explainable scoring** | ✅ Full breakdown | ❌ Black box | ❌ N/A | ❌ Black box | ⚠️ Vote count |
 | **Multi-source** | ✅ HN/arXiv/Reddit/RSS | ✅ 1000+ sources | ❌ User-initiated | ⚠️ Search-based | ❌ HN only |
-| **Behavior learning** | ✅ Implicit + explicit | ⚠️ Basic preferences | ❌ Chat history | ⚠️ Search history | ❌ None |
+| **Learned Preferences** | ✅ User-controlled | ⚠️ Basic preferences | ❌ Chat history | ⚠️ Search history | ❌ None |
 | **Developer-focused** | ✅ Codebase-aware | ❌ General audience | ⚠️ Developer tool | ❌ General audience | ⚠️ Tech-heavy |
 | **Cost** | 💚 $0.50/day (BYOK) | 💰 $6-12/mo | 💚 BYOK | 💰 $20/mo | 💚 Free |
 | **Desktop app** | ✅ Native (Tauri) | ⚠️ Web only | ⚠️ CLI + chat | ⚠️ Web + mobile | ⚠️ Web only |
@@ -141,7 +141,7 @@ This would give OpenClaw users ambient intelligence without leaving chat, and gi
 - **Trusted**: 15+ years of credibility
 
 #### Strengths of 4DA
-- **Personalization**: Learns your interests, filters noise
+- **Personalization**: Grounded in your stack; user-controlled filters
 - **Multi-source**: HN + arXiv + Reddit + RSS
 - **Semantic search**: Finds relevant content you'd miss
 - **Ambient monitoring**: Don't check HN manually
@@ -154,7 +154,7 @@ This would give OpenClaw users ambient intelligence without leaving chat, and gi
 - You're not time-constrained
 
 #### When to Choose 4DA
-- You want only relevant items (99.9% filtered)
+- You want only relevant items (93% of incoming content filtered, measured across 9 developer personas)
 - You're working on specific projects
 - You want ambient monitoring, not manual checking
 - You value your time highly
@@ -172,7 +172,7 @@ This would give OpenClaw users ambient intelligence without leaving chat, and gi
 #### Strengths of 4DA
 - **Semantic relevance**: Not just "new items in feed"
 - **Auto context discovery**: No manual feed curation
-- **Behavior learning**: Improves over time
+- **Corpus re-judging**: Improves with every engine update
 - **Developer-focused**: Tech stack detection
 - **Explainable**: See why items are relevant
 
@@ -212,10 +212,10 @@ This would give OpenClaw users ambient intelligence without leaving chat, and gi
    - No cloud lock-in, no vendor risk
    - Moat: Regulatory compliance (GDPR, CCPA)
 
-4. **Behavior Learning**
-   - Implicit (clicks, saves) + explicit (interests, exclusions)
-   - Affinity multipliers, anti-topic penalties
-   - Moat: Personalization improves over time
+4. **Learned Preferences + Local Grounding**
+   - Explicit, user-controlled: declared interests, exclusions, pins, Brief suppressions — inspectable and deletable
+   - Scoring grounded in the local codebase: manifests, dependencies, Git activity
+   - Moat: The corpus and configuration are yours and local — a competitor clone gets code, not your data
 
 ### Market Segmentation
 

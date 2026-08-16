@@ -41,6 +41,6 @@ Trigger a run from the top bar. 4DA fetches from your configured [sources](/docs
 
 ## 5. Teach it
 
-Save what's useful, dismiss what isn't. Saves boost the relevant topics and lift that source's reputation; dismissals form anti-patterns that suppress similar noise later. The engine sharpens against your real judgment — this is the part that compounds.
+Save what's useful, dismiss what isn't. Saves build a preference profile you can inspect, pin, or forget; dismissals tell the Brief to stop showing you similar items. Relevance scoring itself stays grounded in your actual stack.
 
 Next: **[The scoring engine](/docs/how-it-works/)**.

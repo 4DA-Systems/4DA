@@ -59,15 +59,9 @@ export function getScoreFactorKeys(item: SourceRelevance): string[] {
     factors.push('scoreTooltip.dependencyMatch');
   }
 
-  // Learned preference (taste/feedback)
-  if (b && (b.feedback_boost ?? 0) > 0) {
-    factors.push('scoreTooltip.calibratedTaste');
-  }
-
-  // Topic affinity
-  if (b && b.affinity_mult > 1.05) {
-    factors.push('scoreTooltip.topicAffinity');
-  }
+  // Learned-preference and topic-affinity chips removed in AD-030:
+  // feedback_boost is permanently 0 and affinity_mult permanently 1.0
+  // post-AD-029, so these could never honestly render.
 
   // Content quality
   if (b && (b.content_quality_mult ?? 1) > 1.0) {
@@ -95,8 +89,6 @@ const CHIP_KEY_MAP: Record<string, string> = {
   'scoreTooltip.multipleSignals': 'scoreChip.multipleSignals',
   'scoreTooltip.decisionWindow': 'scoreChip.decisionWindow',
   'scoreTooltip.dependencyMatch': 'scoreChip.dependencyMatch',
-  'scoreTooltip.calibratedTaste': 'scoreChip.calibratedTaste',
-  'scoreTooltip.topicAffinity': 'scoreChip.topicAffinity',
   'scoreTooltip.highQuality': 'scoreChip.highQuality',
   'scoreTooltip.novelContent': 'scoreChip.novelContent',
   'scoreTooltip.serendipity': 'scoreChip.serendipity',

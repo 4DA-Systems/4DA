@@ -127,11 +127,14 @@ describe('getScoreFactorKeys', () => {
     expect(getScoreFactorKeys(item)).toContain('scoreTooltip.interestMatch');
   });
 
-  it('includes topicAffinity when affinity_mult > 1.05', () => {
+  it('never emits topicAffinity — the chip was removed in AD-030', () => {
+    // Even a fixture claiming a non-neutral affinity must not produce the
+    // chip: affinity carries no scoring authority post-AD-029, so the chip
+    // could never render honestly.
     const item = makeMinimalItem({
       score_breakdown: { context_score: 0, interest_score: 0, ace_boost: 0, affinity_mult: 1.2, anti_penalty: 0, confidence_by_signal: {} },
     });
-    expect(getScoreFactorKeys(item)).toContain('scoreTooltip.topicAffinity');
+    expect(getScoreFactorKeys(item)).not.toContain('scoreTooltip.topicAffinity');
   });
 
   it('includes decisionWindow when decision_window_match is true', () => {

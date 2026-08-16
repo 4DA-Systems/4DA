@@ -27,7 +27,8 @@ function generateFallbackReason(item: SourceRelevance, t: TFunction): string {
     if (b.context_score > 0.3) parts.push(t('result.fallbackContext'));
     if (b.interest_score > 0.3) parts.push(t('result.fallbackInterests'));
     if (b.ace_boost > 0.1) parts.push(t('result.fallbackRecentWork'));
-    if (b.affinity_mult > 1.2) parts.push(t('result.fallbackPreference'));
+    // "Learned preference match" fallback removed in AD-030: affinity_mult
+    // is pinned at 1.0 post-AD-029, so it could never render honestly.
     if (b.freshness_mult != null && b.freshness_mult > 1.1) parts.push(t('result.fallbackFresh'));
   }
   if (item.signal_type) {

@@ -12,7 +12,8 @@ This guide covers how to activate a 4DA Signal or Team license. If you are using
 
 The free tier is fully functional. Security baselines are never paywalled, and the BYOK
 features above stay free because they run on your own key at no cost to us. Signal and Team
-unlock the intelligence analysis layer for users who want compound insights from their content.
+unlock the intelligence analysis layer — Blind Spots, Knowledge Gaps, Standing Queries,
+cross-project intelligence — for users who want deeper analysis of their content.
 
 ## Getting Your License Key
 

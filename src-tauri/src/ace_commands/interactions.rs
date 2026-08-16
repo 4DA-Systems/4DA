@@ -402,7 +402,7 @@ pub async fn get_engagement_summary() -> Result<serde_json::Value> {
 }
 
 /// Diagnostic snapshot of the compound-learning loop. Surfaces the state that
-/// proves "4DA gets sharper every day": how many topics have been learned, how
+/// documents the preference-profile capture loop: how many topics recorded, how
 /// many have crossed the confidence-building exposure threshold, the strongest
 /// learned likes and dislikes, and the total interaction volume feeding it.
 /// Pairs with the "4da::learning" tracing stream emitted on every affinity update.
