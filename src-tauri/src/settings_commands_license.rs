@@ -71,6 +71,63 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
         return Err("License key cannot be empty".into());
     }
 
+    // Lease model: a `4DA-LIC-` refresh credential is exchanged online for a
+    // short-lived entitlement token (which becomes the stored license_key).
+    // MUST be checked before the `4DA-` signed-token branch (it also starts "4DA-").
+    if crate::settings::is_refresh_credential(&license_key) {
+        match crate::settings::refresh_entitlement(&license_key).await {
+            crate::settings::RefreshOutcome::Renewed {
+                token,
+                tier,
+                expires_at,
+            } => {
+                let _ = crate::settings::keystore::store_secret("license_key", &token);
+                crate::settings::store_refresh_credential(&license_key);
+                let activated_at = chrono::Utc::now().to_rfc3339();
+                {
+                    let manager = get_settings_manager();
+                    let mut guard = manager.lock();
+                    {
+                        let s = guard.get_mut();
+                        s.license.refresh_key = Some(license_key.clone());
+                        s.license.license_key = token.clone();
+                        s.license.tier = tier.clone();
+                        s.license.activated_at = Some(activated_at.clone());
+                        s.license.trial_started_at = None;
+                    }
+                    guard.save()?;
+                }
+                crate::settings::save_license_backup(&token, &tier, &activated_at);
+                crate::settings::clear_activation_rate_limit();
+                if let Ok(conn) = crate::state::open_db_connection() {
+                    crate::audit::log_team_audit(
+                        &conn,
+                        "license.activated",
+                        "license",
+                        None,
+                        Some(&serde_json::json!({ "tier": tier, "model": "lease" })),
+                    );
+                }
+                info!(target: "4da::license", tier = %tier, "Lease license activated");
+                return Ok(serde_json::json!({
+                    "success": true,
+                    "tier": tier,
+                    "email": serde_json::Value::Null,
+                    "expires_at": expires_at,
+                }));
+            }
+            crate::settings::RefreshOutcome::Revoked { reason } => {
+                return Ok(serde_json::json!({ "success": false, "reason": reason }));
+            }
+            crate::settings::RefreshOutcome::KeepCurrent { reason } => {
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "reason": format!("Could not verify your license right now — check your connection and try again ({reason})"),
+                }));
+            }
+        }
+    }
+
     // Strategy: try Keygen API validation first (for Keygen-format keys like BE3529-...),
     // then fall back to local ed25519 verification (for self-signed 4DA- keys).
     let effective_tier: String;

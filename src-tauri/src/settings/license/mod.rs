@@ -3,6 +3,7 @@
 
 mod gating;
 mod keygen;
+mod lease;
 mod revalidation;
 mod verify;
 
@@ -17,6 +18,10 @@ pub use gating::{
 pub use keygen::{
     save_license_backup, save_license_backup_to, validate_license_key_keygen,
     validate_license_key_keygen_fresh, KeygenValidationCache, KeygenValidationResult,
+};
+pub use lease::{
+    is_refresh_credential, maybe_refresh_lease, refresh_entitlement, store_refresh_credential,
+    RefreshOutcome,
 };
 pub use revalidation::{
     get_last_validated_at, reconcile_license_from_proof, take_downgrade_flag,
