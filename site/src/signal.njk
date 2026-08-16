@@ -1,6 +1,6 @@
 ---
 title: "Signal -- The Intelligence Layer | 4DA"
-description: "Signal adds the analysis layer to 4DA: Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts, and cross-project intelligence. $12/mo or $99/yr."
+description: "Signal adds the analysis layer to 4DA: Blind Spots and Knowledge Gaps, computed from your codebase and your local corpus. $12/mo or $99/yr."
 permalink: "/signal.html"
 ---
 {% extends "base.njk" %}
@@ -8,13 +8,13 @@ permalink: "/signal.html"
 {% block head %}
   <link rel="canonical" href="https://4da.ai/signal">
   <meta property="og:title" content="Signal -- The Intelligence Layer">
-  <meta property="og:description" content="Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts. The analysis layer on top of 4DA's local scoring engine. $12/mo.">
+  <meta property="og:description" content="Blind Spots and Knowledge Gaps. The analysis layer on top of 4DA's local scoring engine. $12/mo.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://4da.ai/signal">
   <meta property="og:image" content="https://4da.ai/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Signal -- The Intelligence Layer">
-  <meta name="twitter:description" content="Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts. The analysis layer on top of 4DA's scoring engine.">
+  <meta name="twitter:description" content="Blind Spots and Knowledge Gaps. The analysis layer on top of 4DA's scoring engine.">
   <meta name="twitter:image" content="https://4da.ai/og-image.png">
 
   <style>
@@ -174,11 +174,11 @@ permalink: "/signal.html"
     <div class="container">
       <div class="hero-label">4DA Signal</div>
       <h1>The intelligence layer<br>your tools <span>can't replicate</span></h1>
-      <p class="hero-sub">4DA already scores content against your codebase across 20+ sources. Signal adds the analysis layer that connects the dots, detects your blind spots, and tracks how your domain moves over time.</p>
+      <p class="hero-sub">4DA already scores content against your codebase across 20+ sources. Signal adds the analysis layer that names your blind spots and quantifies your knowledge gaps &mdash; computed from your dependency graph and your reading history.</p>
       <div class="hero-technical">
         <div><span class="comment">// what signal does in a sentence</span></div>
         <div><span class="key">input</span>:&nbsp; <span class="val">20+ sources &times; your codebase context &times; time</span></div>
-        <div><span class="key">output</span>: <span class="val">connected intelligence, blind spot detection, domain evolution tracking</span></div>
+        <div><span class="key">output</span>: <span class="val">blind-spot detection, knowledge-gap analysis</span></div>
         <div><span class="key">delta</span>:&nbsp; <span class="val">the analysis layer the free engine doesn't compute</span></div>
       </div>
     </div>
@@ -234,36 +234,6 @@ permalink: "/signal.html"
           <div class="technical"><span>gaps</span> = dependency graph analysis &times; content engagement history &times; topic coverage scoring</div>
         </div>
 
-        <div class="feature-card">
-          <span class="tag">Cross-Project Intelligence</span>
-          <h3>One change, every repo it touches</h3>
-          <p class="scenario">You maintain six projects. A breaking change lands in a crate that three of them share &mdash; and you only notice in the one you happen to be working in that week. Cross-project intelligence reads every manifest you have indexed, tells you which repos a change actually reaches, and where the same dependency has drifted to different versions.</p>
-          <div class="technical"><span>cross-project</span> = multi-manifest indexing + shared-dependency resolution + convergence detection</div>
-        </div>
-      </div>
-
-      <!-- Secondary Features (two-column) -->
-      <div class="signal-grid-2col">
-        <div class="feature-card">
-          <span class="tag">Semantic Shifts</span>
-          <h3>Watch your domain evolve in real time</h3>
-          <p class="scenario">Three months ago, "edge runtime" appeared in 2% of your feed. Now it's 19%. Semantic Shifts pinpoints the inflection to a specific Vercel blog post on March 3rd that triggered a conversation cascade across 4 sources. Trend detection that's personal to your stack, not the internet's.</p>
-          <div class="technical"><span>shifts</span> = embedding trajectory analysis over sliding time windows per topic cluster</div>
-        </div>
-
-        <div class="feature-card">
-          <span class="tag">Standing Queries</span>
-          <h3>Persistent watchlists that never sleep</h3>
-          <p class="scenario">Set "Tauri security advisories" as a standing query. Every new item from every source gets tested against it. When an advisory drops at 3am and appears on a security blog, Standing Queries flags it before your next coffee. Like Google Alerts, but running against scored, codebase-relevant content.</p>
-          <div class="technical"><span>standing</span> = persistent semantic queries &times; real-time new-item evaluation &times; notification triggers</div>
-        </div>
-
-        <div class="feature-card">
-          <span class="tag">Precision Ledger</span>
-          <h3>Hold the tool to its own claims</h3>
-          <p class="scenario">Every tool says it cuts noise. Signal shows its working: how often what it surfaced turned out to matter, broken down by domain, and every item you marked a false positive. If precision drops in a domain, you see it &mdash; and so does the scoring engine, which recalibrates against your corrections rather than an average user's.</p>
-          <div class="technical"><span>ledger</span> = per-domain precision + false-positive analysis + calibration feedback</div>
-        </div>
       </div>
     </div>
   </section>
@@ -276,7 +246,7 @@ permalink: "/signal.html"
       <div class="section-label">What builds over time</div>
       <div class="section-title">Signal analyzes what the feed only collects.</div>
       <div class="compound-content">
-        <p class="section-sub" style="text-align:left;margin-bottom:24px;">Signal's analysis runs on your local corpus &mdash; and the corpus grows every day. More items means more connections for Signal Chains to find, more watch history for Standing Queries, more trajectory for Semantic Shifts to measure. Here's what that looks like over time:</p>
+        <p class="section-sub" style="text-align:left;margin-bottom:24px;">Signal's analysis runs on your local corpus &mdash; and the corpus grows every day. More items means a sharper picture of what you rely on but never read about, and which gaps you have actually closed. Here's what that looks like over time:</p>
 
         <div class="compound-phases">
           <div class="phase">
@@ -298,21 +268,21 @@ permalink: "/signal.html"
               <span class="phase-label">Month 1</span>
               <span class="phase-title">Patterns emerge</span>
             </div>
-            <p class="phase-desc">Semantic Shifts detect topic trajectories in your domain. Blind Spots name the dependencies you rely on but never read about. Cross-project intelligence connects a single change to every repo it reaches.</p>
+            <p class="phase-desc">Blind Spots name the dependencies you rely on but never read about. Knowledge Gaps quantify the features you ship against but have never engaged with &mdash; and rank them by how central they are to your stack.</p>
           </div>
           <div class="phase">
             <div class="phase-header">
               <span class="phase-label">Month 3</span>
               <span class="phase-title">Coverage pays off</span>
             </div>
-            <p class="phase-desc">90 days of scored corpus. Signal Chains span whole narratives &mdash; a deprecation notice in week 2 connects to the migration guide in week 9. Standing Queries have had time to catch things you would have missed. Knowledge Gaps show which ones you've closed. The Precision Ledger shows measured precision on your own corrections.</p>
+            <p class="phase-desc">90 days of scored corpus. Blind Spots have surfaced risks no CVE scanner would name &mdash; a maintainer stepping back, a license change, a deprecation buried in release notes. Knowledge Gaps show which gaps you've closed, and which keep widening while you ship against them.</p>
           </div>
           <div class="phase">
             <div class="phase-header">
               <span class="phase-label">Year 1</span>
               <span class="phase-title">A second technical brain</span>
             </div>
-            <p class="phase-desc">365 days of codebase-aware, privacy-preserving coverage. Semantic Shifts show how your entire domain evolved. Blind Spots have closed on dependencies you never would have read about. Signal Chains have connected hundreds of narratives. That archive was scored locally, against your codebase, and it never left your machine &mdash; which is why nothing else has it.</p>
+            <p class="phase-desc">365 days of codebase-aware, privacy-preserving coverage. Blind Spots have closed on dependencies you never would have read about. That archive was scored locally, against your codebase, and it never left your machine &mdash; which is why nothing else has it.</p>
           </div>
         </div>
       </div>
@@ -354,7 +324,7 @@ permalink: "/signal.html"
         <div class="how-card">
           <div class="step">03 / Intelligence</div>
           <h4>Signal analysis layer</h4>
-          <p>Embedding trajectory analysis detects Semantic Shifts. Dependency graph diffing surfaces Knowledge Gaps and Blind Spots. Multi-manifest resolution powers cross-project intelligence. All computed locally using sqlite-vec for vector operations.</p>
+          <p>Dependency graph diffing crossed with your reading history surfaces Knowledge Gaps and Blind Spots, with AI assessment running on your own key. All computed locally using sqlite-vec for vector operations.</p>
         </div>
       </div>
     </div>
@@ -387,12 +357,8 @@ permalink: "/signal.html"
         <div class="price-trial">14-day free trial included in the app. No credit card required to try.</div>
         <ul class="price-features">
           <li>Everything in the free tier</li>
-          <li>Blind spot detection</li>
+          <li>Blind spot detection + AI assessment</li>
           <li>Knowledge gap detection</li>
-          <li>Standing queries (persistent watchlists)</li>
-          <li>Semantic shift tracking</li>
-          <li>Cross-project intelligence</li>
-          <li>Precision ledger (per-domain accuracy)</li>
           <li>Priority support</li>
         </ul>
       </div>
@@ -410,11 +376,11 @@ permalink: "/signal.html"
 
       <div class="faq-item">
         <div class="faq-q">What's the difference between free and Signal?</div>
-        <div class="faq-a">Free gives you the full scoring engine, AI briefings, all 20+ sources, natural language search, Developer DNA, signal chains and Score Autopsy. Signal adds the analysis layer that reads across your whole dependency graph: Blind Spots, Knowledge Gaps, Standing Queries, Semantic Shifts, cross-project intelligence, and the Precision Ledger. Free surfaces relevant content. Signal tells you what you're missing.</div>
+        <div class="faq-a">Free gives you the full scoring engine, AI briefings, all 20+ sources, natural language search, Developer DNA, signal chains and Score Autopsy. Signal adds the analysis layer that reads across your whole dependency graph: Blind Spots with AI assessment, and Knowledge Gaps. Free surfaces relevant content. Signal tells you what you're missing.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Wait, AI briefings are free?</div>
-        <div class="faq-a">Yes. Daily and weekly AI-generated briefings are included in the free tier. They use your own API key (BYOK) or local Ollama. We believe every developer deserves an AI-generated summary of what matters to their stack. Signal adds the intelligence that makes those briefings richer &mdash; connected chains, blind spot detection, and trend context.</div>
+        <div class="faq-a">Yes. Daily and weekly AI-generated briefings are included in the free tier. They use your own API key (BYOK) or local Ollama. We believe every developer deserves an AI-generated summary of what matters to their stack. Signal adds blind-spot and knowledge-gap context on top of what the free engine surfaces.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">What happens to my data?</div>
@@ -426,7 +392,7 @@ permalink: "/signal.html"
       </div>
       <div class="faq-item">
         <div class="faq-q">Why does Signal cost money if it uses my API key?</div>
-        <div class="faq-a">Your API key powers the models. Signal provides the intelligence architecture built on top &mdash; the cross-source entity linking, the dependency graph analysis, the temporal embedding tracking, the attention analytics. Think of it as: you bring the engine, Signal is the dashboard, the instruments, and the navigation system.</div>
+        <div class="faq-a">Your API key powers the models. Signal provides the analysis built on top &mdash; the dependency-graph analysis, the crossing against your reading history, the AI assessment pipeline. Think of it as: you bring the engine, Signal is the dashboard, the instruments, and the navigation system.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Can I try before subscribing?</div>

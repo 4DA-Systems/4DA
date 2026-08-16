@@ -72,7 +72,7 @@ A feed reader shows you whatever arrived today, on day 1 and on day 100. It hold
 
 A Developer Operating System accumulates. Every week adds a snapshot to your technology evolution timeline. Every save and dismissal builds a preference profile you can inspect — and teaches the Brief what to stop showing you. Every item scored joins a local corpus that Signal Chains connect and engine updates re-judge.
 
-After 30 days, you have a scored archive of your ecosystem that no search engine can reconstruct. After 90 days, standing queries have caught things you would have missed. After 180 days, your machine holds a richer record of your professional attention than LinkedIn, GitHub, and Stack Overflow combined.
+After 30 days, you have a scored archive of your ecosystem that no search engine can reconstruct. After 90 days, blind-spot analysis has caught risks you would have missed. After 180 days, your machine holds a richer record of your professional attention than LinkedIn, GitHub, and Stack Overflow combined.
 
 And unlike those platforms, you own that data. It lives on your machine. It's not training someone else's model. It's not selling your attention to advertisers. It's yours.
 
