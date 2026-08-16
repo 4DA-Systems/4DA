@@ -240,12 +240,24 @@ panic = "warn"
 # not a UTF-8 char boundary, and 23 such vectors accumulated on ingested text
 # before #422 fixed them — while `unwrap_used = "deny"` above kept production
 # unwraps at exactly zero. That asymmetry is real and this lint is the right
-# closer. It is NOT enabled crate-wide yet: measured against this tree it fires
-# 280 times (sources/ 55, ace/ 38, scoring/ 36, content_personalization/ 25,
-# ...). Blanket-allowing that backlog would cement any live panic hiding in it,
-# so it is being adopted module-by-module instead, starting with
-# `source_fetching` (see the `#![deny]` in src/source_fetching/mod.rs). Promote
-# to a crate-wide deny here once the backlog is audited out.
+# closer. It is NOT enabled crate-wide yet.
+#
+# MEASURED (`cargo clippy --lib -- -W clippy::string_slice`, 2026-08-16): it
+# fires **221** times. The "280" previously stated here was never re-measured;
+# the number moves as modules are hardened, so re-measure before quoting it.
+# Current shape: ace/scanner.rs 30, monitoring_briefing.rs 13,
+# scoring/dependencies.rs 12, sources/rss.rs 9, sources/arxiv.rs 9,
+# scoring/pipeline_v2.rs 8, sources/mastodon.rs 7, diagnostics.rs 7, ...
+#
+# Blanket-allowing that backlog would cement any live panic hiding in it, so it
+# is adopted module-by-module via a `#![deny(clippy::string_slice)]` at the
+# module root. Closed so far (0 hits, or every remaining slice carries an
+# `#[allow]` with a stated char-boundary proof):
+#   source_fetching/mod.rs, utils/text.rs, signals.rs, package_ambiguity.rs,
+#   knowledge_decay.rs, competing_tech.rs, dep_linker.rs, stacks/scoring.rs,
+#   llm_judge.rs, llm_stream.rs, ipc_guard.rs, taste_test_commands.rs,
+#   health_checks.rs, ace/watcher.rs
+# Promote to a crate-wide deny here once the backlog is audited out.
 # Pedantic — good code practices
 pedantic = { level = "warn", priority = -1 }
 # Allow specific pedantic lints that are too noisy for this codebase
