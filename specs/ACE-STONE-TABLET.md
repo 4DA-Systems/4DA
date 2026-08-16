@@ -18,6 +18,12 @@ The Autonomous Context Engine is the brain of 4DA. It must achieve:
 - **True Personalization:** Each profile is unique and deeply understood
 - **Seamless Operation:** Users never think about context; it just works
 
+> **Target, not a gate (noted 2026-08-16).** The >85% precision figure is an aspiration
+> from this spec and is enforced nowhere. The floors that actually fail a build live in
+> `src-tauri/src/scoring/simulation/reality.rs`: aggregate precision >= 0.70, aggregate
+> F1 >= 0.40, and per-persona noise rejection >= 80%. `.ai/INVARIANTS.md` INV-001 quoted
+> the 85% as if it were enforced; it now states the real floors.
+
 ---
 
 ## 2. Architecture Overview
@@ -586,6 +592,13 @@ pub enum ExclusionStrength {
 }
 ```
 
+> **Not built (noted 2026-08-16).** `ExclusionStrength` has zero occurrences in the
+> codebase. Exclusion shipped binary: `utils/topics.rs::check_exclusions` matches an
+> item's topics against the user's exclusion list, and `scoring::pipeline_v2` zeroes the
+> score and marks the item excluded before any scoring work runs. See `.ai/INVARIANTS.md`
+> INV-060 for the as-built rule. The tier selector in §6.2 is doubly dead: AD-029 also
+> retired the dismissal-count input it derived strength from.
+
 ### Layer 2: Active Context (Weight: 0.8)
 
 **Real-time awareness of current work. High trust but decays.**
@@ -752,6 +765,13 @@ pub struct AggregatedInterest {
 }
 
 impl AggregatedInterest {
+    // Not built (noted 2026-08-16). None of these three constants exist in the
+    // codebase, and LEARNED_LAYER_WEIGHT is doubly stale: AD-029 (2026-08-11)
+    // removed learned behavior from scoring authority entirely, so its shipped
+    // contribution is zero, not 0.6. As built, `scoring::context` folds static
+    // identity and active context into one flat Vec<Interest> with per-item
+    // provenance weights (tech 0.85/0.40, active topics 0.50-0.75, direct deps
+    // 0.30) and no layer multiplier above them. See .ai/INVARIANTS.md INV-023.
     pub fn compute_final_weight(&mut self) {
         // Layer weights (static > active > learned)
         const STATIC_LAYER_WEIGHT: f32 = 1.0;
@@ -812,6 +832,8 @@ pub enum ExclusionSource {
 }
 
 impl UnifiedExclusion {
+    // Not built — see the §5 note. Exclusion is binary; `apply_to_score` has no
+    // as-built counterpart.
     pub fn apply_to_score(&self, base_score: f32) -> f32 {
         match self.strength {
             ExclusionStrength::Absolute => 0.0,
