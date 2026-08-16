@@ -24,6 +24,7 @@ mod clients;
 mod db;
 mod entries;
 mod error;
+mod license;
 mod rate_limit;
 mod stream;
 

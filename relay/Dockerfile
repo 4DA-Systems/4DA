@@ -37,7 +37,13 @@ RUN mkdir -p /app/data && chown -R relay:relay /app
 
 USER relay
 
+# BIND_ADDR must be 0.0.0.0 inside a container. main.rs defaults it to 127.0.0.1,
+# which is the right default for a bare-metal run but binds only the container's
+# own loopback here — published ports resolve to nothing while the healthcheck,
+# which curls localhost from inside the same netns, still passes. The container
+# looked healthy and was unreachable.
 ENV DATABASE_URL="sqlite:/app/data/relay.db?mode=rwc" \
+    BIND_ADDR="0.0.0.0" \
     PORT=8443 \
     RUST_LOG="relay=info,tower_http=info"
 

@@ -55,7 +55,7 @@ async fn setup_team() -> (Router, String, String) {
         "client_id": "admin-client-1",
         "display_name": "Admin User",
         "public_key": [1, 2, 3, 4],
-        "license_key_hash": "testhash123"
+        "license_key": crate::license::test_support::valid_team_license()
     });
 
     let resp = app
@@ -415,7 +415,7 @@ async fn test_expired_invite_rejected() {
         "client_id": "admin-1",
         "display_name": "Admin",
         "public_key": [1, 2, 3],
-        "license_key_hash": "hash"
+        "license_key": crate::license::test_support::valid_team_license()
     });
     let resp = app
         .clone()
@@ -488,4 +488,132 @@ async fn test_team_id_mismatch() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+// ---------------------------------------------------------------------------
+// POST /teams entitlement gate
+//
+// `create_team` took only `State` and `Json`, and its sole check was
+// `if body.license_key_hash.is_empty()` — so any non-empty string created a team
+// and was handed an admin JWT. These tests drive the real router, so they fail if
+// the gate is removed from the handler and not merely from the verifier.
+// ---------------------------------------------------------------------------
+
+/// Build a `POST /teams` body with a caller-chosen licence field.
+fn create_team_body(team_id: &str, license_key: &str) -> serde_json::Value {
+    serde_json::json!({
+        "team_id": team_id,
+        "client_id": "admin-client-1",
+        "display_name": "Admin User",
+        "public_key": [1, 2, 3, 4],
+        "license_key": license_key,
+    })
+}
+
+async fn post_teams(app: &Router, body: &serde_json::Value) -> StatusCode {
+    app.clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/teams")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+        .status()
+}
+
+fn future_date() -> String {
+    (chrono::Utc::now() + chrono::Duration::days(365)).to_rfc3339()
+}
+
+/// The regression test for the finding: the old gate accepted these exact values.
+#[tokio::test]
+async fn create_team_rejects_an_unsigned_license_string() {
+    crate::license::test_support::install_test_key();
+    let app = test_router(test_pool().await);
+
+    for junk in ["testhash123", "hash", "x", "4DA-nope.nope"] {
+        let body = create_team_body(&uuid::Uuid::new_v4().to_string(), junk);
+        assert_eq!(
+            post_teams(&app, &body).await,
+            StatusCode::UNAUTHORIZED,
+            "unsigned licence string was accepted: {junk}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn create_team_rejects_an_empty_license() {
+    crate::license::test_support::install_test_key();
+    let app = test_router(test_pool().await);
+    let body = create_team_body(&uuid::Uuid::new_v4().to_string(), "");
+    assert_eq!(post_teams(&app, &body).await, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn create_team_rejects_a_non_team_tier() {
+    crate::license::test_support::install_test_key();
+    let app = test_router(test_pool().await);
+    let signal_key = crate::license::test_support::mint("signal", &future_date());
+    let body = create_team_body(&uuid::Uuid::new_v4().to_string(), &signal_key);
+    assert_eq!(post_teams(&app, &body).await, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn create_team_rejects_an_expired_license() {
+    crate::license::test_support::install_test_key();
+    let app = test_router(test_pool().await);
+    let past = (chrono::Utc::now() - chrono::Duration::days(1)).to_rfc3339();
+    let expired = crate::license::test_support::mint("team", &past);
+    let body = create_team_body(&uuid::Uuid::new_v4().to_string(), &expired);
+    assert_eq!(post_teams(&app, &body).await, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn create_team_accepts_a_valid_team_license() {
+    let app = test_router(test_pool().await);
+    let key = crate::license::test_support::valid_team_license();
+    let body = create_team_body(&uuid::Uuid::new_v4().to_string(), &key);
+    assert_eq!(post_teams(&app, &body).await, StatusCode::OK);
+}
+
+/// One licence, one team. Otherwise a single valid key mints unlimited teams.
+#[tokio::test]
+async fn create_team_refuses_a_second_team_for_the_same_license() {
+    let app = test_router(test_pool().await);
+    let key = crate::license::test_support::valid_team_license();
+
+    let first = create_team_body(&uuid::Uuid::new_v4().to_string(), &key);
+    assert_eq!(post_teams(&app, &first).await, StatusCode::OK);
+
+    let second = create_team_body(&uuid::Uuid::new_v4().to_string(), &key);
+    assert_eq!(post_teams(&app, &second).await, StatusCode::BAD_REQUEST);
+}
+
+/// The stored hash is derived from the key, never echoed from the request, so a
+/// client cannot choose which hash its team is recorded under.
+#[tokio::test]
+async fn stored_license_hash_is_derived_server_side() {
+    let pool = test_pool().await;
+    let app = test_router(pool.clone());
+    let team_id = uuid::Uuid::new_v4().to_string();
+    let key = crate::license::test_support::valid_team_license();
+
+    let body = create_team_body(&team_id, &key);
+    assert_eq!(post_teams(&app, &body).await, StatusCode::OK);
+
+    let (stored,): (String,) =
+        sqlx::query_as("SELECT license_key_hash FROM teams WHERE team_id = $1")
+            .bind(&team_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    let expected = crate::license::verify_team_license(&key).unwrap().key_hash;
+    assert_eq!(stored, expected);
+    assert_eq!(stored.len(), 64);
+    assert_ne!(stored, key, "the raw licence key must never be stored");
 }
