@@ -25,6 +25,14 @@
 //!
 //! See `docs/strategy/INTELLIGENCE-MESH.md` §4 for the full security model.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use crate::error::{Result, ResultExt};
 use crate::llm::{LLMClient, Message, RelevanceJudgment};
 use crate::prompt_safety::wrap_untrusted_item;
@@ -137,20 +145,31 @@ Output JSON array (one per article):
         Ok((judgments, response.input_tokens, response.output_tokens))
     }
 
-    fn parse_judgments(
+    /// Parse the model's `[{id, score, reason}]` array back into judgments.
+    ///
+    /// `pub(crate)` so the hardening error-path suite can exercise THIS code
+    /// rather than a copy of it — the previous tests re-implemented the bracket
+    /// extraction inline, which meant they reproduced the bug below instead of
+    /// catching it.
+    pub(crate) fn parse_judgments(
         &self,
         response: &str,
         items: &[(String, String, String)],
     ) -> Result<Vec<RelevanceJudgment>> {
-        // Try to extract JSON from the response
-        let json_str = if let Some(start) = response.find('[') {
-            if let Some(end) = response.rfind(']') {
-                &response[start..=end]
-            } else {
-                response
-            }
-        } else {
-            response
+        // Try to extract JSON from the response.
+        //
+        // `e >= s` is load-bearing: `find('[')` scans forward and `rfind(']')`
+        // scans backward, so on a garbled or truncated response the last `]`
+        // can PRECEDE the first `[` ("] then [") — and `&response[s..=e]` with
+        // e + 1 < s panics rather than erroring. Mirrors the already-guarded
+        // sibling in `blind_spots::parse_dep_assessments`.
+        // SAFE: `s` and `e` are byte offsets of the ASCII '[' and ']' found by
+        // `find`/`rfind`, so `s` and `e + 1` are char boundaries; the `e >= s`
+        // arm makes the range well-ordered.
+        #[allow(clippy::string_slice)]
+        let json_str = match (response.find('['), response.rfind(']')) {
+            (Some(s), Some(e)) if e >= s => &response[s..=e],
+            _ => response,
         };
 
         let parsed: Vec<serde_json::Value> = serde_json::from_str(json_str).map_err(|e| {
@@ -211,7 +230,9 @@ Output JSON array (one per article):
                 })
                 .unwrap_or_default();
 
-            // Debug log first few judgments
+            // Debug log first few judgments.
+            // SAFE: `floor_char_boundary` returns a char boundary by definition.
+            #[allow(clippy::string_slice)]
             if judgments.len() < 3 {
                 debug!(
                     target: "4da::llm",
