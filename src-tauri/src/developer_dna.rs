@@ -30,8 +30,6 @@ pub struct DeveloperDna {
     pub interests: Vec<String>,
     /// Top engaged topics from behavior (what you actually click/save)
     pub top_engaged_topics: Vec<EngagedTopic>,
-    /// Knowledge blind spots (dependencies you use but don't track)
-    pub blind_spots: Vec<BlindSpotEntry>,
     /// Source preferences: which sources you engage with most
     pub source_engagement: Vec<SourceEngagement>,
     /// Overall stats
@@ -51,13 +49,6 @@ pub struct EngagedTopic {
     pub topic: String,
     pub interactions: u32,
     pub percent_of_total: f32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BlindSpotEntry {
-    pub dependency: String,
-    pub severity: String,
-    pub days_stale: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,16 +106,13 @@ pub fn generate_dna() -> Result<DeveloperDna> {
     // 3. Engagement data (from feedback/interactions)
     let top_engaged_topics = get_top_engaged_topics(&conn)?;
 
-    // 4. Blind spots (from knowledge gaps)
-    let blind_spots = get_blind_spots(&conn)?;
-
-    // 5. Source engagement stats
+    // 4. Source engagement stats
     let source_engagement = get_source_engagement(&conn)?;
 
-    // 6. Overall stats
+    // 5. Overall stats
     let stats = compute_stats(&conn)?;
 
-    // 7. Identity summary
+    // 6. Identity summary
     let identity_summary = build_identity_summary(&primary_stack, &top_dependencies);
 
     Ok(DeveloperDna {
@@ -134,7 +122,6 @@ pub fn generate_dna() -> Result<DeveloperDna> {
         top_dependencies,
         interests,
         top_engaged_topics,
-        blind_spots,
         source_engagement,
         stats,
         identity_summary,
@@ -190,18 +177,6 @@ pub fn export_as_markdown(dna: &DeveloperDna) -> String {
                 capitalize(&topic.topic),
                 bar,
                 topic.percent_of_total
-            ));
-        }
-        md.push('\n');
-    }
-
-    // Blind Spots
-    if !dna.blind_spots.is_empty() {
-        md.push_str("## Blind Spots\n\n");
-        for spot in dna.blind_spots.iter().take(5) {
-            md.push_str(&format!(
-                "- **{}** — {} severity, {}d stale\n",
-                spot.dependency, spot.severity, spot.days_stale
             ));
         }
         md.push('\n');
@@ -287,39 +262,12 @@ fn get_top_engaged_topics(conn: &rusqlite::Connection) -> Result<Vec<EngagedTopi
     Ok(topics)
 }
 
-fn get_blind_spots(conn: &rusqlite::Connection) -> Result<Vec<BlindSpotEntry>> {
-    // Simplified: find dependencies we haven't engaged with recently
-    let mut spots = Vec::new();
-
-    let query = "
-        SELECT pd.package_name, MAX(pd.project_path) as project_path
-        FROM project_dependencies pd
-        WHERE pd.is_dev = 0
-        AND pd.package_name NOT IN (
-            SELECT DISTINCT topic FROM topic_affinities WHERE weight > 0.3
-        )
-        AND LENGTH(pd.package_name) >= 4
-        GROUP BY pd.package_name
-        ORDER BY pd.package_name
-        LIMIT 10
-    ";
-
-    if let Ok(mut stmt) = conn.prepare(query) {
-        if let Ok(rows) = stmt.query_map([], |row| {
-            Ok(BlindSpotEntry {
-                dependency: row.get(0)?,
-                severity: "medium".to_string(),
-                days_stale: 30, // Approximate; would need temporal tracking for precision
-            })
-        }) {
-            for row in rows.flatten() {
-                spots.push(row);
-            }
-        }
-    }
-
-    Ok(spots)
-}
+// NOTE: a former `get_blind_spots` helper here filtered against a phantom
+// `weight` column on `topic_affinities` (the real column is `affinity_score`),
+// so its prepare failed and it returned [] on every run since it was written.
+// Deleted in v20a as a phantom-column bug together with the always-empty
+// `blind_spots` field it fed. The real Blind Spots feature lives in
+// `blind_spots.rs` and is unrelated.
 
 fn get_source_engagement(conn: &rusqlite::Connection) -> Result<Vec<SourceEngagement>> {
     let mut sources = Vec::new();
@@ -580,7 +528,6 @@ mod tests {
                 interactions: 50,
                 percent_of_total: 45.0,
             }],
-            blind_spots: vec![],
             source_engagement: vec![],
             stats: DnaStats {
                 total_items_processed: 5000,

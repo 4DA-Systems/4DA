@@ -76,20 +76,6 @@ export interface DiscoveredContext {
   lastScan: string | null;
 }
 
-export interface TopicAffinity {
-  topic: string;
-  positive_signals: number;
-  negative_signals: number;
-  affinity_score: number;
-}
-
-export interface AntiTopic {
-  topic: string;
-  rejection_count: number;
-  confidence: number;
-  auto_detected: boolean;
-}
-
 export interface SimilarTopicResult {
   topic: string;
   similarity: number;

@@ -24,9 +24,11 @@ const N_SESSIONS: usize = 20;
 // Enriched context factories
 // ============================================================================
 
-/// Build an enriched Rust persona context with feedback boosts applied.
+/// Build an enriched Rust persona context. Post-AD-029 feedback boosts no
+/// longer enter the scoring context; the parameter keeps the session loop's
+/// rebuild-per-session shape intact.
 fn enriched_rust_ctx(
-    boosts: &HashMap<String, f64>,
+    _boosts: &HashMap<String, f64>,
     interaction_count: i64,
 ) -> super::super::ScoringContext {
     // Start from the base persona builder
@@ -35,29 +37,14 @@ fn enriched_rust_ctx(
     let config = EnrichmentConfig::all();
     let mut enriched = super::enrichment::enrich_persona(base, &enrichments[0], &config);
 
-    // Apply feedback boosts on top of enrichment
-    enriched.feedback_boosts = boosts.iter().map(|(k, v)| (k.clone(), *v)).collect();
     enriched.feedback_interaction_count = interaction_count;
-
-    // Merge feedback-derived affinities into ACE context
-    for (topic, &boost) in boosts {
-        if boost.abs() > 0.05 {
-            let affinity = boost.clamp(-1.0, 1.0) as f32;
-            let confidence = (boost.abs() as f32).min(0.9);
-            enriched
-                .ace_ctx
-                .topic_affinities
-                .entry(topic.clone())
-                .or_insert((affinity, confidence));
-        }
-    }
 
     enriched
 }
 
-/// Build an enriched Python persona context with feedback boosts applied.
+/// Build an enriched Python persona context; see `enriched_rust_ctx`.
 fn enriched_python_ctx(
-    boosts: &HashMap<String, f64>,
+    _boosts: &HashMap<String, f64>,
     interaction_count: i64,
 ) -> super::super::ScoringContext {
     let base = personas::python_ml_engineer();
@@ -65,20 +52,7 @@ fn enriched_python_ctx(
     let config = EnrichmentConfig::all();
     let mut enriched = super::enrichment::enrich_persona(base, &enrichments[1], &config);
 
-    enriched.feedback_boosts = boosts.iter().map(|(k, v)| (k.clone(), *v)).collect();
     enriched.feedback_interaction_count = interaction_count;
-
-    for (topic, &boost) in boosts {
-        if boost.abs() > 0.05 {
-            let affinity = boost.clamp(-1.0, 1.0) as f32;
-            let confidence = (boost.abs() as f32).min(0.9);
-            enriched
-                .ace_ctx
-                .topic_affinities
-                .entry(topic.clone())
-                .or_insert((affinity, confidence));
-        }
-    }
 
     enriched
 }

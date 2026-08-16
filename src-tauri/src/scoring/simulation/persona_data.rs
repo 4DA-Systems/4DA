@@ -40,9 +40,8 @@ pub(super) struct DepInfoSpec {
 /// Full enrichment data for a single persona.
 /// Covers all fields that base persona builders leave at defaults.
 pub(super) struct PersonaEnrichment {
-    // ACEContext enrichment (4 missing fields)
+    // ACEContext enrichment (3 missing fields)
     pub topic_confidence: HashMap<String, f32>,
-    pub topic_affinities: HashMap<String, (f32, f32)>,
     pub anti_topics: Vec<String>,
     pub anti_topic_confidence: HashMap<String, f32>,
 
@@ -66,13 +65,6 @@ pub(super) struct PersonaEnrichment {
 
 fn confidence_map(pairs: &[(&str, f32)]) -> HashMap<String, f32> {
     pairs.iter().map(|(k, v)| (k.to_string(), *v)).collect()
-}
-
-fn affinity_map(pairs: &[(&str, f32, f32)]) -> HashMap<String, (f32, f32)> {
-    pairs
-        .iter()
-        .map(|(k, a, c)| (k.to_string(), (*a, *c)))
-        .collect()
 }
 
 fn string_vec(items: &[&str]) -> Vec<String> {
@@ -130,12 +122,6 @@ fn rust_enrichment() -> PersonaEnrichment {
             ("sqlite", 0.85),
             ("wasm", 0.75),
             ("systems programming", 0.90),
-        ]),
-        topic_affinities: affinity_map(&[
-            ("rust", 0.7, 0.9),
-            ("systems programming", 0.5, 0.8),
-            ("memory safety", 0.4, 0.7),
-            ("performance", 0.3, 0.6),
         ]),
         anti_topics: string_vec(&["python", "java"]),
         anti_topic_confidence: confidence_map(&[("python", 0.6), ("java", 0.5)]),
@@ -206,12 +192,6 @@ fn python_enrichment() -> PersonaEnrichment {
             ("machine learning", 0.92),
             ("llm", 0.85),
             ("data science", 0.75),
-        ]),
-        topic_affinities: affinity_map(&[
-            ("machine learning", 0.8, 0.9),
-            ("python", 0.6, 0.85),
-            ("transformers", 0.5, 0.7),
-            ("gpu", 0.3, 0.6),
         ]),
         anti_topics: string_vec(&["rust", "go"]),
         anti_topic_confidence: confidence_map(&[("rust", 0.5), ("go", 0.4)]),
@@ -287,12 +267,6 @@ fn fullstack_ts_enrichment() -> PersonaEnrichment {
             ("nodejs", 0.80),
             ("graphql", 0.70),
         ]),
-        topic_affinities: affinity_map(&[
-            ("react", 0.7, 0.85),
-            ("nextjs", 0.5, 0.7),
-            ("typescript", 0.6, 0.8),
-            ("tailwind", 0.3, 0.5),
-        ]),
         anti_topics: string_vec(&["java", "c++"]),
         anti_topic_confidence: confidence_map(&[("java", 0.5), ("c++", 0.4)]),
         topic_embeddings: topic_embedding_map(&[
@@ -364,12 +338,6 @@ fn devops_enrichment() -> PersonaEnrichment {
             ("ci/cd", 0.80),
             ("observability", 0.75),
         ]),
-        topic_affinities: affinity_map(&[
-            ("kubernetes", 0.8, 0.9),
-            ("terraform", 0.6, 0.8),
-            ("observability", 0.5, 0.7),
-            ("ebpf", 0.4, 0.6),
-        ]),
         anti_topics: string_vec(&["frontend", "react"]),
         anti_topic_confidence: confidence_map(&[("frontend", 0.6), ("react", 0.5)]),
         topic_embeddings: topic_embedding_map(&[
@@ -436,11 +404,6 @@ fn mobile_enrichment() -> PersonaEnrichment {
             ("mobile", 0.85),
             ("ios", 0.70),
             ("android", 0.70),
-        ]),
-        topic_affinities: affinity_map(&[
-            ("mobile", 0.7, 0.85),
-            ("expo", 0.5, 0.7),
-            ("react native", 0.6, 0.8),
         ]),
         anti_topics: string_vec(&["backend", "devops"]),
         anti_topic_confidence: confidence_map(&[("backend", 0.4), ("devops", 0.4)]),

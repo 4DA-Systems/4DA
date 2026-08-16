@@ -104,7 +104,6 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "ace_get_accuracy_metrics",
     "ace_record_accuracy_feedback",
     "get_engagement_summary",
-    "ace_get_single_affinity",
     "get_rss_feeds",
     "set_rss_feeds",
     "get_twitter_handles",

@@ -60,13 +60,6 @@ pub fn ensure_posterior_table(conn: &Connection) -> Result<()> {
             update_count INTEGER NOT NULL DEFAULT 0,
             last_updated TEXT NOT NULL DEFAULT (datetime('now')),
             source TEXT NOT NULL DEFAULT 'uniform'
-        );
-        CREATE TABLE IF NOT EXISTS posterior_snapshots (
-            id INTEGER PRIMARY KEY,
-            weights TEXT NOT NULL,
-            update_count INTEGER NOT NULL,
-            snapshot_date TEXT NOT NULL DEFAULT (date('now')),
-            UNIQUE(snapshot_date)
         );",
     )?;
     Ok(())
@@ -116,26 +109,6 @@ fn save_posterior(
             last_updated = datetime('now'),
             source = ?3",
         params![json, update_count, source],
-    )?;
-
-    Ok(())
-}
-
-/// Take a daily snapshot of the posterior (for drift detection).
-pub fn snapshot_posterior_if_needed(conn: &Connection) -> Result<()> {
-    ensure_posterior_table(conn)?;
-    let (weights, count) = load_posterior(conn)?;
-    if count == 0 {
-        return Ok(()); // Nothing to snapshot
-    }
-
-    let json = serde_json::to_string(&weights.to_vec())?;
-
-    // INSERT OR IGNORE — only one snapshot per day
-    conn.execute(
-        "INSERT OR IGNORE INTO posterior_snapshots (weights, update_count, snapshot_date)
-         VALUES (?1, ?2, date('now'))",
-        params![json, count],
     )?;
 
     Ok(())
@@ -208,171 +181,11 @@ pub fn update_posterior(conn: &Connection, topics: &[String], signal_strength: f
     Ok(())
 }
 
-/// Get the dominant persona name and weight from the current posterior.
-pub fn get_dominant_persona(conn: &Connection) -> Result<Option<(String, f64)>> {
-    let (weights, count) = load_posterior(conn)?;
-    if count == 0 {
-        return Ok(None);
-    }
-
-    let (idx, &max_w) = match weights
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-    {
-        Some(v) => v,
-        None => return Ok(None),
-    };
-
-    Ok(Some((PERSONA_NAMES[idx].to_string(), max_w)))
-}
-
-// ============================================================================
-// Persona Topic Boosts
-// ============================================================================
-
-/// Derive topic boosts from a dominant persona for scoring context injection.
-/// Returns a map of topic -> small boost value based on persona interests and tech.
-/// The boost is intentionally small: `weight * 0.1` per characteristic topic.
-pub fn get_persona_topic_boosts(
-    persona_idx: usize,
-    weight: f32,
-) -> std::collections::HashMap<String, f32> {
-    let mut boosts = std::collections::HashMap::new();
-    if persona_idx >= NUM_PERSONAS {
-        return boosts;
-    }
-    let template = &TEMPLATES[persona_idx];
-    let boost_factor = weight * 0.1;
-    for &(interest, interest_weight) in template.interests {
-        boosts.insert(interest.to_lowercase(), boost_factor * interest_weight);
-    }
-    for &tech in template.tech {
-        boosts
-            .entry(tech.to_lowercase())
-            .or_insert(boost_factor * 0.5);
-    }
-    boosts
-}
-
-// ============================================================================
-// Drift Detection
-// ============================================================================
-
-/// KL divergence threshold — above this, we flag taste drift.
-/// KL(P||Q) > 0.15 indicates meaningful shift in persona weights.
-const DRIFT_THRESHOLD: f64 = 0.15;
-
-/// Compute KL divergence: KL(current || reference).
-/// Both distributions must sum to ~1.0 and have no zero entries.
-fn kl_divergence(current: &[f64; NUM_PERSONAS], reference: &[f64; NUM_PERSONAS]) -> f64 {
-    let eps = 1e-10;
-    let mut kl = 0.0;
-    for j in 0..NUM_PERSONAS {
-        let p = current[j].max(eps);
-        let q = reference[j].max(eps);
-        kl += p * (p / q).ln();
-    }
-    kl
-}
-
-/// Result of drift detection analysis.
-#[derive(Debug, Clone)]
-pub struct DriftReport {
-    /// KL divergence between current and reference posteriors.
-    pub kl_divergence: f64,
-    /// Whether drift exceeds threshold.
-    pub drifted: bool,
-    /// Days since the reference snapshot.
-    pub days_since_reference: i64,
-    /// Persona that gained the most weight.
-    pub rising_persona: Option<String>,
-    /// Persona that lost the most weight.
-    pub declining_persona: Option<String>,
-    /// Recommended explore rate (higher when drifting).
-    pub recommended_explore_rate: f64,
-}
-
-/// Detect taste drift by comparing current posterior to a reference snapshot.
-///
-/// `lookback_days`: how far back to look for the reference snapshot (default: 30).
-/// Returns None if no reference snapshot exists.
-pub fn detect_drift(conn: &Connection, lookback_days: i64) -> Result<Option<DriftReport>> {
-    ensure_posterior_table(conn)?;
-    let (current, current_count) = load_posterior(conn)?;
-    if current_count < 5 {
-        return Ok(None); // Not enough data yet
-    }
-
-    // Load oldest snapshot within lookback window
-    let result: std::result::Result<(String, String), _> = conn.query_row(
-        "SELECT weights, snapshot_date FROM posterior_snapshots
-         WHERE snapshot_date <= date('now', ?1)
-         ORDER BY snapshot_date ASC LIMIT 1",
-        params![format!("-{lookback_days} days")],
-        |row| Ok((row.get(0)?, row.get(1)?)),
-    );
-
-    let (ref_json, ref_date) = match result {
-        Ok(r) => r,
-        Err(_) => return Ok(None), // No reference snapshot
-    };
-
-    let ref_vec: Vec<f64> = serde_json::from_str(&ref_json)?;
-    if ref_vec.len() != NUM_PERSONAS {
-        return Ok(None);
-    }
-    let mut reference = [0.0; NUM_PERSONAS];
-    reference.copy_from_slice(&ref_vec);
-
-    let kl = kl_divergence(&current, &reference);
-
-    // Find rising and declining personas
-    let mut max_gain = (0, 0.0_f64);
-    let mut max_loss = (0, 0.0_f64);
-    for j in 0..NUM_PERSONAS {
-        let delta = current[j] - reference[j];
-        if delta > max_gain.1 {
-            max_gain = (j, delta);
-        }
-        if delta < max_loss.1 {
-            max_loss = (j, delta);
-        }
-    }
-
-    // Compute days since reference
-    let days = conn
-        .query_row(
-            "SELECT julianday('now') - julianday(?1)",
-            params![ref_date],
-            |row| row.get::<_, f64>(0),
-        )
-        .unwrap_or(0.0) as i64;
-
-    // Recommended explore rate: base 5%, increases with drift
-    let explore_rate = if kl > DRIFT_THRESHOLD {
-        (0.05 + (kl - DRIFT_THRESHOLD) * 2.0).min(0.25) // Max 25% explore
-    } else {
-        0.05
-    };
-
-    Ok(Some(DriftReport {
-        kl_divergence: kl,
-        drifted: kl > DRIFT_THRESHOLD,
-        days_since_reference: days,
-        rising_persona: if max_gain.1 > 0.02 {
-            Some(PERSONA_NAMES[max_gain.0].to_string())
-        } else {
-            None
-        },
-        declining_persona: if max_loss.1 < -0.02 {
-            Some(PERSONA_NAMES[max_loss.0].to_string())
-        } else {
-            None
-        },
-        recommended_explore_rate: explore_rate,
-    }))
-}
+// NOTE (v20a): the persona-posterior READ side (get_dominant_persona,
+// get_persona_topic_boosts, drift detection + posterior_snapshots) was
+// deleted — nothing outside this module's own tests ever called it. The
+// WRITE side (seed_from_taste_test, update_posterior) stays: it keeps the
+// posterior current so a future consumer inherits real data, per AD-029.
 
 #[cfg(test)]
 #[path = "continuous_tests.rs"]

@@ -22,7 +22,6 @@ pub struct WeeklyDigest {
     pub period_start: String,
     pub period_end: String,
     pub highlights: Vec<DigestHighlight>,
-    pub top_topics: Vec<DigestTopic>,
     pub active_signals: Vec<DigestSignal>,
     pub knowledge_gaps: Vec<DigestGap>,
     pub stats: DigestStats,
@@ -35,13 +34,6 @@ pub struct DigestHighlight {
     pub score: f64,
     pub url: Option<String>,
     pub discovered_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DigestTopic {
-    pub topic: String,
-    pub interactions: u32,
-    pub trend: String, // "rising", "stable", "declining"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,44 +149,11 @@ fn collect_stats(conn: &rusqlite::Connection, days: i64) -> DigestStats {
     }
 }
 
-fn collect_topics(conn: &rusqlite::Connection) -> Vec<DigestTopic> {
-    // Use ACE topic affinities if available
-    let sql = "SELECT topic, score FROM ace_topic_affinities ORDER BY score DESC LIMIT 10";
-    let mut stmt = match conn.prepare(sql) {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
-
-    let rows = match stmt.query_map([], |row| {
-        let topic: String = row.get(0)?;
-        let score: f64 = row.get(1)?;
-        let interactions = (score * 100.0).round() as u32;
-        let trend = if score > 0.7 {
-            "rising"
-        } else if score > 0.3 {
-            "stable"
-        } else {
-            "declining"
-        };
-        Ok(DigestTopic {
-            topic,
-            interactions,
-            trend: trend.to_string(),
-        })
-    }) {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
-    };
-
-    rows.filter_map(|r| match r {
-        Ok(v) => Some(v),
-        Err(e) => {
-            tracing::warn!("Row processing failed in weekly_digest: {e}");
-            None
-        }
-    })
-    .collect()
-}
+// NOTE: a former `collect_topics` helper queried a nonexistent
+// `ace_topic_affinities` table (the real table is `topic_affinities`) and so
+// returned an empty Vec on every run since it was written. Deleted in v20a as
+// a phantom-table bug, together with the always-empty `top_topics` field it
+// fed.
 
 // ============================================================================
 // Digest Scheduling
@@ -246,10 +205,7 @@ pub async fn generate_weekly_digest() -> Result<WeeklyDigest> {
     // 2. Stats
     let stats = collect_stats(&conn, 7);
 
-    // 3. Topics
-    let top_topics = collect_topics(&conn);
-
-    // 4. Signal chains (reuse existing detection)
+    // 3. Signal chains (reuse existing detection)
     let active_signals = match crate::signal_chains::detect_and_record_chains(&conn) {
         Ok(chains) => chains
             .into_iter()
@@ -267,7 +223,7 @@ pub async fn generate_weekly_digest() -> Result<WeeklyDigest> {
         }
     };
 
-    // 5. Knowledge gaps (reuse existing detection)
+    // 4. Knowledge gaps (reuse existing detection)
     let knowledge_gaps = match crate::knowledge_decay::detect_knowledge_gaps(&conn) {
         Ok(gaps) => gaps
             .into_iter()
@@ -292,7 +248,6 @@ pub async fn generate_weekly_digest() -> Result<WeeklyDigest> {
         period_start: week_ago.format("%Y-%m-%d").to_string(),
         period_end: now.format("%Y-%m-%d").to_string(),
         highlights,
-        top_topics,
         active_signals,
         knowledge_gaps,
         stats,

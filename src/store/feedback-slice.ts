@@ -3,7 +3,7 @@ import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import { extractTechTopics } from '../lib/known-tech';
 import type { FeedbackAction } from '../types';
-import type { AppStore, FeedbackSlice, AntiTopic } from './types';
+import type { AppStore, FeedbackSlice } from './types';
 
 // Client-side score adjustment multipliers for immediate feedback
 const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
@@ -16,12 +16,7 @@ const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
 
 export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> = (set, get) => ({
   feedbackGiven: {},
-  learnedAffinities: [],
-  antiTopics: [],
   snoozedItemIds: new Set<number>(),
-  lastLearnedTopic: null,
-
-  setLastLearnedTopic: (topic) => set({ lastLearnedTopic: topic }),
 
   loadSnoozedIds: async () => {
     try {
@@ -62,24 +57,6 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
       }
     } catch {
       /* persisted saved ids not available */
-    }
-  },
-
-  loadLearnedBehavior: async () => {
-    const [affinityResult, antiResult] = await Promise.allSettled([
-      cmd('ace_get_topic_affinities'),
-      cmd('ace_get_anti_topics', { minRejections: 2 }),
-    ]);
-
-    if (affinityResult.status === 'fulfilled' && affinityResult.value.affinities) {
-      const sorted = [...affinityResult.value.affinities].sort(
-        (a, b) => Math.abs(b.affinity_score) - Math.abs(a.affinity_score),
-      );
-      set({ learnedAffinities: sorted });
-    }
-
-    if (antiResult.status === 'fulfilled' && antiResult.value.anti_topics) {
-      set({ antiTopics: antiResult.value.anti_topics as unknown as AntiTopic[] });
     }
   },
 
@@ -158,13 +135,7 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         );
       }
 
-      // Track what was just learned for the visible learning loop
       const primaryTopic = topics[0] || null;
-      if (primaryTopic) {
-        const direction: 'positive' | 'negative' =
-          (actionType === 'save' || actionType === 'click') ? 'positive' : 'negative';
-        set({ lastLearnedTopic: { topic: primaryTopic, direction, timestamp: Date.now() } });
-      }
 
       // Immediate score adjustment for visual feedback
       const delta = FEEDBACK_ADJUSTMENTS[actionType] ?? 0;
@@ -177,27 +148,15 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         }));
       }
 
-      // Fetch updated affinity for richer toast (non-critical)
-      let affinityScore: number | null = null;
-      if (primaryTopic) {
-        try {
-          const result = await cmd('ace_get_single_affinity', { topic: primaryTopic });
-          if (result.affinity) {
-            affinityScore = Math.round(result.affinity.affinity_score * 100);
-          }
-        } catch { /* non-critical */ }
-      }
-
       // Show toast with undo action (except for click events)
       if (actionType !== 'click') {
         const { addToast } = get();
         const topicLabel = primaryTopic || 'this type';
-        const scoreNote = affinityScore !== null ? ` (${affinityScore > 0 ? '+' : ''}${affinityScore}%)` : '';
         const learnMessage = actionType === 'save'
-          ? `Saved — boosting '${topicLabel}'${scoreNote}. Similar content will rank higher next analysis.`
+          ? `Saved — boosting '${topicLabel}'. Similar content will rank higher next analysis.`
           : actionType === 'mark_irrelevant'
-          ? `Got it — '${topicLabel}' added to anti-topics${scoreNote}. Matching content will be suppressed.`
-          : `Noted — deprioritizing '${topicLabel}'${scoreNote}. 3 dismissals creates an auto-filter.`;
+          ? `Got it — '${topicLabel}' added to anti-topics. Matching content will be suppressed.`
+          : `Noted — deprioritizing '${topicLabel}'. 3 dismissals creates an auto-filter.`;
 
         addToast('success', learnMessage, {
           label: 'Undo',
@@ -220,8 +179,6 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
           },
         });
       }
-
-      setTimeout(() => void get().loadLearnedBehavior(), 500);
     } catch (error) {
       console.error('Failed to record interaction:', error);
     }

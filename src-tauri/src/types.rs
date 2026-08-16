@@ -68,7 +68,6 @@ pub enum FactorKind {
     TopicMatch,
     DecisionWindow,
     SkillGap,
-    LearnedPreference,
     CommunitySignal,
 }
 

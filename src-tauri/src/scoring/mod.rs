@@ -1,7 +1,6 @@
 #![allow(clippy::manual_range_contains)]
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 mod ace_context;
-mod affinity;
 pub(crate) mod aliases;
 mod analyzer;
 pub(crate) mod authority;
@@ -45,7 +44,6 @@ pub(crate) mod validation;
 
 // Public API — external callers use crate::scoring::function_name unchanged
 pub(crate) use ace_context::{get_ace_context, ACEContext};
-pub(crate) use affinity::compute_affinity_multiplier;
 pub(crate) use analyzer::{run_post_analysis_hooks, score_items_full};
 pub(crate) use calibration::calibrate_score;
 pub(crate) use calibration_monitor::{
@@ -320,8 +318,9 @@ pub(crate) struct ScoringContext {
     pub exclusions: Vec<String>,
     pub ace_ctx: ACEContext,
     pub topic_embeddings: HashMap<String, Vec<f32>>,
-    /// Feedback-derived topic boosts: topic -> net_score (-1.0 to 1.0)
-    pub feedback_boosts: HashMap<String, f64>,
+    // feedback_boosts (feedback-derived topic boosts) DELETED in v20a: the
+    // loader had pinned it to an empty map since v19 (AD-029) and the last
+    // pipeline reader was removed with the dead feedback_boost computation.
     /// Source quality scores from learned preferences: source_type -> score (-1.0 to 1.0)
     ///
     /// Loaded permanently empty and read by nothing since AD-029 demoted the

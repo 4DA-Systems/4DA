@@ -330,7 +330,6 @@ pub(crate) fn run_probe_calibration(
     let mut ax_context = false;
     let mut ax_interest = false;
     let mut ax_ace = false;
-    let mut ax_learned = false;
     let mut ax_dependency = false;
 
     for (i, probe) in probes.iter().enumerate() {
@@ -372,9 +371,6 @@ pub(crate) fn run_probe_calibration(
                 if b.ace_boost >= 0.12 {
                     ax_ace = true;
                 }
-                if b.feedback_boost > 0.05 || b.affinity_mult >= 1.15 {
-                    ax_learned = true;
-                }
                 if b.dep_match_score >= 0.20 {
                     ax_dependency = true;
                 }
@@ -415,9 +411,6 @@ pub(crate) fn run_probe_calibration(
     }
     if ax_ace {
         fired_axes.push("ace".to_string());
-    }
-    if ax_learned {
-        fired_axes.push("learned".to_string());
     }
     if ax_dependency {
         fired_axes.push("dependency".to_string());
@@ -631,16 +624,12 @@ mod tests {
         let ctx = crate::test_utils::empty_scoring_context();
         let (probes, _) = select_probes_for_user(&ctx);
         let results = run_probe_calibration(&ctx, &db, &probes, None);
-        assert!(results.fired_axes.len() <= 5);
+        assert!(results.fired_axes.len() <= 4);
         assert!(
-            results.fired_axes.iter().all(|a| [
-                "context",
-                "interest",
-                "ace",
-                "learned",
-                "dependency"
-            ]
-            .contains(&a.as_str())),
+            results
+                .fired_axes
+                .iter()
+                .all(|a| ["context", "interest", "ace", "dependency"].contains(&a.as_str())),
             "unexpected axis label in {:?}",
             results.fired_axes
         );

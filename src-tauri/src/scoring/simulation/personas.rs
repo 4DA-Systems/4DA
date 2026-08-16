@@ -3,7 +3,7 @@
 //!
 //! Canonical order: [rust, python, typescript, devops, mobile, bootstrap, power, switcher, niche]
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use super::super::ace_context::ACEContext;
 use super::super::ScoringContext;
@@ -406,9 +406,6 @@ pub(super) fn power_user() -> ScoringContext {
         &["tokio", "torch", "react", "postgres"],
         &["rust", "python", "typescript", "distributed systems", "ai"],
     );
-    let mut boosts: HashMap<String, f64> = HashMap::new();
-    boosts.insert("performance".to_string(), 0.3);
-    boosts.insert("architecture".to_string(), 0.3);
     let stack = crate::stacks::compose_profiles(&[
         "rust_systems".to_string(),
         "python_ml".to_string(),
@@ -425,7 +422,6 @@ pub(super) fn power_user() -> ScoringContext {
             "typescript".to_string(),
         ])
         .composed_stack(stack)
-        .feedback_boosts(boosts)
         .feedback_interaction_count(200)
         .build()
 }

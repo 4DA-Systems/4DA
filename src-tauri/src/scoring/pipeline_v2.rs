@@ -203,8 +203,6 @@ fn compute_signal_strength_bonus(
     keyword_score: f32,
     semantic_boost: f32,
     dep_match_score: f32,
-    feedback_boost: f32,
-    affinity_mult: f32,
     stack_pain_match: bool,
 ) -> f32 {
     // Only applies at 2+ signals — 0-1 ceilings are intentionally hard
@@ -242,21 +240,6 @@ fn compute_signal_strength_bonus(
         } else {
             // stack_pain_match is binary — use flat strength
             strengths.push(scoring_config::SIGNAL_NORMALIZATION_STACK_PAIN_STRENGTH);
-        }
-    }
-
-    // Learned axis: feedback or affinity
-    if feedback_boost > scoring_config::FEEDBACK_THRESHOLD
-        || affinity_mult >= scoring_config::AFFINITY_THRESHOLD
-    {
-        // Affinity-driven strength (affinity range 1.15-1.70)
-        if affinity_mult >= scoring_config::AFFINITY_THRESHOLD {
-            let excess = (affinity_mult - scoring_config::AFFINITY_THRESHOLD)
-                / scoring_config::SIGNAL_NORMALIZATION_AFFINITY_RANGE;
-            strengths.push(excess.clamp(0.0, 1.0));
-        } else {
-            strengths.push(scoring_config::SIGNAL_NORMALIZATION_FEEDBACK_STRENGTH);
-            // Feedback is less granular
         }
     }
 
@@ -620,35 +603,14 @@ fn extract_signals(
         (deps, score)
     };
 
-    // Feedback learning boost
-    let feedback_boost = if ctx.feedback_boosts.is_empty() {
-        0.0
-    } else {
-        let mut boost_sum: f64 = 0.0;
-        let mut match_count = 0;
-        for topic in &topics {
-            if let Some(&net_score) = ctx.feedback_boosts.get(topic.as_str()) {
-                boost_sum += net_score;
-                match_count += 1;
-            }
-        }
-        if match_count > 0 {
-            ((boost_sum / match_count as f64) * scoring_config::FEEDBACK_SCALE as f64).clamp(
-                scoring_config::FEEDBACK_CAP_RANGE.0 as f64,
-                scoring_config::FEEDBACK_CAP_RANGE.1 as f64,
-            ) as f32
-        } else {
-            0.0
-        }
-    };
-
-    // Affinity multiplier and anti-topic penalty DEMOTED in v19 (AD-029):
-    // both derived from `topic_affinities`/`anti_topics`, whose capture
-    // layer mixed three incompatible strength scales and self-poisoned
+    // Feedback boost, affinity multiplier, and anti-topic penalty DEMOTED
+    // in v19 (AD-029): all derived from behavioral capture whose layer
+    // mixed three incompatible strength scales and self-poisoned
     // (2026-07-13 doom loop: passive scroll noise drove the user's own
     // stack to −1.0 affinity at ×[0.3, 1.7] authority). Neutral values
     // keep breakdown plumbing intact; explicit suppression still works
     // via user-authored `exclusions`.
+    let feedback_boost = 0.0_f32;
     let affinity_mult = 1.0_f32;
     let anti_penalty = 0.0_f32;
 
@@ -945,11 +907,6 @@ fn compute_quality_composite(
     // Source-engagement multiplier (learned source pref + autophagy blend +
     // per-feed override) DEMOTED in v19 (AD-029); breakdown field stays present and neutral.
     let source_quality_boost = 0.0_f32;
-
-    // Anti-topic multiplier: raw.anti_penalty is used directly in the engagement
-    // formula below. This derived value is kept for score breakdown diagnostics.
-    #[allow(clippy::no_effect_underscore_binding)]
-    let _anti_mult = 1.0 - raw.anti_penalty;
 
     // Domain quality penalty (NOT dampened — preserves full penalty strength)
     let domain_quality_mult =
@@ -2231,8 +2188,6 @@ pub(crate) fn score_item(
         cal.keyword_score,
         cal.semantic_boost,
         raw.dep_match_score,
-        raw.feedback_boost,
-        raw.affinity_mult,
         raw.stack_pain_match,
     );
 
@@ -2617,8 +2572,6 @@ pub(crate) fn score_item(
             interest_score: cal.interest_score,
             keyword_score: cal.keyword_score,
             ace_boost: cal.semantic_boost,
-            feedback_boost: raw.feedback_boost,
-            affinity_mult: raw.affinity_mult,
             window_boost,
             matched_window_label: matched_window_label.as_deref(),
             skill_gap_boost,

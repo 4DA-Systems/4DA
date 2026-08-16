@@ -22,6 +22,18 @@
   "seeded": "2026-08-14",
   "backlog": [
     {
+      "command": "ace_get_anti_topics",
+      "since": "2026-08-17",
+      "rust": "src-tauri/src/ace_commands/interactions.rs:254",
+      "reason": "v20a dead-code removal deleted its only frontend caller (loadLearnedBehavior fed store state nothing rendered). The command stays: it is a live reader of real anti_topics rows and remains in the Victauri MCP allowlist for inspection/diagnostics."
+    },
+    {
+      "command": "ace_get_topic_affinities",
+      "since": "2026-08-17",
+      "rust": "src-tauri/src/ace_commands/interactions.rs:242",
+      "reason": "v20a dead-code removal deleted its only frontend caller (loadLearnedBehavior fed store state nothing rendered). The command stays: it is a live reader of real topic_affinities rows and remains in the Victauri MCP allowlist for inspection/diagnostics."
+    },
+    {
       "command": "calculate_electricity_cost",
       "since": "2026-08-14",
       "rust": "src-tauri/src/streets_localization.rs:208",
@@ -296,12 +308,6 @@
       "since": "2026-08-15",
       "rust": "src-tauri/src/temporal_graph.rs:373",
       "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
-    },
-    {
-      "command": "get_learning_stats",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/ace_commands/interactions.rs:410",
-      "reason": "diagnostic/observability — invoked via dev tools, not a UI panel"
     },
     {
       "command": "get_lesson_translation_status",
