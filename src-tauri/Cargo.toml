@@ -242,21 +242,31 @@ panic = "warn"
 # unwraps at exactly zero. That asymmetry is real and this lint is the right
 # closer. It is NOT enabled crate-wide yet.
 #
-# MEASURED (`cargo clippy --lib -- -W clippy::string_slice`, 2026-08-16): it
-# fires **221** times. The "280" previously stated here was never re-measured;
-# the number moves as modules are hardened, so re-measure before quoting it.
-# Current shape: ace/scanner.rs 30, monitoring_briefing.rs 13,
-# scoring/dependencies.rs 12, sources/rss.rs 9, sources/arxiv.rs 9,
-# scoring/pipeline_v2.rs 8, sources/mastodon.rs 7, diagnostics.rs 7, ...
+# MEASURED (`cargo clippy --lib -- -W clippy::string_slice`, 2026-08-17): it
+# fires **193** times, down from 246 measured on the same command before this
+# branch. The "280" previously stated here was never re-measured; the number
+# moves every time a module is hardened, so RE-MEASURE before quoting it.
+# Current shape: ace/scanner.rs 30, monitoring_briefing.rs 13, sources/rss.rs 9,
+# sources/arxiv.rs 9, scoring/pipeline_v2.rs 8, sources/mastodon.rs 7,
+# diagnostics.rs 7, sources/youtube.rs 6, ...
 #
 # Blanket-allowing that backlog would cement any live panic hiding in it, so it
 # is adopted module-by-module via a `#![deny(clippy::string_slice)]` at the
-# module root. Closed so far (0 hits, or every remaining slice carries an
-# `#[allow]` with a stated char-boundary proof):
-#   source_fetching/mod.rs, utils/text.rs, signals.rs, package_ambiguity.rs,
-#   knowledge_decay.rs, competing_tech.rs, dep_linker.rs, stacks/scoring.rs,
-#   llm_judge.rs, llm_stream.rs, ipc_guard.rs, taste_test_commands.rs,
-#   health_checks.rs, ace/watcher.rs
+# module root. A module qualifies when it has zero hits OR every remaining
+# slice carries an `#[allow]` stating its char-boundary proof — a
+# `floor_char_boundary`, a `find`/`rfind` offset of an ASCII needle (optionally
+# plus that needle's ASCII length), a `char_indices`/`match_indices` offset, or
+# an explicit `snap_to_char_boundary`. "It looks fine" is not a proof.
+#
+# Closed (18 modules):
+#   source_fetching/{mod,fetcher}.rs, utils/{text,word_boundary}.rs, signals.rs,
+#   package_ambiguity.rs, knowledge_decay.rs, competing_tech.rs, dep_linker.rs,
+#   preemption.rs, scoring/dependencies.rs, stacks/scoring.rs, llm_judge.rs,
+#   llm_stream.rs, ipc_guard.rs, taste_test_commands.rs, health_checks.rs,
+#   ace/watcher.rs
+#
+# Note the denies reach `#[cfg(test)]` code too, which is deliberate: a test
+# that byte-slices is a test that can panic on its own fixture.
 # Promote to a crate-wide deny here once the backlog is audited out.
 # Pedantic — good code practices
 pedantic = { level = "warn", priority = -1 }
