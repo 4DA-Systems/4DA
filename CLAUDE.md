@@ -46,7 +46,10 @@ src-tauri/              # Rust backend
     extractors/         # File format extractors (PDF, Office, etc.)
     scoring/            # PASIFA scoring algorithm (multi-module)
     settings/           # Settings management + keychain + validation
-    sources/            # 20+ content source adapters (HN, Reddit, RSS, GitHub, arXiv, dev.to, Lobsters, ProductHunt, Bluesky, crates.io, npm, PyPI, HuggingFace, PapersWithCode, CVE/OSV, StackOverflow, X/Twitter, YouTube, Go modules)
+    sources/            # 22 content source adapters (HN, Reddit, RSS, GitHub, arXiv,
+                        #   dev.to, Lobsters, ProductHunt, Bluesky, crates.io, npm, PyPI,
+                        #   HuggingFace, PapersWithCode, CVE, OSV, StackOverflow, X/Twitter,
+                        #   YouTube, Go modules, Mastodon, Lemmy)
   src/embeddings.rs     # Local embedding via Ollama
 data/                   # Runtime data (gitignored)
   settings.json         # User config (use settings.example.json as template)
@@ -62,11 +65,14 @@ mcp-4da-server/         # MCP server exposing 4DA tools (Claude Code)
 - **Rust:** std > External crates > `crate::` > `super::`
 
 ### File Size Limits
+
+Enforced by `scripts/check-file-sizes.cjs` (`pnpm run validate:sizes`):
+
 - TypeScript (.ts): warn at 300 lines, error at 500
 - TypeScript (.tsx): warn at 350 lines, error at 500
 - Rust: warn at 700 lines, error at 1000
-- Test files (*.test.*, *_tests.rs): exempt from warnings, error at 2x normal
-- Rust functions: max 60 lines (warning only)
+- Test files (`*.test.*`, `*_tests.rs`): exempt from warnings, error at 2x the normal threshold
+- Rust functions: max 60 lines (convention only — clippy's `too_many_lines` is set to `allow`)
 - Exceeding files must be split or added to `scripts/check-file-sizes.cjs` exceptions
 
 ### Error Handling
@@ -81,16 +87,20 @@ mcp-4da-server/         # MCP server exposing 4DA tools (Claude Code)
 
 ## Design System
 
+Tokens are defined in `src/App.css`. The real CSS custom-property names carry a `--color-` prefix.
+
 ```css
 /* Background */
---bg-primary: #0A0A0A;    --bg-secondary: #141414;   --bg-tertiary: #1F1F1F;
+--color-bg-primary: #0A0A0A;     --color-bg-secondary: #141414;   --color-bg-tertiary: #1F1F1F;
 /* Text */
---text-primary: #FFFFFF;   --text-secondary: #A0A0A0; --text-muted: #8A8A8A;
+--color-text-primary: #FFFFFF;   --color-text-secondary: #A0A0A0; --color-text-muted: #8A8A8A;
 /* Accent */
---accent-primary: #FFFFFF; --accent-gold: #D4AF37;    --border: #2A2A2A;
+--color-accent-primary: #FFFFFF; --color-accent-gold: #D4AF37;    --color-border: #2A2A2A;
 /* Status */
---success: #22C55E;        --error: #EF4444;
+--color-success: #22C55E;        --color-error: #EF4444;
 ```
+
+A **light theme** overrides the same token names with a separate palette — never hard-code a hex value; always reference the token so both themes work.
 
 Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
 
@@ -100,7 +110,7 @@ Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
 - **MutexGuard<SourceRegistry>** is not Send — cannot hold across await points in Rust
 - **OCR:** use `ocrs` crate (pure Rust), not tesseract (requires C bindings)
 - **PDF:** pdf-extract + lopdf. **Office:** docx-rs + calamine
-- **ts-rs** v10 with serde-compat generates TypeScript types from Rust structs
+- **ts-rs** v12 with serde-compat generates TypeScript types from Rust structs
 - **Vite dep updates + running fourda.exe** — if you update a Vite-adjacent
   dep (`vite`, `@tailwindcss/vite`, `@vitejs/plugin-react`, etc.) while
   `fourda.exe` is running, the running process keeps the OLD paths in

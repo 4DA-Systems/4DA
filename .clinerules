@@ -55,9 +55,9 @@ src-tauri/              # Rust backend
     extractors/         # File format extractors (PDF, Office, etc.)
     scoring/            # PASIFA scoring algorithm (multi-module)
     settings/           # Settings management + keychain + validation
-    sources/            # 20+ content source adapters (HN, Reddit, RSS, GitHub, arXiv,
+    sources/            # 22 content source adapters (HN, Reddit, RSS, GitHub, arXiv,
                         #   dev.to, Lobsters, ProductHunt, Bluesky, crates.io, npm, PyPI,
-                        #   HuggingFace, PapersWithCode, CVE/OSV, StackOverflow, X/Twitter,
+                        #   HuggingFace, PapersWithCode, CVE, OSV, StackOverflow, X/Twitter,
                         #   YouTube, Go modules, Mastodon, Lemmy)
   src/embeddings.rs     # Local embedding via Ollama
 data/                   # Runtime data (gitignored)
@@ -129,7 +129,7 @@ Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
 - **MutexGuard<SourceRegistry>** is not Send — cannot hold across await points in Rust
 - **OCR:** use the `ocrs` crate (pure Rust), not tesseract (requires C bindings)
 - **PDF:** pdf-extract + lopdf. **Office:** docx-rs + calamine
-- **ts-rs** v10 with serde-compat generates TypeScript types from Rust structs
+- **ts-rs** v12 with serde-compat generates TypeScript types from Rust structs
 - **Vite dep updates while `fourda.exe` runs** — the running process keeps stale module paths in
   memory and crashes on resolution. Fix: `taskkill /F /IM fourda.exe && pnpm install --frozen-lockfile`
 
