@@ -25,8 +25,9 @@ use crate::{
 /// Run background health check - called every 5 minutes by scheduler
 pub async fn run_background_health_check() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
+    let watcher_alive = ace.watcher_is_running();
     let conn = ace.get_conn().lock();
-    let report = health::check_all_components(&conn)?;
+    let report = health::check_all_components(&conn, watcher_alive)?;
 
     info!(
         target: "4da::health",

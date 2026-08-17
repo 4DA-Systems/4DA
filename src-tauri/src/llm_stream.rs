@@ -4,11 +4,64 @@
 //! Extracted from `llm.rs` to keep file sizes within limits.
 //! Supports SSE (Anthropic, OpenAI) and NDJSON (Ollama) streaming formats.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use crate::error::{Result, ResultExt};
 use crate::llm::{sanitize_api_error, LLMResponse, Message};
 use crate::settings::LLMProvider;
 use futures::StreamExt;
 use tracing::debug;
+
+// ============================================================================
+// Chunk reassembly
+// ============================================================================
+
+/// Accumulates raw network bytes and yields complete lines.
+///
+/// All three streaming paths used to do `buffer.push_str(&String::
+/// from_utf8_lossy(&bytes))` **per network chunk**. TCP does not respect
+/// character boundaries: a multi-byte char whose bytes land in two chunks is
+/// decoded as an incomplete sequence in each half, so `from_utf8_lossy`
+/// replaces BOTH halves with U+FFFD and the character is gone before any parser
+/// sees it. Not a panic — silent corruption of user-visible LLM output, and it
+/// only shows up on non-English text and emoji, which is exactly the content
+/// least likely to be in anyone's test fixture.
+///
+/// Decoding is therefore deferred to a line boundary, where a
+/// well-formed stream always has whole characters. `from_utf8_lossy` is still
+/// the decoder for the completed line — a genuinely malformed line degrades to
+/// U+FFFD rather than dropping the line.
+#[derive(Default)]
+pub(crate) struct StreamLineBuffer {
+    buf: Vec<u8>,
+}
+
+impl StreamLineBuffer {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// Append one raw network chunk. No decoding happens here.
+    pub(crate) fn push_chunk(&mut self, bytes: &[u8]) {
+        self.buf.extend_from_slice(bytes);
+    }
+
+    /// Pop the next complete line (up to and including `\n`), decoded.
+    /// Returns `None` while the buffer holds no newline — the partial line
+    /// stays buffered until the chunk carrying its terminator arrives.
+    pub(crate) fn next_line(&mut self) -> Option<String> {
+        let newline = self.buf.iter().position(|b| *b == b'\n')?;
+        let line: Vec<u8> = self.buf.drain(..=newline).collect();
+        // Exclude the trailing '\n' from the decoded line.
+        Some(String::from_utf8_lossy(&line[..newline]).into_owned())
+    }
+}
 
 // ============================================================================
 // SSE / NDJSON Parsing Helpers (pub for testing)
@@ -142,19 +195,18 @@ where
     }
 
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut lines = StreamLineBuffer::new();
     let mut full_text = String::new();
     let mut input_tokens: u64 = 0;
     let mut output_tokens: u64 = 0;
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.context("Stream read error")?;
-        buffer.push_str(&String::from_utf8_lossy(&bytes));
+        lines.push_chunk(&bytes);
 
         // Process complete lines
-        while let Some(newline_pos) = buffer.find('\n') {
-            let line = buffer[..newline_pos].trim().to_string();
-            buffer = buffer[newline_pos + 1..].to_string();
+        while let Some(raw) = lines.next_line() {
+            let line = raw.trim();
 
             if line.is_empty() || line.starts_with(':') {
                 continue;
@@ -267,16 +319,15 @@ where
     }
 
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut lines = StreamLineBuffer::new();
     let mut full_text = String::new();
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.context("Stream read error")?;
-        buffer.push_str(&String::from_utf8_lossy(&bytes));
+        lines.push_chunk(&bytes);
 
-        while let Some(newline_pos) = buffer.find('\n') {
-            let line = buffer[..newline_pos].trim().to_string();
-            buffer = buffer[newline_pos + 1..].to_string();
+        while let Some(raw) = lines.next_line() {
+            let line = raw.trim();
 
             if line.is_empty() {
                 continue;
@@ -370,24 +421,23 @@ where
     }
 
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut lines = StreamLineBuffer::new();
     let mut full_text = String::new();
     let mut input_tokens: u64 = 0;
     let mut output_tokens: u64 = 0;
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.context("Stream read error")?;
-        buffer.push_str(&String::from_utf8_lossy(&bytes));
+        lines.push_chunk(&bytes);
 
-        while let Some(newline_pos) = buffer.find('\n') {
-            let line = buffer[..newline_pos].trim().to_string();
-            buffer = buffer[newline_pos + 1..].to_string();
+        while let Some(raw) = lines.next_line() {
+            let line = raw.trim();
 
             if line.is_empty() {
                 continue;
             }
 
-            let (token, done, in_tok, out_tok) = parse_ollama_ndjson(&line);
+            let (token, done, in_tok, out_tok) = parse_ollama_ndjson(line);
 
             if let Some(t) = token {
                 full_text.push_str(&t);
@@ -415,151 +465,10 @@ where
         output_tokens,
     })
 }
-
 // ============================================================================
 // Tests
 // ============================================================================
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // --- Anthropic SSE parsing ---
-
-    #[test]
-    fn parse_anthropic_content_block_delta() {
-        let data = r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}"#;
-        assert_eq!(parse_anthropic_sse_token(data), Some("Hello".to_string()));
-    }
-
-    #[test]
-    fn parse_anthropic_message_start_input_tokens() {
-        let data = r#"{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"claude-3-haiku","usage":{"input_tokens":42}}}"#;
-        assert_eq!(parse_anthropic_input_tokens(data), Some(42));
-    }
-
-    #[test]
-    fn parse_anthropic_message_delta_output_tokens() {
-        let data = r#"{"type":"message_delta","usage":{"output_tokens":128}}"#;
-        assert_eq!(parse_anthropic_output_tokens(data), Some(128));
-    }
-
-    #[test]
-    fn parse_anthropic_ignores_non_delta_events() {
-        let data = r#"{"type":"message_stop"}"#;
-        assert_eq!(parse_anthropic_sse_token(data), None);
-    }
-
-    #[test]
-    fn parse_anthropic_ignores_ping() {
-        let data = r#"{"type":"ping"}"#;
-        assert_eq!(parse_anthropic_sse_token(data), None);
-        assert_eq!(parse_anthropic_input_tokens(data), None);
-        assert_eq!(parse_anthropic_output_tokens(data), None);
-    }
-
-    #[test]
-    fn parse_anthropic_content_block_start_no_token() {
-        let data =
-            r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#;
-        assert_eq!(parse_anthropic_sse_token(data), None);
-    }
-
-    #[test]
-    fn parse_anthropic_handles_special_chars() {
-        let data = r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello \"world\" <&>"}}"#;
-        assert_eq!(
-            parse_anthropic_sse_token(data),
-            Some("Hello \"world\" <&>".to_string())
-        );
-    }
-
-    // --- OpenAI SSE parsing ---
-
-    #[test]
-    fn parse_openai_delta_content() {
-        let data = r#"{"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":null}]}"#;
-        assert_eq!(parse_openai_sse_token(data), Some("Hi".to_string()));
-    }
-
-    #[test]
-    fn parse_openai_empty_delta() {
-        let data =
-            r#"{"id":"chatcmpl-1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#;
-        assert_eq!(parse_openai_sse_token(data), None);
-    }
-
-    #[test]
-    fn parse_openai_role_delta_no_content() {
-        let data = r#"{"id":"chatcmpl-1","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}"#;
-        assert_eq!(parse_openai_sse_token(data), None);
-    }
-
-    #[test]
-    fn parse_openai_invalid_json() {
-        assert_eq!(parse_openai_sse_token("not json"), None);
-    }
-
-    // --- Ollama NDJSON parsing ---
-
-    #[test]
-    fn parse_ollama_token_line() {
-        let line =
-            r#"{"model":"llama3","message":{"role":"assistant","content":"Hi"},"done":false}"#;
-        let (token, done, in_t, out_t) = parse_ollama_ndjson(line);
-        assert_eq!(token, Some("Hi".to_string()));
-        assert!(!done);
-        assert_eq!(in_t, 0);
-        assert_eq!(out_t, 0);
-    }
-
-    #[test]
-    fn parse_ollama_done_line() {
-        let line = r#"{"model":"llama3","message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":50,"eval_count":100}"#;
-        let (token, done, in_t, out_t) = parse_ollama_ndjson(line);
-        assert_eq!(token, None);
-        assert!(done);
-        assert_eq!(in_t, 50);
-        assert_eq!(out_t, 100);
-    }
-
-    #[test]
-    fn parse_ollama_invalid_json() {
-        let (token, done, in_t, out_t) = parse_ollama_ndjson("broken{json");
-        assert_eq!(token, None);
-        assert!(!done);
-        assert_eq!(in_t, 0);
-        assert_eq!(out_t, 0);
-    }
-
-    #[test]
-    fn parse_ollama_empty_content_skipped() {
-        let line = r#"{"model":"llama3","message":{"role":"assistant","content":""},"done":false}"#;
-        let (token, done, _, _) = parse_ollama_ndjson(line);
-        assert_eq!(token, None);
-        assert!(!done);
-    }
-
-    #[test]
-    fn parse_ollama_done_without_counts() {
-        let line = r#"{"done":true}"#;
-        let (token, done, in_t, out_t) = parse_ollama_ndjson(line);
-        assert_eq!(token, None);
-        assert!(done);
-        assert_eq!(in_t, 0);
-        assert_eq!(out_t, 0);
-    }
-
-    // --- Edge cases ---
-
-    #[test]
-    fn parse_anthropic_sse_invalid_json() {
-        assert_eq!(parse_anthropic_sse_token("not json at all"), None);
-    }
-
-    #[test]
-    fn parse_anthropic_sse_wrong_type() {
-        let data = r#"{"type":"content_block_delta","delta":{"type":"wrong_type","text":"nope"}}"#;
-        assert_eq!(parse_anthropic_sse_token(data), None);
-    }
-}
+#[path = "llm_stream_tests.rs"]
+mod tests;

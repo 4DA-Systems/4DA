@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tauri commands for the taste test calibration flow.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use std::sync::{Mutex, OnceLock};
 
 use tauri::AppHandle;
@@ -38,6 +46,17 @@ pub async fn taste_test_respond(
     response: String,
     response_time_ms: Option<u64>,
 ) -> Result<TasteTestStep> {
+    // `item_slot` crosses the IPC trust boundary and indexes a fixed-size
+    // table. Validate it HERE — the downstream `taste_test::inference` guard
+    // was an `assert!`, which is live in release and aborts the process; and
+    // because this command is `async`, that abort would leave the frontend's
+    // `invoke()` promise unresolved until its 30s timeout.
+    let item_slot = crate::ipc_guard::validate_range(
+        "item_slot",
+        item_slot,
+        crate::taste_test::inference::NUM_ITEMS,
+    )?;
+
     let taste_response = match response.as_str() {
         "interested" => TasteResponse::Interested,
         "not_interested" => TasteResponse::NotInterested,
@@ -235,4 +254,52 @@ pub async fn get_calibration_sprint_status() -> Result<sprint::CalibrationSprint
         .data_dir
         .join("calibrations");
     sprint::sprint_status(&conn, &calibration_dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// H14 regression. `item_slot` arrived from IPC unvalidated and reached
+    /// `inference::update_with_latency`, whose `assert!(item_slot < NUM_ITEMS)`
+    /// is live in release, immediately before `LIKELIHOOD_MATRIX[item_slot]`.
+    /// A malformed `invoke` aborted the process — and because this command is
+    /// `async`, the abort left the frontend's promise unresolved until its 30s
+    /// timeout.
+    ///
+    /// Validation must happen BEFORE the session lookup, so this holds with no
+    /// active session: an out-of-range slot is a Validation error, never a
+    /// panic and never "No active taste test session".
+    #[tokio::test]
+    async fn taste_test_respond_rejects_out_of_range_slot() {
+        for slot in [
+            crate::taste_test::inference::NUM_ITEMS,
+            crate::taste_test::inference::NUM_ITEMS + 1,
+            9_999,
+            usize::MAX,
+        ] {
+            let err = taste_test_respond(slot, "interested".to_string(), None)
+                .await
+                .expect_err("out-of-range slot must be rejected")
+                .to_string();
+            assert!(
+                err.contains("item_slot"),
+                "slot {slot} should fail range validation, got: {err}"
+            );
+        }
+    }
+
+    /// An in-range slot passes validation and fails later, on the session —
+    /// proving the guard rejects the range and nothing else.
+    #[tokio::test]
+    async fn taste_test_respond_in_range_slot_reaches_session_check() {
+        let err = taste_test_respond(0, "not_a_response".to_string(), None)
+            .await
+            .expect_err("invalid response string must be rejected")
+            .to_string();
+        assert!(
+            err.contains("Invalid response"),
+            "slot 0 must clear range validation, got: {err}"
+        );
+    }
 }

@@ -1,4 +1,13 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -165,19 +174,15 @@ impl Default for CorroborationContext {
 
 /// Check if `text` contains `term` at a word boundary (not embedded in a larger word).
 /// "rust" matches "Rust 1.80" but not "frustrating".
+///
+/// Delegates to the shared UTF-8-safe helper. This was the P0 copy: `term` here
+/// is the user's onboarding tech stack (`classify` is reached from
+/// `pipeline_v2` with `ctx.declared_tech`), so it runs against every item of
+/// every scoring pass. Its own version had a byte-arithmetic cursor AND no
+/// empty-term guard — a non-ASCII stack entry abutting an alphanumeric char, or
+/// an empty one, panicked the whole pipeline.
 fn has_word_boundary(text: &str, term: &str) -> bool {
-    let mut search_from = 0;
-    while let Some(pos) = text[search_from..].find(term) {
-        let abs = search_from + pos;
-        let before_ok = abs == 0 || !text.as_bytes()[abs - 1].is_ascii_alphanumeric();
-        let after = abs + term.len();
-        let after_ok = after >= text.len() || !text.as_bytes()[after].is_ascii_alphanumeric();
-        if before_ok && after_ok {
-            return true;
-        }
-        search_from = abs + 1;
-    }
-    false
+    crate::utils::has_word_boundary_match(text, term)
 }
 
 /// Detects SemVer patterns in a title — used to reject ToolDiscovery classification
@@ -1245,6 +1250,53 @@ mod tests {
     #[test]
     fn test_word_boundary_empty_text() {
         assert!(!has_word_boundary("", "rust"));
+    }
+
+    /// P0 regression. `has_word_boundary` advanced its cursor to `abs + 1` —
+    /// one byte past the START of a match — and reached that advance only when
+    /// the boundary test failed, i.e. when the term abutted an alphanumeric
+    /// char. A multi-byte term in that position split its own first char and
+    /// panicked. There was also no empty-term guard, so an empty term walked
+    /// the string byte-by-byte and panicked at the first ASCII-letter-followed-
+    /// by-multibyte position.
+    #[test]
+    fn test_word_boundary_multibyte_term_does_not_panic() {
+        // The term's FIRST char must be multi-byte for `abs + 1` to split it.
+        assert!(!has_word_boundary("éclair2 build", "éclair"));
+        assert!(!has_word_boundary("привет9", "привет"));
+        assert!(!has_word_boundary("我们1 ship", "我们"));
+        // A genuinely bounded later occurrence still matches.
+        assert!(has_word_boundary("éclair2 and éclair ships", "éclair"));
+        // Empty term: never a match, never a byte-by-byte walk.
+        assert!(!has_word_boundary("aé bé cé", ""));
+    }
+
+    /// The live call chain: `pipeline_v2` hands `ctx.declared_tech` — the
+    /// user's onboarding tech stack, free text they typed — to `classify`,
+    /// which word-boundary-matches each entry against the item title. One
+    /// non-ASCII stack entry plus a title where it abuts an alphanumeric char
+    /// took down every scoring pass.
+    #[test]
+    fn test_classify_survives_non_ascii_declared_tech() {
+        let classifier = SignalClassifier::new();
+        let declared = vec![
+            "éclair".to_string(),
+            "\u{4e2d}\u{6587}".to_string(),
+            String::new(),
+        ];
+        let result = classifier.classify(
+            "Critical CVE in éclair2: RCE vulnerability \u{4e2d}\u{6587}9",
+            "A severe security flaw was discovered. Patch immediately.",
+            0.8,
+            &declared,
+            &declared,
+            &CorroborationContext::default(),
+        );
+        // The assertion is secondary — the point is that this returns at all.
+        assert!(
+            result.is_some(),
+            "a security item should still classify with a non-ASCII stack"
+        );
     }
 
     // ====================================================================

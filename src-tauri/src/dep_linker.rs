@@ -12,6 +12,14 @@
 //! - **Advisory** (0.90): security advisory mentioning a known dep.
 //! - **Title heuristic** (0.50): general item whose title mentions a dep.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use rusqlite::params;
 use tracing::{debug, info};
 
@@ -498,6 +506,8 @@ fn truncate_title(title: &str, max_len: usize) -> &str {
     if title.len() <= max_len {
         title
     } else {
+        // SAFE: `floor_char_boundary` returns a char boundary by definition.
+        #[allow(clippy::string_slice)]
         &title[..title.floor_char_boundary(max_len)]
     }
 }
@@ -607,6 +617,9 @@ pub(crate) fn extract_registry_package(source_type: &str, source_id: &str) -> Op
                     if pos == 0 {
                         source_id
                     } else {
+                        // SAFE: `pos` is the byte offset of an ASCII '@' found
+                        // by `rfind`, so it is a char boundary.
+                        #[allow(clippy::string_slice)]
                         &source_id[..pos]
                     }
                 })
@@ -631,6 +644,10 @@ pub(crate) fn extract_registry_package(source_type: &str, source_id: &str) -> Op
             // starts with a digit ("requests-2.31.0" → "requests",
             // "zope-interface-6.0" → "zope-interface"). A name with no
             // version-looking tail passes through unchanged.
+            // SAFE (both slices): `pos` is the byte offset of an ASCII '-'
+            // found by `rfind`, so `pos` and `pos + 1` are both char
+            // boundaries.
+            #[allow(clippy::string_slice)]
             match source_id.rfind('-') {
                 Some(pos)
                     if source_id[pos + 1..]
@@ -669,29 +686,22 @@ fn matches_dep_in_title(title: &str, dep_name: &str) -> Option<f64> {
     let dep_hyphen = dep_lower.replace('_', "-");
 
     for variant in [&dep_lower, &dep_normalized, &dep_hyphen] {
-        if variant.is_empty() {
-            continue;
-        }
-        let hay = title_lower.as_bytes();
-        let needle = variant.as_bytes();
-        let mut start = 0;
-        while let Some(rel) = title_lower[start..].find(variant.as_str()) {
-            let pos = start + rel;
-            let before_ok = pos == 0 || is_package_boundary(hay[pos - 1]);
-            let after_pos = pos + needle.len();
-            let after_ok = after_pos >= hay.len() || is_package_boundary(hay[after_pos]);
-            if before_ok && after_ok {
-                return Some(0.50);
-            }
-            start = pos + 1;
+        if crate::utils::has_bounded_match(&title_lower, variant, is_package_name_char) {
+            return Some(0.50);
         }
     }
 
     None
 }
 
-fn is_package_boundary(b: u8) -> bool {
-    !b.is_ascii_alphanumeric() && b != b'-' && b != b'_' && b != b'.' && b != b'@'
+/// A char that may legitimately appear INSIDE a written package name, and so
+/// does NOT terminate one. The inverse of a package-name boundary.
+///
+/// Alphanumeric is tested on the CHAR, not the byte: the previous `u8` form
+/// classified every UTF-8 continuation byte as a boundary, so "иreact" read as
+/// a whole-token "react" match.
+fn is_package_name_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '@'
 }
 
 /// Generic/common dependency names are too noisy for title-only matching.

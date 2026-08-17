@@ -1,4 +1,12 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
@@ -663,6 +671,8 @@ fn has_language_context_nearby(text: &str, position: usize, window: usize) -> bo
     // Snap to char boundaries to avoid panicking on multi-byte UTF-8
     let start = snap_to_char_boundary(text, start, false);
     let end = snap_to_char_boundary(text, end, true);
+    // SAFE: both ends explicitly snapped on the line above.
+    #[allow(clippy::string_slice)]
     let context = &text[start..end];
     LANGUAGE_CONTEXT_WORDS.iter().any(|w| context.contains(w))
 }
@@ -696,6 +706,8 @@ const SECURITY_CONTEXT_MARKERS: &[&str] = &[
 fn has_security_context_nearby(text: &str, position: usize, window: usize) -> bool {
     let start = snap_to_char_boundary(text, position.saturating_sub(window), false);
     let end = snap_to_char_boundary(text, (position + window).min(text.len()), true);
+    // SAFE: both ends explicitly snapped on the lines above.
+    #[allow(clippy::string_slice)]
     let context = &text[start..end];
     SECURITY_CONTEXT_MARKERS.iter().any(|m| context.contains(m))
 }
@@ -716,7 +728,17 @@ fn is_package_boundary_char(c: char) -> bool {
 /// any other dotted continuation ("axios.get", "next.config") is REJECTED as
 /// package-name-internal — conservative, matching `dep_linker`'s treatment of
 /// `.` as a name character.
-fn package_name_positions(text: &str, package_name: &str, normalized_name: &str) -> Vec<usize> {
+///
+/// Returns `(byte offset, byte length OF THE FORM THAT MATCHED)`. The length is
+/// carried per position rather than recomputed by the caller because the forms
+/// are NOT all the same length — `normalize_package_name` strips a leading `@`,
+/// so `@foo` yields the forms `["foo", "@foo"]`. A caller that assumes one
+/// uniform `name_len` reads past (or into) the name it matched.
+fn package_name_positions(
+    text: &str,
+    package_name: &str,
+    normalized_name: &str,
+) -> Vec<(usize, usize)> {
     let mut forms: Vec<String> = vec![normalized_name.to_string()];
     let underscored = normalized_name.replace('-', "_");
     if underscored != normalized_name {
@@ -732,19 +754,22 @@ fn package_name_positions(text: &str, package_name: &str, normalized_name: &str)
         if form.is_empty() {
             continue;
         }
-        let mut search_from = 0;
-        while let Some(rel) = text[search_from..].find(form.as_str()) {
-            let pos = search_from + rel;
-            let before_ok = text[..pos]
-                .chars()
-                .next_back()
-                .is_none_or(is_package_boundary_char);
+        // Shared UTF-8-safe cursor: the hand-rolled `search_from = pos + 1`
+        // this replaces splits a multi-byte first char on every failed match,
+        // and `form` reaches here from scraped Python `import` tokens.
+        for pos in crate::utils::match_offsets(text, form.as_str()) {
+            let before_ok =
+                crate::utils::char_before(text, pos).is_none_or(is_package_boundary_char);
             let after = pos + form.len();
-            let after_ok = match text[after..].chars().next() {
+            let rest = text.get(after..).unwrap_or("");
+            let after_ok = match rest.chars().next() {
                 None => true,
                 Some(c) if is_package_boundary_char(c) => true,
+                // SAFE: this arm matched `Some('.')`, so `rest` starts with the
+                // 1-byte '.' and index 1 is a char boundary. The proof is the
+                // match arm — moving this body out of it breaks the slice.
+                #[allow(clippy::string_slice)]
                 Some('.') => {
-                    let rest = &text[after..];
                     rest.starts_with(".js")
                         || rest.starts_with(".ts")
                         || rest.starts_with(".rs")
@@ -754,9 +779,8 @@ fn package_name_positions(text: &str, package_name: &str, normalized_name: &str)
                 Some(_) => false,
             };
             if before_ok && after_ok {
-                positions.push(pos);
+                positions.push((pos, form.len()));
             }
-            search_from = pos + 1;
         }
     }
     positions.sort_unstable();
@@ -815,7 +839,7 @@ fn is_name_corroborated(
         return true;
     }
     let title_len = title_lower.len();
-    positions.iter().any(|&pos| {
+    positions.iter().any(|&(pos, _)| {
         // A title hit may draw context from the whole title.
         let window = if pos < title_len {
             title_len.max(NAME_CONTEXT_WINDOW)
@@ -824,22 +848,35 @@ fn is_name_corroborated(
         };
         has_language_context_nearby(text_lower, pos, window)
             || has_security_context_nearby(text_lower, pos, window)
-    }) || has_adjacent_version_literal(text_lower, &positions, normalized_name.len())
+    }) || has_adjacent_version_literal(text_lower, &positions)
 }
 
 /// Version-adjacency corroboration for a single-token name — anchored to the
 /// boundary-checked `positions`, never a raw substring re-scan, so "react"
 /// inside "Preact 10.30" or "react-router 7.5" cannot borrow a sibling
-/// package's version. (In this arm every accepted form equals the normalized
-/// single-token name, so `name_len` is uniform across positions.)
-fn has_adjacent_version_literal(text: &str, positions: &[usize], name_len: usize) -> bool {
-    positions.iter().any(|&pos| {
+/// package's version.
+///
+/// Each position carries the length of the form that matched AT that position.
+/// The previous signature took one `name_len` for all of them, documented as
+/// "every accepted form equals the normalized single-token name, so `name_len`
+/// is uniform" — which is false: `normalize_package_name` strips a leading `@`,
+/// so `@foo` produces forms of length 3 and 4. Every `@foo` hit therefore
+/// started its version scan one byte INSIDE the name, and did so with unsnapped
+/// arithmetic — a panic whenever that landed mid-char.
+fn has_adjacent_version_literal(text: &str, positions: &[(usize, usize)]) -> bool {
+    positions.iter().any(|&(pos, name_len)| {
         let after_start = pos + name_len;
         if after_start >= text.len() {
             return false;
         }
-        let end = snap_to_char_boundary(text, (after_start + 40).min(text.len()), true);
-        version_literal_at_start(&text[after_start..end])
+        // Both ends snapped. `after_start` is a boundary by construction now,
+        // but snapping it costs nothing and removes the invariant a future
+        // edit would have to re-derive.
+        let start = snap_to_char_boundary(text, after_start, true);
+        let end = snap_to_char_boundary(text, (start + 40).min(text.len()), true);
+        // SAFE: both ends explicitly snapped on the lines above.
+        #[allow(clippy::string_slice)]
+        version_literal_at_start(&text[start..end])
     })
 }
 
@@ -874,6 +911,8 @@ fn version_literal_at_start(after_name: &str) -> bool {
             // decides, as in find_mentioned_version.
             return false;
         }
+        // SAFE: `i` comes from `char_indices()`, so it is a char boundary.
+        #[allow(clippy::string_slice)]
         let token: String = after_name[i..]
             .chars()
             .take_while(|c| c.is_ascii_digit() || *c == '.')
@@ -995,11 +1034,19 @@ fn find_mentioned_version(text_lower: &str, pkg_lower: &str) -> Option<(u32, u32
         let start = idx;
         let end = (idx + pkg_lower.len() + 40).min(text_lower.len());
         let end = snap_to_char_boundary(text_lower, end, true);
+        // SAFE: `start` is a `match_indices` offset and `end` is snapped.
+        #[allow(clippy::string_slice)]
         let nearby = &text_lower[start..end];
 
         // Match patterns: "React 19", "tokio 2.0", "gtk 0.18", "v3", "version 5.1".
         // Grab the first version-like token (digits + dots) after the package name
         // so 0.x lines ("0.18" vs "0.20") are distinguishable, not collapsed to "0".
+        //
+        // SAFE: `nearby` starts at a `match_indices(pkg_lower)` offset, so its
+        // first `pkg_lower.len()` bytes ARE that occurrence — the index is the
+        // end of an exact byte match, hence a char boundary, and `end` is never
+        // below `start + pkg_lower.len()`.
+        #[allow(clippy::string_slice)]
         let after_name = &nearby[pkg_lower.len()..];
         for (i, ch) in after_name.char_indices() {
             if ch.is_ascii_digit() && i < 20 {
@@ -1010,6 +1057,8 @@ fn find_mentioned_version(text_lower: &str, pkg_lower: &str) -> Option<(u32, u32
                         .get(i - 1)
                         .is_none_or(|&b| !b.is_ascii_alphanumeric() || b == b'v' || b == b'V')
                 {
+                    // SAFE: `i` comes from `char_indices()`.
+                    #[allow(clippy::string_slice)]
                     let token: String = after_name[i..]
                         .chars()
                         .take_while(|c| c.is_ascii_digit() || *c == '.')
@@ -1140,7 +1189,11 @@ fn classify_term_occurrence(text: &str, term: &str) -> TermOccurrence {
     }
     let mut any_boundary_hit = false;
     for (pos, _) in text.match_indices(term) {
+        // SAFE: `pos` is a `match_indices` offset and `pos + term.len()` is the
+        // end of an exact byte match — both char boundaries.
+        #[allow(clippy::string_slice)]
         let before = text[..pos].chars().next_back();
+        #[allow(clippy::string_slice)]
         let after_str = &text[pos + term.len()..];
         let after = after_str.chars().next();
         // Word boundary in the has_word_boundary_match sense.
@@ -1150,6 +1203,12 @@ fn classify_term_occurrence(text: &str, term: &str) -> TermOccurrence {
         }
         any_boundary_hit = true;
 
+        // SAFE in BOTH arms below, and the proof is the match arm itself — the
+        // matched char is the 1-byte '.', so `pos - 1` (the offset of that '.')
+        // and index 1 of `after_str` are char boundaries. Neither slice is safe
+        // outside its arm: hoisting either one out of the `Some('.')` pattern
+        // re-arms the panic this branch exists to remove.
+        #[allow(clippy::string_slice)]
         let glue_before = match before {
             Some('-') | Some('_') => true,
             Some('.') => text[..pos.saturating_sub(1)]
@@ -1158,6 +1217,7 @@ fn classify_term_occurrence(text: &str, term: &str) -> TermOccurrence {
                 .is_some_and(|c| c.is_alphanumeric()),
             _ => false,
         };
+        #[allow(clippy::string_slice)]
         let glue_after = match after {
             Some('-') | Some('_') => true,
             Some('.') => {
@@ -1367,6 +1427,64 @@ pub(crate) fn match_dependencies(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// N2 regression: `package_name_positions` advanced its cursor to
+    /// `pos + 1` — one byte past the START of a rejected match — which splits
+    /// a multi-byte first char. The advance is reached ONLY when the boundary
+    /// test fails, and the form's first char must be multi-byte, so no ASCII
+    /// package name could ever exercise it. Forms reach here from scraped
+    /// Python `import` tokens as well as manifest dependency names.
+    #[test]
+    fn package_name_positions_multibyte_form_does_not_panic() {
+        // "éclair" glued to a digit: right boundary fails, cursor advances
+        // into the middle of the leading 'é'.
+        let positions = package_name_positions("éclair2 shipped", "éclair", "éclair");
+        assert!(positions.is_empty(), "éclair2 is not a whole package token");
+
+        // A rejected occurrence followed by an accepted one.
+        let positions = package_name_positions("éclair2 and éclair here", "éclair", "éclair");
+        assert_eq!(positions.len(), 1);
+        assert_eq!(positions[0].1, "éclair".len(), "length is the FORM's");
+
+        // Cyrillic, and the scoped form whose length differs from the
+        // normalized one.
+        assert!(package_name_positions("привет9", "привет", "привет").is_empty());
+    }
+
+    /// N2/N10: the positions carry the length of the form that matched, not a
+    /// single "uniform" `name_len`. `normalize_package_name` strips a leading
+    /// `@`, so `@fooé` yields forms of 5 and 6 bytes.
+    #[test]
+    fn package_name_positions_carry_the_matched_form_length() {
+        let positions = package_name_positions("the @fooé 1.2.3 shipped", "@fooé", "fooé");
+        assert_eq!(positions.len(), 1, "only the scoped form is bounded here");
+        let (pos, len) = positions[0];
+        assert_eq!(len, "@fooé".len(), "6 bytes, not the normalized name's 5");
+        // `get` rather than `[..]`: it returns None on a non-boundary range, so
+        // this asserts the offset/length pair is a VALID char range as well as
+        // the right one — which is the whole point of carrying the length.
+        assert_eq!("the @fooé 1.2.3 shipped".get(pos..pos + len), Some("@fooé"));
+    }
+
+    /// N10 regression: `has_adjacent_version_literal` computed
+    /// `after_start = pos + name_len` from the NORMALIZED name's length for
+    /// every position, on the documented-but-false premise that "every
+    /// accepted form equals the normalized single-token name". For `@fooé`
+    /// that lands one byte inside the trailing 'é' — an unsnapped index into
+    /// a slice, i.e. a panic — and even on ASCII it started the version scan
+    /// mid-name. The text deliberately carries no language/security context
+    /// word, so corroboration MUST fall through to the version-literal arm.
+    #[test]
+    fn adjacent_version_literal_handles_forms_of_differing_length() {
+        let text = "the @fooé 1.2.3 shipped today";
+        assert!(
+            is_name_corroborated(text, text, "@fooé", "fooé"),
+            "the version literal after the scoped form corroborates"
+        );
+        // And a bare integer after the name is still not a version.
+        let text = "the @fooé 25 shipped today";
+        assert!(!is_name_corroborated(text, text, "@fooé", "fooé"));
+    }
 
     #[test]
     fn test_is_generic_topic_token_no_short_blanket() {

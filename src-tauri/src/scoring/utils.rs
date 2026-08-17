@@ -76,27 +76,15 @@ pub(crate) fn topic_grounds(a: &str, b: &str) -> bool {
         || (!is_generic_topic_token(&b_lower) && parts_a.contains(&b_lower.as_str()))
 }
 
-/// Check if a short term appears as a whole word (bounded by non-alphanumeric chars)
-pub(crate) fn has_word_boundary_match(text: &str, term: &str) -> bool {
-    for (i, _) in text.match_indices(term) {
-        // Use CHAR boundaries, not raw bytes. `as_bytes()[i-1].is_ascii_alphanumeric()`
-        // is false for any UTF-8 continuation byte, so a non-ASCII letter glued to the
-        // term (e.g. "иgo") was treated as a word boundary and "go" matched (bug E).
-        let before_ok = text[..i]
-            .chars()
-            .next_back()
-            .is_none_or(|c| !c.is_alphanumeric());
-        let after_pos = i + term.len();
-        let after_ok = text[after_pos..]
-            .chars()
-            .next()
-            .is_none_or(|c| !c.is_alphanumeric());
-        if before_ok && after_ok {
-            return true;
-        }
-    }
-    false
-}
+/// Check if a short term appears as a whole word (bounded by non-alphanumeric
+/// chars).
+///
+/// This module held the only UTF-8-safe copy of a helper that had been written
+/// eight times; it now lives in [`crate::utils::text`] and every copy delegates
+/// there. Re-exported rather than moved-and-renamed so the ~30 `super::utils::
+/// has_word_boundary_match` / `scoring::has_word_boundary_match` call sites are
+/// untouched.
+pub(crate) use crate::utils::has_word_boundary_match;
 
 #[cfg(test)]
 mod tests {

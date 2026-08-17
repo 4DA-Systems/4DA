@@ -7,6 +7,14 @@
 //! 3. `has_pain_point_match` — gate confirmation for ACE axis
 //! 4. `compute_competing_penalty` — suppresses competing-only content (multiplier)
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use super::ComposedStack;
 
 // ============================================================================
@@ -24,38 +32,20 @@ pub fn text_contains_term(text: &str, term: &str) -> bool {
     /// Treat alphanumeric, hyphens, and underscores as word characters.
     /// This prevents "react" from matching inside "react-native" and
     /// "go" from matching inside "go-fiber".
+    ///
+    /// Tested on the CHAR, not the byte: the previous `u8` form classified
+    /// every UTF-8 continuation byte as a boundary, so "иgo" read as a
+    /// whole-word "go".
     #[inline]
-    fn is_word_char(b: u8) -> bool {
-        b.is_ascii_alphanumeric() || b == b'-' || b == b'_'
+    fn is_word_char(c: char) -> bool {
+        c.is_alphanumeric() || c == '-' || c == '_'
     }
 
-    let text_bytes = text.as_bytes();
-    let term_len = term.len();
-
-    if term_len == 0 || term_len > text_bytes.len() {
-        return false;
-    }
-
-    let mut start = 0;
-    while start + term_len <= text_bytes.len() {
-        if let Some(pos) = text[start..].find(term) {
-            let abs_pos = start + pos;
-            let end_pos = abs_pos + term_len;
-
-            let left_ok = abs_pos == 0 || !is_word_char(text_bytes[abs_pos - 1]);
-            let right_ok = end_pos == text_bytes.len() || !is_word_char(text_bytes[end_pos]);
-
-            if left_ok && right_ok {
-                return true;
-            }
-
-            start = abs_pos + 1;
-        } else {
-            break;
-        }
-    }
-
-    false
+    // The cursor this replaces advanced one byte past the START of a failed
+    // match, which splits a multi-byte first char. Terms come from const stack
+    // profiles today, so the panic was latent — one non-ASCII keyword in a
+    // profile would arm it.
+    crate::utils::has_bounded_match(text, term, is_word_char)
 }
 
 // ============================================================================
@@ -246,6 +236,23 @@ mod tests {
         assert!(!text_contains_term("mongodb performance", "go"));
         assert!(!text_contains_term("ergonomic keyboards", "go"));
         assert!(!text_contains_term("reactive programming", "react"));
+    }
+
+    /// Regression: the cursor advanced to `abs_pos + 1` — one byte past the
+    /// START of a failed match — splitting a multi-byte first char. Terms come
+    /// from const stack profiles today, so this was latent; one non-ASCII
+    /// keyword in a profile, or a non-ASCII `detected_tech` value reaching
+    /// `stacks::detection`, arms it.
+    #[test]
+    fn test_word_boundary_multibyte_term_does_not_panic() {
+        // The term's FIRST char must be multi-byte for `abs_pos + 1` to split it.
+        assert!(!text_contains_term("éclair2 release", "éclair"));
+        assert!(!text_contains_term("éclair-ui release", "éclair")); // '-' is a word char here
+        assert!(!text_contains_term("привет9", "привет"));
+        assert!(text_contains_term("éclair2 and éclair ship", "éclair"));
+        assert!(!text_contains_term("anything", ""));
+        // Bug E: a non-ASCII letter glued to the term is not a boundary.
+        assert!(!text_contains_term("иgo", "go"));
     }
 
     #[test]
