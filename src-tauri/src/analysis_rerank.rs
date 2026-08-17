@@ -70,14 +70,6 @@ fn build_rerank_context_summary(ctx: &scoring::ScoringContext) -> String {
         }
     }
 
-    // 5. Anti-topics (learned from behavior)
-    if !ctx.ace_ctx.anti_topics.is_empty() {
-        parts.push(format!(
-            "Consistently rejects: {}",
-            ctx.ace_ctx.anti_topics.join(", ")
-        ));
-    }
-
     // 6. Declared interests
     if !ctx.interests.is_empty() {
         let names: Vec<&str> = ctx

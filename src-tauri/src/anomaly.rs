@@ -3,10 +3,12 @@
 //!
 //! Detects unusual patterns in context and behavior:
 //! - Stale data (no context updates in >24h)
-//! - Context drift (high variance in topic weights over 7 days)
-//! - Contradictions (topic with both high affinity AND anti-topic status)
 //! - Abnormal volume (activity z-score >2 from 7-day mean)
-//! - Confidence mismatch (high confidence with <3 supporting interactions)
+//!
+//! v20b (AD-031): the three affinity/anti-topic detectors — context drift,
+//! contradiction, confidence mismatch — were removed with the implicit-capture
+//! layer. Their `AnomalyType` variants remain so historical stored anomaly
+//! rows still deserialize and render.
 
 use crate::error::Result;
 use rusqlite::Connection;
@@ -114,24 +116,9 @@ pub fn detect_all(conn: &Connection) -> Result<Vec<Anomaly>> {
         Err(e) => warn!(target: "4da::anomaly", error = %e, "Stale data detection failed"),
     }
 
-    match detect_context_drift(conn) {
-        Ok(results) => anomalies.extend(results),
-        Err(e) => warn!(target: "4da::anomaly", error = %e, "Context drift detection failed"),
-    }
-
-    match detect_contradictions(conn) {
-        Ok(results) => anomalies.extend(results),
-        Err(e) => warn!(target: "4da::anomaly", error = %e, "Contradiction detection failed"),
-    }
-
     match detect_abnormal_volume(conn) {
         Ok(results) => anomalies.extend(results),
         Err(e) => warn!(target: "4da::anomaly", error = %e, "Abnormal volume detection failed"),
-    }
-
-    match detect_confidence_mismatch(conn) {
-        Ok(results) => anomalies.extend(results),
-        Err(e) => warn!(target: "4da::anomaly", error = %e, "Confidence mismatch detection failed"),
     }
 
     debug!(target: "4da::anomaly", count = anomalies.len(), "Anomaly detection complete");
@@ -201,109 +188,6 @@ pub fn detect_stale_data(conn: &Connection) -> Result<Vec<Anomaly>> {
                 }
             }
         }
-    }
-
-    Ok(anomalies)
-}
-
-/// Detect context drift - high variance in topic weights over 7 days
-///
-/// Checks `topic_affinities` for high variance in affinity scores.
-/// If std deviation of affinity scores exceeds threshold, flags as drift.
-pub fn detect_context_drift(conn: &Connection) -> Result<Vec<Anomaly>> {
-    let mut anomalies = Vec::new();
-    let drift_threshold: f32 = 0.3;
-
-    // Get topic affinities that were updated in the last 7 days
-    let mut stmt = conn.prepare(
-        "SELECT topic, affinity_score FROM topic_affinities
-             WHERE last_interaction > datetime('now', '-7 days')
-             ORDER BY last_interaction DESC",
-    )?;
-
-    let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
-    })?;
-
-    let topics: Vec<(String, f64)> = rows.flatten().collect();
-
-    if topics.len() >= 5 {
-        let scores: Vec<f64> = topics.iter().map(|(_, s)| *s).collect();
-        let mean = scores.iter().sum::<f64>() / scores.len() as f64;
-        let variance = scores.iter().map(|s| (s - mean).powi(2)).sum::<f64>() / scores.len() as f64;
-        let std_dev = variance.sqrt();
-
-        if std_dev > drift_threshold as f64 {
-            let severity = if std_dev > drift_threshold as f64 * 2.0 {
-                AnomalySeverity::High
-            } else {
-                AnomalySeverity::Medium
-            };
-
-            anomalies.push(Anomaly {
-                id: None,
-                anomaly_type: AnomalyType::ContextDrift,
-                topic: None,
-                description: format!("High context volatility detected (sigma = {std_dev:.2})"),
-                confidence: (std_dev as f32 / drift_threshold).min(1.0),
-                severity,
-                evidence: vec![
-                    format!("Topics analyzed: {}", topics.len()),
-                    format!("Standard deviation: {:.2}", std_dev),
-                    format!("Threshold: {:.2}", drift_threshold),
-                ],
-                detected_at: chrono::Utc::now().to_rfc3339(),
-                resolved: false,
-            });
-        }
-    }
-
-    Ok(anomalies)
-}
-
-/// Detect contradictions - topics with both high affinity AND anti-topic status
-///
-/// Cross-checks `topic_affinities` and `anti_topics` tables for topics
-/// that appear in both with significant confidence.
-pub fn detect_contradictions(conn: &Connection) -> Result<Vec<Anomaly>> {
-    let mut anomalies = Vec::new();
-
-    let mut stmt = conn.prepare(
-        "SELECT ta.topic, ta.affinity_score, at.confidence as anti_confidence
-             FROM topic_affinities ta
-             JOIN anti_topics at ON ta.topic = at.topic
-             WHERE ta.affinity_score > 0.3 AND at.confidence > 0.3",
-    )?;
-
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, f64>(1)?,
-            row.get::<_, f64>(2)?,
-        ))
-    })?;
-
-    for row in rows.flatten() {
-        let (topic, affinity, anti_confidence) = row;
-        anomalies.push(Anomaly {
-            id: None,
-            anomaly_type: AnomalyType::Contradiction,
-            topic: Some(topic.clone()),
-            description: format!(
-                "Topic '{}' has conflicting signals: affinity {:.0}% vs rejection {:.0}%",
-                topic,
-                affinity * 100.0,
-                anti_confidence * 100.0
-            ),
-            confidence: f64::midpoint(affinity, anti_confidence) as f32,
-            severity: AnomalySeverity::Medium,
-            evidence: vec![
-                format!("Affinity score: {:.0}%", affinity * 100.0),
-                format!("Anti-topic confidence: {:.0}%", anti_confidence * 100.0),
-            ],
-            detected_at: chrono::Utc::now().to_rfc3339(),
-            resolved: false,
-        });
     }
 
     Ok(anomalies)
@@ -383,66 +267,6 @@ pub fn detect_abnormal_volume(conn: &Connection) -> Result<Vec<Anomaly>> {
                 resolved: false,
             });
         }
-    }
-
-    Ok(anomalies)
-}
-
-/// Detect confidence mismatch - high confidence with <3 supporting interactions
-///
-/// Checks `topic_affinities` for topics where confidence is high (>0.7)
-/// but total evidence (positive_signals + negative_signals) is less than 3.
-pub fn detect_confidence_mismatch(conn: &Connection) -> Result<Vec<Anomaly>> {
-    let mut anomalies = Vec::new();
-
-    // Find topics with high confidence but low interaction count
-    // The actual schema uses positive_signals + negative_signals instead of interaction_count
-    let mut stmt = conn
-        .prepare(
-            "SELECT topic, confidence, affinity_score,
-                    (COALESCE(positive_signals, 0) + COALESCE(negative_signals, 0)) as evidence_count
-             FROM topic_affinities
-             WHERE confidence > 0.7
-               AND (COALESCE(positive_signals, 0) + COALESCE(negative_signals, 0)) < 3",
-        )?;
-
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, f64>(1)?,
-            row.get::<_, f64>(2)?,
-            row.get::<_, i32>(3)?,
-        ))
-    })?;
-
-    for row in rows.flatten() {
-        let (topic, confidence, _affinity, evidence_count) = row;
-
-        let severity = if confidence > 0.9 && evidence_count == 0 {
-            AnomalySeverity::High
-        } else {
-            AnomalySeverity::Low
-        };
-
-        anomalies.push(Anomaly {
-            id: None,
-            anomaly_type: AnomalyType::ConfidenceMismatch,
-            topic: Some(topic.clone()),
-            description: format!(
-                "Topic '{}' has {:.0}% confidence but only {} supporting interactions",
-                topic,
-                confidence * 100.0,
-                evidence_count
-            ),
-            confidence: 0.7,
-            severity,
-            evidence: vec![
-                format!("Topic confidence: {:.0}%", confidence * 100.0),
-                format!("Supporting interactions: {}", evidence_count),
-            ],
-            detected_at: chrono::Utc::now().to_rfc3339(),
-            resolved: false,
-        });
     }
 
     Ok(anomalies)

@@ -15,13 +15,6 @@ pub(crate) struct ACEContext {
     pub topic_confidence: std::collections::HashMap<String, f32>,
     /// Detected tech stack (languages, frameworks)
     pub detected_tech: Vec<String>,
-    /// Anti-topics (topics user has consistently rejected)
-    pub anti_topics: Vec<String>,
-    /// Confidence scores for anti-topics (topic -> confidence 0.0-1.0)
-    pub anti_topic_confidence: std::collections::HashMap<String, f32>,
-    /// Topic affinities from behavior learning (topic -> (affinity_score, confidence))
-    /// PASIFA: Now includes BOTH positive AND negative affinities with confidence
-    pub topic_affinities: std::collections::HashMap<String, (f32, f32)>,
     /// Normalized dependency package names for O(1) lookup
     pub dependency_names: HashSet<String>,
     /// Dependency details: normalized_name -> info (version, language, search terms)
@@ -87,33 +80,6 @@ fn extract_project_name_from_evidence(evidence: &str) -> Option<String> {
     } else {
         Some(name.to_string())
     }
-}
-
-/// QUARANTINED (AD-029, v19) — always returns an EMPTY map.
-///
-/// Learned topic affinities were demoted after the 2026-08-11 poisoned-curve
-/// incident: the capture layer mixed three incompatible strength scales and
-/// self-poisoned (the 2026-07-13 doom loop drove the user's OWN stack to -1.0
-/// affinity while `compute_affinity_multiplier` held x[0.3, 1.7] authority over
-/// the score). The demotion was applied at the CALL SITES — `pipeline_v2.rs`
-/// pins `affinity_mult` to 1.0, `semantic/boost.rs` dropped its affinity
-/// scaling — but the LOADER kept populating this map, so any consumer that
-/// reached for it bypassed the quarantine. `channel_render.rs` did exactly
-/// that: it multiplied its match score by `compute_affinity_multiplier` and
-/// PERSISTED the result via `upsert_channel_source_match`. That function
-/// returns a neutral 1.0 only when the map is empty, and the loader guaranteed
-/// it was not.
-///
-/// Killing it here makes the quarantine hold BY CONSTRUCTION: no call site can
-/// opt back in, because the data never enters the scoring context. The capture
-/// pipeline keeps writing `topic_affinities` (the Learned Preferences panel and
-/// the engagement dashboard read the table directly), so nothing is lost that
-/// re-enabling could not restore. Re-enable criteria live in AD-029; doing so
-/// means deleting `ace_context_quarantines_topic_affinities`, not editing it.
-/// (v20a: `compute_affinity_multiplier` and the other structurally-dead readers
-/// of this map were deleted outright; this loader stays as the quarantine.)
-fn load_topic_affinities(_ace: &crate::ace::ACE) -> HashMap<String, (f32, f32)> {
-    HashMap::new()
 }
 
 /// Fetch ACE-discovered context for relevance scoring
@@ -216,27 +182,6 @@ pub(crate) fn get_ace_context() -> ACEContext {
         }
     }
 
-    // Get anti-topics WITH confidence scores
-    if let Ok(anti_topics) = ace.get_anti_topics(3) {
-        for a in anti_topics
-            .iter()
-            .filter(|a| a.user_confirmed || a.confidence >= 0.5)
-        {
-            let topic_lower = a.topic.to_lowercase();
-            ctx.anti_topics.push(topic_lower.clone());
-            let conf = if a.confidence.is_finite() && a.confidence >= 0.0 && a.confidence <= 1.0 {
-                a.confidence
-            } else {
-                warn!(target: "4da::scoring", topic = %a.topic, raw = a.confidence, "Invalid ACE anti-topic confidence — clamping to 0.5");
-                0.5
-            };
-            ctx.anti_topic_confidence.insert(topic_lower, conf);
-        }
-    }
-
-    // Learned topic affinities are QUARANTINED — see `load_topic_affinities`.
-    ctx.topic_affinities = load_topic_affinities(&ace);
-
     // Merge session-aware work topics with graduated confidence.
     // Uses gap-based session detection: current session gets highest confidence,
     // previous same-day session gets moderate, yesterday gets low.
@@ -287,8 +232,6 @@ mod tests {
         let ctx = ACEContext::default();
         assert!(ctx.active_topics.is_empty());
         assert!(ctx.detected_tech.is_empty());
-        assert!(ctx.anti_topics.is_empty());
-        assert!(ctx.topic_affinities.is_empty());
     }
 
     #[test]
@@ -296,56 +239,5 @@ mod tests {
         let ctx = ACEContext::default();
         assert!(ctx.dependency_names.is_empty());
         assert!(ctx.dependency_info.is_empty());
-    }
-
-    #[test]
-    fn test_ace_context_anti_topic_confidence_default() {
-        let ctx = ACEContext::default();
-        assert!(ctx.anti_topic_confidence.is_empty());
-    }
-
-    /// AD-029 quarantine guard. An ACE carrying STRONG, well-evidenced learned
-    /// affinities must still hand the scoring context an EMPTY map — that is
-    /// what guarantees no scoring consumer can ever see a learned affinity
-    /// (the former reader, `compute_affinity_multiplier`, was deleted in v20a).
-    ///
-    /// This test fails the moment the loader starts populating the map again.
-    /// Re-enabling affinities means DELETING this test as a deliberate act (and
-    /// filing the ADR AD-029 asks for), not quietly editing around it.
-    #[test]
-    fn ace_context_quarantines_topic_affinities() {
-        use crate::ace::create_test_ace;
-        use crate::ace::BehaviorAction;
-
-        let ace = create_test_ace();
-        // 6 saves clears `get_topic_affinities`' min_exposures of 5 and pushes
-        // |affinity_score| well past the loader's old 0.1 admission floor, so a
-        // populating loader WOULD return a non-empty map here.
-        for item_id in 1..=6 {
-            ace.record_interaction(
-                item_id,
-                BehaviorAction::Save,
-                vec!["rust".to_string()],
-                "hackernews".to_string(),
-            )
-            .expect("record save");
-        }
-
-        // Precondition: the capture layer really did learn something — otherwise
-        // the assertion below would pass vacuously.
-        let learned = ace.get_topic_affinities().expect("read affinities");
-        let rust = learned
-            .iter()
-            .find(|a| a.topic == "rust")
-            .expect("capture layer learned a rust affinity");
-        assert!(
-            rust.affinity_score.abs() > 0.1 && rust.total_exposures >= 3,
-            "fixture must satisfy the old loader's admission test, got {rust:?}"
-        );
-
-        assert!(
-            load_topic_affinities(&ace).is_empty(),
-            "learned affinities are quarantined (AD-029) and must not reach scoring"
-        );
     }
 }

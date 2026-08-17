@@ -981,7 +981,6 @@
   "enterprise.export.section.sources": "Source Configuration",
   "enterprise.export.section.briefings": "Briefing History",
   "enterprise.export.section.feedback": "Feedback & Engagement",
-  "enterprise.export.section.learned": "Learned Behavior",
   "enterprise.diagnostics.title": "Configuration Diagnostics",
   "enterprise.diagnostics.description": "Validate your setup and troubleshoot issues without contacting support.",
   "enterprise.diagnostics.running": "Running...",

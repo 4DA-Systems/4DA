@@ -10,6 +10,29 @@ use tracing::info;
 
 use super::Database;
 
+/// Frozen copy of the affinity-recompute SQL used by the historical Phase 89/90
+/// profile-repair migrations. The live writer (`RECOMPUTE_AFFINITY_SQL` in
+/// `ace/behavior/tracking.rs`) was deleted in v20b (AD-031) with the
+/// implicit-capture layer; this copy exists ONLY so a pre-89 database migrating
+/// forward is treated exactly as it always was (Phase 105 then drops the
+/// `topic_affinities` table these phases repair).
+const PHASE89_RECOMPUTE_AFFINITY_SQL: &str = "UPDATE topic_affinities SET
+    affinity_score = CASE
+        WHEN explicit_negative_signals > 0 AND weighted_positive <= 0.0 THEN
+            -1.0 * MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
+        WHEN total_exposures >= 3 THEN
+            MAX(-1.0, MIN(1.0,
+                (weighted_positive - weighted_negative) / CAST(total_exposures AS REAL)
+            )) * MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
+        ELSE 0.0
+    END,
+    confidence = CASE
+        WHEN explicit_negative_signals > 0 AND weighted_positive <= 0.0 THEN
+            MAX(0.3, MIN(CAST(total_exposures AS REAL) / 10.0, 1.0))
+        ELSE MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
+    END
+ WHERE topic = ?1";
+
 // ============================================================================
 // Cold-Boot Recovery Notice — surfaced via startup_health
 // ============================================================================
@@ -1301,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 104;
+        const TARGET_VERSION: i64 = 105;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3897,8 +3920,8 @@ impl Database {
                         // Recompute all rows under the corrected formula (the
                         // exact SQL the live per-interaction path uses, minus
                         // the per-topic WHERE).
-                        let recompute_all = crate::ace::behavior::tracking::RECOMPUTE_AFFINITY_SQL
-                            .replace(" WHERE topic = ?1", "");
+                        let recompute_all =
+                            PHASE89_RECOMPUTE_AFFINITY_SQL.replace(" WHERE topic = ?1", "");
                         c.execute_batch(&recompute_all)?;
                         info!(
                             target: "4da::db",
@@ -3921,7 +3944,7 @@ impl Database {
                         // reads 0 for pre-2026-07-13 evidence — so one explicit
                         // dismissal of a junk item left `rust` at -1.0 despite
                         // backfilled positive weighted evidence. The arm (in
-                        // RECOMPUTE_AFFINITY_SQL) now keys on weighted_positive;
+                        // PHASE89_RECOMPUTE_AFFINITY_SQL) keys on weighted_positive;
                         // re-run the recompute so dormant rows heal too.
                         let has_table: bool = c
                             .query_row(
@@ -3933,8 +3956,8 @@ impl Database {
                         if !has_table {
                             return Ok(());
                         }
-                        let recompute_all = crate::ace::behavior::tracking::RECOMPUTE_AFFINITY_SQL
-                            .replace(" WHERE topic = ?1", "");
+                        let recompute_all =
+                            PHASE89_RECOMPUTE_AFFINITY_SQL.replace(" WHERE topic = ?1", "");
                         c.execute_batch(&recompute_all)?;
                         info!(
                             target: "4da::db",
@@ -4510,6 +4533,44 @@ impl Database {
                     104,
                     "Phase 104: FTS5 sync triggers + index rebuild (search index had diverged)",
                     Self::install_fts_sync_triggers_and_rebuild,
+                )?;
+            }
+
+            if current_version < 105 {
+                Self::run_versioned_migration(
+                    &conn,
+                    104,
+                    105,
+                    "Phase 105: drop the implicit-capture tables (v20b, AD-031)",
+                    |c| {
+                        // The implicit behavioral-capture layer is removed in
+                        // v20b: these tables lose their last writer AND reader.
+                        // `interactions` rows are deliberately KEPT — the
+                        // bootstrap-mode count in scoring/context.rs reads them,
+                        // and deleting rows would flip bootstrap state (scoring
+                        // must stay byte-identical).
+                        c.execute_batch(
+                            "DROP TABLE IF EXISTS topic_affinities;
+                             DROP TABLE IF EXISTS anti_topics;
+                             DROP TABLE IF EXISTS activity_patterns;
+                             DROP TABLE IF EXISTS source_preferences;
+                             DROP TABLE IF EXISTS persona_posterior;
+                             DROP TABLE IF EXISTS posterior_snapshots;",
+                        )?;
+                        // decision_outcome digests were write-only: the module
+                        // that produced them is deleted, and nothing ever read
+                        // this digest_type back out.
+                        let purged = c.execute(
+                            "DELETE FROM digested_intelligence WHERE digest_type = 'decision_outcome'",
+                            [],
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            purged,
+                            "Phase 105: implicit-capture tables dropped, decision_outcome digests purged (AD-031)"
+                        );
+                        Ok(())
+                    },
                 )?;
             }
 
@@ -5522,6 +5583,99 @@ mod tests {
             )
             .unwrap();
         assert_eq!(n, 2, "both versions retained");
+    }
+
+    /// Phase 105 (v20b, AD-031) drops the implicit-capture tables and purges
+    /// write-only decision_outcome digests, while KEEPING interactions rows
+    /// (ruling A5: the bootstrap-mode count must not move). Wind back to 104,
+    /// seed the legacy state, re-run, assert dropped/purged/kept.
+    #[test]
+    fn test_phase_105_drops_implicit_capture_tables() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 105,
+            "schema_version should be >= 105 after migration; got {version}"
+        );
+
+        // Seed the legacy implicit-capture state a pre-v20b database carries
+        // (on production these tables live in the shared 4da.db file via the
+        // old ACE bootstrap; the fresh test DB never creates them), then wind
+        // back so only Phase 105 re-executes.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS topic_affinities (topic TEXT PRIMARY KEY, affinity_score REAL);
+             CREATE TABLE IF NOT EXISTS anti_topics (topic TEXT PRIMARY KEY, confidence REAL);
+             CREATE TABLE IF NOT EXISTS activity_patterns (pattern_type TEXT, pattern_key TEXT);
+             CREATE TABLE IF NOT EXISTS source_preferences (source TEXT PRIMARY KEY, score REAL);
+             CREATE TABLE IF NOT EXISTS persona_posterior (id INTEGER PRIMARY KEY, weights TEXT);
+             CREATE TABLE IF NOT EXISTS interactions (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 item_id INTEGER,
+                 action_type TEXT,
+                 item_topics TEXT,
+                 item_source TEXT,
+                 signal_strength REAL
+             );
+             INSERT INTO digested_intelligence (digest_type, subject, data)
+                 VALUES ('decision_outcome', 'security_patch', '{}');
+             INSERT INTO digested_intelligence (digest_type, subject, data)
+                 VALUES ('calibration', 'rust', '{}');
+             INSERT INTO interactions (item_id, action_type, item_topics, item_source, signal_strength)
+                 VALUES (1, 'scroll', '[\"rust\"]', 'hackernews', 0.3);
+             UPDATE schema_version SET version = 104;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v104");
+
+        let conn = db.conn.lock();
+        for table in [
+            "topic_affinities",
+            "anti_topics",
+            "activity_patterns",
+            "source_preferences",
+            "persona_posterior",
+            "posterior_snapshots",
+        ] {
+            let exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(exists, 0, "table '{table}' should be dropped by Phase 105");
+        }
+        let outcome_digests: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM digested_intelligence WHERE digest_type = 'decision_outcome'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(outcome_digests, 0, "decision_outcome digests purged");
+        let kept_digests: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM digested_intelligence WHERE digest_type = 'calibration'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(kept_digests, 1, "other digest types must survive");
+        let interaction_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM interactions WHERE action_type = 'scroll'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            interaction_rows, 1,
+            "interactions rows (implicit ones included) must be KEPT"
+        );
     }
 
     /// Phase 92 lifts TARGET_VERSION to 92. Verify the test DB reached it.

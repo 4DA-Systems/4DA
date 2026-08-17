@@ -18,7 +18,6 @@ use super::persona_data::PersonaEnrichment;
 /// its individual contribution to scoring quality.
 pub(super) struct EnrichmentConfig {
     pub enable_topic_confidence: bool,
-    pub enable_anti_topics: bool,
     pub enable_topic_embeddings: bool,
     pub enable_source_quality: bool,
     pub enable_work_topics: bool,
@@ -36,7 +35,6 @@ impl EnrichmentConfig {
     pub fn all() -> Self {
         Self {
             enable_topic_confidence: true,
-            enable_anti_topics: true,
             enable_topic_embeddings: true,
             enable_source_quality: true,
             enable_work_topics: true,
@@ -54,7 +52,6 @@ impl EnrichmentConfig {
     pub fn none() -> Self {
         Self {
             enable_topic_confidence: false,
-            enable_anti_topics: false,
             enable_topic_embeddings: false,
             enable_source_quality: false,
             enable_work_topics: false,
@@ -73,7 +70,6 @@ impl EnrichmentConfig {
         let mut cfg = Self::none();
         match field {
             EnrichmentField::TopicConfidence => cfg.enable_topic_confidence = true,
-            EnrichmentField::AntiTopics => cfg.enable_anti_topics = true,
             EnrichmentField::TopicEmbeddings => cfg.enable_topic_embeddings = true,
             EnrichmentField::SourceQuality => cfg.enable_source_quality = true,
             EnrichmentField::WorkTopics => cfg.enable_work_topics = true,
@@ -93,7 +89,6 @@ impl EnrichmentConfig {
 #[derive(Debug, Clone, Copy)]
 pub(super) enum EnrichmentField {
     TopicConfidence,
-    AntiTopics,
     TopicEmbeddings,
     SourceQuality,
     WorkTopics,
@@ -111,7 +106,6 @@ impl EnrichmentField {
     pub fn all_variants() -> &'static [EnrichmentField] {
         &[
             EnrichmentField::TopicConfidence,
-            EnrichmentField::AntiTopics,
             EnrichmentField::TopicEmbeddings,
             EnrichmentField::SourceQuality,
             EnrichmentField::WorkTopics,
@@ -128,7 +122,6 @@ impl EnrichmentField {
     pub fn name(&self) -> &'static str {
         match self {
             Self::TopicConfidence => "topic_confidence",
-            Self::AntiTopics => "anti_topics",
             Self::TopicEmbeddings => "topic_embeddings",
             Self::SourceQuality => "source_quality",
             Self::WorkTopics => "work_topics",
@@ -162,9 +155,6 @@ pub(super) fn enrich_persona(
         active_topics: base.ace_ctx.active_topics.clone(),
         topic_confidence: base.ace_ctx.topic_confidence.clone(),
         detected_tech: base.ace_ctx.detected_tech.clone(),
-        anti_topics: base.ace_ctx.anti_topics.clone(),
-        anti_topic_confidence: base.ace_ctx.anti_topic_confidence.clone(),
-        topic_affinities: base.ace_ctx.topic_affinities.clone(),
         dependency_names: base.ace_ctx.dependency_names.clone(),
         dependency_info: base.ace_ctx.dependency_info.clone(),
         peak_hours: base.ace_ctx.peak_hours.clone(),
@@ -179,19 +169,6 @@ pub(super) fn enrich_persona(
             ace.topic_confidence
                 .entry(topic.clone())
                 .and_modify(|existing| *existing = existing.max(conf))
-                .or_insert(conf);
-        }
-    }
-
-    if config.enable_anti_topics {
-        for anti in &data.anti_topics {
-            if !ace.anti_topics.contains(anti) {
-                ace.anti_topics.push(anti.clone());
-            }
-        }
-        for (topic, &conf) in &data.anti_topic_confidence {
-            ace.anti_topic_confidence
-                .entry(topic.clone())
                 .or_insert(conf);
         }
     }
@@ -372,14 +349,6 @@ mod tests {
                 assert!(
                     !enriched.ace_ctx.topic_confidence.is_empty(),
                     "Persona {i}: topic_confidence not enriched"
-                );
-            }
-
-            // Anti-topics should be set if data has them
-            if !data.anti_topics.is_empty() {
-                assert!(
-                    !enriched.ace_ctx.anti_topics.is_empty(),
-                    "Persona {i}: anti_topics not enriched"
                 );
             }
         }

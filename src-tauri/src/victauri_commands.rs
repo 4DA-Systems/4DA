@@ -91,8 +91,6 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "ace_auto_discover",
     "ace_get_scan_summary",
     "ace_record_interaction",
-    "ace_get_topic_affinities",
-    "ace_get_anti_topics",
     "ace_find_similar_topics",
     "ace_embedding_status",
     "ace_save_watcher_state",

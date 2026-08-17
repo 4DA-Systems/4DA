@@ -960,7 +960,6 @@
   "enterprise.export.section.sources": "Quellenkonfiguration",
   "enterprise.export.section.briefings": "Briefing-Verlauf",
   "enterprise.export.section.feedback": "Feedback & Engagement",
-  "enterprise.export.section.learned": "Erlerntes Verhalten",
   "enterprise.diagnostics.title": "Konfigurationsdiagnose",
   "enterprise.diagnostics.description": "Validieren Sie Ihre Einrichtung und beheben Sie Probleme ohne den Support zu kontaktieren.",
   "enterprise.diagnostics.running": "Wird ausgeführt...",

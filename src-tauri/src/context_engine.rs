@@ -190,25 +190,6 @@ impl ContextEngine {
             CREATE INDEX IF NOT EXISTS idx_interactions_timestamp ON interactions(timestamp);
             CREATE INDEX IF NOT EXISTS idx_interactions_item_action ON interactions(item_id, action_type);
 
-            -- Learned topic affinities (Phase 3 + ACE compatible)
-            CREATE TABLE IF NOT EXISTS topic_affinities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                topic TEXT NOT NULL UNIQUE,
-                embedding BLOB,
-                positive_signals INTEGER DEFAULT 0,
-                negative_signals INTEGER DEFAULT 0,
-                total_exposures INTEGER DEFAULT 0,
-                affinity_score REAL DEFAULT 0.0,
-                confidence REAL DEFAULT 0.0,
-                last_interaction TEXT DEFAULT (datetime('now')),
-                decay_applied INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now'))
-            );
-            CREATE INDEX IF NOT EXISTS idx_affinities_topic ON topic_affinities(topic);
-            CREATE INDEX IF NOT EXISTS idx_topic_affinities_score ON topic_affinities(affinity_score);
-            CREATE INDEX IF NOT EXISTS idx_topic_affinities_last_interaction ON topic_affinities(last_interaction);
-
             -- Initialize singleton user identity if not exists
             INSERT OR IGNORE INTO user_identity (id) VALUES (1);
         ")?;

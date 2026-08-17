@@ -960,7 +960,6 @@
   "enterprise.export.section.sources": "Configuración de fuentes",
   "enterprise.export.section.briefings": "Historial de briefings",
   "enterprise.export.section.feedback": "Feedback y participación",
-  "enterprise.export.section.learned": "Comportamiento aprendido",
   "enterprise.diagnostics.title": "Diagnósticos de configuración",
   "enterprise.diagnostics.description": "Valida tu configuración y soluciona problemas sin contactar soporte.",
   "enterprise.diagnostics.running": "Ejecutando...",

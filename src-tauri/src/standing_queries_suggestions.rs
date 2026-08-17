@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Standing Query Suggestions — auto-generated query recommendations.
 //!
-//! Analyzes user engagement patterns (topic affinities, dependencies)
+//! Analyzes user engagement patterns (explicit engagement, dependencies)
 //! to suggest standing queries the user might want to create.
 
 use std::collections::HashSet;
@@ -15,8 +15,10 @@ use crate::standing_queries::StandingQuerySuggestion;
 
 /// Generate standing query suggestions based on user engagement patterns.
 ///
-/// Finds topics the user has positively engaged with (from topic_affinities)
-/// and dependencies they actively use (from user_dependencies) that don't
+/// Finds topics the user has EXPLICITLY engaged with — 3+ interactions under
+/// the six-type positive-engagement predicate (v20b re-source; the former
+/// topic_affinities table was dropped with the implicit-capture layer) — and
+/// dependencies they actively use (from user_dependencies) that don't
 /// already have standing queries. Returns up to 5 suggestions.
 pub(crate) fn generate_standing_query_suggestions(
     conn: &rusqlite::Connection,
@@ -26,25 +28,28 @@ pub(crate) fn generate_standing_query_suggestions(
 
     let mut suggestions: Vec<StandingQuerySuggestion> = Vec::new();
 
-    // 2. Check topic_affinities for topics with 3+ positive interactions
+    // 2. Topics with 3+ explicit positive-engagement interactions — the same
+    //    six-type predicate skill-gap detection uses. Implicit scroll/ignore
+    //    rows never count (v20b removed their writers, and the predicate
+    //    excludes any legacy rows).
     if let Ok(mut stmt) = conn.prepare(
-        "SELECT topic, positive_signals, affinity_score
-         FROM topic_affinities
-         WHERE positive_signals >= 3 AND affinity_score > 0.0
-         ORDER BY positive_signals DESC, affinity_score DESC
+        "SELECT LOWER(je.value) AS topic, COUNT(*) AS engagements
+         FROM interactions i, json_each(i.item_topics) je
+         WHERE i.item_topics IS NOT NULL
+           AND json_valid(i.item_topics)
+           AND i.action_type IN ('click','save','share','briefing_click','engagement_complete','save_with_context')
+         GROUP BY LOWER(je.value)
+         HAVING COUNT(*) >= 3
+         ORDER BY engagements DESC
          LIMIT 10",
     ) {
         let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, u32>(1)?,
-                row.get::<_, f64>(2)?,
-            ))
+            Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
         });
 
         if let Ok(rows) = rows {
             for row in rows.flatten() {
-                let (topic, positive_signals, _score) = row;
+                let (topic, positive_signals) = row;
                 let topic_lower = topic.to_lowercase();
 
                 // Skip if an existing standing query already covers this topic
@@ -186,19 +191,15 @@ mod tests {
         // Create required tables
         ensure_table(&conn).unwrap();
         conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS topic_affinities (
+            "CREATE TABLE IF NOT EXISTS interactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                topic TEXT NOT NULL UNIQUE,
-                embedding BLOB,
-                positive_signals INTEGER DEFAULT 0,
-                negative_signals INTEGER DEFAULT 0,
-                total_exposures INTEGER DEFAULT 0,
-                affinity_score REAL DEFAULT 0.0,
-                confidence REAL DEFAULT 0.0,
-                last_interaction TEXT DEFAULT (datetime('now')),
-                decay_applied INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now'))
+                item_id INTEGER,
+                action_type TEXT,
+                action_data TEXT,
+                item_topics TEXT,
+                item_source TEXT,
+                signal_strength REAL DEFAULT 0.5,
+                timestamp TEXT DEFAULT (datetime('now'))
             );
             CREATE TABLE IF NOT EXISTS user_dependencies (
                 id INTEGER PRIMARY KEY,
@@ -217,6 +218,18 @@ mod tests {
         conn
     }
 
+    /// Insert `n` explicit-engagement interaction rows for `topic`.
+    fn record_engagements(conn: &rusqlite::Connection, topic: &str, action: &str, n: u32) {
+        for _ in 0..n {
+            conn.execute(
+                "INSERT INTO interactions (item_id, action_type, item_topics, item_source)
+                 VALUES (1, ?1, ?2, 'hackernews')",
+                rusqlite::params![action, format!("[\"{topic}\"]")],
+            )
+            .unwrap();
+        }
+    }
+
     #[test]
     fn suggestions_empty_when_no_data() {
         let conn = setup_suggestion_db();
@@ -225,50 +238,27 @@ mod tests {
     }
 
     #[test]
-    fn suggestions_from_topic_affinities() {
+    fn suggestions_from_explicit_engagement() {
         let conn = setup_suggestion_db();
-        conn.execute(
-            "INSERT INTO topic_affinities (topic, positive_signals, affinity_score)
-             VALUES ('WebAssembly', 5, 0.8)",
-            [],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO topic_affinities (topic, positive_signals, affinity_score)
-             VALUES ('Rust', 7, 0.9)",
-            [],
-        )
-        .unwrap();
-        // Below threshold (only 2 positive signals)
-        conn.execute(
-            "INSERT INTO topic_affinities (topic, positive_signals, affinity_score)
-             VALUES ('Go', 2, 0.3)",
-            [],
-        )
-        .unwrap();
+        record_engagements(&conn, "webassembly", "save", 5);
+        record_engagements(&conn, "rust", "click", 7);
+        // Below the 3-engagement threshold
+        record_engagements(&conn, "go", "save", 2);
+        // Legacy implicit rows must NOT count — the predicate excludes them
+        record_engagements(&conn, "python", "scroll", 10);
 
         let suggestions = generate_standing_query_suggestions(&conn);
         assert_eq!(suggestions.len(), 2);
-        assert_eq!(suggestions[0].topic, "Rust"); // Higher positive_signals
+        assert_eq!(suggestions[0].topic, "rust"); // Higher engagement count
         assert_eq!(suggestions[0].query_type, "topic");
-        assert_eq!(suggestions[1].topic, "WebAssembly");
+        assert_eq!(suggestions[1].topic, "webassembly");
     }
 
     #[test]
     fn suggestions_skip_existing_queries() {
         let conn = setup_suggestion_db();
-        conn.execute(
-            "INSERT INTO topic_affinities (topic, positive_signals, affinity_score)
-             VALUES ('Rust', 5, 0.8)",
-            [],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO topic_affinities (topic, positive_signals, affinity_score)
-             VALUES ('TypeScript', 4, 0.7)",
-            [],
-        )
-        .unwrap();
+        record_engagements(&conn, "rust", "save", 5);
+        record_engagements(&conn, "typescript", "save", 4);
 
         // Create an existing standing query for "Rust"
         conn.execute(
@@ -280,7 +270,7 @@ mod tests {
 
         let suggestions = generate_standing_query_suggestions(&conn);
         assert_eq!(suggestions.len(), 1);
-        assert_eq!(suggestions[0].topic, "TypeScript");
+        assert_eq!(suggestions[0].topic, "typescript");
     }
 
     #[test]
@@ -309,17 +299,8 @@ mod tests {
     #[test]
     fn suggestions_capped_at_five() {
         let conn = setup_suggestion_db();
-        for i in 0..10 {
-            conn.execute(
-                &format!(
-                    "INSERT INTO topic_affinities (topic, positive_signals, affinity_score)
-                     VALUES ('Topic{}', {}, 0.8)",
-                    i,
-                    10 - i
-                ),
-                [],
-            )
-            .unwrap();
+        for i in 0..10u32 {
+            record_engagements(&conn, &format!("topic{i}"), "save", 10 - i);
         }
 
         let suggestions = generate_standing_query_suggestions(&conn);

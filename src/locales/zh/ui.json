@@ -955,7 +955,6 @@
   "enterprise.export.section.sources": "来源配置",
   "enterprise.export.section.briefings": "简报历史",
   "enterprise.export.section.feedback": "反馈和参与度",
-  "enterprise.export.section.learned": "已学习的行为",
   "enterprise.diagnostics.title": "配置诊断",
   "enterprise.diagnostics.description": "无需联系支持即可验证设置和排查问题。",
   "enterprise.diagnostics.running": "运行中...",
