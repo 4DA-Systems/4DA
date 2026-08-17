@@ -149,8 +149,28 @@ function formatExpiry(expiresAt) {
   return `Valid until: ${iso.slice(0, 10)}`;
 }
 
+/**
+ * Where the "Activate in 4DA" button points.
+ *
+ * NOT `4da://activate?key=...`. Gmail strips custom-scheme hrefs outright, in the
+ * browser and in its mobile apps, so that button rendered with no href at all and
+ * did nothing when clicked — in the most widely used mail client there is. The app
+ * was never at fault: the `4da` scheme is registered and handled.
+ *
+ * So we link over https to a bridge page that performs the `4da://` handoff from a
+ * real click on a real web page, which no sanitiser touches. Same pattern as Slack
+ * and Zoom desktop handoff.
+ *
+ * The key goes in the FRAGMENT: a fragment is never sent to the server, so the
+ * licence key stays out of request logs and out of any Referer header. /activate
+ * also sets `noAnalytics`, keeping it away from client-side analytics.
+ */
+function buildActivateUrl(licenseKey) {
+  return `https://4da.ai/activate#key=${encodeURIComponent(licenseKey)}`;
+}
+
 function buildLicenseEmail(licenseKey, tier, expiresAt, context = 'recovery') {
-  const activateUrl = `4da://activate?key=${encodeURIComponent(licenseKey)}`;
+  const activateUrl = buildActivateUrl(licenseKey);
   const expiryLine = formatExpiry(expiresAt);
 
   const html = `<!DOCTYPE html>

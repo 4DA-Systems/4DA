@@ -171,6 +171,56 @@ test('a junk expiry is omitted rather than rendered as junk', async () => {
   } finally { f.restore(); c.restore(); }
 });
 
+test('the activate button is an https link, NOT a 4da:// deep link', async () => {
+  // The defect: Gmail strips custom-scheme hrefs outright, in the browser and in
+  // its mobile apps, so `4da://activate?key=...` rendered as a button with no href
+  // and did nothing when clicked -- in the most used mail client there is. Verified
+  // dead against a real delivered email before this changed. The app was never at
+  // fault; the `4da` scheme is registered and handled.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', null, 'purchase');
+    const { html, text } = f.calls[0].body;
+    assert.ok(html.includes('https://4da.ai/activate#key='), 'the button must point at the https bridge');
+    assert.ok(text.includes('https://4da.ai/activate#key='), 'and so must the plaintext part');
+    assert.ok(!html.includes('href="4da://'), 'a custom-scheme href would be stripped by Gmail');
+    assert.ok(!text.includes('4da://'), 'the plaintext link must be clickable too');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('the key rides in the FRAGMENT so it never reaches a server', async () => {
+  // A fragment is not transmitted in the request, so the licence key stays out of
+  // Cloudflare's logs and out of any Referer header. `?key=` would leak it to both.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', null, 'purchase');
+    const { html, text } = f.calls[0].body;
+    for (const [label, part] of [['html', html], ['text', text]]) {
+      assert.ok(!part.includes('/activate?key='), `${label} must not put the key in the query string`);
+      const url = part.match(/https:\/\/4da\.ai\/activate#key=([^\s"<]+)/);
+      assert.ok(url, `${label} carries an activate URL`);
+      assert.equal(decodeURIComponent(url[1]), KEY, `${label} round-trips the key intact`);
+    }
+  } finally { f.restore(); c.restore(); }
+});
+
+test('a key with URL-hostile characters survives the round trip', async () => {
+  // Licence keys are base64 and legitimately contain + and / and =, all of which
+  // change meaning unescaped in a URL.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  const gnarly = '4DA-abc+def/ghi==.sig+val/ue==';
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', gnarly, 'signal', null, 'purchase');
+    const url = f.calls[0].body.text.match(/https:\/\/4da\.ai\/activate#key=([^\s]+)/);
+    assert.ok(url);
+    assert.equal(decodeURIComponent(url[1]), gnarly, 'plus, slash and equals all survive');
+    assert.ok(!url[1].includes('+'), 'a raw + would decode to a space');
+  } finally { f.restore(); c.restore(); }
+});
+
 test('isRecoveryEmailConfigured requires BOTH variables', () => {
   assert.equal(isRecoveryEmailConfigured(CONFIGURED), true);
   assert.equal(isRecoveryEmailConfigured({ RESEND_API_KEY: 'k' }), false);
