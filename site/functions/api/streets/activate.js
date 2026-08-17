@@ -29,11 +29,14 @@ import { generateRefreshKey } from '../../../lib/ed25519-license.js';
 import {
   hasOtherStandingCharge,
   isTerminal,
+  meta,
+  metaKey,
   resolveCustomerId,
   stripeIdOf,
   terminalStatusPatch,
 } from '../../../lib/entitlement.js';
 import {
+  deliverLicenseEmail,
   deliverRecoveryEmail,
   isPlausibleEmail,
   isRecoveryEmailConfigured,
@@ -172,12 +175,12 @@ async function generateAndStoreLicense(env, stripe, customerId, email, tier, bil
 
   await stripe.customers.update(customerId, {
     metadata: {
-      streets_license: licenseKey,
-      streets_tier: effectiveTier,
-      streets_billing_period: period,
-      streets_issued_at: now.toISOString(),
-      streets_expires_at: expiresAt.toISOString(),
-      streets_status: 'active',
+      [metaKey('license')]: licenseKey,
+      [metaKey('tier')]: effectiveTier,
+      [metaKey('billing_period')]: period,
+      [metaKey('issued_at')]: now.toISOString(),
+      [metaKey('expires_at')]: expiresAt.toISOString(),
+      [metaKey('status')]: 'active',
     },
   });
 
@@ -228,7 +231,7 @@ const HANDLED_EVENTS = [
 
 async function handleCheckoutCompleted(env, stripe, session) {
   const email = session.customer_email || session.customer_details?.email;
-  const tier = session.metadata?.streets_tier || 'signal';
+  const tier = meta(session.metadata, 'tier') || 'signal';
   const billingPeriod = session.metadata?.billing_period;
 
   // ORDERING: this guard must run BEFORE resolveCustomerId, which normalises
@@ -243,12 +246,28 @@ async function handleCheckoutCompleted(env, stripe, session) {
 
   const customerId = await resolveCustomerId(stripe, session.customer, email);
 
-  const { licenseKey } = await generateAndStoreLicense(env, stripe, customerId, email, tier, billingPeriod);
+  const { licenseKey, expiresAt } = await generateAndStoreLicense(env, stripe, customerId, email, tier, billingPeriod);
   // Lease model: back the account with a stable refresh credential for the
   // short-lived-token flow (additive; legacy long token above still delivered).
   const refreshKey = await ensureRefreshKey(stripe, customerId);
-  console.log('License generated:', email, 'tier:', tier, 'period:', billingPeriod, 'customer:', customerId, 'len:', licenseKey.length, 'refresh_key:', refreshKey ? 'set' : 'none');
-  return { license_generated: true };
+
+  // Mail the buyer their own copy. Until this existed, the success page
+  // rendering the key was the ONLY delivery: a buyer who closed the tab inside
+  // the webhook window (the page retries 4x over ~8s) had nothing, and the
+  // recovery fallback was unprovisioned and answered 503. Awaited rather than
+  // backgrounded because it cannot throw — see deliverLicenseEmail — so the log
+  // line is guaranteed written before we return 200 to Stripe.
+  const mailed = await deliverLicenseEmail(
+    env,
+    email,
+    licenseKey,
+    tier,
+    expiresAt?.toISOString?.() ?? expiresAt,
+    'purchase',
+  );
+
+  console.log('License generated:', email, 'tier:', tier, 'period:', billingPeriod, 'customer:', customerId, 'len:', licenseKey.length, 'refresh_key:', refreshKey ? 'set' : 'none', 'emailed:', mailed);
+  return { license_generated: true, emailed: mailed };
 }
 
 async function handleInvoicePaid(env, stripe, invoice) {
@@ -269,9 +288,9 @@ async function handleInvoicePaid(env, stripe, invoice) {
 
   const customer = await stripe.customers.retrieve(customerId);
   const email = customer.email;
-  const existingTier = customer.metadata?.streets_tier || 'signal';
+  const existingTier = meta(customer.metadata, 'tier') || 'signal';
   // Preserve the billing period across renewals so annual keys stay annual.
-  const billingPeriod = customer.metadata?.streets_billing_period;
+  const billingPeriod = meta(customer.metadata, 'billing_period');
 
   // A renewal must not resurrect a terminated customer. `generateAndStoreLicense`
   // writes `streets_status: 'active'` unconditionally, so without this guard the
@@ -284,8 +303,8 @@ async function handleInvoicePaid(env, stripe, invoice) {
   // Recovery is deliberately narrow: only a fresh `checkout.session.completed`
   // clears a terminal status, because that is someone actually paying again.
   if (isTerminal(customer.metadata)) {
-    console.log('Renewal ignored for terminated customer:', customerId, 'status:', customer.metadata?.streets_status);
-    return { skipped: `customer is ${customer.metadata.streets_status} — renewal does not re-issue` };
+    console.log('Renewal ignored for terminated customer:', customerId, 'status:', meta(customer.metadata, 'status'));
+    return { skipped: `customer is ${meta(customer.metadata, 'status')} — renewal does not re-issue` };
   }
 
   if (!email) {
@@ -293,9 +312,23 @@ async function handleInvoicePaid(env, stripe, invoice) {
   }
 
   // Regenerate license with fresh expiry
-  const { licenseKey } = await generateAndStoreLicense(env, stripe, customerId, email, existingTier, billingPeriod);
-  console.log('License renewed:', email, 'tier:', existingTier, 'period:', billingPeriod, 'customer:', customerId, 'reason:', invoice.billing_reason, 'len:', licenseKey.length);
-  return { license_renewed: true };
+  const { licenseKey, expiresAt } = await generateAndStoreLicense(env, stripe, customerId, email, existingTier, billingPeriod);
+
+  // A renewal SILENTLY replaces the key the customer is holding — the previous
+  // one stops working at its original expiry. Without this mail the first they
+  // learn of it is the app refusing their key, so a renewal has to be delivered
+  // as deliberately as a purchase.
+  const mailed = await deliverLicenseEmail(
+    env,
+    email,
+    licenseKey,
+    existingTier,
+    expiresAt?.toISOString?.() ?? expiresAt,
+    'renewal',
+  );
+
+  console.log('License renewed:', email, 'tier:', existingTier, 'period:', billingPeriod, 'customer:', customerId, 'reason:', invoice.billing_reason, 'len:', licenseKey.length, 'emailed:', mailed);
+  return { license_renewed: true, emailed: mailed };
 }
 
 // ---------------------------------------------------------------------------
@@ -348,7 +381,7 @@ async function applyTerminalStatus(stripe, customerId, status, context) {
   const patch = terminalStatusPatch(customer.metadata, status, new Date().toISOString());
   await stripe.customers.update(customerId, { metadata: patch });
 
-  const effective = patch.streets_status || customer.metadata?.streets_status || status;
+  const effective = patch[metaKey('status')] || meta(customer.metadata, 'status') || status;
   console.log(
     'Entitlement terminated:',
     status,
@@ -589,13 +622,13 @@ async function handleSessionLookup(env, session_id, headers) {
     }
 
     const customer = customers.data[0];
-    const license = customer.metadata?.streets_license;
+    const license = meta(customer.metadata, 'license');
     if (!license) {
       return json({ error: 'No STREETS license found' }, 404, headers);
     }
 
     // Check expiration before returning
-    const expiresAt = customer.metadata.streets_expires_at;
+    const expiresAt = meta(customer.metadata, 'expires_at');
     if (expiresAt && new Date(expiresAt) < new Date()) {
       return json({ error: 'License has expired. Please renew your subscription.', expired_at: expiresAt }, 410, headers);
     }
@@ -603,10 +636,10 @@ async function handleSessionLookup(env, session_id, headers) {
     return json(
       {
         license_key: license,
-        tier: customer.metadata.streets_tier,
-        issued_at: customer.metadata.streets_issued_at,
+        tier: meta(customer.metadata, 'tier'),
+        issued_at: meta(customer.metadata, 'issued_at'),
         expires_at: expiresAt,
-        status: customer.metadata.streets_status || 'active',
+        status: meta(customer.metadata, 'status') || 'active',
       },
       200,
       headers,

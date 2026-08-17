@@ -21,7 +21,7 @@
 
 import Stripe from 'stripe';
 import { signLicenseToken } from '../../../lib/ed25519-license.js';
-import { isLifetimeEntitled } from '../../../lib/entitlement.js';
+import { isLifetimeEntitled, meta } from '../../../lib/entitlement.js';
 
 // Lease window. Aligned with the app's 30-day activation grace so an offline
 // user's token never expires *before* their grace does (avoids a confusing
@@ -108,7 +108,7 @@ export async function onRequest({ request, env }) {
     }
 
     const tier = normalizeTier(
-      activeSub?.metadata?.streets_tier || customer.metadata?.streets_tier || 'signal',
+      meta(activeSub?.metadata, 'tier') || meta(customer.metadata, 'tier') || 'signal',
     );
 
     const now = new Date();

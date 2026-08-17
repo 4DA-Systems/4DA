@@ -6,9 +6,9 @@
 
 No code changes. 5.0.1 was published to npm on 2026-08-16 minutes before the
 AD-030 copy retirement (#469) landed the corrected README, so the npm package
-page still described "Compound intelligence (learns over time)" and content
-that "compounds over time" — claims the product retired. This release exists
-to put the current README (and the corrected app-vs-MCP comparison) on npm.
+page still described "Compound intelligence (learns over time)" and content that "compounds over time" — claims the product retired. <!-- retired-ok: quotes the retired claims verbatim to document exactly what this republish removed from npm -->
+This release exists to put the current README (and the corrected app-vs-MCP
+comparison) on npm.
 
 ## 5.0.1 (2026-08-16)
 

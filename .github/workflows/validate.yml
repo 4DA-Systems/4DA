@@ -423,6 +423,14 @@ jobs:
       - name: Release channel integrity
         run: node scripts/check-release-channel.cjs
 
+      # AD-030's own gate, which until now ran nowhere. `.ai/RULES.md` and
+      # AGENTS.md both told every agent it was "enforced by
+      # scripts/check-retired-claims.cjs" while nothing invoked it in CI, so the
+      # claim of enforcement was itself unenforced — and it duly broke on main in
+      # #478 without anyone noticing. Node builtins only, no install needed.
+      - name: Retired promise language (AD-030)
+        run: node scripts/check-retired-claims.cjs
+
       - name: Guard self-tests (scripts/*.test.cjs)
         # The guards above have their OWN unit tests, and until now those ran in
         # no hook and no workflow — nothing verified the guards still detect

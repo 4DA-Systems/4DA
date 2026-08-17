@@ -21,6 +21,37 @@
  */
 export const TERMINAL_STATUSES = ['cancelled', 'refunded', 'chargeback'];
 
+// ---------------------------------------------------------------------------
+// Metadata namespace
+//
+// These keys were written `streets_*` because the Signal tier was originally
+// built on the STREETS scaffolding. STREETS was retired in June 2026 and the
+// name has been actively misleading ever since — it reads as a dead feature, so
+// the live licensing path looks dead too. (It cost a real wrong call: the
+// endpoint was believed retired precisely because of this prefix.)
+//
+// Writes now use `signal_*`. Reads accept EITHER, preferring the current one,
+// so any pre-existing customer record keeps working without a migration.
+//
+// The `streets_` fallback is deletable once no Stripe customer carries the old
+// keys. Do not delete it on the assumption that none do — check first.
+// ---------------------------------------------------------------------------
+
+const META_PREFIX = 'signal_';
+const LEGACY_META_PREFIX = 'streets_';
+
+/** The metadata key to WRITE for a field, e.g. `metaKey('status')`. */
+export function metaKey(field) {
+  return META_PREFIX + field;
+}
+
+/** Read a namespaced entitlement field, preferring the current prefix. */
+export function meta(metadata, field) {
+  const md = metadata || {};
+  const current = md[META_PREFIX + field];
+  return current === undefined ? md[LEGACY_META_PREFIX + field] : current;
+}
+
 /**
  * Severity ranking. Webhook deliveries are NOT ordered — Stripe can deliver
  * `customer.subscription.deleted` after `charge.dispute.created` for the same
@@ -31,10 +62,16 @@ const SEVERITY = { active: 0, cancelled: 1, refunded: 2, chargeback: 3 };
 
 /** Where each terminal status records WHEN it was first observed. */
 const STAMP_KEY = {
-  cancelled: 'streets_cancelled_at',
-  refunded: 'streets_refunded_at',
-  chargeback: 'streets_chargeback_at',
+  cancelled: metaKey('cancelled_at'),
+  refunded: metaKey('refunded_at'),
+  chargeback: metaKey('chargeback_at'),
 };
+
+/** Read a terminal-status stamp, tolerating the legacy prefix. */
+function readStamp(metadata, status) {
+  const field = { cancelled: 'cancelled_at', refunded: 'refunded_at', chargeback: 'chargeback_at' }[status];
+  return field ? meta(metadata, field) : undefined;
+}
 
 export function severityOf(status) {
   return SEVERITY[status] ?? 0;
@@ -50,13 +87,15 @@ export function severityOf(status) {
  * @param {Record<string,string>|null|undefined} metadata Stripe customer metadata
  */
 export function isLifetimeEntitled(metadata) {
-  const md = metadata || {};
-  return md.streets_billing_period === 'lifetime' && !TERMINAL_STATUSES.includes(md.streets_status);
+  return (
+    meta(metadata, 'billing_period') === 'lifetime' &&
+    !TERMINAL_STATUSES.includes(meta(metadata, 'status'))
+  );
 }
 
 /** Is this customer already in a terminal state? */
 export function isTerminal(metadata) {
-  return TERMINAL_STATUSES.includes((metadata || {}).streets_status);
+  return TERMINAL_STATUSES.includes(meta(metadata, 'status'));
 }
 
 /**
@@ -133,14 +172,14 @@ export function terminalStatusPatch(metadata, status, nowIso) {
   const stampKey = STAMP_KEY[status];
   if (!stampKey) throw new Error(`not a terminal status: ${status}`);
 
-  const md = metadata || {};
   // "Same episode" = the customer is already at or beyond this severity, so
   // this delivery is a repeat or a trailing weaker event, not a new event.
-  const sameEpisode = severityOf(md.streets_status) >= severityOf(status);
+  const sameEpisode = severityOf(meta(metadata, 'status')) >= severityOf(status);
+  const existingStamp = readStamp(metadata, status);
 
   const patch = {};
-  patch[stampKey] = sameEpisode && md[stampKey] ? md[stampKey] : nowIso;
-  if (!sameEpisode) patch.streets_status = status;
+  patch[stampKey] = sameEpisode && existingStamp ? existingStamp : nowIso;
+  if (!sameEpisode) patch[metaKey('status')] = status;
   return patch;
 }
 

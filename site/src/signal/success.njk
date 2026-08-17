@@ -107,7 +107,11 @@ permalink: "/signal/success.html"
       currentKey = data.license_key;
       document.getElementById('check-icon').textContent = '\u2713';
       document.getElementById('heading').textContent = 'Signal activated';
-      document.getElementById('subtitle').textContent = 'Your license key is ready. Click below to activate in 4DA.';
+      // Say that a copy was emailed. This page used to be the ONLY delivery, so
+      // a buyer had no reason to expect a durable copy and no reason not to treat
+      // closing the tab as losing the key.
+      document.getElementById('subtitle').textContent =
+        "Your license key is ready — we've also emailed a copy to you. Click below to activate in 4DA.";
 
       var el = document.getElementById('auto-result');
       el.className = 'result success';
