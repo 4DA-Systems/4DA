@@ -64,7 +64,7 @@
 │          │                              │  - Embedding Similarity │ │
 │          │                              │  - Interest Matching    │ │
 │          │                              │  - ACE Boost            │ │
-│          │                              │  - Affinity Multiplier  │ │
+│          │                              │  - Freshness & Quality  │ │
 │          │                              └─────────────────────────┘ │
 │          │                                         │                 │
 │          └─────────────────────────────────────────┘                 │
@@ -194,8 +194,7 @@ src-tauri/src/
    │     ├──> KNN search in context_chunks (sqlite-vec)
    │     ├──> Calculate interest score (keyword matching)
    │     ├──> Calculate ACE boost (detected tech overlap)
-   │     ├──> Apply affinity multiplier (learned behavior)
-   │     ├──> Apply anti-topic penalty (dismissals)
+   │     ├──> Apply freshness + content-quality multipliers
    │     └──> Generate explanation (LLM or template)
    │
    ├──> Backend: Sort by score, filter >0.6 threshold
@@ -364,24 +363,16 @@ let ace_boost = detected_tech
     .sum::<f32>()
     .min(0.3);  // Cap at 0.3
 
-// Step 5: Affinity Multiplier (Learned Behavior)
-let affinity_mult = 1.0 + topic_affinities
-    .iter()
-    .filter(|(topic, _)| item_text.contains(&topic.to_lowercase()))
-    .map(|(_, (affinity, confidence))| affinity * confidence * 0.3)
-    .sum::<f32>();
-
-// Step 6: Anti-Topic Penalty
-let anti_penalty = anti_topics
-    .iter()
-    .filter(|at| item_text.contains(&at.topic.to_lowercase()))
-    .map(|at| 1.0 - (at.confidence * 0.5))
-    .product::<f32>();
-
-// Step 7: Final Score
-let combined_score = base_score + ace_boost;
-let final_score = (combined_score * affinity_mult * anti_penalty).clamp(0.0, 1.0);
+// Step 5: Final Score
+let final_score = (base_score + ace_boost).clamp(0.0, 1.0);
 ```
+
+The full PASIFA V2 pipeline layers further multipliers on this core — freshness,
+content quality, novelty, domain relevance — defined in
+`src-tauri/scoring/pipeline.scoring`. Behavioral affinity and anti-topic
+multipliers lost scoring authority in v19 (AD-029) and their remaining pipeline
+inputs were removed in v20; interaction capture still exists but does not move
+scores.
 
 ### Confidence Calculation
 

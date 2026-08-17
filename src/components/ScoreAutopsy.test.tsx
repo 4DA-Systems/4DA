@@ -40,7 +40,6 @@ const mockAutopsyResult = {
     interests: ['TypeScript', 'React'],
     tech_stack: ['Rust', 'SQLite'],
     active_topics: ['tauri-app'],
-    learned_affinities: ['performance'],
     exclusions_hit: [],
   },
   similar_items: [
