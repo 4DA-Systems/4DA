@@ -285,7 +285,21 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // stored-column predicate (breakdowns are computed on demand), and the
 // corpus is ~15.6k items — the recency-first parallel drain converges it
 // in minutes.
-pub(crate) const PIPELINE_VERSION: i32 = 20;
+//
+// v21 (2026-08-17): bump-only activation of #471 (`5059d0a2`), which merged
+// WITHOUT a bump — the same dark-fix class v9 repaired. #471 unified eight
+// divergent `has_word_boundary` copies into `utils::word_boundary` and fixed
+// the unsnapped-offset bug in `has_adjacent_version_literal`; the worst copy
+// (`signals.rs`) classifies every item against the user's declared tech in
+// every scoring pass, so matching outcomes — and the signal classifications
+// necessity consumes — change for edge-case text. The v20 drain completed
+// BEFORE #471 merged, so the whole corpus was stamped with the pre-#471
+// matcher (a live false positive from this class: a Lemmy Spider-Man post
+// classified as a react "version update" in knowledge-gap evidence,
+// observed 2026-08-17). No scoring-logic change in this commit; the bump
+// makes the drain re-stamp the corpus with the merged logic. Unregistered
+// (full drain), same cost basis as v20.
+pub(crate) const PIPELINE_VERSION: i32 = 21;
 
 /// Score a single item through the PASIFA V2 pipeline.
 ///
