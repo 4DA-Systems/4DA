@@ -1,6 +1,6 @@
 {
   "name": "4da",
-  "version": "5.0.0",
+  "version": "5.0.2",
   "description": "Stack-aware developer intelligence for your agent: CVE scans, dependency health, upgrade plans, decision memory. Privacy-first — only public package names leave the machine.",
   "mcpServers": {
     "4da": {
