@@ -14,7 +14,23 @@
 set -u
 REQUIRE="${GATE_REQUIRE:-0}"
 [ "${SKIP_GATE:-0}" = "1" ] && { echo "[local-gate] bypassed (SKIP_GATE=1)"; exit 0; }
-PUSH_REFS="$(cat 2>/dev/null || true)"   # stdin consumable once — capture before anything reads it
+
+# ---- The ref list, and why it needs two sources ----------------------------
+# git feeds `<local-ref> <local-sha> <remote-ref> <remote-sha>` lines on STDIN,
+# and stdin is consumable exactly ONCE. When this gate is CHAINED onto a host
+# hook (tools/install-gate.sh), the host has usually already drained stdin in
+# its own `while read` loop — .husky/pre-push does exactly that — so by the time
+# we run, `cat` returns nothing, `[ -n "$PUSH_REFS" ]` is false, and GATE 1
+# silently does not run while the hook still prints success. A gate that reports
+# PASS without executing is worse than no gate.
+#
+# So: read stdin if there IS anything there, and otherwise accept the refs the
+# host forwarded through GATE_PUSH_REFS. install-gate.sh emits a delegate block
+# that sets it; .husky/pre-push exports it. Both paths are covered, and the
+# env var is only a fallback so a direct `git push` (stdin populated) is
+# unaffected.
+PUSH_REFS="$(cat 2>/dev/null || true)"
+[ -n "$PUSH_REFS" ] || PUSH_REFS="${GATE_PUSH_REFS:-}"
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 
 # ---- GATE 1: committed-tree coherence (stack-aware) ----
@@ -60,18 +76,52 @@ if ! command -v node >/dev/null 2>&1; then
   echo "[local-gate]   This push was NOT functionally verified. Set GATE_REQUIRE=1 to enforce (fail-closed)."
   exit 0
 fi
-# read "id<TAB>cmd" for each declared job
-mapfile -t JOBS < <(node -e 'const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));for(const j of (s.jobs||[]))console.log(j.id+"\t"+j.cmd)' "$SPEC" 2>/dev/null)
-if [ "${#JOBS[@]}" -eq 0 ]; then
+# Read "id<TAB>arg0<TAB>arg1..." for each declared job.
+#
+# The parsing AND the safety validation live in scripts/gate-jobs.cjs. This used
+# to be an inline `node -e` that handed each `cmd` string to `eval` — i.e. the
+# TRACKED file tools/gate-jobs.json was an arbitrary-code-execution channel into
+# every developer's machine at push time. Read the header of gate-jobs.cjs for
+# the full reasoning; the short version is that jobs now run as an argv vector
+# with no shell, and anything shell-shaped is refused rather than guessed at.
+VALIDATOR="$ROOT/scripts/gate-jobs.cjs"
+if [ ! -f "$VALIDATOR" ]; then
+  # Fail-CLOSED, and deliberately so. The only alternative to validating the
+  # spec is executing it unvalidated, which is the defect this replaced.
+  echo "[local-gate] BLOCKED — $VALIDATOR is missing, so the jobs in $SPEC cannot be"
+  echo "[local-gate]   validated. This gate will not fall back to running them anyway."
+  exit 1
+fi
+GATE_ARGV="$(node "$VALIDATOR" --print-argv "$SPEC" 2>&1)"
+SPEC_RC=$?
+if [ "$SPEC_RC" = "2" ]; then
+  # REFUSED. Fail-CLOSED regardless of GATE_REQUIRE: a spec that wants a shell
+  # is precisely the case this gate exists to stop, so "could not run it safely"
+  # must never degrade into "ran it anyway" or "skipped it quietly".
+  echo "$GATE_ARGV"
+  echo "[local-gate] BLOCKED — $SPEC did not pass validation (see above)."
+  echo "[local-gate]   Nothing from that file was executed. Fix the spec; do not widen the"
+  echo "[local-gate]   allowlist to make a one-off command fit."
+  exit 1
+fi
+if [ "$SPEC_RC" != "0" ] || [ -z "$GATE_ARGV" ]; then
+  echo "$GATE_ARGV"
   echo "[local-gate] could not read jobs from $SPEC (empty or unreadable) — push allowed (FAIL-OPEN)."
   [ "$REQUIRE" = "1" ] && { echo "[local-gate] BLOCKED (GATE_REQUIRE=1)"; exit 1; }
   exit 0
 fi
+mapfile -t JOBS <<< "$GATE_ARGV"
 echo "[local-gate] GATE 2: running ${#JOBS[@]} fast offline checks (bypass: git push --no-verify) ..."
 for entry in "${JOBS[@]}"; do
-  id="${entry%%$'\t'*}"; cmd="${entry#*$'\t'}"
-  echo "[local-gate]   - $id: $cmd"
-  if ! ( cd "$ROOT" && eval "$cmd" ); then
+  [ -n "$entry" ] || continue
+  IFS=$'\t' read -r -a FIELDS <<< "$entry"
+  id="${FIELDS[0]}"
+  ARGV=("${FIELDS[@]:1}")
+  echo "[local-gate]   - $id: ${ARGV[*]}"
+  # NO eval, NO shell string. "${ARGV[@]}" is an argv vector, so a `;` or `$(...)`
+  # in the spec would be an argument, not syntax — and gate-jobs.cjs already
+  # refused it long before here.
+  if ! ( cd "$ROOT" && "${ARGV[@]}" ); then
     echo "[local-gate] FAIL ($id) — push BLOCKED. Fix it, or bypass with: git push --no-verify"
     exit 1
   fi

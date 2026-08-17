@@ -93,7 +93,11 @@ jobs:
               OUTPUT="${OUTPUT}[$dir] clean"$'\n'
             else
               EXIT_CODE=1
-              OUTPUT="${OUTPUT}[$dir] FAILED (exit $CODE):"$'\n'"$RESULT"$'\n'
+              # Bound EACH directory's chunk rather than the concatenation. The
+              # single `tail -c 6000` at the end kept only the LAST directory's
+              # text, so with two or more failing directories the earlier ones
+              # were dropped entirely from both the annotation and the issue.
+              OUTPUT="${OUTPUT}[$dir] FAILED (exit $CODE):"$'\n'"$(printf '%s' "$RESULT" | tail -c 2500)"$'\n'
             fi
           done
           set -e
@@ -101,7 +105,6 @@ jobs:
           # the issue-reporter through the process environment, and an unbounded
           # value (cargo deny dumps the whole dependency tree) overflows it with
           # "Argument list too long" — which silently broke failure reporting.
-          # Keep the last 6 KB: enough for the error/advisory summary at the end.
           {
             echo "exit_code=$EXIT_CODE"
             echo "output<<CARGO_AUDIT_EOF"
@@ -152,7 +155,9 @@ jobs:
               OUTPUT="${OUTPUT}[$dir] clean"$'\n'
             else
               EXIT_CODE=1
-              OUTPUT="${OUTPUT}[$dir] FAILED (exit $CODE):"$'\n'"$RESULT"$'\n'
+              # Per-directory bound — see the cargo-audit step for why the single
+              # trailing `tail -c` silently discarded all but the last failure.
+              OUTPUT="${OUTPUT}[$dir] FAILED (exit $CODE):"$'\n'"$(printf '%s' "$RESULT" | tail -c 1200)"$'\n'
             fi
           done
           set -e
@@ -180,7 +185,6 @@ jobs:
           script: |
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
             const today = new Date().toISOString().slice(0, 10);
-            const title = `Nightly supply-chain audit failure — ${today}`;
             const section = (name, exit, out) => {
               const truncated = (out || '').slice(0, 6000);
               return [
@@ -193,15 +197,6 @@ jobs:
                 ''
               ].join('\n');
             };
-            const body = [
-              `Nightly supply-chain audit fired.`,
-              '',
-              `- Run: ${runUrl}`,
-              '',
-              section('cargo audit',     process.env.CARGO_AUDIT_EXIT, process.env.CARGO_AUDIT_OUT),
-              section('cargo deny check', process.env.CARGO_DENY_EXIT, process.env.CARGO_DENY_OUT),
-              section('pnpm audit (root --prod + sub-lockfiles, high+)', process.env.PNPM_AUDIT_EXIT, process.env.PNPM_AUDIT_OUT),
-            ].join('\n');
 
             // Reuse an existing open issue from a previous nightly if present,
             // to avoid issue spam while a CVE is still unpatched.
@@ -213,6 +208,49 @@ jobs:
               per_page: 10,
             });
             const match = existing.data.find(i => i.title.startsWith('Nightly supply-chain audit failure'));
+
+            // ── Make a SUSTAINED outage visible ─────────────────────────────
+            // Reusing one issue is right (no spam) but it made night 26 of an
+            // unbroken outage read exactly like night 1: a fresh comment on a
+            // page nobody re-opens, under a title frozen at the first failure's
+            // date. Issue #367 silently absorbed ~26 nightly reports that way.
+            // Count the streak, put it in the comment AND in the title, so the
+            // duration is legible from the issue list without opening anything.
+            let streak = 1;
+            let since = today;
+            if (match) {
+              since = (match.created_at || '').slice(0, 10) || today;
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: match.number,
+                per_page: 100,
+              });
+              // Each prior nightly failure left exactly one comment, plus the
+              // issue body itself for the first night.
+              streak = comments.filter(c => (c.body || '').includes('Nightly supply-chain audit fired')).length + 1;
+            }
+            const nights = streak === 1 ? 'night 1' : `${streak} CONSECUTIVE nights`;
+
+            const body = [
+              `Nightly supply-chain audit fired.`,
+              '',
+              `**Failing for ${nights}** (first failure: ${since}). Latest: ${today}.`,
+              streak >= 3
+                ? `> This is not a new alert. The audit has been red every night since ${since} and nothing has been merged to fix it.`
+                : '',
+              '',
+              `- Run: ${runUrl}`,
+              '',
+              section('cargo audit',     process.env.CARGO_AUDIT_EXIT, process.env.CARGO_AUDIT_OUT),
+              section('cargo deny check', process.env.CARGO_DENY_EXIT, process.env.CARGO_DENY_OUT),
+              section('pnpm audit (root --prod + sub-lockfiles, high+)', process.env.PNPM_AUDIT_EXIT, process.env.PNPM_AUDIT_OUT),
+            ].join('\n');
+
+            const title = streak === 1
+              ? `Nightly supply-chain audit failure — ${today}`
+              : `Nightly supply-chain audit failure — ${streak} consecutive nights since ${since}`;
+
             if (match) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -220,7 +258,18 @@ jobs:
                 issue_number: match.number,
                 body,
               });
-              core.info(`Appended to existing issue #${match.number}`);
+              if (match.title !== title) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: match.number,
+                  title,
+                });
+              }
+              core.info(`Appended to existing issue #${match.number} (streak: ${streak})`);
+              core.exportVariable('AUDIT_STREAK', String(streak));
+              core.exportVariable('AUDIT_SINCE', since);
+              core.exportVariable('AUDIT_ISSUE', String(match.number));
             } else {
               const created = await github.rest.issues.create({
                 owner: context.repo.owner,
@@ -230,13 +279,69 @@ jobs:
                 labels: ['security', 'supply-chain', 'nightly-audit'],
               });
               core.info(`Opened issue #${created.data.number}`);
+              core.exportVariable('AUDIT_STREAK', '1');
+              core.exportVariable('AUDIT_SINCE', since);
+              core.exportVariable('AUDIT_ISSUE', String(created.data.number));
             }
 
       - name: Fail job if any audit failed
+        # This step used to be the ONLY red thing in the run — the three audits
+        # above are `continue-on-error`, so each renders green — and all it said
+        # was "see opened issue". `gh run view --log-failed` therefore returned
+        # a single sentence with no diagnostic in it, and the actual
+        # per-directory detail lived exclusively in an auto-appended comment on
+        # one GitHub issue. 26 nights of failure looked identical to one.
+        #
+        # release.yml:216-220 already states the principle this violates, about
+        # its own former masked cargo-deny check: "A policy check that cannot
+        # block and cannot be read is decoration." This one blocked. It could
+        # not be read. Same defect, other half.
         if: >-
           steps.cargo_audit.outputs.exit_code != '0' ||
           steps.cargo_deny.outputs.exit_code != '0' ||
           steps.pnpm_audit.outputs.exit_code != '0'
+        env:
+          CARGO_AUDIT_EXIT: ${{ steps.cargo_audit.outputs.exit_code }}
+          CARGO_AUDIT_OUT:  ${{ steps.cargo_audit.outputs.output }}
+          CARGO_DENY_EXIT:  ${{ steps.cargo_deny.outputs.exit_code }}
+          CARGO_DENY_OUT:   ${{ steps.cargo_deny.outputs.output }}
+          PNPM_AUDIT_EXIT:  ${{ steps.pnpm_audit.outputs.exit_code }}
+          PNPM_AUDIT_OUT:   ${{ steps.pnpm_audit.outputs.output }}
         run: |
-          echo "::error::One or more supply-chain audits failed — see opened issue."
+          # Annotations must be single-line, so fold newlines into the literal
+          # %0A that the Actions log viewer renders as a line break.
+          annotate() {
+            local title="$1" body="$2"
+            printf '::error title=%s::%s\n' "$title" "$(printf '%s' "$body" | tail -c 3500 | sed ':a;N;$!ba;s/\n/%0A/g')"
+          }
+
+          STREAK="${AUDIT_STREAK:-1}"
+          SINCE="${AUDIT_SINCE:-unknown}"
+          if [ "$STREAK" -gt 1 ] 2>/dev/null; then
+            echo "::error title=Sustained supply-chain outage::Red for ${STREAK} CONSECUTIVE nights (since ${SINCE}). Tracking issue #${AUDIT_ISSUE:-?}. This is not a new alert."
+          fi
+
+          [ "${CARGO_AUDIT_EXIT}" = "0" ] || annotate "cargo audit" "${CARGO_AUDIT_OUT}"
+          [ "${CARGO_DENY_EXIT}"  = "0" ] || annotate "cargo deny check" "${CARGO_DENY_OUT}"
+          [ "${PNPM_AUDIT_EXIT}"  = "0" ] || annotate "pnpm audit" "${PNPM_AUDIT_OUT}"
+
+          # Also mirror the whole thing into the run summary, which survives log
+          # retention rules and is readable without expanding a failed step.
+          {
+            echo "## Nightly supply-chain audit — FAILED"
+            echo ""
+            echo "Consecutive failing nights: **${STREAK}** (since ${SINCE}). Tracking issue: #${AUDIT_ISSUE:-?}"
+            for pair in "cargo audit:${CARGO_AUDIT_EXIT}:CARGO_AUDIT_OUT" \
+                        "cargo deny check:${CARGO_DENY_EXIT}:CARGO_DENY_OUT" \
+                        "pnpm audit:${PNPM_AUDIT_EXIT}:PNPM_AUDIT_OUT"; do
+              name="${pair%%:*}"; rest="${pair#*:}"; code="${rest%%:*}"; var="${rest#*:}"
+              echo ""
+              echo "### ${name} (exit ${code})"
+              echo '```'
+              printf '%s\n' "${!var}"
+              echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::error::One or more supply-chain audits failed — details annotated above and in the run summary."
           exit 1

@@ -57,9 +57,30 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Install mcp-publisher
+      - name: Install mcp-publisher (version-pinned + SHA-256 verified)
+        # Was: `curl -L .../releases/latest/download/... | tar xz mcp-publisher`
+        # — an unpinned binary from a third-party repo, streamed straight into
+        # tar with no checksum, and then run two steps later WITH THIS
+        # WORKFLOW'S PUBLISH CREDENTIALS (npm token in the env, GitHub OIDC
+        # identity available to `mcp-publisher login github-oidc`). `latest`
+        # means the binary can change under us between two runs of the same tag,
+        # and nothing would notice.
+        #
+        # The upstream project publishes a signed checksums file per release, so
+        # there is no excuse for the unverified form. Refresh VERSION and SHA
+        # together, from registry_<version>_checksums.txt on the release page.
+        env:
+          MCP_PUBLISHER_VERSION: v1.8.1
+          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          set -euo pipefail
+          ASSET="mcp-publisher_linux_amd64.tar.gz"
+          curl -fsSL -o "$ASSET" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/${ASSET}"
+          echo "${MCP_PUBLISHER_SHA256}  ${ASSET}" | sha256sum -c -
+          tar xzf "$ASSET" mcp-publisher
+          rm -f "$ASSET"
+          ./mcp-publisher --version || true
 
       - name: Sync server.json version with tag
         run: |
