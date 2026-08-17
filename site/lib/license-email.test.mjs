@@ -139,6 +139,38 @@ test('a missing address or key is refused rather than sent blank', async () => {
   } finally { f.restore(); c.restore(); }
 });
 
+test('a Date expiry renders instead of silently killing the email', async () => {
+  // The webhook path holds a Date (generateAndStoreLicense returns new Date(...))
+  // while recovery reads an ISO string from Stripe metadata. `.slice()` on a Date
+  // throws, and the no-throw contract would swallow that into 'error' — a
+  // silently unsent licence email, i.e. exactly the failure class this module
+  // exists to end. Both shapes must render.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const asDate = new Date('2027-03-04T05:06:07.000Z');
+    assert.equal(
+      await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', asDate, 'purchase'),
+      'sent',
+      'a Date must not fail the send',
+    );
+    assert.ok(f.calls[0].body.text.includes('Valid until: 2027-03-04'), 'Date rendered as a date');
+
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', '2027-03-04T05:06:07.000Z', 'purchase');
+    assert.ok(f.calls[1].body.text.includes('Valid until: 2027-03-04'), 'ISO string renders identically');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('a junk expiry is omitted rather than rendered as junk', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', {}, 'purchase');
+    assert.equal(f.calls.length, 1, 'still sends — a bad expiry must not cost the buyer their key');
+    assert.ok(!f.calls[0].body.text.includes('Valid until'), 'and simply omits the line');
+  } finally { f.restore(); c.restore(); }
+});
+
 test('isRecoveryEmailConfigured requires BOTH variables', () => {
   assert.equal(isRecoveryEmailConfigured(CONFIGURED), true);
   assert.equal(isRecoveryEmailConfigured({ RESEND_API_KEY: 'k' }), false);

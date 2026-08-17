@@ -131,9 +131,27 @@ function footerText(context) {
   return ['', ...(REASON_TEXT[context] || REASON_TEXT.recovery), '', ENTITY_TEXT].join('\n');
 }
 
+/**
+ * Render `expiresAt` as YYYY-MM-DD, accepting a Date OR an ISO string.
+ *
+ * The two callers genuinely differ: the webhook path holds a `Date`
+ * (`generateAndStoreLicense` returns `new Date(...)`), while the recovery path
+ * reads an ISO string out of Stripe metadata. `.slice()` on a Date throws, and
+ * `deliverLicenseEmail`'s no-throw contract would swallow that into
+ * "return 'error'" — i.e. a silently unsent licence email, which is the exact
+ * failure class this module was written to end. Normalising here removes the
+ * trap instead of relying on every caller to remember to convert.
+ */
+function formatExpiry(expiresAt) {
+  if (!expiresAt) return '';
+  const iso = typeof expiresAt === 'string' ? expiresAt : expiresAt?.toISOString?.();
+  if (typeof iso !== 'string' || iso.length < 10) return '';
+  return `Valid until: ${iso.slice(0, 10)}`;
+}
+
 function buildLicenseEmail(licenseKey, tier, expiresAt, context = 'recovery') {
   const activateUrl = `4da://activate?key=${encodeURIComponent(licenseKey)}`;
-  const expiryLine = expiresAt ? `Valid until: ${expiresAt.slice(0, 10)}` : '';
+  const expiryLine = formatExpiry(expiresAt);
 
   const html = `<!DOCTYPE html>
 <html>
@@ -176,7 +194,9 @@ function buildLicenseEmail(licenseKey, tier, expiresAt, context = 'recovery') {
 }
 
 function buildExpiredEmail(expiredAt) {
-  const when = expiredAt ? expiredAt.slice(0, 10) : 'recently';
+  // Same Date-or-string tolerance as formatExpiry, for the same reason.
+  const formatted = formatExpiry(expiredAt);
+  const when = formatted ? formatted.replace('Valid until: ', '') : 'recently';
   const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Your 4DA licence has expired</title></head>
