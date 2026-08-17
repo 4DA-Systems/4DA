@@ -225,31 +225,6 @@ pub(crate) async fn mcp_score_autopsy(
             }));
         }
 
-        if (bd.affinity_mult - 1.0).abs() > 0.01 {
-            let direction = if bd.affinity_mult > 1.0 {
-                "boosted"
-            } else {
-                "reduced"
-            };
-            components.push(serde_json::json!({
-                "name": "Learned Affinity",
-                "raw_value": bd.affinity_mult,
-                "weight": 1.0,
-                "contribution": bd.affinity_mult - 1.0,
-                "explanation": format!("Score {} by learned topic preferences (x{:.2})", direction, bd.affinity_mult)
-            }));
-        }
-
-        if bd.anti_penalty > 0.01 {
-            components.push(serde_json::json!({
-                "name": "Anti-Topic Penalty",
-                "raw_value": bd.anti_penalty,
-                "weight": 1.0,
-                "contribution": -bd.anti_penalty,
-                "explanation": format!("Penalized by anti-topic filter (-{:.0}%)", bd.anti_penalty * 100.0)
-            }));
-        }
-
         if (bd.freshness_mult - 1.0).abs() > 0.01 {
             let label = if bd.freshness_mult > 1.0 {
                 "Freshness bonus"
@@ -313,19 +288,6 @@ pub(crate) async fn mcp_score_autopsy(
             })
         })
         .cloned()
-        .collect();
-
-    let matching_affinities: Vec<String> = ace_ctx
-        .topic_affinities
-        .iter()
-        .filter(|(_, (score, _))| *score > 0.3)
-        .filter(|(topic, _)| {
-            topics.iter().any(|t| {
-                let tl = t.to_lowercase();
-                tl.contains(topic.as_str()) || topic.contains(&tl)
-            })
-        })
-        .map(|(topic, (score, _))| format!("{} ({:+.0}%)", topic, score * 100.0))
         .collect();
 
     // Find similar items for comparison (items with close scores)
@@ -399,7 +361,6 @@ pub(crate) async fn mcp_score_autopsy(
             "interests": matching_interests,
             "tech_stack": matching_tech,
             "active_topics": matching_active,
-            "learned_affinities": matching_affinities,
             "exclusions_hit": item.excluded_by.as_ref().map_or_else(Vec::<String>::new, |e| vec![e.clone()])
         },
         "similar_items": similar_items,
@@ -693,7 +654,6 @@ pub(crate) async fn score_tuning_snapshot() -> Result<serde_json::Value> {
             "faint": faint_count,
         },
         "scoring_context": {
-            "feedback_interaction_count": ace_ctx.topic_affinities.len(),
             "calibration_deltas_count": calibration_deltas_count,
             "detected_tech_count": ace_ctx.detected_tech.len(),
             "active_topics_count": ace_ctx.active_topics.len(),

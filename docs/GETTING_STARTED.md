@@ -120,14 +120,10 @@ Enable/disable sources in Settings > Sources.
 
 Items are scored 0.0 to 1.0 based on:
 
-- **Semantic Similarity**: How closely the content matches your interests
-- **Topic Affinity**: Learned preferences from your interactions
-- **Anti-Topic Penalty**: Reduces score for topics you've rejected
-
-The formula:
-```
-score = base_score * affinity_multiplier * (1.0 - anti_penalty)
-```
+- **Context Similarity**: How closely the content matches your indexed codebase
+- **Interest Match**: Overlap with your declared interests
+- **Stack & Dependencies**: Matches against your detected tech stack and dependencies
+- **Freshness & Quality**: Recency and content-quality multipliers
 
 ## Next Steps
 
