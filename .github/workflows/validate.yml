@@ -657,17 +657,36 @@ jobs:
       - name: Verify all required jobs succeeded
         shell: bash
         run: |
+          # ALLOWLIST, not a denylist. This job is the sole required status check,
+          # so anything it does not recognise must block the merge rather than sail
+          # through. The previous form only caught `failure` and `cancelled`, which
+          # meant every other result passed -- and GitHub emits more values than the
+          # documented four. Observed live on 2026-08-17: a Relay job reported
+          # `abandoned`, the case statement fell through to the success branch, and
+          # this check went GREEN while a required job had not succeeded. The run's
+          # own conclusion was `failure` at the time, and the PR read MERGEABLE.
+          #
+          # `skipped` is the one non-success value that legitimately passes: the
+          # path-filtered legs skip when a change does not touch them.
           results='${{ join(needs.*.result, ',') }}'
           echo "dependency results: $results"
-          case ",$results," in
-            *,failure,* | *,cancelled,*)
-              echo "::error::a required Validate job failed or was cancelled ($results)"
-              exit 1
-              ;;
-            *)
-              echo "all required Validate jobs succeeded (or were skipped as not-applicable)"
-              ;;
-          esac
+          bad=''
+          IFS=',' read -ra parsed <<< "$results"
+          for r in "${parsed[@]}"; do
+            case "$r" in
+              success|skipped) ;;
+              *) bad="$bad $r" ;;
+            esac
+          done
+          if [ -z "$results" ]; then
+            echo "::error::no dependency results were reported — refusing to pass a gate that measured nothing"
+            exit 1
+          fi
+          if [ -n "$bad" ]; then
+            echo "::error::a required Validate job did not succeed ($results) — offending results:$bad"
+            exit 1
+          fi
+          echo "all required Validate jobs succeeded (or were skipped as not-applicable)"
 
   # ── Cross-platform validation ──
   # Moved to .github/workflows/hermetic.yml (the "Hermetic Fresh-Clone" gate).
