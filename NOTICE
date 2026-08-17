@@ -860,8 +860,8 @@ npm Packages (42)
 @babel/runtime 7.29.7 - MIT - https://babel.dev/docs/en/next/babel-runtime
 @fontsource-variable/inter 5.2.8 - OFL-1.1 - https://fontsource.org/fonts/inter
 @fontsource-variable/jetbrains-mono 5.2.8 - OFL-1.1 - https://fontsource.org/fonts/jetbrains-mono
-@tanstack/react-virtual 3.14.5 - MIT - https://tanstack.com/virtual
-@tanstack/virtual-core 3.17.3 - MIT - https://tanstack.com/virtual
+@tanstack/react-virtual 3.14.9 - MIT - https://tanstack.com/virtual
+@tanstack/virtual-core 3.17.7 - MIT - https://tanstack.com/virtual
 @tauri-apps/api 2.11.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri#readme
 @tauri-apps/plugin-opener 2.5.4 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
 @tauri-apps/plugin-updater 2.10.1 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
