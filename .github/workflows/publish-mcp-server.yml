@@ -26,7 +26,9 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
+          # No registry-url: that input writes an .npmrc pointing auth at
+          # NODE_AUTH_TOKEN, which is the token flow this workflow no longer
+          # uses (see the publish step).
 
       - run: pnpm install --frozen-lockfile
 
@@ -44,18 +46,32 @@ jobs:
           fi
           echo "Publishing @4da/mcp-server@$PKG_VERSION"
 
-      # Idempotent: a partial failure after npm publish (e.g. the registry step)
-      # must be retryable by re-pushing the tag without a version bump.
-      - name: Publish to npm (skip if version already live)
+      # Auth is npm TRUSTED PUBLISHING (OIDC), not a token. History: the
+      # NPM_TOKEN flow died twice — 5.0.0 needed an operator one-shot token,
+      # and the 5.0.2 run failed E404-on-PUT on a dead secret (2026-08-17).
+      # Granular tokens expire within 90 days, so a token here is a scheduled
+      # future outage. OIDC needs npm >= 11.5.1 (Node 22 bundles npm 10) and
+      # the `id-token: write` permission this job already has. Prerequisite,
+      # one-time, on npmjs.com: package @4da/mcp-server -> Settings ->
+      # Trusted Publisher -> GitHub Actions, repository 4DA-Systems/4DA,
+      # workflow publish-mcp-server.yml. Until that is configured this step
+      # fails with an auth error, same as the dead token did.
+      #
+      # Idempotent: a partial failure after npm publish (e.g. the registry
+      # step) must be retryable by re-pushing the tag without a version bump.
+      # NOTE: re-pushing a tag runs the workflow file AS OF THE TAGGED COMMIT
+      # — to publish an already-tagged version through THIS flow, delete and
+      # re-create the tag on a commit that contains this workflow revision.
+      - name: Publish to npm via Trusted Publishing (skip if version already live)
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
           if npm view "@4da/mcp-server@$PKG_VERSION" version >/dev/null 2>&1; then
             echo "@4da/mcp-server@$PKG_VERSION already on npm — skipping publish"
           else
-            pnpm publish --access public --no-git-checks
+            npm install -g npm@11
+            npm --version
+            npm publish --access public
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install mcp-publisher (version-pinned + SHA-256 verified)
         # Was: `curl -L .../releases/latest/download/... | tar xz mcp-publisher`
