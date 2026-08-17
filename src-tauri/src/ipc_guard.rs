@@ -15,6 +15,14 @@
 //! | [`validate_path_input`] | a WHOLE path the user chose (a project directory) | yes, by design |
 //! | [`validate_path_component`] | ONE segment spliced into a path we build | no, never |
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use crate::error::{FourDaError, Result};
 
 /// Maximum length for general string inputs (search queries, names, labels)
@@ -52,6 +60,35 @@ pub(crate) fn validate_length(field: &str, value: &str, max: usize) -> Result<St
         )));
     }
     Ok(trimmed.to_string())
+}
+
+/// Validate that a numeric IPC input is a valid index into a fixed-size table:
+/// `0 <= value < max`.
+///
+/// This module validated strings, URLs and paths and had **no numeric
+/// validator at all**, so every `usize` from the frontend reached its consumer
+/// unchecked. `taste_test_respond` handed one straight to
+/// `taste_test::inference`, whose `assert!(item_slot < NUM_ITEMS)` is a plain
+/// `assert!` — live in release — immediately before `LIKELIHOOD_MATRIX
+/// [item_slot]`. A trivially malformed `invoke` aborted the process.
+///
+/// Panicking on IPC input is doubly bad in an `async` command: the panic never
+/// resolves the frontend's `invoke()` promise, so the UI hangs until its 30s
+/// `withTimeout` fires rather than showing an error.
+pub(crate) fn validate_range(field: &str, value: usize, max: usize) -> Result<usize> {
+    if value >= max {
+        tracing::warn!(
+            target: "4da::ipc",
+            field,
+            value,
+            max,
+            "Numeric input out of range"
+        );
+        return Err(FourDaError::Validation(format!(
+            "{field} must be less than {max}"
+        )));
+    }
+    Ok(value)
 }
 
 /// Validate a string input doesn't contain null bytes (potential injection).

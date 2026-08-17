@@ -468,3 +468,33 @@ fn test_unc_path_not_caught_by_basic_validate() {
     let result = validate_path_input("path", "\\\\server\\share");
     assert!(result.is_ok(), "Basic validation doesn't catch UNC");
 }
+
+// === Numeric range tests (H14) ===
+//
+// This module validated strings, URLs and paths and had NO numeric validator
+// at all, so every `usize` arriving over IPC reached its consumer unchecked.
+
+#[test]
+fn test_validate_range_accepts_in_range() {
+    assert_eq!(validate_range("slot", 0, 15).unwrap(), 0);
+    assert_eq!(validate_range("slot", 14, 15).unwrap(), 14);
+}
+
+#[test]
+fn test_validate_range_rejects_at_and_above_max() {
+    assert!(validate_range("slot", 15, 15).is_err());
+    assert!(validate_range("slot", 16, 15).is_err());
+    assert!(validate_range("slot", usize::MAX, 15).is_err());
+}
+
+#[test]
+fn test_validate_range_zero_max_rejects_everything() {
+    assert!(validate_range("slot", 0, 0).is_err());
+}
+
+#[test]
+fn test_validate_range_error_names_the_field_not_the_value() {
+    let err = validate_range("item_slot", 99, 15).unwrap_err().to_string();
+    assert!(err.contains("item_slot"), "should name the field: {err}");
+    assert!(err.contains("15"), "should state the bound: {err}");
+}

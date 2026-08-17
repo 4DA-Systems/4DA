@@ -6,6 +6,14 @@
 // String Utilities & Content Preprocessing
 // ============================================================================
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 /// Safely truncate a string to a maximum number of characters (UTF-8 aware)
 /// This avoids panics when slicing multi-byte characters like Cyrillic, Chinese, etc.
 pub(crate) fn truncate_utf8(s: &str, max_chars: usize) -> String {

@@ -185,6 +185,26 @@ impl ACE {
         &self.conn
     }
 
+    /// Liveness of the file-watcher thread, for the health report.
+    ///
+    /// `None` = liveness is not a meaningful question here: either no watcher
+    /// was constructed on this engine (headless engine, tests) or one was
+    /// constructed but never started. `Some(false)` = a watcher that WAS
+    /// started is no longer running — stopped deliberately, killed by a panic
+    /// in a file-change callback, or dropped by its notify backend.
+    ///
+    /// The never-started case must not read as `Some(false)`. `ACE::new`
+    /// constructs the watcher eagerly, while `start_watching` runs late and
+    /// sometimes not at all (no context dirs configured, or every watch path
+    /// missing). Collapsing those into "not running" told a perfectly healthy
+    /// cold-start user their watcher had failed and to restart the app.
+    pub fn watcher_is_running(&self) -> Option<bool> {
+        self.watcher.as_ref().and_then(|w| {
+            let guard = w.lock();
+            guard.has_started().then(|| guard.is_running())
+        })
+    }
+
     /// Start file watching for real-time context updates
     pub fn start_watching(&mut self, paths: &[PathBuf]) -> Result<()> {
         let config = WatcherConfig::default();

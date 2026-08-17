@@ -8,6 +8,14 @@
 //! project health, knowledge gaps, and attention analysis into ranked
 //! preemptive alerts. Tells the user what matters BEFORE it becomes painful.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use std::time::{Duration, Instant};
 
 use once_cell::sync::Lazy;
@@ -1184,7 +1192,15 @@ fn extract_advisory_id(text: &str) -> Option<String> {
     // panic, or a silently byte-shifted advisory id that corrupts the
     // cross-tier dedup key. Both prefixes are pure ASCII, so ASCII folding is
     // sufficient AND keeps byte offsets identical between the two strings.
+    //
+    // SAFE (both slices): `to_ascii_uppercase` preserves byte length AND byte
+    // offsets, and the prefixes are ASCII, so `start` is a char boundary in
+    // `text`. `end` is either `start + i` where `i` came from a `char`-based
+    // `find` on `text[start..]`, or an explicit `floor_char_boundary` — and
+    // both are >= `start`.
+    #[allow(clippy::string_slice)]
     let text_upper = text.to_ascii_uppercase();
+    #[allow(clippy::string_slice)]
     for prefix in &["GHSA-", "CVE-"] {
         if let Some(start) = text_upper.find(prefix) {
             let end = text[start..]
@@ -1266,7 +1282,12 @@ fn truncate(s: &str, max_len: usize) -> String {
             .nth(max_len.saturating_sub(3))
             .map(|(i, _)| i)
             .unwrap_or_else(|| s.floor_char_boundary(max_len.saturating_sub(3)));
-        format!("{}...", &s[..end])
+        // SAFE: `end` is a `char_indices` offset or a `floor_char_boundary`.
+        // Bound to a `let` because an attribute on a macro invocation is
+        // silently ignored.
+        #[allow(clippy::string_slice)]
+        let head = &s[..end];
+        format!("{head}...")
     }
 }
 
@@ -1274,24 +1295,22 @@ fn truncate(s: &str, max_len: usize) -> String {
 /// title. E.g. "i18next" inside "i18next-http-middleware" — the hyphen after
 /// the match means it's a DIFFERENT package, not a standalone mention.
 /// Returns true when ALL occurrences of `dep` in `text` are compound-prefixes.
+///
+/// Not expressible as [`crate::utils::has_word_boundary_match`]: the boundary
+/// test is asymmetric — the LEFT side must be a non-alphanumeric, the RIGHT side
+/// need only not be a hyphen. So it keeps its own loop, but takes the cursor and
+/// the neighbour lookups from the shared UTF-8-safe primitives instead of
+/// hand-rolling `search_from = abs + 1` (which splits a multi-byte first char
+/// on every failed match — and `dep` is a dependency name).
 fn is_compound_prefix_match(text: &str, dep: &str) -> bool {
     if dep.is_empty() {
         return false;
     }
-    let bytes = text.as_bytes();
-    let mut found_standalone = false;
-    let mut search_from = 0;
-    while let Some(pos) = text[search_from..].find(dep) {
-        let abs = search_from + pos;
-        let before_ok = abs == 0 || !bytes[abs - 1].is_ascii_alphanumeric();
-        let after = abs + dep.len();
-        let after_is_hyphen = after < bytes.len() && bytes[after] == b'-';
-        if before_ok && !after_is_hyphen {
-            found_standalone = true;
-            break;
-        }
-        search_from = abs + 1;
-    }
+    let found_standalone = crate::utils::match_offsets(text, dep).any(|pos| {
+        let before_ok = crate::utils::char_before(text, pos).is_none_or(|c| !c.is_alphanumeric());
+        let after_is_hyphen = crate::utils::char_at(text, pos + dep.len()) == Some('-');
+        before_ok && !after_is_hyphen
+    });
     // If we never found a standalone (non-prefix) occurrence, it's compound-prefix only
     !found_standalone && text.contains(dep)
 }
@@ -1313,6 +1332,9 @@ fn is_advisory_subject_match(title_lower: &str, dep: &str) -> bool {
         return true; // No structured prefix — can't extract subject, allow match
     };
 
+    // SAFE: `bracket_end` is the offset of the all-ASCII 2-byte needle `"] "`,
+    // so `bracket_end + 2` is its end — a char boundary.
+    #[allow(clippy::string_slice)]
     let remainder = &title_lower[subject_start..];
     if remainder.is_empty() {
         return true;
@@ -1343,6 +1365,9 @@ fn is_advisory_subject_match(title_lower: &str, dep: &str) -> bool {
         // carry accented names and CJK). Also subsumes the old `.len()` clamp.
         .unwrap_or_else(|| remainder.floor_char_boundary(80));
 
+    // SAFE: `subject_end` is a `find` offset for an ASCII marker or an explicit
+    // `floor_char_boundary`.
+    #[allow(clippy::string_slice)]
     let subject = &remainder[..subject_end];
 
     // If the dep name appears as a word boundary in the subject, it's the target
@@ -1903,6 +1928,32 @@ mod tests {
             "i18next-http-middleware bypasses i18next sanitization",
             "i18next"
         ));
+    }
+
+    /// Regression: the cursor advanced to `abs + 1` — one byte past the START
+    /// of a non-standalone match — splitting a multi-byte first char. The
+    /// compound-prefix shape is precisely what reaches that advance, so a
+    /// dependency name with a multi-byte first char panicked on exactly the
+    /// input this function exists to classify.
+    #[test]
+    fn compound_prefix_multibyte_dep_does_not_panic() {
+        // The dep's FIRST char must be multi-byte for `abs + 1` to split it.
+        assert!(is_compound_prefix_match(
+            "[cve-2026-1] éclair-http-middleware has path traversal",
+            "éclair"
+        ));
+        assert!(is_compound_prefix_match(
+            "привет-core has a path traversal bug",
+            "привет"
+        ));
+        // A standalone occurrence after the compound one still wins.
+        assert!(!is_compound_prefix_match(
+            "éclair-http-middleware bypasses éclair sanitization",
+            "éclair"
+        ));
+        // Bug E: a non-ASCII letter glued to the dep is not a left boundary,
+        // so this is not a standalone mention.
+        assert!(is_compound_prefix_match("иi18next-http bug", "i18next"));
     }
 
     // ─── Advisory-subject extraction ─────────────────────────────────

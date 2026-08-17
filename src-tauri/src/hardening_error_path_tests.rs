@@ -420,35 +420,67 @@ mod tests {
         use crate::llm::RelevanceJudge;
         use crate::settings::LLMProvider;
 
-        /// Non-JSON response: the JSON extraction pattern used in parse_judgments
-        /// should produce an Err when no brackets exist.
+        /// Build a judge whose provider is never contacted — `parse_judgments`
+        /// is pure, so no network or key is involved.
+        fn judge() -> RelevanceJudge {
+            RelevanceJudge::new(LLMProvider::default())
+        }
+
+        fn one_item() -> Vec<(String, String, String)> {
+            vec![("1".to_string(), "Title".to_string(), "Body".to_string())]
+        }
+
+        /// Non-JSON response: `parse_judgments` should produce an Err when no
+        /// brackets exist.
+        ///
+        /// These tests used to RE-IMPLEMENT the bracket extraction inline
+        /// instead of calling the function, so the suite reproduced the
+        /// unguarded `&response[start..=end]` rather than exercising it — a
+        /// gate that could not fail. They now call the real function.
         #[test]
         fn test_json_extraction_no_brackets_is_err() {
             let response = "I'm sorry, I can't help with that.";
-            // The parse_judgments logic: find '[' and ']', fall through to raw string
-            let json_str = if let Some(start) = response.find('[') {
-                if let Some(end) = response.rfind(']') {
-                    &response[start..=end]
-                } else {
-                    response
-                }
-            } else {
-                response
-            };
-            let result: std::result::Result<Vec<serde_json::Value>, _> =
-                serde_json::from_str(json_str);
             assert!(
-                result.is_err(),
+                judge().parse_judgments(response, &one_item()).is_err(),
                 "Non-JSON response should fail to parse as Vec<Value>"
             );
         }
 
-        /// Empty string response: serde should return Err, not panic.
+        /// A garbled or truncated response whose last `]` PRECEDES its first
+        /// `[`. `find('[')` scans forward, `rfind(']')` scans backward, so
+        /// `start > end` — and `&response[start..=end]` panics on a reversed
+        /// range instead of erroring. The sibling in
+        /// `blind_spots::parse_dep_assessments` has carried the `e >= s` guard
+        /// (and a doc comment promising "never a panic") the whole time.
+        #[test]
+        fn test_reversed_brackets_is_err_not_panic() {
+            for response in [
+                "}] some text [",
+                "] [",
+                "partial output}] then a new array starts [",
+            ] {
+                assert!(
+                    judge().parse_judgments(response, &one_item()).is_err(),
+                    "reversed brackets must error, not panic: {response:?}"
+                );
+            }
+        }
+
+        /// A multi-byte char between the brackets must survive the slice.
+        #[test]
+        fn test_multibyte_between_brackets_parses() {
+            let response = "préambule [{\"id\": \"1\", \"score\": 4}] fin é";
+            let judgments = judge()
+                .parse_judgments(response, &one_item())
+                .expect("valid array should parse");
+            assert_eq!(judgments.len(), 1);
+        }
+
+        /// Empty string response: `parse_judgments` should return Err, not panic.
         #[test]
         fn test_json_extraction_empty_string_is_err() {
-            let result: std::result::Result<Vec<serde_json::Value>, _> = serde_json::from_str("");
             assert!(
-                result.is_err(),
+                judge().parse_judgments("", &one_item()).is_err(),
                 "Empty string should fail to parse as JSON array"
             );
         }
@@ -523,26 +555,15 @@ mod tests {
             assert_eq!(output_tokens, 0);
         }
 
-        /// JSON with surrounding text: bracket extraction should isolate the array.
+        /// JSON with surrounding text: bracket extraction should isolate the
+        /// array. Exercises `parse_judgments` itself, not a copy of it.
         #[test]
         fn test_json_extraction_with_surrounding_text() {
             let response = r#"Here are results: [{"id": "1", "score": 3}] end."#;
-            let json_str = if let Some(start) = response.find('[') {
-                if let Some(end) = response.rfind(']') {
-                    &response[start..=end]
-                } else {
-                    response
-                }
-            } else {
-                response
-            };
-            let result: std::result::Result<Vec<serde_json::Value>, _> =
-                serde_json::from_str(json_str);
-            assert!(
-                result.is_ok(),
-                "Bracket extraction should isolate valid JSON array"
-            );
-            assert_eq!(result.unwrap().len(), 1);
+            let judgments = judge()
+                .parse_judgments(response, &one_item())
+                .expect("bracket extraction should isolate valid JSON array");
+            assert_eq!(judgments.len(), 1);
         }
     }
 

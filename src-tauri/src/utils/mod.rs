@@ -13,6 +13,7 @@ mod text;
 mod topics;
 mod url;
 mod vector;
+mod word_boundary;
 
 // Re-export everything so existing `use crate::utils::X` imports continue to work
 pub(crate) use path::sanitize_path;
@@ -29,3 +30,7 @@ pub(crate) use url::{validate_deep_link_url, validate_safe_url};
 #[allow(unused_imports)] // Used by utils_edge_tests and test modules
 pub(crate) use vector::cosine_similarity;
 pub(crate) use vector::{cosine_similarity_with_norm, vector_norm};
+pub(crate) use word_boundary::{
+    char_at, char_before, has_bounded_match, has_word_boundary_match,
+    has_word_boundary_match_with_ext, match_offsets,
+};

@@ -5,6 +5,14 @@
 //! Uses debouncing to prevent excessive processing during rapid saves.
 //! Includes state persistence for restart recovery.
 
+// UTF-8 safety gate (see the `clippy::string_slice` note in Cargo.toml).
+// Byte-slicing a `str` panics on any index that is not a char boundary. This
+// module was hardened against that class, so the lint is denied here to keep it
+// at zero: every future slice must carry an explicit char-boundary proof
+// (`floor_char_boundary`, an offset from `find` of an ASCII needle, or one of
+// the `utils::text` helpers) or an `#[allow]` that states why it is safe.
+#![deny(clippy::string_slice)]
+
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use rusqlite::Connection;
@@ -128,6 +136,16 @@ pub struct FileWatcher {
     last_batch_time: Arc<Mutex<Instant>>,
     callback: Arc<Mutex<Option<ChangeCallback>>>,
     running: Arc<Mutex<bool>>,
+    /// Has the event thread ever been started on this watcher?
+    ///
+    /// `running` alone cannot answer "is this watcher dead", because a watcher
+    /// that was constructed but never started reads `false` exactly like one
+    /// whose thread died. `ACE::new` constructs a `FileWatcher` eagerly while
+    /// `start_watching` runs late (after frontend-ready, a grace sleep, a
+    /// project scan and git mining) — and never at all when no context dirs are
+    /// configured or every watch path is missing. Reporting those as a failed
+    /// watcher would tell a healthy cold-start user to restart the app.
+    started: Arc<Mutex<bool>>,
 }
 
 impl FileWatcher {
@@ -141,6 +159,7 @@ impl FileWatcher {
             last_batch_time: Arc::new(Mutex::new(Instant::now())),
             callback: Arc::new(Mutex::new(None)),
             running: Arc::new(Mutex::new(false)),
+            started: Arc::new(Mutex::new(false)),
         }
     }
 
@@ -202,6 +221,7 @@ impl FileWatcher {
 
         self.watcher = Some(watcher);
         *running.lock() = true;
+        *self.started.lock() = true;
 
         // Spawn event processing thread
         std::thread::spawn(move || {
@@ -245,12 +265,41 @@ impl FileWatcher {
 
                 if let Some(changes) = changes_to_flush {
                     *last_batch_time.lock() = Instant::now();
-                    if let Some(ref cb) = *callback.lock() {
-                        cb(changes);
+                    // INV-003 ("never fails silently"). The callback chain runs
+                    // `ace::context::process_file_changes` -> ExtractorRegistry
+                    // -> the PDF/Office/archive extractors, i.e. arbitrary
+                    // parsing of arbitrary user files. A panic anywhere in
+                    // there unwinds straight out of `thread::spawn` and kills
+                    // this thread — silently, because `running` had no reader
+                    // and the only health surface counted `file_signals` rows,
+                    // which cannot tell a dead thread from an idle developer
+                    // for up to an hour.
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        if let Some(ref cb) = *callback.lock() {
+                            cb(changes);
+                        }
+                    }));
+                    if let Err(payload) = result {
+                        let detail = panic_message(payload.as_ref());
+                        tracing::error!(
+                            target: "ace::watcher",
+                            panic = %detail,
+                            "File-change callback panicked — watcher thread stopping; \
+                             file-derived context will go stale until restart"
+                        );
+                        break;
                     }
                 }
             }
 
+            // Cleared here rather than in the panic arm above so it covers EVERY
+            // exit from the loop. The `Disconnected` arm is the one that matters:
+            // if the notify backend drops its sender (OS handle closed, backend
+            // thread gone) the loop breaks with no panic at all, and clearing the
+            // flag only on the panic path would leave `is_running()` reporting
+            // true for a thread that has stopped — the same silently-dead watcher
+            // this guard exists to eliminate, reached by a different door.
+            *running.lock() = false;
             debug!(target: "ace::watcher", "Event processing thread stopped");
         });
 
@@ -334,6 +383,34 @@ impl FileWatcher {
     pub fn watched_paths(&self) -> Vec<PathBuf> {
         self.watched_paths.lock().iter().cloned().collect()
     }
+
+    /// Is the event-processing thread alive?
+    ///
+    /// `running` existed since the watcher was written but was private with no
+    /// reader, so nothing in the process could observe a dead watcher. It is
+    /// set true when the thread starts, and cleared by [`Self::stop`] OR by the
+    /// thread itself on every exit from its event loop. `false` therefore
+    /// means "not processing events", whether that was deliberate or not.
+    ///
+    /// Check [`Self::has_started`] before reading this as a fault: a watcher
+    /// that was constructed but never started also reports `false`.
+    pub fn is_running(&self) -> bool {
+        *self.running.lock()
+    }
+
+    /// Has the event thread ever been started? See the `started` field.
+    pub fn has_started(&self) -> bool {
+        *self.started.lock()
+    }
+}
+
+/// Best-effort text of a caught panic payload, for logging.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(std::string::ToString::to_string)
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "non-string panic payload".to_string())
 }
 
 impl Drop for FileWatcher {
@@ -478,6 +555,11 @@ fn extract_js_topics(content: &str, topics: &mut HashSet<String>) {
                 // strips quotes from BOTH ends — and stepping one byte past an
                 // ASCII match panics when the next char is multi-byte (curly
                 // quotes in copy-pasted code: `import x from 'pkg'`).
+                //
+                // SAFE: `from_idx` is the byte offset of the all-ASCII 6-byte
+                // needle `" from "`, so `from_idx + 6` is its end — a char
+                // boundary. That is precisely what the `+ 7` bug violated.
+                #[allow(clippy::string_slice)]
                 let module = &trimmed[from_idx + 6..];
                 let module = module.trim_matches(&['"', '\'', ';'][..]);
                 if !module.starts_with('.') && !module.starts_with('/') {
@@ -492,7 +574,12 @@ fn extract_js_topics(content: &str, topics: &mut HashSet<String>) {
         // require()
         if trimmed.contains("require(") {
             if let Some(start) = trimmed.find("require(") {
+                // SAFE: `start + 8` is the end of the all-ASCII 8-byte needle
+                // `"require("`, and `end` is the offset of an ASCII ')' found
+                // by `find` — both are char boundaries.
+                #[allow(clippy::string_slice)]
                 let rest = &trimmed[start + 8..];
+                #[allow(clippy::string_slice)]
                 if let Some(end) = rest.find(')') {
                     let module = rest[..end].trim_matches(&['"', '\''][..]);
                     if !module.starts_with('.') && !module.starts_with('/') {
@@ -1085,6 +1172,99 @@ impl ValidationError {
         assert!(topics.is_empty());
     }
 
+    /// INV-003 regression. `cb(changes)` ran unguarded inside the spawned
+    /// event thread. The chain behind it is `ace::context::process_file_changes`
+    /// -> `ExtractorRegistry` -> the PDF/Office/archive extractors, so a panic
+    /// on one malformed user file unwound out of `thread::spawn` and killed the
+    /// watcher. Nothing observed it: `running` was private with no reader, and
+    /// the health check counted `file_signals` rows.
+    ///
+    /// The thread must survive to record its own death: `is_running()` false.
+    #[test]
+    #[allow(clippy::panic)] // Deliberate: the panic IS the input under test.
+    fn callback_panic_is_caught_and_marks_the_watcher_not_running() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let mut watcher = FileWatcher::new(WatcherConfig {
+            debounce_ms: 0,
+            ..WatcherConfig::default()
+        });
+
+        let fired = Arc::new(AtomicBool::new(false));
+        let fired_cb = fired.clone();
+        watcher.set_callback(move |_changes| {
+            fired_cb.store(true, Ordering::SeqCst);
+            panic!("extractor blew up on a malformed file");
+        });
+
+        // Start the event thread, then queue a change for it to flush.
+        watcher
+            .start_watcher()
+            .expect("watcher thread should start");
+        assert!(watcher.is_running(), "thread is running once started");
+
+        watcher.pending_changes.lock().insert(
+            PathBuf::from("/tmp/whatever.rs"),
+            FileChange {
+                path: PathBuf::from("/tmp/whatever.rs"),
+                change_type: FileChangeType::Modified,
+            },
+        );
+
+        // Wait for the flush + panic to be observed.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline && watcher.is_running() {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        assert!(
+            fired.load(Ordering::SeqCst),
+            "the callback must actually have run"
+        );
+        assert!(
+            !watcher.is_running(),
+            "a panicking callback must mark the watcher dead, not vanish silently"
+        );
+    }
+
+    /// A callback that does NOT panic leaves the watcher running.
+    #[test]
+    fn healthy_callback_leaves_the_watcher_running() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let mut watcher = FileWatcher::new(WatcherConfig {
+            debounce_ms: 0,
+            ..WatcherConfig::default()
+        });
+
+        let count = Arc::new(AtomicUsize::new(0));
+        let count_cb = count.clone();
+        watcher.set_callback(move |changes| {
+            count_cb.fetch_add(changes.len(), Ordering::SeqCst);
+        });
+
+        watcher
+            .start_watcher()
+            .expect("watcher thread should start");
+        watcher.pending_changes.lock().insert(
+            PathBuf::from("/tmp/whatever.rs"),
+            FileChange {
+                path: PathBuf::from("/tmp/whatever.rs"),
+                change_type: FileChangeType::Modified,
+            },
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline && count.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        assert_eq!(count.load(Ordering::SeqCst), 1, "callback should have run");
+        assert!(watcher.is_running(), "no panic — watcher stays alive");
+        watcher.stop();
+        assert!(!watcher.is_running(), "stop() clears the flag too");
+    }
+
     #[test]
     fn test_watcher_config_defaults() {
         let config = WatcherConfig::default();
@@ -1092,5 +1272,52 @@ impl ValidationError {
         assert!(config.watched_extensions.contains("ts"));
         assert!(config.skip_dirs.contains("node_modules"));
         assert!(config.skip_dirs.contains("target"));
+    }
+}
+
+#[cfg(test)]
+mod liveness_tests {
+    use super::*;
+
+    /// The health check treats `Some(false)` as a hard failure that tells the
+    /// user to restart the app. A watcher that was never started must not
+    /// report that: `ACE::new` builds one eagerly, while `start_watching` runs
+    /// late and sometimes never (no context dirs, or every watch path missing).
+    #[test]
+    fn a_constructed_but_unstarted_watcher_is_not_reported_as_dead() {
+        let watcher = FileWatcher::new(WatcherConfig::default());
+        assert!(
+            !watcher.has_started(),
+            "a fresh watcher has not started its event thread"
+        );
+        assert!(
+            !watcher.is_running(),
+            "and is therefore not running — which on its own is indistinguishable from dead"
+        );
+        // has_started() is what lets the caller tell those two apart.
+    }
+
+    /// Every exit from the event loop must clear `running`, not just the panic
+    /// arm. The `Disconnected` arm breaks with no panic at all: if the notify
+    /// backend drops its sender, the thread stops while `is_running()` would
+    /// still report true — a silently dead watcher reached by a different door
+    /// than the one INV-003 was closed against.
+    #[test]
+    fn stop_clears_running_but_leaves_started_set() {
+        let mut watcher = FileWatcher::new(WatcherConfig::default());
+        // Simulate a started thread without depending on a real OS watcher,
+        // which is unavailable on a CI box with exhausted inotify capacity.
+        *watcher.running.lock() = true;
+        *watcher.started.lock() = true;
+        assert!(watcher.is_running());
+
+        watcher.stop();
+
+        assert!(!watcher.is_running(), "stop() clears running");
+        assert!(
+            watcher.has_started(),
+            "started is a latch: it records that liveness is a meaningful \
+             question for this watcher, so a stopped one still reports Some(false)"
+        );
     }
 }

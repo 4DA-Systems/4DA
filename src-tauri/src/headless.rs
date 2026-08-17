@@ -212,13 +212,36 @@ async fn run_drain_to_completion() -> i32 {
 /// writes. Never fails the cycle: a busy checkpoint means another process holds the file,
 /// which the next cycle retries — that is a worse outcome to report as a run failure than
 /// to log.
+///
+/// Records the run in `scheduler_state` on success. Without that the work happened but
+/// left no trace: `persist_run(DB_MAINTENANCE, ..)` was reachable only from the GUI
+/// monitoring loop (`monitoring.rs`), so on a headless-only machine the row stayed frozen
+/// at whenever a GUI last ran — measured 2026-08-17 at 50 hours stale with `run_count`
+/// unmoved, while the engine had in fact checkpointed on every cycle in between. That row
+/// is the signal the 2026-08-16 audit used to *detect* the missing headless maintenance in
+/// the first place, so leaving it unwritten turns the fix into a permanent false negative
+/// for the next person who checks.
+///
+/// Recorded AFTER the work rather than before it (the GUI path stamps first, then runs):
+/// a timestamp is a claim that maintenance ran, and it should only be written when it did.
 fn run_cycle_maintenance() {
     match crate::get_database() {
-        Ok(db) => {
-            if let Err(e) = db.run_scheduled_maintenance() {
+        Ok(db) => match db.run_scheduled_maintenance() {
+            Ok(()) => {
+                // An unreadable clock skips the write rather than defaulting to 0 —
+                // a zero timestamp reads as "never ran", which is the same lie in the
+                // other direction. Losing one stamp is recoverable; a false one is not.
+                if let Ok(d) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                    crate::scheduler_state::persist_run(
+                        crate::scheduler_state::jobs::DB_MAINTENANCE,
+                        d.as_secs(),
+                    );
+                }
+            }
+            Err(e) => {
                 warn!(target: "4da::headless", error = %e, "Post-cycle DB maintenance failed");
             }
-        }
+        },
         Err(e) => {
             warn!(target: "4da::headless", error = %e, "Post-cycle DB maintenance could not access database");
         }
