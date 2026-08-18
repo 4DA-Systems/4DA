@@ -154,7 +154,7 @@ x509-cert = { version = "0.3.0-pre", optional = true }
 
 # Team sync — E2E encrypted metadata relay (AD-023)
 chacha20poly1305 = "0.11"
-x25519-dalek = { version = "2", features = ["static_secrets"] }
+x25519-dalek = { version = "3", features = ["static_secrets"] }
 hkdf = "0.13"
 uuid = { version = "1", features = ["v4", "serde"] }
 rand = "0.8"
