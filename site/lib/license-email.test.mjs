@@ -252,7 +252,26 @@ test('the layout is table-based, not a styled body div', async () => {
     assert.ok(html.includes('role="presentation"'), 'uses presentation tables');
     assert.ok(!/<body[^>]*max-width/.test(html), 'no max-width on body — Outlook drops it');
     assert.ok(/<meta name="color-scheme" content="light">/.test(html), 'opts out of dark-mode auto-inversion');
-    assert.ok(!html.includes('<img'), 'branding is text, not a blocked remote image');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('the sun mark is additive — branding never depends on a blocked image', async () => {
+  // Most clients block remote images by default. The 4-sun may enhance the
+  // header, but the brand must survive without it: text wordmark always present,
+  // alt="" + fixed dimensions so a blocked image is a clean gap (not a broken
+  // icon with stray alt text), and NEVER a data: URI — Gmail strips those.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', null, 'purchase');
+    const { html } = f.calls[0].body;
+    assert.match(html, />4DA<\/td>/, 'the wordmark is text, in its own cell');
+    const img = html.match(/<img[^>]*>/);
+    assert.ok(img, 'the sun mark is present');
+    assert.ok(img[0].includes('src="https://4da.ai/email-sun.jpg"'), 'hosted asset, absolute URL');
+    assert.ok(img[0].includes('alt=""'), 'decorative: no stray alt text when blocked');
+    assert.match(img[0], /width="\d+" height="\d+"/, 'fixed box so a blocked image cannot reflow the header');
+    assert.ok(!html.includes('data:image'), 'no data: URI — Gmail strips them');
   } finally { f.restore(); c.restore(); }
 });
 

@@ -15,6 +15,12 @@
 // as an empty box on first open -- the worst possible first impression for a
 // paid product. A text wordmark always renders, in every client, offline.
 //
+// The 4-sun mark is therefore ADDITIVE, never load-bearing: alt="" and fixed
+// dimensions mean a blocked image leaves a clean 46px gap while the text
+// wordmark still carries the brand. It is referenced by absolute URL because
+// Gmail strips data: URIs; the asset ships with the site (email-sun.jpg — the
+// white-tee sun-on-white cutout, so no black box sits on the white header).
+//
 // WHY THE PREHEADER MATTERS MORE THAN IT LOOKS
 // --------------------------------------------
 // Without one, the client fills the inbox preview line from the top of the body.
@@ -36,9 +42,14 @@ const BRAND = {
   white: '#FFFFFF',
 };
 
+// Brand fonts first (render where installed), system stacks as the graceful
+// fallback — email clients do not load webfonts.
 const FONT_STACK =
-  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-const MONO_STACK = "'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace";
+  "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+const MONO_STACK =
+  "'JetBrains Mono', 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace";
+
+const SUN_URL = 'https://4da.ai/email-sun.jpg';
 
 /** Zero-width padding so body text cannot bleed into the preview line. */
 const PREHEADER_PAD = '&#847;&zwnj;&nbsp;&#8203;'.repeat(30);
@@ -62,12 +73,13 @@ export function emailButton(href, label) {
               </table>`;
 }
 
-/** The monospace panel the licence key sits in. */
+/** The monospace panel the licence key sits in. The 3px gold spine is the
+ *  accent that marks the key as THE artifact of the email. */
 export function keyPanel(escapedKey) {
   return `
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td bgcolor="${BRAND.panel}" style="border: 1px solid ${BRAND.hair}; border-radius: 8px; padding: 18px 20px; font-family: ${MONO_STACK}; font-size: 13px; line-height: 1.7; color: ${BRAND.ink}; word-break: break-all;">${escapedKey}</td>
+                  <td bgcolor="${BRAND.panel}" style="background-color: ${BRAND.panel}; border: 1px solid ${BRAND.hair}; border-left: 3px solid ${BRAND.gold}; border-radius: 0 8px 8px 0; padding: 18px 20px; font-family: ${MONO_STACK}; font-size: 13px; line-height: 1.7; color: ${BRAND.ink}; word-break: break-all;">${escapedKey}</td>
                 </tr>
               </table>`;
 }
@@ -102,18 +114,23 @@ export function renderShell({ title, preheader, badge, contentHtml, footerHtml }
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width: 100%; max-width: 600px; border-collapse: separate;">
 
           <tr>
-            <td bgcolor="${BRAND.black}" style="background-color: ${BRAND.black}; padding: 22px 32px; border-radius: 10px 10px 0 0;">
+            <td bgcolor="${BRAND.gold}" style="background-color: ${BRAND.gold}; height: 3px; line-height: 3px; font-size: 0; border-radius: 10px 10px 0 0;">&nbsp;</td>
+          </tr>
+
+          <tr>
+            <td bgcolor="${BRAND.white}" style="background-color: ${BRAND.white}; padding: 18px 32px; border-left: 1px solid ${BRAND.hair}; border-right: 1px solid ${BRAND.hair}; border-bottom: 1px solid ${BRAND.hair};">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td align="left" style="font-family: ${FONT_STACK}; font-size: 19px; font-weight: 700; letter-spacing: 0.14em; color: ${BRAND.gold};">4DA</td>
-                  <td align="right" style="font-family: ${FONT_STACK}; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: #7A7A7A;">${badge}</td>
+                  <td width="46" style="width: 46px;"><img src="${SUN_URL}" alt="" width="46" height="46" style="display: block; border: 0;"></td>
+                  <td style="padding-left: 12px; font-family: ${FONT_STACK}; font-size: 17px; font-weight: 700; letter-spacing: 0.14em; color: ${BRAND.black}; vertical-align: middle;">4DA</td>
+                  <td align="right" style="font-family: ${FONT_STACK}; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: ${BRAND.faint}; vertical-align: middle;">${badge}</td>
                 </tr>
               </table>
             </td>
           </tr>
 
           <tr>
-            <td bgcolor="${BRAND.white}" style="background-color: ${BRAND.white}; padding: 34px 32px 30px; border-left: 1px solid ${BRAND.hair}; border-right: 1px solid ${BRAND.hair};">
+            <td bgcolor="${BRAND.white}" style="background-color: ${BRAND.white}; padding: 30px 32px; border-left: 1px solid ${BRAND.hair}; border-right: 1px solid ${BRAND.hair};">
 ${contentHtml}
             </td>
           </tr>
