@@ -72,9 +72,20 @@ fn acquire_instance_and_detect_crash_loop() {
             // and this lock rejects it before tauri_plugin_single_instance
             // (whose argv forwarding runs much later) ever initializes. Hand
             // the URL to the primary via the relay file so the click still
-            // works — the primary polls for it (see setup_app) and feeds it
-            // through the same validated deep-link path.
-            if let Some(url) = std::env::args().find(|a| crate::utils::validate_deep_link_url(a)) {
+            // works — the primary polls for it (see setup_app) and VALIDATES
+            // on receipt.
+            //
+            // Deliberately a cheap prefix check, NOT validate_deep_link_url:
+            // the validator's rejection path writes a security event via
+            // get_database(), and running it here made the REJECTED second
+            // instance initialize the shared database (observed live
+            // 2026-08-19, complete with a bogus "rejected deep-link" security
+            // event for argv[0], the exe path) — the exact WAL hazard this
+            // lock exists to prevent. skip(1) keeps argv[0] out entirely.
+            if let Some(url) = std::env::args()
+                .skip(1)
+                .find(|a| a.starts_with("fourda://"))
+            {
                 match crate::single_instance::write_deeplink_relay(&dir, &url) {
                     Ok(()) => {
                         info!(target: "4da::deeplink", running_pid = pid,
@@ -751,6 +762,29 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         let _ = app_handle_analyze.emit("start-analysis-from-tray", ());
     });
 
+    // Deliver a validated deep-link URL to the frontend, surviving a DESTROYED
+    // main window. Observed live 2026-08-19: the main window can die without
+    // any CloseRequested (no hide-to-tray log, no app-side destroy caller —
+    // suspected WebView2-level death; see the Destroyed forensic log in
+    // handle_run_event). An emit into a windowless app goes nowhere and the
+    // click "does nothing". So: window present → front it and emit; window
+    // absent → PARK the URL (the cold-start mechanism) and recreate the main
+    // window from its config — the fresh frontend collects the parked URL on
+    // mount via take_pending_deep_link.
+    fn deliver_deep_link(handle: &tauri::AppHandle, url: String) {
+        if let Some(window) = handle.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.set_focus();
+            let _ = handle.emit("deep-link-activate", url);
+        } else {
+            info!(target: "4da::deeplink", "Main window missing — parking deep-link and recreating window");
+            crate::settings_commands::set_pending_deep_link(url);
+            if ensure_main_window(handle).is_none() {
+                error!(target: "4da::deeplink", "Could not recreate main window for deep-link delivery");
+            }
+        }
+    }
+
     // Re-register the fourda:// protocol handler on every launch (Windows/Linux
     // write it to the user registry / .desktop entries at runtime; macOS is
     // Info.plist-only and register_all is a no-op there). Without this, only an
@@ -802,7 +836,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 for url in url_list {
                     if crate::utils::validate_deep_link_url(&url) {
                         info!(target: "4da::deeplink", url = %url, "Deep-link received");
-                        let _ = deep_link_handle.emit("deep-link-activate", url);
+                        deliver_deep_link(&deep_link_handle, url);
                     } else {
                         warn!(target: "4da::security", url = %url, "Rejected invalid deep-link URL");
                         if let Ok(db) = crate::get_database() {
@@ -834,13 +868,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                         if crate::utils::validate_deep_link_url(&url) {
                             info!(target: "4da::deeplink", url = %url, "Deep-link received via relay");
                             // The user clicked a button expecting the app to
-                            // answer — bring it to the front like the plugin's
-                            // own second-instance callback would have.
-                            if let Some(window) = relay_handle.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                            let _ = relay_handle.emit("deep-link-activate", url);
+                            // answer — front the window (recreating it if it
+                            // was destroyed) and deliver.
+                            deliver_deep_link(&relay_handle, url);
                         } else {
                             warn!(target: "4da::security", url = %url, "Rejected invalid relayed deep-link");
                             if let Ok(db) = crate::get_database() {
@@ -1909,8 +1939,57 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
+/// Return the main window, RECREATING it from config if it was destroyed.
+///
+/// The main window is built once from tauri.conf.json at startup and nothing
+/// in the app recreates it — so any destruction (observed live 2026-08-19,
+/// killer untraced: no CloseRequested fired, no app-side destroy caller)
+/// permanently stranded deep links and the tray's "Show 4DA" until an app
+/// restart. Recreating from the same config re-runs the normal frontend boot,
+/// so pending deep links are collected on mount exactly like a cold start.
+pub(crate) fn ensure_main_window<R: tauri::Runtime>(
+    handle: &tauri::AppHandle<R>,
+) -> Option<tauri::WebviewWindow<R>> {
+    if let Some(window) = handle.get_webview_window("main") {
+        return Some(window);
+    }
+    let config = handle
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "main")
+        .cloned()?;
+    match tauri::WebviewWindowBuilder::from_config(handle, &config).and_then(|b| b.build()) {
+        Ok(window) => {
+            warn!(target: "4da::window", "Main window was destroyed — recreated from config");
+            // The config may leave the window hidden until frontend-ready; a
+            // user-triggered recreation must be visible immediately.
+            let _ = window.show();
+            let _ = window.set_focus();
+            Some(window)
+        }
+        Err(e) => {
+            error!(target: "4da::window", error = %e, "Failed to recreate main window");
+            None
+        }
+    }
+}
+
 /// Handle the `.run()` event callback for hide-to-tray and shutdown cleanup.
 pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunEvent) {
+    // Forensics: the main window has died with no CloseRequested and no
+    // app-side destroy caller (2026-08-19). Log every window destruction so
+    // the next occurrence names its moment instead of vanishing silently.
+    if let tauri::RunEvent::WindowEvent {
+        label,
+        event: tauri::WindowEvent::Destroyed,
+        ..
+    } = &event
+    {
+        warn!(target: "4da::window", label = %label, "Window destroyed");
+    }
+
     // Hide-to-tray: intercept window close when enabled
     if let tauri::RunEvent::WindowEvent {
         event: tauri::WindowEvent::CloseRequested { api, .. },
