@@ -42,6 +42,7 @@
 // `meta` resolves the signal_*/streets_* namespace. entitlement.js imports
 // nothing, so this stays a one-way dependency with no cycle.
 import { meta } from './entitlement.js';
+import { renderShell, emailButton, keyPanel, BRAND, FONT_STACK } from './email-shell.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
@@ -81,10 +82,23 @@ export function isPlausibleEmail(value) {
 // warning on the happiest moment of the funnel, and a recovery mail that omits
 // the "wasn't you?" line loses the only signal that someone probed the address.
 const ENTITY_HTML = `
-  <p style="color: #999; font-size: 12px; margin-top: 16px;">
-    4DA Systems Pty Ltd &middot; ACN 696 078 841
-  </p>`;
-const ENTITY_TEXT = '— 4DA Systems Pty Ltd (ACN 696 078 841)';
+                <p style="margin: 14px 0 0; font-family: ${FONT_STACK}; font-size: 12px; line-height: 1.6; color: ${BRAND.faint};">
+                  4DA Systems Pty Ltd &middot; ACN 696 078 841<br>
+                  Questions? Just reply to this email &mdash; it reaches a person.
+                </p>`;
+const ENTITY_TEXT = [
+  '— 4DA Systems Pty Ltd (ACN 696 078 841)',
+  'Questions? Just reply to this email — it reaches a person.',
+].join('\n');
+
+// The inbox preview line. Without one the client fills it from the top of the
+// body, which for the licence email meant displaying the raw base64 KEY in the
+// preview, on lock screens and in notification banners. Never put the key here.
+const PREHEADER = {
+  recovery: 'Your 4DA Signal licence key is inside, as you requested.',
+  purchase: 'Your 4DA Signal licence key is inside. Keep this email — it is your permanent copy.',
+  renewal: 'Your renewed 4DA Signal licence key is inside. It replaces your previous key.',
+};
 
 const REASON_HTML = {
   recovery: `You are receiving this because someone asked 4DA to recover the licence for this
@@ -114,11 +128,10 @@ const REASON_TEXT = {
 };
 
 function footerHtml(context) {
-  return `
-  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;">
-  <p style="color: #666; font-size: 13px;">
-    ${REASON_HTML[context] || REASON_HTML.recovery}
-  </p>${ENTITY_HTML}`;
+  // The shell draws the divider now, so this is content only.
+  return `                <p style="margin: 0; font-family: ${FONT_STACK}; font-size: 13px; line-height: 1.65; color: ${BRAND.muted};">
+                  ${REASON_HTML[context] || REASON_HTML.recovery}
+                </p>${ENTITY_HTML}`;
 }
 
 const SUBJECT = {
@@ -173,25 +186,25 @@ function buildLicenseEmail(licenseKey, tier, expiresAt, context = 'recovery') {
   const activateUrl = buildActivateUrl(licenseKey);
   const expiryLine = formatExpiry(expiresAt);
 
-  const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Your 4DA licence key</title></head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 40px auto; color: #1a1a1a; line-height: 1.55;">
-  <h1 style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">${escapeHtml(SUBJECT[context] || SUBJECT.recovery)}</h1>
-  <p style="color: #555; margin-top: 0;">Tier: <strong>${escapeHtml(tier || 'signal')}</strong>${
-    expiryLine ? ` &middot; ${escapeHtml(expiryLine)}` : ''
-  }</p>
-  <div style="background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 8px; padding: 20px; margin: 24px 0; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; word-break: break-all;">
-    ${escapeHtml(licenseKey)}
-  </div>
-  <p style="margin-bottom: 24px;">
-    <a href="${escapeHtml(activateUrl)}" style="display: inline-block; background: #D4AF37; color: #0A0A0A; padding: 12px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">Activate in 4DA</a>
-  </p>
-  <p style="color: #666; font-size: 13px;">
-    If the button doesn't work, open 4DA, go to <strong>Settings &rarr; License</strong>, and paste the key.
-  </p>${footerHtml(context)}
-</body>
-</html>`;
+  const heading = escapeHtml(SUBJECT[context] || SUBJECT.recovery);
+  const content = `              <h1 style="margin: 0 0 6px; font-family: ${FONT_STACK}; font-size: 22px; line-height: 1.3; font-weight: 600; color: ${BRAND.ink};">${heading}</h1>
+              <p style="margin: 0 0 22px; font-family: ${FONT_STACK}; font-size: 14px; line-height: 1.5; color: ${BRAND.muted};">Tier: <strong style="color: ${BRAND.ink};">${escapeHtml(tier || 'signal')}</strong>${
+                expiryLine ? ` &middot; ${escapeHtml(expiryLine)}` : ''
+              }</p>
+${keyPanel(escapeHtml(licenseKey))}
+              <div style="height: 26px; line-height: 26px; font-size: 0;">&nbsp;</div>
+${emailButton(escapeHtml(activateUrl), 'Activate in 4DA')}
+              <p style="margin: 22px 0 0; font-family: ${FONT_STACK}; font-size: 13px; line-height: 1.65; color: ${BRAND.muted};">
+                Not working? Open 4DA and paste the key into <strong style="color: ${BRAND.ink};">Settings &rarr; License</strong>.
+              </p>`;
+
+  const html = renderShell({
+    title: heading,
+    preheader: escapeHtml(PREHEADER[context] || PREHEADER.recovery),
+    badge: context === 'renewal' ? 'Subscription renewed' : 'Signal licence',
+    contentHtml: content,
+    footerHtml: footerHtml(context),
+  });
 
   const text = [
     SUBJECT[context] || SUBJECT.recovery,
@@ -217,17 +230,17 @@ function buildExpiredEmail(expiredAt) {
   // Same Date-or-string tolerance as formatExpiry, for the same reason.
   const formatted = formatExpiry(expiredAt);
   const when = formatted ? formatted.replace('Valid until: ', '') : 'recently';
-  const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Your 4DA licence has expired</title></head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 40px auto; color: #1a1a1a; line-height: 1.55;">
-  <h1 style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">Your 4DA licence has expired</h1>
-  <p style="color: #555;">The licence on this address expired on <strong>${escapeHtml(when)}</strong>, so there is no active key to send.</p>
-  <p style="margin: 24px 0;">
-    <a href="https://4da.ai/signal" style="display: inline-block; background: #D4AF37; color: #0A0A0A; padding: 12px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">Renew Signal</a>
-  </p>${footerHtml('recovery')}
-</body>
-</html>`;
+  const content = `              <h1 style="margin: 0 0 6px; font-family: ${FONT_STACK}; font-size: 22px; line-height: 1.3; font-weight: 600; color: ${BRAND.ink};">Your 4DA licence has expired</h1>
+              <p style="margin: 0 0 24px; font-family: ${FONT_STACK}; font-size: 14px; line-height: 1.6; color: ${BRAND.muted};">The licence on this address expired on <strong style="color: ${BRAND.ink};">${escapeHtml(when)}</strong>, so there is no active key to send.</p>
+${emailButton('https://4da.ai/signal', 'Renew Signal')}`;
+
+  const html = renderShell({
+    title: 'Your 4DA licence has expired',
+    preheader: 'Your 4DA Signal licence has expired, so there is no active key to send.',
+    badge: 'Licence expired',
+    contentHtml: content,
+    footerHtml: footerHtml('recovery'),
+  });
 
   const text = [
     'Your 4DA licence has expired',
