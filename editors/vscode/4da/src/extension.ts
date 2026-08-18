@@ -62,7 +62,7 @@ export async function activate(context: vscode.ExtensionContext) {
             diagnostics.refresh();
         }),
         vscode.commands.registerCommand('4da.openApp', () => {
-            vscode.env.openExternal(vscode.Uri.parse('4da://open'));
+            vscode.env.openExternal(vscode.Uri.parse('fourda://open'));
         })
     );
 

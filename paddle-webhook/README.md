@@ -111,7 +111,7 @@ curl -i https://your-deployment.vercel.app/api/paddle
 2. Use Paddle's test card `4242 4242 4242 4242` in Sandbox checkout, or a real card with $0.01 SKU in Live for a true dry run.
 3. Complete checkout.
 4. Confirm in Vercel logs: you should see `License created: <key>` and `License emailed to <email>` in under 10 seconds.
-5. Check the inbox — the email should contain the key and a one-click **Activate in 4DA** button (deep-links to `4da://activate?key=...`).
+5. Check the inbox — the email should contain the key and a one-click **Activate in 4DA** button (links the https bridge `https://4da.ai/activate#key=...`, which performs the `fourda://` handoff).
 6. In 4DA: **Settings → License** → paste the key → verify tier flips to **Signal**.
 
 ### Paddle retry test

@@ -306,7 +306,7 @@ webview layer; the full backend inventory is the tables above.)
 
 ## Deep link protocol
 
-- **Scheme:** `4da://` — inbound only, lets external apps open 4DA to a specific view. No outbound
+- **Scheme:** `fourda://` — inbound only, lets external apps open 4DA to a specific view. No outbound
   network calls.
 
 ---

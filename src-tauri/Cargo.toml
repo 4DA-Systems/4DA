@@ -21,7 +21,11 @@ tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-updater = "2"
-tauri-plugin-single-instance = "2"
+# The deep-link feature forwards a second instance's argv (the fourda:// URL
+# Windows hands to a NEW process when the app is already running) into the
+# deep-link plugin's `deep-link://new-url` event. Without it, deep links only
+# worked when the app was closed.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ts-rs = { version = "12", features = ["serde-compat"] }

@@ -416,6 +416,7 @@ interface CommandMap {
   activate_license: { params: { licenseKey: string }; result: { success: boolean; tier: string; expires_at?: string } };
   validate_license: { params: Record<string, never>; result: { validated: boolean; tier: string; cached?: boolean; detail: string } };
   recover_license_by_email: { params: { email: string }; result: { success: boolean; license_key?: string; tier?: string; expires_at?: string; status?: string; reason?: string; detail?: string } };
+  take_pending_deep_link: { params: Record<string, never>; result: string | null };
   get_trial_status: { params: Record<string, never>; result: { active: boolean; days_remaining: number; started_at: string | null } };
   start_trial: { params: Record<string, never>; result: { success: boolean; days_remaining?: number } };
 

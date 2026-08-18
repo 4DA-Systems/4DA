@@ -20,7 +20,7 @@ interface AppListenersConfig {
 
 /**
  * App-level event listeners extracted from App.tsx:
- * - Deep-link license activation (4da://activate?key=...)
+ * - Deep-link license activation (fourda://activate?key=...)
  * - Embedding status changes (degraded/unavailable toasts)
  * - Framework/Comparison page triggers (from AboutPanel)
  * - Mount-only cached result loader / auto-analysis trigger
@@ -35,11 +35,20 @@ export function useAppListeners({
 }: AppListenersConfig) {
   const activateLicense = useAppStore(s => s.activateLicense);
 
-  // Deep-link handler: 4da://activate?key=...
+  // Deep-link handler: fourda://activate?key=... (`4da` is retired: a URL
+  // scheme must start with a letter, so browsers never launched it — and
+  // `new URL('4da://...')` below would have thrown on it too.)
+  //
+  // Two arrival paths, same handler:
+  //  - app already running: Windows starts a second instance with the URL in
+  //    argv; the single-instance plugin (deep-link feature) forwards it into
+  //    `deep-link://new-url`, app_setup validates and re-emits `deep-link-activate`.
+  //  - app launched BY the link: the URL exists before any listener attaches,
+  //    so app_setup parks it and take_pending_deep_link collects it on mount.
   useEffect(() => {
-    const unlisten = safeListen<string>('deep-link-activate', (event) => { void (async () => {
+    const handleDeepLink = async (payload: string) => {
       try {
-        const url = new URL(event.payload);
+        const url = new URL(payload);
         if (url.hostname === 'activate' || url.pathname === '/activate') {
           const key = url.searchParams.get('key');
           if (key) {
@@ -54,7 +63,23 @@ export function useAppListeners({
       } catch {
         // Ignore malformed URLs
       }
-    })(); });
+    };
+
+    const unlisten = safeListen<string>('deep-link-activate', (event) => {
+      void handleDeepLink(event.payload);
+    });
+
+    void (async () => {
+      if (useAppStore.getState().isBrowserMode) return; // no IPC in plain-browser mode
+      try {
+        const pending = await cmd('take_pending_deep_link');
+        if (pending) await handleDeepLink(pending);
+      } catch {
+        // Command unavailable (e.g. stale backend) — cold-start links can
+        // still be pasted manually; never block mount on this.
+      }
+    })();
+
     return () => { void unlisten.then(fn => fn()); };
   }, [activateLicense, addToast]);
 
