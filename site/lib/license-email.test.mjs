@@ -221,6 +221,94 @@ test('a key with URL-hostile characters survives the round trip', async () => {
   } finally { f.restore(); c.restore(); }
 });
 
+test('the preheader claims the preview line and NEVER contains the key', async () => {
+  // The defect, seen in a real inbox: with no preheader the client fills the
+  // preview line from the top of the body, so Gmail displayed the raw base64
+  // licence key in the message list -- and therefore on lock screens and in
+  // notification banners too. Unprofessional, and a small privacy leak.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', null, 'purchase');
+    const { html } = f.calls[0].body;
+    const preheader = html.match(/mso-hide: all;">([^<]*)</);
+    assert.ok(preheader, 'a hidden preheader block exists');
+    assert.match(preheader[1], /licence key is inside/i, 'it says something purposeful');
+    assert.ok(!preheader[1].includes(KEY), 'and it must NEVER carry the key');
+    // The key must not appear before the preheader either, or it wins the preview.
+    assert.ok(html.indexOf('mso-hide') < html.indexOf(KEY), 'preheader precedes the key');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('the layout is table-based, not a styled body div', async () => {
+  // Outlook on Windows renders through Word: it ignores max-width and most
+  // margins on <body>, so the first version arrived full-bleed and ragged for
+  // precisely the desktop business audience most likely to buy a dev tool.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', null, 'purchase');
+    const { html } = f.calls[0].body;
+    assert.ok(html.includes('role="presentation"'), 'uses presentation tables');
+    assert.ok(!/<body[^>]*max-width/.test(html), 'no max-width on body — Outlook drops it');
+    assert.ok(/<meta name="color-scheme" content="light">/.test(html), 'opts out of dark-mode auto-inversion');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('the sun mark is additive — branding never depends on a blocked image', async () => {
+  // Most clients block remote images by default. The 4-sun may enhance the
+  // header, but the brand must survive without it: text wordmark always present,
+  // alt="" + fixed dimensions so a blocked image is a clean gap (not a broken
+  // icon with stray alt text), and NEVER a data: URI — Gmail strips those.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', null, 'purchase');
+    const { html } = f.calls[0].body;
+    assert.match(html, />4DA<\/td>/, 'the wordmark is text, in its own cell');
+    const img = html.match(/<img[^>]*>/);
+    assert.ok(img, 'the sun mark is present');
+    assert.ok(img[0].includes('src="https://4da.ai/email-sun.jpg"'), 'hosted asset, absolute URL');
+    assert.ok(img[0].includes('alt=""'), 'decorative: no stray alt text when blocked');
+    assert.match(img[0], /width="\d+" height="\d+"/, 'fixed box so a blocked image cannot reflow the header');
+    assert.ok(!html.includes('data:image'), 'no data: URI — Gmail strips them');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('the button colour sits on a td so Outlook still renders a button', async () => {
+  // A padded <a> collapses to bare underlined text in Word-rendered Outlook.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', null, 'purchase');
+    const { html } = f.calls[0].body;
+    assert.match(html, /<td[^>]*bgcolor="#D4AF37"/, 'the gold sits on a table cell');
+    assert.ok(html.includes('Activate in 4DA'), 'and the label is present');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('a renewal is badged differently from a first purchase', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'b@e.co', KEY, 'signal', null, 'purchase');
+    await deliverLicenseEmail(CONFIGURED, 'b@e.co', KEY, 'signal', null, 'renewal');
+    assert.match(f.calls[0].body.html, /Signal licence<\/td>/, 'purchase badge');
+    assert.match(f.calls[1].body.html, /Subscription renewed<\/td>/, 'renewal badge');
+    assert.match(f.calls[1].body.html, /replaces your previous key/, 'renewal preheader says so');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('every email offers a human reply path', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'b@e.co', KEY, 'signal', null, 'purchase');
+    assert.match(f.calls[0].body.html, /reply to this email/i);
+    assert.match(f.calls[0].body.text, /reply to this email/i);
+  } finally { f.restore(); c.restore(); }
+});
+
 test('isRecoveryEmailConfigured requires BOTH variables', () => {
   assert.equal(isRecoveryEmailConfigured(CONFIGURED), true);
   assert.equal(isRecoveryEmailConfigured({ RESEND_API_KEY: 'k' }), false);
