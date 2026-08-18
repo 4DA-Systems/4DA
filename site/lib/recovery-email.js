@@ -1,4 +1,18 @@
-// Licence-recovery email delivery for Cloudflare Pages Functions (Resend).
+// Licence email delivery for Cloudflare Pages Functions (Resend).
+//
+// TWO jobs, deliberately in one module so they share one Resend client, one
+// template and one provisioning check:
+//
+//   1. DELIVERY at purchase/renewal  — `deliverLicenseEmail`
+//   2. RECOVERY on request           — `deliverRecoveryEmail`
+//
+// (1) exists because for a while the ONLY way a buyer ever received their key
+// was the success page rendering it. `handleCheckoutCompleted` minted the key
+// into Stripe metadata and emailed nothing, so a buyer who closed the tab inside
+// the webhook window — the page retries 4 times over ~8s — had no key and no
+// working self-serve route, since (2) was unprovisioned and answered 503. One
+// page load was the entire delivery mechanism for a paid product. Emailing at
+// purchase makes the key durable and demotes recovery to a genuine fallback.
 //
 // WHY THIS MODULE EXISTS — security fix, 2026-08-14
 // -------------------------------------------------
@@ -25,12 +39,20 @@
 //   RESEND_API_KEY    — Resend API key (same provider paddle-webhook/ already uses)
 //   RESEND_FROM_EMAIL — e.g. "4DA <licenses@4da.ai>"; domain must be verified in Resend
 
+// `meta` resolves the signal_*/streets_* namespace. entitlement.js imports
+// nothing, so this stays a one-way dependency with no cycle.
+import { meta } from './entitlement.js';
+
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 /**
- * True when outbound recovery mail is provisioned. When false the caller MUST
- * fail the email path honestly (tell the user to contact support) rather than
- * fall back to returning the key — returning the key is the vulnerability.
+ * True when outbound licence mail is provisioned. When false the RECOVERY path
+ * MUST fail honestly (tell the user to contact support) rather than fall back to
+ * returning the key — returning the key is the vulnerability this replaced.
+ *
+ * The DELIVERY path treats it differently: an unprovisioned mailer must never
+ * fail a paid webhook, so delivery logs loudly and the success page remains the
+ * fallback. See `deliverLicenseEmail`.
  */
 export function isRecoveryEmailConfigured(env) {
   return Boolean(env?.RESEND_API_KEY && env?.RESEND_FROM_EMAIL);
@@ -54,34 +76,108 @@ export function isPlausibleEmail(value) {
 // Message bodies
 // ---------------------------------------------------------------------------
 
-const FOOTER_HTML = `
-  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;">
-  <p style="color: #666; font-size: 13px;">
-    You are receiving this because someone asked 4DA to recover the licence for this
-    address. If that wasn't you, no action is needed — nothing about your account changed.
-  </p>
+// The footer has to match WHY the mail arrived. A purchase confirmation that
+// says "someone asked to recover your licence" reads as an account-compromise
+// warning on the happiest moment of the funnel, and a recovery mail that omits
+// the "wasn't you?" line loses the only signal that someone probed the address.
+const ENTITY_HTML = `
   <p style="color: #999; font-size: 12px; margin-top: 16px;">
     4DA Systems Pty Ltd &middot; ACN 696 078 841
   </p>`;
+const ENTITY_TEXT = '— 4DA Systems Pty Ltd (ACN 696 078 841)';
 
-const FOOTER_TEXT = [
-  '',
-  'You are receiving this because someone asked 4DA to recover the licence for',
-  "this address. If that wasn't you, no action is needed — nothing about your",
-  'account changed.',
-  '',
-  '— 4DA Systems Pty Ltd (ACN 696 078 841)',
-].join('\n');
+const REASON_HTML = {
+  recovery: `You are receiving this because someone asked 4DA to recover the licence for this
+    address. If that wasn't you, no action is needed — nothing about your account changed.`,
+  purchase: `You are receiving this because you purchased 4DA Signal. Keep this email — it is
+    your own copy of the key, so you never depend on the browser tab you bought in.`,
+  renewal: `You are receiving this because your 4DA Signal subscription renewed. The key above
+    replaces the previous one; the old key stops working at its original expiry.`,
+};
 
-function buildLicenseEmail(licenseKey, tier, expiresAt) {
-  const activateUrl = `4da://activate?key=${encodeURIComponent(licenseKey)}`;
-  const expiryLine = expiresAt ? `Valid until: ${expiresAt.slice(0, 10)}` : '';
+const REASON_TEXT = {
+  recovery: [
+    'You are receiving this because someone asked 4DA to recover the licence for',
+    "this address. If that wasn't you, no action is needed — nothing about your",
+    'account changed.',
+  ],
+  purchase: [
+    'You are receiving this because you purchased 4DA Signal. Keep this email —',
+    'it is your own copy of the key, so you never depend on the browser tab you',
+    'bought in.',
+  ],
+  renewal: [
+    'You are receiving this because your 4DA Signal subscription renewed. The key',
+    'above replaces the previous one; the old key stops working at its original',
+    'expiry.',
+  ],
+};
+
+function footerHtml(context) {
+  return `
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;">
+  <p style="color: #666; font-size: 13px;">
+    ${REASON_HTML[context] || REASON_HTML.recovery}
+  </p>${ENTITY_HTML}`;
+}
+
+const SUBJECT = {
+  recovery: 'Your 4DA licence key',
+  purchase: 'Your 4DA Signal licence key',
+  renewal: 'Your renewed 4DA Signal licence key',
+};
+
+function footerText(context) {
+  return ['', ...(REASON_TEXT[context] || REASON_TEXT.recovery), '', ENTITY_TEXT].join('\n');
+}
+
+/**
+ * Render `expiresAt` as YYYY-MM-DD, accepting a Date OR an ISO string.
+ *
+ * The two callers genuinely differ: the webhook path holds a `Date`
+ * (`generateAndStoreLicense` returns `new Date(...)`), while the recovery path
+ * reads an ISO string out of Stripe metadata. `.slice()` on a Date throws, and
+ * `deliverLicenseEmail`'s no-throw contract would swallow that into
+ * "return 'error'" — i.e. a silently unsent licence email, which is the exact
+ * failure class this module was written to end. Normalising here removes the
+ * trap instead of relying on every caller to remember to convert.
+ */
+function formatExpiry(expiresAt) {
+  if (!expiresAt) return '';
+  const iso = typeof expiresAt === 'string' ? expiresAt : expiresAt?.toISOString?.();
+  if (typeof iso !== 'string' || iso.length < 10) return '';
+  return `Valid until: ${iso.slice(0, 10)}`;
+}
+
+/**
+ * Where the "Activate in 4DA" button points.
+ *
+ * NOT `4da://activate?key=...`. Gmail strips custom-scheme hrefs outright, in the
+ * browser and in its mobile apps, so that button rendered with no href at all and
+ * did nothing when clicked — in the most widely used mail client there is. The app
+ * was never at fault: the `4da` scheme is registered and handled.
+ *
+ * So we link over https to a bridge page that performs the `4da://` handoff from a
+ * real click on a real web page, which no sanitiser touches. Same pattern as Slack
+ * and Zoom desktop handoff.
+ *
+ * The key goes in the FRAGMENT: a fragment is never sent to the server, so the
+ * licence key stays out of request logs and out of any Referer header. /activate
+ * also sets `noAnalytics`, keeping it away from client-side analytics.
+ */
+function buildActivateUrl(licenseKey) {
+  return `https://4da.ai/activate#key=${encodeURIComponent(licenseKey)}`;
+}
+
+function buildLicenseEmail(licenseKey, tier, expiresAt, context = 'recovery') {
+  const activateUrl = buildActivateUrl(licenseKey);
+  const expiryLine = formatExpiry(expiresAt);
 
   const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Your 4DA licence key</title></head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 40px auto; color: #1a1a1a; line-height: 1.55;">
-  <h1 style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">Your 4DA licence key</h1>
+  <h1 style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">${escapeHtml(SUBJECT[context] || SUBJECT.recovery)}</h1>
   <p style="color: #555; margin-top: 0;">Tier: <strong>${escapeHtml(tier || 'signal')}</strong>${
     expiryLine ? ` &middot; ${escapeHtml(expiryLine)}` : ''
   }</p>
@@ -93,12 +189,12 @@ function buildLicenseEmail(licenseKey, tier, expiresAt) {
   </p>
   <p style="color: #666; font-size: 13px;">
     If the button doesn't work, open 4DA, go to <strong>Settings &rarr; License</strong>, and paste the key.
-  </p>${FOOTER_HTML}
+  </p>${footerHtml(context)}
 </body>
 </html>`;
 
   const text = [
-    'Your 4DA licence key',
+    SUBJECT[context] || SUBJECT.recovery,
     '',
     `Tier: ${tier || 'signal'}`,
     ...(expiryLine ? [expiryLine] : []),
@@ -111,14 +207,16 @@ function buildLicenseEmail(licenseKey, tier, expiresAt) {
     '',
     "If the deep link doesn't work, open 4DA, go to Settings -> License, and",
     'paste the key.',
-    FOOTER_TEXT,
+    footerText(context),
   ].join('\n');
 
-  return { subject: 'Your 4DA licence key', html, text };
+  return { subject: SUBJECT[context] || SUBJECT.recovery, html, text };
 }
 
 function buildExpiredEmail(expiredAt) {
-  const when = expiredAt ? expiredAt.slice(0, 10) : 'recently';
+  // Same Date-or-string tolerance as formatExpiry, for the same reason.
+  const formatted = formatExpiry(expiredAt);
+  const when = formatted ? formatted.replace('Valid until: ', '') : 'recently';
   const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Your 4DA licence has expired</title></head>
@@ -127,7 +225,7 @@ function buildExpiredEmail(expiredAt) {
   <p style="color: #555;">The licence on this address expired on <strong>${escapeHtml(when)}</strong>, so there is no active key to send.</p>
   <p style="margin: 24px 0;">
     <a href="https://4da.ai/signal" style="display: inline-block; background: #D4AF37; color: #0A0A0A; padding: 12px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">Renew Signal</a>
-  </p>${FOOTER_HTML}
+  </p>${footerHtml('recovery')}
 </body>
 </html>`;
 
@@ -138,7 +236,7 @@ function buildExpiredEmail(expiredAt) {
     'to send.',
     '',
     'Renew: https://4da.ai/signal',
-    FOOTER_TEXT,
+    footerText('recovery'),
   ].join('\n');
 
   return { subject: 'Your 4DA licence has expired', html, text };
@@ -179,6 +277,53 @@ async function send(env, to, message) {
 }
 
 /**
+ * Mail a freshly-issued licence key to the buyer at purchase or renewal.
+ *
+ * NEVER THROWS, and never fails its caller. This runs off the back of a paid
+ * Stripe webhook: throwing would return non-2xx, Stripe would retry, and each
+ * retry MINTS ANOTHER KEY (`generateAndStoreLicense` is not idempotent). A
+ * failed email must therefore degrade to "the buyer uses the success page or
+ * recovery", never to "issue a second entitlement".
+ *
+ * Unprovisioned mail is logged at error level rather than silently skipped. That
+ * is the whole lesson of the recovery path: the 503 there was correct behaviour
+ * that nobody could see, so the capability sat dead. A missing key here has to be
+ * loud in the logs of every single sale.
+ *
+ * @param {Record<string,string>} env
+ * @param {string} to           address on the Stripe customer/session
+ * @param {string} licenseKey
+ * @param {string} [tier]
+ * @param {string} [expiresAt]  ISO-8601
+ * @param {string} [reason]     'purchase' | 'renewal', for logs only
+ * @returns {Promise<'sent'|'not_configured'|'error'>} for logging only.
+ */
+export async function deliverLicenseEmail(env, to, licenseKey, tier, expiresAt, reason = 'purchase') {
+  if (!isRecoveryEmailConfigured(env)) {
+    console.error(
+      `Licence ${reason} email NOT SENT — RESEND_API_KEY/RESEND_FROM_EMAIL unset. ` +
+        'The buyer has no emailed copy of their key; the success page is their only ' +
+        'delivery. Set both on the Pages project.',
+    );
+    return 'not_configured';
+  }
+  if (!to || !licenseKey) {
+    console.error(`Licence ${reason} email NOT SENT — missing address or key`);
+    return 'error';
+  }
+
+  try {
+    await send(env, to, buildLicenseEmail(licenseKey, tier, expiresAt, reason));
+    console.log(`Licence ${reason} email sent`);
+    return 'sent';
+  } catch (err) {
+    // Swallowed on purpose — see the no-throw contract above.
+    console.error(`Licence ${reason} email failed:`, err?.message);
+    return 'error';
+  }
+}
+
+/**
  * Look the address up in Stripe and, if it holds a licence, mail it there.
  *
  * NEVER returns the licence key and NEVER throws — the caller has already sent a
@@ -194,7 +339,7 @@ export async function deliverRecoveryEmail(env, stripe, address) {
     const customer = customers.data[0];
     if (!customer) return 'no_licence';
 
-    const licenseKey = customer.metadata?.streets_license;
+    const licenseKey = meta(customer.metadata, 'license');
     if (!licenseKey) return 'no_licence';
 
     // The address we mail is the one STRIPE holds, not the one the caller typed.
@@ -203,13 +348,13 @@ export async function deliverRecoveryEmail(env, stripe, address) {
     // on file.
     const to = customer.email || address;
 
-    const expiresAt = customer.metadata?.streets_expires_at;
+    const expiresAt = meta(customer.metadata, 'expires_at');
     if (expiresAt && new Date(expiresAt) < new Date()) {
       await send(env, to, buildExpiredEmail(expiresAt));
       return 'expired_notice';
     }
 
-    await send(env, to, buildLicenseEmail(licenseKey, customer.metadata?.streets_tier, expiresAt));
+    await send(env, to, buildLicenseEmail(licenseKey, meta(customer.metadata, 'tier'), expiresAt));
     return 'sent';
   } catch (err) {
     // Deliberately swallowed: surfacing this to the caller would leak whether the

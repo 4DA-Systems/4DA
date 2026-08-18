@@ -1,0 +1,162 @@
+---
+title: "Activate 4DA Signal"
+description: "Open your 4DA Signal licence key in the app."
+permalink: "/activate.html"
+noAnalytics: true
+---
+{% extends "base.njk" %}
+
+{#
+  WHY THIS PAGE EXISTS
+  --------------------
+  The licence email used to link straight to `4da://activate?key=...`. Gmail strips
+  custom-scheme hrefs outright -- in the browser and in its mobile apps -- so the
+  button rendered but carried no href at all and did nothing when clicked. The app
+  side was never at fault: the `4da` scheme is registered (tauri.conf.json), the
+  plugin is initialised, and the handler validates and emits `deep-link-activate`.
+
+  So the email now links here over https, which every mail client permits, and this
+  page performs the handoff to `4da://` from a real user gesture on a real web page.
+  That is the same bridge pattern Slack, Zoom and Figma use for desktop handoff.
+
+  THE KEY TRAVELS IN THE FRAGMENT, NOT THE QUERY STRING.
+  A fragment is never transmitted to the server, so the licence key stays out of
+  Cloudflare's request logs and out of any Referer header sent to a third party.
+  `noAnalytics: true` above additionally keeps PostHog off this page, because an
+  analytics script can read `location.hash` even though the server cannot.
+#}
+
+{% block head %}
+  <link rel="canonical" href="https://4da.ai/activate">
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0A0A0A; color: #FFFFFF; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .card {
+      background: #141414; border: 1px solid #2A2A2A; border-radius: 16px;
+      padding: 40px; max-width: 480px; width: 100%; margin: 20px; text-align: center;
+    }
+    .mark { font-size: 40px; margin-bottom: 16px; }
+    h1 { font-size: 22px; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.01em; }
+    .subtitle { font-size: 14px; color: #A0A0A0; margin-bottom: 28px; line-height: 1.5; }
+    .license-key {
+      display: block; padding: 12px; background: #0A0A0A; border: 1px solid #2A2A2A;
+      border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      color: #D4AF37; word-break: break-all; user-select: all; text-align: left;
+    }
+    .btn-row { display: flex; gap: 8px; margin-top: 16px; }
+    .btn-row button {
+      flex: 1; padding: 12px 16px; font-size: 13px; font-weight: 600;
+      border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s;
+    }
+    .open-btn { background: #D4AF37; color: #0A0A0A; }
+    .open-btn:hover { background: #C4A030; }
+    .copy-btn { background: #1F1F1F; color: #A0A0A0; border: 1px solid #2A2A2A !important; }
+    .copy-btn:hover { color: #fff; border-color: #D4AF37 !important; }
+    .steps { margin-top: 24px; text-align: left; font-size: 13px; color: #A0A0A0; line-height: 1.8; }
+    .steps strong { color: #fff; }
+    .note { margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 13px; text-align: left; line-height: 1.5; }
+    .note.info { background: #D4AF3710; border: 1px solid #D4AF3730; color: #D4AF37; }
+    .note.error { background: #EF444410; border: 1px solid #EF444430; color: #EF4444; }
+    a { color: #D4AF37; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <div class="card">
+    <div class="mark" id="mark">&#9679;</div>
+    <h1 id="heading">Activate 4DA Signal</h1>
+    <p class="subtitle" id="subtitle">Reading your licence key&hellip;</p>
+
+    <div id="body-slot"></div>
+
+    <div class="steps" id="steps" style="display:none;">
+      <p><strong>If nothing opens:</strong></p>
+      <p>1. Make sure 4DA is installed &mdash; <a href="/download">download it here</a></p>
+      <p>2. Copy the key above, then in 4DA go to <strong>Settings &rarr; License</strong> and paste it</p>
+      <p style="margin-top: 12px;"><a href="/signal">Back to Signal</a> &middot; <a href="/">Home</a></p>
+    </div>
+  </div>
+
+  <script>
+    // The key arrives in the fragment (#key=...), which the browser never sends to
+    // the server. Support ?key= too, because a mail client that rewrites links may
+    // convert the fragment -- but never advertise that form.
+    function readKey() {
+      var hash = window.location.hash || '';
+      var m = hash.match(/(?:^#|&)key=([^&]+)/);
+      if (m) return decodeURIComponent(m[1]);
+      var q = new URLSearchParams(window.location.search).get('key');
+      return q || null;
+    }
+
+    function show(cls, text) {
+      var el = document.createElement('div');
+      el.className = 'note ' + cls;
+      el.textContent = text;
+      document.getElementById('body-slot').appendChild(el);
+    }
+
+    var key = readKey();
+
+    if (!key || key.indexOf('4DA-') !== 0) {
+      document.getElementById('mark').innerHTML = '&#33;';
+      document.getElementById('heading').textContent = 'No licence key in this link';
+      document.getElementById('subtitle').textContent =
+        'Open the link straight from your licence email, or paste the key into 4DA by hand.';
+      show('error', 'The activation link did not carry a key. This happens if the URL was truncated when it was copied.');
+      document.getElementById('steps').style.display = 'block';
+    } else {
+      document.getElementById('heading').textContent = 'Your licence key';
+      document.getElementById('subtitle').textContent =
+        'Click below to hand it to 4DA. The app must already be installed.';
+
+      var slot = document.getElementById('body-slot');
+      var code = document.createElement('code');
+      code.className = 'license-key';
+      code.textContent = key;
+      slot.appendChild(code);
+
+      var row = document.createElement('div');
+      row.className = 'btn-row';
+      var open = document.createElement('button');
+      open.className = 'open-btn';
+      open.textContent = 'Open in 4DA';
+      var copy = document.createElement('button');
+      copy.className = 'copy-btn';
+      copy.textContent = 'Copy key';
+      row.appendChild(open);
+      row.appendChild(copy);
+      slot.appendChild(row);
+
+      document.getElementById('steps').style.display = 'block';
+
+      open.addEventListener('click', function () {
+        // Navigating to a custom scheme is allowed here because this is an ordinary
+        // web page reacting to a click -- the restriction that broke the email
+        // button is a mail-client sanitiser, not a browser policy.
+        window.location.href = '4da://activate?key=' + encodeURIComponent(key);
+      });
+
+      copy.addEventListener('click', function () {
+        navigator.clipboard.writeText(key).then(function () {
+          copy.textContent = 'Copied';
+          setTimeout(function () { copy.textContent = 'Copy key'; }, 2000);
+        }, function () {
+          show('error', 'Could not copy automatically — select the key above and copy it.');
+        });
+      });
+
+      // Offer the deep link immediately; a browser that has the handler registered
+      // will prompt, and one that does not simply stays on this page with the key
+      // visible. Deliberately NOT automatic: an unprompted protocol navigation on
+      // page load is what makes these pages feel broken when the app is absent.
+    }
+  </script>
+{% endblock %}

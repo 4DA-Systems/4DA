@@ -24,6 +24,8 @@ import assert from 'node:assert/strict';
 import {
   TERMINAL_STATUSES,
   hasOtherStandingCharge,
+  meta,
+  metaKey,
   isLifetimeEntitled,
   isTerminal,
   resolveCustomerId,
@@ -52,7 +54,7 @@ test('every terminal status is actually producible by terminalStatusPatch', () =
   // path could ever write. Any status the reader rejects must be writable.
   for (const status of TERMINAL_STATUSES) {
     const patch = terminalStatusPatch({ streets_status: 'active' }, status, '2026-01-01T00:00:00.000Z');
-    assert.equal(patch.streets_status, status, `${status} must be writable`);
+    assert.equal(patch.signal_status, status, `${status} must be writable`);
   }
 });
 
@@ -73,14 +75,14 @@ test('duplicate delivery of the same refund writes identical bytes', () => {
     'refunded',
     '2026-03-01T10:00:00.000Z',
   );
-  assert.deepEqual(first, { streets_refunded_at: '2026-03-01T10:00:00.000Z', streets_status: 'refunded' });
+  assert.deepEqual(first, { signal_refunded_at: '2026-03-01T10:00:00.000Z', signal_status: 'refunded' });
 
   // Stripe re-delivers. The customer now already carries the first patch.
   const after = { streets_billing_period: 'lifetime', ...first };
   const second = terminalStatusPatch(after, 'refunded', '2026-03-01T10:07:31.000Z');
 
-  assert.equal(second.streets_refunded_at, '2026-03-01T10:00:00.000Z', 'first-seen timestamp is preserved');
-  assert.equal(second.streets_status, undefined, 'no status rewrite on a repeat');
+  assert.equal(second.signal_refunded_at, '2026-03-01T10:00:00.000Z', 'first-seen timestamp is preserved');
+  assert.equal(second.signal_status, undefined, 'no status rewrite on a repeat');
   assert.equal(isLifetimeEntitled({ ...after, ...second }), false);
 });
 
@@ -91,15 +93,15 @@ test('a trailing cancellation does not downgrade a chargeback', () => {
   const state = { ...disputed };
   const trailing = terminalStatusPatch(state, 'cancelled', '2026-03-01T10:05:00.000Z');
 
-  assert.equal(trailing.streets_status, undefined, 'chargeback must not be downgraded to cancelled');
-  assert.equal(trailing.streets_cancelled_at, '2026-03-01T10:05:00.000Z', 'the cancellation is still recorded');
-  assert.equal({ ...state, ...trailing }.streets_status, 'chargeback');
+  assert.equal(trailing.signal_status, undefined, 'chargeback must not be downgraded to cancelled');
+  assert.equal(trailing.signal_cancelled_at, '2026-03-01T10:05:00.000Z', 'the cancellation is still recorded');
+  assert.equal({ ...state, ...trailing }.signal_status, 'chargeback');
 });
 
 test('a refund arriving after a cancellation escalates', () => {
   const cancelled = terminalStatusPatch({ streets_status: 'active' }, 'cancelled', '2026-03-01T10:00:00.000Z');
   const refunded = terminalStatusPatch({ ...cancelled }, 'refunded', '2026-03-02T10:00:00.000Z');
-  assert.equal(refunded.streets_status, 'refunded');
+  assert.equal(refunded.signal_status, 'refunded');
   assert.equal(severityOf('refunded') > severityOf('cancelled'), true);
 });
 
@@ -112,8 +114,8 @@ test('a refund in a NEW episode gets a fresh timestamp', () => {
     streets_billing_period: 'lifetime',
   };
   const patch = terminalStatusPatch(state, 'refunded', '2026-06-01T00:00:00.000Z');
-  assert.equal(patch.streets_refunded_at, '2026-06-01T00:00:00.000Z');
-  assert.equal(patch.streets_status, 'refunded');
+  assert.equal(patch.signal_refunded_at, '2026-06-01T00:00:00.000Z');
+  assert.equal(patch.signal_status, 'refunded');
 });
 
 test('terminalStatusPatch refuses a status that is not terminal', () => {
@@ -255,9 +257,86 @@ test('a charge-lookup failure does not revoke', async () => {
 
 test('isTerminal recognises every terminal status and nothing else', () => {
   for (const s of TERMINAL_STATUSES) {
-    assert.equal(isTerminal({ streets_status: s }), true, `${s} must be terminal`);
+    assert.equal(isTerminal({ signal_status: s }), true, `${s} must be terminal`);
   }
-  assert.equal(isTerminal({ streets_status: 'active' }), false);
+  assert.equal(isTerminal({ signal_status: 'active' }), false);
   assert.equal(isTerminal({}), false);
   assert.equal(isTerminal(null), false);
+});
+
+// ---------------------------------------------------------------------------
+// Metadata namespace migration: streets_* -> signal_*
+//
+// The rename exists because `streets_*` read as a retired feature and so made
+// the LIVE licensing path look retired too — it caused a real wrong call about
+// whether this endpoint was still in use. Writes moved to `signal_*`; reads must
+// still accept `streets_*` so no existing customer record is orphaned.
+//
+// These pin the compatibility guarantee rather than trusting it. Delete them
+// only when the legacy fallback itself is deleted.
+// ---------------------------------------------------------------------------
+
+test('a LEGACY-only customer record is still read correctly', () => {
+  const legacyOnly = {
+    streets_billing_period: 'lifetime',
+    streets_status: 'active',
+    streets_license: '4DA-legacy',
+    streets_tier: 'signal',
+  };
+  assert.equal(meta(legacyOnly, 'billing_period'), 'lifetime');
+  assert.equal(meta(legacyOnly, 'status'), 'active');
+  assert.equal(meta(legacyOnly, 'license'), '4DA-legacy');
+  assert.equal(isLifetimeEntitled(legacyOnly), true, 'a legacy lifetime holder keeps entitlement');
+  assert.equal(isTerminal(legacyOnly), false);
+});
+
+test('a legacy record that went terminal is still recognised as terminal', () => {
+  // The failure this prevents: reading only signal_* would report an old
+  // refunded customer as entitled, silently re-granting revoked access.
+  const legacyRefunded = { streets_billing_period: 'lifetime', streets_status: 'refunded' };
+  assert.equal(isTerminal(legacyRefunded), true);
+  assert.equal(isLifetimeEntitled(legacyRefunded), false);
+});
+
+test('the CURRENT prefix wins when a record carries both', () => {
+  // Mid-migration a record can hold both: the webhook writes signal_status while
+  // streets_status lingers from before. The new value is authoritative.
+  const both = { streets_status: 'active', signal_status: 'refunded' };
+  assert.equal(meta(both, 'status'), 'refunded');
+  assert.equal(isTerminal(both), true);
+});
+
+test('writes use signal_*, and a terminal patch on a legacy record migrates it', () => {
+  const legacy = { streets_billing_period: 'lifetime', streets_status: 'active' };
+  const patch = terminalStatusPatch(legacy, 'refunded', '2026-05-01T00:00:00.000Z');
+  assert.equal(patch.signal_status, 'refunded', 'the new key is written');
+  assert.equal(patch.streets_status, undefined, 'the legacy key is never written again');
+  assert.equal(patch.signal_refunded_at, '2026-05-01T00:00:00.000Z');
+  // Stripe MERGES metadata, so the stale streets_status survives on the record.
+  // meta() must therefore prefer the new key — proven above — or the merged
+  // result would read as still-active.
+  assert.equal(isTerminal({ ...legacy, ...patch }), true);
+});
+
+test('a legacy first-seen stamp is preserved rather than refreshed', () => {
+  // Idempotency has to survive the rename: a re-delivered refund against a
+  // record whose stamp is still streets_refunded_at must not restamp it.
+  const legacyRefunded = {
+    streets_status: 'refunded',
+    streets_refunded_at: '2026-01-01T00:00:00.000Z',
+  };
+  const repeat = terminalStatusPatch(legacyRefunded, 'refunded', '2026-09-09T00:00:00.000Z');
+  assert.equal(
+    repeat.signal_refunded_at,
+    '2026-01-01T00:00:00.000Z',
+    'first-seen date carried across the rename',
+  );
+  assert.equal(repeat.signal_status, undefined, 'no status rewrite on a repeat');
+});
+
+test('metaKey builds the write key and nothing else', () => {
+  assert.equal(metaKey('status'), 'signal_status');
+  assert.equal(metaKey('license'), 'signal_license');
+  assert.equal(meta({}, 'status'), undefined);
+  assert.equal(meta(null, 'status'), undefined);
 });
