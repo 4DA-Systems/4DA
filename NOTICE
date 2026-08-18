@@ -266,7 +266,7 @@ gobject-sys 0.18.0 - MIT - https://github.com/gtk-rs/gtk-rs-core
 gtk 0.18.2 - MIT - https://github.com/gtk-rs/gtk3-rs
 gtk-sys 0.18.2 - MIT - https://github.com/gtk-rs/gtk3-rs
 gtk3-macros 0.18.2 - MIT - https://github.com/gtk-rs/gtk3-rs
-h2 0.4.14 - MIT - https://github.com/hyperium/h2
+h2 0.4.16 - MIT - https://github.com/hyperium/h2
 half 2.7.1 - MIT OR Apache-2.0 - https://github.com/VoidStarKat/half-rs
 hashbrown 0.12.3 - MIT OR Apache-2.0 - https://github.com/rust-lang/hashbrown
 hashbrown 0.14.5 - MIT OR Apache-2.0 - https://github.com/rust-lang/hashbrown
