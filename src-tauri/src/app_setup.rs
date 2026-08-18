@@ -67,6 +67,26 @@ fn acquire_instance_and_detect_crash_loop() {
             info!(target: "4da::startup", "Single-instance lock acquired");
         }
         Err(crate::single_instance::InstanceError::AlreadyRunning(pid)) => {
+            // Deep-link launches land HERE when the app is already running:
+            // Windows starts a second process with the fourda:// URL in argv,
+            // and this lock rejects it before tauri_plugin_single_instance
+            // (whose argv forwarding runs much later) ever initializes. Hand
+            // the URL to the primary via the relay file so the click still
+            // works — the primary polls for it (see setup_app) and feeds it
+            // through the same validated deep-link path.
+            if let Some(url) = std::env::args().find(|a| crate::utils::validate_deep_link_url(a)) {
+                match crate::single_instance::write_deeplink_relay(&dir, &url) {
+                    Ok(()) => {
+                        info!(target: "4da::deeplink", running_pid = pid,
+                            "Deep-link relayed to running instance; exiting");
+                    }
+                    Err(e) => {
+                        error!(target: "4da::deeplink", error = %e,
+                            "Failed to relay deep-link to running instance");
+                    }
+                }
+                std::process::exit(0);
+            }
             error!(target: "4da::startup", running_pid = pid,
                 "Another 4DA instance is already running — this process will exit");
             eprintln!(
@@ -793,6 +813,45 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             }
         }
     });
+
+    // Deep-link relay poll: a fourda:// launch while THIS instance runs spawns
+    // a second process that our pre-Tauri file lock rejects long before
+    // tauri_plugin_single_instance could forward its argv — so the rejected
+    // process parks the URL in the data dir instead (single_instance.rs) and
+    // this poll delivers it. One file-stat per second against a path that
+    // almost never exists; latency well under the click-to-app expectation.
+    {
+        let relay_handle = app_handle.clone();
+        let relay_dir = crate::state::get_db_path()
+            .parent()
+            .map(std::path::Path::to_path_buf);
+        if let Some(relay_dir) = relay_dir {
+            tauri::async_runtime::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+                loop {
+                    tick.tick().await;
+                    if let Some(url) = crate::single_instance::take_deeplink_relay(&relay_dir) {
+                        if crate::utils::validate_deep_link_url(&url) {
+                            info!(target: "4da::deeplink", url = %url, "Deep-link received via relay");
+                            // The user clicked a button expecting the app to
+                            // answer — bring it to the front like the plugin's
+                            // own second-instance callback would have.
+                            if let Some(window) = relay_handle.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                            let _ = relay_handle.emit("deep-link-activate", url);
+                        } else {
+                            warn!(target: "4da::security", url = %url, "Rejected invalid relayed deep-link");
+                            if let Ok(db) = crate::get_database() {
+                                db.log_security_event("deeplink_blocked", &url, "warning");
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
 
     let _app_handle_toggle = app_handle.clone();
     app.listen("tray-toggle-monitoring", move |_| {
