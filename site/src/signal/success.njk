@@ -143,7 +143,9 @@ permalink: "/signal/success.html"
 
     function openInApp() {
       if (!currentKey) return;
-      window.location.href = '4da://activate?key=' + encodeURIComponent(currentKey);
+      // `fourda://`, never `4da://`: a URL scheme must start with a letter, so
+      // browsers parse `4da://...` as a RELATIVE path (it 404'd on this site).
+      window.location.href = 'fourda://activate?key=' + encodeURIComponent(currentKey);
     }
 
     function copyKey() {

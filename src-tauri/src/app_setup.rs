@@ -731,7 +731,45 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         let _ = app_handle_analyze.emit("start-analysis-from-tray", ());
     });
 
-    // Handle deep-link URLs (4da://activate?key=...)
+    // Re-register the fourda:// protocol handler on every launch (Windows/Linux
+    // write it to the user registry / .desktop entries at runtime; macOS is
+    // Info.plist-only and register_all is a no-op there). Without this, only an
+    // INSTALLED build ever registered the scheme — dev builds silently relied on
+    // whatever exe the installer last wrote, and the 4da→fourda rename would
+    // leave stale registrations pointing at the old scheme forever. Re-pointing
+    // at the current exe on launch is the Slack/Discord pattern: idempotent and
+    // self-healing.
+    {
+        use tauri_plugin_deep_link::DeepLinkExt;
+        if let Err(e) = app.deep_link().register_all() {
+            warn!(target: "4da::deeplink", error = %e, "Failed to register deep-link schemes");
+        }
+
+        // A deep link that LAUNCHED the app rides in argv and exists before any
+        // listener attaches, so the event below never fires for it. Park it for
+        // the frontend to collect via take_pending_deep_link once mounted.
+        match app.deep_link().get_current() {
+            Ok(Some(urls)) => {
+                for url in urls {
+                    let url = url.to_string();
+                    if crate::utils::validate_deep_link_url(&url) {
+                        info!(target: "4da::deeplink", url = %url, "Launch deep-link parked for frontend");
+                        crate::settings_commands::set_pending_deep_link(url);
+                        break;
+                    } else {
+                        warn!(target: "4da::security", url = %url, "Rejected invalid launch deep-link");
+                        if let Ok(db) = crate::get_database() {
+                            db.log_security_event("deeplink_blocked", &url, "warning");
+                        }
+                    }
+                }
+            }
+            Ok(None) => {}
+            Err(e) => warn!(target: "4da::deeplink", error = %e, "Could not read launch deep-link"),
+        }
+    }
+
+    // Handle deep-link URLs (fourda://activate?key=...)
     let deep_link_handle = app_handle.clone();
     app.listen("deep-link://new-url", move |event| {
         if let Some(urls) = event

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! License and trial Tauri commands.
 
+use std::sync::Mutex;
+
 use tracing::{info, warn};
 
 use crate::error::Result;
@@ -8,6 +10,29 @@ use crate::error::Result;
 use crate::get_settings_manager;
 
 use super::validate_input_length;
+
+/// A deep link that launched the app COLD (`fourda://activate?key=...` in
+/// argv). The `deep-link://new-url` event only covers links arriving while the
+/// app runs; a launch URL exists before any listener attaches, so app_setup
+/// parks it here and the frontend collects it once its listeners are mounted.
+static PENDING_DEEP_LINK: Mutex<Option<String>> = Mutex::new(None);
+
+/// Called from app_setup with an ALREADY-VALIDATED URL (validate_deep_link_url).
+pub(crate) fn set_pending_deep_link(url: String) {
+    if let Ok(mut slot) = PENDING_DEEP_LINK.lock() {
+        *slot = Some(url);
+    }
+}
+
+/// One-shot: the frontend calls this on mount to collect a launch deep link.
+/// Consuming (take) so a webview reload cannot re-activate the same link.
+#[tauri::command]
+pub async fn take_pending_deep_link() -> Result<Option<String>> {
+    Ok(PENDING_DEEP_LINK
+        .lock()
+        .ok()
+        .and_then(|mut slot| slot.take()))
+}
 
 /// Get current license tier and feature availability
 #[tauri::command]
@@ -334,7 +359,7 @@ pub async fn validate_license() -> Result<serde_json::Value> {
 ///
 /// So the success outcome here is `reason: "emailed"`, not an activation: the
 /// user completes recovery by opening the email and using the key (or its
-/// `4da://activate` deep link). The 200 arm below is retained only for
+/// `fourda://activate` deep link). The 200 arm below is retained only for
 /// compatibility with an older server response and is unreachable in production.
 #[tauri::command]
 pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value> {

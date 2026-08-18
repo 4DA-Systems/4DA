@@ -39,7 +39,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["4da"]
+        "schemes": ["fourda"]
       }
     },
     "opener": {},

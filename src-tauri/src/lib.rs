@@ -882,6 +882,7 @@ pub fn run() {
             settings_commands::start_trial,
             settings_commands::validate_license,
             settings_commands::recover_license_by_email,
+            settings_commands::take_pending_deep_link,
             settings_commands::get_locale,
             settings_commands::set_locale,
             settings_commands::set_language,

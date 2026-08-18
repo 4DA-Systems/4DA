@@ -165,14 +165,14 @@ function formatExpiry(expiresAt) {
 /**
  * Where the "Activate in 4DA" button points.
  *
- * NOT `4da://activate?key=...`. Gmail strips custom-scheme hrefs outright, in the
+ * NOT a custom-scheme URL. Gmail strips custom-scheme hrefs outright, in the
  * browser and in its mobile apps, so that button rendered with no href at all and
- * did nothing when clicked — in the most widely used mail client there is. The app
- * was never at fault: the `4da` scheme is registered and handled.
+ * did nothing when clicked — in the most widely used mail client there is.
  *
- * So we link over https to a bridge page that performs the `4da://` handoff from a
- * real click on a real web page, which no sanitiser touches. Same pattern as Slack
- * and Zoom desktop handoff.
+ * So we link over https to a bridge page that performs the `fourda://` handoff
+ * from a real click on a real web page, which no sanitiser touches. Same pattern
+ * as Slack and Zoom desktop handoff. (`fourda`, not `4da`: schemes must start
+ * with a letter, so browsers parsed `4da://` as a relative path — see activate.njk.)
  *
  * The key goes in the FRAGMENT: a fragment is never sent to the server, so the
  * licence key stays out of request logs and out of any Referer header. /activate

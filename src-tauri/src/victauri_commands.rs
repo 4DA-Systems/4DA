@@ -46,6 +46,7 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "start_trial",
     "validate_license",
     "recover_license_by_email",
+    "take_pending_deep_link",
     "get_locale",
     "set_locale",
     "get_user_context",

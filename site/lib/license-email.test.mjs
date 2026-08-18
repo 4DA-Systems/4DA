@@ -171,12 +171,13 @@ test('a junk expiry is omitted rather than rendered as junk', async () => {
   } finally { f.restore(); c.restore(); }
 });
 
-test('the activate button is an https link, NOT a 4da:// deep link', async () => {
+test('the activate button is an https link, NOT a custom-scheme deep link', async () => {
   // The defect: Gmail strips custom-scheme hrefs outright, in the browser and in
-  // its mobile apps, so `4da://activate?key=...` rendered as a button with no href
-  // and did nothing when clicked -- in the most used mail client there is. Verified
-  // dead against a real delivered email before this changed. The app was never at
-  // fault; the `4da` scheme is registered and handled.
+  // its mobile apps, so a custom-scheme button rendered with no href and did
+  // nothing when clicked -- in the most used mail client there is. Verified dead
+  // against a real delivered email before this changed. The https bridge page
+  // (/activate) performs the fourda:// handoff instead; no scheme belongs in
+  // the email itself, neither the current `fourda` nor the retired `4da`.
   const f = stubFetch(200);
   const c = captureConsole();
   try {
@@ -184,8 +185,10 @@ test('the activate button is an https link, NOT a 4da:// deep link', async () =>
     const { html, text } = f.calls[0].body;
     assert.ok(html.includes('https://4da.ai/activate#key='), 'the button must point at the https bridge');
     assert.ok(text.includes('https://4da.ai/activate#key='), 'and so must the plaintext part');
-    assert.ok(!html.includes('href="4da://'), 'a custom-scheme href would be stripped by Gmail');
-    assert.ok(!text.includes('4da://'), 'the plaintext link must be clickable too');
+    for (const scheme of ['fourda://', '4da://']) {
+      assert.ok(!html.includes(`href="${scheme}`), `a ${scheme} href would be stripped by Gmail`);
+      assert.ok(!text.includes(scheme), `a ${scheme} plaintext link would not be clickable`);
+    }
   } finally { f.restore(); c.restore(); }
 });
 

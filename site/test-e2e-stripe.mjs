@@ -407,17 +407,17 @@ try {
 // =============================================================================
 console.log('\n--- Test 7: Deep-Link URL Format ---');
 
-const deepLink = `4da://activate?key=${encodeURIComponent(licenseKey)}`;
-assert(deepLink.startsWith('4da://activate?key=4DA-'), 'Deep-link has correct protocol and prefix');
+const deepLink = `fourda://activate?key=${encodeURIComponent(licenseKey)}`;
+assert(deepLink.startsWith('fourda://activate?key=4DA-'), 'Deep-link has correct protocol and prefix');
 
 // Node.js URL parser doesn't support custom protocols directly.
 // Use a http:// substitution to validate the query param round-trips correctly.
-const httpEquiv = deepLink.replace('4da://', 'http://localhost/');
+const httpEquiv = deepLink.replace('fourda://', 'http://localhost/');
 const parsedUrl = new URL(httpEquiv);
 assert(parsedUrl.searchParams.get('key') === licenseKey, 'Key round-trips through URL encoding');
 
 // Verify the actual deep-link structure matches what activate.html generates
-assert(deepLink.includes('4da://activate?key='), 'Deep-link matches 4da://activate?key= format');
+assert(deepLink.includes('fourda://activate?key='), 'Deep-link matches fourda://activate?key= format');
 const decodedKey = decodeURIComponent(deepLink.split('key=')[1]);
 assert(decodedKey === licenseKey, 'URL-decoded key matches original');
 

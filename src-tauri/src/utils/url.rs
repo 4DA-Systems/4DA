@@ -58,16 +58,22 @@ const FORBIDDEN_VALUE_CHARS: &[char] = &['<', '>', '"', '\'', ';', '|', '&', '`'
 
 /// Validate that a deep-link URL matches the expected 4DA protocol.
 ///
-/// Only allows `4da://` scheme with known host paths. Applies additional
+/// Only allows the `fourda://` scheme with known host paths. Applies additional
 /// hardening against injection attacks:
 /// - Length limit (2048 chars)
 /// - Null byte rejection
 /// - Query parameter key/value sanitization
 /// - Path traversal detection
 ///
-/// Note: `4da://` is not a valid RFC 3986 scheme (starts with a digit), so
-/// `url::Url::parse` rejects it. We use string-based validation instead since
-/// this is a custom OS-registered protocol handler.
+/// WHY `fourda` AND NOT `4da`: a URL scheme must start with a LETTER
+/// (RFC 3986 / WHATWG URL). Browsers therefore never launch `4da://...` —
+/// Chrome parses it as a RELATIVE path, so the activate page's "Open in 4DA"
+/// button navigated to `https://4da.ai/4da://activate?key=...` (a 404 that
+/// also leaked the key into the URL path). The OS registry accepts digit-first
+/// scheme names, which is why the handler side always looked fine while no
+/// browser could ever reach it. Verified 2026-08-18: `location.href='4da://x'`
+/// resolves relative; `location.href='fourda://x'` attempts a protocol launch.
+/// Do not rename this back.
 pub(crate) fn validate_deep_link_url(url: &str) -> bool {
     let trimmed = url.trim();
 
@@ -97,9 +103,9 @@ pub(crate) fn validate_deep_link_url(url: &str) -> bool {
         return false;
     }
 
-    // Must start with the 4da:// scheme (case-insensitive)
+    // Must start with the fourda:// scheme (case-insensitive)
     let lower = trimmed.to_lowercase();
-    if !lower.starts_with("4da://") {
+    if !lower.starts_with("fourda://") {
         if !trimmed.is_empty() {
             tracing::warn!(
                 target: "4da::security",
@@ -117,8 +123,8 @@ pub(crate) fn validate_deep_link_url(url: &str) -> bool {
         return false;
     }
 
-    // Extract the host portion (everything between 4da:// and the first / or ?)
-    let after_scheme = &trimmed[6..]; // len("4da://") == 6
+    // Extract the host portion (everything between fourda:// and the first / or ?)
+    let after_scheme = &trimmed[9..]; // len("fourda://") == 9
     let host = after_scheme
         .split(|c: char| c == '/' || c == '?')
         .next()
@@ -285,76 +291,89 @@ mod tests {
 
     #[test]
     fn test_valid_deep_link() {
-        assert!(validate_deep_link_url("4da://activate?key=abc123"));
-        assert!(validate_deep_link_url("4da://open?source=hackernews"));
-        assert!(validate_deep_link_url("4da://settings"));
-        assert!(validate_deep_link_url("4da://activate"));
+        assert!(validate_deep_link_url("fourda://activate?key=abc123"));
+        assert!(validate_deep_link_url("fourda://open?source=hackernews"));
+        assert!(validate_deep_link_url("fourda://settings"));
+        assert!(validate_deep_link_url("fourda://activate"));
     }
 
     #[test]
     fn test_valid_deep_link_with_path() {
-        assert!(validate_deep_link_url("4da://activate/license?key=abc123"));
+        assert!(validate_deep_link_url(
+            "fourda://activate/license?key=abc123"
+        ));
     }
 
     #[test]
-    fn test_reject_non_4da_deep_link() {
+    fn test_reject_foreign_deep_link() {
         assert!(!validate_deep_link_url("http://evil.com/activate"));
-        assert!(!validate_deep_link_url("4da://unknown-host"));
+        assert!(!validate_deep_link_url("fourda://unknown-host"));
         assert!(!validate_deep_link_url(""));
     }
 
     #[test]
+    fn test_reject_retired_digit_scheme() {
+        // `4da://` is retired: a URL scheme must start with a letter, so no
+        // browser ever launched it — Chrome resolved it as a RELATIVE path,
+        // sending the licence key to https://4da.ai/4da://activate?... as a
+        // 404. Anything still emitting the old scheme is a bug; reject it so
+        // the mistake surfaces in logs instead of half-working.
+        assert!(!validate_deep_link_url("4da://activate?key=abc123"));
+        assert!(!validate_deep_link_url("4da://settings"));
+    }
+
+    #[test]
     fn test_reject_deep_link_too_long() {
-        let long_url = format!("4da://activate?key={}", "a".repeat(2048));
+        let long_url = format!("fourda://activate?key={}", "a".repeat(2048));
         assert!(!validate_deep_link_url(&long_url));
     }
 
     #[test]
     fn test_reject_deep_link_null_byte() {
-        assert!(!validate_deep_link_url("4da://activate?key=abc\0def"));
-        assert!(!validate_deep_link_url("4da://activate\0/../evil"));
+        assert!(!validate_deep_link_url("fourda://activate?key=abc\0def"));
+        assert!(!validate_deep_link_url("fourda://activate\0/../evil"));
     }
 
     #[test]
     fn test_reject_deep_link_script_injection() {
         assert!(!validate_deep_link_url(
-            "4da://activate?key=<script>alert(1)</script>"
+            "fourda://activate?key=<script>alert(1)</script>"
         ));
         assert!(!validate_deep_link_url(
-            "4da://open?url=<img onerror=alert(1)>"
+            "fourda://open?url=<img onerror=alert(1)>"
         ));
     }
 
     #[test]
     fn test_reject_deep_link_shell_metacharacters() {
-        assert!(!validate_deep_link_url("4da://activate?cmd=rm;ls"));
-        assert!(!validate_deep_link_url("4da://activate?cmd=cat|grep"));
+        assert!(!validate_deep_link_url("fourda://activate?cmd=rm;ls"));
+        assert!(!validate_deep_link_url("fourda://activate?cmd=cat|grep"));
         assert!(!validate_deep_link_url(
-            "4da://activate?cmd=foo&bar=baz`whoami`"
+            "fourda://activate?cmd=foo&bar=baz`whoami`"
         ));
     }
 
     #[test]
     fn test_reject_deep_link_special_chars_in_key() {
-        assert!(!validate_deep_link_url("4da://activate?ke<y=value"));
-        assert!(!validate_deep_link_url("4da://activate?k.ey=value"));
-        assert!(!validate_deep_link_url("4da://activate?ke-y=value"));
-        assert!(!validate_deep_link_url("4da://activate?ke%20y=value"));
+        assert!(!validate_deep_link_url("fourda://activate?ke<y=value"));
+        assert!(!validate_deep_link_url("fourda://activate?k.ey=value"));
+        assert!(!validate_deep_link_url("fourda://activate?ke-y=value"));
+        assert!(!validate_deep_link_url("fourda://activate?ke%20y=value"));
     }
 
     #[test]
     fn test_reject_deep_link_path_traversal() {
         assert!(!validate_deep_link_url(
-            "4da://activate/../../../etc/passwd"
+            "fourda://activate/../../../etc/passwd"
         ));
-        assert!(!validate_deep_link_url("4da://open/./hidden"));
+        assert!(!validate_deep_link_url("fourda://open/./hidden"));
     }
 
     #[test]
     fn test_reject_deep_link_long_param_value() {
         let long_value = "a".repeat(513);
         assert!(!validate_deep_link_url(&format!(
-            "4da://activate?key={long_value}"
+            "fourda://activate?key={long_value}"
         )));
     }
 }

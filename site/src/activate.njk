@@ -9,11 +9,17 @@ noAnalytics: true
 {#
   WHY THIS PAGE EXISTS
   --------------------
-  The licence email used to link straight to `4da://activate?key=...`. Gmail strips
+  The licence email used to link straight to a custom-scheme URL. Gmail strips
   custom-scheme hrefs outright -- in the browser and in its mobile apps -- so the
-  button rendered but carried no href at all and did nothing when clicked. The app
-  side was never at fault: the `4da` scheme is registered (tauri.conf.json), the
-  plugin is initialised, and the handler validates and emits `deep-link-activate`.
+  button rendered but carried no href at all and did nothing when clicked.
+
+  The scheme is `fourda`, not `4da`: a URL scheme must start with a letter
+  (RFC 3986 / WHATWG), so browsers parsed `4da://...` as a RELATIVE path --
+  "Open in 4DA" navigated to https://4da.ai/4da://activate?key=... and 404'd,
+  leaking the key into the URL path besides. The OS registry happily registers
+  digit-first scheme names, which is why the handler side always looked healthy
+  while no browser could ever reach it. Renamed 2026-08-18 (app + this page +
+  /signal/success together).
 
   So the email now links here over https, which every mail client permits, and this
   page performs the handoff to `4da://` from a real user gesture on a real web page.
@@ -141,7 +147,13 @@ noAnalytics: true
         // Navigating to a custom scheme is allowed here because this is an ordinary
         // web page reacting to a click -- the restriction that broke the email
         // button is a mail-client sanitiser, not a browser policy.
-        window.location.href = '4da://activate?key=' + encodeURIComponent(key);
+        //
+        // `fourda://`, never `4da://`: a URL scheme must start with a LETTER
+        // (RFC 3986 / WHATWG). Browsers parse `4da://...` as a RELATIVE path, so
+        // this exact line used to navigate to https://4da.ai/4da://activate?key=...
+        // -- a 404 that also put the key in the server-visible URL. Verified
+        // 2026-08-18; the app registers `fourda` (tauri.conf.json).
+        window.location.href = 'fourda://activate?key=' + encodeURIComponent(key);
       });
 
       copy.addEventListener('click', function () {
