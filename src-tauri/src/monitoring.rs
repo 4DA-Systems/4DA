@@ -11,7 +11,7 @@ use std::time::Duration;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder},
-    AppHandle, Emitter, Manager, Runtime,
+    AppHandle, Emitter, Runtime,
 };
 use tracing::{info, warn};
 
@@ -181,7 +181,10 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
         .on_menu_event(move |app, event| {
             match event.id.as_ref() {
                 "show" => {
-                    if let Some(window) = app.get_webview_window("main") {
+                    // ensure_main_window RECREATES a destroyed main window —
+                    // without it, "Show 4DA" silently no-ops until an app
+                    // restart once the window has died (observed 2026-08-19).
+                    if let Some(window) = crate::app_setup::ensure_main_window(app) {
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
@@ -196,7 +199,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
                             crate::briefing_window::show_briefing(app, &snapshot.briefing);
                         }
                         None => {
-                            if let Some(window) = app.get_webview_window("main") {
+                            if let Some(window) = crate::app_setup::ensure_main_window(app) {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }
@@ -229,7 +232,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
             } = event
             {
                 let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
+                if let Some(window) = crate::app_setup::ensure_main_window(app) {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
