@@ -953,7 +953,6 @@
   "enterprise.export.section.sources": "Настройка источников",
   "enterprise.export.section.briefings": "История брифингов",
   "enterprise.export.section.feedback": "Обратная связь и взаимодействие",
-  "enterprise.export.section.learned": "Выученное поведение",
   "enterprise.diagnostics.title": "Диагностика конфигурации",
   "enterprise.diagnostics.description": "Проверьте настройку и устраните проблемы без обращения в поддержку.",
   "enterprise.diagnostics.running": "Выполнение...",

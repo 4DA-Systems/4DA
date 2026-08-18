@@ -955,7 +955,6 @@
   "enterprise.export.section.sources": "ソース設定",
   "enterprise.export.section.briefings": "ブリーフィング履歴",
   "enterprise.export.section.feedback": "フィードバックとエンゲージメント",
-  "enterprise.export.section.learned": "学習した振る舞い",
   "enterprise.diagnostics.title": "構成診断",
   "enterprise.diagnostics.description": "サポートに問い合わせずにセットアップを検証し、トラブルシューティングできます。",
   "enterprise.diagnostics.running": "実行中...",

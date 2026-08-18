@@ -420,13 +420,6 @@ pub(crate) async fn generate_briefing_internal(
             .collect::<Vec<_>>()
             .join(", ")
     };
-    let anti_topics = ace_ctx
-        .anti_topics
-        .iter()
-        .take(5)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join(", ");
 
     let system_prompt = format!(
         r#"{defense}
@@ -592,11 +585,11 @@ End your response with exactly one fenced block listing the items you filtered o
          Give me my intelligence briefing.",
         tech = tech_summary,
         topics = topics_summary,
-        anti = if anti_topics.is_empty() {
-            "None specified".to_string()
-        } else {
-            anti_topics
-        },
+        // v20b (AD-031): anti_topics was dropped with the implicit-capture
+        // layer. In production the table held 0 rows, so this branch was
+        // always "None specified" — made unconditional to keep the prompt
+        // byte-identical.
+        anti = "None specified",
         decisions = decision_context,
         anomalies = anomaly_section,
         hot_topics = hot_topics_context,

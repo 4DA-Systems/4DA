@@ -135,8 +135,6 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         );
       }
 
-      const primaryTopic = topics[0] || null;
-
       // Immediate score adjustment for visual feedback
       const delta = FEEDBACK_ADJUSTMENTS[actionType] ?? 0;
       if (delta !== 0) {
@@ -148,17 +146,18 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         }));
       }
 
-      // Show toast with undo action (except for click events)
+      // Show toast with undo action (except for click events).
+      // Plain confirmations only — no learning promise. The implicit-capture
+      // layer was removed in v20b (AD-031); feedback is recorded, not "learned from".
       if (actionType !== 'click') {
         const { addToast } = get();
-        const topicLabel = primaryTopic || 'this type';
-        const learnMessage = actionType === 'save'
-          ? `Saved — boosting '${topicLabel}'. Similar content will rank higher next analysis.`
+        const confirmMessage = actionType === 'save'
+          ? 'Saved.'
           : actionType === 'mark_irrelevant'
-          ? `Got it — '${topicLabel}' added to anti-topics. Matching content will be suppressed.`
-          : `Noted — deprioritizing '${topicLabel}'. 3 dismissals creates an auto-filter.`;
+          ? 'Marked irrelevant.'
+          : 'Dismissed.';
 
-        addToast('success', learnMessage, {
+        addToast('success', confirmMessage, {
           label: 'Undo',
           onClick: () => {
             // Revert feedback

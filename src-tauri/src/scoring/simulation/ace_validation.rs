@@ -2,9 +2,13 @@
 //! ACE Context Validation Tests
 //!
 //! Isolates the ACE axis contributions to scoring:
-//! - Anti-topic exclusion
 //! - Dependency matching (match_dependencies)
 //! - Detected tech influence
+//!
+//! (The former "anti-topic exclusion" test was removed in v20b: the ACE
+//! anti-topic auto-exclusion mechanism it asserted was removed from scoring
+//! in v19 (AD-029), and the test had passed vacuously ever since — a pure-Rust
+//! persona scores an off-topic python item near zero regardless.)
 
 use super::super::{score_item, ScoringContext};
 use super::corpus::corpus;
@@ -12,50 +16,6 @@ use super::personas::make_interests;
 use super::{sim_db, sim_input, sim_no_freshness};
 use crate::scoring::ace_context::ACEContext;
 use crate::scoring::dependencies::DepInfo;
-
-// ============================================================================
-// Test 1: Anti-topic exclusion
-// ============================================================================
-
-#[test]
-fn ace_anti_topic_excludes_matching_content() {
-    // Build a Rust persona but add "python" as an anti-topic
-    let interests = make_interests(&[("Rust", 1.0), ("systems programming", 1.0)]);
-    let mut ace = ACEContext::default();
-    ace.active_topics.push("rust".to_string());
-    ace.detected_tech.push("rust".to_string());
-    ace.anti_topics.push("python".to_string());
-
-    let ctx = ScoringContext::builder()
-        .interest_count(2)
-        .interests(interests)
-        .ace_ctx(ace)
-        .feedback_interaction_count(50)
-        .build();
-
-    let db = sim_db();
-    let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
-
-    // Find a Python-focused corpus item
-    let items = corpus();
-    let python_item = items.iter().find(|i| {
-        let title_lower = i.title.to_lowercase();
-        title_lower.contains("python") || title_lower.contains("pytorch")
-    });
-
-    if let Some(item) = python_item {
-        let input = sim_input(item.id, item.title, item.content, &emb);
-        let result = score_item(&input, &ctx, &db, &opts, None);
-        assert!(
-            result.excluded || result.top_score < 0.05,
-            "Python content should be excluded or near-zero when 'python' is an anti-topic, \
-             but got excluded={}, top_score={:.3}",
-            result.excluded,
-            result.top_score,
-        );
-    }
-}
 
 // ============================================================================
 // Test 2: Dependency matching boosts score

@@ -105,21 +105,6 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
         -- LEARNED BEHAVIOR TABLES (extensions to existing)
         -- ═══════════════════════════════════════════════════════════════
 
-        -- Anti-topics (learned exclusions from behavior)
-        CREATE TABLE IF NOT EXISTS anti_topics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            topic TEXT NOT NULL UNIQUE,
-            rejection_count INTEGER DEFAULT 0,
-            confidence REAL DEFAULT 0.0,
-            auto_detected INTEGER DEFAULT 1,
-            user_confirmed INTEGER DEFAULT 0,
-            first_rejection TEXT DEFAULT (datetime('now')),
-            last_rejection TEXT DEFAULT (datetime('now')),
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_anti_topics_topic ON anti_topics(topic);
-
         -- User interactions (behavior signals)
         -- NOTE: This is the canonical schema — superset of ACE + ContextEngine columns.
         -- ACE uses: item_id, action_type, action_data, item_topics, item_source, signal_strength
@@ -143,49 +128,6 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_interactions_action ON interactions(action);
         CREATE INDEX IF NOT EXISTS idx_interactions_source ON interactions(item_source);
         CREATE INDEX IF NOT EXISTS idx_interactions_item_action ON interactions(item_id, action_type);
-
-        -- Topic affinities (learned preferences)
-        CREATE TABLE IF NOT EXISTS topic_affinities (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            topic TEXT NOT NULL UNIQUE,
-            embedding BLOB,
-            positive_signals INTEGER DEFAULT 0,
-            negative_signals INTEGER DEFAULT 0,
-            total_exposures INTEGER DEFAULT 0,
-            affinity_score REAL DEFAULT 0.0,
-            confidence REAL DEFAULT 0.0,
-            weighted_positive REAL NOT NULL DEFAULT 0,
-            weighted_negative REAL NOT NULL DEFAULT 0,
-            explicit_negative_signals INTEGER NOT NULL DEFAULT 0,
-            last_interaction TEXT DEFAULT (datetime('now')),
-            decay_applied INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_topic_affinities_topic ON topic_affinities(topic);
-        CREATE INDEX IF NOT EXISTS idx_topic_affinities_score ON topic_affinities(affinity_score);
-        CREATE INDEX IF NOT EXISTS idx_topic_affinities_last_interaction ON topic_affinities(last_interaction);
-
-        -- Source preferences (learned from behavior)
-        CREATE TABLE IF NOT EXISTS source_preferences (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source TEXT NOT NULL UNIQUE,
-            score REAL DEFAULT 0.0,
-            interactions INTEGER DEFAULT 0,
-            last_interaction TEXT DEFAULT (datetime('now')),
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_source_preferences_source ON source_preferences(source);
-
-        -- Activity patterns (time-based engagement, keyed by type + slot)
-        CREATE TABLE IF NOT EXISTS activity_patterns (
-            pattern_type TEXT NOT NULL,
-            pattern_key TEXT NOT NULL,
-            interaction_count INTEGER DEFAULT 0,
-            last_updated TEXT,
-            PRIMARY KEY (pattern_type, pattern_key)
-        );
 
         -- ═══════════════════════════════════════════════════════════════
         -- VALIDATION & MONITORING TABLES
@@ -291,29 +233,6 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
     )
     .context("ACE migration failed")?;
 
-    // Phase 1B migration: Add last_decay_at column for continuous decay tracking
-    // This replaces the boolean decay_applied flag with a timestamp
-    conn.execute_batch("ALTER TABLE topic_affinities ADD COLUMN last_decay_at TEXT DEFAULT NULL;")
-        .ok(); // ok() because column may already exist on subsequent runs
-
-    // Strength-weighted affinity evidence (2026-07-13 doom-loop fix): the
-    // instant negative arm keys on EXPLICIT rejections only, and the affinity
-    // formula weighs |signal_strength| instead of bare counts. Main-DB
-    // migration Phase 89 backfills + recomputes existing profiles; these
-    // idempotent ALTERs cover fresh ACE bootstraps and test databases.
-    conn.execute_batch(
-        "ALTER TABLE topic_affinities ADD COLUMN weighted_positive REAL NOT NULL DEFAULT 0;",
-    )
-    .ok();
-    conn.execute_batch(
-        "ALTER TABLE topic_affinities ADD COLUMN weighted_negative REAL NOT NULL DEFAULT 0;",
-    )
-    .ok();
-    conn.execute_batch(
-        "ALTER TABLE topic_affinities ADD COLUMN explicit_negative_signals INTEGER NOT NULL DEFAULT 0;",
-    )
-    .ok();
-
     // detected_tech needs the same re-baseline column so its half-life decay is
     // incremental, not compounding (the sibling topic decay already has it). Without
     // it, apply_detected_tech_decay had no place to record when it last ran.
@@ -355,46 +274,6 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
     ",
     )
     .ok();
-
-    // Migrate activity_patterns from singleton (JSON arrays) to keyed rows schema.
-    // The old schema had columns: id, hourly_engagement, daily_engagement, total_tracked.
-    // The new schema uses (pattern_type, pattern_key) as primary key with interaction_count.
-    // Safe to drop because the old singleton table had no real user data (initialized to zeros).
-    // Use PRAGMA table_info to detect old schema (avoids SQL checker flagging column names).
-    {
-        let has_old_schema: bool = conn
-            .prepare("PRAGMA table_info(activity_patterns)")
-            .map(|mut stmt| {
-                let cols: Vec<String> = stmt
-                    .query_map([], |row| row.get::<_, String>(1))
-                    .map(|rows| {
-                        rows.filter_map(|r| match r {
-                            Ok(v) => Some(v),
-                            Err(e) => {
-                                tracing::warn!("Row processing failed in ace_db: {e}");
-                                None
-                            }
-                        })
-                        .collect()
-                    })
-                    .unwrap_or_default();
-                cols.iter().any(|c| c == "hourly_engagement")
-            })
-            .unwrap_or(false);
-        if has_old_schema {
-            conn.execute_batch(
-                "DROP TABLE IF EXISTS activity_patterns;
-                 CREATE TABLE IF NOT EXISTS activity_patterns (
-                     pattern_type TEXT NOT NULL,
-                     pattern_key TEXT NOT NULL,
-                     interaction_count INTEGER DEFAULT 0,
-                     last_updated TEXT,
-                     PRIMARY KEY (pattern_type, pattern_key)
-                 );",
-            )
-            .ok();
-        }
-    }
 
     // Create vec0 virtual table for KNN search on topic embeddings (sqlite-vec)
     // This enables O(log n) semantic similarity search for topics
@@ -527,8 +406,6 @@ pub fn purge_generic_active_topics(conn: &Connection) -> Result<usize> {
 // - get_active_topics_by_weight
 // - get_tech_stack_summary
 // - get_recent_activity_context
-// - get_topic_affinities (ACE uses BehaviorLearner methods)
-// - get_anti_topics (ACE uses BehaviorLearner methods)
 // - ActivityContext struct
 // - update_component_health
 // ═══════════════════════════════════════════════════════════════
