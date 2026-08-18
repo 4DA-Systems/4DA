@@ -24,6 +24,14 @@ The Autonomous Context Engine is the brain of 4DA. It must achieve:
 > F1 >= 0.40, and per-persona noise rejection >= 80%. `.ai/INVARIANTS.md` INV-001 quoted
 > the 85% as if it were enforced; it now states the real floors.
 
+> **Implicit capture removed (noted 2026-08-17, v20b / AD-031).** The implicit
+> behavior-learning layer this spec describes — `Scroll`/`Ignore` signals, the
+> `topic_affinities` / `anti_topics` / `source_preferences` / `activity_patterns`
+> tables, and the Behavior Learner's affinity recompute (sections 3.5 and the
+> schema appendix) — no longer exists. Explicit engagement capture (click, save,
+> share, dismiss, mark_irrelevant, briefing, engagement_complete) remains. These
+> sections stand as the historical design record only.
+
 ---
 
 ## 2. Architecture Overview

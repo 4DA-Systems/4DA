@@ -1,5 +1,12 @@
 # 4DA Context Engine Architecture
 
+> **Implicit capture removed (noted 2026-08-17, v20b / AD-031).** The "Learned
+> Behavior" layer this document designs — `topic_affinities`, `anti_topics`,
+> `source_preferences`, and the `Ignore` (scrolled-past) signal — was removed;
+> only explicit engagement capture remains. The layer's scoring authority had
+> already been removed in v19 (AD-029). This document stands as the historical
+> design record.
+
 ## The Vision
 
 The Context Engine is the brain of 4DA. It transforms generic information filtering into deeply personalized relevance by understanding **who you are**, **what you're working on**, and **what patterns emerge from your behavior**.

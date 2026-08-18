@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! Behavior types — user interaction signals, topic affinities, anti-topics.
+//! Behavior types — user interaction signals.
 
 use serde::{Deserialize, Serialize};
 
@@ -90,10 +90,6 @@ pub enum BehaviorAction {
     Share,
     Dismiss,
     MarkIrrelevant,
-    Scroll {
-        visible_seconds: f32,
-    },
-    Ignore,
     /// User clicked an item in the intelligence briefing (curated content = stronger signal)
     BriefingClick,
     /// User dismissed the briefing without clicking any item
@@ -135,11 +131,6 @@ impl BehaviorAction {
             BehaviorAction::Share => 1.0,
             BehaviorAction::Dismiss => -0.8,
             BehaviorAction::MarkIrrelevant => -1.0,
-            BehaviorAction::Scroll { visible_seconds } => {
-                // Log scale: 30s read ~ 0.52, 10s ~ 0.36, 2s ~ 0.16 (was capped at 0.30)
-                0.15 * (1.0 + *visible_seconds).ln()
-            }
-            BehaviorAction::Ignore => -0.1,
             BehaviorAction::BriefingClick => 0.7, // Curated content click = stronger than general click
             BehaviorAction::BriefingDismiss => -0.2, // Mild negative — briefing wasn't useful today
             BehaviorAction::EngagementComplete {
@@ -168,32 +159,6 @@ pub struct BehaviorSignal {
     pub item_topics: Vec<String>,
     pub item_source: String,
     pub signal_strength: f32,
-}
-
-/// Topic affinity
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TopicAffinity {
-    pub topic: String,
-    pub embedding: Option<Vec<f32>>,
-    pub positive_signals: u32,
-    pub negative_signals: u32,
-    pub total_exposures: u32,
-    pub affinity_score: f32,
-    pub confidence: f32,
-    pub last_interaction: String,
-    pub decay_applied: bool,
-}
-
-/// Anti-topic
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AntiTopic {
-    pub topic: String,
-    pub rejection_count: u32,
-    pub confidence: f32,
-    pub auto_detected: bool,
-    pub user_confirmed: bool,
-    pub first_rejection: String,
-    pub last_rejection: String,
 }
 
 #[cfg(test)]
@@ -323,32 +288,6 @@ mod tests {
     fn test_mark_irrelevant_strength() {
         let action = BehaviorAction::MarkIrrelevant;
         assert!((action.compute_strength() - (-1.0)).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_scroll_strength() {
-        let action = BehaviorAction::Scroll {
-            visible_seconds: 3.0,
-        };
-        // Log scale: 0.15 * ln(1 + 3.0) ~ 0.2079
-        let expected = 0.15 * (1.0 + 3.0_f32).ln();
-        assert!((action.compute_strength() - expected).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_scroll_capped() {
-        let action = BehaviorAction::Scroll {
-            visible_seconds: 10.0,
-        };
-        // Log scale: 0.15 * ln(1 + 10.0) ~ 0.3598 (no hard cap, log naturally tapers)
-        let expected = 0.15 * (1.0 + 10.0_f32).ln();
-        assert!((action.compute_strength() - expected).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_ignore_strength() {
-        let action = BehaviorAction::Ignore;
-        assert!((action.compute_strength() - (-0.1)).abs() < f32::EPSILON);
     }
 
     // ========================================================================

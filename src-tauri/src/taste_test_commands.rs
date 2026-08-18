@@ -141,16 +141,6 @@ pub async fn taste_test_finalize(app: AppHandle) -> Result<TasteProfileSummary> 
         tracing::warn!(target: "taste_test", error = %e, "Failed to generate synthetic feedback");
     }
 
-    // Seed continuous posterior in ACE DB from taste test persona weights
-    if let Ok(ace) = crate::state::get_ace_engine() {
-        let ace_conn = ace.get_conn().lock();
-        if let Err(e) =
-            crate::taste_test::continuous::seed_from_taste_test(&ace_conn, &profile.persona_weights)
-        {
-            tracing::warn!(target: "taste_test", error = %e, "Failed to seed continuous posterior");
-        }
-    }
-
     // Invalidate context engine so scoring picks up new data
     crate::invalidate_context_engine();
 

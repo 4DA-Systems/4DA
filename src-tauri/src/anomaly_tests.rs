@@ -17,27 +17,6 @@ fn setup_test_db() -> Connection {
                 content_hash TEXT,
                 processed INTEGER DEFAULT 0
             );
-            CREATE TABLE topic_affinities (
-                id INTEGER PRIMARY KEY,
-                topic TEXT UNIQUE,
-                affinity_score REAL,
-                confidence REAL,
-                positive_signals INTEGER DEFAULT 0,
-                negative_signals INTEGER DEFAULT 0,
-                total_exposures INTEGER DEFAULT 0,
-                last_interaction TEXT,
-                last_decay_at TEXT
-            );
-            CREATE TABLE anti_topics (
-                id INTEGER PRIMARY KEY,
-                topic TEXT UNIQUE,
-                confidence REAL,
-                rejection_count INTEGER DEFAULT 0,
-                auto_detected INTEGER DEFAULT 1,
-                user_confirmed INTEGER DEFAULT 0,
-                first_rejection TEXT,
-                last_rejection TEXT
-            );
             CREATE TABLE interactions (
                 id INTEGER PRIMARY KEY,
                 item_id INTEGER,
@@ -96,26 +75,6 @@ fn test_detect_stale_data_recent_signals() {
 }
 
 #[test]
-fn test_detect_contradiction() {
-    let conn = setup_test_db();
-    // Insert a topic that's both an affinity AND an anti-topic
-    conn.execute(
-        "INSERT INTO topic_affinities (topic, affinity_score, confidence, last_interaction, positive_signals) VALUES ('rust', 0.8, 0.9, datetime('now'), 5)",
-        [],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO anti_topics (topic, confidence, rejection_count) VALUES ('rust', 0.7, 3)",
-        [],
-    )
-    .unwrap();
-    let anomalies = detect_contradictions(&conn).unwrap();
-    assert!(!anomalies.is_empty(), "Should detect contradiction");
-    assert_eq!(anomalies[0].anomaly_type, AnomalyType::Contradiction);
-    assert_eq!(anomalies[0].topic, Some("rust".to_string()));
-}
-
-#[test]
 fn test_store_and_retrieve_anomaly() {
     let conn = setup_test_db();
     let anomaly = Anomaly {
@@ -155,23 +114,6 @@ fn test_resolve_anomaly() {
     resolve_anomaly(&conn, id).unwrap();
     let unresolved = get_unresolved(&conn).unwrap();
     assert_eq!(unresolved.len(), 0);
-}
-
-#[test]
-fn test_detect_confidence_mismatch() {
-    let conn = setup_test_db();
-    // High confidence but low interaction count
-    conn.execute(
-        "INSERT INTO topic_affinities (topic, affinity_score, confidence, last_interaction, positive_signals, negative_signals) VALUES ('obscure-topic', 0.7, 0.95, datetime('now'), 1, 0)",
-        [],
-    )
-    .unwrap();
-    let anomalies = detect_confidence_mismatch(&conn).unwrap();
-    assert!(
-        !anomalies.is_empty(),
-        "Should detect confidence mismatch with <3 interactions"
-    );
-    assert_eq!(anomalies[0].anomaly_type, AnomalyType::ConfidenceMismatch);
 }
 
 #[test]

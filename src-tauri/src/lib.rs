@@ -937,8 +937,6 @@ pub fn run() {
             ace_commands::ace_auto_discover,
             ace_commands::ace_get_scan_summary,
             ace_commands::ace_record_interaction,
-            ace_commands::ace_get_topic_affinities,
-            ace_commands::ace_get_anti_topics,
             ace_commands::ace_find_similar_topics,
             ace_commands::ace_embedding_status,
             ace_commands::ace_save_watcher_state,

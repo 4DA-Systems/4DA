@@ -955,7 +955,6 @@
   "enterprise.export.section.sources": "Configurazione fonti",
   "enterprise.export.section.briefings": "Cronologia briefing",
   "enterprise.export.section.feedback": "Feedback e coinvolgimento",
-  "enterprise.export.section.learned": "Comportamento appreso",
   "enterprise.diagnostics.title": "Diagnostica configurazione",
   "enterprise.diagnostics.description": "Valida la tua configurazione e risolvi i problemi senza contattare il supporto.",
   "enterprise.diagnostics.running": "Esecuzione...",

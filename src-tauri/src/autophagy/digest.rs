@@ -103,20 +103,18 @@ pub(crate) fn run_autophagy_cycle_with_ace(
                 topic_decay_rates_updated: 0,
                 source_autopsies_produced: 0,
                 anti_patterns_detected: 0,
-                decision_outcomes_analyzed: 0,
                 duration_ms: start.elapsed().as_millis() as i64,
             });
         }
     }
 
-    // Run all 7 analyzers (each returns empty vec on failure, never panics)
+    // Run the analyzers (each returns empty vec on failure, never panics)
     let calibrations = super::calibration::analyze_calibration(conn, max_age_days);
     let topic_calibrations =
         super::calibration_analysis::analyze_topic_calibration(conn, max_age_days);
     let decay_profiles = super::topic_decay::analyze_topic_decay(conn);
     let source_autopsies = super::source_autopsy::analyze_sources(conn, max_age_days);
     let anti_patterns = super::anti_patterns::detect_anti_patterns(conn, 0.35);
-    let decision_outcomes = super::decision_outcomes::analyze_decision_window_outcomes(conn);
     let archetypes = super::archetype::detect_archetypes(conn, max_age_days);
 
     // Store source-level calibration results
@@ -172,17 +170,6 @@ pub(crate) fn run_autophagy_cycle_with_ace(
             warn!(target: "4da::autophagy", error = %e, "Failed to store dismissal archetypes");
         } else {
             info!(target: "4da::autophagy", count = archetypes_detected, "Detected dismissal archetypes");
-        }
-    }
-
-    // Store decision window outcomes
-    let decision_outcomes_analyzed = decision_outcomes.len() as i64;
-    if !decision_outcomes.is_empty() {
-        if let Err(e) = super::decision_outcomes::store_decision_outcomes(conn, &decision_outcomes)
-        {
-            warn!(target: "4da::autophagy", error = %e, "Failed to store decision outcomes");
-        } else {
-            info!(target: "4da::autophagy", count = decision_outcomes_analyzed, "Analyzed decision window outcomes");
         }
     }
 
@@ -252,7 +239,6 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         source_autopsies_produced,
         anti_patterns_detected,
         archetypes_detected,
-        decision_outcomes_analyzed,
         duration_ms,
         "Autophagy cycle complete"
     );
@@ -264,7 +250,6 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         topic_decay_rates_updated,
         source_autopsies_produced,
         anti_patterns_detected,
-        decision_outcomes_analyzed,
         duration_ms,
     })
 }
