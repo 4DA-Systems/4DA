@@ -807,13 +807,17 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 for url in urls {
                     let url = url.to_string();
                     if crate::utils::validate_deep_link_url(&url) {
-                        info!(target: "4da::deeplink", url = %url, "Launch deep-link parked for frontend");
+                        info!(target: "4da::deeplink", url = %crate::utils::redact_deep_link(&url), "Launch deep-link parked for frontend");
                         crate::settings_commands::set_pending_deep_link(url);
                         break;
                     } else {
-                        warn!(target: "4da::security", url = %url, "Rejected invalid launch deep-link");
+                        warn!(target: "4da::security", url = %crate::utils::redact_deep_link(&url), "Rejected invalid launch deep-link");
                         if let Ok(db) = crate::get_database() {
-                            db.log_security_event("deeplink_blocked", &url, "warning");
+                            db.log_security_event(
+                                "deeplink_blocked",
+                                &crate::utils::redact_deep_link(&url),
+                                "warning",
+                            );
                         }
                     }
                 }
@@ -835,12 +839,16 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             if let Ok(url_list) = serde_json::from_str::<Vec<String>>(&format!("[{urls}]")) {
                 for url in url_list {
                     if crate::utils::validate_deep_link_url(&url) {
-                        info!(target: "4da::deeplink", url = %url, "Deep-link received");
+                        info!(target: "4da::deeplink", url = %crate::utils::redact_deep_link(&url), "Deep-link received");
                         deliver_deep_link(&deep_link_handle, url);
                     } else {
-                        warn!(target: "4da::security", url = %url, "Rejected invalid deep-link URL");
+                        warn!(target: "4da::security", url = %crate::utils::redact_deep_link(&url), "Rejected invalid deep-link URL");
                         if let Ok(db) = crate::get_database() {
-                            db.log_security_event("deeplink_blocked", &url, "warning");
+                            db.log_security_event(
+                                "deeplink_blocked",
+                                &crate::utils::redact_deep_link(&url),
+                                "warning",
+                            );
                         }
                     }
                 }
@@ -866,15 +874,19 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     tick.tick().await;
                     if let Some(url) = crate::single_instance::take_deeplink_relay(&relay_dir) {
                         if crate::utils::validate_deep_link_url(&url) {
-                            info!(target: "4da::deeplink", url = %url, "Deep-link received via relay");
+                            info!(target: "4da::deeplink", url = %crate::utils::redact_deep_link(&url), "Deep-link received via relay");
                             // The user clicked a button expecting the app to
                             // answer — front the window (recreating it if it
                             // was destroyed) and deliver.
                             deliver_deep_link(&relay_handle, url);
                         } else {
-                            warn!(target: "4da::security", url = %url, "Rejected invalid relayed deep-link");
+                            warn!(target: "4da::security", url = %crate::utils::redact_deep_link(&url), "Rejected invalid relayed deep-link");
                             if let Ok(db) = crate::get_database() {
-                                db.log_security_event("deeplink_blocked", &url, "warning");
+                                db.log_security_event(
+                                    "deeplink_blocked",
+                                    &crate::utils::redact_deep_link(&url),
+                                    "warning",
+                                );
                             }
                         }
                     }
