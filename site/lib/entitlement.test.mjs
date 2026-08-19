@@ -30,6 +30,8 @@ import {
   isRevoked,
   isTerminal,
   resolveCustomerId,
+  sessionProvesPurchase,
+  sessionWithinWindow,
   severityOf,
   stripeIdOf,
   terminalStatusPatch,
@@ -340,6 +342,29 @@ test('metaKey builds the write key and nothing else', () => {
   assert.equal(metaKey('license'), 'signal_license');
   assert.equal(meta({}, 'status'), undefined);
   assert.equal(meta(null, 'status'), undefined);
+});
+
+test('sessionProvesPurchase accepts only a completed/paid session', () => {
+  // The HIGH: an incomplete session id + a buyer-typed email used to return any
+  // customer's key. Only a proven-complete session may unlock the lookup.
+  assert.equal(sessionProvesPurchase({ status: 'complete' }), true);
+  assert.equal(sessionProvesPurchase({ payment_status: 'paid' }), true);
+  assert.equal(sessionProvesPurchase({ payment_status: 'no_payment_required' }), true);
+  // The attack shapes — an abandoned/open session must NOT prove purchase.
+  assert.equal(sessionProvesPurchase({ status: 'open', payment_status: 'unpaid' }), false);
+  assert.equal(sessionProvesPurchase({ status: 'expired' }), false);
+  assert.equal(sessionProvesPurchase({}), false);
+  assert.equal(sessionProvesPurchase(null), false);
+});
+
+test('sessionWithinWindow time-boxes the session-id bearer credential', () => {
+  const now = 1_000_000; // arbitrary unix seconds
+  const day = 24 * 60 * 60;
+  assert.equal(sessionWithinWindow({ created: now - 60 }, day, now), true, 'fresh session passes');
+  assert.equal(sessionWithinWindow({ created: now - day + 1 }, day, now), true, 'just inside the window');
+  assert.equal(sessionWithinWindow({ created: now - day - 1 }, day, now), false, 'just past the window');
+  // Unknown created (should not occur) must not block a legitimate lookup.
+  assert.equal(sessionWithinWindow({}, day, now), true);
 });
 
 test('isRevoked means the money went back — stricter than isTerminal', () => {

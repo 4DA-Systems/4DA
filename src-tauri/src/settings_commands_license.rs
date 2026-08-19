@@ -228,9 +228,14 @@ pub async fn start_trial() -> Result<serde_json::Value> {
 
     info!(target: "4da::license", "Free trial started");
 
+    // Report the ACTUAL trial length, computed from the same source gating
+    // enforces (get_trial_status -> TRIAL_DURATION_DAYS). This used to hardcode
+    // 45 while gating.rs expires the trial at 14 days — a response that promised
+    // three times the access the app actually grants.
+    let status = crate::settings::get_trial_status(&guard.get().license);
     Ok(serde_json::json!({
         "success": true,
-        "days_remaining": 45,
+        "days_remaining": status.days_remaining,
     }))
 }
 
@@ -359,8 +364,12 @@ pub async fn validate_license() -> Result<serde_json::Value> {
 ///
 /// So the success outcome here is `reason: "emailed"`, not an activation: the
 /// user completes recovery by opening the email and using the key (or its
-/// `fourda://activate` deep link). The 200 arm below is retained only for
-/// compatibility with an older server response and is unreachable in production.
+/// `fourda://activate` deep link). This command NEVER auto-activates a key handed
+/// back over HTTP — an older server returned the key in a 200 body and this used
+/// to store it into settings/keychain/backup with no signature or online check,
+/// which a user who repointed `4da.ai` at their own server could abuse to grant
+/// any tier. A 200 is now treated as "check your email" and nothing is stored;
+/// activation only ever happens through `activate_license`, which verifies.
 #[tauri::command]
 pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value> {
     validate_input_length(&email, "Email", 254)?;
@@ -387,58 +396,21 @@ pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value
             };
 
             match status {
-                200 => {
-                    // Extract and validate license key
-                    let license_key = body["license_key"].as_str().unwrap_or("").to_string();
-                    if license_key.is_empty() {
-                        return Ok(serde_json::json!({ "success": false, "reason": "not_found" }));
-                    }
-                    // Validate key format — must be 4DA- or Keygen format
-                    if !license_key.starts_with("4DA-") && !license_key.contains('-') {
-                        warn!(target: "4da::license", "Recovery returned invalid key format");
-                        return Ok(
-                            serde_json::json!({ "success": false, "reason": "invalid_key", "detail": "Server returned invalid license key format" }),
-                        );
-                    }
-
-                    // Extract tier — default to "free" (not "signal") if missing
-                    let tier = body["tier"].as_str().unwrap_or("free").to_string();
-
-                    // Auto-activate: store in keychain + settings
-                    let effective_tier = match tier.as_str() {
-                        "signal" | "team" | "enterprise" => tier.clone(),
-                        "pro" | "community" | "cohort" => "signal".to_string(),
-                        _ => tier.clone(),
-                    };
-
-                    let manager = get_settings_manager();
-                    let mut guard = manager.lock();
-                    let settings = guard.get_mut();
-
-                    let _ = crate::settings::keystore::store_secret("license_key", &license_key);
-                    settings.license.license_key = license_key.clone();
-                    settings.license.tier = effective_tier.clone();
-                    let activated_at = chrono::Utc::now().to_rfc3339();
-                    settings.license.activated_at = Some(activated_at.clone());
-                    settings.license.trial_started_at = None;
-                    guard.save()?;
-
-                    crate::settings::save_license_backup(
-                        &license_key,
-                        &effective_tier,
-                        &activated_at,
-                    );
-
-                    info!(target: "4da::license", tier = %effective_tier, "License recovered and activated via email lookup");
-
-                    Ok(serde_json::json!({
-                        "success": true,
-                        "license_key": license_key,
-                        "tier": effective_tier,
-                        "expires_at": body["expires_at"],
-                        "status": body["status"],
-                    }))
-                }
+                // The live server never returns a key to this call — recovery
+                // MAILS the key and answers 202. This arm existed for an older
+                // server that returned the key in the body, and it auto-activated
+                // it into settings + keychain + backup WITHOUT any signature or
+                // online validation (unlike `activate_license`). That is a real
+                // hole: a user who repoints 4da.ai at a server they control (hosts
+                // file + a self-installed root CA) could hand themselves any tier.
+                // We no longer trust a key handed back by this endpoint. If a
+                // legacy server ever returns 200, treat it as "check your email"
+                // and let the user activate through the verified path.
+                200 => Ok(serde_json::json!({
+                    "success": false,
+                    "reason": "emailed",
+                    "detail": "Check your email for your licence key, then activate it in Settings.",
+                })),
                 // The normal, secure outcome: the server accepted the request and
                 // mailed the key to the address on file. It deliberately tells us
                 // nothing about whether that address is a customer, so we must not

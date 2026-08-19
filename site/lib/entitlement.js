@@ -78,6 +78,37 @@ export function severityOf(status) {
 }
 
 /**
+ * Does a retrieved Checkout Session PROVE a completed purchase?
+ *
+ * A session id is minted at CREATION, before payment, and its
+ * `customer_details.email` is buyer-typed. The session-lookup endpoint returns a
+ * licence key, so trusting an incomplete session let anyone start a checkout with
+ * a victim's email, abandon it, and read that victim's offline-verifiable key.
+ * Only a completed session is proof: `status === 'complete'` (payment captured or
+ * subscription created), with `payment_status` covering the $0 edge.
+ */
+export function sessionProvesPurchase(session) {
+  return (
+    session?.status === 'complete' ||
+    session?.payment_status === 'paid' ||
+    session?.payment_status === 'no_payment_required'
+  );
+}
+
+/**
+ * Is a completed session still inside the bearer-credential window? The session
+ * id sits in the success-page URL and retrieves the key, so an old one that later
+ * surfaces in history or a shared link must stop working (email recovery covers
+ * anyone past the window). Unknown `created` (should not happen) does not block.
+ *
+ * @param {number} nowSeconds  current time in UNIX seconds
+ */
+export function sessionWithinWindow(session, maxAgeSeconds, nowSeconds) {
+  if (typeof session?.created !== 'number') return true;
+  return nowSeconds - session.created <= maxAgeSeconds;
+}
+
+/**
  * Is this customer entitled under a LIFETIME (one-time payment) purchase?
  *
  * Lifetime has no Stripe subscription to read a live status from, so the only

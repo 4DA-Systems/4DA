@@ -15,6 +15,10 @@ noAnalytics: true
 {% block head %}
   <link rel="canonical" href="https://4da.ai/signal/success">
   <meta name="robots" content="noindex">
+  {# The URL carries ?session_id=, a bearer credential for the licence key.
+     Force no-referrer so it is never sent to any host in a Referer header
+     (matches /activate). #}
+  <meta name="referrer" content="no-referrer">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {

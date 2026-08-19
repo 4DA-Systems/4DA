@@ -1,6 +1,22 @@
 # Cloudflare Pages headers. Conservative, safe hardening only (behavior-preserving:
 # the previous Vercel site set no custom headers on static assets). API functions
 # set their own CORS headers in code.
+# Strict CSP for the two pages that carry the licence KEY (in the /activate
+# fragment and rendered into the DOM) or the session-id BEARER credential
+# (/signal/success URL). default-src 'none' + connect-src 'self' means that even
+# if a script were somehow injected it could not exfiltrate the key to any
+# external host, and no external script can load at all. These pages set
+# noAnalytics, so — unlike the rest of the site — they need no PostHog origins.
+# 'unsafe-inline' is required (the pages use inline <style>/<script>), but the
+# pages have no injection sink (textContent + encodeURIComponent only), so the
+# real value here is locking script/connect to same-origin. Google Fonts + the
+# data: favicon are the only external resources these pages use.
+/activate*
+  Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+
+/signal/success*
+  Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

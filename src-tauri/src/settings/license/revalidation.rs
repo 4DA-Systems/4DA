@@ -206,15 +206,24 @@ fn normalize_tier(tier: &str) -> String {
 ///    requires. If the key is present and the tier already matches, no-op.
 /// 2. Otherwise, if the current tier is not paid, fall back to the durable
 ///    `license_backup.json`:
-///    - a `4DA-` key is restored only when its ed25519 signature verifies;
+///    - a `4DA-` key is restored only when its ed25519 signature verifies. This
+///      path IS cryptographic: the app holds no private seed, so a paid `4DA-`
+///      tier cannot be forged locally.
 ///    - a Keygen-format key (no local signature) is restored only when a fresh,
-///      key-matching, paid `license_cache.json` entry proves it was validated
-///      online recently — the tier comes from that cache, never from the
-///      hand-writable `backup.tier`.
+///      key-matching, paid `license_cache.json` entry exists — the tier comes from
+///      that cache, not from the hand-writable `backup.tier`.
 ///
-/// A paid tier is therefore granted only from a verified signature or a proven
-/// online validation — never from a bare tier string in `settings.json` or a
-/// fabricated backup file. The tier adopted is the one the proof establishes: if
+/// HONEST LIMIT of the Keygen branch: `license_cache.json` is itself hand-writable
+/// and its `key_hash` is a bare SHA-256 of the key (no server secret / HMAC — see
+/// keygen.rs::hash_key), so a determined local user CAN forge a matching
+/// backup+cache pair and restore a paid Keygen tier. This is an honesty-box
+/// control (it raises the bar to two consistent files), NOT a cryptographic one —
+/// unlike the `4DA-` path. Closing it needs a server-signed Keygen licence file,
+/// or retiring the Keygen offline-restore path once no Keygen customers remain
+/// (the shipping checkout issues `4DA-` keys only). The regression test
+/// `reconcile_restores_keygen_tier_only_with_fresh_matching_cache` documents that
+/// a matching cache DOES restore — i.e. it pins the real, forgeable behaviour
+/// rather than a claimed-secure one. The tier adopted is the one the proof establishes: if
 /// a valid key proves a *lower* paid tier than an inflated settings value, this
 /// corrects downward. Genuinely keyless/invalid paid claims are left to the
 /// downgrade check in [`validate_license_on_startup`]. Returns `true` if it
@@ -452,6 +461,34 @@ mod reconcile_tests {
         let mut l = lic("free", "");
         assert!(!reconcile_license_from_proof(&mut l, &dir));
         assert_eq!(l.tier, "free");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn keygen_offline_restore_is_an_honesty_box_not_cryptographic() {
+        // ADVERSARIAL / documentation test. Unlike the `4DA-` path (unforgeable —
+        // the app holds no signing seed), the Keygen offline-restore trusts a
+        // `license_cache.json` whose `key_hash` is a bare SHA-256 the user can
+        // compute. So a determined local user who hand-writes BOTH a backup and a
+        // matching cache DOES restore a paid Keygen tier. This test pins that real
+        // behaviour so the limitation is visible in the suite and cannot be
+        // mistaken for a cryptographic guarantee. Closing it needs a server-signed
+        // Keygen licence, or retiring this path once no Keygen customers remain.
+        let dir = empty_dir("keygen_honesty_box");
+        let forged_key = "FORGED-KEYGEN-DEADBEEF"; // any Keygen-format string
+        super::super::keygen::save_license_backup_to(
+            &dir,
+            forged_key,
+            "signal",
+            "2026-01-01T00:00:00Z",
+        );
+        write_fresh_paid_cache(&dir, forged_key, "signal"); // user-computed matching hash
+        let mut l = lic("free", "");
+        assert!(
+            reconcile_license_from_proof(&mut l, &dir),
+            "a matching hand-written backup+cache pair restores paid — the known honesty-box limit"
+        );
+        assert_eq!(l.tier, "signal");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
