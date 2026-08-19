@@ -19,7 +19,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { deliverLicenseEmail, isRecoveryEmailConfigured } from './recovery-email.js';
+import { deliverLicenseEmail, deliverRecoveryEmail, isRecoveryEmailConfigured } from './recovery-email.js';
 
 const CONFIGURED = { RESEND_API_KEY: 'test-key', RESEND_FROM_EMAIL: '4DA <licenses@4da.ai>' };
 const KEY = '4DA-eyJ0aWVyIjoic2lnbmFsIn0.c2ln';
@@ -318,4 +318,128 @@ test('isRecoveryEmailConfigured requires BOTH variables', () => {
   assert.equal(isRecoveryEmailConfigured({ RESEND_FROM_EMAIL: 'f' }), false);
   assert.equal(isRecoveryEmailConfigured({}), false);
   assert.equal(isRecoveryEmailConfigured(null), false);
+});
+
+// ---------------------------------------------------------------------------
+// RECOVERY delivery — what each entitlement state receives.
+//
+// The property under test: a REFUNDED or CHARGED-BACK customer must never be
+// re-mailed their key. Keys verify OFFLINE against the app's embedded public
+// key, so a re-delivered copy works until its embedded expiry with nothing to
+// revoke it — recovery would quietly hand back exactly the access the refund
+// ended. A CANCELLED subscriber, by contrast, paid for their current period:
+// they keep recovery until the key's own expiry, because that tail is the
+// policy being sold.
+// ---------------------------------------------------------------------------
+
+/** A fake Stripe client whose customer list answers with exactly one record. */
+function stripeWith(customer) {
+  return { customers: { list: async () => ({ data: customer ? [customer] : [] }) } };
+}
+
+function customerWith(metadata) {
+  return { email: 'buyer@example.com', metadata };
+}
+
+const FUTURE = '2099-01-01T00:00:00.000Z';
+
+test('recovery for an ACTIVE customer mails the key', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const stripe = stripeWith(
+      customerWith({ signal_license: KEY, signal_tier: 'signal', signal_status: 'active', signal_expires_at: FUTURE }),
+    );
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'buyer@example.com'), 'sent');
+    assert.ok(f.calls[0].body.text.includes(KEY), 'the key is delivered');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('recovery for a REFUNDED customer sends a notice, never the key', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const stripe = stripeWith(
+      customerWith({ signal_license: KEY, signal_status: 'refunded', signal_expires_at: FUTURE }),
+    );
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'buyer@example.com'), 'revoked_notice');
+    assert.equal(f.calls.length, 1, 'the address on file still gets an honest answer');
+    const { text, html, subject } = f.calls[0].body;
+    assert.ok(!text.includes(KEY), 'the key must not be in the plaintext part');
+    assert.ok(!html.includes(KEY), 'nor in the HTML part');
+    assert.match(subject, /no longer active/);
+    assert.ok(text.includes('https://4da.ai/signal'), 'and it offers the way back');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('recovery after a CHARGEBACK is refused identically', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const stripe = stripeWith(
+      customerWith({ signal_license: KEY, signal_status: 'chargeback', signal_expires_at: FUTURE }),
+    );
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'buyer@example.com'), 'revoked_notice');
+    assert.ok(!f.calls[0].body.text.includes(KEY));
+  } finally { f.restore(); c.restore(); }
+});
+
+test('a CANCELLED subscriber keeps recovery until the key expires', async () => {
+  // Cancellation ends renewal, not the already-paid period.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const stripe = stripeWith(
+      customerWith({ signal_license: KEY, signal_tier: 'signal', signal_status: 'cancelled', signal_expires_at: FUTURE }),
+    );
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'buyer@example.com'), 'sent');
+    assert.ok(f.calls[0].body.text.includes(KEY), 'the paid tail still delivers the key');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('a legacy streets_-prefixed refund is honoured too', async () => {
+  // Pre-rename customer records carry streets_* metadata; the revoked gate must
+  // read through the namespace fallback like every other entitlement read.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const stripe = stripeWith(
+      customerWith({ streets_license: KEY, streets_status: 'refunded', streets_expires_at: FUTURE }),
+    );
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'buyer@example.com'), 'revoked_notice');
+    assert.ok(!f.calls[0].body.text.includes(KEY));
+  } finally { f.restore(); c.restore(); }
+});
+
+test('an EXPIRED licence gets the expiry notice, not the key', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const stripe = stripeWith(
+      customerWith({ signal_license: KEY, signal_status: 'active', signal_expires_at: '2020-01-01T00:00:00.000Z' }),
+    );
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'buyer@example.com'), 'expired_notice');
+    assert.ok(!f.calls[0].body.text.includes(KEY));
+    assert.match(f.calls[0].body.subject, /expired/);
+  } finally { f.restore(); c.restore(); }
+});
+
+test('an unknown address sends nothing and reports no_licence', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripeWith(null), 'x@y.co'), 'no_licence');
+    assert.equal(f.calls.length, 0);
+  } finally { f.restore(); c.restore(); }
+});
+
+test('a Stripe error during recovery is swallowed, never thrown', async () => {
+  // The caller has already answered 202; a throw here could only produce noise
+  // that distinguishes customers from non-customers in error telemetry.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const stripe = { customers: { list: async () => { throw new Error('stripe down'); } } };
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'x@y.co'), 'error');
+  } finally { f.restore(); c.restore(); }
 });

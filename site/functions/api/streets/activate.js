@@ -28,6 +28,7 @@ import * as ed from '@noble/ed25519';
 import { generateRefreshKey } from '../../../lib/ed25519-license.js';
 import {
   hasOtherStandingCharge,
+  isRevoked,
   isTerminal,
   meta,
   metaKey,
@@ -35,6 +36,17 @@ import {
   stripeIdOf,
   terminalStatusPatch,
 } from '../../../lib/entitlement.js';
+import {
+  checkAndCount,
+  ipWindowKey,
+  IP_WINDOW_TTL_SECONDS,
+  isDuplicateEvent,
+  mailWindowKey,
+  MAIL_WINDOW_TTL_SECONDS,
+  markEventProcessed,
+  RECOVERY_MAILS_PER_ADDRESS_PER_DAY,
+  RECOVERY_REQUESTS_PER_IP_PER_HOUR,
+} from '../../../lib/abuse-guards.js';
 import {
   deliverLicenseEmail,
   deliverRecoveryEmail,
@@ -500,16 +512,10 @@ export async function onRequest({ request, env, waitUntil }) {
     }
 
     // -----------------------------------------------------------------------
-    // DUPLICATE DELIVERIES — what protects us, and what does not.
+    // DUPLICATE DELIVERIES — layered defence.
     //
-    // Stripe retries a webhook until it gets a 2xx and can re-send the same
-    // event id. There is NO event-id dedup store here, because there is nowhere
-    // to put one: site/wrangler.toml declares no KV, D1 or Durable Object
-    // binding, and a binding cannot be invented in code — it has to be
-    // provisioned on the Pages project first, and naming one that does not
-    // exist fails closed at request time on the LIVE payment path.
-    //
-    // What bounds the exposure today:
+    // Stripe retries a webhook until it gets a 2xx and routinely re-sends the
+    // same event id. Three layers bound what a duplicate can do:
     //   * constructEventAsync above enforces Stripe's 300s signature replay
     //     tolerance, so a captured request body cannot be replayed by a third
     //     party indefinitely. Only Stripe's own retries reach these handlers
@@ -519,17 +525,24 @@ export async function onRequest({ request, env, waitUntil }) {
     //     CONSTRUCTION: terminalStatusPatch() preserves the first-seen
     //     timestamp and never downgrades severity, so re-delivery — in any
     //     order — writes identical bytes.
+    //   * The MINTING handlers (checkout.session.completed, invoice.paid)
+    //     issue a new signed key on every run and cannot be idempotent by
+    //     construction — so the LICENSE_KV event-id gate below skips any event
+    //     id that already completed successfully. The id is recorded only
+    //     AFTER the handler succeeds: a failed handler stays retryable.
     //
-    // What is NOT idempotent, and what only a dedup store can fix:
-    //   * checkout.session.completed and invoice.paid MINT a new signed licence
-    //     key on every delivery. A duplicate therefore issues a second valid
-    //     key with a fresh expiry window. Minting cannot be made idempotent by
-    //     construction; it needs a persisted record of processed event ids.
-    //
-    // OPERATOR ACTION: create a KV namespace on the `4da-site` Pages project,
-    // add the binding to site/wrangler.toml, then gate this dispatch on
-    // `event.id` with a TTL comfortably longer than Stripe's retry window (72h).
+    // FAIL-OPEN: a missing binding or a KV error processes the event anyway
+    // (worst case is yesterday's status quo — a duplicate key), because the
+    // alternative is failing the live payment path on a lookup store.
     // -----------------------------------------------------------------------
+
+    const dedupStore = env.LICENSE_KV;
+    if (!dedupStore) {
+      console.error('LICENSE_KV binding missing — webhook dedup disabled for this delivery');
+    } else if (await isDuplicateEvent(dedupStore, event.id)) {
+      console.log('Duplicate webhook delivery skipped:', event.type, event.id);
+      return json({ received: true, duplicate: true }, 200, headers);
+    }
 
     try {
       let result;
@@ -550,6 +563,7 @@ export async function onRequest({ request, env, waitUntil }) {
           result = await handleDisputeCreated(stripe, event.data.object);
           break;
       }
+      if (dedupStore) await markEventProcessed(dedupStore, event.id);
       return json({ received: true, ...result }, 200, headers);
     } catch (err) {
       console.error(`Webhook ${event.type} failed:`, err.message);
@@ -589,7 +603,7 @@ export async function onRequest({ request, env, waitUntil }) {
     const email = url.searchParams.get('email');
 
     if (session_id) return handleSessionLookup(env, session_id, headers);
-    if (email) return handleEmailRecovery(env, email, headers, waitUntil);
+    if (email) return handleEmailRecovery(env, request, email, headers, waitUntil);
 
     return json({ error: 'Provide session_id or email' }, 400, headers);
   }
@@ -627,6 +641,21 @@ async function handleSessionLookup(env, session_id, headers) {
       return json({ error: 'No STREETS license found' }, 404, headers);
     }
 
+    // Refunded / charged back: holding the checkout session id proves this
+    // purchase happened, but the money has since gone back, so the key is not
+    // re-issued. A merely CANCELLED subscriber is NOT blocked here — their paid
+    // tail runs to the key's own expiry, which is the policy being sold.
+    if (isRevoked(customer.metadata)) {
+      return json(
+        {
+          error: 'This licence is no longer active.',
+          status: meta(customer.metadata, 'status'),
+        },
+        410,
+        headers,
+      );
+    }
+
     // Check expiration before returning
     const expiresAt = meta(customer.metadata, 'expires_at');
     if (expiresAt && new Date(expiresAt) < new Date()) {
@@ -654,14 +683,22 @@ async function handleSessionLookup(env, session_id, headers) {
 // GET path 2: recovery by unverified email -> mails the key, discloses nothing
 // ---------------------------------------------------------------------------
 
-// FOLLOW-UP (not fixed here): this path is still unauthenticated and unmetered,
-// so it can be driven in a loop to repeatedly mail an existing customer their own
-// key. It cannot mail anyone who is NOT already a customer (see recovery-email.js),
-// which bounds the blast radius to inbox nuisance rather than open-relay abuse.
-// A proper fix needs per-IP/per-address counters, and this Pages project declares
-// no KV or D1 binding to hold them (site/wrangler.toml). Two options, neither
-// requiring code: a Cloudflare WAF rate-limiting rule on /api/streets/activate
-// (dashboard-only, recommended), or adding a KV binding and gating here.
+// This path is unauthenticated by design (control of the mailbox is the auth
+// factor), so it is METERED instead — LICENSE_KV counters, two windows:
+//
+//   * per IP / hour: bounds scripted probing before any work happens. Answered
+//     with an honest 429 — the limit depends only on the CALLER's behaviour,
+//     never on whether any address is a customer, so it leaks nothing.
+//   * per address / day: bounds how many mails one inbox can be sent, and —
+//     the sharper risk — how much of the Resend daily quota an attacker who
+//     knows ONE customer address can burn (quota exhaustion would silence the
+//     licence-delivery mail of every real purchase that day). Enforced INSIDE
+//     the deferred delivery, after the constant 202 is already sent, so the
+//     response body and timing stay identical in every case.
+//
+// Both fail OPEN on KV errors: recovery for a real customer is never blocked
+// by a broken counter store. A WAF rate-limiting rule on /api/streets/activate
+// remains worthwhile belt-and-braces (dashboard-only, zone-level).
 //
 // The single response every successful email-recovery request gets, no matter
 // what the lookup finds. Keeping this a module constant makes it impossible to
@@ -672,11 +709,31 @@ const RECOVERY_ACCEPTED = {
     "If that address has a 4DA licence, we've emailed the key to it. Check your inbox and spam folder.",
 };
 
-async function handleEmailRecovery(env, email, headers, waitUntil) {
+async function handleEmailRecovery(env, request, email, headers, waitUntil) {
   // Shape-only rejection. Depends purely on the submitted string, so it cannot
   // distinguish "not a customer" from "not an email".
   if (!isPlausibleEmail(email)) {
     return json({ error: 'Provide a valid email address', reason: 'invalid_email' }, 400, headers);
+  }
+
+  // Per-IP window. Runs the same for every request from this caller regardless
+  // of the address submitted, so the 429 carries no customer information.
+  const kv = env.LICENSE_KV;
+  const callerIp = request.headers.get('cf-connecting-ip');
+  if (kv && callerIp) {
+    const allowed = await checkAndCount(
+      kv,
+      ipWindowKey(callerIp),
+      RECOVERY_REQUESTS_PER_IP_PER_HOUR,
+      IP_WINDOW_TTL_SECONDS,
+    );
+    if (!allowed) {
+      return json(
+        { error: 'Too many recovery requests. Please try again later.', reason: 'rate_limited' },
+        429,
+        headers,
+      );
+    }
   }
 
   // Honest failure when outbound mail is not provisioned. We do NOT fall back to
@@ -696,10 +753,26 @@ async function handleEmailRecovery(env, email, headers, waitUntil) {
   }
 
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
-  const delivery = deliverRecoveryEmail(env, stripe, email)
+  const delivery = (async () => {
+    // Per-address window, checked AFTER the constant 202 has gone out (this
+    // whole closure rides waitUntil), so hitting the cap changes nothing the
+    // caller can observe — the mail is simply not sent again.
+    if (kv) {
+      const allowed = await checkAndCount(
+        kv,
+        mailWindowKey(email),
+        RECOVERY_MAILS_PER_ADDRESS_PER_DAY,
+        MAIL_WINDOW_TTL_SECONDS,
+      );
+      if (!allowed) {
+        console.log('Recovery by email outcome: rate_limited (per-address daily cap)');
+        return;
+      }
+    }
     // Logged, never returned: the outcome is exactly the fact we must not leak.
-    .then((outcome) => console.log('Recovery by email outcome:', outcome))
-    .catch((err) => console.error('Recovery by email crashed:', err?.message));
+    const outcome = await deliverRecoveryEmail(env, stripe, email);
+    console.log('Recovery by email outcome:', outcome);
+  })().catch((err) => console.error('Recovery by email crashed:', err?.message));
 
   // Respond BEFORE the lookup runs. Response latency is therefore constant and
   // carries no information about whether the address is a customer — the timing

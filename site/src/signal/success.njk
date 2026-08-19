@@ -2,6 +2,13 @@
 title: "License Activated -- 4DA Signal"
 description: "Your 4DA Signal license is ready. Activate it in the app."
 permalink: "/signal/success.html"
+# noAnalytics is NOT cosmetic here. This page's URL carries ?session_id=cs_...,
+# and that session id is a BEARER CREDENTIAL: GET /api/streets/activate?session_id=
+# returns the licence key to whoever holds it. With PostHog loaded, every
+# pageview shipped that credential to a third party inside $current_url — and the
+# page also renders the key itself in the DOM, which session replay would record.
+# Same reasoning as /activate (which carries the key in its fragment).
+noAnalytics: true
 ---
 {% extends "base.njk" %}
 
