@@ -11,3 +11,17 @@ name = "4da-site"
 pages_build_output_dir = "_site"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
+
+# LICENSE_KV (created 2026-08-19): webhook event-id dedup + recovery rate
+# limiting for the licensing endpoints (see site/lib/abuse-guards.js). Separate
+# preview namespace so preview traffic can never consume production dedup
+# records or rate-limit windows. All consumers FAIL OPEN if the binding is
+# absent, so a deploy without it degrades to the pre-KV behaviour, never a 500.
+[[kv_namespaces]]
+binding = "LICENSE_KV"
+id = "33eb6985e73f40c1a269794ba8a6cca4"
+
+[env.preview]
+[[env.preview.kv_namespaces]]
+binding = "LICENSE_KV"
+id = "83ffb6f2bfe54ad4bfaf0a648cd1f2d8"

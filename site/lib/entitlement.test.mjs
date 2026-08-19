@@ -27,6 +27,7 @@ import {
   meta,
   metaKey,
   isLifetimeEntitled,
+  isRevoked,
   isTerminal,
   resolveCustomerId,
   severityOf,
@@ -339,4 +340,19 @@ test('metaKey builds the write key and nothing else', () => {
   assert.equal(metaKey('license'), 'signal_license');
   assert.equal(meta({}, 'status'), undefined);
   assert.equal(meta(null, 'status'), undefined);
+});
+
+test('isRevoked means the money went back — stricter than isTerminal', () => {
+  // Refund and chargeback revoke retrieval; a plain cancellation does NOT —
+  // the cancelled subscriber paid for their current period, and blocking their
+  // key recovery during that tail would take back something they bought.
+  assert.equal(isRevoked({ signal_status: 'refunded' }), true);
+  assert.equal(isRevoked({ signal_status: 'chargeback' }), true);
+  assert.equal(isRevoked({ signal_status: 'cancelled' }), false);
+  assert.equal(isRevoked({ signal_status: 'active' }), false);
+  assert.equal(isRevoked({}), false);
+  assert.equal(isRevoked(null), false);
+  // Legacy-prefixed records read through the namespace fallback.
+  assert.equal(isRevoked({ streets_status: 'refunded' }), true);
+  assert.equal(isRevoked({ streets_status: 'cancelled' }), false);
 });

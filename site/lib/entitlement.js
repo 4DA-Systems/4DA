@@ -99,6 +99,19 @@ export function isTerminal(metadata) {
 }
 
 /**
+ * Has the money actually gone back (refund) or been clawed back (chargeback)?
+ *
+ * Deliberately STRICTER than isTerminal: a CANCELLED subscriber paid for their
+ * current period and keeps key retrieval until the key's own expiry — that tail
+ * is the product policy being sold, not a leak. A refunded or charged-back
+ * customer no longer holds a standing payment, so re-delivering their key
+ * (recovery mail, session lookup) would undermine the refund itself.
+ */
+export function isRevoked(metadata) {
+  return severityOf(meta(metadata, 'status')) >= SEVERITY.refunded;
+}
+
+/**
  * Does this customer still hold a paid charge OTHER than the one being
  * processed — one that succeeded, was not refunded and is not disputed?
  *

@@ -41,7 +41,7 @@
 
 // `meta` resolves the signal_*/streets_* namespace. entitlement.js imports
 // nothing, so this stays a one-way dependency with no cycle.
-import { meta } from './entitlement.js';
+import { isRevoked, meta } from './entitlement.js';
 import { renderShell, emailButton, keyPanel, BRAND, FONT_STACK } from './email-shell.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
@@ -255,6 +255,39 @@ ${emailButton('https://4da.ai/signal', 'Renew Signal')}`;
   return { subject: 'Your 4DA licence has expired', html, text };
 }
 
+function buildRevokedEmail() {
+  // Sent instead of the key when the entitlement was refunded or charged back.
+  // Mailing the key after the money went back would undermine the refund — the
+  // key verifies offline, so a re-delivered copy works until its embedded
+  // expiry with nothing to revoke it. The address on file still deserves an
+  // honest answer rather than silence (silence reads as a broken recovery form
+  // and becomes a support ticket).
+  const content = `              <h1 style="margin: 0 0 6px; font-family: ${FONT_STACK}; font-size: 22px; line-height: 1.3; font-weight: 600; color: ${BRAND.ink};">This licence is no longer active</h1>
+              <p style="margin: 0 0 24px; font-family: ${FONT_STACK}; font-size: 14px; line-height: 1.6; color: ${BRAND.muted};">The 4DA Signal licence on this address was refunded or its payment was reversed, so there is no active key to send. If you believe this is a mistake, just reply to this email and a person will sort it out.</p>
+${emailButton('https://4da.ai/signal', 'Get Signal again')}`;
+
+  const html = renderShell({
+    title: 'This licence is no longer active',
+    preheader: 'The 4DA Signal licence on this address is no longer active.',
+    badge: 'Licence inactive',
+    contentHtml: content,
+    footerHtml: footerHtml('recovery'),
+  });
+
+  const text = [
+    'This licence is no longer active',
+    '',
+    'The 4DA Signal licence on this address was refunded or its payment was',
+    'reversed, so there is no active key to send. If you believe this is a',
+    'mistake, just reply to this email and a person will sort it out.',
+    '',
+    'Get Signal again: https://4da.ai/signal',
+    footerText('recovery'),
+  ].join('\n');
+
+  return { subject: 'Your 4DA licence is no longer active', html, text };
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -344,7 +377,7 @@ export async function deliverLicenseEmail(env, to, licenseKey, tier, expiresAt, 
  * `waitUntil`), precisely so that neither the response body NOR the response
  * timing can reveal whether the address is a customer.
  *
- * @returns {Promise<'sent'|'expired_notice'|'no_licence'|'error'>} for logging only.
+ * @returns {Promise<'sent'|'revoked_notice'|'expired_notice'|'no_licence'|'error'>} for logging only.
  */
 export async function deliverRecoveryEmail(env, stripe, address) {
   try {
@@ -360,6 +393,15 @@ export async function deliverRecoveryEmail(env, stripe, address) {
     // customer record keeps the invariant explicit: we only ever mail an address
     // on file.
     const to = customer.email || address;
+
+    // Refunded / charged back: the key on file still VERIFIES offline until its
+    // embedded expiry, so re-mailing it would hand back exactly the access the
+    // refund ended. An honest notice instead. A merely CANCELLED subscriber
+    // does not take this branch — their paid tail runs to the key's expiry.
+    if (isRevoked(customer.metadata)) {
+      await send(env, to, buildRevokedEmail());
+      return 'revoked_notice';
+    }
 
     const expiresAt = meta(customer.metadata, 'expires_at');
     if (expiresAt && new Date(expiresAt) < new Date()) {
