@@ -232,6 +232,43 @@ pub(crate) fn validate_deep_link_url(url: &str) -> bool {
     true
 }
 
+/// Redact the licence key out of a `fourda://activate?key=…` URL before it is
+/// LOGGED or persisted.
+///
+/// A self-signed `4DA-…` key is an offline-verifiable BEARER credential for the
+/// Signal tier. The deep-link handlers log the received URL at `info`/`warn` and
+/// write it to the `security_events` table, and the production file appender
+/// captures `info` — so the raw key was landing in `data_dir/logs/*.log` and the
+/// DB in cleartext, where it rides along in support-bundle zips, cloud-synced
+/// profile folders and screen-shares. This replaces the value of any `key`
+/// parameter (in the query OR the fragment) with `<redacted>`, keeping the host,
+/// path and other params intact for forensics. Anything that is not a parseable
+/// `key=` value is returned unchanged.
+pub(crate) fn redact_deep_link(url: &str) -> String {
+    // Byte-level so an unvalidated (rejected-path) URL carrying multi-byte UTF-8
+    // can never panic on a non-char-boundary slice. Match `key=` when it opens a
+    // query/fragment (`?key=`/`#key=`) or follows a separator (`&key=`), and drop
+    // its value up to the next `&` (or end). Copying bytes from a valid &str keeps
+    // the output valid UTF-8, so from_utf8_lossy is a no-op for real URLs.
+    let bytes = url.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let is_boundary = i == 0 || matches!(bytes[i - 1], b'?' | b'&' | b'#');
+        if is_boundary && bytes[i..].starts_with(b"key=") {
+            out.extend_from_slice(b"key=<redacted>");
+            i += 4;
+            while i < bytes.len() && bytes[i] != b'&' {
+                i += 1;
+            }
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,6 +276,33 @@ mod tests {
     #[test]
     fn test_valid_https_url() {
         assert!(validate_safe_url("https://example.com").is_ok());
+    }
+
+    #[test]
+    fn redact_removes_key_from_query_and_fragment() {
+        assert_eq!(
+            redact_deep_link("fourda://activate?key=4DA-SECRETPAYLOAD.SIG"),
+            "fourda://activate?key=<redacted>"
+        );
+        assert_eq!(
+            redact_deep_link("fourda://activate#key=4DA-SECRETPAYLOAD.SIG"),
+            "fourda://activate#key=<redacted>"
+        );
+    }
+
+    #[test]
+    fn redact_preserves_other_params_and_leaves_non_keys_alone() {
+        assert_eq!(
+            redact_deep_link("fourda://activate?key=4DA-abc.def&ref=email"),
+            "fourda://activate?key=<redacted>&ref=email"
+        );
+        // A param literally called "monkey" must not be mistaken for "key".
+        assert_eq!(
+            redact_deep_link("fourda://open?monkey=1"),
+            "fourda://open?monkey=1"
+        );
+        // No key at all → unchanged.
+        assert_eq!(redact_deep_link("fourda://settings"), "fourda://settings");
     }
 
     #[test]

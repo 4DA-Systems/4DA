@@ -500,6 +500,24 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
 // (kept as a cross-module dependency — verify.rs owns the function)
 pub(crate) use super::verify::verify_license_key as verify_license_key_ed25519;
 
+/// Is `key` a USABLE licence key for the fast path of `has_license_key_available`?
+///
+/// - A self-signed `4DA-` key is usable only if it verifies (Ed25519 signature +
+///   embedded expiry — `verify_license_key` checks both). This is what makes an
+///   expired or tampered `4DA-` key fail the availability check and downgrade.
+/// - A Keygen-format key carries no local signature; its paid status is proven by
+///   the online validation cache (checked separately as Layer 4), so here it is
+///   usable as long as it is present.
+fn key_is_usable(key: &str) -> bool {
+    if key.is_empty() {
+        return false;
+    }
+    if key.starts_with("4DA-") {
+        return verify_license_key_ed25519(key).is_ok();
+    }
+    true
+}
+
 /// Helper to check if a license key is available — four-layer fallback chain.
 ///
 /// 1. **In-memory** (loaded from settings.json at startup)
@@ -512,19 +530,35 @@ pub(crate) fn has_license_key_available(license: &mut LicenseConfig) -> bool {
     use super::keystore;
     use crate::settings::license::gating::is_paid_tier;
 
-    // Fast path: in-memory key is present (loaded from settings.json at startup)
-    if !license.license_key.is_empty() {
+    // Fast path: in-memory key is present (loaded from settings.json at startup).
+    //
+    // "Present" is NOT "usable". A self-signed `4DA-` key must VERIFY — signature
+    // AND embedded expiry — before it counts, because this is the check the
+    // downgrade path in revalidation.rs gates on. Two holes this closes:
+    //   * settings.json tamper: pasting `tier: "signal"` + any non-empty string
+    //     used to grant Signal; a bare string now fails verification.
+    //   * expiry enforcement: an EXPIRED `4DA-` key used to keep granting Signal
+    //     forever, because the only automatic downgrade fires on an ABSENT key,
+    //     and `validate_license` (which does check expiry) is a command the
+    //     frontend never calls on its own. A cancelled monthly subscriber kept
+    //     the tier ~indefinitely past their key's ~35-day expiry.
+    // Keygen-format keys (no `4DA-` prefix) carry no local signature; their
+    // validity is established by the online validation cache (Layer 4 below), so
+    // for them "present and non-empty" remains the right fast-path answer.
+    if key_is_usable(&license.license_key) {
         return true;
     }
 
-    // Fallback: check keychain directly and re-hydrate if found.
-    // This covers the transition period for users who activated before the
-    // disk-persistence fix — their settings.json may still have an empty key.
+    // Fallback: check keychain directly and re-hydrate if found. Covers users
+    // who activated before the disk-persistence fix (settings.json key empty)
+    // AND the case above where the in-memory `4DA-` key was present but not
+    // usable — the keychain copy is checked on its own merits, never trusted for
+    // being merely non-empty.
     if let Ok(Some(key)) = keystore::get_secret("license_key") {
-        if !key.is_empty() {
+        if key_is_usable(&key) {
             info!(
                 target: "4da::license",
-                "Re-hydrated license key from keychain (was missing from in-memory settings)"
+                "Re-hydrated usable license key from keychain"
             );
             license.license_key = key;
             return true;
@@ -579,4 +613,37 @@ pub(crate) fn has_license_key_available(license: &mut LicenseConfig) -> bool {
     }
 
     false
+}
+
+#[cfg(test)]
+mod key_usable_tests {
+    use super::key_is_usable;
+
+    #[test]
+    fn empty_key_is_not_usable() {
+        assert!(!key_is_usable(""));
+    }
+
+    #[test]
+    fn a_hand_pasted_4da_string_is_rejected() {
+        // The settings.json tamper: `license_key: "4DA-anything"` used to pass the
+        // fast path on non-emptiness alone and grant Signal. It must now fail the
+        // Ed25519 verification and be treated as no usable key.
+        assert!(!key_is_usable("4DA-not-a-real-signed-key"));
+        assert!(!key_is_usable("4DA-eyJ0aWVyIjoic2lnbmFsIn0.bm90YXNpZw"));
+    }
+
+    #[test]
+    fn a_keygen_format_key_stays_usable_on_presence() {
+        // Non-`4DA-` keys carry no local signature — their validity is the online
+        // cache, checked as Layer 4 — so the fast path must not reject them.
+        assert!(key_is_usable("BE3529-741BAF-DEADBEEF"));
+        assert!(key_is_usable("x")); // any non-empty non-4DA string, pre-existing behaviour
+    }
+
+    // The valid-signature-but-EXPIRED case (a cancelled monthly key past its ~35d
+    // expiry) is not unit-testable here: minting a key that verifies requires the
+    // server-side private seed, which the app deliberately does not hold. Expiry
+    // rejection is exercised by verify.rs's own expiry check, which key_is_usable
+    // routes every `4DA-` key through.
 }

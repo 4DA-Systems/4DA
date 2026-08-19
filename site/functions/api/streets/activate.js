@@ -33,6 +33,8 @@ import {
   meta,
   metaKey,
   resolveCustomerId,
+  sessionProvesPurchase,
+  sessionWithinWindow,
   stripeIdOf,
   terminalStatusPatch,
 } from '../../../lib/entitlement.js';
@@ -239,6 +241,8 @@ const HANDLED_EVENTS = [
   // more importantly, what they do not do.
   'charge.refunded',
   'charge.dispute.created',
+  // A won dispute reverses the chargeback lockout — see handleDisputeClosed.
+  'charge.dispute.closed',
 ];
 
 async function handleCheckoutCompleted(env, stripe, session) {
@@ -439,21 +443,24 @@ async function handleChargeRefunded(stripe, charge) {
   return applyTerminalStatus(stripe, customerId, 'refunded', { charge: charge.id });
 }
 
-async function handleDisputeCreated(stripe, dispute) {
-  // The Dispute object carries no `customer` field, and `dispute.charge` is an
-  // id string on most API versions and an expanded object on some. Resolve
-  // through whichever we were handed rather than assuming.
-  let customerId = null;
+// The Dispute object carries no `customer` field, and `dispute.charge` is an id
+// string on most API versions and an expanded object on some. Resolve through
+// whichever we were handed rather than assuming. Shared by created + closed.
+async function resolveDisputeCustomer(stripe, dispute) {
   if (dispute.charge && typeof dispute.charge === 'object') {
-    customerId = stripeIdOf(dispute.charge.customer);
+    const id = stripeIdOf(dispute.charge.customer);
+    if (id) return id;
   }
-  if (!customerId) {
-    const chargeId = stripeIdOf(dispute.charge);
-    if (chargeId) {
-      const charge = await stripe.charges.retrieve(chargeId);
-      customerId = stripeIdOf(charge?.customer);
-    }
+  const chargeId = stripeIdOf(dispute.charge);
+  if (chargeId) {
+    const charge = await stripe.charges.retrieve(chargeId);
+    return stripeIdOf(charge?.customer);
   }
+  return null;
+}
+
+async function handleDisputeCreated(stripe, dispute) {
+  const customerId = await resolveDisputeCustomer(stripe, dispute);
   if (!customerId) {
     return { skipped: 'no customer resolvable from dispute' };
   }
@@ -465,6 +472,35 @@ async function handleDisputeCreated(stripe, dispute) {
   }
 
   return applyTerminalStatus(stripe, customerId, 'chargeback', { dispute: dispute.id });
+}
+
+// A dispute we WON (status 'won') means the bank rejected the customer's
+// chargeback — they did pay and keep the money with us — so the chargeback that
+// locked them out was reversed and their access must come back. Without this a
+// monthly subscriber whose dispute we won stays terminal forever: the
+// isTerminal guard in handleInvoicePaid then blocks every future renewal from
+// re-issuing, and only a fresh checkout.session.completed clears terminal — which
+// a renewing subscriber never generates. Deliberately narrow: only 'won', and
+// only when the customer is CURRENTLY in the exact 'chargeback' state (a later
+// refund is more severe and must stand; a cancellation is a different episode).
+async function handleDisputeClosed(stripe, dispute) {
+  if (dispute.status !== 'won') {
+    return { skipped: `dispute ${dispute.status || 'closed'} — entitlement unchanged` };
+  }
+  const customerId = await resolveDisputeCustomer(stripe, dispute);
+  if (!customerId) {
+    return { skipped: 'no customer resolvable from dispute' };
+  }
+  const customer = await stripe.customers.retrieve(customerId);
+  if (!customer || customer.deleted) {
+    return { skipped: 'customer deleted' };
+  }
+  if (meta(customer.metadata, 'status') !== 'chargeback') {
+    return { skipped: 'not in chargeback state — nothing to restore' };
+  }
+  await stripe.customers.update(customerId, { metadata: { [metaKey('status')]: 'active' } });
+  console.log('Entitlement restored after won dispute:', customerId, 'dispute:', dispute.id);
+  return { entitlement_restored: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -562,6 +598,9 @@ export async function onRequest({ request, env, waitUntil }) {
         case 'charge.dispute.created':
           result = await handleDisputeCreated(stripe, event.data.object);
           break;
+        case 'charge.dispute.closed':
+          result = await handleDisputeClosed(stripe, event.data.object);
+          break;
       }
       if (dedupStore) await markEventProcessed(dedupStore, event.id);
       return json({ received: true, ...result }, 200, headers);
@@ -615,27 +654,56 @@ export async function onRequest({ request, env, waitUntil }) {
 // GET path 1: verified checkout session -> returns the key (unchanged behaviour)
 // ---------------------------------------------------------------------------
 
+// A completed checkout session is old enough to have been fulfilled and emailed;
+// beyond this window the session id (which sits in the success-page URL and is a
+// bearer credential for the key) stops being honoured, so a URL that later
+// surfaces in browser history or a shared link cannot retrieve the key. Recovery
+// by email covers anyone who needs the key after the window.
+const SESSION_LOOKUP_MAX_AGE_SECONDS = 24 * 60 * 60;
+
 async function handleSessionLookup(env, session_id, headers) {
   try {
     const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
 
-    let customerEmail;
+    let session;
     try {
-      const session = await stripe.checkout.sessions.retrieve(session_id);
-      customerEmail = session.customer_email || session.customer_details?.email;
-      if (!customerEmail) {
-        return json({ error: 'No email found in checkout session' }, 404, headers);
-      }
+      session = await stripe.checkout.sessions.retrieve(session_id);
     } catch {
       return json({ error: 'Invalid session' }, 400, headers);
     }
 
-    const customers = await stripe.customers.list({ email: customerEmail.toLowerCase(), limit: 1 });
-    if (customers.data.length === 0) {
+    // GATE 1 — the session must PROVE a completed purchase (see
+    // sessionProvesPurchase). An incomplete session id + a buyer-typed email was
+    // a full-key oracle for any customer whose email an attacker knew.
+    if (!sessionProvesPurchase(session)) {
+      return json({ error: 'Checkout not completed' }, 402, headers);
+    }
+
+    // GATE 2 — bind to the session's OWN customer, never a list-by-email. The
+    // webhook wrote the licence onto exactly this customer (resolveCustomerId
+    // returns session.customer unchanged when present); an email lookup could
+    // return a different, newer customer record for the same address
+    // (customer_creation:'always' on lifetime makes duplicates) — the read/write
+    // mismatch that made this an email oracle in the first place.
+    const customerId = stripeIdOf(session.customer);
+    if (!customerId) {
       return json({ error: 'No license found' }, 404, headers);
     }
 
-    const customer = customers.data[0];
+    // GATE 3 — time-box the bearer window (see sessionWithinWindow).
+    if (!sessionWithinWindow(session, SESSION_LOOKUP_MAX_AGE_SECONDS, Math.floor(Date.now() / 1000))) {
+      return json(
+        { error: 'This checkout link has expired. Use email recovery to get your key.', reason: 'session_expired' },
+        410,
+        headers,
+      );
+    }
+
+    const customer = await stripe.customers.retrieve(customerId);
+    if (!customer || customer.deleted) {
+      return json({ error: 'No license found' }, 404, headers);
+    }
+
     const license = meta(customer.metadata, 'license');
     if (!license) {
       return json({ error: 'No STREETS license found' }, 404, headers);

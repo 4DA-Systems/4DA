@@ -107,6 +107,21 @@ export function ipWindowKey(ip, now = new Date()) {
 }
 
 /**
+ * Newsletter/notify signups per IP per UTC hour. /api/notify creates or updates
+ * a Stripe CUSTOMER on every call with no auth — unmetered, that is an
+ * unbounded write into the Stripe customer namespace (list pollution, and
+ * recovery/session lookups take the newest customer for an email). Separate key
+ * namespace from `rl:ip` so a signup and a recovery from the same IP do not
+ * share one counter.
+ */
+export const NOTIFY_REQUESTS_PER_IP_PER_HOUR = 20;
+
+/** `rl:notify:<ip>:<yyyy-mm-ddThh>` */
+export function notifyWindowKey(ip, now = new Date()) {
+  return `rl:notify:${ip}:${now.toISOString().slice(0, 13)}`;
+}
+
+/**
  * Check a fixed-window counter and, if under the limit, count this call.
  * Returns true when the call is allowed. Fails OPEN on any KV error.
  */

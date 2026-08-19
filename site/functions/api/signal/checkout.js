@@ -16,20 +16,25 @@
 import Stripe from 'stripe';
 
 const PLANS = {
+  // metadata writes the CURRENT `signal_tier` key. The webhook reads it through
+  // meta(), which still accepts the legacy `streets_tier`, but new sessions
+  // should not keep minting the retired prefix (the STREETS name was retired in
+  // June 2026 and reads as a dead feature). billing_period is unprefixed and
+  // read as a literal on the webhook side — leave it as-is.
   monthly: {
     priceEnv: 'SIGNAL_PRICE_MONTHLY',
     mode: 'subscription',
-    metadata: { streets_tier: 'signal', billing_period: 'monthly' },
+    metadata: { signal_tier: 'signal', billing_period: 'monthly' },
   },
   annual: {
     priceEnv: 'SIGNAL_PRICE_ANNUAL',
     mode: 'subscription',
-    metadata: { streets_tier: 'signal', billing_period: 'annual' },
+    metadata: { signal_tier: 'signal', billing_period: 'annual' },
   },
   lifetime: {
     priceEnv: 'SIGNAL_PRICE_LIFETIME',
     mode: 'payment',
-    metadata: { streets_tier: 'signal', billing_period: 'lifetime' },
+    metadata: { signal_tier: 'signal', billing_period: 'lifetime' },
   },
 };
 
