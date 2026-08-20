@@ -197,7 +197,8 @@ Only contacted when you enter a license key (`src-tauri/src/settings/license/key
 (`src-tauri/src/settings_commands_license.rs`)
 
 - **Host:** `4da.ai` — **the only 4DA-operated server the app ever contacts.**
-- **Endpoint:** `GET https://4da.ai/api/streets/activate?email={email}`
+- **Endpoint:** `GET https://4da.ai/api/license/activate?email={email}`
+  (builds before 2026-08-20 call the same endpoint at its old `/api/streets/activate` path)
 - **Trigger:** only when you click "Recover License by Email" in Settings.
 - **Data sent:** your purchase email (query parameter).
 - **Data returned:** **not the key.** The server emails the key to the address on file and

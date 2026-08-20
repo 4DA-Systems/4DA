@@ -360,7 +360,7 @@ jobs:
       # and audited the root only. site/, paddle-webhook/ and mcp-4da-server/
       # each have their own pnpm-lock.yaml and were audited ONLY by the
       # nightly, which cannot block anything. So an advisory in the Cloudflare
-      # payment path (site/functions/api/streets/activate.js) could never fail a
+      # payment path (site/functions/api/license/activate.js) could never fail a
       # PR. When this was written those three lockfiles carried 12, 20 and 4
       # advisories respectively while `Validate Success` stayed green.
       #

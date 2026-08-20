@@ -5,7 +5,7 @@
 //
 //   1. WEBHOOK EVENT DEDUP — Stripe retries a delivery until it gets a 2xx and
 //      routinely re-sends the same event id. The terminal handlers in
-//      functions/api/streets/activate.js are idempotent by construction, but
+//      functions/api/license/activate.js are idempotent by construction, but
 //      `checkout.session.completed` and `invoice.paid` MINT a new signed licence
 //      key on every delivery, so a duplicate used to issue a second valid key
 //      with a fresh expiry window. Minting cannot be made idempotent by

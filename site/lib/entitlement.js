@@ -1,7 +1,7 @@
 // Shared entitlement-lifecycle helpers for the Stripe-backed licence system.
 //
 // Imported by BOTH the webhook that WRITES entitlement state
-// (functions/api/streets/activate.js) and the lease endpoint that READS it
+// (functions/api/license/activate.js) and the lease endpoint that READS it
 // (functions/api/license/refresh.js). The sharing is the whole point. Before
 // this module existed, refresh.js gated lifetime access on
 // `streets_status !== 'refunded'` while NOTHING anywhere in the repo ever wrote
@@ -195,7 +195,7 @@ export async function hasOtherStandingCharge(stripe, customerId, excludeChargeId
  *
  * IDEMPOTENT BY CONSTRUCTION — this is the property that stands in for the
  * event-id dedup store the Pages project has no binding for (see the dispatch
- * comment in functions/api/streets/activate.js):
+ * comment in functions/api/license/activate.js):
  *
  *   - re-delivering the SAME event produces a byte-identical patch, because the
  *     first-seen timestamp is preserved rather than refreshed;

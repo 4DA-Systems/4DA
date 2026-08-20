@@ -11,11 +11,11 @@
 //
 // THE LIMIT OF THAT CLAIM: "the next refresh denies" only bounds access for a
 // client that actually refreshes. A LIFETIME licence key issued by
-// /api/streets/activate carries an embedded expiry of the year 2099 and verifies
+// /api/license/activate carries an embedded expiry of the year 2099 and verifies
 // offline against the app's built-in public key, so a refunded lifetime holder who
 // simply never calls this endpoint keeps working regardless of what Stripe says.
 // This endpoint is only load-bearing for revocation once every tier is issued a
-// short-dated key. See the terminal-status note in functions/api/streets/activate.js.
+// short-dated key. See the terminal-status note in functions/api/license/activate.js.
 //
 // Secrets: STRIPE_SECRET_KEY, LICENSE_PRIVATE_KEY_HEX.
 

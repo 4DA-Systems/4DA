@@ -417,7 +417,7 @@ pub async fn validate_license() -> Result<serde_json::Value> {
 /// endpoint mails the key to the address on file and answers `202 Accepted`
 /// identically whether or not that address holds a licence — otherwise anyone
 /// could retrieve any customer's offline-verifiable key just by knowing their
-/// email address (fixed 2026-08-14, see site/functions/api/streets/activate.js).
+/// email address (fixed 2026-08-14, see site/functions/api/license/activate.js).
 ///
 /// So the success outcome here is `reason: "emailed"`, not an activation: the
 /// user completes recovery by opening the email and using the key (or its
@@ -433,7 +433,7 @@ pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value
     crate::settings::check_activation_rate_limit()?;
 
     let response = crate::http_client::HTTP_CLIENT
-        .get("https://4da.ai/api/streets/activate")
+        .get("https://4da.ai/api/license/activate")
         .query(&[("email", email.as_str())])
         .timeout(std::time::Duration::from_secs(15))
         .send()
