@@ -86,9 +86,43 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
     }))
 }
 
-/// Activate a license key — tries Keygen API first, falls back to ed25519 self-signed
+/// Should a DEEP-LINK activation be refused because it would replace an existing,
+/// valid licence belonging to a DIFFERENT account?
+///
+/// A `fourda://activate?key=...` link is remotely triggerable — any web page the
+/// user visits can fire it — so it must never silently swap a paying user's
+/// licence for another. Returns true (refuse) only when a valid, non-expired
+/// `4DA-` licence is already present AND the incoming key does not carry the SAME
+/// account's email. First activation (no valid current key), a same-account
+/// renewal (matching email), and manual paste (which never sets `from_deep_link`)
+/// are all allowed unchanged.
+///
+/// `incoming_email` is the email embedded in the key being activated — `Some` for
+/// a `4DA-` key, `None` for a Keygen key (which carries no local email and so can
+/// never prove it is the same account).
+fn deep_link_replacement_blocked(current_key: &str, incoming_email: Option<&str>) -> bool {
+    // Only a live, valid 4DA- licence is worth protecting. An absent, invalid or
+    // expired current key is not something a deep link needs consent to replace.
+    let current = match crate::settings::verify_license_key(current_key) {
+        Ok(payload) => payload,
+        Err(_) => return false,
+    };
+    match incoming_email {
+        Some(e) if e.eq_ignore_ascii_case(&current.email) => false, // same account — renewal
+        _ => true, // different email, or a Keygen key with no email — refuse the swap
+    }
+}
+
+/// Activate a license key — tries Keygen API first, falls back to ed25519 self-signed.
+///
+/// `from_deep_link` is set ONLY by the `fourda://activate` handler; manual paste in
+/// Settings leaves it None. When true, `deep_link_replacement_blocked` guards
+/// against a website silently replacing a valid licence for a different account.
 #[tauri::command]
-pub async fn activate_license(license_key: String) -> Result<serde_json::Value> {
+pub async fn activate_license(
+    license_key: String,
+    from_deep_link: Option<bool>,
+) -> Result<serde_json::Value> {
     crate::settings::check_activation_rate_limit()?;
     // Strip whitespace — users copying keys from emails often get line breaks injected
     let license_key: String = license_key.chars().filter(|c| !c.is_whitespace()).collect();
@@ -132,6 +166,29 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
         effective_tier = result.tier;
         email = None;
         expires_at = None;
+    }
+
+    // Deep-link consent guard (see deep_link_replacement_blocked). A remotely
+    // triggerable link must not silently replace a valid licence for a different
+    // account. Read the current key in its own short-lived lock, released before
+    // the write below.
+    if from_deep_link.unwrap_or(false) {
+        let current_key = {
+            let manager = get_settings_manager();
+            let guard = manager.lock();
+            guard.get().license.license_key.clone()
+        };
+        if deep_link_replacement_blocked(&current_key, email.as_deref()) {
+            warn!(
+                target: "4da::license",
+                "Deep-link activation refused — it would replace a valid licence for a different account"
+            );
+            return Ok(serde_json::json!({
+                "success": false,
+                "reason": "different_account",
+                "detail": "This link is for a different 4DA account. To switch licences, open Settings \u{2192} License and paste the key.",
+            }));
+        }
     }
 
     let manager = get_settings_manager();
@@ -452,5 +509,64 @@ pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value
                 "detail": format!("Network error: {}", e),
             }))
         }
+    }
+}
+
+#[cfg(test)]
+mod deep_link_guard_tests {
+    use super::deep_link_replacement_blocked;
+
+    // A real signed 4DA- key (same fixture as license_tests.rs). Embedded email:
+    // e2e-test-1771748424165@4da.test; expires 2027-02-22 (unexpired), so it
+    // verifies — a genuinely valid current licence worth protecting.
+    const VALID_KEY: &str = "4DA-eyJ0aWVyIjoiY29tbXVuaXR5IiwiZW1haWwiOiJlMmUtdGVzdC0xNzcxNzQ4NDI0MTY1QDRkYS50ZXN0IiwiZXhwaXJlc19hdCI6IjIwMjctMDItMjJUMDg6MjA6MjQuNzM5WiIsImlzc3VlZF9hdCI6IjIwMjYtMDItMjJUMDg6MjA6MjQuNzM5WiIsImZlYXR1cmVzIjpbInN0cmVldHNfY29tbXVuaXR5Il19.1T/4tSaET1tC1z/fuEEGwecSqBd8fIrplHdFxnUW9J0ZIOfWRmKhnJvTIt1i+Q7U3+OkrLBpwl4f8hngo0t6Bg==";
+    const OWNER_EMAIL: &str = "e2e-test-1771748424165@4da.test";
+
+    #[test]
+    fn first_activation_is_never_blocked() {
+        // No current key — the common legitimate case (buyer clicks the email link).
+        assert!(!deep_link_replacement_blocked(
+            "",
+            Some("anyone@example.com")
+        ));
+    }
+
+    #[test]
+    fn an_invalid_or_expired_current_key_is_not_protected() {
+        // Nothing valid to protect → a deep link may replace it.
+        assert!(!deep_link_replacement_blocked(
+            "4DA-bad.bad",
+            Some("x@y.co")
+        ));
+        assert!(!deep_link_replacement_blocked(
+            "BE3529-KEYGEN",
+            Some("x@y.co")
+        ));
+    }
+
+    #[test]
+    fn same_account_renewal_is_allowed() {
+        // A renewal link carries a fresh key for the SAME email — must replace freely.
+        assert!(!deep_link_replacement_blocked(VALID_KEY, Some(OWNER_EMAIL)));
+        assert!(!deep_link_replacement_blocked(
+            VALID_KEY,
+            Some(&OWNER_EMAIL.to_uppercase())
+        ));
+    }
+
+    #[test]
+    fn a_different_account_key_is_refused() {
+        // THE ATTACK: a website fires fourda://activate?key=<attacker's own valid
+        // key>. Different email → refuse the silent swap.
+        assert!(deep_link_replacement_blocked(
+            VALID_KEY,
+            Some("attacker@evil.com")
+        ));
+    }
+
+    #[test]
+    fn a_keygen_key_cannot_replace_a_valid_4da_licence_via_deep_link() {
+        // No embedded email to match → cannot prove same account → refuse.
+        assert!(deep_link_replacement_blocked(VALID_KEY, None));
     }
 }
