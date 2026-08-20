@@ -10,7 +10,7 @@
 import crypto from 'node:crypto';
 import * as ed from '@noble/ed25519';
 
-// Wire @noble's async SHA-512 to WebCrypto — exactly as functions/api/streets/activate.js does.
+// Wire @noble's async SHA-512 to WebCrypto — exactly as functions/api/license/activate.js does.
 ed.etc.sha512Async = async (...msgs) => {
   let total = 0;
   for (const m of msgs) total += m.length;
