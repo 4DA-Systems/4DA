@@ -42,7 +42,7 @@ Plus:
 ### 2. Keygen account + policy
 
 1. Create an account at [keygen.sh](https://app.keygen.sh/sign-up). Your account slug (e.g. `runyourempirehq`) becomes `KEYGEN_ACCOUNT_ID`.
-2. Create a **Product** (e.g. "4DA Home").
+2. Create a **Product** (e.g. "4DA").
 3. Create a **Policy** attached to that product with these settings:
    - **Scheme:** `ED25519_SIGN` (recommended — allows offline validation in 4DA)
    - **Duration:** subscription-aligned (e.g. monthly, plus a grace period)
