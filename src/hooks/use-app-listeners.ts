@@ -52,9 +52,18 @@ export function useAppListeners({
         if (url.hostname === 'activate' || url.pathname === '/activate') {
           const key = url.searchParams.get('key');
           if (key) {
-            const proResult = await activateLicense(key);
+            // fromDeepLink=true: the backend refuses to silently REPLACE a valid
+            // licence for a different account (a fourda://activate link can be
+            // fired by any site the user visits). First activation and same-account
+            // renewal still activate normally.
+            const proResult = await activateLicense(key, true);
             if (proResult.ok) {
               addToast('success', 'License activated successfully');
+            } else if (proResult.reason === 'different_account') {
+              addToast(
+                'error',
+                'This link is for a different 4DA account. To switch licences, open Settings → License and paste the key.',
+              );
             } else {
               addToast('error', 'Invalid license key');
             }

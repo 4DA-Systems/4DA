@@ -419,6 +419,9 @@ export interface LicenseSlice {
   loadLicense: () => Promise<void>;
   activateLicense: (
     key: string,
+    // Set only by the fourda://activate deep-link handler; guards against a
+    // website silently replacing a valid licence for a different account.
+    fromDeepLink?: boolean,
   ) => Promise<{ ok: boolean; reason?: string }>;
   recoverLicenseByEmail: (
     email: string,
