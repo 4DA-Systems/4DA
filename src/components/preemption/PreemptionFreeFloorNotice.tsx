@@ -22,7 +22,7 @@ export const PreemptionFreeFloorNotice = memo(function PreemptionFreeFloorNotice
         <p className="text-xs text-text-muted mt-0.5">{t('preemption.freeFloor.subtitle')}</p>
       </div>
       <div className="shrink-0">
-        <SignalUpgradeCTA compact />
+        <SignalUpgradeCTA compact source="preemption-free-floor" />
       </div>
     </div>
   );

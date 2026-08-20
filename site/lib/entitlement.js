@@ -166,24 +166,47 @@ export function isRevoked(metadata) {
  * Fails CLOSED on an API error — if we cannot establish that another payment
  * survives, we do not revoke. Wrongly keeping a refunded customer's access is
  * a support ticket; wrongly revoking a paying customer's is a refund request
- * and a lost customer.
+ * and a lost customer. The page cap below takes the same exit: a history too
+ * deep to scan is "unknowable", and unknowable is not revocable.
  *
  * @param {{charges:{list:Function}}} stripe
  * @param {string} customerId
  * @param {string|null} excludeChargeId the charge being refunded/disputed
  * @returns {Promise<boolean>}
  */
+const CHARGE_PAGE_SIZE = 100;
+const CHARGE_MAX_PAGES = 5;
+
+function isStandingCharge(c, excludeChargeId) {
+  return (
+    c.id !== excludeChargeId &&
+    c.paid === true &&
+    c.status === 'succeeded' &&
+    c.refunded !== true &&
+    c.disputed !== true
+  );
+}
+
 export async function hasOtherStandingCharge(stripe, customerId, excludeChargeId) {
   try {
-    const charges = await stripe.charges.list({ customer: customerId, limit: 100 });
-    return (charges.data || []).some(
-      (c) =>
-        c.id !== excludeChargeId &&
-        c.paid === true &&
-        c.status === 'succeeded' &&
-        c.refunded !== true &&
-        c.disputed !== true,
+    let startingAfter;
+    for (let page = 0; page < CHARGE_MAX_PAGES; page++) {
+      // First page stays byte-identical to the historical single call — no
+      // starting_after key at all (the hand-rolled test mocks deep-equal the args).
+      const params = { customer: customerId, limit: CHARGE_PAGE_SIZE };
+      if (startingAfter) params.starting_after = startingAfter;
+
+      const charges = await stripe.charges.list(params);
+      const data = charges?.data || [];
+      if (data.some((c) => isStandingCharge(c, excludeChargeId))) return true;
+      if (!charges?.has_more || data.length === 0) return false;
+      startingAfter = data[data.length - 1].id;
+    }
+    console.error(
+      `charge history exceeds ${CHARGE_MAX_PAGES * CHARGE_PAGE_SIZE} charges; not revoking`,
+      customerId,
     );
+    return true;
   } catch (err) {
     console.error('charge lookup failed; not revoking', customerId, err?.message);
     return true;

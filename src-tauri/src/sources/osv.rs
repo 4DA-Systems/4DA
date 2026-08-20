@@ -40,11 +40,16 @@ impl OsvSource {
         }
     }
 
-    /// Fetch vulnerabilities for popular packages in an ecosystem.
+    /// Fetch vulnerabilities for popular packages in an ecosystem, keeping the
+    /// package each advisory was queried FOR (the user's own dependency — the
+    /// grounding the scoring dep-matcher keys on).
     ///
     /// The OSV API requires a package name — cannot query by ecosystem alone.
     /// Uses well-known packages per ecosystem, augmented by ACE deps when available.
-    async fn fetch_ecosystem_vulns(&self, ecosystem: &str) -> SourceResult<Vec<OsvVulnerability>> {
+    async fn fetch_ecosystem_vulns(
+        &self,
+        ecosystem: &str,
+    ) -> SourceResult<Vec<(OsvVulnerability, String)>> {
         // Get packages to check: ACE deps with versions when available
         let ace_packages = crate::source_fetching::load_ace_packages_with_versions(ecosystem);
         let packages: Vec<(String, Option<String>)> = if !ace_packages.is_empty() {
@@ -119,7 +124,13 @@ impl OsvSource {
             }
 
             if let Ok(result) = response.json::<OsvQueryResponse>().await {
-                all_vulns.extend(result.vulns.unwrap_or_default());
+                all_vulns.extend(
+                    result
+                        .vulns
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|v| (v, pkg_name.clone())),
+                );
             }
 
             // Rate limit between per-package queries
@@ -129,8 +140,18 @@ impl OsvSource {
         Ok(all_vulns)
     }
 
-    /// Fetch vulnerabilities across multiple ecosystems using the batch endpoint.
-    async fn fetch_batch_vulns(&self, ecosystems: &[&str]) -> SourceResult<Vec<OsvVulnerability>> {
+    /// Discover advisory ids across multiple ecosystems using the batch endpoint.
+    ///
+    /// `/v1/querybatch` returns ONLY `{id, modified}` per vulnerability — it is a
+    /// DISCOVERY endpoint, not a data endpoint (live-verified 2026-08-20). The
+    /// previous implementation converted these id-only records straight into
+    /// SourceItems, which is how every stored OSV item became a content-empty
+    /// husk. Returns `(advisory_id, modified, queried_package)` triples for the
+    /// caller to hydrate via [`Self::hydrate_vuln`].
+    async fn fetch_batch_vuln_refs(
+        &self,
+        ecosystems: &[&str],
+    ) -> SourceResult<Vec<(String, Option<String>, String)>> {
         // Build queries with actual package names + versions per ecosystem
         let mut queries = Vec::new();
         for eco in ecosystems {
@@ -165,6 +186,18 @@ impl OsvSource {
             }
         }
 
+        // The response's `results` array is positional with `queries` — that
+        // ordering is the ONLY thing tying an advisory id back to the package
+        // it was found for, so keep the package list parallel to the request.
+        let query_packages: Vec<String> = queries
+            .iter()
+            .map(|q| {
+                q.package
+                    .as_ref()
+                    .map(|p| p.name.clone())
+                    .unwrap_or_default()
+            })
+            .collect();
         let body = OsvBatchRequest { queries };
 
         let response = self
@@ -183,16 +216,52 @@ impl OsvSource {
             .await
             .map_err(|e| SourceError::Parse(e.to_string()))?;
 
-        let mut all_vulns = Vec::new();
+        let mut refs = Vec::new();
         if let Some(results) = result.results {
-            for resp in results {
+            for (i, resp) in results.into_iter().enumerate() {
+                let pkg = query_packages.get(i).cloned().unwrap_or_default();
                 if let Some(vulns) = resp.vulns {
-                    all_vulns.extend(vulns);
+                    for v in vulns {
+                        refs.push((v.id, v.modified, pkg.clone()));
+                    }
                 }
             }
         }
 
-        Ok(all_vulns)
+        Ok(refs)
+    }
+
+    /// Fetch the full advisory record for one id via `GET /v1/vulns/{id}`.
+    ///
+    /// This is the hydration step the batch endpoint requires. `None` on any
+    /// network/HTTP/parse failure — the caller skips the advisory rather than
+    /// storing an empty husk for it.
+    async fn hydrate_vuln(&self, id: &str) -> Option<OsvVulnerability> {
+        let url = format!("https://api.osv.dev/v1/vulns/{id}");
+        let response = match self
+            .client
+            .get(&url)
+            .header("User-Agent", "4DA-Developer-OS/1.0")
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(target: "4da::sources", advisory = %id, error = %e, "OSV: hydration network error");
+                return None;
+            }
+        };
+        if !response.status().is_success() {
+            warn!(target: "4da::sources", advisory = %id, status = %response.status(), "OSV: hydration HTTP error");
+            return None;
+        }
+        match response.json::<OsvVulnerability>().await {
+            Ok(v) => Some(v),
+            Err(e) => {
+                warn!(target: "4da::sources", advisory = %id, error = %e, "OSV: hydration parse error");
+                None
+            }
+        }
     }
 }
 
@@ -381,9 +450,9 @@ impl Source for OsvSource {
             match self.fetch_ecosystem_vulns(eco).await {
                 Ok(vulns) => {
                     info!(ecosystem = eco, count = vulns.len(), "Fetched OSV vulns");
-                    for vuln in &vulns {
-                        if seen_ids.insert(vuln.id.clone()) {
-                            all_items.push(vuln_to_source_item(vuln));
+                    for (vuln, pkg) in &vulns {
+                        if vuln_is_informative(vuln) && seen_ids.insert(vuln.id.clone()) {
+                            all_items.push(vuln_to_source_item(vuln, Some(pkg)));
                         }
                     }
                 }
@@ -400,7 +469,7 @@ impl Source for OsvSource {
         Ok(all_items)
     }
 
-    async fn fetch_items_deep(&self, _items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
+    async fn fetch_items_deep(&self, items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
         }
@@ -422,32 +491,61 @@ impl Source for OsvSource {
 
         info!(ecosystems = ?ecosystems, "Deep fetching OSV.dev vulnerabilities");
 
-        // Use the batch endpoint to query ecosystems at once
-        let vulns = match self.fetch_batch_vulns(&ecosystems).await {
-            Ok(v) => v,
+        // Discovery via the batch endpoint (ids only), then hydrate each id via
+        // `GET /v1/vulns/{id}` before conversion. Skipping hydration is what
+        // filled the corpus with content-empty husks — see fetch_batch_vuln_refs.
+        let items: Vec<SourceItem> = match self.fetch_batch_vuln_refs(&ecosystems).await {
+            Ok(mut refs) => {
+                // Newest first, dedup by id (one advisory can hit several deps —
+                // the first/newest queried package wins the title slot; the full
+                // affected list still lands in content), then bound hydration:
+                // one GET per advisory, capped by the caller's fetch budget.
+                refs.sort_by(|a, b| b.1.cmp(&a.1));
+                let mut seen_ids = std::collections::HashSet::new();
+                refs.retain(|(id, _, _)| seen_ids.insert(id.clone()));
+                let cap = items_per_category.clamp(1, self.config.max_items);
+                refs.truncate(cap);
+
+                let mut hydrated = Vec::new();
+                for (id, _, pkg) in &refs {
+                    if let Some(vuln) = self.hydrate_vuln(id).await {
+                        if vuln_is_informative(&vuln) {
+                            hydrated.push(vuln_to_source_item(&vuln, Some(pkg)));
+                        }
+                    }
+                    // Rate limit between hydration requests
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+                info!(
+                    discovered = refs.len(),
+                    hydrated = hydrated.len(),
+                    "OSV deep fetch: hydrated batch-discovered advisories"
+                );
+                hydrated
+            }
             Err(e) => {
                 warn!(error = ?e, "Batch fetch failed, falling back to sequential");
-                // Fallback: query each ecosystem individually
-                let mut fallback_vulns = Vec::new();
+                // Fallback: the per-package query endpoint returns FULL records,
+                // so no hydration pass is needed here.
+                let mut seen_ids = std::collections::HashSet::new();
+                let mut fallback_items = Vec::new();
                 for eco in &ecosystems {
                     match self.fetch_ecosystem_vulns(eco).await {
-                        Ok(v) => fallback_vulns.extend(v),
+                        Ok(vulns) => {
+                            for (vuln, pkg) in &vulns {
+                                if vuln_is_informative(vuln) && seen_ids.insert(vuln.id.clone()) {
+                                    fallback_items.push(vuln_to_source_item(vuln, Some(pkg)));
+                                }
+                            }
+                        }
                         Err(e) => {
                             warn!(ecosystem = eco, error = ?e, "Failed to fetch OSV ecosystem");
                         }
                     }
                 }
-                fallback_vulns
+                fallback_items
             }
         };
-
-        // Dedup by vuln ID and convert
-        let mut seen_ids = std::collections::HashSet::new();
-        let items: Vec<SourceItem> = vulns
-            .iter()
-            .filter(|v| seen_ids.insert(v.id.clone()))
-            .map(vuln_to_source_item)
-            .collect();
 
         info!(total = items.len(), "Total deep OSV items after dedup");
         Ok(items)
@@ -479,7 +577,7 @@ impl Source for OsvSource {
             .await
             .map_err(|e| SourceError::Parse(e.to_string()))?;
 
-        let enriched = vuln_to_source_item(&vuln);
+        let enriched = vuln_to_source_item(&vuln, None);
         Ok(enriched.content)
     }
 }
@@ -592,7 +690,7 @@ mod tests {
             modified: Some("2026-03-20T12:00:00Z".to_string()),
         };
 
-        let item = vuln_to_source_item(&vuln);
+        let item = vuln_to_source_item(&vuln, None);
 
         assert_eq!(item.source_type, "osv");
         assert_eq!(item.source_id, "GHSA-xxxx-yyyy-zzzz");
@@ -627,7 +725,7 @@ mod tests {
             modified: None,
         };
 
-        let item = vuln_to_source_item(&vuln);
+        let item = vuln_to_source_item(&vuln, None);
 
         assert_eq!(item.source_id, "OSV-2026-1234");
         assert_eq!(item.title, "[OSV-2026-1234] Security advisory");
@@ -637,6 +735,58 @@ mod tests {
         );
         assert!(item.content.contains("Severity: Unknown"));
         assert!(item.content.contains("Affected: Unknown"));
+    }
+
+    #[test]
+    fn test_batch_husk_is_never_informative() {
+        // `/v1/querybatch` returns `{id, modified}` only. A record in that shape
+        // must never be stored: it produced the "[ID] Security advisory /
+        // Severity: Unknown / Affected: Unknown" husks that filled the OSV lane
+        // with unscoreable noise (374/374 items, live audit 2026-08-20). This
+        // pins the guard both fetch paths run before conversion.
+        let husk = OsvVulnerability {
+            id: "PYSEC-2026-3717".to_string(),
+            summary: None,
+            details: None,
+            severity: None,
+            affected: None,
+            references: None,
+            published: None,
+            modified: Some("2026-08-19T00:00:00Z".to_string()),
+        };
+        assert!(!vuln_is_informative(&husk), "an id-only record is a husk");
+
+        // Any single descriptive field rescues the record.
+        let with_summary = OsvVulnerability {
+            summary: Some("RCE in parser".to_string()),
+            ..husk
+        };
+        assert!(vuln_is_informative(&with_summary));
+    }
+
+    #[test]
+    fn test_hydrated_title_leads_with_the_queried_package() {
+        // The queried package is one of the USER'S manifest dependencies. The
+        // title leads with it — the same `[id] pkg: summary` contract as the
+        // strict-manifest path, which the ledger grounding gate and the scoring
+        // dep-matcher's standalone-title match both key on.
+        let vuln = OsvVulnerability {
+            id: "GHSA-aaaa-bbbb-cccc".to_string(),
+            summary: Some("Prototype pollution".to_string()),
+            details: None,
+            severity: None,
+            affected: None,
+            references: None,
+            published: None,
+            modified: None,
+        };
+        let item = vuln_to_source_item(&vuln, Some("lodash"));
+        assert_eq!(
+            item.title,
+            "[GHSA-aaaa-bbbb-cccc] lodash: Prototype pollution"
+        );
+        let metadata = item.metadata.unwrap();
+        assert_eq!(metadata["package"], "lodash");
     }
 
     #[test]
@@ -661,7 +811,7 @@ mod tests {
             modified: None,
         };
 
-        let item = vuln_to_source_item(&vuln);
+        let item = vuln_to_source_item(&vuln, None);
         assert_eq!(item.url, Some("https://advisory.example.com".to_string()));
     }
 
@@ -687,7 +837,7 @@ mod tests {
             modified: None,
         };
 
-        let item = vuln_to_source_item(&vuln);
+        let item = vuln_to_source_item(&vuln, None);
         assert!(item.content.contains("CVSS_V3: 8.1"));
     }
 
@@ -815,7 +965,7 @@ mod tests {
             modified: None,
         };
 
-        let item = vuln_to_source_item(&vuln);
+        let item = vuln_to_source_item(&vuln, None);
         assert!(item.content.contains("pkg-a (npm)"));
         assert!(item.content.contains("pkg-b (PyPI)"));
 

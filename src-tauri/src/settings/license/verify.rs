@@ -23,9 +23,18 @@ pub struct LicensePayload {
     pub features: Vec<String>,
 }
 
-/// Verify and decode a license key.
+/// Verify and decode a license key against the anti-rollback effective clock.
 /// Format: `4DA-{base64(json_payload)}.{base64(ed25519_signature)}`
 pub fn verify_license_key(key: &str) -> Result<LicensePayload> {
+    verify_license_key_at(key, super::clock::license_effective_now())
+}
+
+/// Verification with an explicit evaluation instant — the hermetic test seam,
+/// mirroring the `*_in` / `*_from` variants in keygen.rs.
+pub(crate) fn verify_license_key_at(
+    key: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<LicensePayload> {
     // Strip ALL whitespace — users copying keys from emails often get line breaks
     // or spaces injected in the middle of the base64. Valid keys never contain spaces.
     let key: String = key.chars().filter(|c| !c.is_whitespace()).collect();
@@ -97,9 +106,12 @@ pub fn verify_license_key(key: &str) -> Result<LicensePayload> {
     let payload: LicensePayload = serde_json::from_slice(&payload_bytes)
         .map_err(|e| format!("Invalid license payload: {e}"))?;
 
-    // Check expiration
+    // Check expiration against `now` — `max(wall clock, trusted time floor)`
+    // from the caller. A user who winds the system clock back before
+    // `expires_at` no longer resurrects the key: the floor is durable and
+    // never moves backward (clock.rs, audit finding F1/P1b).
     if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&payload.expires_at) {
-        if chrono::Utc::now() > expires {
+        if now > expires {
             return Err("License has expired".into());
         }
     }

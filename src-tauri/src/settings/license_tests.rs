@@ -21,6 +21,29 @@ mod tests {
         assert!(payload.features.contains(&"streets_community".to_string()));
     }
 
+    /// End-to-end anti-rollback proof on the ONE real signed key available in
+    /// tests (no private seed exists here to mint fresh ones — see the note in
+    /// keygen.rs). The key expires 2027-02-22; evaluated at an instant past
+    /// that, verification must fail even though the signature is valid — this
+    /// is the exact seam `license_effective_now()` lifts a rolled-back clock
+    /// through (clock.rs, audit finding F1/P1b).
+    #[test]
+    fn a_floor_past_expiry_expires_a_key_the_wall_clock_still_accepts() {
+        let key = "4DA-eyJ0aWVyIjoiY29tbXVuaXR5IiwiZW1haWwiOiJlMmUtdGVzdC0xNzcxNzQ4NDI0MTY1QDRkYS50ZXN0IiwiZXhwaXJlc19hdCI6IjIwMjctMDItMjJUMDg6MjA6MjQuNzM5WiIsImlzc3VlZF9hdCI6IjIwMjYtMDItMjJUMDg6MjA6MjQuNzM5WiIsImZlYXR1cmVzIjpbInN0cmVldHNfY29tbXVuaXR5Il19.1T/4tSaET1tC1z/fuEEGwecSqBd8fIrplHdFxnUW9J0ZIOfWRmKhnJvTIt1i+Q7U3+OkrLBpwl4f8hngo0t6Bg==";
+        let before: chrono::DateTime<chrono::Utc> =
+            "2026-06-01T00:00:00Z".parse().expect("fixed test instant");
+        assert!(
+            verify_license_key_at(key, before).is_ok(),
+            "the key is valid before its embedded expiry"
+        );
+        let after: chrono::DateTime<chrono::Utc> =
+            "2027-03-01T00:00:00Z".parse().expect("fixed test instant");
+        assert!(
+            verify_license_key_at(key, after).is_err(),
+            "past expiry the same signed key must be rejected"
+        );
+    }
+
     #[test]
     fn reject_invalid_key() {
         assert!(verify_license_key("").is_err());

@@ -53,15 +53,18 @@ describe('SignalsPanel', () => {
     mockIsPro = true;
   });
 
-  it('renders without crash with empty results', () => {
-    render(<SignalsPanel results={[]} />);
-    expect(screen.getByText('signals.noSignals')).toBeInTheDocument();
+  it('renders nothing when there are no results', () => {
+    // Hide-when-empty: an empty run must not leave a bordered "no signals" card
+    // behind — the panel simply does not appear (same contract as
+    // WhatYouWouldHaveMissed).
+    const { container } = render(<SignalsPanel results={[]} />);
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it('shows empty state when no results have signal fields', () => {
+  it('renders nothing when no results have signal fields', () => {
     // Items without signal_type/signal_priority/signal_action are filtered out
-    render(<SignalsPanel results={[makeItem()]} />);
-    expect(screen.getByText('signals.noSignals')).toBeInTheDocument();
+    const { container } = render(<SignalsPanel results={[makeItem()]} />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('renders signal items when results have signal data', () => {
@@ -418,10 +421,9 @@ describe('SignalsPanel (free tier)', () => {
     expect(screen.queryByText('pro.upgrade')).not.toBeInTheDocument();
   });
 
-  it('shows empty state normally when no signals exist in free tier', () => {
-    render(<SignalsPanel results={[]} />);
-    expect(screen.getByText('signals.noSignals')).toBeInTheDocument();
-    // No upgrade CTA for empty state
-    expect(screen.queryByText('pro.upgrade')).not.toBeInTheDocument();
+  it('renders nothing when no signals exist in free tier', () => {
+    // An empty container also means no upgrade CTA can be shown on emptiness.
+    const { container } = render(<SignalsPanel results={[]} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });
