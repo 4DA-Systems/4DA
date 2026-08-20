@@ -369,6 +369,28 @@ export async function deliverLicenseEmail(env, to, licenseKey, tier, expiresAt, 
   }
 }
 
+// How many customer records to scan for one address. Duplicates beyond this are
+// vanishingly unlikely (they require 10+ separate purchases on one email), and
+// Stripe serves any limit <= 100 in the one list call.
+const RECOVERY_CUSTOMER_SCAN_LIMIT = 10;
+
+/**
+ * Classify one customer record for recovery: `null` when it holds no licence at
+ * all, otherwise the key plus a 'live' | 'revoked' | 'expired' state mirroring
+ * the branch order deliverRecoveryEmail has always applied to a single record.
+ */
+function licenceStateOf(customer) {
+  const licenseKey = meta(customer?.metadata, 'license');
+  if (!licenseKey) return null;
+  const expiresAt = meta(customer.metadata, 'expires_at');
+  const state = isRevoked(customer.metadata)
+    ? 'revoked'
+    : expiresAt && new Date(expiresAt) < new Date()
+      ? 'expired'
+      : 'live';
+  return { customer, licenseKey, expiresAt, state };
+}
+
 /**
  * Look the address up in Stripe and, if it holds a licence, mail it there.
  *
@@ -381,35 +403,51 @@ export async function deliverLicenseEmail(env, to, licenseKey, tier, expiresAt, 
  */
 export async function deliverRecoveryEmail(env, stripe, address) {
   try {
-    const customers = await stripe.customers.list({ email: address.toLowerCase(), limit: 1 });
-    const customer = customers.data[0];
-    if (!customer) return 'no_licence';
+    // Duplicate customer records for one email are normal: checkout.js sets
+    // customer_creation:'always' for lifetime purchases, so every purchase can
+    // mint a fresh record. Scanning only the newest (limit:1) made a licence
+    // bought on an earlier record unrecoverable — the buyer got silence and a
+    // support ticket. Stripe returns newest-first and caps `limit` at 100, so
+    // scanning 10 is the SAME single API call as before.
+    const customers = await stripe.customers.list({
+      email: address.toLowerCase(),
+      limit: RECOVERY_CUSTOMER_SCAN_LIMIT,
+    });
 
-    const licenseKey = meta(customer.metadata, 'license');
-    if (!licenseKey) return 'no_licence';
+    const candidates = (customers.data || []).map(licenceStateOf).filter(Boolean);
+    if (candidates.length === 0) return 'no_licence';
+
+    // A live licence anywhere wins — one payment still standing means the
+    // entitlement stands, whichever record Stripe happened to file it under.
+    // With no live one, fall back to the newest record holding a key at all,
+    // which is exactly what the old limit:1 lookup returned.
+    const chosen = candidates.find((c) => c.state === 'live') || candidates[0];
 
     // The address we mail is the one STRIPE holds, not the one the caller typed.
     // They are equal here (we looked up by it), but reading it back from the
     // customer record keeps the invariant explicit: we only ever mail an address
     // on file.
-    const to = customer.email || address;
+    const to = chosen.customer.email || address;
 
     // Refunded / charged back: the key on file still VERIFIES offline until its
     // embedded expiry, so re-mailing it would hand back exactly the access the
     // refund ended. An honest notice instead. A merely CANCELLED subscriber
     // does not take this branch — their paid tail runs to the key's expiry.
-    if (isRevoked(customer.metadata)) {
+    if (chosen.state === 'revoked') {
       await send(env, to, buildRevokedEmail());
       return 'revoked_notice';
     }
 
-    const expiresAt = meta(customer.metadata, 'expires_at');
-    if (expiresAt && new Date(expiresAt) < new Date()) {
-      await send(env, to, buildExpiredEmail(expiresAt));
+    if (chosen.state === 'expired') {
+      await send(env, to, buildExpiredEmail(chosen.expiresAt));
       return 'expired_notice';
     }
 
-    await send(env, to, buildLicenseEmail(licenseKey, meta(customer.metadata, 'tier'), expiresAt));
+    await send(
+      env,
+      to,
+      buildLicenseEmail(chosen.licenseKey, meta(chosen.customer.metadata, 'tier'), chosen.expiresAt),
+    );
     return 'sent';
   } catch (err) {
     // Deliberately swallowed: surfacing this to the caller would leak whether the

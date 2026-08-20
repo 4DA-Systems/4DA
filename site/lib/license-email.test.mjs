@@ -443,3 +443,82 @@ test('a Stripe error during recovery is swallowed, never thrown', async () => {
     assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'x@y.co'), 'error');
   } finally { f.restore(); c.restore(); }
 });
+
+// ---------------------------------------------------------------------------
+// RECOVERY across duplicate customer records (M2).
+//
+// checkout.js uses customer_creation:'always' for lifetime purchases, so one
+// email can own several Stripe customer records. The old limit:1 lookup saw
+// only the newest — a licence filed on an earlier record was unrecoverable.
+// The property under test: a LIVE licence on ANY of the newest 10 records is
+// found and mailed, exactly one mail goes out, and when no record holds a live
+// licence the newest record with a key still decides the notice (the old
+// single-record behaviour, preserved as the fallback).
+// ---------------------------------------------------------------------------
+
+/** A fake Stripe client answering with several records, newest first, that
+ *  records the args of every customers.list call. */
+function stripeWithMany(customers) {
+  const calls = [];
+  return {
+    calls,
+    customers: {
+      list: async (args) => { calls.push(args); return { data: customers }; },
+    },
+  };
+}
+
+test('recovery finds a LIVE licence on an older duplicate record', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const stripe = stripeWithMany([
+      customerWith({}), // newest record: no licence at all (e.g. abandoned checkout)
+      customerWith({ signal_license: KEY, signal_tier: 'signal', signal_status: 'active', signal_expires_at: FUTURE }),
+    ]);
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'buyer@example.com'), 'sent');
+    assert.equal(stripe.calls[0].limit, 10, 'one call scans up to 10 records');
+    assert.equal(f.calls.length, 1, 'exactly one mail, however many duplicates');
+    assert.ok(f.calls[0].body.text.includes(KEY), 'the older record\'s key is delivered');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('a REVOKED newest record does not hide a LIVE older licence', async () => {
+  // The double-charge shape: the duplicate purchase was refunded (newest record
+  // revoked), the legitimate one still stands on the earlier record.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const stripe = stripeWithMany([
+      customerWith({ signal_license: 'OTHER-KEY', signal_status: 'refunded', signal_expires_at: FUTURE }),
+      customerWith({ signal_license: KEY, signal_tier: 'signal', signal_status: 'active', signal_expires_at: FUTURE }),
+    ]);
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'buyer@example.com'), 'sent');
+    assert.ok(f.calls[0].body.text.includes(KEY), 'the LIVE licence wins over the revoked one');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('with no live licence anywhere, the newest record with a key decides', async () => {
+  // Fallback = the old limit:1 behaviour: newest-with-key, honest notice.
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const stripe = stripeWithMany([
+      customerWith({ signal_license: KEY, signal_status: 'refunded', signal_expires_at: FUTURE }),
+      customerWith({ signal_license: 'OLD-KEY', signal_status: 'refunded', signal_expires_at: FUTURE }),
+    ]);
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'buyer@example.com'), 'revoked_notice');
+    assert.equal(f.calls.length, 1);
+    assert.ok(!f.calls[0].body.text.includes(KEY), 'a revoked key is never re-mailed');
+  } finally { f.restore(); c.restore(); }
+});
+
+test('duplicates with no licence on any record still report no_licence silently', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    const stripe = stripeWithMany([customerWith({}), customerWith({}), customerWith({})]);
+    assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'x@y.co'), 'no_licence');
+    assert.equal(f.calls.length, 0, 'nothing is mailed');
+  } finally { f.restore(); c.restore(); }
+});

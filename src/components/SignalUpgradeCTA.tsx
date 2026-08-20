@@ -9,13 +9,20 @@ import { useAppStore } from '../store';
 
 interface SignalUpgradeCTAProps {
   compact?: boolean;
+  /**
+   * Which app surface rendered this CTA. Becomes `utm_content` on the 4da.ai
+   * link so the SITE's existing analytics can attribute the visit per surface.
+   * The app itself sends nothing and embeds no analytics — the only thing that
+   * leaves the machine is a URL the user chose to open in their own browser.
+   */
+  source?: string;
 }
 
 /**
  * Shared inline upgrade CTA for Signal-gated components.
  * Shows "Upgrade to Signal" button + optional trial start.
  */
-export function SignalUpgradeCTA({ compact }: SignalUpgradeCTAProps) {
+export function SignalUpgradeCTA({ compact, source = 'unknown' }: SignalUpgradeCTAProps) {
   const { t } = useTranslation();
   const { trialStatus } = useLicense();
   const startTrial = useAppStore(s => s.startTrial);
@@ -29,10 +36,12 @@ export function SignalUpgradeCTA({ compact }: SignalUpgradeCTAProps) {
     setStarting(false);
   };
 
+  const upgradeUrl = `https://4da.ai/signal?utm_source=app&utm_medium=upsell&utm_content=${encodeURIComponent(source)}`;
+
   return (
     <div className={`flex items-center justify-center ${compact ? 'gap-2' : 'gap-3'}`}>
       <a
-        href="https://4da.ai/signal"
+        href={upgradeUrl}
         target="_blank"
         rel="noopener noreferrer"
         className={`font-medium text-bg-primary bg-accent-gold rounded-lg hover:bg-accent-gold-hover transition-colors ${

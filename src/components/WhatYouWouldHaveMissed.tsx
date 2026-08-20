@@ -167,7 +167,7 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
           <p className="text-xs text-text-muted text-center">
             {t('missed.freeSubtext')}
           </p>
-          <SignalUpgradeCTA compact />
+          <SignalUpgradeCTA compact source="missed-teaser" />
         </div>
       </div>
     );

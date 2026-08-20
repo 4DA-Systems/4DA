@@ -48,6 +48,11 @@ pub(crate) fn maybe_revalidate_license() {
     // from concurrent callers during the same window.
     LAST_LICENSE_CHECK.store(now, Ordering::Relaxed);
 
+    // Feed the anti-rollback time floor on the same >=6h cadence — BEFORE the
+    // settings lock below, so the observation's keychain/file I/O never runs
+    // under it.
+    super::clock::observe_license_clock();
+
     let manager = crate::get_settings_manager();
     let mut guard = manager.lock();
     let mut license = guard.get().license.clone();
@@ -111,6 +116,12 @@ pub(crate) fn maybe_revalidate_license() {
 /// Dev bypass: in debug builds with `dev_unlock_all: true`, the tier is
 /// preserved without needing a license key. Release builds ignore this flag.
 pub fn validate_license_on_startup() {
+    // One anti-rollback clock observation per session, before the settings
+    // lock — this both warms the floor cache (so later verify calls under the
+    // lock do zero keychain I/O) and provides the second-session signal the
+    // quarantine confirm rule needs.
+    super::clock::observe_license_clock();
+
     let manager = crate::get_settings_manager();
     let mut guard = manager.lock();
     let mut license = guard.get().license.clone();
