@@ -168,6 +168,16 @@ function minutesSince(ts: string | null): number | null {
 }
 
 /**
+ * The dependency-group query the server runs at init against a pre-existing
+ * database (index.ts full-DB branch). Exported as a single source of truth so
+ * the schema-compatibility regression test exercises the EXACT production SQL —
+ * the `is_direct` standalone-schema gap slipped through precisely because the
+ * two modes were only ever tested separately.
+ */
+export const DEPENDENCY_GROUP_QUERY =
+  "SELECT DISTINCT package_name, language, project_path, is_dev, is_direct FROM project_dependencies";
+
+/**
  * 4DA Database accessor
  */
 export class FourDADatabase {
@@ -205,6 +215,26 @@ export class FourDADatabase {
     if (isNew) {
       this.createMinimalSchema();
       this._isStandalone = true;
+    }
+
+    // Schema upgrade for standalone databases created before `is_direct` was
+    // added to the minimal schema: the full-DB init branch queries that column
+    // (DEPENDENCY_GROUP_QUERY), and without it session 2+ of a standalone
+    // install throws, gets caught, and silently disables vulnerability_scan /
+    // dependency_health / upgrade_planner. Scanner-inserted manifest deps are
+    // direct by definition, so DEFAULT 1 backfills correctly. The desktop
+    // app's database already has the column — no-op there.
+    try {
+      const hasDepsTable = this.db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_dependencies'")
+        .get();
+      if (hasDepsTable) {
+        this.ensureColumn("project_dependencies", "is_direct", "INTEGER DEFAULT 1");
+      }
+    } catch (err) {
+      console.error(
+        `[4da] project_dependencies is_direct upgrade failed (dependency tools may be degraded): ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -464,6 +494,7 @@ export class FourDADatabase {
         package_name TEXT NOT NULL,
         version TEXT,
         is_dev INTEGER DEFAULT 0,
+        is_direct INTEGER DEFAULT 1,
         language TEXT NOT NULL,
         last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
         UNIQUE(project_path, package_name)

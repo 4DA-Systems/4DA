@@ -66,7 +66,7 @@ const SERVER_VERSION: string = (() => {
   }
 })();
 
-import { createDatabase, FourDADatabase, type DatabaseValidationResult } from "./db.js";
+import { createDatabase, DEPENDENCY_GROUP_QUERY, FourDADatabase, type DatabaseValidationResult } from "./db.js";
 
 // =============================================================================
 // Server Setup
@@ -155,9 +155,7 @@ function getDatabase(): FourDADatabase {
       // npm deps living in sub-packages.
       try {
         const rawDb = db.getRawDb();
-        const rows = rawDb.prepare(
-          "SELECT DISTINCT package_name, language, project_path, is_dev, is_direct FROM project_dependencies",
-        ).all() as Array<{ package_name: string; language: string; project_path: string; is_dev: number; is_direct: number }>;
+        const rows = rawDb.prepare(DEPENDENCY_GROUP_QUERY).all() as Array<{ package_name: string; language: string; project_path: string; is_dev: number; is_direct: number }>;
 
         // Scope to the active project root. Sibling projects tracked in the same
         // database (the ACE engine indexes every local project) must not bleed
