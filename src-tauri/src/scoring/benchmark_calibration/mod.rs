@@ -343,6 +343,113 @@ fn quality_gate_rejects_bad_results() {
     );
 }
 
+/// Ratchet regression: a report that sailed through the ORIGINAL generous
+/// thresholds (overall 80 / TP 70 / TN 90 / sec 90) must now FAIL — that
+/// slack is exactly how five under-scoring regressions accumulated silently
+/// between v7 and v21 (2026-08 audit). See quality_gate.rs header.
+#[cfg(feature = "fastembed-local")]
+#[test]
+fn quality_gate_ratchet_rejects_pre_audit_drift_levels() {
+    use super::benchmark_scenarios::{BenchmarkReport, CategoryResult};
+
+    let mut by_category = HashMap::new();
+    by_category.insert(
+        "true_positive".to_string(),
+        CategoryResult {
+            total: 20,
+            passed: 15,
+            accuracy: 0.75,
+        }, // old gate: fine; ratchet: < 0.80
+    );
+    by_category.insert(
+        "true_negative".to_string(),
+        CategoryResult {
+            total: 20,
+            passed: 19,
+            accuracy: 0.95,
+        }, // old gate: fine; ratchet: < 1.00
+    );
+    by_category.insert(
+        "security".to_string(),
+        CategoryResult {
+            total: 12,
+            passed: 11,
+            accuracy: 0.9167,
+        },
+    );
+    by_category.insert(
+        "cold_start".to_string(),
+        CategoryResult {
+            total: 12,
+            passed: 11,
+            accuracy: 0.9167,
+        },
+    );
+
+    let drifted = BenchmarkReport {
+        total: 64,
+        passed: 56,
+        failed: 8,
+        accuracy: 0.875, // old gate: >= 0.80 fine; ratchet: < 0.92
+        relevance_accuracy: 0.70,
+        by_category,
+        failures: vec![],
+    };
+
+    assert!(
+        !quality_gate::model_meets_quality_gate(&drifted),
+        "Ratchet must reject drift the pre-audit thresholds tolerated"
+    );
+
+    // And the CURRENT achieved state passes — the ratchet locks, it does not overreach.
+    let mut current = HashMap::new();
+    current.insert(
+        "true_positive".to_string(),
+        CategoryResult {
+            total: 20,
+            passed: 16,
+            accuracy: 0.80,
+        },
+    );
+    current.insert(
+        "true_negative".to_string(),
+        CategoryResult {
+            total: 20,
+            passed: 20,
+            accuracy: 1.00,
+        },
+    );
+    current.insert(
+        "security".to_string(),
+        CategoryResult {
+            total: 12,
+            passed: 11,
+            accuracy: 0.9167,
+        },
+    );
+    current.insert(
+        "cold_start".to_string(),
+        CategoryResult {
+            total: 12,
+            passed: 11,
+            accuracy: 0.9167,
+        },
+    );
+    let achieved = BenchmarkReport {
+        total: 78,
+        passed: 72,
+        failed: 6,
+        accuracy: 0.923,
+        relevance_accuracy: 0.744,
+        by_category: current,
+        failures: vec![],
+    };
+    assert!(
+        quality_gate::model_meets_quality_gate(&achieved),
+        "The currently-achieved state must pass the ratchet"
+    );
+}
+
 /// Diagnostic: dump every scenario's actual score, relevance, and signals
 /// to identify which scenarios need re-calibration.
 #[cfg(feature = "fastembed-local")]
