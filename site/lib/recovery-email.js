@@ -201,7 +201,10 @@ ${emailButton(escapeHtml(activateUrl), 'Activate in 4DA')}
   const html = renderShell({
     title: heading,
     preheader: escapeHtml(PREHEADER[context] || PREHEADER.recovery),
-    badge: context === 'renewal' ? 'Subscription renewed' : 'Signal licence',
+    // Within BADGE_MAX_CHARS — see the header width budget in email-shell.js.
+    // `Subscription renewed` (20) overflowed the header row on a 320px phone,
+    // wrapping it and squeezing the wordmark.
+    badge: context === 'renewal' ? 'Renewal' : 'Signal licence',
     contentHtml: content,
     footerHtml: footerHtml(context),
   });
