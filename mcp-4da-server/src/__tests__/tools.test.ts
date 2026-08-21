@@ -994,7 +994,9 @@ describe("4DA MCP Tool Handlers", () => {
         source_id: "hn-react-gap-1",
       });
 
-      const result = executeKnowledgeGaps(db, {});
+      // A single unread mention grades as "low" (honest quantity grading) —
+      // opt in to low to see it.
+      const result = executeKnowledgeGaps(db, { min_severity: "low" });
 
       expect(result.gaps_found).toBeGreaterThan(0);
       expect(result.gaps[0].dependency).toBe("react");
@@ -1036,15 +1038,108 @@ describe("4DA MCP Tool Handlers", () => {
         )
         .run("/home/user/project", "package.json", "express", "4.18.0", "javascript");
 
+      // critical requires an actual ADVISORY (cve/osv source or
+      // security_advisory content_type) whose TITLE names the dependency.
       insertSourceItem(db, {
         title: "CVE-2024-1234: Critical security vulnerability in express",
         content: "A critical security vulnerability found in express framework.",
-        source_id: "hn-express-cve",
+        source_id: "cve-express-1",
+        source_type: "cve",
       });
 
       const result = executeKnowledgeGaps(db, { min_severity: "critical" });
       expect(result.gaps_found).toBeGreaterThan(0);
       expect(result.gaps[0].gap_severity).toBe("critical");
+    });
+
+    // -------------------------------------------------------------------------
+    // Grounding regressions — each guards an observed false-positive class from
+    // the 2026-08-21 live audit (substring "invite"→vite, a Gwyneth Paltrow
+    // article filed under hono, a 2014 StackOverflow post as "missed intel",
+    // and blanket "critical" severity from co-mentioned advisories).
+    // -------------------------------------------------------------------------
+
+    it("does not match a package name inside another word (invite is not vite)", () => {
+      const rawDb = db.getRawDb();
+      rawDb
+        .prepare(
+          "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, language) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("/home/user/project", "package.json", "vite", "7.0.0", "javascript");
+
+      insertSourceItem(db, {
+        title: "Rocket Reversi multiplayer is live — invite a friend with a room link",
+        content: "Sign in, open Multiplayer, then invite a friend. Invited players join instantly.",
+        source_id: "hn-reversi-1",
+      });
+
+      const result = executeKnowledgeGaps(db, { min_severity: "low" });
+      expect(result.gaps_found).toBe(0);
+    });
+
+    it("an advisory that merely co-mentions the dep in its body is not critical", () => {
+      const rawDb = db.getRawDb();
+      rawDb
+        .prepare(
+          "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, language) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("/home/user/project", "package.json", "hono", "4.13.2", "javascript");
+
+      insertSourceItem(db, {
+        title: "CVE-2026-61663: django CMS missing authorization in render_object_structure",
+        content: "The affected stack also bundles hono in unrelated tooling examples.",
+        source_id: "cve-django-1",
+        source_type: "cve",
+      });
+
+      const result = executeKnowledgeGaps(db, { min_severity: "low" });
+      expect(result.gaps_found).toBe(1);
+      expect(result.gaps[0].gap_severity).toBe("low");
+    });
+
+    it("ignores mentions older than the 30-day window", () => {
+      const rawDb = db.getRawDb();
+      rawDb
+        .prepare(
+          "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, language) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("/home/user/project", "package.json", "react", "18.2.0", "javascript");
+
+      insertSourceItem(db, {
+        title: "How do I convert an image to Base64 in react?",
+        content: "Old react question.",
+        source_id: "so-old-react",
+        created_at: "2014-01-01 00:00:00",
+      });
+
+      const result = executeKnowledgeGaps(db, { min_severity: "low" });
+      expect(result.gaps_found).toBe(0);
+    });
+
+    it("applies the relevance floor when the scoring column exists", () => {
+      const rawDb = db.getRawDb();
+      rawDb.exec("ALTER TABLE source_items ADD COLUMN relevance_score REAL");
+      rawDb
+        .prepare(
+          "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, language) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("/home/user/project", "package.json", "react", "18.2.0", "javascript");
+
+      const noiseId = insertSourceItem(db, {
+        title: "react mentioned in passing in an off-topic listicle",
+        source_id: "hn-react-noise",
+      });
+      const signalId = insertSourceItem(db, {
+        title: "React 19 breaking changes and migration guide",
+        source_id: "hn-react-signal",
+      });
+      rawDb.prepare("UPDATE source_items SET relevance_score = 0.05 WHERE id = ?").run(noiseId);
+      rawDb.prepare("UPDATE source_items SET relevance_score = 0.5 WHERE id = ?").run(signalId);
+
+      const result = executeKnowledgeGaps(db, { min_severity: "low" });
+      expect(result.gaps_found).toBe(1);
+      expect(result.gaps[0].missed_count).toBe(1);
+      expect(result.gaps[0].missed_items[0].title).toContain("React 19");
     });
   });
 

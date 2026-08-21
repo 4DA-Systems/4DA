@@ -882,7 +882,7 @@ export class FourDADatabase {
     }
   }
 
-  private hasColumn(table: string, column: string): boolean {
+  hasColumn(table: string, column: string): boolean {
     try {
       const cols = this.db.pragma(`table_info(${table})`) as Array<{ name: string }>;
       return cols.some((c) => c.name === column);
