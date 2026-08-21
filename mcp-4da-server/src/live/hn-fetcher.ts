@@ -78,10 +78,14 @@ export class HNFetcher {
   }
 
   private async searchHN(query: string): Promise<HNHit[]> {
+    // "Pulse" means current: without a recency floor Algolia's point-sorted
+    // results are dominated by multi-year-old all-time hits (e.g. the Tauri
+    // 1.0 launch), which is archaeology, not ecosystem news.
+    const fourteenDaysAgo = Math.floor(Date.now() / 1000) - 14 * 24 * 60 * 60;
     const params = new URLSearchParams({
       query,
       tags: "story",
-      numericFilters: `points>${MIN_POINTS}`,
+      numericFilters: `points>${MIN_POINTS},created_at_i>${fourteenDaysAgo}`,
       hitsPerPage: String(RESULTS_PER_QUERY),
     });
 
@@ -110,11 +114,15 @@ function buildQueries(techStack: string[]): string[] {
 }
 
 function wordBoundaryMatch(text: string, term: string): boolean {
-  const idx = text.indexOf(term);
-  if (idx === -1) return false;
-  const before = idx === 0 || !/[a-zA-Z0-9]/.test(text[idx - 1]);
-  const after = idx + term.length >= text.length || !/[a-zA-Z0-9]/.test(text[idx + term.length]);
-  return before && after;
+  // Check EVERY occurrence — indexOf-only missed "react" in a title whose
+  // first hit was inside "reactor".
+  let idx = -1;
+  while ((idx = text.indexOf(term, idx + 1)) !== -1) {
+    const before = idx === 0 || !/[a-zA-Z0-9]/.test(text[idx - 1]);
+    const after = idx + term.length >= text.length || !/[a-zA-Z0-9]/.test(text[idx + term.length]);
+    if (before && after) return true;
+  }
+  return false;
 }
 
 function scoreAndMap(hits: HNHit[], techStack: string[]): LiveHeadline[] {
@@ -124,6 +132,13 @@ function scoreAndMap(hits: HNHit[], techStack: string[]): LiveHeadline[] {
     .map((hit) => {
       const titleLower = hit.title.toLowerCase();
       const matchedTech = techLower.filter((t) => wordBoundaryMatch(titleLower, t));
+      return { hit, matchedTech };
+    })
+    // The tool's contract is "filtered by detected technologies" — a hit whose
+    // title matches none of the user's stack is Algolia query noise (nuclear
+    // "reactors" and weather stories arrived this way), not ecosystem news.
+    .filter(({ matchedTech }) => matchedTech.length > 0)
+    .map(({ hit, matchedTech }) => {
       const techBoost = Math.min(matchedTech.length * 0.2, 0.4);
       const pointsBoost = Math.min(hit.points / 500, 0.3);
       const commentsBoost = Math.min(hit.num_comments / 200, 0.2);
@@ -138,9 +153,7 @@ function scoreAndMap(hits: HNHit[], techStack: string[]): LiveHeadline[] {
         comments: hit.num_comments,
         published: hit.created_at,
         relevanceScore: Math.round(score * 100) / 100,
-        relevanceReason: matchedTech.length > 0
-          ? `Matches your stack: ${matchedTech.join(", ")}`
-          : `Trending (${hit.points} points)`,
+        relevanceReason: `Matches your stack: ${matchedTech.join(", ")}`,
       };
     })
     .sort((a, b) => b.relevanceScore - a.relevanceScore)

@@ -43,6 +43,7 @@ import { runSetup } from "./setup.js";
 import { runDoctor } from "./doctor.js";
 import { scanCurrentProject } from "./project-scanner.js";
 import { LiveIntelligence } from "./live/index.js";
+import { deriveTechStackForHeadlines } from "./tools/ecosystem-pulse.js";
 import { setLiveIntelligence } from "./live-singleton.js";
 
 // Schema registry for slim tool listing + category metadata
@@ -183,6 +184,20 @@ function getDatabase(): FourDADatabase {
 
         if (groups.size > 0) {
           liveIntel.initFromDependencyGroups([...groups.values()]);
+        }
+
+        // Warm the headline cache for ecosystem_pulse — previously only the
+        // standalone branch prefetched, so full-DB servers served an empty
+        // cache forever. Non-blocking; the tool also fetches on demand now.
+        if (liveIntel.isEnabled()) {
+          const techStack = deriveTechStackForHeadlines(db);
+          if (techStack.length > 0) {
+            liveIntel.fetchHeadlines(techStack).catch((err) => {
+              console.error(
+                `[4DA]   Headline prefetch failed: ${err instanceof Error ? err.message : String(err)}.`,
+              );
+            });
+          }
         }
       } catch (err) {
         // Non-fatal — live intel just won't have version data — but log to stderr
