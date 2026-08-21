@@ -18,24 +18,48 @@
 // It reads secret NAMES only. Cloudflare never returns values, which is exactly
 // why this is safe to run and safe to put in a release checklist.
 //
+// PRESENCE IS NOT DELIVERABILITY
+// ------------------------------
+// Because values are never returned, name-presence alone cannot tell "configured"
+// from "actually able to send". Those come apart in a specific and dangerous way:
+// set RESEND_API_KEY/RESEND_FROM_EMAIL while the sending domain is unverified and
+// every send fails 403 — but this script would report OK. That green would be the
+// same lie in the other direction, and this script exists to refuse exactly that
+// conflation, so it also checks that the sending domain is DKIM-verified in DNS.
+// That check needs no token and no secret values: either the record is published
+// or it is not.
+//
 // USAGE
 //   CLOUDFLARE_API_TOKEN=... node scripts/check-pages-secrets.cjs
 //   CLOUDFLARE_API_TOKEN=... node scripts/check-pages-secrets.cjs --json
 //
 // EXIT CODES
-//   0  every REQUIRED variable is present
-//   1  one or more REQUIRED variables are missing
-//   2  could not ask (no token, wrangler missing, API error) — NOT a pass.
-//      "Could not check" must never read as "checked and fine"; that conflation
-//      is the same defect this script exists to catch.
+//   0  every REQUIRED variable is present AND the sending domain is verified
+//   1  a REQUIRED variable is missing, or the mailer is configured against an
+//      unverified domain (i.e. it will 403 on every send)
+//   2  could not ask (no token, wrangler missing, API error, DNS unreachable) —
+//      NOT a pass. "Could not check" must never read as "checked and fine"; that
+//      conflation is the same defect this script exists to catch.
 
 'use strict';
 
 const { execFileSync } = require('node:child_process');
+const dns = require('node:dns').promises;
 const path = require('node:path');
 
 const PROJECT = '4da-site';
 const SITE_DIR = path.join(__dirname, '..', 'site');
+
+/**
+ * The domain licence email is sent FROM. Hard-coded for the same reason PROJECT
+ * is: Cloudflare will not tell us the value of RESEND_FROM_EMAIL, so the domain
+ * this must be checked against cannot be discovered from the project.
+ */
+const SENDING_DOMAIN = '4da.ai';
+const DKIM_HOST = `resend._domainkey.${SENDING_DOMAIN}`;
+
+/** DNS answers that mean "genuinely not published" rather than "could not ask". */
+const ABSENT_CODES = new Set(['ENOTFOUND', 'NXDOMAIN', 'ENODATA']);
 
 /**
  * Every variable the live payment path reads, and what breaks without it.
@@ -120,7 +144,33 @@ function listSecretNames() {
   throw new Error(failures.join(' | '));
 }
 
-function main(argv) {
+/**
+ * Is the sending domain DKIM-verified in DNS?
+ *
+ * Three-valued on purpose, mirroring this script's exit codes: a resolver that
+ * cannot be reached must not be reported as "not verified", or a flaky network
+ * would fail a release for the wrong reason.
+ *
+ * @param {(name: string) => Promise<string[][]>} [resolveTxt] injectable for tests
+ * @returns {Promise<{state: 'verified'|'absent'|'unknown', detail: string}>}
+ */
+async function checkSendingDomain(resolveTxt = dns.resolveTxt) {
+  try {
+    const records = await resolveTxt(DKIM_HOST);
+    if (Array.isArray(records) && records.length > 0) {
+      return { state: 'verified', detail: `${DKIM_HOST} is published` };
+    }
+    return { state: 'absent', detail: `${DKIM_HOST} resolved but returned no TXT data` };
+  } catch (err) {
+    const code = err && err.code;
+    if (ABSENT_CODES.has(code)) {
+      return { state: 'absent', detail: `${DKIM_HOST} does not exist (${code})` };
+    }
+    return { state: 'unknown', detail: `${DKIM_HOST} lookup failed: ${code || err.message}` };
+  }
+}
+
+async function main(argv) {
   const asJson = argv.includes('--json');
 
   if (!process.env.CLOUDFLARE_API_TOKEN) {
@@ -148,11 +198,22 @@ function main(argv) {
   const missingOptional = EXPECTED.filter((e) => !e.required && !present.includes(e.name));
   const unexpected = present.filter((n) => !EXPECTED.some((e) => e.name === n));
 
+  // Both halves of the mailer, or neither, is the only coherent state — the
+  // EXPECTED entries already say either alone does nothing.
+  const mailerVars = ['RESEND_API_KEY', 'RESEND_FROM_EMAIL'];
+  const mailerConfigured = mailerVars.every((n) => present.includes(n));
+  const domain = await checkSendingDomain();
+
+  // The dangerous combination: credentials set, domain unverified. Every send
+  // 403s, and without this the script would call that OK.
+  const mailerBroken = mailerConfigured && domain.state === 'absent';
+
   if (asJson) {
     process.stdout.write(
-      `${JSON.stringify({ project: PROJECT, present, missingRequired: missingRequired.map((m) => m.name), missingOptional: missingOptional.map((m) => m.name), unexpected }, null, 2)}\n`,
+      `${JSON.stringify({ project: PROJECT, present, missingRequired: missingRequired.map((m) => m.name), missingOptional: missingOptional.map((m) => m.name), unexpected, sendingDomain: { host: DKIM_HOST, ...domain }, mailerConfigured, mailerDeliverable: mailerConfigured && domain.state === 'verified' }, null, 2)}\n`,
     );
-    return missingRequired.length > 0 ? 1 : 0;
+    if (missingRequired.length > 0 || mailerBroken) return 1;
+    return mailerConfigured && domain.state === 'unknown' ? 2 : 0;
   }
 
   process.stdout.write(`[pages-secrets] ${PROJECT}: ${present.length} variable(s) configured\n`);
@@ -163,7 +224,28 @@ function main(argv) {
       process.stderr.write(`  ${m.name}\n      gates: ${m.gates}\n`);
       process.stderr.write(`      fix:   cd site && wrangler pages secret put ${m.name} --project-name ${PROJECT}\n\n`);
     }
+    if (domain.state === 'absent') {
+      process.stderr.write(`  note: ${domain.detail} — the sending domain also still needs verifying at\n`);
+      process.stderr.write('        https://resend.com/domains, or delivery will 403 once the keys are set.\n\n');
+    }
     return 1;
+  }
+
+  if (mailerBroken) {
+    process.stderr.write('\n[pages-secrets] MAILER CONFIGURED BUT UNDELIVERABLE:\n\n');
+    process.stderr.write(`  ${domain.detail}\n`);
+    process.stderr.write(`  Both ${mailerVars.join(' and ')} are set, so this looks configured, but\n`);
+    process.stderr.write(`  Resend refuses to send from an unverified domain — every licence email\n`);
+    process.stderr.write(`  will fail 403 and be logged, not delivered.\n\n`);
+    process.stderr.write(`      fix:   add ${SENDING_DOMAIN} at https://resend.com/domains, then publish the\n`);
+    process.stderr.write(`             DKIM/SPF records it gives you (DKIM goes to ${DKIM_HOST}).\n\n`);
+    return 1;
+  }
+
+  if (mailerConfigured && domain.state === 'unknown') {
+    process.stderr.write(`[pages-secrets] INCONCLUSIVE — ${domain.detail}\n`);
+    process.stderr.write('                The mailer is configured but its domain could not be checked.\n');
+    return 2;
   }
 
   for (const m of missingOptional) {
@@ -172,12 +254,21 @@ function main(argv) {
   if (unexpected.length > 0) {
     process.stdout.write(`  (present, undocumented) ${unexpected.join(', ')} — add to EXPECTED or remove\n`);
   }
-  process.stdout.write('[pages-secrets] OK — every required variable is present.\n');
+  process.stdout.write(`  sending domain: ${domain.detail}\n`);
+  process.stdout.write('[pages-secrets] OK — every required variable is present and the mailer can send.\n');
   return 0;
 }
 
 if (require.main === module) {
-  process.exitCode = main(process.argv.slice(2));
+  main(process.argv.slice(2)).then(
+    (code) => {
+      process.exitCode = code;
+    },
+    (err) => {
+      process.stderr.write(`[pages-secrets] INCONCLUSIVE — unexpected failure: ${err.message}\n`);
+      process.exitCode = 2;
+    },
+  );
 }
 
-module.exports = { EXPECTED, main };
+module.exports = { EXPECTED, main, checkSendingDomain, DKIM_HOST, SENDING_DOMAIN };
