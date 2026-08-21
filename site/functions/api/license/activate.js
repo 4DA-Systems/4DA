@@ -318,7 +318,10 @@ async function handleInvoicePaid(env, stripe, invoice) {
   // with the customer active again holding a brand-new key on a fresh expiry —
   // which is the exact defect this file's refund handling exists to close, and
   // Stripe re-delivering an already-processed event is the ordinary case, not an
-  // edge one (there is no event-id dedup store; see the dispatch note below).
+  // edge one. Event-id dedup now exists (LICENSE_KV, see the dispatch handler),
+  // but this guard is still load-bearing: dedup only suppresses a redelivery of
+  // the SAME event id, whereas this catches a genuinely NEW invoice.paid arriving
+  // after the customer was refunded or disputed.
   //
   // Recovery is deliberately narrow: only a fresh `checkout.session.completed`
   // clears a terminal status, because that is someone actually paying again.

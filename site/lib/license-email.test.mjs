@@ -20,6 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { deliverLicenseEmail, deliverRecoveryEmail, isRecoveryEmailConfigured } from './recovery-email.js';
+import { BADGE_MAX_CHARS } from './email-shell.js';
 
 const CONFIGURED = { RESEND_API_KEY: 'test-key', RESEND_FROM_EMAIL: '4DA <licenses@4da.ai>' };
 const KEY = '4DA-eyJ0aWVyIjoic2lnbmFsIn0.c2ln';
@@ -297,7 +298,18 @@ test('a renewal is badged differently from a first purchase', async () => {
     await deliverLicenseEmail(CONFIGURED, 'b@e.co', KEY, 'signal', null, 'purchase');
     await deliverLicenseEmail(CONFIGURED, 'b@e.co', KEY, 'signal', null, 'renewal');
     assert.match(f.calls[0].body.html, /Signal licence<\/td>/, 'purchase badge');
-    assert.match(f.calls[1].body.html, /Subscription renewed<\/td>/, 'renewal badge');
+    assert.match(f.calls[1].body.html, /Renewal<\/td>/, 'renewal badge');
+    // Self-guarding: assert the BUDGET, not just this string, so the next person
+    // who writes a more descriptive badge fails here rather than in someone's
+    // inbox. `Subscription renewed` (20) is what overflowed the header row.
+    for (const call of f.calls) {
+      const badge = call.body.html.match(/text-transform: uppercase[^>]*>([^<]+)<\/td>/);
+      assert.ok(badge, 'a badge is rendered');
+      assert.ok(
+        badge[1].trim().length <= BADGE_MAX_CHARS,
+        `badge "${badge[1].trim()}" is ${badge[1].trim().length} chars, over the ${BADGE_MAX_CHARS} budget`,
+      );
+    }
     assert.match(f.calls[1].body.html, /replaces your previous key/, 'renewal preheader says so');
   } finally { f.restore(); c.restore(); }
 });
