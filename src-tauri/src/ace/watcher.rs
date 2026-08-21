@@ -346,6 +346,19 @@ impl FileWatcher {
                 continue;
             }
 
+            // Never mine the app's OWN data directory. When it sits inside a
+            // watched project (dev/dogfood layout, FOURDA_DATA_DIR overrides),
+            // the watcher fed 4DA's own outputs back into the profile:
+            // briefing_snapshot.json minted `azure`/`redis` as user topics and
+            // the RSS feed URLs inside settings.json minted `docker`/
+            // `kubernetes`/`aws` — which then boosted off-stack content into
+            // the top band and re-entered the briefing (self-scan
+            // contamination loop, 2026-08-21 audit). The app's exhaust is
+            // never the user's work.
+            if is_own_data_path(path) {
+                continue;
+            }
+
             // Check file size for non-delete events
             if change_type != FileChangeType::Deleted {
                 if let Ok(metadata) = std::fs::metadata(path) {
@@ -424,6 +437,38 @@ impl Drop for FileWatcher {
 // ============================================================================
 
 /// Check if a file is sensitive and should never be indexed.
+/// True when `path` lies inside the app's OWN runtime data directory
+/// (`RuntimePaths::get().data_dir`). Resolved live, not cached in config, so a
+/// `FOURDA_DATA_DIR` override is honored and persisted watcher state can never
+/// go stale. See the call site in `process_event` for the contamination-loop
+/// incident this guards against.
+fn is_own_data_path(path: &Path) -> bool {
+    path_is_under(path, &crate::runtime_paths::RuntimePaths::get().data_dir)
+}
+
+/// Prefix containment over normalized path strings: separators unified to `/`
+/// and, on Windows, case-folded (the same file arrives as `D:\4DA\data\…` from
+/// the OS watcher and `d:/4da/data` from config).
+fn path_is_under(path: &Path, root: &Path) -> bool {
+    fn norm(p: &Path) -> String {
+        let s = p.to_string_lossy().replace('\\', "/");
+        if cfg!(windows) {
+            s.to_lowercase()
+        } else {
+            s
+        }
+    }
+    let p = norm(path);
+    let mut r = norm(root);
+    while r.ends_with('/') {
+        r.pop();
+    }
+    if r.is_empty() {
+        return false;
+    }
+    p == r || p.starts_with(&format!("{r}/"))
+}
+
 /// Catches credential files that have watched extensions (.json, .yaml, .toml).
 fn is_sensitive_file(path: &Path) -> bool {
     let file_name = match path.file_name().and_then(|f| f.to_str()) {
@@ -1027,6 +1072,52 @@ pub struct RateLimitStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression: self-scan contamination loop (2026-08-21 audit). The
+    /// watcher mined the app's own data dir — briefing_snapshot.json minted
+    /// `azure`/`redis` as user topics, settings.json's RSS feed URLs minted
+    /// `docker`/`kubernetes`/`aws` — so files under the runtime data dir must
+    /// never pass the event filter.
+    #[test]
+    fn own_data_dir_paths_are_excluded() {
+        let data_dir = crate::runtime_paths::RuntimePaths::get().data_dir.clone();
+        assert!(is_own_data_path(&data_dir.join("settings.json")));
+        assert!(is_own_data_path(&data_dir.join("briefing_snapshot.json")));
+        assert!(is_own_data_path(
+            &data_dir.join("digests").join("mini_digest.md")
+        ));
+        // A sibling project file is NOT excluded.
+        if let Some(parent) = data_dir.parent() {
+            assert!(!is_own_data_path(&parent.join("src").join("main.rs")));
+        }
+    }
+
+    #[test]
+    fn path_is_under_normalizes_separators_and_case() {
+        use std::path::PathBuf;
+        let root = PathBuf::from(r"D:\4DA\data");
+        assert!(path_is_under(
+            &PathBuf::from("D:/4DA/data/settings.json"),
+            &root
+        ));
+        if cfg!(windows) {
+            assert!(path_is_under(
+                &PathBuf::from(r"d:\4da\DATA\usage.json"),
+                &root
+            ));
+        }
+        // Prefix must respect path boundaries: `data-backup` is not `data`.
+        assert!(!path_is_under(
+            &PathBuf::from(r"D:\4DA\data-backup\x.json"),
+            &root
+        ));
+        assert!(!path_is_under(&PathBuf::from(r"D:\4DA\src\lib.rs"), &root));
+        // Empty root never matches (a misconfigured data dir must not exclude everything).
+        assert!(!path_is_under(
+            &PathBuf::from("D:/4DA/data/x.json"),
+            &PathBuf::from("")
+        ));
+    }
 
     /// Regression: the module offset was `find(" from ") + 7`, one byte PAST
     /// the 6-byte pattern. That extra byte split the following char whenever
