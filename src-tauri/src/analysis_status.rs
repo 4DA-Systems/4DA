@@ -373,14 +373,18 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
         scores.iter().sum::<f32>() / scores.len() as f32
     };
     let max_score = scores.iter().copied().fold(0.0f32, f32::max);
+    // The three per-cycle counters are NOT measured on this path (gate/cap
+    // detail lives in ScoringTelemetry logs; briefing_items only exists when a
+    // briefing builds). They used to be hardcoded 0, which read as "gates
+    // never fire" in any analysis of the table — absent data is NULL.
     let _ = db.record_scoring_event(
         total_scored,
         relevant_count,
         avg_score,
         max_score,
-        0, // gate_rejections — logged via ScoringTelemetry
-        0, // commodity_caps — logged via ScoringTelemetry
-        0, // briefing_items — filled on briefing build
+        None, // gate_rejections — not measured here; see ScoringTelemetry logs
+        None, // commodity_caps — not measured here; see ScoringTelemetry logs
+        None, // briefing_items — only meaningful on briefing build
     );
 }
 

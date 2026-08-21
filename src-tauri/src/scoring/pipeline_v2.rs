@@ -1041,8 +1041,12 @@ fn compute_quality_composite(
         if raw.dep_match_score == 0.0 {
             // No dependency matched — neutralize the boost, don't penalize
             content_dna_mult.min(1.00)
-        } else if raw.dep_match_score <= 0.40 {
-            // Weak match — partial boost
+        } else if raw.dep_match_score
+            <= scoring_config::SECURITY_DEP_VALIDATION_STRONG_DEP_THRESHOLD
+        {
+            // Weak match — partial boost. Same DSL knob as the validation
+            // penalties below; a hardcoded copy here silently ignored DSL
+            // retunes of strong_dep_threshold.
             content_dna_mult.min(1.10)
         } else {
             // Strong dep match — full boost justified
@@ -2043,8 +2047,20 @@ pub(crate) fn score_item(
     // down), so require a REAL embedding, not merely a non-empty one.
     let has_real_embedding = input.embedding.iter().any(|&v| v != 0.0);
     let matches: Vec<RelevanceMatch> = if ctx.cached_context_count > 0 && has_real_embedding {
+        // A DB error here silently zeroes the CONTEXT axis for this item —
+        // indistinguishable from "no match" downstream. Degrade gracefully,
+        // but never silently (accuracy-first: a muted axis must be visible in
+        // the logs, 2026-08-21 audit).
         db.find_similar_contexts(input.embedding, 3)
-            .unwrap_or_default()
+            .unwrap_or_else(|e| {
+                tracing::warn!(
+                    target: "4da::scoring",
+                    error = %e,
+                    item_id = input.id,
+                    "find_similar_contexts failed — context axis degraded to zero for this item"
+                );
+                Vec::new()
+            })
             .into_iter()
             // Boilerplate chunks (shebangs, license headers) match everything
             // and were surfacing as top "Similar to your code" evidence on
