@@ -756,16 +756,16 @@ describe("4DA MCP Tool Handlers", () => {
       expect(result.ace).toBeUndefined();
     });
 
-    it("includes learned preferences when requested", () => {
+    it("learned preferences are permanently empty (implicit capture removed in v20b/schema 105)", () => {
       seedUserContext(db);
+      // Even seeded legacy rows are quarantined data the product no longer
+      // honors — the shape stays for API stability, the content stays empty.
       seedLearnedPreferences(db);
 
       const result = executeGetContext(db, { include_learned: true });
       expect(result.learned).toBeDefined();
-      expect(result.learned!.topic_affinities).toBeInstanceOf(Array);
-      expect(result.learned!.anti_topics).toBeInstanceOf(Array);
-      expect(result.learned!.topic_affinities.length).toBeGreaterThan(0);
-      expect(result.learned!.anti_topics.length).toBeGreaterThan(0);
+      expect(result.learned!.topic_affinities).toEqual([]);
+      expect(result.learned!.anti_topics).toEqual([]);
     });
 
     it("excludes learned preferences when not requested", () => {

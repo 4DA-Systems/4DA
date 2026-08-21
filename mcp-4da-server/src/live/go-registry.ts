@@ -12,7 +12,7 @@
 import type { LiveCache } from "./cache.js";
 import type { RateLimiter } from "./rate-limiter.js";
 import { fetchJson, fetchWithTimeout } from "./http-utils.js";
-import { computeSemverDistance, isPreRelease } from "./semver-utils.js";
+import { computeSemverDistance, isPreRelease, maxStableSemver } from "./semver-utils.js";
 import type { RegistryPackageInfo } from "./types.js";
 
 const GO_PROXY_URL = "https://proxy.golang.org";
@@ -133,13 +133,9 @@ function escapeModulePath(mod: string): string {
  * Versions use "v" prefix (v1.2.3) -- strip for prerelease check.
  */
 function findLatestStable(versions: string[]): string | null {
-  for (let i = versions.length - 1; i >= 0; i--) {
-    const v = versions[i];
-    if (!isPreRelease(v.replace(/^v/, ""))) {
-      return v;
-    }
-  }
-  return null;
+  // Semver-max, not last-listed (see maxStableSemver). parseSemver strips the
+  // "v" prefix; isPreRelease needs it stripped here.
+  return maxStableSemver(versions.filter((v) => !isPreRelease(v.replace(/^v/, ""))));
 }
 
 function errorResult(

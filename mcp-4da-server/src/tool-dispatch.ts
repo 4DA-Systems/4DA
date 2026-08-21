@@ -99,7 +99,25 @@ export async function dispatchTool(
 
   assertToolPermission(name);
 
-  const result = await executor(db, (args || {}) as Record<string, unknown>);
+  // BUSY/LOCKED retry at the single choke point every tool passes through.
+  // The desktop engine writes to the same database every 30 minutes; a read
+  // that collides with its transaction deserves one backoff retry rather than
+  // an immediate error JSON. (db.queryWithRetry existed for this but had no
+  // production caller — it is sync and the executors are async, so the retry
+  // lives here.)
+  const toolArgs = (args || {}) as Record<string, unknown>;
+  let result: unknown;
+  try {
+    result = await executor(db, toolArgs);
+  } catch (error: unknown) {
+    const code = (error as { code?: string }).code;
+    if (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED") {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      result = await executor(db, toolArgs);
+    } else {
+      throw error;
+    }
+  }
   const payload = FRESHNESS_TOOLS.has(name) ? attachFreshness(db, result) : result;
   return {
     content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],

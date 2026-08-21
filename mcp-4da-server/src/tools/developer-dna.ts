@@ -129,7 +129,8 @@ interface EngagedTopic {
 interface BlindSpotEntry {
   dependency: string;
   severity: string;
-  days_stale: number;
+  /** Days since last engagement with content about this dep; null = never engaged. */
+  days_stale: number | null;
 }
 
 interface SourceEngagement {
@@ -271,33 +272,44 @@ export function executeDeveloperDna(
   }
 
   // -------------------------------------------------------------------------
-  // 5. Top Engaged Topics — from topic_affinities
+  // 5. Top Engaged Topics — from explicit interactions (topic_affinities was
+  // dropped with the implicit-capture system in desktop schema 105; querying
+  // it returned empty forever).
   // -------------------------------------------------------------------------
   let topEngagedTopics: EngagedTopic[] = [];
   try {
-    const affinityRows = rawDb
+    const interactionRows = rawDb
       .prepare(
-        `SELECT topic, positive_signals, negative_signals, total_exposures
-         FROM topic_affinities
-         WHERE positive_signals > 0
-         ORDER BY positive_signals DESC
-         LIMIT ?`,
+        `SELECT item_topics FROM interactions
+         WHERE action_type IN ('click', 'save') AND item_topics IS NOT NULL`,
       )
-      .all(maxTopics) as TopicAffinityRow[];
+      .all() as Array<{ item_topics: string }>;
 
-    const totalPositive = affinityRows.reduce(
-      (sum, r) => sum + r.positive_signals,
-      0,
-    );
+    const topicCounts = new Map<string, number>();
+    for (const row of interactionRows) {
+      try {
+        const topics = JSON.parse(row.item_topics) as unknown;
+        if (!Array.isArray(topics)) continue;
+        for (const t of topics) {
+          if (typeof t === "string" && t.length > 0) {
+            topicCounts.set(t, (topicCounts.get(t) || 0) + 1);
+          }
+        }
+      } catch {
+        // Malformed topic JSON on one row — skip it
+      }
+    }
 
-    topEngagedTopics = affinityRows.map((r) => ({
-      topic: r.topic,
-      interactions: r.positive_signals,
-      percent_of_total:
-        totalPositive > 0
-          ? Math.round((r.positive_signals / totalPositive) * 10000) / 100
-          : 0,
-    }));
+    const totalPositive = [...topicCounts.values()].reduce((a, b) => a + b, 0);
+    topEngagedTopics = [...topicCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, maxTopics)
+      .map(([topic, count]) => ({
+        topic,
+        interactions: count,
+        percent_of_total:
+          totalPositive > 0 ? Math.round((count / totalPositive) * 10000) / 100 : 0,
+      }));
   } catch {
     // table may not exist
   }
@@ -324,28 +336,9 @@ export function executeDeveloperDna(
       for (const dep of topDependencies) {
         const depLower = dep.name.toLowerCase();
 
-        // Check if any interaction item's source mentions this dependency
-        // Use a simpler heuristic: check if the dependency name appears in
-        // topic_affinities with positive signals
-        let lastEngagement: string | null = null;
-        try {
-          const affinityRow = rawDb
-            .prepare(
-              `SELECT topic, positive_signals
-               FROM topic_affinities
-               WHERE LOWER(topic) = ?
-               AND positive_signals > 0`,
-            )
-            .get(depLower) as TopicAffinityRow | undefined;
-
-          if (affinityRow) {
-            continue; // Has engagement, not a blind spot
-          }
-        } catch {
-          // Ignore
-        }
-
         // Check for any source_items mentioning this dep that have interactions
+        // (the old topic_affinities shortcut queried a table dropped in schema
+        // 105 — it never fired).
         try {
           // Escape LIKE wildcards so a name containing % or _ matches literally.
           const likeDep = `%${depLower.replace(/[\\%_]/g, (c) => "\\" + c)}%`;
@@ -379,11 +372,12 @@ export function executeDeveloperDna(
               });
             }
           } else {
-            // Never interacted with content about this dependency
+            // Never interacted with content about this dependency — null, not
+            // a -1 sentinel leaking into user-facing output.
             blindSpots.push({
               dependency: dep.name,
               severity: "low",
-              days_stale: -1, // indicates "never engaged"
+              days_stale: null,
             });
           }
         } catch {
@@ -467,16 +461,31 @@ export function executeDeveloperDna(
     // table may not exist
   }
 
+  // total_relevant / rejection_rate describe the PIPELINE's judgment, so they
+  // must come from its persisted verdicts — the old interaction-based count
+  // reported total_relevant: 0 / rejection_rate: 1.0 for any passive user,
+  // contradicting a corpus with hundreds of feed-relevant items.
+  let judgedCount = 0;
   try {
-    // Items with at least one positive interaction = "relevant"
-    const relevantRow = rawDb
-      .prepare(
-        `SELECT COUNT(DISTINCT item_id) as cnt
-         FROM interactions
-         WHERE action_type IN ('click', 'save')`,
-      )
-      .get() as CountRow;
-    totalRelevant = relevantRow.cnt;
+    if (db.hasColumn("source_items", "feed_relevant")) {
+      const row = rawDb
+        .prepare(
+          `SELECT COUNT(*) as judged, SUM(CASE WHEN feed_relevant = 1 THEN 1 ELSE 0 END) as relevant
+           FROM source_items WHERE feed_relevant IS NOT NULL`,
+        )
+        .get() as { judged: number; relevant: number | null };
+      judgedCount = row.judged;
+      totalRelevant = row.relevant ?? 0;
+    } else if (db.hasColumn("source_items", "relevance_score")) {
+      const row = rawDb
+        .prepare(
+          `SELECT COUNT(*) as judged, SUM(CASE WHEN relevance_score >= 0.4 THEN 1 ELSE 0 END) as relevant
+           FROM source_items WHERE relevance_score IS NOT NULL`,
+        )
+        .get() as { judged: number; relevant: number | null };
+      judgedCount = row.judged;
+      totalRelevant = row.relevant ?? 0;
+    }
   } catch {
     // table may not exist
   }
@@ -519,11 +528,11 @@ export function executeDeveloperDna(
     // table may not exist
   }
 
+  // Rejection rate over the JUDGED set — unjudged items are "not yet curated",
+  // not rejected.
   const rejectionRate =
-    totalItemsProcessed > 0
-      ? Math.round(
-          ((totalItemsProcessed - totalRelevant) / totalItemsProcessed) * 10000,
-        ) / 10000
+    judgedCount > 0
+      ? Math.round(((judgedCount - totalRelevant) / judgedCount) * 10000) / 10000
       : 0;
 
   const stats: DnaStats = {

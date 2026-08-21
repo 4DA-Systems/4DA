@@ -136,11 +136,38 @@ export async function executeDependencyHealth(
   const limit = params.limit ?? 50;
   const limited = sorted.slice(0, limit);
 
-  // Health score: 100 = perfect, 0 = everything is on fire
+  // Health score: 100 = perfect. Proportional and severity-weighted — the old
+  // absolute-count formula (15 points per vulnerable package, 2 per outdated,
+  // regardless of severity, degree, or project size) pinned any real-sized
+  // project at 0/100: a patch-behind dep cost the same as a critical CVE and
+  // the number informed nothing.
   const total = registryData.length || 1;
-  const vulnPenalty = Math.min(vulnerable * 15, 50);
-  const deprecatedPenalty = Math.min(deprecated * 10, 30);
-  const outdatedPenalty = Math.min(outdated * 2, 40);
+
+  // Vulnerabilities: severity-weighted; transitive findings at one-third
+  // weight (their fix arrives via a parent bump — the direct surface is what
+  // the user controls directly).
+  const sevWeight: Record<string, number> = { critical: 20, high: 10, medium: 4, low: 1 };
+  let vulnPenaltyRaw = 0;
+  if (vulnResult) {
+    for (const v of vulnResult.vulnerabilities) {
+      const w = sevWeight[v.severity] ?? 2; // "unknown" (mostly unmaintained-notices) counts low
+      vulnPenaltyRaw += v.isDirect ? w : w / 3;
+    }
+  }
+  const vulnPenalty = Math.min(Math.round(vulnPenaltyRaw), 55);
+
+  // Staleness: degree-weighted and proportional to the tracked set — a major
+  // behind is a real liability, a patch behind is routine drift.
+  let stalenessWeight = 0;
+  for (const dep of registryData) {
+    const label = dep.versionsBehind?.label;
+    if (label === "major") stalenessWeight += 1;
+    else if (label === "minor") stalenessWeight += 0.35;
+    else if (label === "patch") stalenessWeight += 0.1;
+  }
+  const outdatedPenalty = Math.min(30, Math.round((stalenessWeight / total) * 60));
+
+  const deprecatedPenalty = Math.min(deprecated * 8, 15);
   const healthScore = Math.max(0, 100 - vulnPenalty - deprecatedPenalty - outdatedPenalty);
 
   const vulnSummary = vulnResult ? {

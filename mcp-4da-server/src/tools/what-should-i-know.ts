@@ -139,9 +139,12 @@ function getOpenDecisionWindows(db: FourDADatabase): WindowRow[] {
   try {
     const rawDb = db.getRawDb();
     return rawDb.prepare(
+      // opened_at, not created_at — the wrong column name made this query
+      // throw (swallowed below) on EVERY schema in existence, so the
+      // decision-windows section had never returned a row for anyone.
       `SELECT id, title, description, urgency
        FROM decision_windows WHERE status = 'open'
-       ORDER BY urgency DESC, created_at DESC
+       ORDER BY urgency DESC, opened_at DESC
        LIMIT 20`,
     ).all() as WindowRow[];
   } catch {
