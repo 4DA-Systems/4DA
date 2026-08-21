@@ -167,6 +167,61 @@ function minutesSince(ts: string | null): number | null {
   return Math.max(0, Math.round((Date.now() - ms) / 60000));
 }
 
+/** Filler words ignored when comparing titles for near-duplicate collapsing. */
+const TITLE_STOPWORDS = new Set([
+  "the", "a", "an", "is", "are", "was", "out", "in", "on", "of", "for", "to",
+  "and", "announcing", "announced", "new", "blog", "via", "with",
+]);
+
+function titleTokens(title: string): Set<string> {
+  const tokens = title
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, " ")
+    .split(/\s+/)
+    .map((t) => t.replace(/^\.+|\.+$/g, ""))
+    .filter((t) => t.length > 0 && !TITLE_STOPWORDS.has(t));
+  return new Set(tokens);
+}
+
+/**
+ * Collapse near-duplicate stories (same news via reddit + rss + mastodon…) by
+ * token-set Jaccard similarity over normalized titles. Input is score-ordered,
+ * so the highest-scored copy of a story survives. Exported for tests.
+ */
+export function dedupeByTitle<T extends { title: string | null }>(items: T[], threshold = 0.6): T[] {
+  const kept: Array<{ item: T; tokens: Set<string> }> = [];
+  for (const item of items) {
+    const tokens = titleTokens(item.title ?? "");
+    if (tokens.size === 0) {
+      kept.push({ item, tokens });
+      continue;
+    }
+    let isDup = false;
+    for (const prev of kept) {
+      if (prev.tokens.size === 0) continue;
+      let overlap = 0;
+      for (const t of tokens) if (prev.tokens.has(t)) overlap++;
+      const union = tokens.size + prev.tokens.size - overlap;
+      if (union > 0 && overlap / union >= threshold) {
+        isDup = true;
+        break;
+      }
+    }
+    if (!isDup) kept.push({ item, tokens });
+  }
+  return kept.map((k) => k.item);
+}
+
+/**
+ * The dependency-group query the server runs at init against a pre-existing
+ * database (index.ts full-DB branch). Exported as a single source of truth so
+ * the schema-compatibility regression test exercises the EXACT production SQL —
+ * the `is_direct` standalone-schema gap slipped through precisely because the
+ * two modes were only ever tested separately.
+ */
+export const DEPENDENCY_GROUP_QUERY =
+  "SELECT DISTINCT package_name, language, project_path, is_dev, is_direct FROM project_dependencies";
+
 /**
  * 4DA Database accessor
  */
@@ -205,6 +260,26 @@ export class FourDADatabase {
     if (isNew) {
       this.createMinimalSchema();
       this._isStandalone = true;
+    }
+
+    // Schema upgrade for standalone databases created before `is_direct` was
+    // added to the minimal schema: the full-DB init branch queries that column
+    // (DEPENDENCY_GROUP_QUERY), and without it session 2+ of a standalone
+    // install throws, gets caught, and silently disables vulnerability_scan /
+    // dependency_health / upgrade_planner. Scanner-inserted manifest deps are
+    // direct by definition, so DEFAULT 1 backfills correctly. The desktop
+    // app's database already has the column — no-op there.
+    try {
+      const hasDepsTable = this.db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_dependencies'")
+        .get();
+      if (hasDepsTable) {
+        this.ensureColumn("project_dependencies", "is_direct", "INTEGER DEFAULT 1");
+      }
+    } catch (err) {
+      console.error(
+        `[4da] project_dependencies is_direct upgrade failed (dependency tools may be degraded): ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -410,35 +485,10 @@ export class FourDADatabase {
       );
       CREATE INDEX IF NOT EXISTS idx_active_topics_topic ON active_topics(topic);
 
-      -- Topic affinities (learned) — queried by get_context, developer_dna, attention_report
-      CREATE TABLE IF NOT EXISTS topic_affinities (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        topic TEXT NOT NULL UNIQUE,
-        embedding BLOB,
-        positive_signals INTEGER DEFAULT 0,
-        negative_signals INTEGER DEFAULT 0,
-        total_exposures INTEGER DEFAULT 0,
-        affinity_score REAL DEFAULT 0.0,
-        confidence REAL DEFAULT 0.0,
-        last_interaction TEXT DEFAULT (datetime('now')),
-        decay_applied INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now'))
-      );
-
-      -- Anti-topics (learned exclusions) — queried by get_context
-      CREATE TABLE IF NOT EXISTS anti_topics (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        topic TEXT NOT NULL UNIQUE,
-        rejection_count INTEGER DEFAULT 0,
-        confidence REAL DEFAULT 0.0,
-        auto_detected INTEGER DEFAULT 1,
-        user_confirmed INTEGER DEFAULT 0,
-        first_rejection TEXT DEFAULT (datetime('now')),
-        last_rejection TEXT DEFAULT (datetime('now')),
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now'))
-      );
+      -- topic_affinities / anti_topics are deliberately NOT created: the
+      -- implicit-capture learning system was removed product-wide (AD-029 →
+      -- v20b) and desktop schema 105 dropped both tables. Baking them into
+      -- fresh standalone installs would recreate dead tables no code reads.
 
       -- Interactions — queried by record_feedback, developer_dna, knowledge_gaps
       CREATE TABLE IF NOT EXISTS interactions (
@@ -464,6 +514,7 @@ export class FourDADatabase {
         package_name TEXT NOT NULL,
         version TEXT,
         is_dev INTEGER DEFAULT 0,
+        is_direct INTEGER DEFAULT 1,
         language TEXT NOT NULL,
         last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
         UNIQUE(project_path, package_name)
@@ -851,7 +902,7 @@ export class FourDADatabase {
     }
   }
 
-  private hasColumn(table: string, column: string): boolean {
+  hasColumn(table: string, column: string): boolean {
     try {
       const cols = this.db.pragma(`table_info(${table})`) as Array<{ name: string }>;
       return cols.some((c) => c.name === column);
@@ -950,10 +1001,14 @@ export class FourDADatabase {
     }
 
     query += ` ORDER BY relevance_score DESC LIMIT ?`;
-    params.push(limit);
+    // Over-fetch so near-duplicate collapsing below can still fill `limit`
+    // (the same story arrives via reddit + rss + mastodon: live feeds showed
+    // three copies of "Rust 1.98.0" in one 20-item response).
+    params.push(limit * 2);
 
     const stmt = this.db.prepare(query);
-    const items = stmt.all(...params) as Array<SourceItem & { relevance_score: number; content_type: string | null; signal_type: string | null; signal_priority: string | null; dep_match_count: number }>;
+    const fetched = stmt.all(...params) as Array<SourceItem & { relevance_score: number; content_type: string | null; signal_type: string | null; signal_priority: string | null; dep_match_count: number }>;
+    const items = dedupeByTitle(fetched).slice(0, limit);
 
     const now = Date.now();
     return items.map((item) => {
@@ -1187,42 +1242,17 @@ export class FourDADatabase {
       }
     }
 
-    // Learned preferences
+    // Learned preferences: permanently empty by design. The implicit-capture
+    // learning system was removed product-wide (AD-029 quarantine, then v20b
+    // #488 deleted it) and desktop schema 105 DROPPED topic_affinities /
+    // anti_topics. Even a pre-105 database's rows are quarantined data the
+    // product no longer honors, so they are not read — the fields remain in
+    // the shape for API stability.
     if (includeLearned) {
-      try {
-        const affinitiesStmt = this.db.prepare(`
-          SELECT topic, affinity_score, confidence, positive_signals, negative_signals, total_exposures
-          FROM topic_affinities
-          WHERE confidence > 0.1
-          ORDER BY affinity_score DESC
-          LIMIT 50
-        `);
-        const affinities = affinitiesStmt.all() as TopicAffinity[];
-
-        const antiTopicsStmt = this.db.prepare(`
-          SELECT topic, rejection_count, confidence, auto_detected, user_confirmed
-          FROM anti_topics
-          WHERE confidence > 0.3
-          ORDER BY confidence DESC
-          LIMIT 50
-        `);
-        const antiTopics = antiTopicsStmt.all() as AntiTopic[];
-
-        context.learned = {
-          topic_affinities: affinities,
-          anti_topics: antiTopics.map((at) => ({
-            ...at,
-            auto_detected: Boolean(at.auto_detected),
-            user_confirmed: Boolean(at.user_confirmed),
-          })),
-        };
-      } catch {
-        // Learned tables might not exist
-        context.learned = {
-          topic_affinities: [],
-          anti_topics: [],
-        };
-      }
+      context.learned = {
+        topic_affinities: [],
+        anti_topics: [],
+      };
     }
 
     return context;

@@ -1106,12 +1106,30 @@ fn compare_version_in_content(
 pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String, DepInfo>) {
     let db = match crate::open_db_connection() {
         Ok(db) => db,
-        Err(_) => return (HashSet::new(), HashMap::new()),
+        Err(e) => {
+            // Empty maps mute the DEPENDENCY axis for the entire scoring run —
+            // no dep matches, no grounding, no critical fast-path floors. That
+            // must degrade loudly, never silently (accuracy-first; 2026-08-21
+            // audit found this indistinguishable from "user has no deps").
+            tracing::warn!(
+                target: "4da::scoring",
+                error = %e,
+                "load_dependency_intelligence: DB open failed — dependency axis degraded to empty for this run"
+            );
+            return (HashSet::new(), HashMap::new());
+        }
     };
 
     let all_deps = match crate::temporal::get_all_dependencies(&db) {
         Ok(deps) => deps,
-        Err(_) => return (HashSet::new(), HashMap::new()),
+        Err(e) => {
+            tracing::warn!(
+                target: "4da::scoring",
+                error = %e,
+                "load_dependency_intelligence: dependency query failed — dependency axis degraded to empty for this run"
+            );
+            return (HashSet::new(), HashMap::new());
+        }
     };
 
     // Canonical project-inclusion policy, defense in depth: the funnel above

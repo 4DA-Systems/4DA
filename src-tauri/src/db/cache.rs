@@ -17,6 +17,13 @@ pub struct ScoringEvent {
     pub total_relevant: i64,
     pub avg_score: f64,
     pub max_score: f64,
+    /// CAVEAT: 0 in these three columns means "not measured on this path",
+    /// not a measured zero — no analysis path computes them today (gate/cap
+    /// detail lives in ScoringTelemetry logs; briefing_items only exists when
+    /// a briefing builds). The legacy schema declares them NOT NULL DEFAULT 0,
+    /// so honest NULLs need a migration; until then the writer takes Options
+    /// and stores 0 for None. (2026-08-21 audit read the zeros as "gates
+    /// never fire".)
     pub gate_rejections: i64,
     pub commodity_caps: i64,
     pub briefing_items: i64,
@@ -316,9 +323,9 @@ impl Database {
         total_relevant: usize,
         avg_score: f32,
         max_score: f32,
-        gate_rejections: usize,
-        commodity_caps: usize,
-        briefing_items: usize,
+        gate_rejections: Option<usize>,
+        commodity_caps: Option<usize>,
+        briefing_items: Option<usize>,
     ) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -329,9 +336,12 @@ impl Database {
                 total_relevant as i64,
                 avg_score as f64,
                 max_score as f64,
-                gate_rejections as i64,
-                commodity_caps as i64,
-                briefing_items as i64,
+                // NOT NULL DEFAULT 0 legacy schema: None must become 0 here
+                // or the whole telemetry INSERT fails (caught by
+                // persist_cycle_results_writes_verdict_scores_and_scoring_event).
+                gate_rejections.map_or(0, |v| v as i64),
+                commodity_caps.map_or(0, |v| v as i64),
+                briefing_items.map_or(0, |v| v as i64),
             ],
         )?;
         Ok(())

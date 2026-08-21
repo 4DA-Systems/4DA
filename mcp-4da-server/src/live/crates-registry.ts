@@ -12,7 +12,7 @@ import type { LiveCache } from "./cache.js";
 import type { RateLimiter } from "./rate-limiter.js";
 import { fetchWithTimeout } from "./http-utils.js";
 import type { RegistryPackageInfo, SemverDistance } from "./types.js";
-import { computeSemverDistance, isPreRelease } from "./semver-utils.js";
+import { computeSemverDistance, maxStableSemver } from "./semver-utils.js";
 
 const CRATES_TIMEOUT_MS = 8_000;
 const CRATES_CACHE_TTL = 86_400; // 24 hours
@@ -135,13 +135,11 @@ function parseIndexLines(text: string): SparseIndexEntry[] {
   return entries;
 }
 
+// Semver-max among non-yanked entries, not last-published: rsa published
+// 0.9.10 after 0.10.0-rc.*, so last-entry scanning reported the older line
+// as latest stable (see maxStableSemver).
 function findLatestStable(entries: SparseIndexEntry[]): string | null {
-  for (let i = entries.length - 1; i >= 0; i--) {
-    if (!entries[i].yanked && !isPreRelease(entries[i].vers)) {
-      return entries[i].vers;
-    }
-  }
-  return null;
+  return maxStableSemver(entries.filter((e) => !e.yanked).map((e) => e.vers));
 }
 
 function errorResult(

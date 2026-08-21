@@ -50,3 +50,18 @@ export function maxSemver(versions: string[]): string | null {
   if (versions.length === 0) return null;
   return versions.reduce((max, v) => (compareSemver(v, max) > 0 ? v : max), versions[0]);
 }
+
+/**
+ * Highest NON-prerelease version by semver from a list.
+ *
+ * Registries list versions in publish order, and maintenance releases for an
+ * older line land AFTER newer lines (React published 19.0.8 after 19.2.x; rsa
+ * published 0.9.10 after 0.10.0-rc.*). Taking the "last stable entry" therefore
+ * reported an older line as the latest stable — which surfaced as a bogus
+ * stable version in dependency_health and a literal DOWNGRADE recommendation
+ * in upgrade_planner. Order-independent max fixes the class.
+ */
+export function maxStableSemver(versions: string[]): string | null {
+  const stable = versions.filter((v) => parseSemver(v) !== null && !isPreRelease(v));
+  return maxSemver(stable);
+}

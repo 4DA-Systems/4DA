@@ -10,7 +10,20 @@ import type { DependencyWithProjectRow, SourceItemBriefRow } from "../types.js";
 
 // Word-boundary matching prevents "cve" matching inside "achieve", "receiver", etc.
 function hasWordBoundary(text: string, term: string): boolean {
-  const regex = new RegExp(`\\b${term}\\b`, 'i');
+  const regex = new RegExp(`\\b${escapeRegExp(term)}\\b`, 'i');
+  return regex.test(text);
+}
+
+// Package names can contain regex metacharacters (@scope/name, c++, next.js).
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+}
+
+// True when `text` mentions the package name as a whole word. Word characters
+// for this purpose include - and _ (so dep "hono" does NOT match "hono-shim",
+// and never matches "in HONOr of"). @scope/name matches as the full literal.
+function mentionsPackage(text: string, pkg: string): boolean {
+  const regex = new RegExp(`(^|[^A-Za-z0-9_-])${escapeRegExp(pkg)}($|[^A-Za-z0-9_-])`, "i");
   return regex.test(text);
 }
 
@@ -62,9 +75,19 @@ export function executeKnowledgeGaps(
 ) {
   const rawDb = db.getRawDb();
 
-  // Get all tracked dependencies
+  // Feature-detect optional columns: a pure-standalone database has no scoring
+  // pipeline (no relevance_score) and may predate content_type — the tool must
+  // degrade to word-boundary + recency grounding there, never throw.
+  const hasRelevance = db.hasColumn("source_items", "relevance_score");
+  const hasContentType = db.hasColumn("source_items", "content_type");
+  const hasIsDirect = db.hasColumn("project_dependencies", "is_direct");
+
+  // Direct dependencies only — a transitive dep's news is not the user's
+  // reading backlog. Dev deps stay in: a vitest or eslint advisory is real.
   const deps = rawDb
-    .prepare("SELECT package_name, version, project_path, language FROM project_dependencies LIMIT 100")
+    .prepare(
+      `SELECT package_name, version, project_path, language FROM project_dependencies ${hasIsDirect ? "WHERE is_direct = 1 " : ""}LIMIT 100`,
+    )
     .all() as DependencyWithProjectRow[];
 
   if (deps.length === 0) {
@@ -75,49 +98,106 @@ export function executeKnowledgeGaps(
   }
 
   const gaps: KnowledgeGap[] = [];
+  const seenPackages = new Set<string>();
 
   for (const dep of deps) {
     // Names shorter than 3 chars (e.g. "c", "go", "ws") match too many unrelated
     // items via substring LIKE to be a trustworthy "mention" signal — skip them.
     if (!dep.package_name || dep.package_name.length < 3) continue;
+    // One gap per package: the same dep declared by several projects would
+    // otherwise repeat identical missed_items once per project_path.
+    const pkgKey = dep.package_name.toLowerCase();
+    if (seenPackages.has(pkgKey)) continue;
+    seenPackages.add(pkgKey);
 
     // Find source items mentioning this dependency. Engagement is recorded by the
     // app in interactions.item_id / .action_type (the canonical columns; the older
     // source_item_id / action columns are unused), so the NOT-IN suppression must
     // read those or it silently never fires.
+    //
+    // Grounding (each guard killed an observed false-positive class):
+    // - relevance_score >= 0.2: the scoring pipeline's above-noise band — drops
+    //   off-topic chatter that merely contains the string (chocolate-bar class).
+    // - 30-day window: a "gap" is something you MISSED, not archaeology — a
+    //   2014 StackOverflow post is not missed intelligence.
+    // - LIKE is only a cheap candidate pre-filter; the real test is the
+    //   word-boundary check below ("invite" must never evidence a vite gap).
+    // - feed_relevant is deliberately NOT filtered here: an item the feed gate
+    //   rejected can still be a legitimate unread dep mention — surfacing those
+    //   is this tool's niche. The relevance floor already excludes noise.
     const pattern = `%${escapeLike(dep.package_name)}%`;
-    const mentionedItems = rawDb
-      .prepare(`SELECT si.id, si.title, si.url, si.source_type, si.created_at
+    const candidates = rawDb
+      .prepare(`SELECT si.id, si.title, si.url, si.source_type, ${hasContentType ? "si.content_type" : "NULL AS content_type"}, si.created_at,
+               ${hasRelevance ? "si.relevance_score" : "NULL AS relevance_score"}, substr(COALESCE(si.content, ''), 1, 2000) AS content_head
         FROM source_items si
         WHERE (si.title LIKE ? ESCAPE '\\' OR si.content LIKE ? ESCAPE '\\')
+        ${hasRelevance ? "AND si.relevance_score IS NOT NULL AND si.relevance_score >= 0.2" : ""}
+        AND si.created_at >= datetime('now', '-30 days')
         AND si.id NOT IN (SELECT item_id FROM interactions WHERE action_type IN ('click', 'save'))
-        ORDER BY si.created_at DESC LIMIT 5`)
-      .all(pattern, pattern) as SourceItemBriefRow[];
+        ORDER BY si.created_at DESC LIMIT 25`)
+      .all(pattern, pattern) as Array<SourceItemBriefRow & {
+        content_type: string | null;
+        relevance_score: number | null;
+        content_head: string;
+      }>;
+
+    // Word-boundary verification: the mention must be the package name as a
+    // whole word in the title or the content head, not a substring.
+    const mentionedItems = candidates
+      .filter(
+        (item) =>
+          mentionsPackage(item.title || "", dep.package_name) ||
+          mentionsPackage(item.content_head || "", dep.package_name),
+      )
+      .slice(0, 5);
 
     if (mentionedItems.length > 0) {
-      // Check if any are security-related
-      const hasSecurityMention = mentionedItems.some(
-        (item) =>
-          hasWordBoundary(item.title || "", "cve") ||
-          hasWordBoundary(item.title || "", "security") ||
-          hasWordBoundary(item.title || "", "vulnerability"),
-      );
+      const isAdvisory = (item: (typeof mentionedItems)[number]) =>
+        item.source_type === "cve" ||
+        item.source_type === "osv" ||
+        item.content_type === "security_advisory";
+      const securityKeywords = (title: string) =>
+        hasWordBoundary(title, "cve") ||
+        hasWordBoundary(title, "security") ||
+        hasWordBoundary(title, "vulnerability");
 
-      const severity = hasSecurityMention
+      // Graded honestly:
+      // - critical: an actual advisory whose TITLE names this dependency — the
+      //   advisory is about the dep, not merely co-mentioning it in a body.
+      // - high: a security-keyword item whose title names the dep.
+      // - medium: 3+ recent unread mentions; low: 1-2.
+      const advisoryAboutDep = mentionedItems.some(
+        (item) => isAdvisory(item) && mentionsPackage(item.title || "", dep.package_name),
+      );
+      const securityTitleMention = mentionedItems.some(
+        (item) =>
+          securityKeywords(item.title || "") &&
+          mentionsPackage(item.title || "", dep.package_name),
+      );
+      const severity = advisoryAboutDep
         ? "critical"
-        : mentionedItems.length >= 3
+        : securityTitleMention
           ? "high"
-          : "medium";
+          : mentionedItems.length >= 3
+            ? "medium"
+            : "low";
 
       gaps.push({
         dependency: dep.package_name,
         version: dep.version,
         project_path: dep.project_path,
         language: dep.language,
-        missed_items: mentionedItems.map(item => ({
-          ...item,
-          title: item.title && item.title.length > 120 ? item.title.substring(0, 120) + "..." : item.title,
-        })),
+        missed_items: mentionedItems.map((item) => ({
+          id: item.id,
+          title:
+            item.title && item.title.length > 120
+              ? item.title.substring(0, 120) + "..."
+              : item.title,
+          url: item.url,
+          source_type: item.source_type,
+          created_at: item.created_at,
+          relevance_score: item.relevance_score,
+        })) as SourceItemBriefRow[],
         gap_severity: severity,
         missed_count: mentionedItems.length,
       });

@@ -20,7 +20,7 @@
 
 import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
-import { maxSemver } from "../live/semver-utils.js";
+import { compareSemver, maxSemver } from "../live/semver-utils.js";
 
 export interface UpgradePlannerParams {
   include_dev?: boolean;
@@ -196,9 +196,25 @@ export async function executeUpgradePlanner(
     // Skip if no upgrade needed (no vuln, not deprecated, not behind => no reasons)
     if (reasons.length === 0) continue;
 
+    // Never recommend a downgrade: when the current version is a prerelease
+    // AHEAD of the latest stable (rsa 0.10.0-rc.18 vs stable 0.9.10), the
+    // stable line is not an upgrade target. Fall back to the highest vuln
+    // fix version that IS ahead of current, else no target ("review").
+    if (
+      targetVersion &&
+      dep.currentVersion &&
+      compareSemver(dep.currentVersion, targetVersion) >= 0
+    ) {
+      const vulnFixesAhead = (vulns ?? [])
+        .map((v) => v.fixedVersion)
+        .filter((f): f is string => Boolean(f))
+        .filter((f) => compareSemver(f, dep.currentVersion!) > 0);
+      targetVersion = vulnFixesAhead.length > 0 ? maxSemver(vulnFixesAhead) : null;
+    }
+
     const label = dep.versionsBehind?.label;
     const upgradeType: UpgradeRecommendation["upgradeType"] =
-      !label || label === "up-to-date" ? "patch" : label;
+      !label || label === "up-to-date" ? "unknown" : label;
 
     recommendations.push({
       package: dep.name,

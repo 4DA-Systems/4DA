@@ -11,7 +11,7 @@
 import type { LiveCache } from "./cache.js";
 import type { RateLimiter } from "./rate-limiter.js";
 import { fetchJson } from "./http-utils.js";
-import { computeSemverDistance, isPreRelease } from "./semver-utils.js";
+import { computeSemverDistance, isPreRelease, maxStableSemver } from "./semver-utils.js";
 import type { RegistryPackageInfo } from "./types.js";
 
 const PYPI_BASE_URL = "https://pypi.org/pypi";
@@ -131,17 +131,14 @@ function findLatestStable(
   versions: string[],
   releases: Record<string, PyPIReleaseFile[]>,
 ): string | null {
-  for (let i = versions.length - 1; i >= 0; i--) {
-    const v = versions[i];
-    if (isPreRelease(v)) continue;
-
+  // Semver-max among eligible versions, not last-listed (see maxStableSemver).
+  const eligible = versions.filter((v) => {
+    if (isPreRelease(v)) return false;
     // Skip if all files for this version are yanked
     const files = releases[v];
-    if (files && files.length > 0 && files.every((f) => f.yanked)) continue;
-
-    return v;
-  }
-  return null;
+    return !(files && files.length > 0 && files.every((f) => f.yanked));
+  });
+  return maxStableSemver(eligible);
 }
 
 function getLastPublished(files: PyPIReleaseFile[] | undefined): string | null {
