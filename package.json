@@ -114,7 +114,7 @@
     "@playwright/test": "^1.61.1",
     "@size-limit/esbuild": "^12.1.0",
     "@tailwindcss/vite": "^4.3.1",
-    "@tauri-apps/cli": "^2.11.2",
+    "@tauri-apps/cli": "^2.11.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/better-sqlite3": "^7.6.13",
