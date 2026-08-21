@@ -27,7 +27,7 @@ export function ProGate({ children, feature }: ProGateProps) {
         <div className="mb-2 px-3 py-1.5 rounded-lg bg-accent-gold/10 border border-accent-gold/20 text-center">
           <p className="text-[10px] text-accent-gold">
             {t('pro.licenseExpiresSoon', { count: daysRemaining })}{' '}
-            <a href="https://4da.ai/signal" target="_blank" rel="noopener noreferrer" className="underline font-medium">{t('pro.renew')}</a>
+            <a href="https://4da.ai/signal?utm_source=app&utm_medium=license&utm_content=progate-renew" target="_blank" rel="noopener noreferrer" className="underline font-medium">{t('pro.renew')}</a>
           </p>
         </div>
         {children}
@@ -85,7 +85,7 @@ export function ProGate({ children, feature }: ProGateProps) {
           </p>
           <div className="flex flex-col gap-2">
             <a
-              href="https://4da.ai/signal"
+              href="https://4da.ai/signal?utm_source=app&utm_medium=upsell&utm_content=progate"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block px-5 py-2 text-sm font-medium text-bg-primary bg-accent-gold rounded-lg hover:bg-accent-gold-hover transition-colors"

@@ -255,6 +255,63 @@ test('a charge-lookup failure does not revoke', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Charge pagination (L8).
+//
+// One page of 100 was silently treated as the whole history — a surviving
+// payment on page 2 of a >100-charge customer was never seen, and the customer
+// was revoked without even an error logged. These pin: later pages are scanned,
+// the scan stops as soon as a standing charge is found, and a history too deep
+// to scan takes the SAME exit as an API error (decline to revoke).
+// ---------------------------------------------------------------------------
+
+/** A fake Stripe client serving pre-baked pages in order, recording each call. */
+function pagedChargeStripe(pages) {
+  const calls = [];
+  return {
+    calls,
+    charges: {
+      async list(args) {
+        calls.push(args);
+        const page = pages[Math.min(calls.length - 1, pages.length - 1)];
+        return { data: page, has_more: calls.length < pages.length };
+      },
+    },
+  };
+}
+
+test('a surviving payment on page 2 is found, not revoked past', async () => {
+  const page1 = Array.from({ length: 100 }, (_, i) => refunded(`ch_r${i}`));
+  const stripe = pagedChargeStripe([page1, [paid('ch_survivor')]]);
+  assert.equal(await hasOtherStandingCharge(stripe, 'cus_1', 'ch_r0'), true);
+  assert.equal(stripe.calls.length, 2, 'page 2 was actually fetched');
+  assert.equal(stripe.calls[1].starting_after, 'ch_r99', 'cursor threads from the last row of page 1');
+});
+
+test('the first page still goes out with the historical exact args', async () => {
+  // The first call must carry NO starting_after key at all — deepEqual pins it.
+  const stripe = pagedChargeStripe([[paid('ch_1')]]);
+  await hasOtherStandingCharge(stripe, 'cus_1', 'ch_x');
+  assert.deepEqual(stripe.calls[0], { customer: 'cus_1', limit: 100 });
+});
+
+test('the scan stops at the first standing charge', async () => {
+  const stripe = pagedChargeStripe([
+    Array.from({ length: 100 }, (_, i) => (i === 50 ? paid('ch_mid') : refunded(`ch_r${i}`))),
+    [paid('ch_never_reached')],
+  ]);
+  assert.equal(await hasOtherStandingCharge(stripe, 'cus_1', 'ch_x'), true);
+  assert.equal(stripe.calls.length, 1, 'no second page once the answer is known');
+});
+
+test('a history deeper than the page cap declines to revoke', async () => {
+  // Unknowable is not revocable — same direction as the API-error exit.
+  const fullPage = Array.from({ length: 100 }, (_, i) => refunded(`ch_r${i}`));
+  const stripe = pagedChargeStripe([fullPage, fullPage, fullPage, fullPage, fullPage, fullPage]);
+  assert.equal(await hasOtherStandingCharge(stripe, 'cus_1', 'ch_x'), true);
+  assert.equal(stripe.calls.length, 5, 'the scan is bounded at five pages');
+});
+
+// ---------------------------------------------------------------------------
 // A renewal must not resurrect a terminated customer.
 // ---------------------------------------------------------------------------
 

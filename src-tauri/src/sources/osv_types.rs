@@ -109,8 +109,36 @@ pub(super) const DEFAULT_ECOSYSTEMS: &[&str] = &["npm", "crates.io", "PyPI", "Go
 // Conversion helpers
 // ============================================================================
 
+/// Does this advisory record carry enough data to be worth storing?
+///
+/// `/v1/querybatch` returns ONLY `{id, modified}` per vulnerability (documented
+/// OSV API behavior), so an unhydrated batch record deserializes with every
+/// descriptive field `None`. Converting one produced a content-empty "husk"
+/// item — `[ID] Security advisory / Severity: Unknown / Affected: Unknown` —
+/// that can never dep-match, never carries CVSS evidence, and scores as pure
+/// noise (live audit 2026-08-20: 374/374 stored OSV items were husks, avg
+/// score 0.084, zero relevant). A record that still looks like this after a
+/// hydration attempt is dropped rather than stored.
+pub(super) fn vuln_is_informative(vuln: &OsvVulnerability) -> bool {
+    vuln.summary.is_some()
+        || vuln.details.is_some()
+        || vuln
+            .affected
+            .as_ref()
+            .is_some_and(|a| a.iter().any(|x| x.package.is_some()))
+}
+
 /// Convert an OSV vulnerability into a SourceItem for the scoring pipeline.
-pub(super) fn vuln_to_source_item(vuln: &OsvVulnerability) -> SourceItem {
+///
+/// `queried_package` is the package the OSV query was made FOR — i.e. one of
+/// the user's own manifest dependencies. When present, the title leads with it
+/// (`[id] pkg: summary`, the same contract as the strict-manifest path in
+/// osv.rs, which the ledger's grounding gate and the scoring dep-matcher both
+/// key on). The advisory's own `affected` list still lands in content/metadata.
+pub(super) fn vuln_to_source_item(
+    vuln: &OsvVulnerability,
+    queried_package: Option<&str>,
+) -> SourceItem {
     let summary = vuln.summary.as_deref().unwrap_or("Security advisory");
     let details = vuln.details.as_deref().unwrap_or("");
 
@@ -196,6 +224,9 @@ pub(super) fn vuln_to_source_item(vuln: &OsvVulnerability) -> SourceItem {
         "affected_packages": affected_pkgs,
         "source_name": "osv",
     });
+    if let Some(pkg) = queried_package {
+        metadata["package"] = serde_json::json!(pkg);
+    }
     if !fixed_versions.is_empty() {
         metadata["fixed_versions"] = serde_json::json!(fixed_versions);
     }
@@ -216,7 +247,11 @@ pub(super) fn vuln_to_source_item(vuln: &OsvVulnerability) -> SourceItem {
         }
     }
 
-    SourceItem::new("osv", &vuln.id, &format!("[{}] {}", vuln.id, summary))
+    let title = match queried_package {
+        Some(pkg) => format!("[{}] {}: {}", vuln.id, pkg, summary),
+        None => format!("[{}] {}", vuln.id, summary),
+    };
+    SourceItem::new("osv", &vuln.id, &title)
         .with_url(Some(url))
         .with_content(content)
         .with_metadata(metadata)

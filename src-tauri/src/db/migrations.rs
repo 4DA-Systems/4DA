@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 105;
+        const TARGET_VERSION: i64 = 106;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -4574,6 +4574,53 @@ impl Database {
                 )?;
             }
 
+            if current_version < 106 {
+                Self::run_versioned_migration(
+                    &conn,
+                    105,
+                    106,
+                    "Phase 106: purge content-empty OSV husk items",
+                    |c| {
+                        // The OSV deep-fetch path converted `/v1/querybatch`
+                        // results — which carry ONLY {id, modified} — straight
+                        // into items, so every stored OSV row was a husk:
+                        // "[ID] Security advisory / Severity: Unknown /
+                        // Affected: Unknown". The adapter now hydrates each id
+                        // before conversion, but the ingest path skips ids that
+                        // already exist, so stored husks would never heal — and
+                        // their scored 0.08s drag the OSV lane's yield-throttle
+                        // budget down indefinitely. Delete them so the fixed
+                        // adapter re-ingests hydrated records. The husk shape is
+                        // exact (~57 chars); the length bound keeps any real
+                        // advisory that merely LOOKS sparse out of the blast
+                        // radius. source_vec has no cascade trigger, so its rows
+                        // go explicitly (FTS + feedback/necessity/analyses are
+                        // trigger-maintained on DELETE).
+                        const HUSK_PREDICATE: &str = "source_type = 'osv' \
+                             AND title LIKE '[%] Security advisory' \
+                             AND content LIKE '%Severity: Unknown%Affected: Unknown%' \
+                             AND length(content) <= 80";
+                        c.execute(
+                            &format!(
+                                "DELETE FROM source_vec WHERE rowid IN \
+                                 (SELECT id FROM source_items WHERE {HUSK_PREDICATE})"
+                            ),
+                            [],
+                        )?;
+                        let purged = c.execute(
+                            &format!("DELETE FROM source_items WHERE {HUSK_PREDICATE}"),
+                            [],
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            purged,
+                            "Phase 106: content-empty OSV husk items purged for hydrated re-ingest"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -5675,6 +5722,63 @@ mod tests {
         assert_eq!(
             interaction_rows, 1,
             "interactions rows (implicit ones included) must be KEPT"
+        );
+    }
+
+    /// Phase 106 purges the content-empty OSV husk items the unhydrated batch
+    /// path stored ("[ID] Security advisory / Severity: Unknown / Affected:
+    /// Unknown"), so the hydrating adapter can re-ingest them — the ingest path
+    /// skips existing ids, so without the purge they never heal. A hydrated OSV
+    /// advisory and non-OSV items must survive untouched.
+    #[test]
+    fn test_phase_106_purges_osv_husks() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 106,
+            "schema_version should be >= 106 after migration; got {version}"
+        );
+
+        // Seed one husk (the exact shape vuln_to_source_item produced for an
+        // id-only batch record), one hydrated OSV advisory, and one non-OSV
+        // item whose content merely RESEMBLES a husk; wind back so only
+        // Phase 106 re-executes.
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding) VALUES
+                 ('osv', 'PYSEC-2026-1', '[PYSEC-2026-1] Security advisory',
+                  'Security advisory' || char(10) || char(10) || 'Severity: Unknown' || char(10) || 'Affected: Unknown' || char(10) || char(10), 'hash-husk', x''),
+                 ('osv', 'GHSA-xx-1', '[GHSA-xx-1] lodash: Prototype pollution',
+                  'lodash (npm)' || char(10) || 'Prototype pollution' || char(10) || 'Severity: CVSS_V3: 7.5' || char(10) || 'Affected: lodash (npm)', 'hash-real', x''),
+                 ('rss', 'feed-1', '[weekly] Security advisory',
+                  'Severity: Unknown' || char(10) || 'Affected: Unknown', 'hash-rss', x'');
+             UPDATE schema_version SET version = 105;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v105");
+
+        let conn = db.conn.lock();
+        let husks: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM source_items WHERE source_id = 'PYSEC-2026-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(husks, 0, "the OSV husk must be purged");
+        let survivors: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM source_items WHERE source_id IN ('GHSA-xx-1', 'feed-1')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            survivors, 2,
+            "hydrated OSV advisories and non-OSV items must survive"
         );
     }
 

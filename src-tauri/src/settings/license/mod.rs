@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! License verification, feature gating, and trial management.
 
+mod clock;
 mod gating;
 mod keygen;
 mod revalidation;
@@ -10,6 +11,7 @@ mod verify;
 // Re-exports — preserve the original public API surface
 // ============================================================================
 
+pub use clock::{license_effective_now, observe_license_clock};
 pub use gating::{
     get_trial_status, is_signal, is_signal_feature_available, is_trial_active,
     require_signal_feature, TrialStatus, SIGNAL_FEATURES,
@@ -23,6 +25,10 @@ pub use revalidation::{
     validate_license_on_startup,
 };
 pub use verify::{verify_license_key, LicensePayload};
+// The explicit-instant seam is consumed by license_tests.rs (a #[cfg(test)]
+// sibling); production callers go through verify_license_key.
+#[cfg(test)]
+pub(crate) use verify::verify_license_key_at;
 
 // Rate limiting is pub from here
 pub use self::rate_limit::{check_activation_rate_limit, clear_activation_rate_limit};
