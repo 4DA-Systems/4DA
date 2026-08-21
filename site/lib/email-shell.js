@@ -55,6 +55,25 @@ const SUN_URL = 'https://4da.ai/email-sun.jpg';
 const PREHEADER_PAD = '&#847;&zwnj;&nbsp;&#8203;'.repeat(30);
 
 /**
+ * How long a header badge may be.
+ *
+ * The header row is a fixed width budget, and email has no media queries worth
+ * relying on -- Gmail strips <style> in several contexts, so a responsive rule
+ * cannot be trusted to run. The three cells must therefore fit unaided at the
+ * narrowest common phone width.
+ *
+ * On a 320px viewport the card's 32px side padding leaves ~256px. The sun is
+ * 46px, the gap 12px and the wordmark ~45px, leaving roughly 150px. At 11px
+ * uppercase with 0.16em tracking a character costs ~8.5px, so ~17 characters
+ * is the ceiling; 16 keeps a margin. Beyond it the row wraps and the wordmark
+ * gets squeezed, which is why `Subscription renewed` (20) became `Renewal`.
+ *
+ * Both header cells are additionally `white-space: nowrap`, so if a future
+ * badge does overflow the layout pushes rather than fracturing mid-word.
+ */
+export const BADGE_MAX_CHARS = 16;
+
+/**
  * A button that survives Outlook.
  *
  * A padded `<a>` collapses to bare underlined text in Word-rendered Outlook,
@@ -122,8 +141,8 @@ export function renderShell({ title, preheader, badge, contentHtml, footerHtml }
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td width="46" style="width: 46px;"><img src="${SUN_URL}" alt="" width="46" height="46" style="display: block; border: 0;"></td>
-                  <td style="padding-left: 12px; font-family: ${FONT_STACK}; font-size: 17px; font-weight: 700; letter-spacing: 0.14em; color: ${BRAND.black}; vertical-align: middle;">4DA</td>
-                  <td align="right" style="font-family: ${FONT_STACK}; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: ${BRAND.faint}; vertical-align: middle;">${badge}</td>
+                  <td style="padding-left: 12px; white-space: nowrap; font-family: ${FONT_STACK}; font-size: 17px; font-weight: 700; letter-spacing: 0.14em; color: ${BRAND.black}; vertical-align: middle;">4DA</td>
+                  <td align="right" style="white-space: nowrap; font-family: ${FONT_STACK}; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: ${BRAND.faint}; vertical-align: middle;">${badge}</td>
                 </tr>
               </table>
             </td>
