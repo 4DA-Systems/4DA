@@ -1483,7 +1483,7 @@
   "onboarding.stack.autoSelectedBanner": "Автоматически выбрано на основе ваших проектов",
   "onboarding.projects.scanning": "Сканирование ваших проектов...",
   "onboarding.projects.detected": "Обнаружено из ваших локальных проектов:",
-  "onboarding.projects.noTech": "Конкретные технологии не обнаружены. 4DA будет учиться по вашей активности.",
+  "onboarding.projects.noTech": "Конкретные технологии не обнаружены. Добавьте каталоги проектов в настройках, чтобы 4DA определил ваш стек.",
   "onboarding.projects.manageHint": "Управляйте директориями в любое время в Настройках.",
   "channels.renderNow": "Отрисовать сейчас",
   "channels.rerender": "Перерисовать",

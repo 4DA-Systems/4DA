@@ -23,6 +23,24 @@ test('flags behavior-learning as a feature name', () => {
   assert.ok(isRetiredClaim('Behavioural learning kicks in'));
 });
 
+test('flags the interaction-learning promise family (GPT audit finding 5)', () => {
+  // The three live strings found on 2026-08-23 — each must now trip the gate.
+  assert.ok(isRetiredClaim('If it\'s relevant, the ACE engine will learn from your interaction.'));
+  assert.ok(isRetiredClaim('Save items like this to train the system to surface similar content.'));
+  assert.ok(isRetiredClaim('No specific technologies detected. 4DA will learn from your activity.'));
+  // Variants of the same promise.
+  assert.ok(isRetiredClaim('4DA learns from your behavior over time'));
+  assert.ok(isRetiredClaim('the system learns from you'));
+  assert.ok(isRetiredClaim('rate items — teaching the system what matters'));
+});
+
+test('allows true statements about explicit, user-authored mechanisms', () => {
+  assert.ok(!isRetiredClaim('Add the technology as an interest in Settings > Interests.'));
+  assert.ok(!isRetiredClaim('Explicit topic suppression works through exclusions.'));
+  assert.ok(!isRetiredClaim('save, dismiss, and rate items')); // Learned Preferences (real feature)
+  assert.ok(!isRetiredClaim('training the model locally with Ollama')); // not "the system"
+});
+
 test('allows the surviving true claim (re-judging)', () => {
   assert.ok(!isRetiredClaim("yesterday's noise becomes tomorrow's signal"));
   assert.ok(!isRetiredClaim('when the engine improves it re-judges the corpus'));

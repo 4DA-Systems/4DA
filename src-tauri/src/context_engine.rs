@@ -386,7 +386,8 @@ impl ContextEngine {
     // Interaction Tracking (Layer 3 - Foundation)
     // ========================================================================
 
-    /// Record an interaction, enriched with item metadata for behavior learning.
+    /// Record an explicit interaction, enriched with item metadata. Feeds the
+    /// Learned Preferences lifecycle and feedback-count gate graduation (AD-029).
     pub fn record_interaction(
         &self,
         source_item_id: i64,

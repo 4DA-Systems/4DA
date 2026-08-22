@@ -153,18 +153,30 @@ pub(crate) async fn mcp_score_autopsy(
         "Score autopsy requested"
     );
 
-    // Find the item in analysis results
+    // Find the item in analysis results. These are typed Analysis errors
+    // (E5010: "try running the analysis again") — the previous bare-string
+    // errors fell through to the E9999 catch-all, whose remediation told the
+    // user to RESTART 4DA. Restarting is the one action guaranteed to not
+    // help: explanations live only in the current session's in-memory
+    // analysis (they are not persisted — see db/scoring_queries.rs), so a
+    // restart destroys exactly the state the autopsy needs.
     let state = get_analysis_state();
     let guard = state.lock();
-    let results = guard
-        .results
-        .as_ref()
-        .ok_or("No analysis results available. Run an analysis first.")?;
+    let results = guard.results.as_ref().ok_or_else(|| {
+        crate::error::FourDaError::Analysis(
+            "No analysis results in memory — score explanations exist only for the \
+             current session's analysis and are not persisted. Run an analysis to \
+             rebuild them."
+                .into(),
+        )
+    })?;
 
-    let item = results
-        .iter()
-        .find(|r| r.id == item_id)
-        .ok_or_else(|| format!("Item {item_id} not found in analysis results"))?;
+    let item = results.iter().find(|r| r.id == item_id).ok_or_else(|| {
+        crate::error::FourDaError::Analysis(format!(
+            "Item {item_id} was not part of the current session's analysis — run an \
+             analysis that includes it to rebuild its explanation."
+        ))
+    })?;
 
     // Get item metadata from DB
     let db = get_database()?;
@@ -179,14 +191,22 @@ pub(crate) async fn mcp_score_autopsy(
         .map(|i| i.created_at.to_rfc3339())
         .unwrap_or_default();
 
-    // Build component breakdown from ScoreBreakdown
+    // Build component breakdown from ScoreBreakdown. These are the MEASURED
+    // axis values from the live scoring run — honest measurements, honestly
+    // labeled. The previous shape invented additive arithmetic ("weight":
+    // 0.5, "contribution": raw * 0.5) that matched no pipeline the app has
+    // ever run: PASIFA combines axes multiplicatively with gates, floors and
+    // ceilings, so per-axis additive "contributions" cannot be derived from
+    // the persisted breakdown at all. `contribution` now IS the measured
+    // axis value (delta from neutral for multipliers) — the UI bar renders
+    // "what this axis measured", and the narrative says explicitly that the
+    // axes do not sum to the final score.
     let mut components = Vec::new();
     if let Some(ref bd) = item.score_breakdown {
         components.push(serde_json::json!({
             "name": "Context Match",
             "raw_value": bd.context_score,
-            "weight": 0.5,
-            "contribution": bd.context_score * 0.5,
+            "contribution": bd.context_score,
             "explanation": if bd.context_score > 0.2 {
                 format!("Strong match with your project files ({:.0}% similarity)", bd.context_score * 100.0)
             } else if bd.context_score > 0.05 {
@@ -199,8 +219,7 @@ pub(crate) async fn mcp_score_autopsy(
         components.push(serde_json::json!({
             "name": "Interest Match",
             "raw_value": bd.interest_score,
-            "weight": 0.5,
-            "contribution": bd.interest_score * 0.5,
+            "contribution": bd.interest_score,
             "explanation": if bd.interest_score > 0.3 {
                 format!("Closely matches your declared interests ({:.0}%)", bd.interest_score * 100.0)
             } else if bd.interest_score > 0.1 {
@@ -214,7 +233,6 @@ pub(crate) async fn mcp_score_autopsy(
             components.push(serde_json::json!({
                 "name": "ACE Semantic Boost",
                 "raw_value": bd.ace_boost,
-                "weight": 1.0,
                 "contribution": bd.ace_boost,
                 "explanation": format!("Boosted by ACE context engine topics/tech (+{:.0}%)", bd.ace_boost * 100.0)
             }));
@@ -229,7 +247,6 @@ pub(crate) async fn mcp_score_autopsy(
             components.push(serde_json::json!({
                 "name": "Temporal Freshness",
                 "raw_value": bd.freshness_mult,
-                "weight": 1.0,
                 "contribution": bd.freshness_mult - 1.0,
                 "explanation": format!("{}: item is {:.0}h old (x{:.2})", label, age_hours, bd.freshness_mult)
             }));
@@ -332,14 +349,20 @@ pub(crate) async fn mcp_score_autopsy(
         );
     }
     if matching_tech.is_empty() {
-        recommendations.push("This item doesn't match your detected tech stack. If it's relevant, the ACE engine will learn from your interaction.".to_string());
+        recommendations.push("This item doesn't match your detected tech stack. If it's relevant, add the technology as an interest in Settings > Interests.".to_string());
     }
     if item.top_score < 0.35 && !item.relevant {
-        recommendations.push("This item fell below the relevance threshold. Save items like this to train the system to surface similar content.".to_string());
+        recommendations.push("This item fell below the relevance threshold. Add a matching interest in Settings, or index the project that uses this technology, to boost similar content.".to_string());
     }
 
     // Build narrative
-    let narrative = build_autopsy_narrative(item, &matching_tech, &matching_active, age_hours);
+    let narrative = build_autopsy_narrative(
+        item,
+        &matching_interests,
+        &matching_tech,
+        &matching_active,
+        age_hours,
+    );
 
     Ok(serde_json::json!({
         "item": {
@@ -367,6 +390,7 @@ pub(crate) async fn mcp_score_autopsy(
 /// Build a human-readable narrative for the score autopsy
 fn build_autopsy_narrative(
     item: &SourceRelevance,
+    matching_interests: &[String],
     matching_tech: &[String],
     matching_active: &[String],
     age_hours: f64,
@@ -394,9 +418,24 @@ fn build_autopsy_narrative(
         parts.push("It has some overlap with your project files.".to_string());
     }
 
-    // Interest explanation
+    // Interest explanation. The interest axis is embedding similarity, while
+    // `matching_interests` is exact title-keyword overlap — a high axis score
+    // with an empty match list is normal (semantic closeness, no shared
+    // keyword). Say which one it is instead of claiming alignment next to an
+    // empty match list (the self-contradiction the 2026-08-22 audit flagged).
     if item.interest_score > 0.3 {
-        parts.push("It strongly aligns with your declared interests.".to_string());
+        if matching_interests.is_empty() {
+            parts.push(
+                "Its content is semantically close to your declared interests \
+                 (no exact keyword overlap in the title)."
+                    .to_string(),
+            );
+        } else {
+            parts.push(format!(
+                "It strongly aligns with your declared interests ({}).",
+                matching_interests.join(", ")
+            ));
+        }
     } else if item.interest_score > 0.1 {
         parts.push("It partially matches your interests.".to_string());
     }
@@ -443,6 +482,16 @@ fn build_autopsy_narrative(
             item.signal_priority.as_deref().unwrap_or("unknown")
         ));
     }
+
+    // Honesty note: the component bars are measured axes, not an additive
+    // breakdown — PASIFA combines them multiplicatively with gates and
+    // ceilings, so the axes do not sum to the final score.
+    parts.push(
+        "The components shown are the measured scoring axes; the final score \
+         combines them multiplicatively with gates and ceilings, so they do \
+         not add up to the total."
+            .to_string(),
+    );
 
     parts.join(" ")
 }
@@ -701,7 +750,7 @@ mod tests {
     #[test]
     fn narrative_strong_match_above_60_percent() {
         let item = make_item(0.75, 0.0, 0.0);
-        let result = build_autopsy_narrative(&item, &[], &[], 10.0);
+        let result = build_autopsy_narrative(&item, &[], &[], &[], 10.0);
         assert!(result.contains("strong match"));
         assert!(result.contains("75%"));
     }
@@ -709,14 +758,14 @@ mod tests {
     #[test]
     fn narrative_above_threshold() {
         let item = make_item(0.45, 0.0, 0.0);
-        let result = build_autopsy_narrative(&item, &[], &[], 10.0);
+        let result = build_autopsy_narrative(&item, &[], &[], &[], 10.0);
         assert!(result.contains("above the relevance threshold"));
     }
 
     #[test]
     fn narrative_below_threshold() {
         let item = make_item(0.20, 0.0, 0.0);
-        let result = build_autopsy_narrative(&item, &[], &[], 10.0);
+        let result = build_autopsy_narrative(&item, &[], &[], &[], 10.0);
         assert!(result.contains("below the relevance threshold"));
     }
 
@@ -724,7 +773,7 @@ mod tests {
     fn narrative_includes_tech_stack() {
         let item = make_item(0.50, 0.0, 0.0);
         let tech = vec!["Rust".to_string(), "TypeScript".to_string()];
-        let result = build_autopsy_narrative(&item, &tech, &[], 10.0);
+        let result = build_autopsy_narrative(&item, &[], &tech, &[], 10.0);
         assert!(result.contains("Rust, TypeScript"));
         assert!(result.contains("tech stack"));
     }
@@ -733,7 +782,7 @@ mod tests {
     fn narrative_includes_active_topics() {
         let item = make_item(0.50, 0.0, 0.0);
         let active = vec!["WebAssembly".to_string()];
-        let result = build_autopsy_narrative(&item, &[], &active, 10.0);
+        let result = build_autopsy_narrative(&item, &[], &[], &active, 10.0);
         assert!(result.contains("WebAssembly"));
         assert!(result.contains("active in"));
     }
@@ -741,28 +790,52 @@ mod tests {
     #[test]
     fn narrative_freshness_boost() {
         let item = make_item(0.50, 0.0, 0.0);
-        let result = build_autopsy_narrative(&item, &[], &[], 1.0);
+        let result = build_autopsy_narrative(&item, &[], &[], &[], 1.0);
         assert!(result.contains("freshness boost"));
     }
 
     #[test]
     fn narrative_staleness_penalty() {
         let item = make_item(0.50, 0.0, 0.0);
-        let result = build_autopsy_narrative(&item, &[], &[], 48.0);
+        let result = build_autopsy_narrative(&item, &[], &[], &[], 48.0);
         assert!(result.contains("staleness"));
     }
 
     #[test]
     fn narrative_context_match() {
         let item = make_item(0.50, 0.5, 0.0);
-        let result = build_autopsy_narrative(&item, &[], &[], 10.0);
+        let result = build_autopsy_narrative(&item, &[], &[], &[], 10.0);
         assert!(result.contains("actively working on"));
     }
 
+    /// High interest axis with NO keyword overlap must say "semantically
+    /// close", never claim alignment next to an empty match list (the
+    /// self-contradiction the 2026-08-22 live audit flagged).
     #[test]
-    fn narrative_interest_match() {
+    fn narrative_interest_match_semantic_only() {
         let item = make_item(0.50, 0.0, 0.5);
-        let result = build_autopsy_narrative(&item, &[], &[], 10.0);
+        let result = build_autopsy_narrative(&item, &[], &[], &[], 10.0);
+        assert!(result.contains("semantically close"));
+        assert!(result.contains("no exact keyword overlap"));
+    }
+
+    /// High interest axis WITH keyword overlap names the matched interests.
+    #[test]
+    fn narrative_interest_match_with_keywords() {
+        let item = make_item(0.50, 0.0, 0.5);
+        let interests = vec!["rust".to_string(), "tauri".to_string()];
+        let result = build_autopsy_narrative(&item, &interests, &[], &[], 10.0);
         assert!(result.contains("declared interests"));
+        assert!(result.contains("rust, tauri"));
+    }
+
+    /// Every narrative ends with the multiplicative-honesty note so the
+    /// component bars are never read as an additive breakdown.
+    #[test]
+    fn narrative_always_carries_the_multiplicative_note() {
+        let item = make_item(0.75, 0.0, 0.0);
+        let result = build_autopsy_narrative(&item, &[], &[], &[], 10.0);
+        assert!(result.contains("multiplicatively"));
+        assert!(result.contains("do not add up to the total"));
     }
 }

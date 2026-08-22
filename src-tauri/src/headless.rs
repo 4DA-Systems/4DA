@@ -28,6 +28,13 @@ use crate::engine_runs::RunReceipt;
 const MIN_DAEMON_INTERVAL_MINUTES: u64 = 5;
 /// Fallback cadence when settings are readable but unset.
 const DEFAULT_DAEMON_INTERVAL_MINUTES: u64 = 30;
+/// Never-scored backfill: items per chunk in the engine cycle's Step 2b drain.
+/// Matches the analysis path's 500-per-run trickle scale.
+const ENGINE_BACKFILL_CHUNK: usize = 500;
+/// Never-scored backfill: chunk ceiling per cycle. Four chunks (2000 items)
+/// recover a full night of downtime in one cycle while bounding runtime; the
+/// loop exits as soon as the backlog reports drained.
+const ENGINE_BACKFILL_MAX_CHUNKS: usize = 4;
 
 /// How the headless engine should run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -343,6 +350,44 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
             error!(target: "4da::headless", error = %e, "Scoring failed");
             receipt.ok = false;
             append_receipt_error(&mut receipt, e.to_string());
+        }
+    }
+
+    // Step 2b — drain the never-scored backlog. The Phase-2 backfill worker's
+    // only other caller is the GUI monitoring loop (monitoring.rs), so a
+    // deployment that runs engine-only — the recommended OS-scheduled setup —
+    // accumulated a version-0 backlog forever: measured live 2026-08-23, 463
+    // unscored items spanning 35 hours INCLUDING 5 CVE items, across ~30
+    // scheduled cycles that never touched them. The analysis path only scores
+    // a recent window, so arrivals that outpace it age out silently; security
+    // items sitting unscored is a recall hole in the flagship lane. The engine
+    // now drains a bounded slice every cycle (security-first order comes from
+    // get_unscored_backlog_chunk). Best-effort like the GUI path: a failed
+    // chunk logs and the next cycle retries — never fails the run.
+    for _ in 0..ENGINE_BACKFILL_MAX_CHUNKS {
+        match crate::analysis_backfill::backfill_unscored_cycle(ENGINE_BACKFILL_CHUNK).await {
+            Ok(p) => {
+                if p.scored_this_cycle > 0 {
+                    info!(
+                        target: "4da::headless",
+                        scored = p.scored_this_cycle,
+                        relevant = p.relevant_this_cycle,
+                        remaining = p.remaining_unscored,
+                        "Never-scored backfill chunk complete"
+                    );
+                }
+                if p.done {
+                    break;
+                }
+            }
+            Err(e) => {
+                warn!(
+                    target: "4da::headless",
+                    error = %e,
+                    "Never-scored backfill failed — next cycle retries"
+                );
+                break;
+            }
         }
     }
 

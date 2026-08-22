@@ -24,15 +24,13 @@ const mockAutopsyResult = {
     {
       name: 'Interest Match',
       raw_value: 0.8,
-      weight: 0.3,
-      contribution: 0.4,
+      contribution: 0.8,
       explanation: 'Matches interests: TypeScript, React',
     },
     {
       name: 'Tech Stack Match',
       raw_value: 0.7,
-      weight: 0.2,
-      contribution: 0.2,
+      contribution: 0.7,
       explanation: 'Matches tech: Rust, SQLite',
     },
   ],
@@ -126,7 +124,9 @@ describe('ScoreAutopsy', () => {
     await waitFor(() => {
       const bars = document.querySelectorAll('.component-bar');
       expect(bars.length).toBeGreaterThan(0);
-      expect(screen.getByText('40.0%')).toBeInTheDocument(); // First component contribution
+      // First component's measured axis value (no additive weighting —
+      // contribution IS the measured axis since the 2026-08-23 honesty fix).
+      expect(screen.getByText('80.0%')).toBeInTheDocument();
     });
   });
 

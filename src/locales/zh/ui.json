@@ -1483,7 +1483,7 @@
   "onboarding.stack.autoSelectedBanner": "已根据您的项目自动选择",
   "onboarding.projects.scanning": "正在扫描您的项目...",
   "onboarding.projects.detected": "从您的本地项目中检测到：",
-  "onboarding.projects.noTech": "未检测到特定技术。4DA 将从您的活动中学习。",
+  "onboarding.projects.noTech": "未检测到特定技术。请在设置中添加项目目录，以便 4DA 识别您的技术栈。",
   "onboarding.projects.manageHint": "可随时在设置中管理目录。",
   "channels.renderNow": "立即渲染",
   "channels.rerender": "重新渲染",

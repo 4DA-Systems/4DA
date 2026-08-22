@@ -162,11 +162,40 @@ pub(crate) async fn deliberate(
 // Batch filter
 // ============================================================================
 
+/// How a deliberation verdict is applied to an item. Extracted as data so the
+/// decision is testable without an LLM (`filter_batch` itself needs one).
+#[derive(Debug, PartialEq, Eq)]
+enum VerdictApplication {
+    /// Verdict agrees the item should surface — adopt the grounded explanation
+    /// and adjusted confidence.
+    SurfaceUpdated,
+    /// Safety floor: the verdict argued AGAINST surfacing, but Critical/High
+    /// urgency mandates surfacing anyway. The item surfaces UNCHANGED — its
+    /// original explanation and confidence stand. Adopting the verdict here
+    /// ships an alert that argues against itself (observed live 2026-08-22:
+    /// a Critical chain-alert whose own explanation read "incorrectly
+    /// escalated" at 92% displayed confidence).
+    SurfaceUnchanged,
+    /// Verdict says don't surface and no safety floor applies — drop the item.
+    Filter,
+}
+
+/// The one decision table for applying a verdict. `must_surface` is the
+/// Critical/High safety floor; `should_surface` is the LLM's judgment.
+fn apply_verdict(must_surface: bool, should_surface: bool) -> VerdictApplication {
+    match (should_surface, must_surface) {
+        (true, _) => VerdictApplication::SurfaceUpdated,
+        (false, true) => VerdictApplication::SurfaceUnchanged,
+        (false, false) => VerdictApplication::Filter,
+    }
+}
+
 /// Run adversarial deliberation on a batch of items, filtering out items that
 /// don't pass deliberation.
 ///
-/// - Critical and High urgency items pass through automatically (never filter
-///   safety-critical intelligence).
+/// - Critical and High urgency items always surface (never filter
+///   safety-critical intelligence) — but a dissenting verdict never rewrites
+///   them (see [`VerdictApplication::SurfaceUnchanged`]).
 /// - Items that cannot be deliberated (LLM unavailable) pass through unchanged.
 /// - Items where the verdict says "don't surface" are dropped.
 /// - Items where the verdict says "surface" get their explanation and confidence
@@ -218,14 +247,28 @@ pub(crate) async fn filter_batch(
         }
 
         match deliberate(&item, user_context).await {
-            Ok(Some(verdict)) => {
-                if verdict.should_surface || must_surface {
+            Ok(Some(verdict)) => match apply_verdict(must_surface, verdict.should_surface) {
+                VerdictApplication::SurfaceUpdated => {
                     let mut updated = item;
                     updated.explanation = verdict.grounded_explanation;
                     updated.confidence =
                         Confidence::llm_assessed(verdict.adjusted_confidence.clamp(0.0, 1.0));
                     passed.push(updated);
-                } else {
+                }
+                VerdictApplication::SurfaceUnchanged => {
+                    // Surfaced by the safety floor over LLM dissent. Keep the
+                    // item's own explanation/confidence — the dissent is an
+                    // input to filtering, not a rewrite of the evidence.
+                    warn!(
+                        target: "4da::adversarial",
+                        item_id = %item.id,
+                        title = %item.title,
+                        adjusted_confidence = verdict.adjusted_confidence,
+                        "Critical/High item surfaced despite dissenting verdict; original explanation kept"
+                    );
+                    passed.push(item);
+                }
+                VerdictApplication::Filter => {
                     filtered_count += 1;
                     debug!(
                         target: "4da::adversarial",
@@ -234,7 +277,7 @@ pub(crate) async fn filter_batch(
                         "Item filtered by adversarial deliberation"
                     );
                 }
-            }
+            },
             Ok(None) => {
                 // LLM unavailable -- pass through unchanged
                 passed.push(item);

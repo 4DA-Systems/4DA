@@ -201,7 +201,7 @@ pub(crate) async fn backfill_unscored_cycle(chunk_size: usize) -> Result<Backfil
 
     let relevant_this_cycle = score_data.len();
     if !score_data.is_empty() {
-        if let Err(e) = db.persist_analysis_scores(&score_data) {
+        if let Err(e) = db.persist_analysis_scores(&score_data, "backfill") {
             warn!(target: "4da::backfill", error = %e, "Failed to persist backfill scores");
         }
     }
@@ -470,7 +470,7 @@ pub(crate) async fn drain_stale_version_cycle(chunk_size: usize) -> Result<Backf
 
     let relevant_this_cycle = score_data.len();
     if !score_data.is_empty() {
-        if let Err(e) = db.persist_analysis_scores(&score_data) {
+        if let Err(e) = db.persist_analysis_scores(&score_data, "drain") {
             warn!(target: "4da::backfill", error = %e, "Failed to persist re-scored values");
         }
     }

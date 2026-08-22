@@ -1537,7 +1537,7 @@
   "onboarding.stack.autoSelectedBanner": "Auto-selected based on your projects",
   "onboarding.projects.scanning": "Scanning your projects...",
   "onboarding.projects.detected": "Detected from your local projects:",
-  "onboarding.projects.noTech": "No specific technologies detected. 4DA will learn from your activity.",
+  "onboarding.projects.noTech": "No specific technologies detected. Add project directories in Settings so 4DA can scan your stack.",
   "onboarding.projects.manageHint": "Manage directories anytime in Settings.",
   "learnedPreferences.title": "Learned Preferences",
   "learnedPreferences.subtitle": "What you've told the Brief to show more and less of",

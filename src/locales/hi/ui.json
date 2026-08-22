@@ -1244,7 +1244,7 @@
   "onboarding.nav.skipForNow": "अभी छोड़ें",
   "onboarding.projects.detected": "आपके स्थानीय प्रोजेक्ट्स से पहचाना गया:",
   "onboarding.projects.manageHint": "सेटिंग्स में कभी भी डायरेक्टरियाँ प्रबंधित करें।",
-  "onboarding.projects.noTech": "कोई विशिष्ट तकनीक नहीं पहचानी गई। 4DA आपकी गतिविधि से सीखेगा।",
+  "onboarding.projects.noTech": "कोई विशिष्ट तकनीक नहीं पहचानी गई। सेटिंग्स में प्रोजेक्ट डायरेक्टरी जोड़ें ताकि 4DA आपका स्टैक पहचान सके।",
   "onboarding.projects.scanning": "आपके प्रोजेक्ट्स स्कैन हो रहे हैं...",
   "onboarding.results.building": "आपकी व्यक्तिगत इंटेलिजेंस फ़ीड बन रही है...",
   "onboarding.results.title": "आपके परिणाम",

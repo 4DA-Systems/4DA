@@ -2,8 +2,14 @@
 /**
  * Schema Registry for Dynamic Context Discovery
  *
- * Reduces tool listing from ~4500 tokens to ~500 tokens by:
- * - Returning only one-liner summaries in list_tools
+ * Reduces tool listing from ~4500 tokens to ~1300 tokens by:
+ * - Returning one-liner summaries in list_tools
+ * - Serving the REAL inputSchema only for tools with REQUIRED parameters
+ *   (AD-032): a client cannot construct a valid call to those without the
+ *   schema, and most clients never read MCP Resources — so a slim
+ *   `{type:"object"}` made required-param tools effectively uncallable.
+ *   All-optional tools stay slim (`{}` is a valid call) with the full
+ *   schema still available as a Resource.
  * - Storing full schemas as MCP Resources (lazy-loaded)
  *
  * Also provides category/tag metadata for tool discovery and filtering.
@@ -11,6 +17,10 @@
  * Full schemas available at: 4da://schema/{tool_name}
  * Category manifest at: 4da://categories
  */
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 /** Tool categories — maps to the functional groupings in the MCP server */
 export type ToolCategory =
@@ -172,14 +182,61 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
   },
 };
 
+/** Schemas live beside this module in both layouts: src/schemas (vitest) and
+ * dist/schemas (compiled — populated by the copy-schemas build step). */
+const SCHEMAS_DIR = join(dirname(fileURLToPath(import.meta.url)), "schemas");
+
+/** An inputSchema as tools/list serves it — the MCP Tool contract requires
+ * the literal `type: "object"` at the root. */
+export type ToolInputSchema = { type: "object" } & Record<string, unknown>;
+
+/** Lazy cache: tool name → its real inputSchema when the schema declares
+ * required parameters, else null (tool stays slim). */
+const requiredParamSchemas = new Map<string, ToolInputSchema | null>();
+
 /**
- * Get slim tool list for list_tools response
- * Returns minimal schema (just type: object) — full schema via resources
+ * The tools/list discoverability line (AD-032): a tool whose schema declares
+ * REQUIRED parameters serves its real inputSchema — `{type:"object"}` hid the
+ * required params from every client that never reads MCP Resources, making
+ * those tools fail on first call (GPT adversarial audit, finding 7). Tools
+ * whose parameters are all optional keep the slim schema: `{}` is a valid
+ * call, and the full schema stays one Resource read away. Fail-open: an
+ * unreadable or malformed schema file falls back to slim rather than
+ * breaking tools/list.
+ */
+function inputSchemaIfRequired(name: string, schemaFile: string): ToolInputSchema | null {
+  if (!requiredParamSchemas.has(name)) {
+    let loaded: ToolInputSchema | null = null;
+    try {
+      const parsed = JSON.parse(readFileSync(join(SCHEMAS_DIR, schemaFile), "utf-8")) as {
+        inputSchema?: { type?: unknown; required?: unknown[] } & Record<string, unknown>;
+      };
+      const schema = parsed.inputSchema;
+      if (
+        schema &&
+        schema.type === "object" &&
+        Array.isArray(schema.required) &&
+        schema.required.length > 0
+      ) {
+        loaded = schema as ToolInputSchema;
+      }
+    } catch {
+      loaded = null;
+    }
+    requiredParamSchemas.set(name, loaded);
+  }
+  return requiredParamSchemas.get(name) ?? null;
+}
+
+/**
+ * Get the tool list for the tools/list response: slim summaries throughout,
+ * real inputSchema for required-param tools, `{type:"object"}` otherwise
+ * (full schema via resources).
  */
 export function getSlimToolList(standaloneOnly?: boolean): Array<{
   name: string;
   description: string;
-  inputSchema: { type: "object" };
+  inputSchema: ToolInputSchema;
   annotations: ToolAnnotations;
 }> {
   return Object.entries(TOOL_REGISTRY)
@@ -187,7 +244,7 @@ export function getSlimToolList(standaloneOnly?: boolean): Array<{
     .map(([name, info]) => ({
       name,
       description: info.summary,
-      inputSchema: { type: "object" as const },
+      inputSchema: inputSchemaIfRequired(name, info.schemaFile) ?? { type: "object" as const },
       annotations: info.annotations,
     }));
 }

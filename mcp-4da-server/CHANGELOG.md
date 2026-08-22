@@ -1,5 +1,41 @@
 # Changelog
 
+## 5.0.3 (2026-08-23)
+
+### Fixed: standalone mode broke on its second session (critical)
+
+The minimal standalone schema created `dependencies` without the `is_direct`
+column, while the live-intelligence init queried it. Session 1 of a standalone
+install worked (fresh scan); session 2+ threw on init, the error was swallowed,
+and `vulnerability_scan` / `dependency_health` / `upgrade_planner` silently
+reported "no project detected" — blaming the user's setup. The column is now in
+the minimal schema and an `ensureColumn` upgrade heals existing standalone DBs
+on open.
+
+### Fixed: grounded tool output
+
+- `knowledge_gaps`: word-boundary matching with relevance/recency guards and
+  honest severity (previously substring matches like "invite" → vite, and
+  everything reported "critical").
+- `ecosystem_pulse`: returns headlines again (dependency prefetch + on-demand
+  fetch + 14-day recency window; previously reproducibly empty).
+- `what_should_i_know`: the decision-windows section was dead (ordered by a
+  column that does not exist on that table — `created_at` vs `opened_at`).
+- Version logic: no more prerelease "upgrades" (rsa 0.10.0-rc downgrade) or
+  phantom stable versions (React "19.0.8") — stable-semver comparison
+  throughout.
+- `dependency_health`: healthScore is proportional instead of collapsing to
+  0/100; feed output deduplicated (title similarity).
+
+### Changed: tools/list serves real schemas for required-param tools (AD-032)
+
+Tools whose schema declares required parameters (`record_feedback`,
+`decision_memory`, `agent_memory`, `check_decision_alignment`,
+`what_should_i_know`) now serve their real `inputSchema` in `tools/list` —
+the slim `{"type":"object"}` made them uncallable for clients that never read
+MCP Resources. All-optional tools stay slim; full schemas remain available at
+`4da://schema/{tool}`.
+
 ## 5.0.2 (2026-08-17)
 
 ### Docs: republish so npm serves the corrected README
@@ -149,6 +185,7 @@ Every remaining tool reliably returns useful, actionable information.
 - `get_relevant_content` — scored content feed (full mode)
 - `get_actionable_signals` — classified alerts (full mode)
 - `knowledge_gaps` — dependency blind spots (full mode)
+<!-- retired-ok: historical release notes — describes that release's tool list verbatim -->
 - `record_feedback` — save/dismiss to teach the system (full mode)
 - `decision_memory` — persistent architectural decisions (standalone)
 - `check_decision_alignment` — verify tech choices (standalone)

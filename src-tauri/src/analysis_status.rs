@@ -113,6 +113,7 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 // Synthetic topic-affinity seeding removed in v19 (AD-029):
                 // it fabricated engagement rows (positive_signals=3) that
                 // the learned axis could not distinguish from real behavior.
+                // retired-ok: documents the AD-029 demotion itself
                 // With behavioral learning demoted from scoring authority,
                 // the seed served no purpose and only polluted the
                 // preferences/radar surfaces that still read affinities.
@@ -324,7 +325,7 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
         })
         .collect();
     if !score_data.is_empty() {
-        if let Err(e) = db.persist_analysis_scores(&score_data) {
+        if let Err(e) = db.persist_analysis_scores(&score_data, "analysis") {
             tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist relevance scores");
         }
     }

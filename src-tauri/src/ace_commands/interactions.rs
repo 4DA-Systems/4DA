@@ -51,7 +51,9 @@ pub async fn record_item_feedback(item_id: i64, relevant: bool) -> Result<()> {
     Ok(())
 }
 
-/// Record a user interaction for behavior learning
+/// Record an explicit user interaction (save/dismiss/rate). Since v19
+/// (AD-029) interactions feed the Learned Preferences lifecycle and
+/// feedback-count gate graduation — not scoring authority.
 #[tauri::command]
 pub async fn ace_record_interaction(
     item_id: i64,

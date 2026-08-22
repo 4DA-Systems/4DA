@@ -1242,7 +1242,7 @@
   "onboarding.nav.skipForNow": "Pular por enquanto",
   "onboarding.projects.detected": "Detectado dos seus projetos locais:",
   "onboarding.projects.manageHint": "Gerencie diretórios a qualquer momento nas Configurações.",
-  "onboarding.projects.noTech": "Nenhuma tecnologia específica detectada. O 4DA aprenderá da sua atividade.",
+  "onboarding.projects.noTech": "Nenhuma tecnologia específica detectada. Adicione diretórios de projetos nas Configurações para que o 4DA detecte sua stack.",
   "onboarding.projects.scanning": "Escaneando seus projetos...",
   "onboarding.results.building": "Construindo seu feed de inteligência personalizado...",
   "onboarding.results.title": "Seus resultados",

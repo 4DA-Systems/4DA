@@ -1187,7 +1187,7 @@
   "onboarding.nav.skipForNow": "تخطي الآن",
   "onboarding.projects.detected": "تم الاكتشاف من مشاريعك المحلية:",
   "onboarding.projects.manageHint": "أدر المجلدات في أي وقت في الإعدادات.",
-  "onboarding.projects.noTech": "لم يتم اكتشاف تقنيات محددة. سيتعلم 4DA من نشاطك.",
+  "onboarding.projects.noTech": "لم يتم اكتشاف تقنيات محددة. أضف مجلدات المشاريع في الإعدادات ليتمكن 4DA من التعرف على حزمتك التقنية.",
   "onboarding.projects.scanning": "جارٍ فحص مشاريعك...",
   "onboarding.results.building": "جارٍ بناء خلاصة الاستخبارات المخصصة لك...",
   "onboarding.results.title": "نتائجك",
