@@ -191,3 +191,36 @@ fn test_make_test_item_fields() {
     assert_eq!(item.title, "test vuln");
     assert_eq!(item.id, "test-test-vuln");
 }
+
+// ---- Verdict application (the self-refuting-alert regression) ----
+
+#[test]
+fn agreeing_verdict_updates_the_item() {
+    assert_eq!(
+        apply_verdict(false, true),
+        VerdictApplication::SurfaceUpdated
+    );
+    // The safety floor never blocks an agreed update.
+    assert_eq!(
+        apply_verdict(true, true),
+        VerdictApplication::SurfaceUpdated
+    );
+}
+
+/// A dissenting verdict on a Critical/High item surfaces the item UNCHANGED.
+/// Regression for 2026-08-22: the old `should_surface || must_surface` arm
+/// overwrote the item's explanation/confidence with the REFUTING verdict, so
+/// Preemption displayed a Critical alert whose own explanation said
+/// "incorrectly escalated" at 92% confidence.
+#[test]
+fn dissenting_verdict_on_must_surface_item_keeps_original_evidence() {
+    assert_eq!(
+        apply_verdict(true, false),
+        VerdictApplication::SurfaceUnchanged
+    );
+}
+
+#[test]
+fn dissenting_verdict_without_floor_filters() {
+    assert_eq!(apply_verdict(false, false), VerdictApplication::Filter);
+}
