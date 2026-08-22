@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 106;
+        const TARGET_VERSION: i64 = 107;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -4618,6 +4618,48 @@ impl Database {
                             target: "4da::db",
                             purged,
                             "Phase 106: content-empty OSV husk items purged for hydrated re-ingest"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 107 {
+                Self::run_versioned_migration(
+                    &conn,
+                    106,
+                    107,
+                    "Phase 107: scoring_churn — run-level score-delta instrumentation",
+                    |c| {
+                        // Same-version re-scores can move an item materially
+                        // (2026-08-22 live: 0.94 → 0.50 with no pipeline bump;
+                        // GPT adversarial audit measured 579 rows changed and
+                        // 31 items moving >0.1 in ONE scheduled run) — but the
+                        // only way to see it was an ad-hoc DB snapshot diff.
+                        // This table makes churn a continuously measured
+                        // quantity: every persist batch writes one summary row
+                        // (per-path: analysis / backfill / drain). Ops table —
+                        // read by forensics and MCP query paths, no UI surface.
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS scoring_churn (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                path TEXT NOT NULL,
+                                pipeline_version INTEGER NOT NULL,
+                                items_written INTEGER NOT NULL,
+                                rescored INTEGER NOT NULL,
+                                moved_up_gt_010 INTEGER NOT NULL,
+                                moved_down_gt_010 INTEGER NOT NULL,
+                                max_up REAL NOT NULL,
+                                max_down REAL NOT NULL,
+                                mean_abs_delta REAL NOT NULL
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_scoring_churn_created
+                                ON scoring_churn(created_at);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 107: scoring_churn instrumentation table created"
                         );
                         Ok(())
                     },

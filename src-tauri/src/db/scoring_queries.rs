@@ -4,8 +4,9 @@
 //! Extracted from `cache.rs` (which exceeded the file-size limit) to keep the funnel's
 //! query surface in one coherent place: the recall-audit rows (Phase 0), the
 //! never-scored backlog drain (Phase 2), and the dependency-change re-examination
-//! candidates + requeue (Phase 3). The stale-VERSION drain (`get_stale_scored_items`,
-//! `mark_items_scored_version`) remains in `cache.rs` alongside `persist_analysis_scores`.
+//! candidates + requeue (Phase 3). The stale-VERSION drain and the score-persist
+//! boundary (`persist_analysis_scores` + churn instrumentation, `mark_items_scored_version`,
+//! `get_stale_scored_items`) moved here 2026-08-23 when `cache.rs` crossed the limit again.
 
 use rusqlite::{params, Result as SqliteResult};
 
@@ -232,6 +233,211 @@ impl Database {
         )?;
         let rows = stmt.query_map(params![limit as i64], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?;
+        rows.collect()
+    }
+
+    /// Persist relevance scores from in-memory analysis back to the database.
+    /// Called after scoring completes so the DB fallback path has real scores.
+    ///
+    /// `path` labels the persisting pipeline (`"analysis"` / `"backfill"` /
+    /// `"drain"`) in the `scoring_churn` summary row this writes alongside the
+    /// scores. Same-version re-scores can move items materially (2026-08-22
+    /// live: 0.94 → 0.50 at the same PIPELINE_VERSION), and until this row
+    /// existed the only way to see that churn was an ad-hoc snapshot diff of
+    /// the whole table. The old score is read inside the same transaction, so
+    /// the delta is exact, not racy.
+    pub fn persist_analysis_scores(
+        &self,
+        scores: &[(i64, f32, Option<String>, Option<String>)],
+        path: &str,
+    ) -> SqliteResult<usize> {
+        /// A move this large is churn worth counting (matches the forensic
+        /// threshold the 2026-08-22/23 audits used).
+        const CHURN_DELTA: f64 = 0.10;
+
+        let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
+        let mut count = 0;
+        let mut rescored: i64 = 0;
+        let mut moved_up: i64 = 0;
+        let mut moved_down: i64 = 0;
+        let mut max_up: f64 = 0.0;
+        let mut max_down: f64 = 0.0;
+        let mut sum_abs: f64 = 0.0;
+        {
+            let mut read_stmt =
+                tx.prepare_cached("SELECT relevance_score FROM source_items WHERE id = ?1")?;
+            let mut stmt = tx.prepare_cached(
+                "UPDATE source_items SET relevance_score = ?1, scored_pipeline_version = ?2, signal_type = ?3, signal_priority = ?4 WHERE id = ?5",
+            )?;
+            for (id, score, signal_type, signal_priority) in scores {
+                // Old score first (same txn): NULL = first-ever score, not churn.
+                let old: Option<f64> = read_stmt
+                    .query_row(params![id], |r| r.get::<_, Option<f64>>(0))
+                    .unwrap_or(None);
+                if let Some(old) = old {
+                    let delta = f64::from(*score) - old;
+                    rescored += 1;
+                    sum_abs += delta.abs();
+                    if delta > CHURN_DELTA {
+                        moved_up += 1;
+                    } else if delta < -CHURN_DELTA {
+                        moved_down += 1;
+                    }
+                    max_up = max_up.max(delta);
+                    max_down = max_down.max(-delta);
+                }
+                stmt.execute(params![
+                    *score as f64,
+                    crate::scoring::PIPELINE_VERSION,
+                    signal_type,
+                    signal_priority,
+                    id
+                ])?;
+                count += 1;
+            }
+        }
+        if count > 0 {
+            let mean_abs = if rescored > 0 {
+                sum_abs / rescored as f64
+            } else {
+                0.0
+            };
+            tx.execute(
+                "INSERT INTO scoring_churn (path, pipeline_version, items_written, rescored,
+                    moved_up_gt_010, moved_down_gt_010, max_up, max_down, mean_abs_delta)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    path,
+                    crate::scoring::PIPELINE_VERSION,
+                    count,
+                    rescored,
+                    moved_up,
+                    moved_down,
+                    max_up,
+                    max_down,
+                    mean_abs
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(count)
+    }
+
+    /// Stamp `scored_pipeline_version` for every item that was scored this run,
+    /// regardless of its relevance. This is load-bearing for the stale-drain:
+    /// `persist_analysis_scores` only writes items with `top_score > 0`, so items
+    /// that re-score to 0 (noise) would never be stamped, stay "stale" forever, and
+    /// the relevance-ordered drain would re-pick the same zero-scorers every run —
+    /// the backlog could never fully drain past a band of zero-scoring items. An
+    /// item we scored IS scored at the current version even if the verdict is "noise".
+    pub fn mark_items_scored_version(&self, ids: &[i64], version: i32) -> SqliteResult<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
+        let mut count = 0;
+        {
+            let mut stmt = tx.prepare_cached(
+                "UPDATE source_items SET scored_pipeline_version = ?1 WHERE id = ?2",
+            )?;
+            for id in ids {
+                stmt.execute(params![version, id])?;
+                count += 1;
+            }
+        }
+        tx.commit()?;
+        Ok(count)
+    }
+
+    /// Get items whose scores were computed under an older pipeline version.
+    /// These need re-scoring to reflect current pipeline logic.
+    ///
+    /// Ordering is deliberately NOT pure `relevance_score DESC`. A pipeline-version
+    /// bump happens precisely because scoring CHANGED, and the change that matters
+    /// most — the necessity stack-update path (try_stack_update_path) — RESCUES items
+    /// that the old pipeline buried as noise: a release of your own dependency
+    /// (`crates.io: axum v0.8.9`) used to be recency-decayed to a near-zero score.
+    /// Ordering by old relevance DESC therefore drains the already-relevant items
+    /// first and the buried releases LAST, so a dev's own stack updates only surface
+    /// after the entire backlog drains (many scheduler cycles). We front-load
+    /// `release_notes` / `platform_update` items (the stack-update candidates, an
+    /// indexed `content_type`) so they re-score in the first drain batches and
+    /// EcosystemShift items surface promptly; everything else keeps relevance DESC.
+    ///
+    /// RECENCY-FIRST (Phase 1, scoring-drain elimination): the outermost sort key
+    /// is now "is this item inside the ≤30-day visible window?" Every user-facing
+    /// surface (Signal graph, Blind Spots, MCP, briefings) reads a recency-bounded
+    /// window; ordering the drain by score alone meant a fresh 2-day item waited
+    /// behind high-scoring 3-week-old items, so a version bump did NOT converge the
+    /// windows the user actually looks at until deep into the drain. Front-loading
+    /// the recent window means the visible surfaces re-score in the FIRST chunks
+    /// (correct within minutes) while the invisible cold tail — consumed only by
+    /// the drain itself, autophagy (now current-version-gated), and diagnostics —
+    /// re-stamps unwatched afterward. This preserves the stack-update intent: a
+    /// genuine stack update is a *recent* release, so it is in the recent window
+    /// AND a release_notes row, i.e. tier-0 on both keys — it still drains first.
+    pub fn get_stale_scored_items(
+        &self,
+        current_version: i32,
+        limit: usize,
+    ) -> SqliteResult<Vec<StoredSourceItem>> {
+        let conn = self.conn.lock();
+        // Signal users have unlimited history, so the recency bound is dropped ENTIRELY
+        // for them. A "very large hours" sentinel does NOT work: passing i64::MAX (the
+        // previous behaviour) to SQLite's datetime() overflows to NULL, and
+        // `created_at >= NULL` is never true — so the drain silently returned ZERO stale
+        // items for every Signal user. That was the real reason the version-bump drain
+        // never reached the deep backlog (and stack releases never surfaced) on the
+        // live, Signal-tier app: it wasn't slow, it was empty. Free users keep the
+        // 30-day recency bound (their history is gated anyway). The constant is embedded
+        // directly (it is a compile-time i64, never user input — no injection risk).
+        let time_clause = if crate::settings::is_signal() {
+            String::new()
+        } else {
+            format!(
+                " AND created_at >= datetime('now', '-{} hours')",
+                super::sources::FREE_HISTORY_LIMIT_HOURS
+            )
+        };
+        let sql = format!(
+            "SELECT id, source_type, source_id, url, title, content, content_hash,
+                    embedding, created_at, last_seen, COALESCE(detected_lang, 'en'),
+                    feed_origin, tags, published_at
+             FROM source_items
+             WHERE scored_pipeline_version < ?1
+               AND relevance_score IS NOT NULL{time_clause}
+             ORDER BY
+                 CASE WHEN created_at >= datetime('now', '-30 days') THEN 0 ELSE 1 END,
+                 CASE WHEN content_type IN ('release_notes', 'platform_update') THEN 0 ELSE 1 END,
+                 relevance_score DESC
+             LIMIT ?2"
+        );
+        let mut stmt = conn.prepare_cached(&sql)?;
+        let rows = stmt.query_map(params![current_version, limit as i64], |row| {
+            let embedding_blob: Vec<u8> = row.get(7)?;
+            Ok(StoredSourceItem {
+                id: row.get(0)?,
+                source_type: row.get(1)?,
+                source_id: row.get(2)?,
+                url: row.get(3)?,
+                title: row.get(4)?,
+                content: row.get(5)?,
+                content_hash: row.get(6)?,
+                embedding: blob_to_embedding(&embedding_blob),
+                created_at: parse_datetime(row.get::<_, String>(8)?),
+                last_seen: parse_datetime(row.get::<_, String>(9)?),
+                detected_lang: row
+                    .get::<_, String>(10)
+                    .unwrap_or_else(|_| "en".to_string()),
+                feed_origin: row.get(11).ok().flatten(),
+                tags: row.get(12).ok().flatten(),
+                published_at: crate::db::parse_datetime_opt(
+                    row.get::<_, Option<String>>(13).ok().flatten(),
+                ),
+            })
         })?;
         rows.collect()
     }

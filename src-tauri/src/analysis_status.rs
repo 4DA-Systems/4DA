@@ -325,7 +325,7 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
         })
         .collect();
     if !score_data.is_empty() {
-        if let Err(e) = db.persist_analysis_scores(&score_data) {
+        if let Err(e) = db.persist_analysis_scores(&score_data, "analysis") {
             tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist relevance scores");
         }
     }
