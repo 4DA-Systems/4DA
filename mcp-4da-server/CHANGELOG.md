@@ -149,6 +149,7 @@ Every remaining tool reliably returns useful, actionable information.
 - `get_relevant_content` — scored content feed (full mode)
 - `get_actionable_signals` — classified alerts (full mode)
 - `knowledge_gaps` — dependency blind spots (full mode)
+<!-- retired-ok: historical release notes — describes that release's tool list verbatim -->
 - `record_feedback` — save/dismiss to teach the system (full mode)
 - `decision_memory` — persistent architectural decisions (standalone)
 - `check_decision_alignment` — verify tech choices (standalone)

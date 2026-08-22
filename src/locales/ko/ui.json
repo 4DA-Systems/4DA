@@ -1185,7 +1185,7 @@
   "onboarding.nav.skipForNow": "지금은 건너뛰기",
   "onboarding.projects.detected": "로컬 프로젝트에서 감지됨:",
   "onboarding.projects.manageHint": "디렉토리는 설정에서 언제든 관리할 수 있습니다.",
-  "onboarding.projects.noTech": "특정 기술이 감지되지 않았습니다. 4DA가 활동을 통해 학습합니다.",
+  "onboarding.projects.noTech": "특정 기술이 감지되지 않았습니다. 설정에서 프로젝트 디렉터리를 추가하면 4DA가 스택을 감지할 수 있습니다.",
   "onboarding.projects.scanning": "프로젝트 스캔 중...",
   "onboarding.results.building": "맞춤형 인텔리전스 피드 구축 중...",
   "onboarding.results.title": "결과",

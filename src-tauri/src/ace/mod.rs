@@ -7,8 +7,8 @@
 //! - Git history analysis
 //! - Embedding-based semantic search
 //!
-//! Note: Advanced behavior learning, health monitoring, anomaly detection,
-//! and validation are archived in _future/ace/ for potential future use.
+//! Note: the archived experiments (advanced interaction capture, health
+//! monitoring, anomaly detection, validation) live in _future/ace/.
 //!
 //! ACE always hits its mark.
 

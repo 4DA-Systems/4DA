@@ -1490,7 +1490,7 @@
   "onboarding.stack.autoSelectedBanner": "Basierend auf Ihren Projekten automatisch ausgewählt",
   "onboarding.projects.scanning": "Ihre Projekte werden gescannt...",
   "onboarding.projects.detected": "Aus Ihren lokalen Projekten erkannt:",
-  "onboarding.projects.noTech": "Keine spezifischen Technologien erkannt. 4DA wird aus Ihrer Aktivität lernen.",
+  "onboarding.projects.noTech": "Keine spezifischen Technologien erkannt. Fügen Sie in den Einstellungen Projektverzeichnisse hinzu, damit 4DA Ihren Stack erkennen kann.",
   "onboarding.projects.manageHint": "Verzeichnisse jederzeit in den Einstellungen verwalten.",
   "learnedPreferences.title": "Gelernte Präferenzen",
   "learnedPreferences.subtitle": "Was Sie dem Brief mitgeteilt haben, um mehr und weniger anzuzeigen",

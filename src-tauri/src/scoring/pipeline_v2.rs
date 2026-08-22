@@ -1115,7 +1115,9 @@ fn compute_quality_composite(
     // The unified "engagement multiplier" that lived here blended SIX terms,
     // four of them pure user history (affinity ×0.3–1.7, anti-topics,
     // feedback boosts, taste embedding, learned source quality) into a
-    // ×[0.50, 1.60] swing on the composite. Behavioral learning was demoted
+    // ×[0.50, 1.60] swing on the composite.
+    // retired-ok: documents the AD-029 demotion itself
+    // Behavioral learning was demoted
     // from scoring authority (AD-029): its capture layer mixed three
     // incompatible strength scales, it self-poisoned twice (2026-07-13 doom
     // loop, 2026-08-11 calibration curve), and it never had enough clean

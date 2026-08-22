@@ -41,6 +41,18 @@ const PATTERNS = [
   /behaviou?r(al)?\s+learning/i,
   /compounds?\s+over\s+time/i,
   /(scoring|model|system)\s+(gets|becomes)\s+(smarter|sharper|more\s+accurate)\s+(over\s+time|with\s+use|every)/i,
+  // Interaction-learning promise family (2026-08-23, GPT adversarial audit
+  // finding 5). Equivalent promises the original family missed: the mechanism
+  // lost scoring authority in v19 (pipeline_v2.rs: feedback_boost = 0.0) and
+  // implicit capture was removed in v20b (#488), so "learns from your
+  // activity" / "train the system" are FALSE statements, not just retired
+  // marketing. Caught live in commands.rs autopsy recommendations and
+  // onboarding.projects.noTech across all 13 locales.
+  /(learns?|learning)\s+from\s+your\s+(activity|activities|interactions?|behaviou?r)/i,
+  /will\s+learn\s+from\s+your/i,
+  /train(s|ing)?\s+the\s+system/i,
+  /teach(es|ing)?\s+the\s+system/i,
+  /system\s+(learns|is\s+learning)\s+from\s+you/i,
 ];
 
 // Code identifiers that legitimately contain banned substrings.
@@ -68,8 +80,12 @@ const EXCLUDE = [
 ];
 
 function trackedFiles() {
+  // src-tauri/src is in scope because backend .rs files carry user-facing
+  // strings (autopsy recommendations, notifications) — the 2026-08-23 finding
+  // was two false learning promises living in commands.rs, invisible to a
+  // frontend-only scan. Test files are dropped by EXCLUDE.
   const out = execSync(
-    'git ls-files "src/**" "site/src/**" "site/scan/**" "docs/**" "*.md" "CLAUDE.md" "src-tauri/tauri.conf.json" "mcp-4da-server/README.md" "editors/**"',
+    'git ls-files "src/**" "src-tauri/src/**" "site/src/**" "site/scan/**" "docs/**" "*.md" "CLAUDE.md" "src-tauri/tauri.conf.json" "mcp-4da-server/README.md" "mcp-4da-server/src/**" "editors/**"',
     { cwd: ROOT, encoding: 'utf8' },
   );
   return out

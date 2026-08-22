@@ -241,7 +241,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     // injections (incl. the Veto hard −1.0) DEMOTED in v19 (AD-029). The
     // stability detector keeps its full lifecycle — it powers the Learned
     // Preferences panel (pin/forget/reset), which is the user-visible,
-    // user-controllable home of behavioral learning. Explicit topic
+    // user-controllable home of interaction-derived preferences. Explicit topic
     // suppression still works through `exclusions` (the suppress-topic
     // button), which is user-authored, not inferred.
 

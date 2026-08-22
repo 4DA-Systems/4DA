@@ -1211,7 +1211,7 @@
   "onboarding.nav.skipForNow": "Şimdilik atla",
   "onboarding.projects.detected": "Yerel projelerinizden algılananlar:",
   "onboarding.projects.manageHint": "Dizinleri istediğiniz zaman Ayarlar'da yönetin.",
-  "onboarding.projects.noTech": "Belirli bir teknoloji algılanmadı. 4DA aktivitenizden öğrenecek.",
+  "onboarding.projects.noTech": "Belirli bir teknoloji algılanmadı. 4DA'nın yığınınızı algılayabilmesi için Ayarlar'dan proje dizinleri ekleyin.",
   "onboarding.projects.scanning": "Projeleriniz taranıyor...",
   "onboarding.results.building": "Kişiselleştirilmiş istihbarat akışınız oluşturuluyor...",
   "onboarding.results.title": "Sonuçlarınız",

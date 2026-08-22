@@ -3102,12 +3102,14 @@ impl Database {
                 )?;
             }
 
+            // retired-ok: shipped migration — its name is frozen history
             // Phase 65: structured dismiss feedback for compound intelligence
             if current_version < 65 {
                 Self::run_versioned_migration(
                     &conn,
                     64,
                     65,
+                    // retired-ok: shipped migration — its name is frozen history
                     "Phase 65: structured dismiss feedback for compound intelligence",
                     |c| {
                         // The `interactions` table lives in the ACE database, not the
@@ -3140,6 +3142,7 @@ impl Database {
                             }
                             info!(
                                 target: "4da::db",
+                                // retired-ok: shipped migration log — frozen history
                                 "Added dismiss_reason + dismiss_category to interactions (compound intelligence loop)"
                             );
                         } else {

@@ -1483,7 +1483,7 @@
   "onboarding.stack.autoSelectedBanner": "プロジェクトに基づいて自動選択されました",
   "onboarding.projects.scanning": "プロジェクトをスキャン中...",
   "onboarding.projects.detected": "ローカルプロジェクトから検出:",
-  "onboarding.projects.noTech": "特定の技術は検出されませんでした。4DAはアクティビティから学習します。",
+  "onboarding.projects.noTech": "特定の技術は検出されませんでした。設定でプロジェクトディレクトリを追加すると、4DAがスタックを検出できます。",
   "onboarding.projects.manageHint": "ディレクトリはいつでも設定で管理できます。",
   "channels.renderNow": "今すぐレンダリング",
   "channels.rerender": "再レンダリング",

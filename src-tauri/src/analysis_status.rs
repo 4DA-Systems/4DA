@@ -113,6 +113,7 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 // Synthetic topic-affinity seeding removed in v19 (AD-029):
                 // it fabricated engagement rows (positive_signals=3) that
                 // the learned axis could not distinguish from real behavior.
+                // retired-ok: documents the AD-029 demotion itself
                 // With behavioral learning demoted from scoring authority,
                 // the seed served no purpose and only polluted the
                 // preferences/radar surfaces that still read affinities.

@@ -332,10 +332,10 @@ pub(crate) async fn mcp_score_autopsy(
         );
     }
     if matching_tech.is_empty() {
-        recommendations.push("This item doesn't match your detected tech stack. If it's relevant, the ACE engine will learn from your interaction.".to_string());
+        recommendations.push("This item doesn't match your detected tech stack. If it's relevant, add the technology as an interest in Settings > Interests.".to_string());
     }
     if item.top_score < 0.35 && !item.relevant {
-        recommendations.push("This item fell below the relevance threshold. Save items like this to train the system to surface similar content.".to_string());
+        recommendations.push("This item fell below the relevance threshold. Add a matching interest in Settings, or index the project that uses this technology, to boost similar content.".to_string());
     }
 
     // Build narrative
