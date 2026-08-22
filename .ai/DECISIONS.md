@@ -385,6 +385,16 @@
 - **Status:** Final — amends AD-029 (partial adoption of its rejected "full removal" option); retires INV-071.
 - **Code:** `ace/behavior/` (tracking, types, decay; `queries.rs` deleted), `ace_commands/interactions.rs`, `engagement_telemetry.rs`, `scoring/ace_context.rs`, `anomaly.rs`, `taste_test/continuous.rs` (deleted), `autophagy/decision_outcomes.rs` (deleted), `data_export.rs`, `standing_queries_suggestions.rs`, `developer_dna.rs`, `tech_radar_compute.rs`, `db/migrations.rs` Phase 105, `src/hooks/use-view-tracking.ts` (deleted), `src/store/feedback-slice.ts`.
 
+### AD-032: MCP tools/list Serves Real Schemas for Required-Param Tools
+- **Decision:** In the MCP server's `tools/list` response, a tool whose JSON Schema declares `required` parameters serves its REAL `inputSchema`; tools whose parameters are all optional keep the slim `{"type":"object"}` with the full schema available as an MCP Resource (`4da://schema/{tool}`). The line is computed from the schema files at runtime (`schema-registry.ts::inputSchemaIfRequired`), never hand-maintained.
+- **Rationale:** The all-slim design (a ~4500→~500 token optimization) assumed clients lazy-load schemas via MCP Resources; in practice most MCP clients never read Resources, so the five required-param tools (`record_feedback`, `decision_memory`, `agent_memory`, `check_decision_alignment`, `what_should_i_know`) were effectively uncallable — a client cannot construct a valid call without knowing the required params (GPT adversarial audit 2026-08-23, finding 7). Serving real schemas for exactly those five costs ~800 tokens; `{}` is already a valid call for every all-optional tool, so slim remains honest there.
+- **Considered:**
+  - Serve full schemas for all 14 tools: Rejected — ~1700 extra tokens per listing for information the all-optional tools do not need to be callable.
+  - Keep all-slim and document the Resources path better: Rejected — documentation cannot fix clients that structurally never read Resources; the tools stay broken for them.
+- **Date:** 2026-08-23
+- **Status:** Final
+- **Code:** `mcp-4da-server/src/schema-registry.ts`, tests in `mcp-4da-server/src/__tests__/schema-registry.test.ts`.
+
 ---
 
 ## Rejected Alternatives (Reference)
