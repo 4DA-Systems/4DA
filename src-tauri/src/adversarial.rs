@@ -245,12 +245,25 @@ fn contains_advisory_id(text: &str) -> bool {
 /// citations. Deliberately never inspects `explanation` — a previous fix
 /// round (R3) rewrote explanation copy, and the escalation decision must
 /// rest on structured evidence, not prose.
+///
+/// SIGNAL CHAINS (`chain-*` ids) never earn linkage through their citations:
+/// a chain AGGREGATES co-tokened items, so its evidence list routinely
+/// includes advisory-titled neighbors that merely share the chain's token —
+/// live post-activation proof (2026-08-24): all three phantom single-token
+/// chains ("table"/"sandbox"/"next") survived the gate through exactly this
+/// arm, the "table" chain citing an unrelated XWiki "Live Table" CVE. A cited
+/// neighbor's advisory id is evidence about the NEIGHBOR, not the chain; a
+/// chain keeps critical only via OSV-verified provenance, an advisory id in
+/// its own title, or corroborated affected deps (checked by the gate).
 fn has_advisory_linkage(item: &EvidenceItem) -> bool {
     if item.confidence.provenance == crate::evidence::ConfidenceProvenance::OsvVerified {
         return true;
     }
     if contains_advisory_id(&item.title) {
         return true;
+    }
+    if item.id.starts_with("chain-") {
+        return false;
     }
     item.evidence.iter().any(|citation| {
         contains_advisory_id(&citation.title)
@@ -305,8 +318,38 @@ pub(crate) async fn filter_batch(
     items: Vec<EvidenceItem>,
     user_context: &str,
 ) -> Vec<EvidenceItem> {
+    // Escalation gate FIRST — deterministic, zero-cost, and it must run
+    // regardless of LLM availability: the Basic-tier early return below used
+    // to exit before the gate, so on a Basic-tier/no-LLM config phantom
+    // critical chains sailed through the deliberated path untouched (found
+    // live 2026-08-24 during post-activation verification). An uncorroborated
+    // Critical/High item (no advisory linkage, no affected deps) loses its
+    // escalation BEFORE the safety floor is computed. R3 fixed the
+    // explanation copy of phantom chain alerts ("No advisory issued"); this
+    // fixes the escalation itself.
+    let mut items = items;
+    let mut demoted_count: usize = 0;
+    for item in items.iter_mut() {
+        if item.confidence.provenance == crate::evidence::ConfidenceProvenance::OsvVerified {
+            continue;
+        }
+        let original_urgency = item.urgency;
+        if gate_escalation(item) {
+            demoted_count += 1;
+            warn!(
+                target: "4da::adversarial",
+                item_id = %item.id,
+                title = %item.title,
+                from = ?original_urgency,
+                to = ?item.urgency,
+                "Escalated item has no advisory linkage and no affected deps; demoted below the Critical/High floor"
+            );
+        }
+    }
+
     // Gate: skip adversarial deliberation for Basic-tier models. Small models
     // produce unreliable verdicts that would incorrectly filter good items.
+    // (The escalation gate above has already run — this skips only the LLM.)
     let llm_settings = {
         let mgr = crate::get_settings_manager();
         let guard = mgr.lock();
@@ -318,7 +361,8 @@ pub(crate) async fn filter_batch(
             target: "4da::adversarial",
             tier = %tier,
             count = items.len(),
-            "LLM model tier does not support adversarial deliberation, passing items through"
+            demoted = demoted_count,
+            "LLM model tier does not support adversarial deliberation, passing gated items through"
         );
         return items;
     }
@@ -328,7 +372,6 @@ pub(crate) async fn filter_batch(
     let mut filtered_count: usize = 0;
     let mut bypass_count: usize = 0;
     let mut delib_count: usize = 0;
-    let mut demoted_count: usize = 0;
 
     for item in items {
         // OSV-verified items are machine-confirmed (semver range check against
@@ -337,26 +380,6 @@ pub(crate) async fn filter_batch(
             bypass_count += 1;
             passed.push(item);
             continue;
-        }
-
-        // Escalation gate: an uncorroborated Critical/High item (no advisory
-        // linkage, no affected deps) loses its escalation BEFORE the safety
-        // floor is computed. R3 fixed the explanation copy of phantom chain
-        // alerts ("No advisory issued"); this fixes the escalation itself
-        // (observed live 2026-08-23: 3 of 6 critical Preemption items were
-        // single-token chains like "table"/"sandbox"/"next").
-        let mut item = item;
-        let original_urgency = item.urgency;
-        if gate_escalation(&mut item) {
-            demoted_count += 1;
-            warn!(
-                target: "4da::adversarial",
-                item_id = %item.id,
-                title = %item.title,
-                from = ?original_urgency,
-                to = ?item.urgency,
-                "Escalated item has no advisory linkage and no affected deps; demoted below the Critical/High floor"
-            );
         }
 
         let must_surface = item.urgency == Urgency::Critical || item.urgency == Urgency::High;
