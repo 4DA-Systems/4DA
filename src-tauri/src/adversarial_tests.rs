@@ -319,6 +319,49 @@ fn advisory_id_in_title_counts_as_linkage() {
     assert_eq!(item.urgency, Urgency::Critical);
 }
 
+/// The live post-activation shape (2026-08-24): a single-token chain whose
+/// EVIDENCE citations carry advisory-titled neighbors — a chain aggregates
+/// co-tokened items, so the "table" chain cited an unrelated XWiki "Live
+/// Table" CVE and rode that citation through the linkage check. A cited
+/// neighbor's advisory id is evidence about the neighbor, not the chain:
+/// chain items must not keep critical through citations alone.
+#[test]
+fn chain_with_advisory_titled_citations_still_demotes() {
+    let mut item = make_test_item(
+        Urgency::Critical,
+        "Structured Prediction for Scalable Spreadsheet Table Understanding",
+    );
+    item.id = "chain-8457f1ba-bcef-4b15-812f-04229fa15295".to_string();
+    item.evidence.push(citation(
+        "[CVE-2026-53966] XWiki Platform Live Data Live Table Connector",
+        Some("https://osv.dev/vulnerability/CVE-2026-53966"),
+    ));
+    item.evidence.push(citation(
+        "[GHSA-hq84-x37p-j6q5] Winter: Reflected XSS through the search",
+        None,
+    ));
+
+    assert!(
+        gate_escalation(&mut item),
+        "a chain must not keep critical through cited neighbors' advisory ids"
+    );
+    assert_eq!(item.urgency, Urgency::Medium);
+}
+
+/// A NON-chain item keeps citation-derived linkage (the citation is about the
+/// item itself, e.g. an aggregated advisory writeup) — the chain rule is
+/// scoped to `chain-*` ids only.
+#[test]
+fn non_chain_item_keeps_citation_linkage() {
+    let mut item = make_test_item(Urgency::High, "lodash injection weekly roundup");
+    item.evidence.push(citation(
+        "GHSA-35jh-r3h4-6jhm: lodash command injection",
+        Some("https://osv.dev/vulnerability/GHSA-35jh-r3h4-6jhm"),
+    ));
+    assert!(!gate_escalation(&mut item));
+    assert_eq!(item.urgency, Urgency::High);
+}
+
 #[test]
 fn osv_verified_provenance_counts_as_advisory_linkage() {
     let mut item = make_test_item(Urgency::Critical, "openssl heap overflow");
