@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed: vulnerability_scan could recommend a downgrade
+
+`fixed_version` selection took the first OSV range's fix regardless of which
+range contains the installed version — live consequence: "Upgrade undici to
+6.28.0" while on 7.28.0. Selection is now branch-aware (the fix comes from the
+range containing the installed version), with a hard guard that a
+recommendation is never below the installed version — if no fix at or above it
+exists, the honest "no fix version published" line is emitted instead.
+
+### Changed: ranked reads follow the app's evidence/rank split
+
+`get_relevant_content` orders by `COALESCE(rank_score, relevance_score)`
+(schema 110, guarded for older databases); membership thresholds stay on the
+evidence score.
+
 ## 5.0.3 (2026-08-23)
 
 ### Fixed: standalone mode broke on its second session (critical)

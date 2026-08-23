@@ -51,6 +51,11 @@ from a large body of work — this is a selection, not an exhaustive commit log.
 
 ### Fixed
 
+- **Feed stability overhaul** (2026-08-23 adversarial audit, scoring pipeline v22): background runs now score only new and changed items instead of re-scoring the whole window every 30 minutes; sub-noise score wobble no longer touches durable state; batch-relative ranking factors (cross-encoder, diversity, source percentile) persist separately from the evidence score, so an item's score has a fixed point; and feed evictions without a categorical reason require two consecutive agreeing runs. The 6-hour cliff that crashed fresh community items to exactly 0.50 on schedule is gone, and interest synthesis is deterministic instead of a per-process lottery.
+- **Recall repairs from the same audit**: releases of the developer's own dev-tools (vite, vitest, typescript) and family sub-crates (serde_derive-class) now ground properly; scoped npm packages and Go module paths survive advisory matching; Go standard-library and toolchain advisories are reachable; OSV content queries cover all nine ecosystems instead of two; years-old content is discounted by its published date; and migration stories about the developer's own stack are no longer suppressed as competitor noise.
+- **Honest self-measurement**: the high-stakes recall monitor uses the corroborated dependency matcher (it previously reported a permanent 87.5% pseudo-miss-rate from phantom matches); the real-embedding simulation now runs in CI; benchmark quality floors raised to the newly measured levels (score-range 96.5%, security and cold-start 100%).
+- Community engagement (favourites, boosts, scores, likes) is now actually ingested for Mastodon, Lemmy, and Bluesky — the "earn it back with engagement" scoring path had no data reaching it.
+- Uncorroborated word-chain alerts can no longer carry critical urgency; job-seeker posts join the hiring cap.
 - Numerous signal-feed precision failures, including registry release noise that dominated the feed and look-alike package matches.
 - Grounding now requires name corroboration before a text match counts, removing phantom critical alerts; several gate count-inflation paths closed.
 - CVSS extraction was reading a version-label digit as the severity score.
