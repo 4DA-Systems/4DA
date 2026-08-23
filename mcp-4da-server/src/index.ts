@@ -511,8 +511,9 @@ async function main() {
     process.exit(0);
   });
 
-  const toolCount = getSlimToolList().length;
-  console.error(`4DA MCP Server v${SERVER_VERSION} started — ${toolCount} tools, stdio transport`);
+  const toolCount = getSlimToolList(validation.standalone ? true : undefined).length;
+  const toolLabel = validation.standalone ? "standalone tools" : "tools";
+  console.error(`4DA MCP Server v${SERVER_VERSION} started — ${toolCount} ${toolLabel}, stdio transport`);
   console.error("  Use --http for Streamable HTTP, --setup to configure editors, --doctor to check health");
 }
 

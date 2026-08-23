@@ -16,6 +16,7 @@
 // the `utils::text` helpers) or an `#[allow]` that states why it is safe.
 #![deny(clippy::string_slice)]
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use once_cell::sync::Lazy;
@@ -56,6 +57,7 @@ struct CachedPreemptionFeed {
 
 static PREEMPTION_FEED_CACHE: Lazy<Mutex<Option<CachedPreemptionFeed>>> =
     Lazy::new(|| Mutex::new(None));
+static PREEMPTION_REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
 /// How long a computed feed stays fresh before the next call recomputes.
 const PREEMPTION_CACHE_TTL: Duration = Duration::from_mins(10);
@@ -84,6 +86,43 @@ fn store_preemption_feed(feed: &EvidenceFeed) {
     *PREEMPTION_FEED_CACHE.lock() = Some(CachedPreemptionFeed {
         computed_at: Instant::now(),
         feed: feed.clone(),
+    });
+}
+
+fn refresh_preemption_cache_in_background(reason: &'static str) {
+    if PREEMPTION_REFRESH_IN_FLIGHT.swap(true, Ordering::SeqCst) {
+        debug!(
+            target: "4da::preemption",
+            reason,
+            "preemption refresh already in flight"
+        );
+        return;
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let result = if crate::settings::is_signal() {
+            compute_preemption_evidence_feed().await
+        } else {
+            compute_preemption_free_floor_feed()
+        };
+        match result {
+            Ok(feed) => {
+                let n = feed.items.len();
+                let scope = feed.tier_scope;
+                store_preemption_feed(&feed);
+                info!(
+                    target: "4da::preemption",
+                    reason, items = n, ?scope,
+                    "Preemption feed cache refreshed"
+                );
+            }
+            Err(e) => warn!(
+                target: "4da::preemption",
+                reason, error = %e,
+                "Preemption cache refresh failed"
+            ),
+        }
+        PREEMPTION_REFRESH_IN_FLIGHT.store(false, Ordering::SeqCst);
     });
 }
 
@@ -1567,7 +1606,9 @@ pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String
         // started this session) — fall through and compute the full feed.
     }
     let feed = if entitled {
-        compute_preemption_evidence_feed().await?
+        let feed = compute_preemption_fast_full_feed()?;
+        refresh_preemption_cache_in_background("entitled-cache-miss");
+        feed
     } else {
         compute_preemption_free_floor_feed()?
     };
@@ -1638,16 +1679,29 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
         );
     }
 
-    // Upgrade Plan (Phase 1 dependency intelligence): append the ranked
-    // per-package upgrade steps. Deliberately AFTER the adversarial filter —
-    // plan steps are deterministic aggregates of version-confirmed advisory
-    // matches; there is nothing for an LLM to second-guess (the same reasoning
-    // that exempts the free floor). Heuristic provenance keeps them out of
-    // `free_floor_view` (pinned by test) — the ranked plan is the Signal
-    // artifact; the underlying OSV-verified alerts remain the free security
-    // floor. The lens regroups: packages represented by a plan step render in
-    // the "Upgrade Plan" section instead of duplicating in the alert list.
     let mut items = items;
+    append_upgrade_plan_items(&mut items);
+
+    let mut feed = EvidenceFeed::from_items(items);
+    feed.tier_scope = Some(TierScope::Full);
+    Ok(feed)
+}
+
+fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, String> {
+    let mut items = validated_preemption_items()?;
+    append_upgrade_plan_items(&mut items);
+    let mut feed = EvidenceFeed::from_items(items);
+    feed.tier_scope = Some(TierScope::Full);
+    Ok(feed)
+}
+
+// Upgrade Plan (Phase 1 dependency intelligence): append the ranked
+// per-package upgrade steps. Deliberately after adversarial filtering when the
+// full cache refresh runs — plan steps are deterministic aggregates of
+// version-confirmed advisory matches, so there is nothing for an LLM to
+// second-guess. The fast command path also appends the same deterministic plan
+// so a cache miss remains useful and bounded.
+fn append_upgrade_plan_items(items: &mut Vec<EvidenceItem>) {
     match crate::get_database() {
         Ok(db) => {
             let (plan, drops) = crate::evidence::build_upgrade_plan_with_drops(db);
@@ -1672,10 +1726,6 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
             "upgrade plan skipped — database unavailable"
         ),
     }
-
-    let mut feed = EvidenceFeed::from_items(items);
-    feed.tier_scope = Some(TierScope::Full);
-    Ok(feed)
 }
 
 /// Compute the free-tier security floor: Tier 1 (OSV-verified) items only.
@@ -1684,10 +1734,7 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
 /// there is nothing for an LLM to second-guess and free tier must not
 /// depend on an LLM being configured).
 fn compute_preemption_free_floor_feed() -> std::result::Result<EvidenceFeed, String> {
-    let items: Vec<EvidenceItem> = validated_preemption_items()?
-        .into_iter()
-        .filter(|i| i.confidence.provenance == ConfidenceProvenance::OsvVerified)
-        .collect();
+    let items = validated_osv_preemption_items();
     info!(
         target: "4da::preemption",
         tier1 = items.len(),
@@ -1696,6 +1743,25 @@ fn compute_preemption_free_floor_feed() -> std::result::Result<EvidenceFeed, Str
     let mut feed = EvidenceFeed::from_items(items);
     feed.tier_scope = Some(TierScope::FreeFloor);
     Ok(feed)
+}
+
+fn validated_osv_preemption_items() -> Vec<EvidenceItem> {
+    osv_matches_to_alerts()
+        .iter()
+        .map(PreemptionAlert::to_evidence_item)
+        .filter(|item| match crate::evidence::validate_item(item) {
+            Ok(()) => true,
+            Err(e) => {
+                warn!(
+                    target: "4da::evidence::validate",
+                    id = %item.id,
+                    error = %e,
+                    "dropped OSV preemption item failing schema validation"
+                );
+                false
+            }
+        })
+        .collect()
 }
 
 /// Shared materialization step: produce canonical `EvidenceItem`s from the

@@ -56,7 +56,7 @@ pub(super) fn model_meets_quality_gate(report: &BenchmarkReport) -> bool {
         .get("cold_start")
         .is_none_or(|c| c.accuracy as f64 >= COLD_FLOOR);
 
-    let mut check = |ok: bool, name: &str, actual: f64, floor: f64| {
+    let check = |ok: bool, name: &str, actual: f64, floor: f64| {
         if !ok {
             warn!(
                 "Quality gate RATCHET: {} accuracy {:.1}% < locked floor {:.1}% — \

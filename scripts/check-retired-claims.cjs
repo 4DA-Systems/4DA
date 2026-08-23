@@ -53,6 +53,10 @@ const PATTERNS = [
   /train(s|ing)?\s+the\s+system/i,
   /teach(es|ing)?\s+the\s+system/i,
   /system\s+(learns|is\s+learning)\s+from\s+you/i,
+  /sharpen(s|ing)?\s+future\s+scoring/i,
+  /helps?\s+4DA\s+learn\s+user\s+preferences/i,
+  /learn(ed)?\s+preferences?\s+from\s+past\s+interactions/i,
+  /learned\s+preferences?\s+from\s+user\s+behaviou?r/i,
 ];
 
 // Code identifiers that legitimately contain banned substrings.

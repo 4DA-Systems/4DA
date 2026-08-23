@@ -4,10 +4,9 @@
 //! Engagement Telemetry — bridges user interactions to the stability detector.
 //!
 //! Every click, save, dismiss, and explicit feedback event flows through here
-//! to record evidence for learned preferences. This is the wire that makes
-//! the preference profile real: interactions become evidence, evidence
-//! accumulates into facets, facets feed the user-facing preference surfaces
-//! (never scores or verdicts — INV-023).
+//! to record evidence for user-visible interaction facets. Interactions become
+//! evidence, evidence accumulates into facets, and facets feed preference
+//! surfaces only (never scores or verdicts — INV-023).
 
 use rusqlite::{params, Connection};
 use tracing::debug;
