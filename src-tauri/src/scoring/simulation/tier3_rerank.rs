@@ -7,10 +7,8 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{
-        compute_serendipity_candidates, dedup_results, score_item, sort_results,
-        topic_dedup_results,
-    };
+    use super::super::super::dedup::compute_serendipity_candidates;
+    use super::super::super::{dedup_results, score_item, sort_results, topic_dedup_results};
     use super::super::corpus::corpus;
     use super::super::personas::all_personas;
     use super::super::PI_RUST;

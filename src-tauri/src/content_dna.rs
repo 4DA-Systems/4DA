@@ -521,6 +521,19 @@ mod tests {
         assert_eq!(ct, ContentType::Hiring);
     }
 
+    #[test]
+    fn test_job_seeker_post_is_hiring_class() {
+        // The mirror of a job ad (live FP 2026-08-23): the poster's stack
+        // keywords are identity, not intelligence.
+        let (ct, _) = classify_content(
+            "Open to work: Haskell and functional programming expert",
+            "",
+        );
+        assert_eq!(ct, ContentType::Hiring);
+        let (ct, _) = classify_content("Senior Rust developer available for hire", "");
+        assert_eq!(ct, ContentType::Hiring);
+    }
+
     // ========================================================================
     // Educational repository detection
     // ========================================================================

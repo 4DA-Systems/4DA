@@ -178,11 +178,7 @@ pub(crate) async fn score_items_full(
             }
         }
 
-        let parsed_tags: Vec<String> = item
-            .tags
-            .as_deref()
-            .and_then(|s| serde_json::from_str(s).ok())
-            .unwrap_or_default();
+        let parsed_tags: Vec<String> = scoring::parse_tags_topics(item.tags.as_deref());
 
         results.push(scoring::score_item(
             &scoring::ScoringInput {
@@ -301,14 +297,18 @@ pub(crate) async fn score_items_full(
         let settings = crate::get_settings_manager().lock();
         let serendipity_config = &settings.get().serendipity;
         if serendipity_config.enabled {
-            let candidates = scoring::compute_serendipity_candidates(
-                &results,
+            // In-place swap: the picks REPLACE the scorer-rejected originals
+            // they were cloned from. The previous `extend` left the originals
+            // behind, so every pick's id persisted twice (once relevant=false
+            // / "score", once relevant=true / "serendipity") with the stored
+            // verdict decided by write order — see the injector's doc.
+            let injected = scoring::dedup::inject_serendipity_candidates(
+                &mut results,
                 serendipity_config.budget_percent,
             );
-            if !candidates.is_empty() {
-                telemetry.serendipity_injected = candidates.len();
-                tracing::info!(target: "4da::analysis", count = candidates.len(), "Injecting serendipity items (cached)");
-                results.extend(candidates);
+            if injected > 0 {
+                telemetry.serendipity_injected = injected;
+                tracing::info!(target: "4da::analysis", count = injected, "Injecting serendipity items (cached)");
                 scoring::sort_results(&mut results);
             }
         }

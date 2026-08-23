@@ -321,6 +321,24 @@ commodity_ceiling {
     registry_release_ungrounded: 0.35    # [0.20, 0.37]
 }
 
+# Stale published-content discount — evidence from the item's PUBLISHED date.
+# ScoringInput.created_at carries source_items.published_at when the source
+# provides one (analysis paths pass published_at.unwrap_or(created_at)), so a
+# 2023 article fetched in 2026 is measured from 2023. The freshness tiers
+# bottom out at 0.80 for anything older than 30 days, which is why
+# "TypeScript 5.1 Beta is OUT!" (published 2023-04) scored 0.882 into the
+# feed top-25 (2026-08-23 audit). Ramp: 1.0 at <= fresh_months, linear down
+# to stale_floor at >= stale_months. Security advisories are exempt (an old
+# unpatched CVE can still matter); strongly dep-grounded items are softened
+# to grounded_floor instead of the full discount (a 2-year-old deep-dive on
+# YOUR exact stack can still be gold).
+stale_content {
+    fresh_months: 12.0      # [6.0, 24.0]
+    stale_months: 36.0      # [24.0, 60.0]
+    stale_floor: 0.55       # [0.30, 0.80]
+    grounded_floor: 0.80    # [0.60, 0.95]
+}
+
 # Community quality signal thresholds - extracted from source metadata
 # (SO score, HN points, Reddit upvotes). Applied as multiplier in Phase 5.
 community_signal {

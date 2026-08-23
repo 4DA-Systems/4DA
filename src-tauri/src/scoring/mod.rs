@@ -54,8 +54,8 @@ pub(crate) use context::{
     build_scoring_context, invalidate_scoring_context_cache, is_low_quality_topic,
 };
 pub(crate) use dedup::{
-    apply_domain_diversity, apply_source_topic_diversity, compute_serendipity_candidates,
-    dedup_results, fuzzy_dedup_results, normalize_result_url, sort_results, topic_dedup_results,
+    apply_domain_diversity, apply_source_topic_diversity, dedup_results, fuzzy_dedup_results,
+    inject_serendipity_candidates, normalize_result_url, sort_results, topic_dedup_results,
 };
 pub(crate) use dependencies::{
     is_ambiguous_dep_name, is_generic_topic_token, match_dependencies, STRONG_GROUNDING_CONFIDENCE,
@@ -300,6 +300,35 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // makes the drain re-stamp the corpus with the merged logic. Unregistered
 // (full drain), same cost basis as v20.
 pub(crate) const PIPELINE_VERSION: i32 = 21;
+
+/// Parse the topic tags carried in the `source_items.tags` column.
+///
+/// Canonical shape (2026-08-23) is an object
+/// `{"topics":["rust","async"], "score":42, ...}` — topics under `"topics"`,
+/// engagement keys at the top level for `extract_community_signal`. Legacy
+/// rows hold a bare JSON array of topic strings. Both shapes parse; anything
+/// else yields no topics. Every `ScoringInput::source_tags` build site must
+/// go through this — a raw `Vec<String>` deserialize silently drops the
+/// topics of every object-shaped row.
+pub(crate) fn parse_tags_topics(tags_json: Option<&str>) -> Vec<String> {
+    let Some(raw) = tags_json else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return Vec::new();
+    };
+    let arr = match &value {
+        serde_json::Value::Array(a) => a,
+        serde_json::Value::Object(o) => match o.get("topics").and_then(|t| t.as_array()) {
+            Some(a) => a,
+            None => return Vec::new(),
+        },
+        _ => return Vec::new(),
+    };
+    arr.iter()
+        .filter_map(|v| v.as_str().map(String::from))
+        .collect()
+}
 
 /// Score a single item through the PASIFA V2 pipeline.
 ///

@@ -106,6 +106,7 @@ fn dep(name: &str, confidence: f32, is_direct: bool, version: Option<&str>) -> D
         version: version.map(str::to_string),
         ecosystem: "rust".to_string(),
         corroborated: true,
+        raw_name: None,
     }
 }
 

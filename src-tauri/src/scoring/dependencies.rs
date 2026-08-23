@@ -8,10 +8,35 @@
 // the `utils::text` helpers) or an `#[allow]` that states why it is safe.
 #![deny(clippy::string_slice)]
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
 
 use super::ace_context::ACEContext;
 use super::utils::topic_grounds;
+
+/// Whether the most recent `load_dependency_intelligence` call FAILED and
+/// returned empty maps (DB open / dependency query error). Empty-by-error is
+/// score-indistinguishable from "user has no deps", so the pipeline stamps
+/// `degraded_inputs: ["dep_intel_load_failed"]` on every breakdown scored
+/// under it (2026-08-23 audit, item 11). Process-global because the load
+/// happens in `ace_context::build` (once per analysis run) while the marker is
+/// consumed per-item in `pipeline_v2::score_item`; cleared by every successful
+/// load. Concurrent runs sharing the flag is an accepted, documented race —
+/// both runs share the same DB health anyway.
+static DEP_INTEL_LOAD_DEGRADED: AtomicBool = AtomicBool::new(false);
+
+/// True when the ACE dependency intelligence backing the current run came from
+/// a FAILED load (see [`DEP_INTEL_LOAD_DEGRADED`]).
+pub(crate) fn dep_intel_load_degraded() -> bool {
+    DEP_INTEL_LOAD_DEGRADED.load(Ordering::Relaxed)
+}
+
+/// Test hook: force the degraded flag so pipeline tests can assert the marker
+/// is carried onto the breakdown without staging a real DB failure.
+#[cfg(test)]
+pub(crate) fn set_dep_intel_load_degraded_for_test(value: bool) {
+    DEP_INTEL_LOAD_DEGRADED.store(value, Ordering::Relaxed);
+}
 
 /// Metadata for a tracked dependency from user's project manifests
 #[derive(Debug, Clone)]
@@ -54,6 +79,12 @@ pub(crate) struct DepMatch {
     /// (`is_strong_grounding_match`); the structured-advisory route checks
     /// affected-package metadata independently at its call site.
     pub corroborated: bool,
+    /// The manifest's pre-normalization package name (`@babel/traverse`,
+    /// `github.com/gin-gonic/gin`) — `package_name` is the NORMALIZED form
+    /// (`babel-traverse`, `github.com-gin-gonic-gin`), which never appears in
+    /// advisory prose. The CVE/OSV survivor text-filter tries BOTH forms
+    /// (2026-08-23 audit, item 8b). `None` only on test-constructed matches.
+    pub raw_name: Option<String>,
 }
 
 /// Version comparison between installed and mentioned
@@ -74,16 +105,24 @@ pub(crate) enum VersionDelta {
 /// single question "is this item grounded in the user's dependencies?".
 pub(crate) const STRONG_GROUNDING_CONFIDENCE: f32 = 0.40;
 
-/// Base grounding requirements shared by every route: a non-dev match at or
-/// above the strong-confidence floor whose package name is not so word-like
-/// that a bare text hit can't be trusted (the persistence-layer denylist,
+/// Base grounding requirements shared by every route: a match at or above the
+/// strong-confidence floor whose package name is not so word-like that a bare
+/// text hit can't be trusted (the persistence-layer denylist,
 /// `is_ambiguous_package_name`). NOT sufficient on its own — the text route
 /// additionally requires name corroboration (`is_strong_grounding_match`);
 /// the structured-advisory route (`security_applicability` in `pipeline_v2`)
 /// substitutes affected-package metadata as the proof instead.
+///
+/// Dev dependencies CAN ground (2026-08-23 audit, item 16): a vitest/vite/
+/// typescript release is stack-relevant to the developer who declared it, and
+/// the old `!d.is_dev` hard exclusion crushed those items to 0.03-0.40. The
+/// discount is carried in `confidence` itself (`match_dependencies` applies a
+/// modest 0.8x dev multiplier), still subject to the 0.40 floor here — only
+/// actual manifest devDeps with a real full-name match clear it. The
+/// Critical-alert lane keeps its stricter non-dev discipline separately
+/// (`is_strongly_grounded_direct`, `security_applicability`).
 pub(crate) fn is_grounding_candidate(d: &DepMatch) -> bool {
-    !d.is_dev
-        && d.confidence >= STRONG_GROUNDING_CONFIDENCE
+    d.confidence >= STRONG_GROUNDING_CONFIDENCE
         && !crate::package_ambiguity::is_ambiguous_package_name(&d.package_name)
 }
 
@@ -113,11 +152,14 @@ pub(crate) fn is_strongly_grounded(deps: &[DepMatch]) -> bool {
 }
 
 /// As [`is_strongly_grounded`], but additionally requires the edge to be a
-/// DIRECT dependency — the trust floor for a Critical alert. A CVE in a package
-/// the user chose directly is urgent; one reached only transitively is watch-level.
+/// DIRECT, NON-DEV dependency — the trust floor for a Critical alert. A CVE in
+/// a package the user chose directly is urgent; one reached only transitively
+/// is watch-level. The `!is_dev` guard is explicit here (not inherited from
+/// `is_grounding_candidate`, which admits dev deps since item 16): dev deps
+/// may ground the feed, but the Critical paging lane stays production-only.
 pub(crate) fn is_strongly_grounded_direct(deps: &[DepMatch]) -> bool {
     deps.iter()
-        .any(|d| is_strong_grounding_match(d) && d.is_direct)
+        .any(|d| is_strong_grounding_match(d) && d.is_direct && !d.is_dev)
 }
 
 /// The canonical grounding verdict for one item, computed ONCE per score and
@@ -192,7 +234,11 @@ pub(crate) fn compute_grounding_verdict(
                         && ecosystem_congruent(lang, &info.ecosystem)
                 }) {
                     return GroundingVerdict {
-                        strong: !info.is_dev,
+                        // A release of a package the user's manifests declare
+                        // grounds regardless of dev status (item 16): a vitest
+                        // major from npm IS the user's stack. Only the
+                        // Critical-alert tier stays non-dev.
+                        strong: true,
                         strong_direct: !info.is_dev && info.is_direct,
                         via_registry_subject: true,
                     };
@@ -1111,11 +1157,14 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
             // no dep matches, no grounding, no critical fast-path floors. That
             // must degrade loudly, never silently (accuracy-first; 2026-08-21
             // audit found this indistinguishable from "user has no deps").
+            // The flag makes every breakdown scored under this run carry
+            // `degraded_inputs: ["dep_intel_load_failed"]` (item 11).
             tracing::warn!(
                 target: "4da::scoring",
                 error = %e,
                 "load_dependency_intelligence: DB open failed — dependency axis degraded to empty for this run"
             );
+            DEP_INTEL_LOAD_DEGRADED.store(true, Ordering::Relaxed);
             return (HashSet::new(), HashMap::new());
         }
     };
@@ -1128,9 +1177,13 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
                 error = %e,
                 "load_dependency_intelligence: dependency query failed — dependency axis degraded to empty for this run"
             );
+            DEP_INTEL_LOAD_DEGRADED.store(true, Ordering::Relaxed);
             return (HashSet::new(), HashMap::new());
         }
     };
+
+    // Load succeeded — clear any degraded state from a previous failed run.
+    DEP_INTEL_LOAD_DEGRADED.store(false, Ordering::Relaxed);
 
     // Canonical project-inclusion policy, defense in depth: the funnel above
     // (temporal::get_all_dependencies) already enforces all three tiers —
@@ -1285,6 +1338,82 @@ pub(crate) fn align_registry_corroboration(
     }
 }
 
+/// Ecosystem congruence for the family rule — TypeScript manifests are
+/// scanned as JavaScript-family (mirrors `ecosystem_congruent`); everything
+/// else compares exactly. Empty ecosystems never agree.
+fn family_ecosystem_congruent(a: &str, b: &str) -> bool {
+    let canon = |e: &str| {
+        let e = e.to_lowercase();
+        if e == "typescript" {
+            "javascript".to_string()
+        } else {
+            e
+        }
+    };
+    !a.is_empty() && !b.is_empty() && canon(a) == canon(b)
+}
+
+/// Is `child` a recognized FAMILY FORM of `parent`? Both are RAW manifest
+/// names, lowercased. Recognized forms (deliberately narrow):
+///   * `<parent>_<suffix>` — `serde_derive` ← `serde`
+///   * `<parent>-<suffix>` — `tokio-util` ← `tokio`
+///   * `<parent>/<subpath>` — Go submodule paths
+///   * `@types/<parent>`   — DefinitelyTyped declarations
+///   * same npm scope      — `@babel/traverse` ← `@babel/core` (the `@types`
+///     scope is excluded: it is registry infrastructure shared by unrelated
+///     packages, not one publisher's family)
+fn is_family_form(child: &str, parent: &str) -> bool {
+    if parent.is_empty() || child == parent {
+        return false;
+    }
+    if let Some(rest) = child.strip_prefix(parent) {
+        if rest.len() > 1
+            && (rest.starts_with('_') || rest.starts_with('-') || rest.starts_with('/'))
+        {
+            return true;
+        }
+    }
+    if let Some(typed) = child.strip_prefix("@types/") {
+        if typed == parent {
+            return true;
+        }
+    }
+    if parent.starts_with('@') && child.starts_with('@') {
+        if let (Some(ps), Some(cs)) = (parent.split('/').next(), child.split('/').next()) {
+            if ps == cs && ps != "@types" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// THE FAMILY RULE (2026-08-23 audit, item 15). A transitive dependency keeps
+/// FULL match weight (no 0.5x halving) when it is a family child of a DIRECT
+/// declared dependency. The constraint that keeps this honest has two legs,
+/// BOTH required:
+///
+/// 1. **Lockfile membership** — `child` exists as a `DepInfo` at all only
+///    because `get_all_dependencies` found it in the user's manifests or
+///    lockfiles. A shared-prefix crate that is NOT in the user's tree
+///    (`serde_v8` for a plain serde user) never produces a `DepInfo`, so no
+///    match exists to upgrade — prefix similarity alone can never mint
+///    credit. And if `serde_v8` IS in the lockfile, it is a real transitive
+///    dep of this user's tree, so full weight is earned evidence, not a
+///    look-alike leak.
+/// 2. **Recognized family form of a DIRECT dep** ([`is_family_form`]), same
+///    ecosystem — an npm package named `serde-something` cannot ride a Rust
+///    `serde` declaration.
+fn is_family_child_of_direct(child: &DepInfo, ace_ctx: &ACEContext) -> bool {
+    debug_assert!(!child.is_direct, "family upgrade is for transitive deps");
+    let child_raw = child.package_name.to_lowercase();
+    ace_ctx.dependency_info.values().any(|parent| {
+        parent.is_direct
+            && family_ecosystem_congruent(&parent.ecosystem, &child.ecosystem)
+            && is_family_form(&child_raw, &parent.package_name.to_lowercase())
+    })
+}
+
 /// Match content (title + body) against user's dependency graph.
 /// Returns matched packages and an aggregate score (0.0-1.0).
 pub(crate) fn match_dependencies(
@@ -1360,23 +1489,54 @@ pub(crate) fn match_dependencies(
             continue;
         }
 
-        // Dev dependencies contribute less
+        // Normalized name + corroboration computed up front — the family and
+        // infrastructure adjustments below consume them. Compare against the
+        // ACTUAL package name, not search_terms[0] (see the version-delta
+        // note further down).
+        let normalized_name = normalize_package_name(&info.package_name);
+        let corroborated = is_name_corroborated(
+            &title_lower,
+            &text_lower,
+            &info.package_name,
+            &normalized_name,
+        );
+
+        // Dev dependencies contribute modestly less — 0.8, not the old 0.7
+        // (2026-08-23 audit, item 16). Dev-dep releases (vitest, typescript)
+        // ARE stack-relevant to the developer who declared them; 0.8 keeps a
+        // full-name title hit (0.5) exactly at the 0.40 strong-grounding
+        // floor, so real dev-dep content grounds while anything weaker still
+        // falls short. Security TN discipline is preserved elsewhere: the
+        // Critical lane (`is_strongly_grounded_direct`, applicability)
+        // remains non-dev.
         if info.is_dev {
-            confidence *= 0.7;
+            confidence *= 0.8;
         }
 
         // Transitive dependencies contribute less than direct dependencies.
         // A user chose `tauri` directly — a CVE in tauri is urgent.
         // `x509-cert` came in via rustls — background noise at half weight.
-        if !info.is_direct {
+        //
+        // EXCEPTION (2026-08-23 audit, item 15): a lockfile-confirmed FAMILY
+        // CHILD of a declared direct dep (`serde_derive` for a `serde` user,
+        // `tokio-util` for `tokio`, `@types/react` for `react`) keeps full
+        // weight — a serde_derive advisory IS a serde-user concern, and the
+        // halving pinned it at 0.25 < the 0.40 strong-grounding floor, so
+        // the critical fast-path never engaged (sec_serde_advisory measured
+        // 0.414 exactly).
+        if !info.is_direct && !is_family_child_of_direct(info, ace_ctx) {
             confidence *= 0.5;
         }
 
         // Infrastructure dependencies (test libraries, type declarations, linting,
         // monitoring) are present in virtually every project of their ecosystem.
         // Matching "testing" against testing-library-jest-dom doesn't mean the content
-        // is about testing in the user's context. Dampen to prevent false confirmations.
-        if is_infrastructure_dep(&info.package_name) {
+        // is about testing in the user's context. Dampen to prevent false confirmations
+        // — but only for UNCORROBORATED matches (item 16): when the item
+        // demonstrably names the package itself ("Vitest 3.0 released"), the
+        // ubiquity argument doesn't apply, and the dampen was crushing real
+        // dev-tool releases to 0.03-0.12. Subterm/alias noise stays crushed.
+        if !corroborated && is_infrastructure_dep(&info.package_name) {
             confidence *= 0.3;
         }
 
@@ -1394,7 +1554,9 @@ pub(crate) fn match_dependencies(
         // `terms.sort()` the first search term is the alphabetically-first SUBTERM
         // (e.g. "tanstack" for @tanstack/react-query), so version intelligence was
         // reading a sibling product's version near that subterm (bug F).
-        let normalized_name = normalize_package_name(&info.package_name);
+        // (`normalized_name` / `corroborated` — the grounding proof, NOT a
+        // confidence input — are computed above the dev/transitive/infra
+        // adjustments, which consume them.)
         let version_delta =
             compare_version_in_content(&text_lower, &normalized_name, &info.version);
         match version_delta {
@@ -1403,17 +1565,6 @@ pub(crate) fn match_dependencies(
             VersionDelta::OlderMajor => confidence *= 0.5,
             VersionDelta::Unknown => {}
         }
-
-        // Name corroboration — computed only for deps that actually matched.
-        // This is the grounding proof, NOT a confidence input: the score
-        // machinery is unchanged; only the canonical grounding predicate
-        // (`is_strong_grounding_match`) consumes it.
-        let corroborated = is_name_corroborated(
-            &title_lower,
-            &text_lower,
-            &info.package_name,
-            &normalized_name,
-        );
 
         matched.push(DepMatch {
             package_name: normalized_name,
@@ -1424,6 +1575,7 @@ pub(crate) fn match_dependencies(
             version: info.version.clone(),
             ecosystem: info.ecosystem.clone(),
             corroborated,
+            raw_name: Some(info.package_name.clone()),
         });
     }
 
@@ -1931,6 +2083,7 @@ mod tests {
             version: None,
             ecosystem: "rust".to_string(),
             corroborated: true,
+            raw_name: None,
         }
     }
 
@@ -2415,7 +2568,7 @@ mod tests {
     }
 
     #[test]
-    fn strong_grounding_requires_nondev_confident_unambiguous() {
+    fn strong_grounding_requires_confident_unambiguous() {
         // A direct, confident, distinctively-named match grounds.
         assert!(is_strongly_grounded(&[grounding_match(
             "axios", 0.5, false, true
@@ -2424,8 +2577,13 @@ mod tests {
             "axios", 0.5, false, true
         )]));
 
-        // Dev-only matches never ground (a CVE in a test harness isn't urgent).
-        assert!(!is_strongly_grounded(&[grounding_match(
+        // Dev deps DO ground for the feed (item 16: a vitest release is
+        // stack-relevant) — but never at the Critical direct trust floor
+        // (a CVE in a test harness doesn't page).
+        assert!(is_strongly_grounded(&[grounding_match(
+            "axios", 0.9, true, true
+        )]));
+        assert!(!is_strongly_grounded_direct(&[grounding_match(
             "axios", 0.9, true, true
         )]));
 
@@ -2750,7 +2908,8 @@ mod tests {
 
         assert!(!matches.is_empty(), "Dev dep should still match");
         assert!(matches[0].is_dev, "Should be flagged as dev dependency");
-        // Dev dep confidence is multiplied by 0.7
+        // Dev dep confidence is multiplied by 0.8 (item 16: modest discount,
+        // not exclusion)
         assert!(
             matches[0].confidence < 1.0,
             "Dev dep confidence should be attenuated"
@@ -2995,5 +3154,182 @@ mod tests {
         assert!(!is_infrastructure_dep("sentry")); // standalone sentry is domain-relevant
         assert!(!is_infrastructure_dep("image"));
         assert!(!is_infrastructure_dep("i18next-resources-to-backend"));
+    }
+
+    // ── Family rule (item 15) + dev-dep grounding (item 16), 2026-08-23 ──
+
+    fn dep_info(name: &str, ecosystem: &str, is_dev: bool, is_direct: bool) -> DepInfo {
+        DepInfo {
+            package_name: name.to_string(),
+            version: None,
+            is_dev,
+            is_direct,
+            search_terms: extract_search_terms(name),
+            ecosystem: ecosystem.to_string(),
+        }
+    }
+
+    fn ace_with(deps: &[DepInfo]) -> ACEContext {
+        let mut ace = ACEContext::default();
+        for info in deps {
+            for term in &info.search_terms {
+                ace.dependency_names.insert(term.clone());
+            }
+            ace.dependency_names.insert(info.package_name.clone());
+            ace.dependency_info
+                .insert(normalize_package_name(&info.package_name), info.clone());
+        }
+        ace
+    }
+
+    #[test]
+    fn family_form_recognizes_family_and_rejects_strangers() {
+        // Recognized family forms.
+        assert!(is_family_form("serde_derive", "serde"));
+        assert!(is_family_form("tokio-util", "tokio"));
+        assert!(is_family_form("@types/react", "react"));
+        assert!(is_family_form("@babel/traverse", "@babel/core"));
+        assert!(is_family_form(
+            "github.com/gin-gonic/gin/v2",
+            "github.com/gin-gonic/gin"
+        ));
+        // NOT family: identity, bare-separator remainders, unrelated names,
+        // and the shared @types registry scope.
+        assert!(!is_family_form("serde", "serde"));
+        assert!(!is_family_form("serde-", "serde"));
+        assert!(!is_family_form("serenity", "serde"));
+        assert!(!is_family_form("@types/node", "react"));
+        assert!(!is_family_form("@types/react", "@types/node"));
+        // `serde_v8` IS a family FORM of serde — by design. The honesty gate
+        // is lockfile membership (`is_family_child_of_direct` only ever sees
+        // deps that exist in the user's tree), not name shape.
+        assert!(is_family_form("serde_v8", "serde"));
+    }
+
+    #[test]
+    fn lockfile_family_child_of_direct_dep_keeps_full_weight_and_grounds() {
+        // The sec_serde_advisory production case: serde declared directly,
+        // serde_derive present only via the lockfile (transitive). Pre-fix
+        // the 0.5x transitive halving pinned the serde_derive title hit at
+        // 0.25 < the 0.40 floor — no strong grounding, no fast-path floor.
+        let ace = ace_with(&[
+            dep_info("serde", "rust", false, true),
+            dep_info("serde_derive", "rust", false, false),
+        ]);
+        let (matches, _) = match_dependencies(
+            "RUSTSEC-2026-0042: serde_derive unbounded recursion during deserialization",
+            "serde_derive versions before 1.0.205 allow unbounded recursion when \
+             deserializing deeply nested structures.",
+            &[],
+            &ace,
+        );
+        let child = matches
+            .iter()
+            .find(|m| m.package_name == "serde_derive")
+            .expect("serde_derive must match");
+        assert!(
+            child.confidence >= STRONG_GROUNDING_CONFIDENCE,
+            "lockfile family child must keep full weight (got {})",
+            child.confidence
+        );
+        assert!(
+            is_strongly_grounded(&matches),
+            "serde_derive advisory must strongly ground a serde user"
+        );
+    }
+
+    #[test]
+    fn shared_prefix_crate_not_in_lockfile_gets_no_family_credit() {
+        // serde_v8 is a third-party crate sharing the prefix. It is NOT in
+        // this user's tree, so no DepInfo exists for it — the only possible
+        // match is `serde` itself via a compound-only occurrence, which stays
+        // minimal credit. No upgrade path exists without lockfile membership.
+        let ace = ace_with(&[dep_info("serde", "rust", false, true)]);
+        let (matches, _) = match_dependencies(
+            "serde_v8 0.240.0 released",
+            "Bindings between v8 and Rust values.",
+            &[],
+            &ace,
+        );
+        assert!(
+            matches
+                .iter()
+                .all(|m| m.confidence < STRONG_GROUNDING_CONFIDENCE),
+            "a compound-only prefix hit must stay below the grounding floor: {matches:?}"
+        );
+        assert!(!is_strongly_grounded(&matches));
+    }
+
+    #[test]
+    fn transitive_non_family_dep_is_still_halved() {
+        // The family exception is narrow: an ordinary transitive dep with no
+        // direct-dep parent keeps the conservative 0.5x halving.
+        let ace = ace_with(&[dep_info("x509-cert", "rust", false, false)]);
+        let (matches, _) = match_dependencies(
+            "x509-cert 0.3.0 released",
+            "Pure Rust X.509 certificate handling.",
+            &[],
+            &ace,
+        );
+        assert!(!matches.is_empty(), "full-name hit still matches");
+        assert!(
+            matches
+                .iter()
+                .all(|m| m.confidence < STRONG_GROUNDING_CONFIDENCE),
+            "no direct parent → halved below the grounding floor: {matches:?}"
+        );
+    }
+
+    #[test]
+    fn dev_dep_full_name_release_grounds_with_modest_discount() {
+        // Item 16: a vitest major release with a full-name title hit must
+        // ground — 0.5 title hit x 0.8 dev discount = 0.40, exactly the
+        // strong-grounding floor. The adjacent version literal corroborates
+        // the name, which also lifts the infrastructure dampen (the item IS
+        // about the tool itself, not subterm noise).
+        let ace = ace_with(&[dep_info("vitest", "javascript", true, true)]);
+        let (matches, _) = match_dependencies(
+            "Vitest 3.0.0 released with a redesigned browser mode",
+            "The vitest 3.0.0 release overhauls the runner API.",
+            &[],
+            &ace,
+        );
+        let m = matches.first().expect("vitest must match");
+        assert!(m.is_dev);
+        assert!(
+            m.confidence >= STRONG_GROUNDING_CONFIDENCE,
+            "dev-dep full-name release must reach the grounding floor (got {})",
+            m.confidence
+        );
+        assert!(
+            is_strongly_grounded(&matches),
+            "manifest devDep release is stack-relevant"
+        );
+        // The Critical paging lane stays production-only.
+        assert!(
+            !is_strongly_grounded_direct(&matches),
+            "dev deps never clear the Critical direct trust floor"
+        );
+    }
+
+    #[test]
+    fn dev_dep_uncorroborated_mention_stays_crushed() {
+        // TN guard for item 16: prose that merely mentions the tool without
+        // naming-it-as-subject evidence (version literal / package context)
+        // keeps the infrastructure dampen — no grounding.
+        let ace = ace_with(&[dep_info("vitest", "javascript", true, true)]);
+        let (matches, _) = match_dependencies(
+            "Five habits of productive developers",
+            "Some teams run vitest, others prefer other runners entirely.",
+            &[],
+            &ace,
+        );
+        assert!(
+            matches
+                .iter()
+                .all(|m| m.confidence < STRONG_GROUNDING_CONFIDENCE),
+            "a bare mention must not ground: {matches:?}"
+        );
+        assert!(!is_strongly_grounded(&matches));
     }
 }

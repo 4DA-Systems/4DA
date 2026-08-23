@@ -20,6 +20,10 @@ pub(super) struct SimMetrics {
     pub fn_strong: u32,
     pub tp_weak: u32,
     pub fn_weak: u32,
+    /// Titles (with scores) of false positives — printed in the failure
+    /// report so a P-guard breach names its offenders instead of forcing a
+    /// forensic re-run (2026-08-23 audit checkpoint lesson).
+    pub fp_titles: Vec<String>,
 }
 
 impl SimMetrics {
@@ -55,6 +59,8 @@ impl SimMetrics {
                 self.noise_scores.push(score);
                 if predicted {
                     self.fp += 1;
+                    self.fp_titles
+                        .push(format!("{} (score {score:.3})", result.title));
                 } else {
                     self.tn += 1;
                 }
@@ -144,14 +150,22 @@ impl SimMetrics {
     }
 
     pub(super) fn format_report(&self, label: &str) -> String {
-        format!(
+        let mut report = format!(
             "[{label}] TP={} FP={} TN={} FN={} | P={:.3} R={:.3} F1={:.3} | R_strong={:.3} ({}/{}) R_weak={:.3} ({}/{}) | rel={:.3} noise={:.3} gap={:.3}",
             self.tp, self.fp, self.tn, self.r#fn,
             self.precision(), self.recall(), self.f1(),
             self.recall_strong(), self.tp_strong, self.tp_strong + self.fn_strong,
             self.recall_weak(), self.tp_weak, self.tp_weak + self.fn_weak,
             self.mean_relevant_score(), self.mean_noise_score(), self.separation_gap(),
-        )
+        );
+        if !self.fp_titles.is_empty() {
+            report.push_str("\nFalse positives:");
+            for t in &self.fp_titles {
+                report.push_str("\n  - ");
+                report.push_str(t);
+            }
+        }
+        report
     }
 
     pub(super) fn merge(&mut self, other: &SimMetrics) {

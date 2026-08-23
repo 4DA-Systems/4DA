@@ -407,5 +407,25 @@ pub(super) fn is_hiring(title: &str) -> bool {
         return true;
     }
 
+    // Job-SEEKER posts — the mirror of a job ad. "Open to work: Haskell and
+    // functional programming expert" name-drops the reader's exact stack as
+    // the POSTER's identity, not as intelligence (live FP 2026-08-23: such a
+    // post rode an own-stack keyword confirmation to 0.695 for a Haskell
+    // specialist persona). Same doctrine as hiring ads: never stack
+    // intelligence, capped below the MATCH band.
+    let seeker_terms = [
+        "open to work",
+        "open for work",
+        "available for hire",
+        "for hire",
+        "seeking opportunities",
+        "looking for work",
+        "seeking new role",
+        "seeking a role",
+    ];
+    if seeker_terms.iter().any(|t| title.contains(t)) {
+        return true;
+    }
+
     false
 }

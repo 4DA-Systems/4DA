@@ -321,3 +321,320 @@ fn patched_advisory_is_not_affected_and_never_critical() {
         "still-affecting advisory keeps real necessity"
     );
 }
+
+/// Degraded-input markers (2026-08-23 audit, item 11): a scoring run whose
+/// inputs silently collapsed must say so on the persisted breakdown. The
+/// persist-skip POLICY lands in a later wave — these tests pin the honest
+/// carrier only.
+mod degraded_inputs {
+    use super::*;
+
+    fn breakdown_markers(r: &crate::SourceRelevance) -> Vec<String> {
+        r.score_breakdown
+            .as_ref()
+            .map(|b| b.degraded_inputs.clone())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn knn_failure_marks_results_degraded() {
+        let db = bench_db();
+        // Break the KNN table so find_similar_contexts errors. bench_db is
+        // in-memory, so read_conn() falls back to the single writer conn —
+        // the DROP is visible to the scoring query.
+        db.read_conn()
+            .execute_batch("DROP TABLE IF EXISTS context_vec;")
+            .expect("drop context_vec");
+        let mut ctx = profile_ctx("rust_developer");
+        ctx.cached_context_count = 3; // context axis SHOULD run…
+        let emb = vec![0.5_f32; crate::EMBEDDING_DIMS]; // …with a real embedding
+        let opts = no_freshness();
+        let input = ScoringInput {
+            id: 91,
+            title: "Async runtime scheduling deep dive",
+            url: Some("https://example.com"),
+            content: "How work-stealing schedulers balance tasks across threads.",
+            source_type: "hackernews",
+            embedding: &emb,
+            created_at: None,
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+            source_id: None,
+        };
+        let r = score_item(&input, &ctx, &db, &opts, None);
+        assert!(
+            breakdown_markers(&r)
+                .iter()
+                .any(|m| m == "context_knn_failed"),
+            "a KNN failure must mark the breakdown degraded (got {:?})",
+            breakdown_markers(&r)
+        );
+    }
+
+    #[test]
+    fn zero_embedding_marks_results_degraded() {
+        let db = bench_db();
+        let ctx = profile_ctx("rust_developer");
+        // The shared score() helper uses an all-zero embedding — exactly the
+        // OSV/CVE zero-blob retention case: semantic axes default, not measure.
+        let r = score(
+            &ctx,
+            &db,
+            "hackernews",
+            None,
+            "Async runtime scheduling deep dive",
+            "How work-stealing schedulers balance tasks across threads.",
+        );
+        assert!(
+            breakdown_markers(&r)
+                .iter()
+                .any(|m| m == "embedding_missing"),
+            "an absent embedding must mark the breakdown degraded (got {:?})",
+            breakdown_markers(&r)
+        );
+    }
+
+    #[test]
+    fn dep_intel_load_failure_marker_is_carried_and_cleared() {
+        let db = bench_db();
+        let ctx = profile_ctx("rust_developer");
+        super::super::dependencies::set_dep_intel_load_degraded_for_test(true);
+        let degraded = score(
+            &ctx,
+            &db,
+            "hackernews",
+            None,
+            "Async runtime scheduling deep dive",
+            "How work-stealing schedulers balance tasks across threads.",
+        );
+        // Clear immediately — the flag is process-global.
+        super::super::dependencies::set_dep_intel_load_degraded_for_test(false);
+        assert!(
+            breakdown_markers(&degraded)
+                .iter()
+                .any(|m| m == "dep_intel_load_failed"),
+            "a failed dep-intel load must mark the breakdown degraded"
+        );
+        let healthy = score(
+            &ctx,
+            &db,
+            "hackernews",
+            None,
+            "Async runtime scheduling deep dive",
+            "How work-stealing schedulers balance tasks across threads.",
+        );
+        assert!(
+            !breakdown_markers(&healthy)
+                .iter()
+                .any(|m| m == "dep_intel_load_failed"),
+            "a healthy load must not carry the marker"
+        );
+    }
+}
+
+/// Dev-dep registry releases (2026-08-23 audit, item 16): a release of a
+/// package the user's manifests declare grounds regardless of dev status —
+/// a vitest major IS the user's stack — while the Critical paging lane stays
+/// production-only.
+#[test]
+fn dev_dep_registry_release_grounds_but_never_pages() {
+    let db = bench_db();
+    let mut ctx = profile_ctx("fullstack_js");
+    let info = super::dependencies::DepInfo {
+        package_name: "vitest".to_string(),
+        version: Some("2.1.0".to_string()),
+        is_dev: true,
+        is_direct: true,
+        search_terms: super::dependencies::extract_search_terms("vitest"),
+        ecosystem: "javascript".to_string(),
+    };
+    ctx.ace_ctx.dependency_names.insert("vitest".to_string());
+    ctx.ace_ctx
+        .dependency_info
+        .insert("vitest".to_string(), info);
+
+    let r = score(
+        &ctx,
+        &db,
+        "npm_registry",
+        Some("vitest@3.0.0"),
+        "npm: vitest v3.0.0",
+        "Next generation testing framework powered by Vite.",
+    );
+    assert!(
+        grounded(&r),
+        "a release of the user's declared devDep must ground (breakdown: {:?})",
+        r.score_breakdown.as_ref().map(|b| &b.matched_deps)
+    );
+    assert_ne!(
+        r.signal_priority.as_deref(),
+        Some("critical"),
+        "dev-dep releases never page critical"
+    );
+}
+
+/// Family rule end-to-end (2026-08-23 audit, item 15): a RUSTSEC advisory for
+/// `serde_derive` — present only via the lockfile — must engage the critical
+/// fast-path for a serde user instead of stalling at the ungrounded-advisory
+/// cap (measured 0.414 pre-fix).
+#[test]
+fn serde_derive_advisory_engages_fast_path_for_serde_user() {
+    let db = bench_db();
+    // rust_developer now carries serde_derive as a lockfile transitive,
+    // exactly as a real serde user's Cargo.lock does.
+    let ctx = profile_ctx("rust_developer");
+    let opts = ScoringOptions {
+        apply_freshness: false,
+        apply_signals: true,
+        trend_topics: vec![],
+    };
+    let classifier = crate::signals::SignalClassifier::new();
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let input = ScoringInput {
+        id: 15,
+        title: "RUSTSEC-2026-0042: serde_derive unbounded recursion during deserialization",
+        url: Some("https://example.com"),
+        content: "serde_derive versions before 1.0.205 allow unbounded recursion when \
+                  deserializing deeply nested structures, leading to stack overflow. \
+                  Severity: CVSS_V3: 5.3. Update serde_derive to >= 1.0.205.",
+        source_type: "cve",
+        embedding: &zero_emb,
+        created_at: None,
+        detected_lang: "en",
+        source_tags: &[],
+        tags_json: None,
+        feed_origin: None,
+        source_id: Some("RUSTSEC-2026-0042"),
+    };
+    let r = score_item(&input, &ctx, &db, &opts, Some(&classifier));
+    assert!(
+        grounded(&r),
+        "lockfile family child must strongly ground (deps: {:?})",
+        r.score_breakdown.as_ref().map(|b| &b.matched_deps)
+    );
+    assert!(
+        r.top_score >= 0.50,
+        "critical fast-path floor must engage (got {})",
+        r.top_score
+    );
+    assert!(r.relevant, "grounded advisory must be feed-relevant");
+}
+
+/// Dep-gate bypass integration (2026-08-23 audit, item 22b): post-bootstrap
+/// (feedback_interaction_count >= 10 arms the 2-signal quality floor), a
+/// strong direct-dep release whose ONLY confirmed axis is the dependency must
+/// carry the LIFTED confirmation multiplier on its breakdown. The unit tests
+/// on `apply_gate_effect` pin the score arithmetic (0.72 ceiling reachable);
+/// this pins the wiring end-to-end.
+#[test]
+fn post_bootstrap_single_axis_dep_release_carries_lifted_conf_mult() {
+    let db = bench_db();
+    let mut ctx = profile_ctx("rust_developer");
+    ctx.feedback_interaction_count = 25; // post-bootstrap
+    let r = score(
+        &ctx,
+        &db,
+        "crates_io",
+        Some("crate-tokio"),
+        "crates.io: tokio v1.40.0",
+        "A runtime for writing reliable asynchronous applications. tokio 1.40.0 \
+         brings scheduler and IO driver improvements.\nDownloads: 4200000",
+    );
+    let bd = r.score_breakdown.as_ref().expect("breakdown");
+    assert!(
+        bd.dep_match_score >= crate::scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_MIN_SCORE,
+        "premise: the dep axis is bypass-strength (got {})",
+        bd.dep_match_score
+    );
+    assert!(
+        bd.signal_count <= 1,
+        "premise: dependency is the only confirmed axis (got {} — {:?})",
+        bd.signal_count,
+        bd.confirmed_signals
+    );
+    assert!(
+        (bd.confirmation_mult - crate::scoring_config::CONFIRMATION_GATE[2].0).abs() < f32::EPSILON,
+        "bypass must lift conf_mult to the 2-signal tier (got {})",
+        bd.confirmation_mult
+    );
+    // Reachable-band justification (measured 2026-08-23): this harness item
+    // carries a ZERO embedding, so its relevance core is semantic-only
+    // (~0.18 boosted) and it lands at ~0.22 = boosted x conf 1.00 x domain
+    // 1.10 + 0.02 offset — 2.2x the ~0.10 the pre-fix 0.45 multiplier
+    // produced for the IDENTICAL item, but honestly below the feed
+    // threshold: a release with no semantic evidence at all should not
+    // surface on the dep name alone. The [0.70, 0.72+offset] band the
+    // audit's intent comment names requires boosted >= ~0.64 (real
+    // embedding similarity + quality composite), and its reachability under
+    // conf 1.00 is pinned by `dep_gate_bypass_lifts_conf_mult_to_two_signal_
+    // tier` (0.90 boosted -> exactly the 0.72 ceiling). Pre-fix, NO boosted
+    // value could exceed 0.45 x 1.10 + 0.02 = 0.515 — the band was
+    // arithmetically empty.
+    assert!(
+        (0.19..0.30).contains(&r.top_score),
+        "measured band pin for the minimal harness item (got {}) — a shift \
+         means the gate arithmetic changed; re-derive the band",
+        r.top_score
+    );
+    assert!(
+        r.top_score < scoring_config_bypass_ceiling_plus_offset(),
+        "bypass ceiling must still hold the top band out of reach"
+    );
+}
+
+fn scoring_config_bypass_ceiling_plus_offset() -> f32 {
+    crate::scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_CEILING
+        + crate::scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR
+        + f32::EPSILON
+}
+
+/// Stale published-content wiring (2026-08-23 audit, item 19): the discount
+/// must flow through `score_item`'s quality composite, not just exist as a
+/// helper. `created_at` carries published_at on the analysis paths, so a
+/// years-old PUBLISH date discounts regardless of fetch date. The ramp,
+/// security exemption, and grounded softening are pinned at helper level
+/// (`stale_multiplier_*` in pipeline_v2); this pins the end-to-end effect.
+#[test]
+fn stale_published_content_scores_below_fresh_twin() {
+    let db = bench_db();
+    let ctx = profile_ctx("rust_developer");
+    let opts = ScoringOptions {
+        apply_freshness: true,
+        apply_signals: false,
+        trend_topics: vec![],
+    };
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let mut score_published_at = |id: u64, published: chrono::DateTime<chrono::Utc>| {
+        let input = ScoringInput {
+            id,
+            title: "TypeScript 5.1 Beta is OUT! Deep dive into the new features",
+            url: Some("https://example.com"),
+            content: "A tour of the new TypeScript beta: decorators, const type \
+                      parameters, and improved inference for Rust-interop tooling.",
+            source_type: "rss",
+            embedding: &zero_emb,
+            created_at: Some(&published),
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+            source_id: None,
+        };
+        score_item(&input, &ctx, &db, &opts, None).top_score
+    };
+    let fresh = score_published_at(191, chrono::Utc::now() - chrono::Duration::days(2));
+    let stale = score_published_at(192, chrono::Utc::now() - chrono::Duration::days(1200));
+    assert!(
+        stale < fresh,
+        "a 40-month-old publish date must score below its fresh twin \
+         (fresh {fresh}, stale {stale})"
+    );
+    // The drop must exceed what the freshness tiers alone explain (their
+    // floor is 0.80 vs 1.00 at 2 days): the stale multiplier (0.55) stacks.
+    assert!(
+        stale < fresh * 0.60,
+        "stale discount must stack on the freshness floor (fresh {fresh}, stale {stale})"
+    );
+}

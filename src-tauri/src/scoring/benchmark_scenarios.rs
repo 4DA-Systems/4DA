@@ -113,20 +113,35 @@ pub(crate) fn profile_ctx(name: &str) -> ScoringContext {
 /// benchmark faithful to production; the scoring algorithm is unchanged.
 fn install_bench_deps(ace: &mut ace_context::ACEContext, deps: &[(&str, &str)]) {
     for (name, ecosystem) in deps {
-        let info = super::dependencies::DepInfo {
-            package_name: (*name).to_string(),
-            version: None,
-            is_dev: false,
-            is_direct: true,
-            search_terms: super::dependencies::extract_search_terms(name),
-            ecosystem: (*ecosystem).to_string(),
-        };
-        for term in &info.search_terms {
-            ace.dependency_names.insert(term.clone());
-        }
-        ace.dependency_names.insert((*name).to_string());
-        ace.dependency_info.insert((*name).to_string(), info);
+        install_bench_dep(ace, name, ecosystem, true);
     }
+}
+
+/// Lockfile-only (transitive) deps for a benchmark profile. Production's
+/// `load_dependency_intelligence` yields these from lockfiles with
+/// `is_direct: false` — a serde user's Cargo.lock always contains
+/// `serde_derive`, which is exactly the family-rule production case
+/// (2026-08-23 audit, item 15).
+fn install_bench_transitive_deps(ace: &mut ace_context::ACEContext, deps: &[(&str, &str)]) {
+    for (name, ecosystem) in deps {
+        install_bench_dep(ace, name, ecosystem, false);
+    }
+}
+
+fn install_bench_dep(ace: &mut ace_context::ACEContext, name: &str, ecosystem: &str, direct: bool) {
+    let info = super::dependencies::DepInfo {
+        package_name: name.to_string(),
+        version: None,
+        is_dev: false,
+        is_direct: direct,
+        search_terms: super::dependencies::extract_search_terms(name),
+        ecosystem: ecosystem.to_string(),
+    };
+    for term in &info.search_terms {
+        ace.dependency_names.insert(term.clone());
+    }
+    ace.dependency_names.insert(name.to_string());
+    ace.dependency_info.insert(name.to_string(), info);
 }
 
 fn rust_developer_ctx() -> ScoringContext {
@@ -170,6 +185,12 @@ fn rust_developer_ctx() -> ScoringContext {
             ("hyper", "rust"),
             ("reqwest", "rust"),
         ],
+    );
+    // Lockfile-only family children of the direct deps above, exactly as a
+    // real serde/tokio user's Cargo.lock carries them (family rule, item 15).
+    install_bench_transitive_deps(
+        &mut ace,
+        &[("serde_derive", "rust"), ("tokio-util", "rust")],
     );
 
     let primary_stack = std::collections::HashSet::from_iter(
