@@ -77,6 +77,16 @@ impl Default for GateEvidence {
 /// corroboration bar hardcoded in the broad branch below: keyword evidence
 /// alone (one word colliding with a title — "Rust Belt cities…") can never
 /// confirm; the item embedding must at least weakly agree with the interest.
+///
+/// 0.35 is MEASURED, not arbitrary — do not lower it without re-running the
+/// experiment (2026-08-24, real-embedding benchmark): at 0.28 the genuine
+/// systems-content scenario tp_systems_programming recovers (corroboration
+/// exactly 0.28), but edge_mixed_signal ("How Rust Belt cities are
+/// reinventing themselves through urban farming") lands at 0.445 — a
+/// non-technical region article crossing the 0.40 relevance line for a Rust
+/// developer. Arctic-M cannot separate those two classes in [0.28, 0.35);
+/// closing that gap is representation quality (audit item 27), not threshold
+/// tuning.
 // TODO(orchestrator): candidate for promotion to pipeline.scoring as a tunable.
 const OWN_STACK_KEYWORD_CORROBORATION: f32 = 0.35;
 
