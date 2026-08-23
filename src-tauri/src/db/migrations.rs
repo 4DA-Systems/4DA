@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 107;
+        const TARGET_VERSION: i64 = 108;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -4660,6 +4660,50 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Phase 107: scoring_churn instrumentation table created"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 108 {
+                Self::run_versioned_migration(
+                    &conn,
+                    107,
+                    108,
+                    "Phase 108: feed_verdict_reason — why a persisted verdict flipped",
+                    |c| {
+                        // The 2026-08-23 adversarial scoring audit found 106 of
+                        // 532 feed members below 0.45 with a score-sourced
+                        // verdict: within a pipeline version a score-derived
+                        // verdict was immortal (the Phase-101 working set is
+                        // version-scoped only), so items whose live score sank
+                        // as low as 0.17 stayed curated. The in-version demote
+                        // sweep that closes this needs provenance for WHY a
+                        // verdict flipped — 'score_sunk_in_version' vs
+                        // 'stale_version' — or forensics cannot tell a churn
+                        // demotion from an epoch one. Nullable, NO backfill:
+                        // NULL means "no explanation needed" (a normal cycle
+                        // verdict), which is the truth for every existing row.
+                        //
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when absent.
+                        let has_column: bool = c
+                            .prepare("SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name = 'feed_verdict_reason'")?
+                            .query_row([], |r| r.get::<_, i64>(0))
+                            .map(|n| n > 0)?;
+                        if !has_column {
+                            c.execute(
+                                "ALTER TABLE source_items ADD COLUMN feed_verdict_reason TEXT",
+                                [],
+                            )?;
+                        }
+                        // No index: every reader of this column arrives via the
+                        // Phase-101 partial index on the curated set; the reason
+                        // is forensic payload, never a selection key.
+                        info!(
+                            target: "4da::db",
+                            "Phase 108: feed_verdict_reason column added"
                         );
                         Ok(())
                     },

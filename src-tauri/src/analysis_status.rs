@@ -676,6 +676,8 @@ async fn analyze_cached_content_inner_impl(
                 );
             }
 
+            // Path parity with the analyzer path: parse topic tags (§3.5).
+            let parsed_tags = scoring::parse_tags_topics(item.tags.as_deref());
             new_results.push(scoring::score_item(
                 &scoring::ScoringInput {
                     id: item.id as u64,
@@ -687,7 +689,7 @@ async fn analyze_cached_content_inner_impl(
                     // Effective publication date: honest freshness (falls back to first-seen)
                     created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
                     detected_lang: &item.detected_lang,
-                    source_tags: &[],
+                    source_tags: &parsed_tags,
                     tags_json: item.tags.as_deref(),
                     feed_origin: item.feed_origin.as_deref(),
                     source_id: Some(&item.source_id),
