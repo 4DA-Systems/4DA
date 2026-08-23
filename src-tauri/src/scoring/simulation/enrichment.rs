@@ -361,14 +361,19 @@ mod tests {
         let config = EnrichmentConfig::none();
 
         // For a non-trivial persona (Rust), enriching with none() should leave
-        // top-level fields at their defaults (empty)
-        let enriched = enrich_persona(
-            bases.into_iter().next().expect("at least one persona"),
-            &enrichments[0],
-            &config,
-        );
-        assert!(
-            enriched.topic_embeddings.is_empty(),
+        // top-level fields at their BASE state. topic_embeddings is asserted
+        // relative to the base, not as empty: under `calibrated-sim` the base
+        // personas already carry the real fastembed topic map by design
+        // (personas::with_calibrated_topic_embeddings), so "empty" was a
+        // synthetic-mode-only premise (failed under calibrated-sim,
+        // 2026-08-24 measurement run). The invariant under test is unchanged:
+        // enrichment with none() ADDS nothing.
+        let base = bases.into_iter().next().expect("at least one persona");
+        let base_topic_embeddings = base.topic_embeddings.len();
+        let enriched = enrich_persona(base, &enrichments[0], &config);
+        assert_eq!(
+            enriched.topic_embeddings.len(),
+            base_topic_embeddings,
             "EnrichmentConfig::none() should not add topic_embeddings"
         );
         assert!(
@@ -391,19 +396,20 @@ mod tests {
         let enrichments = all_enrichments();
         let config = EnrichmentConfig::only(EnrichmentField::SourceQuality);
 
-        let enriched = enrich_persona(
-            bases.into_iter().next().expect("at least one persona"),
-            &enrichments[0],
-            &config,
-        );
+        // Base-relative for the same reason as enrichment_none_preserves_base:
+        // calibrated-sim bases legitimately carry topic embeddings already.
+        let base = bases.into_iter().next().expect("at least one persona");
+        let base_topic_embeddings = base.topic_embeddings.len();
+        let enriched = enrich_persona(base, &enrichments[0], &config);
         // Source quality should be set
         assert!(
             !enriched.source_quality.is_empty(),
             "only(SourceQuality) should set source_quality"
         );
-        // But topic_embeddings should still be empty
-        assert!(
-            enriched.topic_embeddings.is_empty(),
+        // But topic_embeddings should be untouched
+        assert_eq!(
+            enriched.topic_embeddings.len(),
+            base_topic_embeddings,
             "only(SourceQuality) should not set topic_embeddings"
         );
         // And exclusions should still be empty

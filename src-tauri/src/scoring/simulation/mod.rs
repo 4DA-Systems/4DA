@@ -13,6 +13,7 @@
 //!   Dashboard (quality)        — aggregate quality reporting
 
 pub(super) mod ace_validation;
+pub(super) mod analyzer_batch_parity;
 pub(super) mod corpus;
 pub(super) mod differential;
 pub(super) mod domain_embeddings;

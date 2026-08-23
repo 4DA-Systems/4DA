@@ -481,12 +481,14 @@ jobs:
     # the local pre-push gate. cargo-audit/deny use prebuilt binaries (taiki-e) to skip
     # a ~3-min source compile each.
     runs-on: ubuntu-latest
-    # 45, not 30: this job now compiles the integration test targets too (see
-    # the compile-gate step). Swatinem's cache is only saved from main, so until
-    # this change lands there, PR runs restore a cache with no integration-test
-    # artifacts in it and pay the full cold link for 5 extra binaries. 30 was
-    # too tight for that first window and a timeout here is a red required gate.
-    timeout-minutes: 45
+    # 60, not 30: this job now compiles the integration test targets too (see
+    # the compile-gate step), and the default leg additionally builds the lib
+    # once more under `--features calibrated-sim` for the real-embedding gate
+    # (feature unification forces a fourda-crate recompile; the dep graph stays
+    # cached). Swatinem's cache is only saved from main, so PR runs right after
+    # a scope change pay the full cold link. A timeout here is a red required
+    # gate, so the cap holds headroom for the cold-cache window.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -631,6 +633,53 @@ jobs:
             exit 1
           fi
           rm -f test-output.txt
+
+      # ── Real-embedding mode (2026-08-23 adversarial audit, items 21/22) ──
+      # Everything above runs the SYNTHETIC embedding suite. That suite was
+      # 699/699 green while real-embedding mode failed 4 persona recall guards
+      # — CI was structurally blind to real-mode regressions because nothing
+      # here ever exercised them. These two steps close that hole on the
+      # default leg only (one leg is enough: the calibrated fixtures are
+      # platform-independent committed .bin files, and the fastembed model is
+      # deterministic ONNX inference).
+      - name: Fetch embedding model + ORT runtime (real-embedding gate)
+        # Same artifacts `pnpm run bundle:resources` fetches (download-ort +
+        # download-embedding-model), invoked directly so this job doesn't need
+        # pnpm. In debug builds the crate resolves src-tauri/models/ as the
+        # bundled dir (runtime_paths::bundled_models_dir), so tests find the
+        # model without any network fallback. Without this fetch the
+        # real-embedding tests would try a HuggingFace download mid-test —
+        # the exact truncated-archive flake class hermetic.yml documented.
+        if: matrix.label == 'default'
+        working-directory: .
+        run: |
+          node scripts/download-ort.cjs
+          node scripts/download-embedding-model.cjs
+
+      - name: Real-embedding calibration + persona sim (CI must SEE real mode)
+        # `--features calibrated-sim` swaps the simulation corpus/interest
+        # embeddings for REAL fastembed fixtures (committed .bin files — see
+        # scoring/simulation/mod.rs), so the 9 persona reality guards assert
+        # against production-grade embedding behavior. The `scoring::` filter
+        # also picks up benchmark_calibration::full_calibration_with_real_
+        # embeddings — the live-model benchmark whose quality-gate ratchet
+        # (benchmark_calibration/quality_gate.rs) pins score-range floors.
+        #
+        # FOURDA_REQUIRE_REAL_EMBEDDINGS=1 is the audit's item-22 guard: with
+        # it set, an unavailable embedding model PANICS instead of printing
+        # "SKIP" and green-passing having measured nothing, and the benchmark
+        # quality-gate ratchet hard-fails instead of soft-warning. This step
+        # can therefore never pass vacuously.
+        if: matrix.label == 'default'
+        env:
+          FOURDA_REQUIRE_REAL_EMBEDDINGS: '1'
+          FOURDA_DATA_DIR: ${{ runner.temp }}/4da-validate-data
+          FOURDA_DB_PATH: ${{ runner.temp }}/4da-validate-data/4da.db
+        # Block scalar on purpose: the trailing `scoring::` ends in a colon,
+        # which is a YAML mapping indicator in a plain scalar and breaks the
+        # whole workflow file if written inline.
+        run: |
+          cargo test --lib --features calibrated-sim scoring::
 
   # ─────────────────────────────────────────────────────────────────────
   # Aggregate gate: a SINGLE status check to require in branch protection.
