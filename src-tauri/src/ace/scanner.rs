@@ -814,6 +814,97 @@ impl ProjectScanner {
                 }
             }
         }
+
+        // Synthetic stdlib/toolchain deps from the `go`/`toolchain` directives.
+        // OSV publishes Go standard-library advisories against package name
+        // "stdlib" (e.g. GO-2024-2687) and Go toolchain advisories against
+        // package name "toolchain" (e.g. GO-2023-1842), both ecosystem "Go" —
+        // identities no `require` line can ever declare (module paths need a
+        // dotted first segment), so without these rows nothing in
+        // user_dependencies can match them and every Go stdlib/toolchain CVE
+        // is structurally unreachable (2026-08-23 adversarial scoring audit).
+        // They ride the normal direct-dependency path (ecosystem "go",
+        // detected_from = 'manifest'); [`Self::parse_go_directives`] carries
+        // the declared version for the version-bearing persistence hook.
+        for (name, _version) in Self::parse_go_directives(content) {
+            if !signal.dependencies.contains(&name) {
+                signal.dependencies.push(name);
+            }
+        }
+    }
+
+    /// The `go` / `toolchain` directives from go.mod content, mapped to the
+    /// synthetic package identities OSV uses for them: Go standard-library
+    /// advisories are published against package "stdlib" (GO-2024-2687) and
+    /// Go toolchain advisories against package "toolchain" (GO-2023-1842),
+    /// both ecosystem "Go" (verified against api.osv.dev 2026-08-23). Returns
+    /// (package_name, declared_version) pairs, stdlib first:
+    /// `go 1.22.3` -> ("stdlib", "1.22.3"); `toolchain go1.22.5` ->
+    /// ("toolchain", "1.22.5"). A bare-minor `go 1.22` normalizes to "1.22.0"
+    /// (its go.mod meaning since Go 1.21, and the three-part form OSV ranges
+    /// carry). Toolchain values that pin no version (`toolchain default`)
+    /// emit nothing.
+    pub(crate) fn parse_go_directives(content: &str) -> Vec<(String, String)> {
+        let mut stdlib_version: Option<String> = None;
+        let mut toolchain_version: Option<String> = None;
+        let mut in_block = false;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            // Both directives are single-line and top-level only; skip
+            // factored blocks (`require (` ... `)`, `godebug (` ... `)`) so
+            // their entries can never spoof a directive.
+            if in_block {
+                if trimmed == ")" {
+                    in_block = false;
+                }
+                continue;
+            }
+            if trimmed.ends_with('(') {
+                in_block = true;
+                continue;
+            }
+            if let Some(rest) = trimmed.strip_prefix("go ") {
+                let token = rest.split_whitespace().next().unwrap_or("");
+                if token.starts_with(|c: char| c.is_ascii_digit()) && stdlib_version.is_none() {
+                    stdlib_version = Some(Self::normalize_go_directive_version(token));
+                }
+            } else if let Some(rest) = trimmed.strip_prefix("toolchain ") {
+                // Toolchain names look like "go1.22.5".
+                let token = rest.split_whitespace().next().unwrap_or("");
+                if let Some(version) = token.strip_prefix("go") {
+                    if version.starts_with(|c: char| c.is_ascii_digit())
+                        && toolchain_version.is_none()
+                    {
+                        toolchain_version = Some(Self::normalize_go_directive_version(version));
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        if let Some(version) = stdlib_version {
+            out.push(("stdlib".to_string(), version));
+        }
+        if let Some(version) = toolchain_version {
+            out.push(("toolchain".to_string(), version));
+        }
+        out
+    }
+
+    /// Normalize a go.mod directive version token to the three-part form
+    /// OSV's Go advisory ranges use: bare-minor "1.22" -> "1.22.0" (what the
+    /// directive means since Go 1.21; `osv::matching::parse_version` applies
+    /// the same two-part completion). Anything else ("1.22.3", "1.23rc1")
+    /// passes through unchanged.
+    fn normalize_go_directive_version(version: &str) -> String {
+        let parts: Vec<&str> = version.split('.').collect();
+        if parts.len() == 2
+            && parts
+                .iter()
+                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+        {
+            return format!("{version}.0");
+        }
+        version.to_string()
     }
 
     // ========================================================================
@@ -2877,6 +2968,117 @@ require golang.org/x/sys v0.20.0 // indirect
         // Framework detection from DIRECT modules only.
         assert!(signal.frameworks.contains(&"gin".to_string()));
         assert!(signal.frameworks.contains(&"cobra".to_string()));
+    }
+
+    #[test]
+    fn test_parse_go_mod_emits_stdlib_and_toolchain_synthetic_deps() {
+        let content = r"
+module example.com/svc
+
+go 1.22.3
+
+toolchain go1.22.5
+
+require github.com/spf13/cobra v1.8.0
+";
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::GoMod, "go");
+        scanner.parse_go_mod(content, &mut signal);
+
+        // OSV names Go standard-library advisories "stdlib" (GO-2024-2687)
+        // and toolchain advisories "toolchain" (GO-2023-1842) — both must
+        // surface as DIRECT deps so those advisories have a user_dependencies
+        // row to match.
+        assert!(signal.dependencies.contains(&"stdlib".to_string()));
+        assert!(signal.dependencies.contains(&"toolchain".to_string()));
+        assert!(!signal.indirect_dependencies.contains(&"stdlib".to_string()));
+        assert!(!signal
+            .indirect_dependencies
+            .contains(&"toolchain".to_string()));
+        // Real modules still parse alongside the synthetic deps.
+        assert!(signal
+            .dependencies
+            .contains(&"github.com/spf13/cobra".to_string()));
+
+        let directives = ProjectScanner::parse_go_directives(content);
+        assert_eq!(
+            directives,
+            vec![
+                ("stdlib".to_string(), "1.22.3".to_string()),
+                ("toolchain".to_string(), "1.22.5".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_go_mod_without_toolchain_emits_stdlib_only() {
+        let content = "module example.com/svc\n\ngo 1.21.0\n";
+        let scanner = ProjectScanner::new();
+        let mut signal = p2_signal(ManifestType::GoMod, "go");
+        scanner.parse_go_mod(content, &mut signal);
+
+        assert!(signal.dependencies.contains(&"stdlib".to_string()));
+        assert!(!signal.dependencies.contains(&"toolchain".to_string()));
+        assert_eq!(
+            ProjectScanner::parse_go_directives(content),
+            vec![("stdlib".to_string(), "1.21.0".to_string())]
+        );
+    }
+
+    #[test]
+    fn test_parse_go_directives_edge_cases() {
+        // Bare-minor `go 1.22` means 1.22.0 — normalized to the three-part
+        // form OSV's Go ranges carry.
+        assert_eq!(
+            ProjectScanner::parse_go_directives("go 1.22\n"),
+            vec![("stdlib".to_string(), "1.22.0".to_string())]
+        );
+        // Release-candidate toolchains pass through unchanged.
+        assert_eq!(
+            ProjectScanner::parse_go_directives("toolchain go1.23rc1\n"),
+            vec![("toolchain".to_string(), "1.23rc1".to_string())]
+        );
+        // `toolchain default` pins no version — nothing emitted for it.
+        assert_eq!(
+            ProjectScanner::parse_go_directives("go 1.22.1\ntoolchain default\n"),
+            vec![("stdlib".to_string(), "1.22.1".to_string())]
+        );
+        // No directives (pre-1.12 era go.mod) -> no synthetic deps.
+        assert!(ProjectScanner::parse_go_directives("module a.b/c\n").is_empty());
+        // `godebug` is not the `go` directive, and lines inside factored
+        // blocks can never spoof a directive.
+        assert!(ProjectScanner::parse_go_directives(
+            "godebug default=go1.21\nrequire (\n\tgo 9.9.9\n)\n"
+        )
+        .is_empty());
+        // Trailing comments don't leak into the version token.
+        assert_eq!(
+            ProjectScanner::parse_go_directives("go 1.22.4 // pinned\n"),
+            vec![("stdlib".to_string(), "1.22.4".to_string())]
+        );
+    }
+
+    #[test]
+    fn test_non_go_manifests_emit_no_synthetic_stdlib_deps() {
+        let scanner = ProjectScanner::new();
+
+        let mut cargo_signal = p2_signal(ManifestType::CargoToml, "rust");
+        scanner.parse_cargo_toml(
+            "[package]\nname = \"acme\"\n\n[dependencies]\nserde = \"1\"\n",
+            &mut cargo_signal,
+        );
+        let mut npm_signal = p2_signal(ManifestType::PackageJson, "javascript");
+        scanner.parse_package_json(
+            r#"{"name":"acme","dependencies":{"react":"^18.0.0"}}"#,
+            &mut npm_signal,
+        );
+
+        for signal in [&cargo_signal, &npm_signal] {
+            assert!(!signal.dependencies.contains(&"stdlib".to_string()));
+            assert!(!signal.dependencies.contains(&"toolchain".to_string()));
+        }
+        assert!(cargo_signal.dependencies.contains(&"serde".to_string()));
+        assert!(npm_signal.dependencies.contains(&"react".to_string()));
     }
 
     #[test]

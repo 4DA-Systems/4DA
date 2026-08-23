@@ -566,6 +566,26 @@ impl Database {
         Ok(())
     }
 
+    /// Refresh the tags column (topics + engagement keys) for an item the
+    /// fetch path re-saw. Engagement counts (favourites/score/likes) grow
+    /// after first ingest, and a re-see while the item is still inside the
+    /// source window is the ONLY moment they can refresh — without this, a
+    /// post fetched minutes after publication carries `0` engagement forever
+    /// and the community-signal escape hatch never opens for it.
+    pub fn update_source_item_tags(
+        &self,
+        source_type: &str,
+        source_id: &str,
+        tags: &str,
+    ) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE source_items SET tags = ?3 WHERE source_type = ?1 AND source_id = ?2",
+            params![source_type, source_id, tags],
+        )?;
+        Ok(())
+    }
+
     /// Get recent source_id values for a given source type (for duplicate detection).
     pub fn get_recent_source_item_ids(
         &self,

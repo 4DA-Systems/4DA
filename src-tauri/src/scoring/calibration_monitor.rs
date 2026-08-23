@@ -37,6 +37,7 @@ use rusqlite::Result as SqliteResult;
 
 use crate::db::Database;
 
+use super::dependencies::is_strongly_grounded;
 use super::{match_dependencies, ScoringContext};
 
 /// Minimum feedback events before the engagement-derived metrics are trustworthy.
@@ -137,18 +138,34 @@ fn ratio(num: i64, denom: i64) -> f32 {
 ///
 /// A security/breaking advisory that affects the developer's OWN stack should never score
 /// as noise; if it does, that's a concrete recall bug. The dep-graph scoping is what makes
-/// this honest: an unscoped "high-stakes scored low" count flagged ~86% on live data
-/// (a CVE in a package you don't use SHOULD score low). Here the denominator is ONLY the
-/// high-stakes items that match a current dependency.
+/// this honest, and it must use the same corroborated grounding the production pipeline
+/// trusts (`is_strongly_grounded`): an unscoped "high-stakes scored low" count flagged
+/// ~86% on live data, and an UNCORROBORATED dep-scoped count was barely better — the
+/// bare substring matcher read a permanent ~87% pseudo-miss-rate (JSONata, node-opcua,
+/// sqlite3-ruby, Netty "matching" via subterm/prose coincidences; 2026-08-23 audit).
+/// Here the denominator is ONLY the high-stakes items whose grounding edge to a current
+/// dependency clears the production trust floor (confidence >= 0.40 + name corroboration).
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct HighStakesRecall {
-    /// High-stakes (security/breaking/CVE) items that match a current dependency.
+    /// High-stakes (security/breaking/CVE) items with a corroborated grounding
+    /// edge to a current dependency (`is_strongly_grounded`).
     pub dep_matched_total: usize,
     /// ...of those, how many scored below threshold (a buried advisory for your stack).
     pub misscored: usize,
-    /// `misscored / dep_matched_total`. Should be ~0; anything above is a real recall bug.
+    /// `misscored / dep_matched_total`. Should be ~0; sustained elevation is a real
+    /// recall regression.
     pub miss_rate: f32,
+    /// True when `miss_rate` exceeds [`HIGH_STAKES_MISS_ALERT_RATE`] — the condition
+    /// consumers should alarm on. This metric is a regression monitor, not a
+    /// permanent scare number: a healthy pipeline reads ~0% and never alerts.
+    pub alert: bool,
 }
+
+/// Alert floor for the dep-scoped high-stakes miss rate. A healthy pipeline sits at
+/// ~0%; readings above 5% mean stack advisories are being buried — a recall
+/// regression worth surfacing loudly. Below it, an isolated borderline advisory in
+/// a large corroborated denominator is noise, not an alarm.
+const HIGH_STAKES_MISS_ALERT_RATE: f32 = 0.05;
 
 /// Compute dep-scoped high-stakes recall from the live corpus + dependency graph.
 /// Bounded scan (most-recent high-stakes items); read-only.
@@ -163,7 +180,13 @@ pub(crate) fn compute_high_stakes_recall(
     let mut misscored = 0usize;
     for (_, title, content, relevance) in &items {
         let (matches, _) = match_dependencies(title, content, &[], &ctx.ace_ctx);
-        if !matches.is_empty() {
+        // Corroborated grounding only — the exact predicate the production
+        // pipeline's Critical gate / evidence pool trust. `!matches.is_empty()`
+        // admitted every >= 0.15-confidence substring coincidence ("sqlite3" in
+        // a sqlite3-ruby release, "anthropic" in company news), which pinned
+        // this metric at a permanent ~87% pseudo-miss-rate on live data and
+        // made any real recall regression invisible inside the noise.
+        if is_strongly_grounded(&matches) {
             dep_matched_total += 1;
             if *relevance < t {
                 misscored += 1;
@@ -179,6 +202,7 @@ pub(crate) fn compute_high_stakes_recall(
         dep_matched_total,
         misscored,
         miss_rate,
+        alert: miss_rate > HIGH_STAKES_MISS_ALERT_RATE,
     })
 }
 

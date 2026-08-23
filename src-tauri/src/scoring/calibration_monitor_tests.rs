@@ -167,6 +167,7 @@ fn high_stakes_recall_is_dep_scoped() {
         "only the buried tokio advisory is a recall miss"
     );
     assert!((hs.miss_rate - 0.5).abs() < 1e-6);
+    assert!(hs.alert, "50% miss-rate is far above the 5% alert floor");
 }
 
 #[test]
@@ -179,4 +180,66 @@ fn high_stakes_recall_clean_when_no_stack_advisories_buried() {
     assert_eq!(hs.dep_matched_total, 1);
     assert_eq!(hs.misscored, 0);
     assert_eq!(hs.miss_rate, 0.0);
+    assert!(!hs.alert, "a clean reading must not alarm");
+}
+
+#[test]
+fn high_stakes_recall_ignores_uncorroborated_subterm_matches() {
+    // The phantom-substring class the 2026-08-23 audit measured at an 87.5%
+    // PERMANENT pseudo-miss-rate (sampled "matches": JSONata, node-opcua,
+    // sqlite3-ruby, Netty — none actual deps): a dep SUBTERM occurring in
+    // prose cleared the old `!matches.is_empty()` bar at 0.2 confidence.
+    // The item below is about JSONata / sqlite3-ruby, NOT the tracked
+    // better-sqlite3 — it must not count as "your stack" at all.
+    let db = test_db();
+    let ctx = ctx_with_dep("better-sqlite3");
+    let phantom = insert_test_item(
+        &db,
+        "cve",
+        "p1",
+        "JSONata 2.0 released",
+        "Also this week: the sqlite3 bindings for Ruby shipped a fix.",
+    );
+    set_score(
+        &db,
+        phantom,
+        0.02,
+        Some("security_advisory"),
+        Some("CVE-2026-3"),
+    );
+
+    let hs = compute_high_stakes_recall(&db, &ctx, 0.4).unwrap();
+    assert_eq!(
+        hs.dep_matched_total, 0,
+        "a subterm prose coincidence is not the developer's stack"
+    );
+    assert_eq!(hs.misscored, 0);
+    assert_eq!(hs.miss_rate, 0.0);
+    assert!(!hs.alert);
+}
+
+#[test]
+fn high_stakes_recall_requires_name_corroboration_not_just_confidence() {
+    // A subterm title hit can clear the 0.40 confidence floor on its own
+    // ("anthropic" for @anthropic-ai/sdk on company news — the 2026-07-02
+    // phantom class). Corroboration is what rejects it: the item never names
+    // the package itself, so it must not enter the recall denominator.
+    let db = test_db();
+    let ctx = ctx_with_dep("@anthropic-ai/sdk");
+    let news = insert_test_item(
+        &db,
+        "hackernews",
+        "n1",
+        "Anthropic announces enterprise expansion",
+        "The AI company grows its enterprise business.",
+    );
+    set_score(&db, news, 0.02, Some("security_advisory"), None);
+
+    let hs = compute_high_stakes_recall(&db, &ctx, 0.4).unwrap();
+    assert_eq!(
+        hs.dep_matched_total, 0,
+        "company news never names @anthropic-ai/sdk — uncorroborated"
+    );
+    assert_eq!(hs.misscored, 0);
+    assert!(!hs.alert);
 }

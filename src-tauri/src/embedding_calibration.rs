@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! Adaptive embedding calibration — auto-computes sigmoid parameters per model.
+//! Embedding calibration — sigmoid parameters per embedding model.
 //!
 //! The PASIFA scoring pipeline stretches raw cosine similarity via a sigmoid:
 //!   calibrated = 1 / (1 + exp((center - raw) * scale))
@@ -8,11 +8,16 @@
 //! Hardcoding center=0.48 (tuned for text-embedding-3-small) causes
 //! systematic mis-scoring when users run nomic-embed-text or other models.
 //!
-//! This module auto-computes optimal parameters from observed data, with
-//! known-good fallbacks for popular models.
+//! Parameters come from a curated known-model table, with a calibrated
+//! default for everything else. A DB-driven "auto-compute from observed
+//! similarities" stage was DELETED 2026-08-23 (scoring audit, item 8e): it
+//! queried `context_score`/`interest_score` columns that have never existed
+//! on `source_items`, so it failed silently on every launch — dead code
+//! masquerading as adaptivity. If real per-model adaptation returns, it must
+//! read raw similarities that are actually persisted.
 
 use std::sync::atomic::{AtomicU32, Ordering};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 static ACTIVE_CENTER: AtomicU32 = AtomicU32::new(0);
 static ACTIVE_SCALE: AtomicU32 = AtomicU32::new(0);
@@ -41,7 +46,6 @@ const KNOWN_MODELS: &[(&str, f32, f32)] = &[
 
 const DEFAULT_CENTER: f32 = 0.43;
 const DEFAULT_SCALE: f32 = 13.0;
-const MIN_SAMPLES_FOR_AUTO: usize = 50;
 
 pub(crate) fn get_sigmoid_center() -> f32 {
     #[cfg(test)]
@@ -104,21 +108,15 @@ pub(crate) fn lookup_known_model(model_name: &str) -> Option<(f32, f32)> {
 /// Initialize calibration for the current embedding model.
 ///
 /// Priority:
-/// 1. Auto-compute from observed similarity distribution (most accurate)
-/// 2. Known-model lookup table
-/// 3. Default (text-embedding-3-small parameters)
-pub(crate) fn initialize_calibration(conn: &rusqlite::Connection, model_name: &str) {
-    if let Some((center, scale)) = auto_compute_from_db(conn) {
-        info!(
-            model = model_name,
-            center = format!("{:.3}", center),
-            scale = format!("{:.1}", scale),
-            "Using auto-computed embedding calibration"
-        );
-        set_active_params(center, scale);
-        return;
-    }
-
+/// 1. Known-model lookup table
+/// 2. Calibrated default — applied EXPLICITLY, so switching away from a known
+///    model (reembed) cannot leave the previous model's parameters active.
+///
+/// `_conn` is retained for call-site stability (`app_setup`, `reembed`): the
+/// DB-driven auto-compute stage that consumed it was deleted 2026-08-23 — it
+/// queried `context_score`/`interest_score` columns that never existed on
+/// `source_items`, so it silently returned nothing on every launch.
+pub(crate) fn initialize_calibration(_conn: &rusqlite::Connection, model_name: &str) {
     if let Some((center, scale)) = lookup_known_model(model_name) {
         info!(
             model = model_name,
@@ -132,106 +130,11 @@ pub(crate) fn initialize_calibration(conn: &rusqlite::Connection, model_name: &s
 
     debug!(
         model = model_name,
-        "No calibration data, using defaults (center={}, scale={})", DEFAULT_CENTER, DEFAULT_SCALE
+        "Unknown embedding model, using calibrated defaults (center={}, scale={})",
+        DEFAULT_CENTER,
+        DEFAULT_SCALE
     );
-}
-
-/// Auto-compute sigmoid parameters from observed cosine similarity distribution.
-///
-/// Samples raw similarities between source items, computes mean and stddev,
-/// then derives: center = mean, scale = 2.5 / stddev.
-fn auto_compute_from_db(conn: &rusqlite::Connection) -> Option<(f32, f32)> {
-    let has_embeddings: bool = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='source_vec'",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .map(|c| c > 0)
-        .unwrap_or(false);
-
-    if !has_embeddings {
-        return None;
-    }
-
-    // Sample raw embedding similarity scores from scored items.
-    // context_score and interest_score in source_items are the raw cosine values
-    // BEFORE calibration — exactly what we need to characterise the distribution.
-    let mut stmt = match conn.prepare(
-        "SELECT context_score FROM source_items \
-         WHERE context_score IS NOT NULL AND context_score > 0.01 \
-         ORDER BY RANDOM() LIMIT 500",
-    ) {
-        Ok(s) => s,
-        Err(e) => {
-            debug!(error = %e, "Could not query for auto-calibration");
-            return None;
-        }
-    };
-
-    let similarities: Vec<f32> = match stmt.query_map([], |row| row.get::<_, f64>(0)) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).map(|v| v as f32).collect(),
-        Err(e) => {
-            debug!(error = %e, "Failed to collect calibration samples");
-            return None;
-        }
-    };
-
-    // Fall back to interest_score if no context scores yet
-    let similarities = if similarities.len() < MIN_SAMPLES_FOR_AUTO {
-        let mut stmt2 = match conn.prepare(
-            "SELECT interest_score FROM source_items \
-             WHERE interest_score IS NOT NULL AND interest_score > 0.01 \
-             ORDER BY RANDOM() LIMIT 500",
-        ) {
-            Ok(s) => s,
-            Err(_) => return None,
-        };
-        let fallback: Vec<f32> = match stmt2.query_map([], |row| row.get::<_, f64>(0)) {
-            Ok(rows) => rows.filter_map(|r| r.ok()).map(|v| v as f32).collect(),
-            Err(_) => return None,
-        };
-        fallback
-    } else {
-        similarities
-    };
-
-    if similarities.len() < MIN_SAMPLES_FOR_AUTO {
-        debug!(
-            samples = similarities.len(),
-            min = MIN_SAMPLES_FOR_AUTO,
-            "Insufficient samples for auto-calibration"
-        );
-        return None;
-    }
-
-    let n = similarities.len() as f32;
-    let mean = similarities.iter().sum::<f32>() / n;
-    let variance = similarities.iter().map(|s| (s - mean).powi(2)).sum::<f32>() / n;
-    let stddev = variance.sqrt();
-
-    if stddev < 0.01 {
-        warn!(
-            mean = format!("{:.3}", mean),
-            stddev = format!("{:.4}", stddev),
-            "Embedding distribution too narrow for calibration"
-        );
-        return None;
-    }
-
-    let center = mean.clamp(0.20, 0.70);
-    let scale = (2.5 / stddev).clamp(5.0, 30.0);
-
-    info!(
-        samples = similarities.len(),
-        mean = format!("{:.3}", mean),
-        stddev = format!("{:.4}", stddev),
-        center = format!("{:.3}", center),
-        scale = format!("{:.1}", scale),
-        "Auto-computed embedding calibration"
-    );
-
-    Some((center, scale))
+    set_active_params(DEFAULT_CENTER, DEFAULT_SCALE);
 }
 
 #[cfg(test)]
@@ -274,6 +177,29 @@ mod tests {
         set_active_params(0.42, 14.0);
         assert!((get_sigmoid_center() - 0.42).abs() < 0.001);
         assert!((get_sigmoid_scale() - 14.0).abs() < 0.1);
+        clear_active_params_for_current_test_thread();
+    }
+
+    #[test]
+    fn initialize_prefers_known_model() {
+        clear_active_params_for_current_test_thread();
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory conn");
+        initialize_calibration(&conn, "nomic-embed-text");
+        assert!((get_sigmoid_center() - 0.42).abs() < 0.001);
+        assert!((get_sigmoid_scale() - 14.0).abs() < 0.1);
+        clear_active_params_for_current_test_thread();
+    }
+
+    #[test]
+    fn initialize_unknown_model_applies_defaults_even_after_known_model() {
+        clear_active_params_for_current_test_thread();
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory conn");
+        // A reembed switch known → unknown must not leave the known model's
+        // parameters active.
+        initialize_calibration(&conn, "nomic-embed-text");
+        initialize_calibration(&conn, "totally-custom-model");
+        assert!((get_sigmoid_center() - DEFAULT_CENTER).abs() < 0.001);
+        assert!((get_sigmoid_scale() - DEFAULT_SCALE).abs() < 0.1);
         clear_active_params_for_current_test_thread();
     }
 

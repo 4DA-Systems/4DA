@@ -684,13 +684,22 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         if let Ok(hs) =
                             crate::scoring::compute_high_stakes_recall(db, &ctx, threshold)
                         {
-                            if hs.misscored > 0 {
+                            if hs.alert {
                                 warn!(
                                     target: "4da::calibration",
                                     misscored = hs.misscored,
                                     dep_matched = hs.dep_matched_total,
                                     miss_rate = hs.miss_rate,
                                     "Security/breaking advisories affecting your stack scored as noise — recall bug"
+                                );
+                            } else if hs.misscored > 0 {
+                                // Below the alert threshold: note it, don't page.
+                                info!(
+                                    target: "4da::calibration",
+                                    misscored = hs.misscored,
+                                    dep_matched = hs.dep_matched_total,
+                                    miss_rate = hs.miss_rate,
+                                    "High-stakes recall: isolated misses below alert threshold"
                                 );
                             } else if hs.dep_matched_total > 0 {
                                 info!(
