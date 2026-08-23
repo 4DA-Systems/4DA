@@ -37,6 +37,8 @@ fn make_item(title: &str, url: Option<&str>, score: f32) -> SourceRelevance {
         applicability: None,
         advisory_id: None,
         primary_topic: None,
+        evidence_score: score,
+        rank_factors: None,
     }
 }
 
@@ -677,4 +679,336 @@ fn extract_domain_strips_www_and_port() {
         extract_domain("https://blog.rust-lang.org/2026/05/post"),
         Some("blog.rust-lang.org".to_string())
     );
+}
+
+// ====================================================================
+// Grounded-first dedup (adversarial audit 2026-08-23, item 8f)
+// ====================================================================
+
+/// The arrayref case: duplicate copies of the same story at 0.892 ungrounded
+/// vs 0.50 dependency-grounded. Grounding is the one axis a content author
+/// can't fabricate — the grounded copy must survive dedup.
+#[test]
+fn test_dedup_url_keeps_grounded_duplicate_over_higher_score() {
+    let mut items = vec![
+        make_item(
+            "arrayref 0.4 release",
+            Some("https://example.com/arrayref"),
+            0.892,
+        ),
+        {
+            let mut g = make_grounded_item("arrayref 0.4 release grounded copy", 0.50);
+            g.url = Some("https://example.com/arrayref".to_string());
+            g
+        },
+    ];
+    dedup_results(&mut items);
+    assert_eq!(items.len(), 1, "URL duplicate should be removed");
+    assert!(
+        items[0]
+            .score_breakdown
+            .as_ref()
+            .is_some_and(|b| b.strongly_grounded),
+        "the grounded duplicate must survive, not the higher-scored ungrounded one"
+    );
+    assert!((items[0].top_score - 0.50).abs() < 0.001);
+}
+
+#[test]
+fn test_dedup_title_keeps_grounded_duplicate_over_higher_score() {
+    let mut items = vec![
+        make_item("Show HN: Tokio 2.0 Released", None, 0.9),
+        make_grounded_item("Tokio 2.0 Released", 0.6),
+    ];
+    dedup_results(&mut items);
+    assert_eq!(items.len(), 1, "Title duplicate should be removed");
+    assert!(
+        items[0]
+            .score_breakdown
+            .as_ref()
+            .is_some_and(|b| b.strongly_grounded),
+        "grounded title-duplicate must survive"
+    );
+}
+
+/// Both duplicates grounded: the tie-break is score, as before.
+#[test]
+fn test_dedup_grounded_duplicates_tie_break_by_score() {
+    let mut items = vec![
+        {
+            let mut g = make_grounded_item("Same story low", 0.55);
+            g.url = Some("https://example.com/story".to_string());
+            g
+        },
+        {
+            let mut g = make_grounded_item("Same story high", 0.80);
+            g.url = Some("https://example.com/story".to_string());
+            g
+        },
+    ];
+    dedup_results(&mut items);
+    assert_eq!(items.len(), 1);
+    assert!(
+        (items[0].top_score - 0.80).abs() < 0.001,
+        "between two grounded duplicates the higher score survives"
+    );
+}
+
+/// Side effect of the canonical order, intended: an excluded duplicate can no
+/// longer claim the URL key and knock out the visible copy.
+#[test]
+fn test_dedup_excluded_duplicate_no_longer_claims_key() {
+    let mut items = vec![
+        {
+            let mut r = make_item("Story excluded copy", Some("https://example.com/s"), 0.9);
+            r.excluded = true;
+            r
+        },
+        make_item("Story visible copy", Some("https://example.com/s"), 0.4),
+    ];
+    dedup_results(&mut items);
+    assert_eq!(items.len(), 1);
+    assert!(
+        !items[0].excluded,
+        "the visible duplicate must survive over the excluded higher-scored one"
+    );
+}
+
+// ====================================================================
+// Platform-domain diversity exemption (adversarial audit 2026-08-23, 8d)
+// ====================================================================
+
+#[test]
+fn platform_domain_matching() {
+    assert!(is_platform_domain("crates.io"));
+    assert!(is_platform_domain("github.com"));
+    assert!(
+        is_platform_domain("gist.github.com"),
+        "subdomains of a platform are the same platform"
+    );
+    assert!(
+        !is_platform_domain("xbox.com"),
+        "suffix match requires the dot boundary — xbox.com is not x.com"
+    );
+    assert!(!is_platform_domain("blog.example.com"));
+    assert!(!is_platform_domain("hachyderm.io"));
+}
+
+/// The churn arithmetic this exemption removes: three of the user's own crate
+/// releases in one batch used to decay the 3rd 0.73 -> 0.297 (-0.43), and the
+/// next run's different cohort put it back — the +/-0.42-0.43 oscillation in
+/// the churn table. Registry items are different crates, not one prolific blog.
+#[test]
+fn domain_diversity_exempts_platform_domains() {
+    let mut results = vec![
+        make_item(
+            "my-crate-a 1.2.0",
+            Some("https://crates.io/crates/my-crate-a"),
+            0.73,
+        ),
+        make_item(
+            "my-crate-b 0.5.1",
+            Some("https://crates.io/crates/my-crate-b"),
+            0.73,
+        ),
+        make_item(
+            "my-crate-c 2.0.0",
+            Some("https://crates.io/crates/my-crate-c"),
+            0.73,
+        ),
+    ];
+    let adjusted = apply_domain_diversity(&mut results);
+    assert_eq!(adjusted, 0, "platform-domain items must not be decayed");
+    for r in &results {
+        assert!(
+            (r.top_score - 0.73).abs() < 0.001,
+            "score must survive intact, got {}",
+            r.top_score
+        );
+    }
+}
+
+#[test]
+fn domain_diversity_platform_subdomain_exempt() {
+    let mut results = vec![
+        make_item("Gist A", Some("https://gist.github.com/u/a"), 0.6),
+        make_item("Gist B", Some("https://gist.github.com/u/b"), 0.6),
+    ];
+    let adjusted = apply_domain_diversity(&mut results);
+    assert_eq!(adjusted, 0);
+    assert!((results[1].top_score - 0.6).abs() < 0.001);
+}
+
+/// The decay's real purpose is untouched: a genuine single-author blog still
+/// decays, with platform items interleaved in the same batch.
+#[test]
+fn domain_diversity_still_decays_blogs_alongside_exempt_platforms() {
+    let mut results = vec![
+        make_item("Blog post A", Some("https://prolific.blog/a"), 0.80),
+        make_item("crate rel", Some("https://crates.io/crates/x"), 0.78),
+        make_item("Blog post B", Some("https://prolific.blog/b"), 0.75),
+        make_item("repo rel", Some("https://github.com/owner/repo"), 0.74),
+        make_item("Blog post C", Some("https://prolific.blog/c"), 0.70),
+    ];
+    let adjusted = apply_domain_diversity(&mut results);
+    assert_eq!(adjusted, 2, "only the 2nd and 3rd blog items decay");
+    assert!((results[0].top_score - 0.80).abs() < 0.001);
+    assert!((results[1].top_score - 0.78).abs() < 0.001);
+    assert!(results[2].top_score < 0.75, "2nd blog item decays");
+    assert!((results[3].top_score - 0.74).abs() < 0.001);
+    assert!(
+        results[4].top_score < results[2].top_score,
+        "3rd blog item decays harder"
+    );
+}
+
+// ====================================================================
+// Serendipity ceiling exclusion + in-place injection (audit 8c)
+// ====================================================================
+
+/// Helper: a scorer-rejected item whose breakdown carries the categorical
+/// score ceiling (the 0.37 = 0.35 commodity cap + 0.02 offset cluster of
+/// ungrounded registry releases). Interest is above the axis floor so ONLY
+/// the ceiling check keeps it out of the serendipity pool.
+fn make_capped_near_miss(title: &str, score: f32) -> SourceRelevance {
+    let mut item = make_item(title, None, score);
+    item.relevant = false;
+    item.interest_score = 0.4;
+    let json = serde_json::json!({
+        "context_score": 0.0,
+        "interest_score": 0.0,
+        "ace_boost": 0.0,
+        "affinity_mult": 1.0,
+        "anti_penalty": 0.0,
+        "confidence_by_signal": {},
+        "score_ceiling": 0.37,
+    });
+    item.score_breakdown = Some(serde_json::from_value(json).expect("breakdown"));
+    item
+}
+
+#[test]
+fn test_serendipity_excludes_score_ceilinged_items() {
+    let mut results: Vec<SourceRelevance> = (0..10)
+        .map(|i| make_item(&format!("Relevant {i}"), None, 0.8))
+        .collect();
+    // Three capped look-alike registry releases at the 0.37 cluster …
+    for i in 0..3 {
+        results.push(make_capped_near_miss(
+            &format!("look-alike crate {i}"),
+            0.37,
+        ));
+    }
+    // … and two genuine uncapped near-misses scoring LOWER.
+    for i in 0..2 {
+        let mut item = make_item(&format!("Genuine miss {i}"), None, 0.30);
+        item.relevant = false;
+        item.interest_score = 0.4;
+        results.push(item);
+    }
+    // Budget: 20% of 10 relevant = 2 slots.
+    let candidates = compute_serendipity_candidates(&results, 20);
+    assert_eq!(candidates.len(), 2);
+    for c in &candidates {
+        assert!(
+            c.score_breakdown
+                .as_ref()
+                .is_none_or(|b| b.score_ceiling.is_none()),
+            "capped item won a serendipity slot: {}",
+            c.title
+        );
+        assert!(c.title.starts_with("Genuine miss"));
+    }
+}
+
+/// The exact failure shape: the capped item outscores the genuine near-miss,
+/// so by sort order it used to win the only slot.
+#[test]
+fn test_serendipity_capped_item_does_not_win_slot_by_sort_order() {
+    let mut results = vec![make_item("Relevant", None, 0.8)];
+    results.push(make_capped_near_miss("capped high", 0.45));
+    let mut genuine = make_item("genuine lower", None, 0.40);
+    genuine.relevant = false;
+    genuine.interest_score = 0.4;
+    results.push(genuine);
+
+    // Budget: 100% of 1 relevant = 1 slot.
+    let candidates = compute_serendipity_candidates(&results, 100);
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(
+        candidates[0].title, "genuine lower",
+        "the ceiling-capped item must not take the slot from the genuine near-miss"
+    );
+}
+
+#[test]
+fn inject_serendipity_replaces_originals_no_duplicate_ids() {
+    let mut results: Vec<SourceRelevance> = (0..10)
+        .map(|i| {
+            let mut r = make_item(&format!("Relevant {i}"), None, 0.8);
+            r.id = i + 1;
+            r
+        })
+        .collect();
+    for i in 0..5u64 {
+        let mut r = make_item(&format!("Miss {i}"), None, 0.45);
+        r.id = 100 + i;
+        r.relevant = false;
+        r.context_score = 0.4;
+        results.push(r);
+    }
+    let before = results.len();
+
+    // Budget: 20% of 10 relevant = 2 picks.
+    let injected = inject_serendipity_candidates(&mut results, 20);
+
+    assert_eq!(injected, 2);
+    assert_eq!(
+        results.len(),
+        before,
+        "swap in place: each pick replaces its scorer-rejected original"
+    );
+    let mut seen_ids = std::collections::HashSet::new();
+    for r in &results {
+        assert!(
+            seen_ids.insert(r.id),
+            "id {} appears twice — the duplicate-persist clone is back",
+            r.id
+        );
+    }
+    assert_eq!(
+        results.iter().filter(|r| r.serendipity).count(),
+        2,
+        "exactly the injected picks are serendipity-marked"
+    );
+    for r in results.iter().filter(|r| r.serendipity) {
+        assert!(r.relevant, "picks surface as relevant");
+    }
+    assert_eq!(
+        results.iter().filter(|r| !r.relevant).count(),
+        3,
+        "the unpicked misses remain, still not relevant"
+    );
+}
+
+#[test]
+fn inject_serendipity_zero_budget_leaves_results_untouched() {
+    let mut results: Vec<SourceRelevance> = (0..4)
+        .map(|i| {
+            let mut r = make_item(&format!("Relevant {i}"), None, 0.8);
+            r.id = i + 1;
+            r
+        })
+        .collect();
+    let mut miss = make_item("Miss", None, 0.45);
+    miss.id = 100;
+    miss.relevant = false;
+    miss.context_score = 0.4;
+    results.push(miss);
+
+    // 8% of 4 relevant = 0 injections (budget-true, rounds down).
+    let injected = inject_serendipity_candidates(&mut results, 8);
+    assert_eq!(injected, 0);
+    assert_eq!(results.len(), 5);
+    assert!(results.iter().all(|r| !r.serendipity));
 }

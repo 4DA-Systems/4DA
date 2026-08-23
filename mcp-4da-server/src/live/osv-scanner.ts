@@ -12,6 +12,7 @@ import type { LiveCache } from "./cache.js";
 import type { RateLimiter } from "./rate-limiter.js";
 import { fetchWithTimeout, fetchJson } from "./http-utils.js";
 import { cvssBaseScore } from "./cvss.js";
+import { compareSemver, maxSemver, parseSemver } from "./semver-utils.js";
 import type {
   ResolvedDependency,
   OsvVulnerability,
@@ -219,7 +220,7 @@ function mapVulnerability(
   dep: ResolvedDependency,
 ): VulnerabilityEntry {
   const { severity, cvssScore } = deriveSeverity(vuln);
-  const fixedVersion = extractFixedVersion(vuln.affected, dep.name, dep.ecosystem);
+  const fixedVersion = extractFixedVersion(vuln.affected, dep.name, dep.ecosystem, dep.version);
 
   return {
     package: dep.name,
@@ -309,20 +310,107 @@ function cvssToSeverity(score: number): "critical" | "high" | "medium" | "low" |
   return "unknown";
 }
 
-function extractFixedVersion(
+/** One vulnerable interval: [introduced, fixed) — `fixed: null` = still open. */
+interface VulnerableInterval {
+  introduced: string;
+  fixed: string | null;
+}
+
+/**
+ * Pick the fix version for the OSV range that actually CONTAINS the installed
+ * version — never another release line's fix. The old code returned the first
+ * range's first `fixed` event, so a multi-range advisory (e.g. undici fixed at
+ * 6.x on the 6 line and 7.x on the 7 line) recommended a DOWNGRADE to 6.x for
+ * an installed 7.x.
+ *
+ * Selection order:
+ * 1. The `fixed` of the interval containing installed (introduced <= installed
+ *    < fixed).
+ * 2. If that interval has no fix (or none contains installed), the smallest
+ *    published fix strictly ABOVE installed across all ranges.
+ * 3. If the installed version is unparseable, the highest published fix (it
+ *    resolves the advisory regardless of release line).
+ * 4. Otherwise null — omitting the recommendation beats emitting a downgrade.
+ *
+ * Hard guard: the returned version is never below the installed version.
+ */
+export function extractFixedVersion(
   affected: OsvVulnerability["affected"] | undefined,
   packageName: string,
   ecosystem: string,
+  installedVersion: string | null,
 ): string | null {
   if (!affected) return null;
+
+  const intervals = collectVulnerableIntervals(affected, packageName, ecosystem);
+  const fixes = intervals
+    .map((i) => i.fixed)
+    .filter((f): f is string => f !== null);
+  if (fixes.length === 0) return null;
+
+  if (installedVersion === null || parseSemver(installedVersion) === null) {
+    // Can't place the installed version on a release line — recommend the
+    // highest published fix so the upgrade resolves the advisory either way.
+    return maxSemver(fixes);
+  }
+
+  // The interval whose release line the installed version sits on. `compareSemver`
+  // returns 0 for unparseable bounds (e.g. introduced "0" = since inception),
+  // which keeps those intervals eligible on the introduced side only.
+  const containing = intervals.find(
+    (i) =>
+      compareSemver(installedVersion, i.introduced) >= 0 &&
+      (i.fixed === null || compareSemver(installedVersion, i.fixed) < 0),
+  );
+  if (
+    containing?.fixed &&
+    compareSemver(containing.fixed, installedVersion) > 0
+  ) {
+    return containing.fixed;
+  }
+
+  // No fix on the installed line (open interval, or installed already past
+  // every containing range): smallest fix strictly above installed, or nothing.
+  const above = fixes.filter((f) => compareSemver(f, installedVersion) > 0);
+  if (above.length === 0) return null;
+  return above.reduce((min, v) => (compareSemver(v, min) < 0 ? v : min), above[0]);
+}
+
+/**
+ * Flatten the matching package's version ranges into [introduced, fixed)
+ * intervals. OSV sorts events within a range; each `introduced` opens an
+ * interval and the next `fixed` closes it. GIT ranges hold commit hashes,
+ * not versions, and are skipped.
+ */
+function collectVulnerableIntervals(
+  affected: NonNullable<OsvVulnerability["affected"]>,
+  packageName: string,
+  ecosystem: string,
+): VulnerableInterval[] {
+  const intervals: VulnerableInterval[] = [];
   for (const a of affected) {
-    if (a.package.name === packageName && a.package.ecosystem === ecosystem) {
-      for (const range of a.ranges || []) {
-        for (const event of range.events || []) {
-          if (event.fixed) return event.fixed;
+    if (a.package.name !== packageName || a.package.ecosystem !== ecosystem) continue;
+    for (const range of a.ranges || []) {
+      if (range.type === "GIT") continue;
+      let open: VulnerableInterval | null = null;
+      for (const event of range.events || []) {
+        if (event.introduced !== undefined) {
+          if (open) intervals.push(open);
+          open = { introduced: event.introduced, fixed: null };
+        } else if (event.fixed !== undefined) {
+          if (open) {
+            open.fixed = event.fixed;
+            intervals.push(open);
+            open = null;
+          } else {
+            // `fixed` with no preceding `introduced` — treat as vulnerable
+            // since inception ("0" = OSV's since-the-beginning sentinel).
+            intervals.push({ introduced: "0", fixed: event.fixed });
+          }
         }
       }
+      if (open) intervals.push(open);
     }
   }
-  return null;
+  return intervals;
 }

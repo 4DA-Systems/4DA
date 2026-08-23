@@ -1689,6 +1689,24 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
 
 fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, String> {
     let mut items = validated_preemption_items()?;
+    // The fast path skips adversarial deliberation (a cache miss must not
+    // wait on an LLM), but the escalation-corroboration gate is
+    // deterministic — apply it here too, so an uncorroborated critical
+    // chain cannot flash in the fast feed and vanish when the deliberated
+    // recompute lands.
+    let mut demoted = 0usize;
+    for item in items.iter_mut() {
+        if crate::adversarial::gate_escalation(item) {
+            demoted += 1;
+        }
+    }
+    if demoted > 0 {
+        info!(
+            target: "4da::preemption",
+            demoted,
+            "fast-path escalation gate demoted uncorroborated critical/high items"
+        );
+    }
     append_upgrade_plan_items(&mut items);
     let mut feed = EvidenceFeed::from_items(items);
     feed.tier_scope = Some(TierScope::Full);

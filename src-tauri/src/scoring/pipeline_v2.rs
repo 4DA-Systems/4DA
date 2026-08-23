@@ -278,6 +278,16 @@ struct RawSignals {
     stack_pain_match: bool,
     topics: Vec<String>,
     specificity_weight: f32,
+    /// True when `semantic_boost` came from real embedding similarity
+    /// (`compute_semantic_ace_boost` returned `Some`); false when it is the
+    /// keyword fallback. Gate evidence only (audit item 8e): the fallback
+    /// re-reads the same keyword surface as the interest axis, so it must
+    /// never count as INDEPENDENT ACE evidence.
+    semantic_is_embedding_derived: bool,
+    /// Raw (un-discounted) keyword score over the user's own primary-stack
+    /// single-word interests (audit item 14). Gate confirmation evidence
+    /// only — never score magnitude.
+    own_stack_keyword_score: f32,
 }
 
 /// Calibrated signal values ready for combination.
@@ -379,7 +389,10 @@ fn security_applicability(
     advisory_ecosystems: &[(String, String)],
 ) -> (Option<String>, bool) {
     let has_strong_dep = matched_deps.iter().any(|d| {
-        if !dependencies::is_grounding_candidate(d) {
+        // Dev-only matches stay "likely_affected" (never `affected` /
+        // critical) — explicit here since `is_grounding_candidate` admits dev
+        // deps for FEED grounding (item 16); the alert lane does not follow.
+        if d.is_dev || !dependencies::is_grounding_candidate(d) {
             return false;
         }
         if advisory_ecosystems.is_empty() {
@@ -430,6 +443,110 @@ fn cve_dep_match_score(deps: &[DepMatch]) -> f32 {
     summed.max(direct_max).min(1.0)
 }
 
+/// CVE/OSV survivor filter — decides which dependency matches remain credible
+/// for a security advisory. Two evidence routes, structured metadata FIRST
+/// (2026-08-23 audit, item 8b):
+///
+/// * **Structured route** (the advisory carries an `Affected:` list): the
+///   metadata is authoritative in BOTH directions. A dep it names (same
+///   ecosystem) survives even when the prose never contains the name in
+///   matchable form — metadata is stronger evidence than prose — and a dep it
+///   does not name is dropped even on a title hit (title/body matches alone
+///   are not enough to make a CVE applicable). Pre-fix this route only ran on
+///   TEXT-filter survivors, so the one mechanism that could confirm a scoped
+///   npm package or Go module never got the chance.
+/// * **Text route** (no structured metadata): the advisory text must name the
+///   package. Both the NORMALIZED form (`babel-traverse`,
+///   `github.com-gin-gonic-gin`) and the RAW manifest form
+///   (`@babel/traverse`, `github.com/gin-gonic/gin`) are tried — advisories
+///   always write the real form, so requiring the normalized form made every
+///   scoped npm package and every Go module path fail the filter.
+fn filter_cve_dep_survivors(
+    deps: &mut Vec<DepMatch>,
+    title_lower: &str,
+    body_lower: &str,
+    advisory_affected: &[(String, String)],
+) {
+    if !advisory_affected.is_empty() {
+        deps.retain(|d| advisory_affects_dependency(advisory_affected, d));
+        return;
+    }
+    deps.retain(|d| {
+        let normalized = d.package_name.to_lowercase();
+        if cve_text_names_package(title_lower, body_lower, &normalized) {
+            return true;
+        }
+        // Raw manifest form (pre-normalization): `@scope/name`, full Go
+        // module path. A raw-form title hit is rule-1 evidence.
+        d.raw_name
+            .as_deref()
+            .map(str::to_lowercase)
+            .filter(|raw| *raw != normalized)
+            .is_some_and(|raw| cve_text_names_package(title_lower, body_lower, &raw))
+    });
+}
+
+/// Text-route survivor rules for ONE candidate name form. A match survives if
+/// ANY of:
+///   1. The full name appears in the TITLE (high evidence — advisories name
+///      the affected software directly).
+///   2. The full name appears in the description AND there is package
+///      language context ("npm X", "cargo X", "crate X", "package X")
+///      within 80 chars, OR
+///   3. The name is compound — contains a hyphen, underscore, or path/scope
+///      separator (`x509-cert`, `serde_derive`, `@babel/traverse`,
+///      `github.com/gin-gonic/gin`). Compound names are inherently specific,
+///      so a body match is strong evidence.
+///
+/// Single word-boundary hits in prose (e.g. the word "hostname" in a
+/// DNS-related advisory) are rejected — they're noise.
+fn cve_text_names_package(title_lower: &str, body_lower: &str, full: &str) -> bool {
+    // Rule 1: title match
+    if has_word_boundary_match(title_lower, full) {
+        return true;
+    }
+
+    if !has_word_boundary_match(body_lower, full) {
+        return false;
+    }
+    // Rule 3: compound name
+    if full.contains(['-', '_', '/']) {
+        return true;
+    }
+
+    // Rule 2: single-word name — require language context nearby
+    const CONTEXT_WORDS: &[&str] = &[
+        "npm",
+        "cargo",
+        "crate",
+        "crates",
+        "pip",
+        "pypi",
+        "gem",
+        "composer",
+        "maven",
+        "nuget",
+        "package",
+        "library",
+        " lib ",
+        "module",
+        "dependency",
+    ];
+    let window: usize = 80;
+    // Find each occurrence and check for context nearby
+    for (idx, _) in body_lower.match_indices(full) {
+        // Use floor/ceil_char_boundary to avoid panicking on multi-byte
+        // UTF-8 content (e.g. accented researcher names in CVE descriptions).
+        let start = body_lower.floor_char_boundary(idx.saturating_sub(window));
+        let end = body_lower.ceil_char_boundary((idx + full.len() + window).min(body_lower.len()));
+        let slice = &body_lower[start..end];
+        if CONTEXT_WORDS.iter().any(|w| slice.contains(w)) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Return whichever content should be used for dependency matching. For CVE
 /// and OSV source items the synthetic metadata block is stripped; all other
 /// sources use the content verbatim.
@@ -472,10 +589,27 @@ fn extract_signals(
     );
     let keyword_score = raw_keyword_score * specificity_weight;
 
-    // Semantic boost with keyword fallback
+    // Own-stack confirmation evidence (audit item 14): raw un-discounted
+    // keyword score over the user's own primary-stack single-word interests.
+    // Feeds ONLY the confirmation gate (with embedding corroboration required
+    // there) — the specificity discount stays on the score itself.
+    let own_stack_keyword_score = keywords::own_stack_single_word_keyword_score(
+        input.title,
+        input.content,
+        &ctx.interests,
+        Some(&spec_profile),
+    );
+
+    // Semantic boost with keyword fallback. Provenance is carried so the
+    // confirmation gate can refuse to double-count the keyword fallback as
+    // independent ACE evidence against a keyword-confirmed interest (audit
+    // item 8e — the degraded/embedding-less state used to confirm MORE
+    // signals than the healthy one, flipping the 1↔2 signal cliff).
+    let embedding_ace =
+        compute_semantic_ace_boost(input.embedding, &ctx.ace_ctx, &ctx.topic_embeddings);
+    let semantic_is_embedding_derived = embedding_ace.is_some();
     let semantic_boost =
-        compute_semantic_ace_boost(input.embedding, &ctx.ace_ctx, &ctx.topic_embeddings)
-            .unwrap_or_else(|| semantic::compute_keyword_ace_boost(&topics, &ctx.ace_ctx));
+        embedding_ace.unwrap_or_else(|| semantic::compute_keyword_ace_boost(&topics, &ctx.ace_ctx));
 
     // Dependency intelligence — for security sources, strip the synthetic
     // `Affected:` metadata block from the content so text matching only
@@ -486,92 +620,21 @@ fn extract_signals(
         let (mut deps, mut score) =
             match_dependencies(input.title, dep_match_text, &topics, &ctx.ace_ctx);
 
-        // For CVE/OSV items, apply a MUCH stricter post-filter. The goal is
-        // to only keep matches where the CVE is plausibly about the user's
-        // actual package — not a generic English word that happens to
-        // coincide with a package name (hostname, proxy, client, cert, ...).
-        //
-        // A match survives if ANY of:
-        //   1. Full normalized package name appears in the TITLE (high
-        //      evidence — advisories name the affected software directly).
-        //   2. Full name appears in the description AND there is package
-        //      language context ("npm X", "cargo X", "crate X", "package X")
-        //      within 80 chars, OR
-        //   3. Name contains a hyphen (compound names like `x509-cert` are
-        //      inherently specific and hyphen matches are strong evidence).
-        //
-        // Single word-boundary hits in prose (e.g. the word "hostname" in
-        // a DNS-related advisory) are rejected — they're noise.
+        // For CVE/OSV items, apply a MUCH stricter post-filter
+        // (`filter_cve_dep_survivors`): structured affected-package metadata
+        // decides when present; otherwise the advisory text must name the
+        // package (normalized OR raw manifest form). Then recompute
+        // dep_match_score from the surviving deps. A confirmed
+        // direct-dependency match is full evidence for a CVE (see
+        // cve_dep_match_score) — do not halve it.
         if matches!(input.source_type, "cve" | "osv") && !deps.is_empty() {
             let title_lower = input.title.to_lowercase();
             let body_lower = dep_match_text.to_lowercase();
-            deps.retain(|d| {
-                let full = d.package_name.to_lowercase();
-
-                // Rule 1: title match
-                if has_word_boundary_match(&title_lower, &full) {
-                    return true;
-                }
-
-                // Rule 3: compound name (contains hyphen)
-                let is_compound = full.contains('-');
-                if !has_word_boundary_match(&body_lower, &full) {
-                    return false;
-                }
-                if is_compound {
-                    return true;
-                }
-
-                // Rule 2: single-word name — require language context nearby
-                const CONTEXT_WORDS: &[&str] = &[
-                    "npm",
-                    "cargo",
-                    "crate",
-                    "crates",
-                    "pip",
-                    "pypi",
-                    "gem",
-                    "composer",
-                    "maven",
-                    "nuget",
-                    "package",
-                    "library",
-                    " lib ",
-                    "module",
-                    "dependency",
-                ];
-                let window: usize = 80;
-                // Find each occurrence and check for context nearby
-                for (idx, _) in body_lower.match_indices(&full) {
-                    // Use floor/ceil_char_boundary to avoid panicking on
-                    // multi-byte UTF-8 content (e.g. accented researcher
-                    // names in CVE descriptions).
-                    let start = body_lower.floor_char_boundary(idx.saturating_sub(window));
-                    let end = body_lower
-                        .ceil_char_boundary((idx + full.len() + window).min(body_lower.len()));
-                    let slice = &body_lower[start..end];
-                    if CONTEXT_WORDS.iter().any(|w| slice.contains(w)) {
-                        return true;
-                    }
-                }
-                false
-            });
-            // Recompute dep_match_score from the surviving deps. A confirmed
-            // direct-dependency match is full evidence for a CVE (see
-            // cve_dep_match_score) — do not halve it.
-            score = cve_dep_match_score(&deps);
-        }
-
-        // Structured advisory cross-reference: when the source adapter gives
-        // us affected packages, require the dependency name and ecosystem to
-        // match that metadata exactly. Title/body matches alone are not enough
-        // to make a CVE applicable.
-        if matches!(input.source_type, "cve" | "osv") && !deps.is_empty() {
+            // The `Affected:` metadata block lives in the RAW content (it is
+            // stripped from `dep_match_text` before text matching).
             let advisory_affected = extract_advisory_ecosystems(input.content);
-            if !advisory_affected.is_empty() {
-                deps.retain(|d| advisory_affects_dependency(&advisory_affected, d));
-                score = cve_dep_match_score(&deps);
-            }
+            filter_cve_dep_survivors(&mut deps, &title_lower, &body_lower, &advisory_affected);
+            score = cve_dep_match_score(&deps);
         }
 
         // Registry release items: a dep-name mention in another package's
@@ -678,6 +741,8 @@ fn extract_signals(
         stack_pain_match,
         topics,
         specificity_weight,
+        semantic_is_embedding_derived,
+        own_stack_keyword_score,
     }
 }
 
@@ -754,12 +819,22 @@ fn compute_relevance(
 
 /// Extract community quality signal from source metadata.
 /// Returns 0.0-1.0 where higher = more community validation.
-/// Fresh items (< 6 hours) get neutral (0.50) -- the community hasn't voted yet.
-/// Items without metadata get neutral (0.50).
+///
+/// Voted sources (SO/HN/reddit) younger than 6 hours get neutral (0.50) —
+/// the community genuinely hasn't voted yet. The federated/microblog UGC arm
+/// gets NO such free-pass window: its engagement signal applies from age 0.
+/// The old blanket <6h early-return created a scheduled cliff — a no-metadata
+/// mastodon/lemmy/bluesky item scored freely (up to 0.9x) for six hours, then
+/// dropped to 0.25 and was clamped to exactly 0.50 by the UGC exit ceiling
+/// forever (live 2026-08-23 audit: yesterday's #1 feed item crashed
+/// 0.923→0.500 on schedule; 148 items pinned at exactly 0.50, 72 more queued).
+/// Capping consistently from ingest removes the cliff; real engagement
+/// metadata (favourites/reblogs, lemmy score, bluesky likes) earns it back.
+/// Items without metadata on voted/unknown sources get neutral (0.50).
 fn extract_community_signal(source_type: &str, tags_json: Option<&str>, age_hours: f64) -> f32 {
-    if age_hours < 6.0 {
-        return 0.50;
-    }
+    // Free-pass window ONLY for sources whose score accrues by community
+    // voting over the first hours — never for the UGC arm below.
+    let too_fresh_to_judge = age_hours < 6.0;
 
     let tags: serde_json::Value = tags_json
         .and_then(|s| serde_json::from_str(s).ok())
@@ -767,6 +842,9 @@ fn extract_community_signal(source_type: &str, tags_json: Option<&str>, age_hour
 
     match source_type {
         "stackoverflow" => {
+            if too_fresh_to_judge {
+                return 0.50;
+            }
             let score = tags.get("score").and_then(|v| v.as_i64()).unwrap_or(0);
             match score {
                 s if s >= 50 => 0.90,
@@ -776,6 +854,9 @@ fn extract_community_signal(source_type: &str, tags_json: Option<&str>, age_hour
             }
         }
         "hackernews" => {
+            if too_fresh_to_judge {
+                return 0.50;
+            }
             let points = tags.get("score").and_then(|v| v.as_i64()).unwrap_or(0);
             match points {
                 p if p >= 100 => 0.90,
@@ -785,6 +866,9 @@ fn extract_community_signal(source_type: &str, tags_json: Option<&str>, age_hour
             }
         }
         "reddit" => {
+            if too_fresh_to_judge {
+                return 0.50;
+            }
             let score = tags.get("score").and_then(|v| v.as_i64()).unwrap_or(0);
             match score {
                 s if s >= 100 => 0.85,
@@ -797,12 +881,12 @@ fn extract_community_signal(source_type: &str, tags_json: Option<&str>, age_hour
         // neutral arm — never penalized — so promotional posts and off-topic
         // social noise rode embedding similarity into the feed unchecked
         // (live 2026-07-23: mastodon promo at 0.91, lemmy "share your
-        // collection" at 0.61, all feed_relevant). No engagement metadata is
-        // ingested for these sources today (live DB: tags empty across the
-        // board), so the no-metadata default is LOW (0.25 — below the 0.30
-        // low_threshold, arming the UGC cap); if engagement tags appear
-        // (mastodon favourites/reblogs, lemmy score, bluesky likes), real
-        // community traction earns the score back.
+        // collection" at 0.61, all feed_relevant). The no-metadata default is
+        // LOW (0.25 — below the 0.30 low_threshold, arming the UGC cap), and
+        // it applies FROM AGE 0 (no <6h free pass — see the doc comment: the
+        // free-pass window produced the 6-hour cliff). Engagement tags
+        // (mastodon favourites/reblogs, lemmy score, bluesky likes) earn the
+        // score back whenever the adapters ingest them.
         "mastodon" | "lemmy" | "bluesky" | "twitter" => {
             let engagement = tags
                 .get("score")
@@ -825,6 +909,54 @@ fn extract_community_signal(source_type: &str, tags_json: Option<&str>, age_hour
             }
         }
         _ => 0.50,
+    }
+}
+
+// ============================================================================
+// Stale published-content discount
+// ============================================================================
+
+/// Average Gregorian month in days — for converting item age to months.
+const DAYS_PER_MONTH: f32 = 30.44;
+
+/// Discount for content whose PUBLISHED date is years old, regardless of when
+/// it was fetched (2026-08-23 audit, item 19: "TypeScript 5.1 Beta is OUT!"
+/// published 2023-04, fetched 2026-08, scored 0.882 into the feed top-25 —
+/// the freshness tiers bottom out at 0.80 for anything older than 30 days).
+///
+/// `published` is `ScoringInput.created_at`, which the analysis paths populate
+/// with `source_items.published_at` when the source provides one (fetch date
+/// only when it doesn't — those items simply age from first-seen).
+///
+/// Ramp (constants in `pipeline.scoring` → `stale_content`): 1.0 at
+/// <= fresh_months (12), linear down to stale_floor (0.55) at >= stale_months
+/// (36). Exemptions:
+/// * security advisories — an old unpatched CVE can still matter;
+/// * strongly dep-grounded items are softened to grounded_floor (0.80), not
+///   killed — a 2-year-old deep-dive on YOUR exact stack can still be gold.
+fn stale_published_multiplier(
+    published: &chrono::DateTime<chrono::Utc>,
+    is_security: bool,
+    strongly_grounded: bool,
+) -> f32 {
+    if is_security {
+        return 1.0;
+    }
+    let age_months = ((chrono::Utc::now() - *published).num_days().max(0) as f32) / DAYS_PER_MONTH;
+    let fresh = scoring_config::STALE_CONTENT_FRESH_MONTHS;
+    let stale = scoring_config::STALE_CONTENT_STALE_MONTHS;
+    let floor = scoring_config::STALE_CONTENT_STALE_FLOOR;
+    let mult = if age_months <= fresh {
+        1.0
+    } else if age_months >= stale {
+        floor
+    } else {
+        1.0 - (1.0 - floor) * (age_months - fresh) / (stale - fresh)
+    };
+    if strongly_grounded {
+        mult.max(scoring_config::STALE_CONTENT_GROUNDED_FLOOR)
+    } else {
+        mult
     }
 }
 
@@ -995,9 +1127,17 @@ fn compute_quality_composite(
     };
 
     // Negative stack prior: Bayesian suppression for technologies user doesn't use.
-    // UNDAMPENED — full suppressive force (0.15 for competing-absent, 0.30 for anti-topics).
-    let negative_stack_prior =
-        crate::stacks::negative_stack::lookup_prior(&ctx.ace_ctx.negative_stack, &raw.topics);
+    // UNDAMPENED — full suppressive force (0.15 for competing-absent, 0.30 for
+    // anti-topics), except migration/comparison content ABOUT the user's own
+    // stack, which softens to 0.85 (audit item 18 — "We migrated our Electron
+    // app to Tauri" is top-value validation content for a Tauri user, not
+    // competitor noise).
+    let negative_stack_prior = crate::stacks::negative_stack::lookup_prior_with_content(
+        &ctx.ace_ctx.negative_stack,
+        &raw.topics,
+        input.title,
+        input.content,
+    );
 
     // NOTE: ecosystem_shift_mult, stack_competing_mult, and content_analysis_mult are
     // still computed above for the return tuple (used by logging/diagnostics) but are
@@ -1100,6 +1240,25 @@ fn compute_quality_composite(
         1.0
     };
 
+    // Stale published-content discount (see `stale_published_multiplier`):
+    // gated on the same `apply_freshness` switch as the freshness tiers —
+    // both are temporal evidence, and the benchmark/simulation harnesses that
+    // neutralize freshness expect temporal terms to stay neutral. Security
+    // exemption covers both the novelty classifier's verdict and the raw
+    // CVE/OSV source types (their zero-embedding retention path can miss the
+    // classifier).
+    let stale_mult = if options.apply_freshness {
+        input.created_at.map_or(1.0, |published| {
+            stale_published_multiplier(
+                published,
+                novelty.is_security || matches!(input.source_type, "cve" | "osv"),
+                grounding.strong,
+            )
+        })
+    } else {
+        1.0
+    };
+
     // ── Structural multipliers (content-intrinsic, multiplicative) ──
     let structural = competing_mult
         * content_quality.multiplier
@@ -1107,6 +1266,7 @@ fn compute_quality_composite(
         * novelty.multiplier
         * sophistication_mult
         * freshness
+        * stale_mult
         * domain_quality_mult
         * negative_stack_prior
         * tier_authority_mult;
@@ -1410,6 +1570,20 @@ fn compute_boosts(
 // Phase 7: Apply gate effect — confidence multiplier + domain gate + ceiling LAST
 // ============================================================================
 
+/// True when the low-signal direct-dependency gate bypass applies: the item's
+/// only confirmed axis is (at most) a STRONG dependency match. Shared by
+/// `apply_gate_effect` and the persisted `confirmation_mult` so the breakdown
+/// always reports the multiplier the item was actually scored with.
+///
+/// `signal_count == 0` is structurally unreachable here in practice — a
+/// dep_match_score at or above the bypass minimum (0.35) clears the 0.20
+/// dependency signal threshold, so the dependency axis itself confirms — but
+/// the `<= 1` guard keeps the two consumers trivially identical.
+fn dep_gate_bypass_applies(signal_count: u8, dep_match_score: f32) -> bool {
+    signal_count <= 1
+        && dep_match_score >= scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_MIN_SCORE
+}
+
 fn apply_gate_effect(
     score: f32,
     signal_count: u8,
@@ -1426,15 +1600,26 @@ fn apply_gate_effect(
     let score_ceiling = (base_ceiling + strength_bonus).min(1.0);
 
     // Direct dependency gate bypass: if a strong dep match got orphaned into
-    // single-axis territory, raise the ceiling so it isn't capped at 0.28.
-    // Without this, serde/tokio/axum release notes score ~48% instead of 75%+
-    // because dependency is the only confirmed axis for package-specific content.
-    let score_ceiling = if signal_count <= 1
-        && dep_match_score >= scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_MIN_SCORE
-    {
+    // single-axis territory, raise the ceiling so it isn't capped at 0.28 —
+    // AND lift the confidence multiplier to the 2-signal tier (1.00). The
+    // ceiling alone was an arithmetic contradiction (2026-08-23 audit, item
+    // 22b): raising the cap to 0.72 while the 1-signal conf_mult (0.45) held
+    // output to ~0.52 meant post-bootstrap single-axis dep releases could
+    // never clear the 0.70 quality-floor relevance escape. A corroborated
+    // direct-dep match at bypass strength is real evidence; the 0.72 ceiling
+    // still holds it out of the top band. Without this, serde/tokio/axum
+    // release notes score ~48% instead of 70%+ because dependency is the only
+    // confirmed axis for package-specific content.
+    let bypass = dep_gate_bypass_applies(signal_count, dep_match_score);
+    let score_ceiling = if bypass {
         score_ceiling.max(scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_CEILING)
     } else {
         score_ceiling
+    };
+    let conf_mult = if bypass {
+        conf_mult.max(scoring_config::CONFIRMATION_GATE[2].0)
+    } else {
+        conf_mult
     };
 
     let gated = score * conf_mult;
@@ -1819,7 +2004,7 @@ pub(crate) fn finalize_scores(results: &mut [crate::SourceRelevance]) {
 /// name a package the item demonstrably corroborates. The escalation gate above
 /// tests `grounding.strong`, which is a DIFFERENT source of truth from
 /// `is_strong_grounding_match`: on the registry-subject route
-/// `compute_grounding_verdict` returns `strong: !info.is_dev` WITHOUT inspecting
+/// `compute_grounding_verdict` returns `strong: true` WITHOUT inspecting
 /// `deps` at all, so `strong` can be true while zero `DepMatch` passes the
 /// filter here. The previous code closed that case with
 /// `.unwrap_or(&matched_deps[0])` — an arbitrary positional pick, in practice an
@@ -1827,9 +2012,9 @@ pub(crate) fn finalize_scores(results: &mut [crate::SourceRelevance]) {
 /// that never mentions Tauri) — and printed it as the affected dependency.
 ///
 /// When nothing passes the filter, OMIT the name rather than guess one. The
-/// alert is still true (the item's registry subject is one of the user's non-dev
-/// dependencies, which is what made grounding strong); only the identification
-/// is unavailable. This mirrors the trigger-chip rule a few lines below, which
+/// alert is still true (the item's registry subject is one of the user's
+/// manifest dependencies, which is what made grounding strong); only the
+/// identification is unavailable. This mirrors the trigger-chip rule a few lines below, which
 /// filters on `corroborated` and emits nothing rather than falling back.
 fn critical_security_action(matched_deps: &[dependencies::DepMatch]) -> String {
     let best_dep = matched_deps
@@ -2031,6 +2216,8 @@ pub(crate) fn score_item(
             applicability: None,
             advisory_id: None,
             primary_topic: topics.first().cloned(),
+            evidence_score: 0.0,
+            rank_factors: None,
         };
     }
 
@@ -2048,44 +2235,69 @@ pub(crate) fn score_item(
     // are retained with a 768-dim zero blob when embedding providers are
     // down), so require a REAL embedding, not merely a non-empty one.
     let has_real_embedding = input.embedding.iter().any(|&v| v != 0.0);
+
+    // ── Degraded-input markers (2026-08-23 audit, item 11) ────────────
+    // A run whose inputs silently collapsed (KNN failure, dep-intel load
+    // failure, absent embedding) still produces scores — and those scores
+    // would overwrite good durable ones. This vector carries the honest
+    // state on the persisted breakdown; persistence POLICY (skip / re-score)
+    // is decided downstream (analysis_status wave), not here.
+    let mut degraded_inputs: Vec<String> = Vec::new();
+    if !has_real_embedding {
+        // Zero/absent embedding: the semantic similarity axes (context KNN,
+        // interest) default rather than measure. Zero blobs exist by design
+        // (OSV/CVE retention while embedding providers are down) — that is
+        // exactly a degraded input, not a healthy one.
+        degraded_inputs.push("embedding_missing".to_string());
+    }
+    if dependencies::dep_intel_load_degraded() {
+        // The ACE context for this run was built while the dependency
+        // intelligence load failed — the dependency axis is empty-by-error,
+        // indistinguishable in the scores from "user has no deps".
+        degraded_inputs.push("dep_intel_load_failed".to_string());
+    }
+
     let matches: Vec<RelevanceMatch> = if ctx.cached_context_count > 0 && has_real_embedding {
         // A DB error here silently zeroes the CONTEXT axis for this item —
         // indistinguishable from "no match" downstream. Degrade gracefully,
         // but never silently (accuracy-first: a muted axis must be visible in
-        // the logs, 2026-08-21 audit).
-        db.find_similar_contexts(input.embedding, 3)
-            .unwrap_or_else(|e| {
+        // the logs AND on the persisted breakdown, 2026-08-21 audit).
+        match db.find_similar_contexts(input.embedding, 3) {
+            Ok(results) => results,
+            Err(e) => {
                 tracing::warn!(
                     target: "4da::scoring",
                     error = %e,
                     item_id = input.id,
                     "find_similar_contexts failed — context axis degraded to zero for this item"
                 );
+                degraded_inputs.push("context_knn_failed".to_string());
                 Vec::new()
-            })
-            .into_iter()
-            // Boilerplate chunks (shebangs, license headers) match everything
-            // and were surfacing as top "Similar to your code" evidence on
-            // unrelated items. The chunker no longer indexes them; this filter
-            // protects users whose existing DBs still contain them — filtering
-            // here also keeps them out of the context score itself, not just
-            // the displayed evidence.
-            .filter(|result| !crate::utils::is_boilerplate_chunk(&result.text))
-            .map(|result| {
-                let similarity = 1.0 / (1.0 + result.distance);
-                let matched_text = if result.text.len() > 100 {
-                    let truncated: String = result.text.chars().take(100).collect();
-                    format!("{truncated}...")
-                } else {
-                    result.text
-                };
-                RelevanceMatch {
-                    source_file: result.source_file,
-                    matched_text,
-                    similarity,
-                }
-            })
-            .collect()
+            }
+        }
+        .into_iter()
+        // Boilerplate chunks (shebangs, license headers) match everything
+        // and were surfacing as top "Similar to your code" evidence on
+        // unrelated items. The chunker no longer indexes them; this filter
+        // protects users whose existing DBs still contain them — filtering
+        // here also keeps them out of the context score itself, not just
+        // the displayed evidence.
+        .filter(|result| !crate::utils::is_boilerplate_chunk(&result.text))
+        .map(|result| {
+            let similarity = 1.0 / (1.0 + result.distance);
+            let matched_text = if result.text.len() > 100 {
+                let truncated: String = result.text.chars().take(100).collect();
+                format!("{truncated}...")
+            } else {
+                result.text
+            };
+            RelevanceMatch {
+                source_file: result.source_file,
+                matched_text,
+                similarity,
+            }
+        })
+        .collect()
     } else {
         vec![]
     };
@@ -2097,7 +2309,7 @@ pub(crate) fn score_item(
     let cal = calibrate_signals(&raw);
 
     // ── Phase 3: Gate count on clean signals ──────────────────────────
-    let confirmation = gate::count_confirmed_signals(
+    let confirmation = gate::count_confirmed_signals_with_evidence(
         cal.context_score,
         cal.interest_score,
         cal.keyword_score,
@@ -2109,6 +2321,10 @@ pub(crate) fn score_item(
         raw.dep_match_score,
         raw.stack_pain_match,
         raw.specificity_weight,
+        gate::GateEvidence {
+            semantic_is_embedding_derived: raw.semantic_is_embedding_derived,
+            own_stack_keyword_score: raw.own_stack_keyword_score,
+        },
     );
     let signal_count = confirmation.count;
     let confirmed_signals = confirmation.confirmed_names();
@@ -2211,7 +2427,16 @@ pub(crate) fn score_item(
 
     // ── Phase 7: Gate effect ──────────────────────────────────────────
     let conf_idx = (signal_count as usize).min(5);
-    let confirmation_mult = scoring_config::CONFIRMATION_GATE[conf_idx].0;
+    // Persist the multiplier the item is ACTUALLY scored with: when the
+    // direct-dep gate bypass fires, `apply_gate_effect` lifts the 1-signal
+    // multiplier to the 2-signal tier — the breakdown must say so.
+    let confirmation_mult = if dep_gate_bypass_applies(signal_count, raw.dep_match_score) {
+        scoring_config::CONFIRMATION_GATE[conf_idx]
+            .0
+            .max(scoring_config::CONFIRMATION_GATE[2].0)
+    } else {
+        scoring_config::CONFIRMATION_GATE[conf_idx].0
+    };
     let gated_score = apply_gate_effect(
         boosted_score,
         signal_count,
@@ -2627,6 +2852,7 @@ pub(crate) fn score_item(
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names,
         strongly_grounded: grounding.strong,
+        degraded_inputs,
         // Categorical ceiling for post-pipeline writers: a capped item
         // (ungrounded registry release, zero-engagement UGC) must never
         // rank above its ceiling no matter what the cross-encoder, dedup
@@ -2742,6 +2968,10 @@ pub(crate) fn score_item(
         applicability,
         advisory_id,
         primary_topic: raw.topics.first().cloned(),
+        // The EVIDENCE snapshot (audit items 12+26): identical to top_score at
+        // construction; batch-relative writers downstream mutate top_score only.
+        evidence_score: combined_score,
+        rank_factors: None,
     }
 }
 
@@ -2847,11 +3077,49 @@ mod tests {
     }
 
     #[test]
-    fn federated_fresh_items_keep_neutral_grace() {
-        // The <6h fresh-item grace applies to federated sources too — the
-        // community hasn't had a chance to vote yet.
-        let signal = extract_community_signal("mastodon", None, 2.0);
-        assert!((signal - 0.50).abs() < f32::EPSILON);
+    fn federated_fresh_items_get_no_neutral_grace() {
+        // Item 2 (2026-08-23 audit): the <6h neutral grace made every young
+        // UGC item score FREELY (cap disarmed) and then crash to the 0.50
+        // ceiling at hour six — a scheduled cliff (yesterday's #1 feed item
+        // fell 0.923→0.500 on schedule; 148 items pinned at exactly 0.50).
+        // The UGC engagement signal now applies from age 0: a no-metadata
+        // federated item is consistently capped from ingest.
+        for source in ["mastodon", "lemmy", "bluesky", "twitter"] {
+            let signal = extract_community_signal(source, None, 1.0);
+            assert!(
+                (signal - 0.25).abs() < f32::EPSILON,
+                "{source} with no engagement at 1h must be 0.25, not the old \
+                 free-pass 0.50 (got {signal})"
+            );
+        }
+    }
+
+    #[test]
+    fn federated_fresh_items_with_engagement_earn_high_signal_immediately() {
+        // Real engagement counts from minute one — no need to wait out a
+        // window that no longer exists.
+        let signal = extract_community_signal("mastodon", Some(r#"{"favourites": 50}"#), 1.0);
+        assert!(
+            (signal - 0.85).abs() < f32::EPSILON,
+            "50 favourites at 1h → 0.85 (got {signal})"
+        );
+    }
+
+    #[test]
+    fn voted_sources_keep_fresh_item_neutral_grace() {
+        // HN/SO/reddit scores accrue by community voting over the first
+        // hours — "the community hasn't voted yet" is REAL there, so the
+        // <6h neutral window stays (even when metadata says 0 points).
+        let no_meta = extract_community_signal("hackernews", None, 1.0);
+        assert!((no_meta - 0.50).abs() < f32::EPSILON);
+        let zero_points = extract_community_signal("hackernews", Some(r#"{"score": 0}"#), 1.0);
+        assert!(
+            (zero_points - 0.50).abs() < f32::EPSILON,
+            "a 1-hour-old HN item with 0 points is unjudged, not unpopular"
+        );
+        // After the window, the same zero-point item IS judged.
+        let judged = extract_community_signal("hackernews", Some(r#"{"score": 0}"#), 8.0);
+        assert!((judged - 0.30).abs() < f32::EPSILON);
     }
 
     // ========================================================================
@@ -2868,6 +3136,7 @@ mod tests {
             version: None,
             ecosystem: "npm".to_string(),
             corroborated,
+            raw_name: None,
         }
     }
 
@@ -3684,6 +3953,7 @@ mod tests {
             version: None,
             ecosystem: ecosystem.to_string(),
             corroborated: true,
+            raw_name: None,
         }
     }
 
@@ -4237,5 +4507,208 @@ mod tests {
             false, // ungrounded_registry_release
         );
         assert_eq!(score, 0.90, "non-commodity types must pass through");
+    }
+
+    // ========================================================================
+    // filter_cve_dep_survivors — scoped/Go raw names + metadata-first (item 8b)
+    // ========================================================================
+
+    fn survivor_dep(normalized: &str, raw: &str, ecosystem: &str) -> DepMatch {
+        DepMatch {
+            package_name: normalized.to_string(),
+            confidence: 0.5,
+            version_delta: dependencies::VersionDelta::Unknown,
+            is_dev: false,
+            is_direct: true,
+            version: None,
+            ecosystem: ecosystem.to_string(),
+            corroborated: true,
+            raw_name: Some(raw.to_string()),
+        }
+    }
+
+    #[test]
+    fn scoped_npm_raw_name_title_hit_survives_and_keeps_credit() {
+        // `DepMatch.package_name` is normalized ("babel-traverse") but the
+        // advisory always writes the real form — pre-fix EVERY scoped npm
+        // package failed the text filter.
+        let mut deps = vec![survivor_dep(
+            "babel-traverse",
+            "@babel/traverse",
+            "javascript",
+        )];
+        filter_cve_dep_survivors(
+            &mut deps,
+            "@babel/traverse prototype pollution vulnerability",
+            "improper access control allows arbitrary code execution during compilation.",
+            &[],
+        );
+        assert_eq!(deps.len(), 1, "raw-form title hit is rule-1 evidence");
+        assert!(
+            cve_dep_match_score(&deps) >= 0.5,
+            "surviving direct dep keeps its credit"
+        );
+    }
+
+    #[test]
+    fn go_module_raw_path_survives_text_filter() {
+        // Go modules normalize to "github.com-gin-gonic-gin" — never present
+        // in prose. The raw module path is.
+        let mut deps = vec![survivor_dep(
+            "github.com-gin-gonic-gin",
+            "github.com/gin-gonic/gin",
+            "go",
+        )];
+        filter_cve_dep_survivors(
+            &mut deps,
+            "cve-2026-1234: directory traversal in github.com/gin-gonic/gin",
+            "versions before 1.9.1 are affected.",
+            &[],
+        );
+        assert_eq!(deps.len(), 1, "Go module path in the title must survive");
+    }
+
+    #[test]
+    fn structured_metadata_confirms_dep_even_when_text_never_matches() {
+        // The structured route runs INDEPENDENT of the text filter: metadata
+        // naming the dep is stronger evidence than prose. Pre-fix it only ran
+        // on text survivors, so it never got the chance.
+        let mut deps = vec![survivor_dep(
+            "babel-traverse",
+            "@babel/traverse",
+            "javascript",
+        )];
+        filter_cve_dep_survivors(
+            &mut deps,
+            "prototype pollution in a popular transpiler internals package",
+            "a crafted file leads to arbitrary code execution during compilation.",
+            &[("@babel/traverse".to_string(), "npm".to_string())],
+        );
+        assert_eq!(
+            deps.len(),
+            1,
+            "affected-package metadata is proof by itself"
+        );
+    }
+
+    #[test]
+    fn structured_metadata_still_rejects_unlisted_deps() {
+        // TN discipline preserved: when metadata exists, a dep it does NOT
+        // name is dropped even on a clean title hit.
+        let mut deps = vec![survivor_dep("serde", "serde", "rust")];
+        filter_cve_dep_survivors(
+            &mut deps,
+            "serde mentioned in passing: vulnerability in left-pad",
+            "the serde crate is unaffected.",
+            &[("left-pad".to_string(), "npm".to_string())],
+        );
+        assert!(
+            deps.is_empty(),
+            "metadata that names only OTHER packages must drop the match"
+        );
+    }
+
+    #[test]
+    fn single_word_prose_hit_without_context_is_still_rejected() {
+        // TN discipline preserved on the text route: the word "hostname" in a
+        // DNS advisory is noise, not the `hostname` package.
+        let mut deps = vec![survivor_dep("hostname", "hostname", "rust")];
+        filter_cve_dep_survivors(
+            &mut deps,
+            "dns resolver cache poisoning issue",
+            "a malicious response can override the hostname resolution result.",
+            &[],
+        );
+        assert!(deps.is_empty(), "bare prose word hits stay rejected");
+    }
+
+    #[test]
+    fn underscore_crate_body_hit_is_compound_evidence() {
+        // `serde_derive` keeps its underscore through normalization; an
+        // underscore name is as package-specific as a hyphenated one.
+        let mut deps = vec![survivor_dep("serde_derive", "serde_derive", "rust")];
+        filter_cve_dep_survivors(
+            &mut deps,
+            "unbounded recursion during deserialization",
+            "serde_derive versions before 1.0.205 allow unbounded recursion.",
+            &[],
+        );
+        assert_eq!(deps.len(), 1, "underscore compound body hit survives");
+    }
+
+    // ========================================================================
+    // stale_published_multiplier — published_at as evidence (item 19)
+    // ========================================================================
+
+    fn published_months_ago(months: f32) -> chrono::DateTime<chrono::Utc> {
+        chrono::Utc::now() - chrono::Duration::days((months * DAYS_PER_MONTH) as i64)
+    }
+
+    #[test]
+    fn stale_multiplier_ramp() {
+        // Fresh content: untouched.
+        let fresh = stale_published_multiplier(&published_months_ago(6.0), false, false);
+        assert!((fresh - 1.0).abs() < 1e-6, "6mo old → 1.0 (got {fresh})");
+        // Past the stale horizon: floored.
+        let old = stale_published_multiplier(&published_months_ago(40.0), false, false);
+        assert!(
+            (old - scoring_config::STALE_CONTENT_STALE_FLOOR).abs() < 1e-6,
+            "40mo old → stale floor (got {old})"
+        );
+        // Mid-ramp: linear between the two (24mo = halfway 12→36 → 0.775).
+        let mid = stale_published_multiplier(&published_months_ago(24.0), false, false);
+        assert!(
+            (mid - 0.775).abs() < 0.02,
+            "24mo old → ~0.775 mid-ramp (got {mid})"
+        );
+        // Monotonic: older never scores higher.
+        assert!(fresh >= mid && mid >= old);
+    }
+
+    #[test]
+    fn stale_multiplier_exempts_security_and_softens_grounded() {
+        // An old unpatched CVE can still matter — no discount.
+        let sec = stale_published_multiplier(&published_months_ago(40.0), true, false);
+        assert!((sec - 1.0).abs() < 1e-6, "security exempt (got {sec})");
+        // A years-old deep-dive on YOUR exact stack: softened, not killed.
+        let grounded = stale_published_multiplier(&published_months_ago(40.0), false, true);
+        assert!(
+            (grounded - scoring_config::STALE_CONTENT_GROUNDED_FLOOR).abs() < 1e-6,
+            "grounded floor (got {grounded})"
+        );
+    }
+
+    // ========================================================================
+    // Dep-gate bypass conf_mult lift (item 22b)
+    // ========================================================================
+
+    #[test]
+    fn dep_gate_bypass_lifts_conf_mult_to_two_signal_tier() {
+        // Pre-fix: ceiling raised to 0.72 but conf_mult stayed 0.45, so a
+        // 1-signal strong dep item topped out at ~0.45x its boosted score —
+        // arithmetically below the 0.70 relevance escape, always. Post-fix
+        // the same input reaches the bypass ceiling itself.
+        let ctx = super::benchmark_scenarios::profile_ctx("rust_developer");
+        let gated = apply_gate_effect(0.90, 1, 1.0, &ctx, 0.0, 0.40);
+        assert!(
+            (gated - scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_CEILING).abs() < 1e-3,
+            "strong 1-signal dep item must reach the 0.72 bypass ceiling (got {gated})"
+        );
+        // The confirmation_gate table this lift mirrors: 1 => (0.45, 0.28),
+        // 2 => (1.00, 0.72). Sanity-pin both so a DSL retune is noticed here.
+        assert_eq!(scoring_config::CONFIRMATION_GATE[1], (0.45, 0.28));
+        assert_eq!(scoring_config::CONFIRMATION_GATE[2], (1.00, 0.72));
+    }
+
+    #[test]
+    fn weak_dep_match_stays_capped_at_one_signal_tier() {
+        // TN guard: below the bypass minimum (0.35) nothing lifts — the
+        // 1-signal tier's 0.28 ceiling holds.
+        let ctx = super::benchmark_scenarios::profile_ctx("rust_developer");
+        let gated = apply_gate_effect(0.90, 1, 1.0, &ctx, 0.0, 0.30);
+        assert!(
+            gated <= scoring_config::CONFIRMATION_GATE[1].1 + 1e-4,
+            "weak dep match must stay capped at 0.28 (got {gated})"
+        );
     }
 }

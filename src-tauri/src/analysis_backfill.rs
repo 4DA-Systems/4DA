@@ -96,6 +96,10 @@ fn score_chunk(
 ) -> (Vec<(i64, f32, Option<String>, Option<String>)>, Vec<i64>) {
     type Scored = (Option<(i64, f32, Option<String>, Option<String>)>, i64);
     let score_one = |item: &crate::db::StoredSourceItem| -> Scored {
+        // Path parity: the analyzer path parses topic tags into source_tags;
+        // this path used to pass &[] — one of the "two score families" the
+        // 2026-08-23 audit traced (§3.5). Same parse, same signal.
+        let parsed_tags = scoring::parse_tags_topics(item.tags.as_deref());
         let r = scoring::score_item(
             &ScoringInput {
                 id: item.id as u64,
@@ -107,7 +111,7 @@ fn score_chunk(
                 // Effective publication date: honest freshness (falls back to first-seen)
                 created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
                 detected_lang: &item.detected_lang,
-                source_tags: &[],
+                source_tags: &parsed_tags,
                 tags_json: item.tags.as_deref(),
                 feed_origin: item.feed_origin.as_deref(),
                 source_id: Some(&item.source_id),
@@ -511,6 +515,10 @@ pub(crate) struct VerdictReconciliation {
     pub confirmed: usize,
     /// Stale, score-derived verdicts still outstanding after this batch.
     pub remaining: i64,
+    /// In-version verdicts demoted because their live score sank below the
+    /// demote line (`threshold − SCORE_SUNK_EPSILON`) — the 2026-08-23 audit's
+    /// "immortal within a version" class. Reason: `score_sunk_in_version`.
+    pub sunk_demoted: usize,
 }
 
 impl VerdictReconciliation {
@@ -573,23 +581,59 @@ const VERDICT_RECONCILE_BUDGET: usize = 500;
 /// would empty it after every bump (94% of live nodes, measured) until this
 /// pass caught up, violating the cold-start doctrine. This pass converging IS
 /// the fix.
+///
+/// The pass also runs the IN-VERSION sunk sweep
+/// (`Database::demote_sunk_verdicts`) on the same cadence: a score-sourced
+/// verdict whose live score churned clearly below the admission line within
+/// the current version is demoted with reason `score_sunk_in_version` — the
+/// version-scoped working set alone left that class immortal (2026-08-23
+/// audit).
 pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<VerdictReconciliation> {
     let db = get_database()?;
 
-    // Cheap indexed probe first: this runs on EVERY analysis cycle forever, so
+    // In-version sunk sweep FIRST, and before the stale early-return below:
+    // once every verdict is version-current the stale probe reads 0 forever,
+    // which is precisely the state in which same-version score churn is the
+    // ONLY remaining decay path (2026-08-23 audit: 106 of 532 feed members
+    // below 0.45 with a score-sourced, current-version verdict). Pure SQL over
+    // the curated set — no scoring context, so the idle path stays ~0. Demote
+    // line is threshold − epsilon: the ~300-item jitter band the audit
+    // measured across 0.37–0.43 must not thrash (see SCORE_SUNK_EPSILON).
+    let sunk = db
+        .demote_sunk_verdicts(
+            scoring::PIPELINE_VERSION,
+            crate::get_relevance_threshold() - crate::db::SCORE_SUNK_EPSILON,
+        )
+        .map_err(|e| format!("Failed to demote sunk in-version verdicts: {e}"))?;
+    if sunk > 0 {
+        info!(
+            target: "4da::verdicts",
+            demoted = sunk,
+            version = scoring::PIPELINE_VERSION,
+            "In-version sweep: curated items whose live score sank below the demote line un-curated"
+        );
+    }
+
+    // Cheap indexed probe next: this runs on EVERY analysis cycle forever, so
     // the idle path must cost ~0 and must not build a scoring context.
     let stale = db
         .count_stale_verdicts(scoring::PIPELINE_VERSION)
         .map_err(|e| format!("Failed to probe stale verdicts: {e}"))?;
     if stale == 0 {
-        return Ok(VerdictReconciliation::default());
+        return Ok(VerdictReconciliation {
+            sunk_demoted: sunk,
+            ..VerdictReconciliation::default()
+        });
     }
 
     let items = db
         .get_stale_verdict_items(scoring::PIPELINE_VERSION, budget)
         .map_err(|e| format!("Failed to load stale-verdict items: {e}"))?;
     if items.is_empty() {
-        return Ok(VerdictReconciliation::default());
+        return Ok(VerdictReconciliation {
+            sunk_demoted: sunk,
+            ..VerdictReconciliation::default()
+        });
     }
 
     let ctx = tokio::time::timeout(
@@ -617,6 +661,8 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
     let mut demote: Vec<i64> = Vec::new();
     let mut confirm: Vec<i64> = Vec::new();
     for item in &items {
+        // Path parity with the analyzer path: parse topic tags (§3.5).
+        let parsed_tags = scoring::parse_tags_topics(item.tags.as_deref());
         let r = scoring::score_item(
             &ScoringInput {
                 id: item.id as u64,
@@ -627,7 +673,7 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
                 embedding: &item.embedding,
                 created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
                 detected_lang: &item.detected_lang,
-                source_tags: &[],
+                source_tags: &parsed_tags,
                 tags_json: item.tags.as_deref(),
                 feed_origin: item.feed_origin.as_deref(),
                 source_id: Some(&item.source_id),
@@ -648,6 +694,7 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
         demoted: demote.len(),
         confirmed: confirm.len(),
         remaining: (stale - items.len() as i64).max(0),
+        sunk_demoted: sunk,
     };
     if let Err(e) = db.reconcile_feed_verdicts(&demote, &confirm, scoring::PIPELINE_VERSION) {
         // Unlike epoch promotion (where failure just means a slower drain), a

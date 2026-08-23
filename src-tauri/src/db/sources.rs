@@ -422,15 +422,20 @@ impl Database {
     /// in the ambiguous zone (0.20–0.55) within the last 3 days.
     pub fn get_enrichment_candidates(&self, limit: usize) -> SqliteResult<Vec<(i64, String)>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
+        // Ranked read (audit items 12+26): the ambiguous-zone FILTER stays on
+        // relevance_score (evidence decides membership); ordering within the
+        // zone uses the shared rank-then-evidence expression.
+        let sql = format!(
             "SELECT id, url FROM source_items
              WHERE (content = '' OR LENGTH(content) < 100)
                AND url IS NOT NULL AND url != ''
                AND created_at > datetime('now', '-3 days')
                AND relevance_score BETWEEN 0.20 AND 0.55
-             ORDER BY relevance_score DESC
+             ORDER BY {ranked}
              LIMIT ?1",
-        )?;
+            ranked = super::RANKED_ORDER_EXPR
+        );
+        let mut stmt = conn.prepare(&sql)?;
 
         let rows = stmt.query_map(params![limit as i64], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
@@ -562,6 +567,26 @@ impl Database {
         conn.execute(
             "UPDATE source_items SET last_seen = datetime('now') WHERE source_type = ?1 AND source_id = ?2",
             params![source_type, source_id],
+        )?;
+        Ok(())
+    }
+
+    /// Refresh the tags column (topics + engagement keys) for an item the
+    /// fetch path re-saw. Engagement counts (favourites/score/likes) grow
+    /// after first ingest, and a re-see while the item is still inside the
+    /// source window is the ONLY moment they can refresh — without this, a
+    /// post fetched minutes after publication carries `0` engagement forever
+    /// and the community-signal escape hatch never opens for it.
+    pub fn update_source_item_tags(
+        &self,
+        source_type: &str,
+        source_id: &str,
+        tags: &str,
+    ) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE source_items SET tags = ?3 WHERE source_type = ?1 AND source_id = ?2",
+            params![source_type, source_id, tags],
         )?;
         Ok(())
     }

@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 107;
+        const TARGET_VERSION: i64 = 110;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -4666,6 +4666,194 @@ impl Database {
                 )?;
             }
 
+            if current_version < 108 {
+                Self::run_versioned_migration(
+                    &conn,
+                    107,
+                    108,
+                    "Phase 108: feed_verdict_reason — why a persisted verdict flipped",
+                    |c| {
+                        // The 2026-08-23 adversarial scoring audit found 106 of
+                        // 532 feed members below 0.45 with a score-sourced
+                        // verdict: within a pipeline version a score-derived
+                        // verdict was immortal (the Phase-101 working set is
+                        // version-scoped only), so items whose live score sank
+                        // as low as 0.17 stayed curated. The in-version demote
+                        // sweep that closes this needs provenance for WHY a
+                        // verdict flipped — 'score_sunk_in_version' vs
+                        // 'stale_version' — or forensics cannot tell a churn
+                        // demotion from an epoch one. Nullable, NO backfill:
+                        // NULL means "no explanation needed" (a normal cycle
+                        // verdict), which is the truth for every existing row.
+                        //
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when absent.
+                        let has_column: bool = c
+                            .prepare("SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name = 'feed_verdict_reason'")?
+                            .query_row([], |r| r.get::<_, i64>(0))
+                            .map(|n| n > 0)?;
+                        if !has_column {
+                            c.execute(
+                                "ALTER TABLE source_items ADD COLUMN feed_verdict_reason TEXT",
+                                [],
+                            )?;
+                        }
+                        // No index: every reader of this column arrives via the
+                        // Phase-101 partial index on the curated set; the reason
+                        // is forensic payload, never a selection key.
+                        info!(
+                            target: "4da::db",
+                            "Phase 108: feed_verdict_reason column added"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 109 {
+                Self::run_versioned_migration(
+                    &conn,
+                    108,
+                    109,
+                    "Phase 109: stability columns — verdict-flip damping + churn top offenders",
+                    |c| {
+                        // The 2026-08-23 adversarial audit measured ~1,350 score
+                        // moves >0.1/day on a 532-item feed with single-run
+                        // swings of ±0.43, and daily membership churn driven by
+                        // unreasoned verdict flips. Two columns close the loop:
+                        //
+                        // - `source_items.feed_verdict_pending` — an unreasoned
+                        //   verdict FLIP (true→false or false→true against a
+                        //   standing verdict) is deferred until a second
+                        //   consecutive run agrees. The marker holds the pending
+                        //   direction + first-seen timestamp ("1@<rfc3339>");
+                        //   NULL means no flip is pending. Reasoned flips
+                        //   (score_sunk_in_version / stale_version / llm_reject
+                        //   / serendipity rotations) never use it.
+                        // - `scoring_churn.top_offenders` — the aggregate row
+                        //   said HOW MUCH moved but never WHICH items; every
+                        //   investigation started with an ad-hoc snapshot diff.
+                        //   JSON array of up to 10 {id, old, new} largest-|Δ|
+                        //   movers per persist batch.
+                        // - `scoring_churn.suppressed_writes` — how many writes
+                        //   the |Δ|<0.05 persist hysteresis kept at the old
+                        //   score (still version-stamped, so the drain
+                        //   converges). NULL on pre-109 rows: not measured.
+                        //
+                        // All nullable, NO backfill/default — NULL means "not
+                        // recorded", which is the truth for every existing row.
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when absent.
+                        let has_column =
+                            |c: &Connection, table: &str, name: &str| -> SqliteResult<bool> {
+                                c.prepare(&format!(
+                                "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"
+                            ))?
+                                .query_row([name], |r| r.get::<_, i64>(0))
+                                .map(|n| n > 0)
+                            };
+                        if !has_column(c, "source_items", "feed_verdict_pending")? {
+                            c.execute(
+                                "ALTER TABLE source_items ADD COLUMN feed_verdict_pending TEXT",
+                                [],
+                            )?;
+                        }
+                        if !has_column(c, "scoring_churn", "top_offenders")? {
+                            c.execute(
+                                "ALTER TABLE scoring_churn ADD COLUMN top_offenders TEXT",
+                                [],
+                            )?;
+                        }
+                        if !has_column(c, "scoring_churn", "suppressed_writes")? {
+                            c.execute(
+                                "ALTER TABLE scoring_churn ADD COLUMN suppressed_writes INTEGER",
+                                [],
+                            )?;
+                        }
+                        // No indexes: feed_verdict_pending is read row-at-a-time
+                        // inside the verdict persist loop (id-keyed); the churn
+                        // columns are forensic payload on an ops table.
+                        info!(
+                            target: "4da::db",
+                            "Phase 109: verdict-flip pending + churn observability columns added"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 110 {
+                Self::run_versioned_migration(
+                    &conn,
+                    109,
+                    110,
+                    "Phase 110: evidence/rank separation — batch-relative rank gets its own columns",
+                    |c| {
+                        // The 2026-08-23 adversarial audit (§3.5, items 12+26)
+                        // traced the ±0.43 durable-score oscillation to the
+                        // analyzer persisting BATCH-RELATIVE factors
+                        // (cross-encoder blend, dedup corroboration boosts,
+                        // diversity decay, per-source percentile, LLM advisor
+                        // delta) into `relevance_score`, while the backfill
+                        // path persisted pure `score_item` output — two score
+                        // families in one column, each write batch-dependent.
+                        //
+                        // From this phase `relevance_score` is the EVIDENCE
+                        // score (pure pipeline output, hysteresis-damped) and
+                        // the batch layer lands in its own columns:
+                        //
+                        // - `source_items.rank_score` — the run's final
+                        //   display/rank value (post batch layer, capped).
+                        // - `source_items.rank_factors` — compact JSON naming
+                        //   the batch factors that ACTUALLY fired, with deltas
+                        //   (e.g. {"ce":-0.12,"percentile":0.03}).
+                        // - `source_items.rank_scored_at` — when this rank was
+                        //   computed (UTC canonical format).
+                        //
+                        // Ranked read surfaces order by
+                        // COALESCE(rank_score, relevance_score) DESC
+                        // (`db::RANKED_ORDER_EXPR`); threshold/membership
+                        // filters and the eviction/prune ASC queries stay on
+                        // `relevance_score` — evidence decides membership and
+                        // retention, rank decides order.
+                        //
+                        // All nullable, NO backfill: NULL rank = "never
+                        // batch-ranked", and the COALESCE falls back to
+                        // evidence — the truth for every existing row.
+                        // No index: the COALESCE ordering expression cannot
+                        // use a single-column index, and every reader already
+                        // filters on indexed/id-keyed predicates first.
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when absent.
+                        let has_column =
+                            |c: &Connection, table: &str, name: &str| -> SqliteResult<bool> {
+                                c.prepare(&format!(
+                                "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"
+                            ))?
+                                .query_row([name], |r| r.get::<_, i64>(0))
+                                .map(|n| n > 0)
+                            };
+                        if !has_column(c, "source_items", "rank_score")? {
+                            c.execute("ALTER TABLE source_items ADD COLUMN rank_score REAL", [])?;
+                        }
+                        if !has_column(c, "source_items", "rank_factors")? {
+                            c.execute("ALTER TABLE source_items ADD COLUMN rank_factors TEXT", [])?;
+                        }
+                        if !has_column(c, "source_items", "rank_scored_at")? {
+                            c.execute(
+                                "ALTER TABLE source_items ADD COLUMN rank_scored_at TEXT",
+                                [],
+                            )?;
+                        }
+                        info!(
+                            target: "4da::db",
+                            "Phase 110: rank_score/rank_factors/rank_scored_at columns added"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -5825,6 +6013,72 @@ mod tests {
             survivors, 2,
             "hydrated OSV advisories and non-OSV items must survive"
         );
+    }
+
+    /// Phase 110 lifts TARGET_VERSION to 110 and adds the evidence/rank
+    /// separation columns (`rank_score`, `rank_factors`, `rank_scored_at`).
+    /// Verify the version, the columns, and idempotency under version-rewind
+    /// (the harness convention: wind back one phase, re-run, nothing breaks).
+    #[test]
+    fn test_phase_110_rank_columns_added_and_idempotent() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 110,
+            "schema_version should be >= 110 after migration; got {version}"
+        );
+        let count_cols = |name: &str| -> i64 {
+            conn.query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name = ?1",
+                [name],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        for col in ["rank_score", "rank_factors", "rank_scored_at"] {
+            assert_eq!(
+                count_cols(col),
+                1,
+                "source_items.{col} must exist exactly once"
+            );
+        }
+
+        // Wind back to 109 and re-run: the has_column guards make the ALTERs
+        // no-ops, existing rank data survives, and the version returns to 110.
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, url, content_hash,
+                                       embedding, rank_score, rank_factors)
+             VALUES ('hackernews', 'p110:test', 'ranked survivor', 'x', 'https://example.com/p110',
+                     'hash-p110', X'00', 0.91, '{\"ce\":0.2}');
+             UPDATE schema_version SET version = 109;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v109");
+
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 110,
+            "re-run must restore the version; got {version}"
+        );
+        let (rank, factors): (Option<f64>, Option<String>) = conn
+            .query_row(
+                "SELECT rank_score, rank_factors FROM source_items WHERE source_id = 'p110:test'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert!(
+            (rank.unwrap() - 0.91).abs() < 1e-6,
+            "rank data survives the re-run"
+        );
+        assert_eq!(factors.as_deref(), Some("{\"ce\":0.2}"));
     }
 
     /// Phase 92 lifts TARGET_VERSION to 92. Verify the test DB reached it.

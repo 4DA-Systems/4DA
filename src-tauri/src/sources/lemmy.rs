@@ -102,17 +102,26 @@ fn post_view_to_item(view: LemmyPostView) -> SourceItem {
     // External link if the post links out; otherwise the canonical federated discussion URL.
     let link = post.url.clone().unwrap_or_else(|| post.ap_id.clone());
     let content = post.body.clone().unwrap_or_default();
+    let mut metadata = serde_json::json!({
+        "community": view.community.as_ref().map(|c| c.name.as_str()),
+        "author": view.creator.as_ref().map(|c| c.name.as_str()),
+        "is_self": post.url.is_none(),
+        "via": "api",
+    });
+    // Engagement contract (scoring::pipeline_v2::extract_community_signal): the
+    // community-signal reader consumes "score". Written ONLY when the API
+    // returned a counts object — "score": 0 then means MEASURED zero engagement
+    // (metadata present), while a missing counts object (or the RSS path, which
+    // has no counts at all) writes no engagement keys (engagement unknown).
+    // Unconditionally defaulting to 0 here would mislabel unknown as measured.
+    if let Some(counts) = view.counts.as_ref() {
+        metadata["score"] = serde_json::json!(counts.score);
+        metadata["comments"] = serde_json::json!(counts.comments);
+    }
     SourceItem::new("lemmy", &post.ap_id, &post.name)
         .with_url(Some(link))
         .with_content(content)
-        .with_metadata(serde_json::json!({
-            "community": view.community.as_ref().map(|c| c.name.as_str()),
-            "author": view.creator.as_ref().map(|c| c.name.as_str()),
-            "score": view.counts.as_ref().map(|c| c.score).unwrap_or(0),
-            "comments": view.counts.as_ref().map(|c| c.comments).unwrap_or(0),
-            "is_self": post.url.is_none(),
-            "via": "api",
-        }))
+        .with_metadata(metadata)
 }
 
 /// Fetch via the instance RSS feed (`/feeds/all.xml`) — the credential-free fallback path.
@@ -330,6 +339,39 @@ mod tests {
         );
         let md = items[1].metadata.as_ref().unwrap();
         assert_eq!(md.get("is_self").and_then(|v| v.as_bool()), Some(true));
+
+        // Engagement flows through: counts {score: 42, comments: 7} land under
+        // the keys the community-signal reader consumes.
+        let md0 = items[0].metadata.as_ref().unwrap();
+        assert_eq!(md0.get("score").and_then(|v| v.as_i64()), Some(42));
+        assert_eq!(md0.get("comments").and_then(|v| v.as_i64()), Some(7));
+
+        // The second post has NO counts object — engagement is UNKNOWN, so no
+        // engagement keys are written (a fabricated 0 would mislabel it as
+        // measured-zero and hide it from the scorer's no-metadata handling).
+        assert!(md.get("score").is_none(), "missing counts must not fake 0");
+        assert!(md.get("comments").is_none());
+    }
+
+    #[test]
+    fn zero_engagement_counts_are_measured_not_missing() {
+        // counts PRESENT with score 0: the community measurably ignored the
+        // post. Keys are written with value 0 — distinguishable from the
+        // missing-counts case above, which writes no keys. The scoring
+        // pipeline's UGC cliff fires on NO metadata; measured zero survives.
+        let json = r#"{
+            "posts": [
+                {
+                    "post": { "name": "Ignored post", "ap_id": "https://programming.dev/post/77" },
+                    "counts": { "score": 0, "comments": 0 }
+                }
+            ]
+        }"#;
+        let list: LemmyPostList = serde_json::from_str(json).unwrap();
+        let items: Vec<_> = list.posts.into_iter().map(post_view_to_item).collect();
+        let md = items[0].metadata.as_ref().unwrap();
+        assert_eq!(md.get("score").and_then(|v| v.as_i64()), Some(0));
+        assert_eq!(md.get("comments").and_then(|v| v.as_i64()), Some(0));
     }
 
     #[test]
@@ -344,6 +386,9 @@ mod tests {
         assert_eq!(items[0].title, "RSS post one");
         assert_eq!(items[0].source_id, "https://programming.dev/post/1");
         assert!(items[1].content.is_empty(), "missing description tolerated");
+        // RSS carries no vote counts — engagement stays UNKNOWN (no keys).
+        let md = items[0].metadata.as_ref().unwrap();
+        assert!(md.get("score").is_none(), "RSS item must not fake a score");
     }
 
     #[test]

@@ -28,6 +28,13 @@ pub(crate) struct Scenario {
     pub item: ScenarioItem,
     pub profile: String,
     pub expected: Expected,
+    /// Score with `apply_freshness: true` (temporal evidence ON — freshness
+    /// tiers + the stale-published discount). Default false: most scenarios
+    /// pin non-temporal semantics and deliberately neutralize time. Scenarios
+    /// that exist to exercise temporal evidence (harness_coverage's stale-
+    /// published pair) opt in. 2026-08-23 audit, item 22a.
+    #[serde(default)]
+    pub apply_freshness: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -36,7 +43,19 @@ pub(crate) struct ScenarioItem {
     pub content: String,
     pub source_type: String,
     pub tags_json: Option<String>,
+    /// Item age, wired into `ScoringInput.created_at` as (now − N hours).
+    /// Every scenario declares one; until the 2026-08-23 audit (item 22a,
+    /// §4.4) both runners silently ignored it and scored everything at age 0 —
+    /// so the UGC community caps, the voted-source <6h grace, and the stale-
+    /// published discount were never exercised by the benchmark at all.
     pub created_hours_ago: Option<u64>,
+    /// The adapter's stable per-item id (`source_items.source_id`). For
+    /// registry sources this names the released SUBJECT package
+    /// (`crate-tokio`, `vitest@3.0.0`) — the only grounding evidence the v18
+    /// registry route trusts. `None` (the default for non-registry scenarios)
+    /// keeps the corroborated-text fallback route, exactly like production's
+    /// ad-hoc scoring paths.
+    pub source_id: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -88,6 +107,30 @@ pub(crate) fn load_scenarios() -> Vec<Scenario> {
     serde_json::from_str(SCENARIOS_JSON).expect("benchmark_scenarios.json must be valid JSON")
 }
 
+/// The scenario's `created_at` timestamp: (now − created_hours_ago). Shared by
+/// every runner (synthetic, calibrated, diagnostic dump) so no harness can
+/// quietly regress to age-0 scoring again (2026-08-23 audit, item 22a).
+pub(crate) fn scenario_created_at(scenario: &Scenario) -> Option<chrono::DateTime<chrono::Utc>> {
+    scenario
+        .item
+        .created_hours_ago
+        .map(|h| chrono::Utc::now() - chrono::Duration::hours(h as i64))
+}
+
+/// Scoring options for one scenario: freshness-neutral by default, temporal
+/// evidence ON for scenarios that opted in via `apply_freshness`.
+pub(crate) fn scenario_options(scenario: &Scenario) -> ScoringOptions {
+    if scenario.apply_freshness {
+        ScoringOptions {
+            apply_freshness: true,
+            apply_signals: false,
+            trend_topics: vec![],
+        }
+    } else {
+        no_freshness()
+    }
+}
+
 // ============================================================================
 // Profile Contexts
 // ============================================================================
@@ -113,20 +156,35 @@ pub(crate) fn profile_ctx(name: &str) -> ScoringContext {
 /// benchmark faithful to production; the scoring algorithm is unchanged.
 fn install_bench_deps(ace: &mut ace_context::ACEContext, deps: &[(&str, &str)]) {
     for (name, ecosystem) in deps {
-        let info = super::dependencies::DepInfo {
-            package_name: (*name).to_string(),
-            version: None,
-            is_dev: false,
-            is_direct: true,
-            search_terms: super::dependencies::extract_search_terms(name),
-            ecosystem: (*ecosystem).to_string(),
-        };
-        for term in &info.search_terms {
-            ace.dependency_names.insert(term.clone());
-        }
-        ace.dependency_names.insert((*name).to_string());
-        ace.dependency_info.insert((*name).to_string(), info);
+        install_bench_dep(ace, name, ecosystem, true);
     }
+}
+
+/// Lockfile-only (transitive) deps for a benchmark profile. Production's
+/// `load_dependency_intelligence` yields these from lockfiles with
+/// `is_direct: false` — a serde user's Cargo.lock always contains
+/// `serde_derive`, which is exactly the family-rule production case
+/// (2026-08-23 audit, item 15).
+fn install_bench_transitive_deps(ace: &mut ace_context::ACEContext, deps: &[(&str, &str)]) {
+    for (name, ecosystem) in deps {
+        install_bench_dep(ace, name, ecosystem, false);
+    }
+}
+
+fn install_bench_dep(ace: &mut ace_context::ACEContext, name: &str, ecosystem: &str, direct: bool) {
+    let info = super::dependencies::DepInfo {
+        package_name: name.to_string(),
+        version: None,
+        is_dev: false,
+        is_direct: direct,
+        search_terms: super::dependencies::extract_search_terms(name),
+        ecosystem: ecosystem.to_string(),
+    };
+    for term in &info.search_terms {
+        ace.dependency_names.insert(term.clone());
+    }
+    ace.dependency_names.insert(name.to_string());
+    ace.dependency_info.insert(name.to_string(), info);
 }
 
 fn rust_developer_ctx() -> ScoringContext {
@@ -170,6 +228,12 @@ fn rust_developer_ctx() -> ScoringContext {
             ("hyper", "rust"),
             ("reqwest", "rust"),
         ],
+    );
+    // Lockfile-only family children of the direct deps above, exactly as a
+    // real serde/tokio user's Cargo.lock carries them (family rule, item 15).
+    install_bench_transitive_deps(
+        &mut ace,
+        &[("serde_derive", "rust"), ("tokio-util", "rust")],
     );
 
     let primary_stack = std::collections::HashSet::from_iter(
@@ -441,7 +505,6 @@ fn minimal_ctx() -> ScoringContext {
 
 pub(crate) fn run_benchmark(db: &crate::db::Database) -> BenchmarkReport {
     let scenarios = load_scenarios();
-    let opts = no_freshness();
     let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let mut total = 0;
@@ -453,6 +516,7 @@ pub(crate) fn run_benchmark(db: &crate::db::Database) -> BenchmarkReport {
     for scenario in &scenarios {
         total += 1;
         let ctx = profile_ctx(&scenario.profile);
+        let opts = scenario_options(scenario);
 
         let tags: Vec<String> = scenario
             .item
@@ -461,6 +525,7 @@ pub(crate) fn run_benchmark(db: &crate::db::Database) -> BenchmarkReport {
             .and_then(|j| serde_json::from_str(j).ok())
             .unwrap_or_default();
         let tags_json_ref = scenario.item.tags_json.as_deref();
+        let created_at = scenario_created_at(scenario);
 
         let input = ScoringInput {
             id: total as u64,
@@ -469,12 +534,12 @@ pub(crate) fn run_benchmark(db: &crate::db::Database) -> BenchmarkReport {
             content: &scenario.item.content,
             source_type: &scenario.item.source_type,
             embedding: &zero_emb,
-            created_at: None,
+            created_at: created_at.as_ref(),
             detected_lang: "en",
             source_tags: &tags,
             tags_json: tags_json_ref,
             feed_origin: None,
-            source_id: None,
+            source_id: scenario.item.source_id.as_deref(),
         };
 
         let result = score_item(&input, &ctx, db, &opts, None);
@@ -626,8 +691,8 @@ fn scenarios_parse_correctly() {
     let scenarios = load_scenarios();
     assert_eq!(
         scenarios.len(),
-        78,
-        "Expected 78 scenarios, got {}",
+        85,
+        "Expected 85 scenarios, got {}",
         scenarios.len()
     );
     for s in &scenarios {
@@ -709,12 +774,12 @@ fn cold_start_scores_have_spread() {
     );
 
     let db = bench_db();
-    let opts = no_freshness();
     let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let mut scores = Vec::new();
     for scenario in &cold_start {
         let ctx = profile_ctx(&scenario.profile);
+        let opts = scenario_options(scenario);
         let tags: Vec<String> = scenario
             .item
             .tags_json
@@ -722,6 +787,7 @@ fn cold_start_scores_have_spread() {
             .and_then(|j| serde_json::from_str(j).ok())
             .unwrap_or_default();
         let tags_json_ref = scenario.item.tags_json.as_deref();
+        let created_at = scenario_created_at(scenario);
 
         let input = ScoringInput {
             id: 1,
@@ -730,12 +796,12 @@ fn cold_start_scores_have_spread() {
             content: &scenario.item.content,
             source_type: &scenario.item.source_type,
             embedding: &zero_emb,
-            created_at: None,
+            created_at: created_at.as_ref(),
             detected_lang: "en",
             source_tags: &tags,
             tags_json: tags_json_ref,
             feed_origin: None,
-            source_id: None,
+            source_id: scenario.item.source_id.as_deref(),
         };
 
         let result = score_item(&input, &ctx, &db, &opts, None);

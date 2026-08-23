@@ -54,8 +54,8 @@ pub(crate) use context::{
     build_scoring_context, invalidate_scoring_context_cache, is_low_quality_topic,
 };
 pub(crate) use dedup::{
-    apply_domain_diversity, apply_source_topic_diversity, compute_serendipity_candidates,
-    dedup_results, fuzzy_dedup_results, normalize_result_url, sort_results, topic_dedup_results,
+    apply_domain_diversity, apply_source_topic_diversity, dedup_results, fuzzy_dedup_results,
+    inject_serendipity_candidates, normalize_result_url, sort_results, topic_dedup_results,
 };
 pub(crate) use dependencies::{
     is_ambiguous_dep_name, is_generic_topic_token, match_dependencies, STRONG_GROUNDING_CONFIDENCE,
@@ -299,7 +299,58 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // observed 2026-08-17). No scoring-logic change in this commit; the bump
 // makes the drain re-stamp the corpus with the merged logic. Unregistered
 // (full drain), same cost basis as v20.
-pub(crate) const PIPELINE_VERSION: i32 = 21;
+// v22 (2026-08-24): the adversarial-audit fix queue (2026-08-23, all phases).
+// Scoring-semantics changes landing under this bump: the 6-hour UGC community
+// cliff defused (engagement-based signal from age 0 for federated sources),
+// deterministic dep-interest synthesis (lottery killed; cap 15→40; direct dev
+// deps at 0.2 weight), the ace_independent tautology fixed (keyword-fallback
+// ACE no longer double-counts against a keyword-confirmed interest),
+// own-stack single-word keyword confirmation (corroborated, confirmation-only),
+// family/sub-crate dependency grounding (serde_derive-class lockfile children
+// of direct deps), scoped-package/Go-module advisory raw-name matching +
+// metadata-first survivor filtering, dev-dep grounding at 0.8 discount,
+// published_at staleness discount, the dep-gate bypass conf_mult lift,
+// negative-stack token-boundary matching + migration carve-out, dedup
+// grounded-first retention, platform-domain diversity exemption, serendipity
+// ceiling exclusion, and the job-seeker hiring classification.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS: this bump changes
+// global gate machinery (confirmation gate evidence, keyword confirmation,
+// community signal, staleness evidence — the epochs module contract's
+// explicit do-not-register class), so no predicate can provably bound its
+// reach. The whole corpus drains — correct, just slower; the differential
+// watermark's stale-backlog gate forces full windows until the drain
+// converges to <=500 pending.
+pub(crate) const PIPELINE_VERSION: i32 = 22;
+
+/// Parse the topic tags carried in the `source_items.tags` column.
+///
+/// Canonical shape (2026-08-23) is an object
+/// `{"topics":["rust","async"], "score":42, ...}` — topics under `"topics"`,
+/// engagement keys at the top level for `extract_community_signal`. Legacy
+/// rows hold a bare JSON array of topic strings. Both shapes parse; anything
+/// else yields no topics. Every `ScoringInput::source_tags` build site must
+/// go through this — a raw `Vec<String>` deserialize silently drops the
+/// topics of every object-shaped row.
+pub(crate) fn parse_tags_topics(tags_json: Option<&str>) -> Vec<String> {
+    let Some(raw) = tags_json else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return Vec::new();
+    };
+    let arr = match &value {
+        serde_json::Value::Array(a) => a,
+        serde_json::Value::Object(o) => match o.get("topics").and_then(|t| t.as_array()) {
+            Some(a) => a,
+            None => return Vec::new(),
+        },
+        _ => return Vec::new(),
+    };
+    arr.iter()
+        .filter_map(|v| v.as_str().map(String::from))
+        .collect()
+}
 
 /// Score a single item through the PASIFA V2 pipeline.
 ///

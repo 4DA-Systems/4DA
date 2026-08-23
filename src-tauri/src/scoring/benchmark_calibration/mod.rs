@@ -26,10 +26,11 @@ use std::collections::HashMap;
 use tracing::info;
 
 #[cfg(feature = "fastembed-local")]
-use super::benchmark::{bench_db, no_freshness};
+use super::benchmark::bench_db;
 #[cfg(feature = "fastembed-local")]
 use super::benchmark_scenarios::{
-    load_scenarios, profile_ctx, BenchmarkFailure, BenchmarkReport, CategoryResult, Scenario,
+    load_scenarios, profile_ctx, scenario_created_at, scenario_options, BenchmarkFailure,
+    BenchmarkReport, CategoryResult, Scenario,
 };
 #[cfg(feature = "fastembed-local")]
 use super::types::ScoringInput;
@@ -146,8 +147,78 @@ pub(crate) fn run_calibration_sync() -> crate::error::Result<CalibrationResult> 
 }
 
 // ============================================================================
+// Model-unavailable guard (2026-08-23 adversarial audit, item 22)
+// ============================================================================
+
+/// True when the environment demands that real-embedding tests actually
+/// measure. Set `FOURDA_REQUIRE_REAL_EMBEDDINGS=1` wherever a green result is
+/// consumed as evidence (CI's real-embedding step sets it after fetching the
+/// model): with it, an unavailable model FAILS instead of skipping, and the
+/// benchmark quality-gate ratchet hard-fails instead of soft-warning.
+#[cfg(feature = "fastembed-local")]
+pub(crate) fn real_embeddings_required() -> bool {
+    std::env::var("FOURDA_REQUIRE_REAL_EMBEDDINGS").is_ok_and(|v| v == "1")
+}
+
+/// The one policy point for "the embedding model failed to load" in a
+/// real-embedding test. Default (required=false): a LOUD skip — the historic
+/// behavior for hermetic/offline runners that legitimately cannot fetch the
+/// model, now impossible to mistake for a measurement. Required=true: panic —
+/// a harness told to measure real embeddings must never green-pass having
+/// measured nothing (the audit's E8 silent-skip hazard: CI could report the
+/// calibration suite green while the model download had failed).
+///
+/// Pure in `required` so the policy is unit-testable without process-global
+/// env mutation (env reads race across parallel tests).
+#[cfg(feature = "fastembed-local")]
+fn skip_or_fail_model_unavailable(test_name: &str, err: &str, required: bool) {
+    if required {
+        panic!(
+            "FOURDA_REQUIRE_REAL_EMBEDDINGS=1 but the embedding model is unavailable — \
+             {test_name} would have SKIPPED and reported a vacuous green pass. \
+             Fetch the model first (node scripts/download-ort.cjs && \
+             node scripts/download-embedding-model.cjs, or `pnpm run bundle:resources`) \
+             or unset the env var to accept a loud skip. Underlying error: {err}"
+        );
+    }
+    eprintln!(
+        "SKIP {test_name}: embedding model unavailable ({err}) — \
+         NO measurement was made; this green result is vacuous. \
+         Set FOURDA_REQUIRE_REAL_EMBEDDINGS=1 to make this a hard failure."
+    );
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
+
+#[cfg(feature = "fastembed-local")]
+#[test]
+fn guard_model_unavailable_skips_loudly_by_default() {
+    // required=false must NOT panic (the hermetic/offline skip survives).
+    skip_or_fail_model_unavailable("guard_selftest", "simulated: model missing", false);
+}
+
+#[cfg(feature = "fastembed-local")]
+#[test]
+fn guard_model_unavailable_panics_when_required() {
+    // required=true must panic — the env-gated path can never green-pass a
+    // skipped measurement. catch_unwind on the pure function keeps this
+    // hermetic (no env mutation, no model needed).
+    let outcome = std::panic::catch_unwind(|| {
+        skip_or_fail_model_unavailable("guard_selftest", "simulated: model missing", true);
+    });
+    let err = outcome.expect_err("required=true must panic on an unavailable model");
+    let msg = err.downcast_ref::<String>().cloned().unwrap_or_default();
+    assert!(
+        msg.contains("FOURDA_REQUIRE_REAL_EMBEDDINGS"),
+        "panic must name the env gate so the CI log is self-explanatory: {msg}"
+    );
+    assert!(
+        msg.contains("guard_selftest"),
+        "panic must name the skipping test: {msg}"
+    );
+}
 
 #[cfg(feature = "fastembed-local")]
 #[test]
@@ -162,13 +233,18 @@ fn embedding_generation_works() {
     // network on first use. A fresh or offline runner can receive a truncated
     // archive — the hermetic Fresh-Clone CI hit exactly this on Linux ("invalid
     // Zip archive: Could not find central directory end", 2026-06-13). Skip
-    // rather than fail the whole suite when the model is unavailable; the
-    // assertions below still run wherever the model loads (dev machines, warm
-    // or cached CI, Windows hosted).
+    // (loudly) rather than fail the whole suite when the model is unavailable;
+    // the assertions below still run wherever the model loads. Under
+    // FOURDA_REQUIRE_REAL_EMBEDDINGS=1 the skip becomes a hard failure — see
+    // skip_or_fail_model_unavailable.
     let raw = match crate::fastembed_sync(&texts) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("SKIP embedding_generation_works: embedding model unavailable ({e})");
+            skip_or_fail_model_unavailable(
+                "embedding_generation_works",
+                &e.to_string(),
+                real_embeddings_required(),
+            );
             return;
         }
     };
@@ -203,13 +279,18 @@ fn embedding_generation_works() {
 #[test]
 fn full_calibration_with_real_embeddings() {
     // Real-embedding calibration needs the fastembed model (network download on
-    // first use). Skip when unavailable instead of failing the hermetic suite —
-    // see embedding_generation_works for the full rationale.
+    // first use). Skip (loudly) when unavailable instead of failing the
+    // hermetic suite — see embedding_generation_works for the full rationale.
+    // Under FOURDA_REQUIRE_REAL_EMBEDDINGS=1 an unavailable model FAILS: this
+    // is the audit's E8 hazard test — a CI run must never pass having measured
+    // nothing.
     let result = match run_calibration_sync() {
         Ok(r) => r,
         Err(e) => {
-            eprintln!(
-                "SKIP full_calibration_with_real_embeddings: embedding model unavailable ({e})"
+            skip_or_fail_model_unavailable(
+                "full_calibration_with_real_embeddings",
+                &e.to_string(),
+                real_embeddings_required(),
             );
             return;
         }
@@ -261,8 +342,21 @@ fn full_calibration_with_real_embeddings() {
         }
     }
     if !result.meets_quality_gate {
+        // Local dev keeps the soft warning (a model transition may be mid-
+        // flight); the env-gated CI path enforces the ratchet — otherwise CI
+        // would still be blind to score-range regressions even while running
+        // real-embedding mode (2026-08-23 audit, items 21/22).
+        if real_embeddings_required() {
+            panic!(
+                "quality-gate RATCHET FAILED in required real-embedding mode: \
+                 overall score-range {:.1}% — see the floors and doctrine in \
+                 benchmark_calibration/quality_gate.rs (fix the regression or \
+                 consciously lower the floor in the same PR)",
+                result.benchmark_report.accuracy * 100.0
+            );
+        }
         eprintln!(
-            "WARN: quality gate soft-fail during model transition: overall={:.1}% (need 80%)",
+            "WARN: quality gate soft-fail during model transition: overall={:.1}%",
             result.benchmark_report.accuracy * 100.0
         );
     }
@@ -272,12 +366,15 @@ fn full_calibration_with_real_embeddings() {
 #[test]
 fn hill_climbing_improves_or_maintains() {
     // Same network-model dependency as the other real-embedding tests — skip
-    // gracefully when the model cannot be loaded rather than failing the suite.
+    // loudly when the model cannot be loaded rather than failing the suite;
+    // FOURDA_REQUIRE_REAL_EMBEDDINGS=1 turns the skip into a hard failure.
     let result = match run_calibration_sync() {
         Ok(r) => r,
         Err(e) => {
-            eprintln!(
-                "SKIP hill_climbing_improves_or_maintains: embedding model unavailable ({e})"
+            skip_or_fail_model_unavailable(
+                "hill_climbing_improves_or_maintains",
+                &e.to_string(),
+                real_embeddings_required(),
             );
             return;
         }
@@ -401,14 +498,67 @@ fn quality_gate_ratchet_rejects_pre_audit_drift_levels() {
         "Ratchet must reject drift the pre-audit thresholds tolerated"
     );
 
-    // And the CURRENT achieved state passes — the ratchet locks, it does not overreach.
-    let mut current = HashMap::new();
-    current.insert(
+    // The 2026-08-22 achieved state (overall 92.3%, TP 16/20, sec 11/12,
+    // cold 11/12) must now ALSO fail — the 2026-08-24 ratchet raise locked in
+    // the Wave 1-2 recall recoveries; sliding back to the pre-fix level is a
+    // regression, not an acceptable state.
+    let mut pre_raise = HashMap::new();
+    pre_raise.insert(
         "true_positive".to_string(),
         CategoryResult {
             total: 20,
             passed: 16,
             accuracy: 0.80,
+        },
+    );
+    pre_raise.insert(
+        "true_negative".to_string(),
+        CategoryResult {
+            total: 20,
+            passed: 20,
+            accuracy: 1.00,
+        },
+    );
+    pre_raise.insert(
+        "security".to_string(),
+        CategoryResult {
+            total: 12,
+            passed: 11,
+            accuracy: 0.9167,
+        },
+    );
+    pre_raise.insert(
+        "cold_start".to_string(),
+        CategoryResult {
+            total: 12,
+            passed: 11,
+            accuracy: 0.9167,
+        },
+    );
+    let pre_raise_report = BenchmarkReport {
+        total: 78,
+        passed: 72,
+        failed: 6,
+        accuracy: 0.923,
+        relevance_accuracy: 0.744,
+        by_category: pre_raise,
+        failures: vec![],
+    };
+    assert!(
+        !quality_gate::model_meets_quality_gate(&pre_raise_report),
+        "The pre-raise (2026-08-22) level must fail the raised ratchet"
+    );
+
+    // And the CURRENT achieved state passes — the ratchet locks, it does not
+    // overreach. Measured 2026-08-24 (62ffbacf + Wave 1-2 + harness wiring):
+    // 82/85, TP 17/20, TN 20/20, sec 12/12, cold 12/12, harness 7/7.
+    let mut current = HashMap::new();
+    current.insert(
+        "true_positive".to_string(),
+        CategoryResult {
+            total: 20,
+            passed: 17,
+            accuracy: 0.85,
         },
     );
     current.insert(
@@ -423,24 +573,32 @@ fn quality_gate_ratchet_rejects_pre_audit_drift_levels() {
         "security".to_string(),
         CategoryResult {
             total: 12,
-            passed: 11,
-            accuracy: 0.9167,
+            passed: 12,
+            accuracy: 1.00,
         },
     );
     current.insert(
         "cold_start".to_string(),
         CategoryResult {
             total: 12,
-            passed: 11,
-            accuracy: 0.9167,
+            passed: 12,
+            accuracy: 1.00,
+        },
+    );
+    current.insert(
+        "harness_coverage".to_string(),
+        CategoryResult {
+            total: 7,
+            passed: 7,
+            accuracy: 1.00,
         },
     );
     let achieved = BenchmarkReport {
-        total: 78,
-        passed: 72,
-        failed: 6,
-        accuracy: 0.923,
-        relevance_accuracy: 0.744,
+        total: 85,
+        passed: 82,
+        failed: 3,
+        accuracy: 0.9647,
+        relevance_accuracy: 0.765,
         by_category: current,
         failures: vec![],
     };
@@ -459,18 +617,19 @@ fn diagnostic_dump_all_scenarios() {
     let scenarios = load_scenarios();
     let (item_emb, topic_emb) = embeddings::generate_all_embeddings(&scenarios).unwrap();
     let db = bench_db();
-    let opts = no_freshness();
     let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     eprintln!("\n=== SCENARIO DIAGNOSTIC DUMP ===");
     eprintln!(
-        "{:<40} {:>6} {:>5} {:>5} {:>5} {:>4} {:<20} {}",
-        "SCENARIO", "SCORE", "REL", "EXPRL", "PASS", "SIGS", "SIGNALS", "RANGE"
+        "{:<40} {:>6} {:>5} {:>5} {:>5} {:>4} {:>5} {:>5} {:>5} {:<20} {}",
+        "SCENARIO", "SCORE", "REL", "EXPRL", "PASS", "SIGS", "INT", "KW", "DEP", "SIGNALS", "RANGE"
     );
-    eprintln!("{}", "-".repeat(120));
+    eprintln!("{}", "-".repeat(132));
 
     for scenario in &scenarios {
         let ctx = profile::build_profile_with_embeddings(&scenario.profile, &topic_emb);
+        let opts = scenario_options(scenario);
+        let created_at = scenario_created_at(scenario);
         let embedding = item_emb
             .get(&scenario.id)
             .map(|v| v.as_slice())
@@ -489,12 +648,12 @@ fn diagnostic_dump_all_scenarios() {
             content: &scenario.item.content,
             source_type: &scenario.item.source_type,
             embedding,
-            created_at: None,
+            created_at: created_at.as_ref(),
             detected_lang: "en",
             source_tags: &tags,
             tags_json: scenario.item.tags_json.as_deref(),
             feed_origin: None,
-            source_id: None,
+            source_id: scenario.item.source_id.as_deref(),
         };
 
         let result = score_item(&input, &ctx, &db, &opts, None);
@@ -517,7 +676,7 @@ fn diagnostic_dump_all_scenarios() {
         };
 
         eprintln!(
-            "{:<40} {:>6.3} {:>5} {:>5} {:>5} {:>4} {:<20} [{:.2}-{:.2}]",
+            "{:<40} {:>6.3} {:>5} {:>5} {:>5} {:>4} {:>5.2} {:>5.2} {:>5.2} {:<20} [{:.2}-{:.2}]",
             format!(
                 "[{}] {}",
                 &scenario.category[..std::cmp::min(3, scenario.category.len())],
@@ -528,6 +687,9 @@ fn diagnostic_dump_all_scenarios() {
             scenario.expected.should_be_relevant,
             pass_str,
             sigs,
+            bd.map(|b| b.interest_score).unwrap_or(0.0),
+            bd.map(|b| b.keyword_score).unwrap_or(0.0),
+            bd.map(|b| b.dep_match_score).unwrap_or(0.0),
             &confirmed[..std::cmp::min(20, confirmed.len())],
             scenario.expected.score_min,
             scenario.expected.score_max

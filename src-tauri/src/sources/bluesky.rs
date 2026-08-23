@@ -133,46 +133,54 @@ impl BlueskySource {
             bsky_resp.posts.unwrap_or_default()
         };
 
-        let items: Vec<SourceItem> = posts
-            .into_iter()
-            .filter_map(|post| {
-                let text = post.record.text.as_deref().unwrap_or("").to_string();
-                if text.is_empty() {
-                    return None;
-                }
-
-                let title = Self::truncate_title(&text, 120);
-                let url = Self::post_url(&post.author.handle, &post.uri);
-
-                let mut metadata = serde_json::json!({
-                    "author_handle": post.author.handle,
-                    "source_name": "bluesky",
-                });
-
-                if let Some(likes) = post.like_count {
-                    metadata["like_count"] = serde_json::json!(likes);
-                }
-                if let Some(replies) = post.reply_count {
-                    metadata["reply_count"] = serde_json::json!(replies);
-                }
-                if let Some(reposts) = post.repost_count {
-                    metadata["repost_count"] = serde_json::json!(reposts);
-                }
-                if let Some(created) = &post.record.created_at {
-                    metadata["created_at"] = serde_json::json!(created);
-                }
-
-                // Use the AT URI as source_id (globally unique)
-                Some(
-                    SourceItem::new("bluesky", &post.uri, &title)
-                        .with_url(Some(url))
-                        .with_content(text)
-                        .with_metadata(metadata),
-                )
-            })
-            .collect();
+        let items: Vec<SourceItem> = posts.into_iter().filter_map(Self::post_to_item).collect();
 
         Ok(items)
+    }
+
+    /// Convert one API post into a `SourceItem`. Returns `None` for text-less posts.
+    fn post_to_item(post: BskyPost) -> Option<SourceItem> {
+        let text = post.record.text.as_deref().unwrap_or("").to_string();
+        if text.is_empty() {
+            return None;
+        }
+
+        let title = Self::truncate_title(&text, 120);
+        let url = Self::post_url(&post.author.handle, &post.uri);
+
+        let mut metadata = serde_json::json!({
+            "author_handle": post.author.handle,
+            "source_name": "bluesky",
+        });
+
+        // Engagement contract (scoring::pipeline_v2::extract_community_signal):
+        // the community-signal reader consumes "likes" for bluesky, so the API's
+        // likeCount is written under that key (the legacy "like_count" spelling
+        // is kept alongside for existing readers). Written ONLY when the API
+        // returned a count — "likes": 0 means MEASURED zero engagement
+        // (metadata present), while an absent likeCount writes no key at all
+        // (engagement unknown). The two must stay distinguishable.
+        if let Some(likes) = post.like_count {
+            metadata["likes"] = serde_json::json!(likes);
+            metadata["like_count"] = serde_json::json!(likes);
+        }
+        if let Some(replies) = post.reply_count {
+            metadata["reply_count"] = serde_json::json!(replies);
+        }
+        if let Some(reposts) = post.repost_count {
+            metadata["repost_count"] = serde_json::json!(reposts);
+        }
+        if let Some(created) = &post.record.created_at {
+            metadata["created_at"] = serde_json::json!(created);
+        }
+
+        // Use the AT URI as source_id (globally unique)
+        Some(
+            SourceItem::new("bluesky", &post.uri, &title)
+                .with_url(Some(url))
+                .with_content(text)
+                .with_metadata(metadata),
+        )
     }
 }
 
@@ -320,5 +328,58 @@ mod tests {
         assert_eq!(posts[0].like_count, Some(42));
         assert_eq!(posts[0].reply_count, Some(5));
         assert_eq!(posts[0].repost_count, Some(12));
+    }
+
+    /// Test fixture: a post with controllable engagement counts.
+    fn bsky_post(text: &str, likes: Option<u32>) -> BskyPost {
+        BskyPost {
+            uri: "at://did:plc:abc/app.bsky.feed.post/xyz".to_string(),
+            author: BskyAuthor {
+                handle: "dev.bsky.social".to_string(),
+            },
+            record: BskyRecord {
+                text: Some(text.to_string()),
+                created_at: None,
+            },
+            like_count: likes,
+            reply_count: None,
+            repost_count: None,
+        }
+    }
+
+    #[test]
+    fn test_bluesky_engagement_flows_to_metadata() {
+        // likeCount lands under "likes" — the key the community-signal reader
+        // consumes — with the legacy "like_count" spelling kept alongside.
+        let item = BlueskySource::post_to_item(bsky_post("Shipped a new Rust crate!", Some(42)))
+            .expect("text post converts");
+        let md = item.metadata.as_ref().unwrap();
+        assert_eq!(md.get("likes").and_then(|v| v.as_i64()), Some(42));
+        assert_eq!(md.get("like_count").and_then(|v| v.as_i64()), Some(42));
+    }
+
+    #[test]
+    fn test_bluesky_zero_engagement_distinct_from_missing() {
+        // likeCount: 0 is MEASURED zero engagement — the key is present with
+        // value 0. The scoring pipeline's UGC cliff fires on NO metadata, so
+        // measured zero must stay distinguishable from an absent count.
+        let zero = BlueskySource::post_to_item(bsky_post("A post with zero likes yet", Some(0)))
+            .expect("text post converts");
+        let md = zero.metadata.as_ref().unwrap();
+        assert_eq!(md.get("likes").and_then(|v| v.as_i64()), Some(0));
+
+        // No likeCount at all → engagement UNKNOWN → no engagement keys.
+        let unknown = BlueskySource::post_to_item(bsky_post("A post with no counts", None))
+            .expect("text post converts");
+        let md = unknown.metadata.as_ref().unwrap();
+        assert!(md.get("likes").is_none(), "missing count must not fake 0");
+        assert!(md.get("like_count").is_none());
+    }
+
+    #[test]
+    fn test_bluesky_textless_post_dropped() {
+        let mut post = bsky_post("", Some(9));
+        post.record.text = None;
+        assert!(BlueskySource::post_to_item(post).is_none());
     }
 }

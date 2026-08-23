@@ -301,7 +301,17 @@ fn status_to_item(status: MastodonStatus) -> Option<SourceItem> {
             .with_metadata(serde_json::json!({
                 "author": author,
                 "tags": tags,
+                // Engagement contract (scoring::pipeline_v2::extract_community_signal):
+                // the community-signal reader consumes "score" first, then the raw
+                // "favourites" + "reblogs" pair — all three are written so the batch
+                // sort (item_score) keeps working and the raw counts survive for the
+                // scorer. Written unconditionally on the API path: a 0 here is
+                // MEASURED zero engagement (metadata present), meaningfully different
+                // from the RSS path, which has no counts and writes no engagement
+                // keys at all (engagement unknown).
                 "score": status.favourites_count + status.reblogs_count,
+                "favourites": status.favourites_count,
+                "reblogs": status.reblogs_count,
                 "comments": status.replies_count,
                 "is_self": true,
                 "via": "api",
@@ -818,6 +828,32 @@ mod tests {
         assert_eq!(items[0].title, "A neat Rust crate just dropped");
         let md = items[0].metadata.as_ref().unwrap();
         assert_eq!(md.get("score").and_then(|v| v.as_i64()), Some(15)); // favs + reblogs
+
+        // Raw engagement counts survive alongside the combined score — the
+        // community-signal reader consumes "score" / "favourites"+"reblogs".
+        assert_eq!(md.get("favourites").and_then(|v| v.as_i64()), Some(12));
+        assert_eq!(md.get("reblogs").and_then(|v| v.as_i64()), Some(3));
+        assert_eq!(md.get("comments").and_then(|v| v.as_i64()), Some(2));
+    }
+
+    #[test]
+    fn api_zero_engagement_is_measured_not_missing() {
+        // A post the community measurably ignored still carries engagement
+        // metadata (keys present, value 0). The scoring pipeline's UGC cliff
+        // fires on NO metadata — measured zero must stay distinguishable.
+        let json = r#"[
+            {
+                "uri": "https://hachyderm.io/users/z/statuses/3",
+                "content": "<p>A post nobody has boosted yet</p>",
+                "favourites_count": 0, "reblogs_count": 0, "replies_count": 0
+            }
+        ]"#;
+        let statuses: Vec<MastodonStatus> = serde_json::from_str(json).unwrap();
+        let items: Vec<_> = statuses.into_iter().filter_map(status_to_item).collect();
+        let md = items[0].metadata.as_ref().unwrap();
+        assert_eq!(md.get("score").and_then(|v| v.as_i64()), Some(0));
+        assert_eq!(md.get("favourites").and_then(|v| v.as_i64()), Some(0));
+        assert_eq!(md.get("reblogs").and_then(|v| v.as_i64()), Some(0));
     }
 
     #[test]
@@ -830,6 +866,12 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].title, "A tagged post");
         assert_eq!(items[0].source_id, "https://hachyderm.io/@x/1");
+        // RSS carries no engagement counts — no engagement keys are written
+        // (engagement UNKNOWN), as opposed to the API path's measured zero.
+        let md = items[0].metadata.as_ref().unwrap();
+        for key in ["score", "favourites", "reblogs", "likes", "upvotes"] {
+            assert!(md.get(key).is_none(), "RSS item must not fake `{key}`");
+        }
     }
 
     #[test]

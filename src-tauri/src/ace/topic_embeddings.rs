@@ -39,16 +39,41 @@ pub fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
         .collect()
 }
 
+/// Norm floor below which an "embedding" is a failed-embed placeholder, not a
+/// real vector. `embed_texts` returns all-zero vectors when every provider is
+/// down (`zero_vector_fallback`); persisting or serving one poisons every
+/// similarity average it enters (cosine against it is always 0) and never
+/// heals — the stored row satisfies the cache forever, so the topic is never
+/// re-embedded once the provider recovers.
+const MIN_TOPIC_EMBEDDING_NORM: f32 = 1e-6;
+
+/// True when `embedding` carries no usable signal (empty, all-zero, or
+/// near-zero norm) and must be treated as a failed embed.
+fn is_unusable_embedding(embedding: &[f32]) -> bool {
+    embedding.is_empty() || crate::vector_norm(embedding) < MIN_TOPIC_EMBEDDING_NORM
+}
+
 // ============================================================================
 // Module-level Functions
 // ============================================================================
 
-/// Store a topic embedding in the database and vec0 index
+/// Store a topic embedding in the database and vec0 index.
+///
+/// Refuses zero/near-zero-norm vectors (provider-outage placeholders): a
+/// failed embed must stay a MISS so the topic is retried next time, not a
+/// permanently cached poison row.
 pub fn store_topic_embedding(
     conn: &Arc<Mutex<Connection>>,
     topic: &str,
     embedding: &[f32],
 ) -> Result<()> {
+    if is_unusable_embedding(embedding) {
+        return Err(format!(
+            "refusing to persist zero-norm topic embedding for '{topic}' — \
+             treating as failed embed (will retry when a provider is available)"
+        )
+        .into());
+    }
     let conn = conn.lock();
     let embedding_blob = embedding_to_blob(embedding);
 
@@ -127,7 +152,7 @@ pub fn sync_topic_vec(conn: &Arc<Mutex<Connection>>, limit: usize) -> Result<usi
     let mut inserted = 0usize;
     for (id, blob) in rows {
         let embedding = blob_to_embedding(&blob);
-        if embedding.len() != expected_dim || embedding.iter().all(|&v| v == 0.0) {
+        if embedding.len() != expected_dim || is_unusable_embedding(&embedding) {
             continue; // wrong-dimension or zero-vector blob - never index these
         }
         if conn
@@ -151,7 +176,12 @@ pub fn sync_topic_vec(conn: &Arc<Mutex<Connection>>, limit: usize) -> Result<usi
     Ok(inserted)
 }
 
-/// Load all topic embeddings from the database
+/// Load all topic embeddings from the database.
+///
+/// Skips zero/near-zero-norm rows (failed-embed placeholders persisted before
+/// `store_topic_embedding` refused them): leaving such a topic OUT of the
+/// returned map is what heals it — the semantic cache treats it as missing and
+/// re-embeds it, and the fresh vector overwrites the poisoned row.
 pub fn load_topic_embeddings(
     conn: &Arc<Mutex<Connection>>,
 ) -> Result<std::collections::HashMap<String, Vec<f32>>> {
@@ -173,7 +203,7 @@ pub fn load_topic_embeddings(
     let expected_dim = crate::EMBEDDING_DIMS;
     for (topic, blob) in rows.flatten() {
         let embedding = blob_to_embedding(&blob);
-        if embedding.len() == expected_dim {
+        if embedding.len() == expected_dim && !is_unusable_embedding(&embedding) {
             result.insert(topic, embedding);
         }
     }
@@ -356,6 +386,69 @@ mod tests {
         for id in ids {
             assert!(topic_vec_has_row(&ace, id));
         }
+    }
+
+    // ========================================================================
+    // Zero-vector poisoning guards (2026-08-23 audit, item 8a)
+    // ========================================================================
+
+    #[test]
+    fn test_store_topic_embedding_refuses_zero_vector() {
+        let ace = super::super::create_test_ace();
+        let id = insert_topic(&ace, "outagetopic", None);
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+
+        let res = store_topic_embedding(ace.get_conn(), "outagetopic", &zero);
+        assert!(
+            res.is_err(),
+            "a zero vector is a failed embed, not an embedding — must be refused"
+        );
+
+        // Neither the source table nor the KNN index may hold the poison.
+        {
+            let conn = ace.get_conn().lock();
+            let blob: Option<Vec<u8>> = conn
+                .query_row(
+                    "SELECT embedding FROM active_topics WHERE id = ?1",
+                    rusqlite::params![id],
+                    |r| r.get(0),
+                )
+                .expect("topic row exists");
+            assert!(blob.is_none(), "zero embedding must not be persisted");
+        }
+        assert!(
+            !topic_vec_has_row(&ace, id),
+            "zero vector must not be indexed"
+        );
+
+        // A real embedding for the same topic still stores fine (the retry path).
+        let real: Vec<f32> = (0..crate::EMBEDDING_DIMS)
+            .map(|i| (i as f32) * 0.001 + 0.2)
+            .collect();
+        store_topic_embedding(ace.get_conn(), "outagetopic", &real).expect("real embedding stores");
+        assert!(
+            topic_vec_has_row(&ace, id),
+            "real embedding reaches the index"
+        );
+    }
+
+    #[test]
+    fn test_load_topic_embeddings_skips_zero_vectors() {
+        let ace = super::super::create_test_ace();
+        let real: Vec<f32> = (0..crate::EMBEDDING_DIMS)
+            .map(|i| (i as f32) * 0.001 + 0.1)
+            .collect();
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        insert_topic(&ace, "realtopic", Some(&real));
+        // A poisoned row persisted before the store guard existed.
+        insert_topic(&ace, "zerotopic", Some(&zero));
+
+        let loaded = load_topic_embeddings(ace.get_conn()).expect("load succeeds");
+        assert!(loaded.contains_key("realtopic"), "real embedding loads");
+        assert!(
+            !loaded.contains_key("zerotopic"),
+            "poisoned row must not re-enter the cache — its absence triggers re-embed"
+        );
     }
 
     #[test]

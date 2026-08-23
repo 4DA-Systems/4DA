@@ -37,6 +37,59 @@ impl SignalConfirmation {
     }
 }
 
+/// Additional evidence provenance the caller can supply so the gate can tell
+/// apart signals that LOOK independent but share one underlying source.
+///
+/// Introduced 2026-08-23 (adversarial audit items 8e + 14). The legacy
+/// `count_confirmed_signals` wrapper passes `GateEvidence::default()`, which
+/// reproduces the pre-provenance behavior bit-for-bit — the pipeline call
+/// site opts into real provenance by calling
+/// `count_confirmed_signals_with_evidence` directly.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GateEvidence {
+    /// True when `semantic_boost` came from real embedding similarity
+    /// (`compute_semantic_ace_boost` returned `Some`), false when it is the
+    /// keyword fallback (`compute_keyword_ace_boost`). The fallback re-reads
+    /// the SAME keyword surface as the interest axis, so it must never count
+    /// as independent ACE evidence against a keyword-confirmed interest.
+    pub semantic_is_embedding_derived: bool,
+    /// Raw (un-discounted) keyword score over ONLY the user's own
+    /// primary-stack single-word interests
+    /// (`keywords::own_stack_single_word_keyword_score`). 0.0 = no such
+    /// interest matched. Lets the gate confirm the interest axis for the
+    /// user's own stack without inflating the score-side keyword magnitude.
+    pub own_stack_keyword_score: f32,
+}
+
+impl Default for GateEvidence {
+    fn default() -> Self {
+        Self {
+            // Legacy-compatible: before provenance existed, every
+            // above-threshold semantic boost was treated as independent.
+            semantic_is_embedding_derived: true,
+            own_stack_keyword_score: 0.0,
+        }
+    }
+}
+
+/// Embedding corroboration required before an own-stack single-word keyword
+/// hit may confirm the interest axis. Mirrors the broad-interest
+/// corroboration bar hardcoded in the broad branch below: keyword evidence
+/// alone (one word colliding with a title — "Rust Belt cities…") can never
+/// confirm; the item embedding must at least weakly agree with the interest.
+///
+/// 0.35 is MEASURED, not arbitrary — do not lower it without re-running the
+/// experiment (2026-08-24, real-embedding benchmark): at 0.28 the genuine
+/// systems-content scenario tp_systems_programming recovers (corroboration
+/// exactly 0.28), but edge_mixed_signal ("How Rust Belt cities are
+/// reinventing themselves through urban farming") lands at 0.445 — a
+/// non-technical region article crossing the 0.40 relevance line for a Rust
+/// developer. Arctic-M cannot separate those two classes in [0.28, 0.35);
+/// closing that gap is representation quality (audit item 27), not threshold
+/// tuning.
+// TODO(orchestrator): candidate for promotion to pipeline.scoring as a tunable.
+const OWN_STACK_KEYWORD_CORROBORATION: f32 = 0.35;
+
 /// Count how many independent signal axes confirm this item is relevant.
 /// Each axis answers a different question:
 /// - Context: Does this match code you're actually writing? (KNN embedding similarity)
@@ -44,6 +97,13 @@ impl SignalConfirmation {
 /// - ACE/Tech: Does this involve your tech stack or active topics? (semantic boost + tech detection)
 /// - Learned: Has user behavior confirmed this kind of content? (feedback + affinity)
 /// - Dependency: Does this mention packages from your installed dependencies?
+///
+/// Legacy entry point: identical to `count_confirmed_signals_with_evidence`
+/// with `GateEvidence::default()` (semantic treated as embedding-derived, no
+/// own-stack keyword evidence) — the pre-2026-08-23 behavior. Production
+/// (pipeline_v2) now passes real evidence; this shim survives only for the
+/// gate tests that pin default-evidence behavior, hence `cfg(test)`.
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn count_confirmed_signals(
     context_score: f32,
@@ -58,18 +118,63 @@ pub(crate) fn count_confirmed_signals(
     stack_pain_match: bool,
     best_keyword_specificity: f32,
 ) -> SignalConfirmation {
+    count_confirmed_signals_with_evidence(
+        context_score,
+        interest_score,
+        keyword_score,
+        semantic_boost,
+        ace_ctx,
+        topics,
+        feedback_boost,
+        affinity_mult,
+        dep_match_score,
+        stack_pain_match,
+        best_keyword_specificity,
+        GateEvidence::default(),
+    )
+}
+
+/// Evidence-aware variant of [`count_confirmed_signals`] — see [`GateEvidence`].
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn count_confirmed_signals_with_evidence(
+    context_score: f32,
+    interest_score: f32,
+    keyword_score: f32,
+    semantic_boost: f32,
+    ace_ctx: &ACEContext,
+    topics: &[String],
+    feedback_boost: f32,
+    affinity_mult: f32,
+    dep_match_score: f32,
+    stack_pain_match: bool,
+    best_keyword_specificity: f32,
+    evidence: GateEvidence,
+) -> SignalConfirmation {
     let context_confirmed = context_score >= scoring_config::CONTEXT_THRESHOLD;
+    // Own-stack keyword confirmation (2026-08-23 audit item 14): a single-word
+    // interest that IS the user's own primary stack ("Tauri" for a Tauri
+    // developer) may confirm the interest axis from its RAW keyword score —
+    // the single-word specificity discount (0.60) otherwise caps keyword
+    // evidence at 0.80 × 0.60 = 0.48 < the 0.70 threshold, structurally
+    // locking the keyword route out for every user with 3+ interests. The
+    // discount still applies to the score magnitude; only CONFIRMATION is
+    // exempted, and only with embedding corroboration, so a bare word
+    // collision on an off-topic item cannot manufacture a signal.
+    let own_stack_keyword_confirms = evidence.own_stack_keyword_score
+        >= scoring_config::KEYWORD_THRESHOLD
+        && interest_score >= OWN_STACK_KEYWORD_CORROBORATION;
     // Broad interests (specificity < 0.50, e.g. "Open Source") cannot confirm the interest
     // axis from keyword matching alone — they need corroboration from embedding similarity.
-    let interest_confirmed = if best_keyword_specificity < 0.50 {
-        // Broad interest: require BOTH keyword AND embedding, OR very strong embedding alone
-        // (>= INTEREST_THRESHOLD of 0.50 indicates high semantic match even without keywords)
-        (keyword_score >= scoring_config::KEYWORD_THRESHOLD && interest_score >= 0.35)
-            || interest_score >= scoring_config::INTEREST_THRESHOLD
-    } else {
-        interest_score >= scoring_config::INTEREST_THRESHOLD
-            || keyword_score >= scoring_config::KEYWORD_THRESHOLD
-    };
+    let interest_confirmed = own_stack_keyword_confirms
+        || if best_keyword_specificity < 0.50 {
+            // Broad interest: require BOTH keyword AND embedding, OR very strong embedding alone
+            // (>= INTEREST_THRESHOLD of 0.50 indicates high semantic match even without keywords)
+            (keyword_score >= scoring_config::KEYWORD_THRESHOLD && interest_score >= 0.35)
+                || interest_score >= scoring_config::INTEREST_THRESHOLD
+        } else {
+            interest_score >= scoring_config::INTEREST_THRESHOLD
+                || keyword_score >= scoring_config::KEYWORD_THRESHOLD
+        };
     // ACE confirmed: require semantic boost OR active topic match (NOT broad detected_tech).
     // Uses strict topic grounding (v12): a generic shared fragment — item topic
     // "http" against active topic "tower-http" — can never confirm this axis.
@@ -98,10 +203,18 @@ pub(crate) fn count_confirmed_signals(
     // ACE active_topics (from scanning the user's actual project files) ARE genuinely
     // independent evidence — the user declared an interest AND their code confirms it.
     // Only dedup when the overlap is purely keyword-level with no project-level backing.
-    let ace_independent = ace_confirmed
-        && (semantic_boost >= scoring_config::SEMANTIC_THRESHOLD
-            || stack_pain_match
-            || ace_via_active_topics);
+    //
+    // Independence is judged on PROVENANCE (2026-08-23 audit item 8e): the old
+    // check repeated the `ace_confirmed` disjunction verbatim, so
+    // `ace_independent ≡ ace_confirmed` and this guard could never fire. Worse,
+    // with embeddings unavailable the KEYWORD-fallback ACE boost (0.25–0.30)
+    // exceeds SEMANTIC_THRESHOLD (0.18), so a DEGRADED state confirmed more
+    // signals and flipped the 1↔2 cliff (±0.44). A semantic boost only counts
+    // as independent when it is embedding-derived; the keyword fallback shares
+    // its evidence surface with the interest axis and dedups against it.
+    let semantic_independent = evidence.semantic_is_embedding_derived
+        && semantic_boost >= scoring_config::SEMANTIC_THRESHOLD;
+    let ace_independent = semantic_independent || stack_pain_match || ace_via_active_topics;
     let deduped_ace = if interest_confirmed && ace_confirmed {
         ace_independent
     } else {
@@ -435,6 +548,310 @@ mod tests {
         assert!(
             !conf.interest_confirmed,
             "Broad interest keyword-only should NOT confirm interest axis"
+        );
+    }
+
+    // ========================================================================
+    // GateEvidence: ACE independence provenance (2026-08-23 audit item 8e)
+    // ========================================================================
+
+    #[test]
+    fn legacy_wrapper_equals_default_evidence() {
+        // The wrapper must reproduce the evidence variant with defaults exactly.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("tauri".to_string());
+        let topics = vec!["tauri".to_string()];
+        let legacy = count_confirmed_signals(
+            0.50, 0.50, 0.80, 0.25, &ace_ctx, &topics, 0.0, 1.0, 0.30, false, 1.0,
+        );
+        let with_default = count_confirmed_signals_with_evidence(
+            0.50,
+            0.50,
+            0.80,
+            0.25,
+            &ace_ctx,
+            &topics,
+            0.0,
+            1.0,
+            0.30,
+            false,
+            1.0,
+            GateEvidence::default(),
+        );
+        assert_eq!(legacy.count, with_default.count);
+        assert_eq!(legacy.confirmed_names(), with_default.confirmed_names());
+    }
+
+    #[test]
+    fn keyword_fallback_ace_dedups_against_keyword_confirmed_interest() {
+        // Item 8e: interest confirmed via keywords + ACE "confirmed" ONLY via
+        // the keyword-fallback semantic boost (embeddings unavailable) is ONE
+        // signal — the fallback re-reads the same keyword surface. The old
+        // tautological ace_independent counted this as two.
+        let ace_ctx = ACEContext::default(); // no active topics → no grounding
+        let topics = vec!["somelib".to_string()];
+        let conf = count_confirmed_signals_with_evidence(
+            0.10, // context: not confirmed
+            0.10, // interest embedding: not confirmed
+            0.80, // keyword: confirms interest axis (specific interest)
+            0.25, // semantic boost ABOVE 0.18 — but keyword-fallback derived
+            &ace_ctx,
+            &topics,
+            0.0,
+            1.0,
+            0.0,
+            false, // no stack pain
+            1.0,   // specific interest
+            GateEvidence {
+                semantic_is_embedding_derived: false,
+                own_stack_keyword_score: 0.0,
+            },
+        );
+        assert!(conf.interest_confirmed, "interest confirmed via keyword");
+        assert!(
+            conf.ace_confirmed,
+            "ACE axis still shows confirmed in the breakdown"
+        );
+        assert_eq!(
+            conf.count, 1,
+            "keyword-fallback ACE must dedup against a keyword-confirmed interest"
+        );
+    }
+
+    #[test]
+    fn embedding_derived_semantic_stays_independent() {
+        // Same shape, but the semantic boost came from real embeddings —
+        // genuinely independent evidence → two signals.
+        let ace_ctx = ACEContext::default();
+        let topics = vec!["somelib".to_string()];
+        let conf = count_confirmed_signals_with_evidence(
+            0.10,
+            0.10,
+            0.80,
+            0.25,
+            &ace_ctx,
+            &topics,
+            0.0,
+            1.0,
+            0.0,
+            false,
+            1.0,
+            GateEvidence {
+                semantic_is_embedding_derived: true,
+                own_stack_keyword_score: 0.0,
+            },
+        );
+        assert_eq!(
+            conf.count, 2,
+            "embedding-derived semantic boost is independent ACE evidence"
+        );
+    }
+
+    #[test]
+    fn active_topic_grounding_stays_independent_without_embeddings() {
+        // Item 8e positive case: interest confirmed + ACE via an active-topic
+        // project scan → two signals even when embeddings are unavailable.
+        // Scanning the user's actual project files IS independent evidence.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("tauri".to_string());
+        let topics = vec!["tauri".to_string()];
+        let conf = count_confirmed_signals_with_evidence(
+            0.10,
+            0.10,
+            0.80, // keyword confirms interest
+            0.25, // fallback boost (not embedding-derived)
+            &ace_ctx,
+            &topics,
+            0.0,
+            1.0,
+            0.0,
+            false,
+            1.0,
+            GateEvidence {
+                semantic_is_embedding_derived: false,
+                own_stack_keyword_score: 0.0,
+            },
+        );
+        assert_eq!(
+            conf.count, 2,
+            "active-topic grounding must keep ACE independent of the interest axis"
+        );
+    }
+
+    #[test]
+    fn fallback_ace_alone_still_confirms_the_axis() {
+        // When ACE is the ONLY evidence, the keyword fallback still lights the
+        // axis (degraded mode must not go blind) — it just cannot double-count
+        // against a keyword-confirmed interest.
+        let ace_ctx = ACEContext::default();
+        let topics = vec!["somelib".to_string()];
+        let conf = count_confirmed_signals_with_evidence(
+            0.10,
+            0.10,
+            0.10, // interest NOT confirmed
+            0.25, // fallback boost above threshold
+            &ace_ctx,
+            &topics,
+            0.0,
+            1.0,
+            0.0,
+            false,
+            1.0,
+            GateEvidence {
+                semantic_is_embedding_derived: false,
+                own_stack_keyword_score: 0.0,
+            },
+        );
+        assert!(conf.ace_confirmed);
+        assert_eq!(conf.count, 1, "fallback ACE alone is still one signal");
+    }
+
+    #[test]
+    fn stack_pain_match_stays_independent_without_embeddings() {
+        let ace_ctx = ACEContext::default();
+        let topics = vec!["somelib".to_string()];
+        let conf = count_confirmed_signals_with_evidence(
+            0.10,
+            0.10,
+            0.80, // keyword confirms interest
+            0.01, // no semantic boost at all
+            &ace_ctx,
+            &topics,
+            0.0,
+            1.0,
+            0.0,
+            true, // stack pain — binary, project-derived, independent
+            1.0,
+            GateEvidence {
+                semantic_is_embedding_derived: false,
+                own_stack_keyword_score: 0.0,
+            },
+        );
+        assert_eq!(conf.count, 2, "stack pain keeps ACE independent");
+    }
+
+    // ========================================================================
+    // GateEvidence: own-stack keyword confirmation (2026-08-23 audit item 14)
+    // ========================================================================
+
+    #[test]
+    fn own_stack_keyword_with_corroboration_confirms_interest() {
+        // "Tauri 2 …" title for a Tauri developer: post-discount keyword is
+        // 0.80 × 0.60 = 0.48 (below threshold), but the raw own-stack keyword
+        // evidence is 0.80 and the embedding weakly agrees (0.40 ≥ 0.35) →
+        // the interest axis confirms.
+        let ace_ctx = ACEContext::default();
+        let topics: Vec<String> = vec![];
+        let conf = count_confirmed_signals_with_evidence(
+            0.10,
+            0.40, // embedding corroboration ≥ 0.35, below 0.45 threshold
+            0.48, // post-discount keyword (0.80 × 0.60) — below 0.70
+            0.01,
+            &ace_ctx,
+            &topics,
+            0.0,
+            1.0,
+            0.0,
+            false,
+            0.60, // single-word specificity
+            GateEvidence {
+                semantic_is_embedding_derived: true,
+                own_stack_keyword_score: 0.80,
+            },
+        );
+        assert!(
+            conf.interest_confirmed,
+            "own-stack single-word keyword + corroboration must confirm interest"
+        );
+        assert_eq!(conf.count, 1);
+    }
+
+    #[test]
+    fn own_stack_keyword_without_corroboration_does_not_confirm() {
+        // The "Rust Belt cities" case: strong raw keyword hit on an own-stack
+        // word, but the item embedding does NOT corroborate → no confirmation.
+        let ace_ctx = ACEContext::default();
+        let topics: Vec<String> = vec![];
+        let conf = count_confirmed_signals_with_evidence(
+            0.10,
+            0.10, // embedding says: not about this interest
+            0.48,
+            0.01,
+            &ace_ctx,
+            &topics,
+            0.0,
+            1.0,
+            0.0,
+            false,
+            0.60,
+            GateEvidence {
+                semantic_is_embedding_derived: true,
+                own_stack_keyword_score: 1.0, // word collision, maximal
+            },
+        );
+        assert!(
+            !conf.interest_confirmed,
+            "own-stack keyword without embedding corroboration must NOT confirm"
+        );
+        assert_eq!(conf.count, 0);
+    }
+
+    #[test]
+    fn off_stack_single_word_keeps_the_discount_lockout() {
+        // No own-stack evidence supplied: a single-word interest's discounted
+        // keyword score (0.48) still cannot confirm — the exemption is
+        // own-domain only.
+        let ace_ctx = ACEContext::default();
+        let topics: Vec<String> = vec![];
+        let conf = count_confirmed_signals_with_evidence(
+            0.10,
+            0.40,
+            0.48,
+            0.01,
+            &ace_ctx,
+            &topics,
+            0.0,
+            1.0,
+            0.0,
+            false,
+            0.60,
+            GateEvidence {
+                semantic_is_embedding_derived: true,
+                own_stack_keyword_score: 0.0,
+            },
+        );
+        assert!(
+            !conf.interest_confirmed,
+            "off-stack single-word interests keep the specificity lockout"
+        );
+    }
+
+    #[test]
+    fn own_stack_raw_below_threshold_does_not_confirm() {
+        // Own-stack interest matched only in content (raw 0.55 < 0.70): the
+        // exemption never lowers the keyword bar, it only un-discounts it.
+        let ace_ctx = ACEContext::default();
+        let topics: Vec<String> = vec![];
+        let conf = count_confirmed_signals_with_evidence(
+            0.10,
+            0.40,
+            0.33, // 0.55 × 0.60
+            0.01,
+            &ace_ctx,
+            &topics,
+            0.0,
+            1.0,
+            0.0,
+            false,
+            0.60,
+            GateEvidence {
+                semantic_is_embedding_derived: true,
+                own_stack_keyword_score: 0.55,
+            },
+        );
+        assert!(
+            !conf.interest_confirmed,
+            "content-only own-stack hits stay below the confirmation bar"
         );
     }
 

@@ -352,6 +352,29 @@ pub(crate) fn is_low_quality_topic(topic: &str) -> bool {
     false
 }
 
+/// Cap on dependency-synthesized interests. The cap exists to bound per-item
+/// scoring cost (every interest is one more keyword/embedding candidate in the
+/// hot loop) and to keep low-weight dep names from crowding explanations — NOT
+/// to pick "the best" deps (there is no usage-frequency signal here yet). The
+/// old cap of 15 covered ~8% of a real 184-direct-dep project and, combined
+/// with HashMap iteration order, selected a different random 15 every process.
+/// 40 widens coverage to a stable, deterministic head (runtime-first, then
+/// alphabetical) while keeping the interest list bounded.
+// TODO(orchestrator): candidate for promotion to pipeline.scoring as a tunable.
+const DEP_INTEREST_CAP: usize = 40;
+
+/// Weight for runtime direct-dependency interests: modest, so a dep-name
+/// keyword match alone can never rival an explicit interest (score ≤ 0.3).
+// TODO(orchestrator): candidate for promotion to pipeline.scoring as a tunable.
+const RUNTIME_DEP_INTEREST_WEIGHT: f32 = 0.3;
+
+/// Weight for direct DEV-dependency interests (vite, vitest, typescript, …).
+/// Included since the 2026-08-23 audit (item 16 — dev-dep blindness) at a
+/// discount below runtime deps: build/test tooling is real user context but a
+/// weaker identity signal than shipped dependencies.
+// TODO(orchestrator): candidate for promotion to pipeline.scoring as a tunable.
+const DEV_DEP_INTEREST_WEIGHT: f32 = 0.2;
+
 /// Synthesize ACE-discovered context into keyword interests.
 ///
 /// Bridges ACE intelligence into keyword scoring: detected tech, active topics,
@@ -429,22 +452,49 @@ pub(crate) fn synthesize_ace_interests(
     // No display-worthy filter here: if a dep is in the user's actual
     // package.json, content about it IS relevant. The Phase 1 filter
     // only blocks inferred/detected tech that isn't identity-defining.
+    //
+    // Determinism (2026-08-23 adversarial audit, churn mechanism #2):
+    // `dependency_info` is a HashMap whose iteration order is reseeded per
+    // process. Taking "the first N" of it meant every 30-min scheduled run
+    // (a fresh process) synthesized interests from a DIFFERENT random subset
+    // of the direct deps — live differential: react ace_boost 0.225 vs
+    // zustand 0.0 against the same corpus. Candidates are now sorted on a
+    // stable importance key BEFORE the cap: runtime deps first (they define
+    // the shipped product), then dev deps, each alphabetical — the same
+    // dependency_info always yields the same interest set.
+    let mut dep_candidates: Vec<(&String, &super::dependencies::DepInfo)> = ace_ctx
+        .dependency_info
+        .iter()
+        .filter(|(_, info)| info.is_direct)
+        .collect();
+    dep_candidates.sort_by(|(a_name, a), (b_name, b)| {
+        a.is_dev.cmp(&b.is_dev).then_with(|| a_name.cmp(b_name))
+    });
+
     let mut dep_synth = 0usize;
-    for (dep_name, dep_info) in &ace_ctx.dependency_info {
-        if dep_synth >= 15 {
+    for (dep_name, dep_info) in dep_candidates {
+        if dep_synth >= DEP_INTEREST_CAP {
             break;
-        }
-        if !dep_info.is_direct || dep_info.is_dev {
-            continue;
         }
         let lower = dep_name.to_lowercase();
         if existing.contains(&lower) || lower.len() < 3 {
             continue;
         }
+        // Dev-dep blindness fix (audit item 16): direct devDependencies
+        // (vite, vitest, typescript, …) previously got NO interest synthesis,
+        // so releases of the user's own build tools scored 0.03–0.40. They
+        // now synthesize at a discount below runtime deps — tooling is real
+        // context but a weaker identity signal than shipped dependencies —
+        // and sort after runtime deps so the cap prefers runtime.
+        let weight = if dep_info.is_dev {
+            DEV_DEP_INTEREST_WEIGHT
+        } else {
+            RUNTIME_DEP_INTEREST_WEIGHT
+        };
         interests.push(crate::context_engine::Interest {
             id: None,
             topic: dep_name.clone(),
-            weight: 0.3,
+            weight,
             embedding: topic_embeddings.get(dep_name).cloned(),
             source: crate::context_engine::InterestSource::Inferred,
         });
@@ -662,7 +712,9 @@ mod tests {
     }
 
     #[test]
-    fn test_dev_deps_excluded() {
+    fn test_direct_dev_deps_synthesized_at_discount() {
+        // Audit item 16 (dev-dep blindness): direct dev deps DO synthesize,
+        // at DEV_DEP_INTEREST_WEIGHT — below the runtime-dep weight.
         let mut interests = vec![];
         let mut ace = ACEContext::default();
         ace.dependency_info
@@ -670,7 +722,30 @@ mod tests {
 
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
-        assert_eq!(interests.len(), 0, "dev deps should not be synthesized");
+        assert_eq!(interests.len(), 1, "direct dev deps must be synthesized");
+        assert!(
+            (interests[0].weight - DEV_DEP_INTEREST_WEIGHT).abs() < 0.001,
+            "dev dep weight should be {DEV_DEP_INTEREST_WEIGHT}, got {}",
+            interests[0].weight
+        );
+        assert_eq!(interests[0].source, InterestSource::Inferred);
+    }
+
+    #[test]
+    fn test_transitive_dev_deps_still_excluded() {
+        // The dev-dep inclusion is DIRECT-only: a transitive dev dep stays out.
+        let mut interests = vec![];
+        let mut ace = ACEContext::default();
+        ace.dependency_info
+            .insert("esbuild".into(), make_dep("esbuild", false, true));
+
+        synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
+
+        assert_eq!(
+            interests.len(),
+            0,
+            "transitive dev deps should not be synthesized"
+        );
     }
 
     #[test]
@@ -706,21 +781,122 @@ mod tests {
     }
 
     #[test]
-    fn test_dep_cap_at_15() {
+    fn test_dep_cap() {
         let mut interests = vec![];
         let mut ace = ACEContext::default();
-        for i in 0..20 {
-            let name = format!("package-{i:02}");
+        for i in 0..(DEP_INTEREST_CAP + 10) {
+            let name = format!("package-{i:03}");
             ace.dependency_info
                 .insert(name.clone(), make_dep(&name, true, false));
         }
 
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
-        assert!(
-            interests.len() <= 15,
-            "should cap at 15 dep interests, got {}",
+        assert_eq!(
+            interests.len(),
+            DEP_INTEREST_CAP,
+            "should cap at {DEP_INTEREST_CAP} dep interests, got {}",
             interests.len()
+        );
+        // With the deterministic alphabetical order, the cap keeps exactly
+        // the first DEP_INTEREST_CAP names — never a random subset.
+        for (idx, interest) in interests.iter().enumerate() {
+            assert_eq!(interest.topic, format!("package-{idx:03}"));
+        }
+    }
+
+    #[test]
+    fn test_dep_synthesis_deterministic_across_insertion_orders() {
+        // Audit item 3 (dep-interest lottery): the SAME dependency_info must
+        // synthesize the SAME interest set regardless of map insertion order
+        // (HashMap iteration order is reseeded per process — every scheduled
+        // run is a fresh process).
+        let names: Vec<String> = (0..30).map(|i| format!("crate-{i:02}")).collect();
+
+        let mut forward = ACEContext::default();
+        for name in &names {
+            forward
+                .dependency_info
+                .insert(name.clone(), make_dep(name, true, false));
+        }
+        let mut reversed = ACEContext::default();
+        for name in names.iter().rev() {
+            reversed
+                .dependency_info
+                .insert(name.clone(), make_dep(name, true, false));
+        }
+
+        let mut interests_forward = vec![];
+        let mut interests_reversed = vec![];
+        synthesize_ace_interests(&mut interests_forward, &forward, &HashMap::new());
+        synthesize_ace_interests(&mut interests_reversed, &reversed, &HashMap::new());
+
+        let seq_forward: Vec<(String, f32)> = interests_forward
+            .iter()
+            .map(|i| (i.topic.clone(), i.weight))
+            .collect();
+        let seq_reversed: Vec<(String, f32)> = interests_reversed
+            .iter()
+            .map(|i| (i.topic.clone(), i.weight))
+            .collect();
+        assert_eq!(
+            seq_forward, seq_reversed,
+            "synthesized interest sequence must not depend on insertion order"
+        );
+        // And the order itself is alphabetical (the stable importance key).
+        let mut sorted = seq_forward.clone();
+        sorted.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            seq_forward, sorted,
+            "runtime deps must come out alphabetical"
+        );
+    }
+
+    #[test]
+    fn test_runtime_deps_sort_before_dev_deps() {
+        // Runtime deps outrank dev deps in the deterministic ordering, so the
+        // cap always prefers runtime. Alphabetically "aaa-lint" would come
+        // first — but it is a dev dep, so it must come AFTER every runtime dep.
+        let mut interests = vec![];
+        let mut ace = ACEContext::default();
+        ace.dependency_info
+            .insert("aaa-lint".into(), make_dep("aaa-lint", true, true)); // dev
+        ace.dependency_info
+            .insert("zzz-http".into(), make_dep("zzz-http", true, false)); // runtime
+        ace.dependency_info
+            .insert("mmm-json".into(), make_dep("mmm-json", true, false)); // runtime
+
+        synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
+
+        let topics: Vec<&str> = interests.iter().map(|i| i.topic.as_str()).collect();
+        assert_eq!(
+            topics,
+            vec!["mmm-json", "zzz-http", "aaa-lint"],
+            "runtime deps (alphabetical) must precede dev deps"
+        );
+        assert!((interests[0].weight - RUNTIME_DEP_INTEREST_WEIGHT).abs() < 0.001);
+        assert!((interests[2].weight - DEV_DEP_INTEREST_WEIGHT).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cap_slots_go_to_runtime_deps_over_dev_deps() {
+        // With more runtime deps than cap slots, dev deps get NOTHING.
+        let mut interests = vec![];
+        let mut ace = ACEContext::default();
+        for i in 0..DEP_INTEREST_CAP {
+            let name = format!("runtime-{i:03}");
+            ace.dependency_info
+                .insert(name.clone(), make_dep(&name, true, false));
+        }
+        ace.dependency_info
+            .insert("a-dev-tool".into(), make_dep("a-dev-tool", true, true));
+
+        synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
+
+        assert_eq!(interests.len(), DEP_INTEREST_CAP);
+        assert!(
+            interests.iter().all(|i| i.topic.starts_with("runtime-")),
+            "every cap slot must go to a runtime dep before any dev dep"
         );
     }
 

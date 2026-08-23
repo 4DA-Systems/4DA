@@ -96,6 +96,32 @@ const REAL_DEP_CRATES: &[RegistryFixture] = &[
     },
 ];
 
+/// The embedding every registry/social fixture carries. The trap being modeled
+/// is MAXIMAL similarity with the persona's own interests, so the vector must
+/// come from the same universe as the persona's interest embeddings:
+/// the synthetic block-signature by default, the persona's REAL fastembed
+/// interest vector under `calibrated-sim`. Using the synthetic vector in
+/// calibrated mode silently voided the trap premise — the block vector is
+/// ~orthogonal to fastembed space, so every fixture measured int=0.00 and the
+/// real-dep recall guard failed on a fixture artifact, not the pipeline
+/// (measured 2026-08-24: tokio 0.249 / serde 0.220 with interest axis dark).
+#[cfg(not(feature = "calibrated-sim"))]
+fn fixture_embedding() -> Vec<f32> {
+    super::domain_embeddings::interest_embedding(0)
+}
+
+#[cfg(feature = "calibrated-sim")]
+fn fixture_embedding() -> Vec<f32> {
+    // First interest of the rust_systems persona, from the same committed
+    // fixture map personas::make_interests_calibrated reads — cosine 1.0
+    // against that interest, exactly like the synthetic arm.
+    all_personas()
+        .into_iter()
+        .next()
+        .and_then(|p| p.interests.first().and_then(|i| i.embedding.clone()))
+        .expect("calibrated-sim: rust persona must carry a real interest embedding")
+}
+
 fn score_registry_fixture(
     fx: &RegistryFixture,
     ctx: &ScoringContext,
@@ -104,7 +130,7 @@ fn score_registry_fixture(
     let db = sim_db();
     let opts = sim_no_freshness();
     // Persona's own interest embedding — maximal similarity (the trap).
-    let emb = super::domain_embeddings::interest_embedding(0);
+    let emb = fixture_embedding();
     let title = format!("crates.io: {} v{}", fx.name, fx.version);
     let source_id = format!("crate-{}", fx.name);
     // Old enough that the community-signal fresh-item grace does not apply.
@@ -289,7 +315,10 @@ fn federated_social_noise_capped() {
     let ctx = enriched_rust_persona();
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = super::domain_embeddings::interest_embedding(0);
+    // Same mode-aware maximal-similarity vector as the registry fixtures — the
+    // cap must hold even against an item that looks EXACTLY like the user's
+    // interests (that is the production trap).
+    let emb = fixture_embedding();
     let created = Utc::now() - Duration::hours(8);
 
     let fixtures: &[(&str, &str, &str)] = &[

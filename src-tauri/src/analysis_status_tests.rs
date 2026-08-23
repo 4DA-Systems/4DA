@@ -164,6 +164,9 @@ mod tests {
 
         // Build SourceRelevance via serde defaults — only id/title/url/top_score/
         // matches/relevant are required; every other field defaults.
+        // `evidence_score` mirrors top_score, as score_item sets it at
+        // construction (items 12+26): persistence writes relevance_score from
+        // evidence, so a fixture modelling a scored result must carry it.
         let make = |id: i64, top_score: f32, relevant: bool| -> SourceRelevance {
             serde_json::from_value(serde_json::json!({
                 "id": id,
@@ -172,6 +175,7 @@ mod tests {
                 "top_score": top_score,
                 "matches": [],
                 "relevant": relevant,
+                "evidence_score": top_score,
             }))
             .expect("construct SourceRelevance")
         };
@@ -226,7 +230,7 @@ mod tests {
             "all three items stamped at current pipeline version"
         );
 
-        // Relevance scores persisted only for top_score > 0 items (noise skipped).
+        // Relevance scores persisted only for evidence > 0 items (noise skipped).
         let scored: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM source_items WHERE relevance_score IS NOT NULL",
@@ -251,6 +255,182 @@ mod tests {
         assert_eq!(
             total_relevant, 2,
             "scoring_events records the relevant count"
+        );
+    }
+
+    // ========================================================================
+    // Degraded-input persist guard (2026-08-23 audit, item 11)
+    //
+    // A run whose inputs SYSTEMICALLY collapsed (dep-intel load failure,
+    // context-KNN failure) produces confidently-wrong scores. The persist
+    // boundary must not let them overwrite fresh durable judgments — while the
+    // 7-day escape hatch keeps a permanently-degraded deployment from freezing.
+    // ========================================================================
+
+    /// SourceRelevance with a breakdown carrying the given degraded markers.
+    /// `evidence_score` mirrors top_score (score_item sets it at construction;
+    /// persistence writes relevance_score from evidence — items 12+26).
+    fn make_with_markers(
+        id: i64,
+        top_score: f32,
+        relevant: bool,
+        markers: &[&str],
+    ) -> crate::types::SourceRelevance {
+        serde_json::from_value(serde_json::json!({
+            "id": id,
+            "title": format!("item {id}"),
+            "url": null,
+            "top_score": top_score,
+            "matches": [],
+            "relevant": relevant,
+            "evidence_score": top_score,
+            "score_breakdown": {
+                "context_score": 0.0,
+                "interest_score": 0.0,
+                "ace_boost": 0.0,
+                "affinity_mult": 1.0,
+                "anti_penalty": 0.0,
+                "confidence_by_signal": {},
+                "degraded_inputs": markers,
+            },
+        }))
+        .expect("construct SourceRelevance with breakdown")
+    }
+
+    #[test]
+    fn degraded_run_protects_fresh_durable_scores_with_age_escape_hatch() {
+        use crate::test_utils::{insert_test_item, test_db};
+
+        let db = test_db();
+        let protected = insert_test_item(&db, "hackernews", "dg1", "Fresh durable", "body");
+        let aged = insert_test_item(&db, "hackernews", "dg2", "Aged durable", "body");
+        let first = insert_test_item(&db, "hackernews", "dg3", "Never scored", "body");
+        let emb_only = insert_test_item(&db, "hackernews", "dg4", "Embedding missing", "body");
+
+        // Healthy cycle seeds durable judgments for `protected` and `aged`.
+        crate::analysis::persist_cycle_results(
+            &db,
+            &[
+                make_with_markers(protected, 0.80, true, &[]),
+                make_with_markers(aged, 0.70, true, &[]),
+            ],
+        );
+        {
+            let conn = db.conn.lock();
+            // Age `aged` past the escape hatch, and give both a distinguishable
+            // old version stamp so the no-stamp-on-protect rule is observable.
+            conn.execute(
+                "UPDATE source_items SET feed_verdict_at = datetime('now', '-8 days') WHERE id = ?1",
+                rusqlite::params![aged],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE source_items SET scored_pipeline_version = 1 WHERE id IN (?1, ?2)",
+                rusqlite::params![protected, aged],
+            )
+            .unwrap();
+        }
+
+        // Systemically degraded cycle wants radically different judgments.
+        crate::analysis::persist_cycle_results(
+            &db,
+            &[
+                make_with_markers(protected, 0.10, false, &["dep_intel_load_failed"]),
+                make_with_markers(aged, 0.10, false, &["context_knn_failed"]),
+                make_with_markers(first, 0.30, false, &["dep_intel_load_failed"]),
+                make_with_markers(emb_only, 0.25, true, &["embedding_missing"]),
+            ],
+        );
+
+        let conn = db.conn.lock();
+        let row = |id: i64| -> (Option<f64>, i64, Option<i64>) {
+            conn.query_row(
+                "SELECT relevance_score, scored_pipeline_version, feed_relevant
+                 FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap()
+        };
+
+        let (p_score, p_version, p_verdict) = row(protected);
+        assert!(
+            (p_score.unwrap() - f64::from(0.80f32)).abs() < 1e-6,
+            "fresh durable score survives a degraded run, got {p_score:?}"
+        );
+        assert_eq!(
+            p_version, 1,
+            "a protected item is NOT version-stamped — a later healthy run must re-score it"
+        );
+        assert_eq!(p_verdict, Some(1), "fresh durable verdict survives too");
+
+        let (a_score, a_version, _) = row(aged);
+        assert!(
+            (a_score.unwrap() - f64::from(0.10f32)).abs() < 1e-6,
+            ">7-day-old durable score accepts the degraded write (no freeze), got {a_score:?}"
+        );
+        assert_eq!(
+            a_version,
+            i64::from(crate::scoring::PIPELINE_VERSION),
+            "an accepted write stamps normally"
+        );
+
+        let (f_score, f_version, f_verdict) = row(first);
+        assert!(
+            (f_score.unwrap() - f64::from(0.30f32)).abs() < 1e-6,
+            "an item with no durable score writes even on a degraded run"
+        );
+        assert_eq!(f_version, i64::from(crate::scoring::PIPELINE_VERSION));
+        assert_eq!(f_verdict, Some(0));
+
+        let (e_score, _, e_verdict) = row(emb_only);
+        assert!(
+            (e_score.unwrap() - f64::from(0.25f32)).abs() < 1e-6,
+            "per-item embedding_missing is NOT a systemic degradation"
+        );
+        assert_eq!(e_verdict, Some(1));
+    }
+
+    // ========================================================================
+    // Differential drain safety (2026-08-23 audit, item 9)
+    // ========================================================================
+
+    /// Version-stale items still drain on differential runs: the batch merger
+    /// the differential path calls picks up anything scored under an older
+    /// pipeline version and folds it into the run's scoring set (deduplicated
+    /// against items already selected).
+    #[test]
+    fn version_stale_items_merge_into_the_differential_batch() {
+        use crate::test_utils::{insert_test_item, test_db};
+
+        let db = test_db();
+        let stale = insert_test_item(&db, "hackernews", "ds1", "Old-version score", "body");
+        let current = insert_test_item(&db, "hackernews", "ds2", "Current score", "body");
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET relevance_score = 0.6, scored_pipeline_version = 1 WHERE id = ?1",
+                rusqlite::params![stale],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE source_items SET relevance_score = 0.6, scored_pipeline_version = ?1 WHERE id = ?2",
+                rusqlite::params![crate::scoring::PIPELINE_VERSION, current],
+            )
+            .unwrap();
+        }
+
+        let mut items = Vec::new(); // the differential selection found nothing new
+        let added = crate::analysis::merge_stale_drain_batch(&db, &mut items);
+        assert_eq!(added, 1, "exactly the stale-version item is merged");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, stale);
+
+        // Already selected → not merged twice.
+        let added_again = crate::analysis::merge_stale_drain_batch(&db, &mut items);
+        assert_eq!(
+            added_again, 0,
+            "an already-selected item is never duplicated"
         );
     }
 }

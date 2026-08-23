@@ -326,9 +326,14 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // Step 2 — score (embeds + PASIFA; writes relevance_score). Silent variant: no UI progress events.
     info!(target: "4da::headless", "Cycle step 2/3: scoring cached content...");
     match crate::analysis::analyze_cached_content_silent(handle).await {
-        Ok(results) => {
-            receipt.items_scored = results.len();
-            receipt.relevant_count = results.iter().filter(|r| r.relevant).count();
+        Ok(cycle) => {
+            // Honest receipt numbers (audit item 9): on a differential run the
+            // cycle scores only new/stale items; `items_scored` records that
+            // real work, not the size of a merged display set. This receipt is
+            // ALSO the next run's differential watermark (`ok=1 AND
+            // items_scored>0` — see engine_runs::last_scoring_watermark).
+            receipt.items_scored = cycle.scored_count();
+            receipt.relevant_count = cycle.scored_relevant();
 
             // Scores, pipeline-version stamps, feed verdicts, and the scoring-event
             // row are now persisted once at the shared analysis boundary
@@ -463,6 +468,22 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
         let steps = plan.len();
         crate::evidence::persist_upgrade_plan(&db, &plan, drops, run_id);
         info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed");
+    }
+
+    // Step 3b-ii — Tier-2 LLM passes (judge + content analysis + LlmReject
+    // demotions). Awaited INLINE, not spawned: a `--once` engine process exits
+    // when this function returns, so a detached task would be silently
+    // dropped. Bounded work (<=4 LLM calls per pass) and budget/BYOK-gated
+    // inside — a no-provider deployment is a silent no-op.
+    if let Ok(db) = crate::get_database() {
+        let summary = crate::llm_judgments::run_post_cycle_llm_passes(&db).await;
+        info!(
+            target: "4da::headless",
+            judged = summary.judged,
+            demoted = summary.demoted,
+            skipped = summary.skipped.unwrap_or("none"),
+            "Tier-2 LLM pass complete"
+        );
     }
 
     // Step 3c — DB maintenance. Every other caller of `run_scheduled_maintenance` lives in

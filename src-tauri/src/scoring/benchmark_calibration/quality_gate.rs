@@ -16,26 +16,48 @@
 //! this gate exists to prevent. After a genuine improvement, raise the floor
 //! to the new state in the same PR.
 //!
-//! Current achieved state (2026-08-22, snowflake-arctic-embed-m, live run):
-//! overall 92.3% · TP 16/20 (80%) · TN 20/20 (100%) · security 11/12 (91.7%)
-//! · cold_start 11/12 (91.7%) · edge_case 14/14 (100%).
+//! Current achieved state (2026-08-24, snowflake-arctic-embed-m, live run at
+//! 62ffbacf + Wave 1-2 audit fixes + the item-22a harness wiring — item ages,
+//! registry source_id, and the 7 harness_coverage scenarios now measured):
+//! overall 82/85 (96.5%) · TP 17/20 (85%) · TN 20/20 (100%) · security 12/12
+//! (100%) · cold_start 12/12 (100%) · edge_case 14/14 (100%) ·
+//! harness_coverage 7/7 (100%). Residual failures (root-caused, Phase-2
+//! recall-arc scope): tp_systems_programming 0.182 (interest corroboration
+//! 0.28 < the 0.35 own-stack bar), reg_tauri_title_boost 0.171 (corroboration
+//! 0.15), reg_desktop_packaging 0.078 (1-signal cap + domain token filter).
+//!
+//! Enforcement: soft-warn locally; HARD-FAIL when FOURDA_REQUIRE_REAL_
+//! EMBEDDINGS=1 (the CI real-embedding step) — see full_calibration_with_
+//! real_embeddings.
 
 use tracing::warn;
 
 use super::BenchmarkReport;
 
-/// Overall score-range floor — achieved 92.3%.
-const OVERALL_FLOOR: f64 = 0.92;
-/// True-positive floor — achieved 16/20.
-const TP_FLOOR: f64 = 0.80;
+/// Overall score-range floor — achieved 82/85 (96.5%), raised from 0.92
+/// (2026-08-24 ratchet after the Wave 1-2 recall fixes recovered
+/// sec_serde_advisory + reg_multi_stack_title and the harness re-band).
+const OVERALL_FLOOR: f64 = 0.96;
+/// True-positive floor — achieved 17/20, raised from 0.80 (16/20).
+const TP_FLOOR: f64 = 0.85;
 /// True-negative floor — 100% is the precision-first hard gate (held since
 /// 2026-06; a single false positive here is a doctrine violation, not drift).
 const TN_FLOOR: f64 = 1.00;
-/// Security floor — achieved 11/12.
-const SEC_FLOOR: f64 = 0.91;
-/// Cold-start floor — achieved 11/12. Previously ungated: cold-start is a
-/// non-negotiable product surface (intelligence-doctrine rule 6).
-const COLD_FLOOR: f64 = 0.91;
+/// Security floor — achieved 12/12, raised from 0.91 (11/12): the family/
+/// sub-crate map recovered sec_serde_advisory (0.414 → 0.544). A security
+/// scenario regression is now categorically red.
+const SEC_FLOOR: f64 = 1.00;
+/// Cold-start floor — achieved 12/12, raised from 0.91 (11/12) after
+/// cold_single_interest_match's synthetic-era 0.60 ceiling was re-derived to
+/// 0.635 (ratcheted BELOW the audit-era 0.639 measurement — see the scenario's
+/// notes). Cold-start is a non-negotiable product surface (doctrine rule 6).
+const COLD_FLOOR: f64 = 1.00;
+/// Harness-coverage floor — the 7 scenarios that exercise the paths the
+/// 2026-08-23 audit found structurally untested (UGC caps from age 0,
+/// engagement escape hatch, v18 registry grounding via source_id, stale
+/// published_at discount, post-bootstrap dep-release surfacing). All banded
+/// from measurement; a regression here reopens a closed audit blind spot.
+const HARNESS_FLOOR: f64 = 1.00;
 
 pub(super) fn model_meets_quality_gate(report: &BenchmarkReport) -> bool {
     let category = |name: &str| -> f64 {
@@ -49,12 +71,16 @@ pub(super) fn model_meets_quality_gate(report: &BenchmarkReport) -> bool {
     let tp_ok = category("true_positive") >= TP_FLOOR;
     let tn_ok = category("true_negative") >= TN_FLOOR;
     let sec_ok = category("security") >= SEC_FLOOR;
-    // cold_start may be absent in reduced fixture reports (unit tests build
-    // partial category maps); only gate it when the category ran.
+    // cold_start / harness_coverage may be absent in reduced fixture reports
+    // (unit tests build partial category maps); only gate them when they ran.
     let cold_ok = report
         .by_category
         .get("cold_start")
         .is_none_or(|c| c.accuracy as f64 >= COLD_FLOOR);
+    let harness_ok = report
+        .by_category
+        .get("harness_coverage")
+        .is_none_or(|c| c.accuracy as f64 >= HARNESS_FLOOR);
 
     let check = |ok: bool, name: &str, actual: f64, floor: f64| {
         if !ok {
@@ -72,6 +98,12 @@ pub(super) fn model_meets_quality_gate(report: &BenchmarkReport) -> bool {
     check(tn_ok, "true_negative", category("true_negative"), TN_FLOOR);
     check(sec_ok, "security", category("security"), SEC_FLOOR);
     check(cold_ok, "cold_start", category("cold_start"), COLD_FLOOR);
+    check(
+        harness_ok,
+        "harness_coverage",
+        category("harness_coverage"),
+        HARNESS_FLOOR,
+    );
 
-    overall_ok && tp_ok && tn_ok && sec_ok && cold_ok
+    overall_ok && tp_ok && tn_ok && sec_ok && cold_ok && harness_ok
 }

@@ -1598,6 +1598,9 @@ fn find_missed_signals(
     // this ≤30-day window in the first chunks, so the gap is brief. Compile-time
     // constant — no injection risk.
     let current_version = crate::scoring::PIPELINE_VERSION;
+    // Ranked read (audit items 12+26): the `> 0.5` "you would have missed
+    // this" gate stays on relevance_score (evidence decides membership);
+    // ordering uses the shared rank-then-evidence expression.
     let sql = format!(
         "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score,
                 si.created_at, si.content_type
@@ -1617,10 +1620,11 @@ fn find_missed_signals(
                 OR si.content_type NOT IN ('show_and_tell','tutorial','question',
                                            'help_request','hiring','clickbait',
                                            'security_advisory','breaking_change'))
-         ORDER BY si.relevance_score DESC
+         ORDER BY {ranked}
          LIMIT 40",
         days = days,
-        feed_window = feed_window_days
+        feed_window = feed_window_days,
+        ranked = crate::db::ranked_order_expr("si")
     );
 
     let mut stmt = match conn.prepare(&sql) {
@@ -4161,7 +4165,11 @@ mod tests {
                 -- 0.5 missed-signal threshold). Defaults to a high sentinel so any
                 -- fixture that does not set it explicitly is treated as current-brain
                 -- scored; the stale-version regression test sets it below current.
-                scored_pipeline_version INTEGER DEFAULT 1000000
+                scored_pipeline_version INTEGER DEFAULT 1000000,
+                -- Mirrors the Phase-110 rank column: find_missed_signals orders by
+                -- the shared ranked-read expression COALESCE(rank_score,
+                -- relevance_score). NULL = never batch-ranked (evidence order).
+                rank_score REAL DEFAULT NULL
             );
 
             CREATE TABLE project_dependencies (

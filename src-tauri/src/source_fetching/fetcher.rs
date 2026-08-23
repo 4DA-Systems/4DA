@@ -333,6 +333,14 @@ pub(crate) async fn fetch_all_sources(
                         if let Err(e) = db.touch_source_item(source_type, &item.source_id) {
                             warn!(target: "4da::sources", source_type, source_id = %item.source_id, error = %e, "Failed to touch source item");
                         }
+                        // Re-see = the only moment engagement counts refresh.
+                        if let Some(ref fresh_tags) = source_tags {
+                            if let Err(e) =
+                                db.update_source_item_tags(source_type, &item.source_id, fresh_tags)
+                            {
+                                warn!(target: "4da::sources", source_type, error = %e, "Tags refresh failed on re-seen item");
+                            }
+                        }
                         all_items.push((
                             GenericSourceItem {
                                 id,
@@ -342,7 +350,11 @@ pub(crate) async fn fetch_all_sources(
                                 url: cached.url,
                                 content: cached.content,
                                 feed_origin: cached.feed_origin,
-                                tags: cached.tags.or(source_tags.clone()),
+                                // Fresh-fetch tags win over the cached copy:
+                                // engagement counts (favourites/score/likes)
+                                // grow after first ingest, and this re-see is
+                                // the only moment they refresh.
+                                tags: source_tags.clone().or(cached.tags),
                                 published_at: cached
                                     .published_at
                                     .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string()),

@@ -118,6 +118,7 @@ mod tests {
             version: None,
             ecosystem: "rust".to_string(),
             corroborated: true,
+            raw_name: None,
         }
     }
 
@@ -192,11 +193,13 @@ mod tests {
     }
 
     #[test]
-    fn corroboration_dependency_match_false_for_dev_or_weak_dep() {
+    fn corroboration_dependency_match_for_dev_and_weak_dep() {
         let db = test_db();
-        // Dev dependency is not a grounding edge even at high confidence.
+        // Dev dependency IS a grounding edge at strong confidence (item 16,
+        // 2026-08-23: manifest devDeps ground the feed; only the Critical
+        // paging lane stays non-dev via `is_strongly_grounded_direct`).
         let c1 = build_corroboration(&db, &["x".to_string()], &[dep("tokio", 0.95, true)]);
-        assert!(!c1.dependency_match);
+        assert!(c1.dependency_match);
         // Confidence below the 0.40 strong floor does not ground.
         let c2 = build_corroboration(&db, &["x".to_string()], &[dep("tokio", 0.30, false)]);
         assert!(!c2.dependency_match);

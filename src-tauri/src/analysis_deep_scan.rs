@@ -230,18 +230,20 @@ pub(crate) async fn run_multi_source_analysis_impl(
     scoring::apply_domain_diversity(&mut results);
     scoring::apply_source_topic_diversity(&mut results);
 
-    // Serendipity Engine: inject anti-bubble items
+    // Serendipity Engine: inject anti-bubble items. Routed through
+    // `inject_serendipity_candidates` so the scorer-rejected originals are
+    // REPLACED, not duplicated — the old compute+extend here double-persisted
+    // every pick (same clone bug as the analyzer path, fixed 2026-08-23).
     {
         let settings = crate::get_settings_manager().lock();
         let serendipity_config = &settings.get().serendipity;
         if serendipity_config.enabled {
-            let candidates = scoring::compute_serendipity_candidates(
-                &results,
+            let injected = scoring::inject_serendipity_candidates(
+                &mut results,
                 serendipity_config.budget_percent,
             );
-            if !candidates.is_empty() {
-                tracing::info!(target: "4da::analysis", count = candidates.len(), "Injecting serendipity items");
-                results.extend(candidates);
+            if injected > 0 {
+                tracing::info!(target: "4da::analysis", count = injected, "Injecting serendipity items");
                 scoring::sort_results(&mut results);
             }
         }
@@ -307,6 +309,10 @@ pub(crate) async fn run_multi_source_analysis_impl(
                                                 applicability: None,
                                                 advisory_id: None,
                                                 primary_topic: None,
+                                                // Injected, never scored: the 0.45
+                                                // cap IS its durable evidence.
+                                                evidence_score: 0.45,
+                                                rank_factors: None,
                                             };
                                             info!(
                                                 target: "4da::analysis",

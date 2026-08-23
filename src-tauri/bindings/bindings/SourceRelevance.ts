@@ -107,4 +107,16 @@ advisory_id: string | null,
 /**
  * Primary extracted topic for frontend topic clustering (e.g. "webassembly", "rust")
  */
-primary_topic: string | null, };
+primary_topic: string | null, 
+/**
+ * EVIDENCE score (audit 2026-08-23 §3.5, items 12+26): the pure
+ * `score_item` output for this item — post the pipeline's own ceilings,
+ * pre every batch-relative layer (cross-encoder blend, dedup cluster
+ * boost, diversity decay, per-source percentile, LLM advisor delta).
+ * Set once at construction in `pipeline_v2::score_item` and never
+ * mutated afterwards; this is what persists as
+ * `source_items.relevance_score`. `top_score` remains the final
+ * display/rank value the batch layer produces (persisted separately as
+ * `source_items.rank_score`). 0.0 on excluded items.
+ */
+evidence_score: number, };

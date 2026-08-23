@@ -36,7 +36,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.1,
-      "score_max": 0.90,
+      "score_max": 0.9,
       "should_be_relevant": true,
       "required_signals": [
         "interest",
@@ -215,7 +215,7 @@
     "profile": "fullstack_js",
     "expected": {
       "score_min": 0.12,
-      "score_max": 0.90,
+      "score_max": 0.9,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -1106,12 +1106,12 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0,
-      "score_max": 0.6,
+      "score_max": 0.635,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
       ],
-      "notes": "Should match via interest even without rich context"
+      "notes": "Should match via interest even without rich context. CEILING RE-DERIVED 2026-08-24: the 0.60 max was a synthetic-vector-era band (see the #[ignore] note on benchmark_scoring_accuracy); with real embeddings this scenario measured a stable 0.639 (pre-audit-fix) -> 0.620 (post Wave-2, with item age wired). The ceiling is RATCHETED DOWN to 0.635 = measured + 0.015 jitter buffer - deliberately BELOW the audit-era 0.639, so this stays the counter-scenario that punishes blunt cold-start loosening (audit item 14 watch): any regression to the old level fails again."
     }
   },
   {
@@ -1317,7 +1317,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.40,
+      "score_min": 0.4,
       "score_max": 1.0,
       "should_be_relevant": true,
       "required_signals": [
@@ -1340,7 +1340,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.50,
+      "score_min": 0.5,
       "score_max": 1.0,
       "should_be_relevant": true,
       "required_signals": [
@@ -1364,7 +1364,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.0,
-      "score_max": 0.40,
+      "score_max": 0.4,
       "should_be_relevant": false,
       "required_signals": [],
       "notes": "Express is from MCP subproject (weight 0.10), should not dominate rust_developer feed"
@@ -1383,8 +1383,8 @@
     },
     "profile": "fullstack_js",
     "expected": {
-      "score_min": 0.20,
-      "score_max": 0.90,
+      "score_min": 0.2,
+      "score_max": 0.9,
       "should_be_relevant": true,
       "required_signals": [
         "interest",
@@ -1407,7 +1407,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.0,
-      "score_max": 0.20,
+      "score_max": 0.2,
       "should_be_relevant": false,
       "required_signals": [],
       "notes": "Ruby/Rails completely off-stack for Rust developer"
@@ -1427,7 +1427,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.0,
-      "score_max": 0.20,
+      "score_max": 0.2,
       "should_be_relevant": false,
       "required_signals": [],
       "notes": "Django/Python completely off-stack for Rust developer"
@@ -1447,7 +1447,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.0,
-      "score_max": 0.20,
+      "score_max": 0.2,
       "should_be_relevant": false,
       "required_signals": [],
       "notes": "Java/Spring completely off-stack for Rust developer"
@@ -1467,7 +1467,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.0,
-      "score_max": 0.50,
+      "score_max": 0.5,
       "should_be_relevant": false,
       "required_signals": [],
       "notes": "Only TypeScript partially matches. Should NOT be top-scored item anymore."
@@ -1486,7 +1486,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.30,
+      "score_min": 0.3,
       "score_max": 1.0,
       "should_be_relevant": true,
       "required_signals": [
@@ -1532,7 +1532,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.50,
+      "score_min": 0.5,
       "score_max": 1.0,
       "should_be_relevant": true,
       "required_signals": [
@@ -1595,7 +1595,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.0,
-      "score_max": 0.20,
+      "score_max": 0.2,
       "should_be_relevant": false,
       "required_signals": [],
       "notes": "Should NOT match 'sharp' dep — word boundary check prevents collision"
@@ -1614,8 +1614,8 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.20,
-      "score_max": 0.80,
+      "score_min": 0.2,
+      "score_max": 0.8,
       "should_be_relevant": true,
       "required_signals": [
         "ace"
@@ -1641,6 +1641,163 @@
       "should_be_relevant": false,
       "required_signals": [],
       "notes": "Cold start — no stack to match against, generic HN content"
+    }
+  },
+  {
+    "id": "hc_ugc_no_engagement_capped",
+    "category": "harness_coverage",
+    "description": "UGC (mastodon) stack-relevant post with ZERO engagement metadata must be community-capped at 0.50 from age 0 (no 6h free pass)",
+    "item": {
+      "title": "Shipping our Tauri 2 desktop app: lessons from six months in production",
+      "content": "Long post about building a production desktop application with Tauri 2 and Rust: IPC patterns, SQLite persistence, packaging for Windows and macOS, and the sharp edges we hit along the way.",
+      "source_type": "mastodon",
+      "tags_json": null,
+      "created_hours_ago": 2,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.2,
+      "score_max": 0.51,
+      "should_be_relevant": true,
+      "required_signals": [],
+      "notes": "Measured 0.500 (2026-08-24, real embeddings): the UGC community cap engages EXACTLY at 0.50 from age 2h - Wave 2 removed the <6h grace, so there is no window in which this on-stack no-engagement post scores freely (pre-fix it rode to ~0.9 then cliffed). The ceiling 0.51 is the pin: any score above it means the cap disarmed. Still feed-relevant at the cap by current design (capped items keep verdict eligibility; the cap bounds rank)."
+    }
+  },
+  {
+    "id": "hc_ugc_high_engagement_surfaces",
+    "category": "harness_coverage",
+    "description": "UGC (mastodon) stack-relevant post WITH strong engagement (favourites+reblogs >= 50) earns past the community cap",
+    "item": {
+      "title": "Deep dive: profiling Rust async runtimes inside a Tauri desktop app",
+      "content": "A detailed walkthrough of profiling tokio task scheduling and IPC latency in a production Tauri 2 application, with flamegraphs, SQLite write batching, and systems programming tricks that cut cold start in half.",
+      "source_type": "mastodon",
+      "tags_json": "{\"favourites\": 45, \"reblogs\": 20}",
+      "created_hours_ago": 8,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.52,
+      "score_max": 0.75,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Measured 0.606 (2026-08-24): engagement metadata (favourites+reblogs=65 -> community signal 0.85) disarms the cap; the floor 0.52 pins 'clears the no-engagement twin's 0.50 ceiling' - the earn-it-back escape hatch works end-to-end through the harness now that the adapters ingest engagement tags."
+    }
+  },
+  {
+    "id": "hc_registry_grounded_dep_release",
+    "category": "harness_coverage",
+    "description": "v18 registry-subject route: a crates.io release whose source_id subject IS a direct dependency (tokio) grounds and surfaces",
+    "item": {
+      "title": "crates.io: tokio v1.47.0",
+      "content": "An event-driven, non-blocking I/O platform for writing asynchronous I/O backed applications in Rust. This release improves the multi-threaded scheduler and reduces task wakeup latency.\nDownloads: 250000000",
+      "source_type": "crates_io",
+      "tags_json": null,
+      "created_hours_ago": 8,
+      "source_id": "crate-tokio"
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.55,
+      "score_max": 0.9,
+      "should_be_relevant": true,
+      "required_signals": [
+        "dependency"
+      ],
+      "notes": "Measured 0.761 (2026-08-24): source_id subject 'crate-tokio' is a declared direct dep -> strongly grounded, 3 confirmed axes (interest+ace+dependency), no commodity cap. Floor 0.55 keeps it clearly above the ungrounded look-alike band (0.37)."
+    }
+  },
+  {
+    "id": "hc_registry_ungrounded_lookalike_capped",
+    "category": "harness_coverage",
+    "description": "v18 registry-subject route: a stack-shaped look-alike crate (NOT a dependency) is categorically capped and never relevant",
+    "item": {
+      "title": "crates.io: forge-plugin-sdk-rust v1.0.7",
+      "content": "Rust SDK for building Forge plugins with async support, built on tokio and serde for streaming pipelines.\nDownloads: 12",
+      "source_type": "crates_io",
+      "tags_json": null,
+      "created_hours_ago": 8,
+      "source_id": "crate-forge-plugin-sdk-rust"
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.1,
+      "score_max": 0.38,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Measured 0.370 (2026-08-24) = the categorical ungrounded-registry ceiling (0.35) + score offset (0.02). TN guard: the ceiling 0.38 must NOT be widened - text name-drops of tokio/serde in a non-dependency crate's description can never ground a registry release (v18 doctrine)."
+    }
+  },
+  {
+    "id": "hc_dep_release_post_bootstrap",
+    "category": "harness_coverage",
+    "description": "Item 22b pin through the harness: a direct-dep release (hyper) for a POST-bootstrap profile (feedback >= 10) rides the lifted dep-gate arithmetic",
+    "item": {
+      "title": "crates.io: hyper v1.8.0",
+      "content": "A protective and efficient HTTP library for all. hyper 1.8 brings HTTP/2 CONTINUATION flood protections and lower-latency body streaming for Rust services.\nDownloads: 98000000",
+      "source_type": "crates_io",
+      "tags_json": null,
+      "created_hours_ago": 8,
+      "source_id": "crate-hyper"
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.55,
+      "score_max": 0.9,
+      "should_be_relevant": true,
+      "required_signals": [
+        "dependency"
+      ],
+      "notes": "Measured 0.816 (2026-08-24). rust_developer is post-bootstrap (feedback 20 >= 10). Pre-22b, a dep release whose ONLY axis was the dependency was arithmetically lidded at ~0.515 (< the 0.70 quality floor) - the class could never surface. Under real embeddings this release co-confirms interest+ace, and the 22b conf-mult lift is pinned at unit level (pipeline_v2 dep_gate tests + registry_grounding_tests); this scenario pins the product outcome: a direct-dep release SURFACES for a post-bootstrap profile. Floor 0.55 sits above the pre-fix 0.515 lid."
+    }
+  },
+  {
+    "id": "hc_stale_published_discounted",
+    "category": "harness_coverage",
+    "description": "published_at staleness (item 19) through the harness: a ~3.4-year-old publish date is discounted regardless of fetch date",
+    "item": {
+      "title": "TypeScript 5.1 Beta is OUT! Deep dive into the new features",
+      "content": "A tour of the new TypeScript beta for React and Node.js developers: decorators, const type parameters, and improved inference. What it means for your Next.js and Express codebases.",
+      "source_type": "rss",
+      "tags_json": null,
+      "created_hours_ago": 30000,
+      "source_id": null
+    },
+    "profile": "fullstack_js",
+    "apply_freshness": true,
+    "expected": {
+      "score_min": 0.35,
+      "score_max": 0.53,
+      "should_be_relevant": true,
+      "required_signals": [],
+      "notes": "Measured 0.463 (2026-08-24) vs fresh twin 0.828 - a 44% discount for the ~3.4-year-old publish date (stale_content ramp + freshness tiers stacking). The live-audit class ('TS 5.1 Beta' published 2023 scored 0.882) is dead: ceiling 0.53 < the fresh twin's floor 0.74 pins the non-overlap. Still relevant at 0.463 by design - staleness discounts, it does not kill."
+    }
+  },
+  {
+    "id": "hc_fresh_published_twin",
+    "category": "harness_coverage",
+    "description": "Control twin for hc_stale_published_discounted: identical text published 2 days ago keeps its score",
+    "item": {
+      "title": "TypeScript 5.1 Beta is OUT! Deep dive into the new features",
+      "content": "A tour of the new TypeScript beta for React and Node.js developers: decorators, const type parameters, and improved inference. What it means for your Next.js and Express codebases.",
+      "source_type": "rss",
+      "tags_json": null,
+      "created_hours_ago": 48,
+      "source_id": null
+    },
+    "profile": "fullstack_js",
+    "apply_freshness": true,
+    "expected": {
+      "score_min": 0.74,
+      "score_max": 0.92,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Measured 0.828 (2026-08-24). Identical text to hc_stale_published_discounted at 2 days old: the [0.74, 0.92] band against the stale twin's [0.35, 0.53] pins the published_at discount end-to-end through the harness (non-overlapping bands)."
     }
   }
 ]

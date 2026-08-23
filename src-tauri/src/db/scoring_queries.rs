@@ -12,6 +12,39 @@ use rusqlite::{params, Result as SqliteResult};
 
 use super::{blob_to_embedding, parse_datetime, Database, StoredSourceItem};
 
+/// Persist-boundary score hysteresis (2026-08-23 audit, item 10): a same-item
+/// re-score moving less than this keeps the OLD durable score (the version
+/// stamp still advances). The audit measured ~300 items jittering 0.37–0.43
+/// across consecutive 30-minute runs — sub-0.05 wobble is measurement noise,
+/// not information, and re-writing it churned every ranking surface daily.
+/// Deliberately BELOW the 0.10 churn-telemetry threshold: everything the
+/// damper eats was already invisible to the churn counters.
+pub const SCORE_WRITE_HYSTERESIS: f64 = 0.05;
+
+/// THE shared ranked-read ORDER BY expression (audit 2026-08-23 §3.5, items
+/// 12+26): rank when a batch layer has ranked the item, evidence otherwise.
+///
+/// `relevance_score` is the EVIDENCE score (pure `score_item` output,
+/// hysteresis-damped, batch-independent); `rank_score` is the batch-relative
+/// display rank the analysis cycle's rerank/diversity/percentile/LLM layer
+/// produced, stamped with provenance (`rank_factors`, `rank_scored_at`).
+/// Every ranked read surface orders by this ONE expression so ranking
+/// semantics cannot fork per-surface again. Membership/threshold FILTERS keep
+/// comparing `relevance_score` — evidence decides membership, rank decides
+/// order. Mirrored (with a column-existence guard for older DBs) in
+/// `mcp-4da-server/src/db.ts`; that mirror names this const as its source of
+/// truth.
+///
+/// SQLite sorts NULLs last under DESC, so items with neither column set sink
+/// to the bottom without extra clauses.
+pub const RANKED_ORDER_EXPR: &str = "COALESCE(rank_score, relevance_score) DESC";
+
+/// [`RANKED_ORDER_EXPR`] with a table alias, for joined queries
+/// (e.g. `ranked_order_expr("si")` → `COALESCE(si.rank_score, si.relevance_score) DESC`).
+pub fn ranked_order_expr(alias: &str) -> String {
+    format!("COALESCE({alias}.rank_score, {alias}.relevance_score) DESC")
+}
+
 /// Row for the relevance-triage recall audit (Phase 0 of the scoring funnel).
 /// Carries exactly what the cheap gate reads plus the stored relevance_score.
 #[derive(Debug, Clone)]
@@ -247,6 +280,16 @@ impl Database {
     /// existed the only way to see that churn was an ad-hoc snapshot diff of
     /// the whole table. The old score is read inside the same transaction, so
     /// the delta is exact, not racy.
+    ///
+    /// **Persist hysteresis (2026-08-23 audit, item 10):** a re-score whose
+    /// move is smaller than [`SCORE_WRITE_HYSTERESIS`] keeps the OLD durable
+    /// score — sub-noise jitter (the audit measured ~300 items wobbling
+    /// 0.37–0.43 every 30 minutes) stops rewriting the feed's ranking substrate.
+    /// The row is STILL stamped (`scored_pipeline_version` + signal columns):
+    /// skipping the stamp would trap damped items in the version-drain set
+    /// forever. First-ever scores (old NULL) always write. Churn statistics
+    /// are computed over the RAW deltas (what the scorer produced), with
+    /// `suppressed_writes` recording how many the damper kept at the old value.
     pub fn persist_analysis_scores(
         &self,
         scores: &[(i64, f32, Option<String>, Option<String>)],
@@ -255,6 +298,11 @@ impl Database {
         /// A move this large is churn worth counting (matches the forensic
         /// threshold the 2026-08-22/23 audits used).
         const CHURN_DELTA: f64 = 0.10;
+        /// Raw moves below this floor are invisible at every consumer and are
+        /// excluded from the `top_offenders` forensic list.
+        const OFFENDER_FLOOR: f64 = 0.01;
+        /// Largest-|Δ| movers recorded per persist batch.
+        const TOP_OFFENDERS_CAP: usize = 10;
 
         let conn = self.conn.lock();
         let tx = conn.unchecked_transaction()?;
@@ -265,6 +313,9 @@ impl Database {
         let mut max_up: f64 = 0.0;
         let mut max_down: f64 = 0.0;
         let mut sum_abs: f64 = 0.0;
+        let mut suppressed: i64 = 0;
+        // (id, old, new) raw movers — sorted/truncated into `top_offenders`.
+        let mut movers: Vec<(i64, f64, f64)> = Vec::new();
         {
             let mut read_stmt =
                 tx.prepare_cached("SELECT relevance_score FROM source_items WHERE id = ?1")?;
@@ -276,8 +327,9 @@ impl Database {
                 let old: Option<f64> = read_stmt
                     .query_row(params![id], |r| r.get::<_, Option<f64>>(0))
                     .unwrap_or(None);
+                let mut write_score = f64::from(*score);
                 if let Some(old) = old {
-                    let delta = f64::from(*score) - old;
+                    let delta = write_score - old;
                     rescored += 1;
                     sum_abs += delta.abs();
                     if delta > CHURN_DELTA {
@@ -287,9 +339,17 @@ impl Database {
                     }
                     max_up = max_up.max(delta);
                     max_down = max_down.max(-delta);
+                    if delta.abs() >= OFFENDER_FLOOR {
+                        movers.push((*id, old, write_score));
+                    }
+                    if delta.abs() < SCORE_WRITE_HYSTERESIS {
+                        // Keep the durable score; the stamp below still writes.
+                        suppressed += 1;
+                        write_score = old;
+                    }
                 }
                 stmt.execute(params![
-                    *score as f64,
+                    write_score,
                     crate::scoring::PIPELINE_VERSION,
                     signal_type,
                     signal_priority,
@@ -304,10 +364,50 @@ impl Database {
             } else {
                 0.0
             };
+            movers.sort_by(|a, b| {
+                (b.2 - b.1)
+                    .abs()
+                    .partial_cmp(&(a.2 - a.1).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            movers.truncate(TOP_OFFENDERS_CAP);
+            // One grep instead of a forensic hunt: name the biggest movers.
+            if !movers.is_empty() {
+                let top3 = movers
+                    .iter()
+                    .take(3)
+                    .map(|(id, old, new)| format!("id={id} {old:.3}->{new:.3}"))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                tracing::info!(
+                    target: "4da::churn",
+                    path,
+                    rescored,
+                    suppressed_writes = suppressed,
+                    top_movers = %top3,
+                    "Score churn summary"
+                );
+            }
+            let top_offenders: Option<String> = if movers.is_empty() {
+                None
+            } else {
+                let arr: Vec<serde_json::Value> = movers
+                    .iter()
+                    .map(|(id, old, new)| {
+                        serde_json::json!({
+                            "id": id,
+                            "old": (old * 1000.0).round() / 1000.0,
+                            "new": (new * 1000.0).round() / 1000.0,
+                        })
+                    })
+                    .collect();
+                serde_json::to_string(&arr).ok()
+            };
             tx.execute(
                 "INSERT INTO scoring_churn (path, pipeline_version, items_written, rescored,
-                    moved_up_gt_010, moved_down_gt_010, max_up, max_down, mean_abs_delta)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    moved_up_gt_010, moved_down_gt_010, max_up, max_down, mean_abs_delta,
+                    suppressed_writes, top_offenders)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     path,
                     crate::scoring::PIPELINE_VERSION,
@@ -317,12 +417,109 @@ impl Database {
                     moved_down,
                     max_up,
                     max_down,
-                    mean_abs
+                    mean_abs,
+                    suppressed,
+                    top_offenders
                 ],
             )?;
         }
         tx.commit()?;
         Ok(count)
+    }
+
+    /// Persist the batch-relative RANK layer for the set the analysis cycle's
+    /// batch layer actually ranked: `rank_score` (the final `top_score`),
+    /// `rank_factors` (compact JSON provenance of the factors that fired, NULL
+    /// when none did or the path records none), and `rank_scored_at` (now,
+    /// UTC canonical format).
+    ///
+    /// Deliberately NOT [`Database::persist_analysis_scores`]:
+    /// - no hysteresis — rank churn is expected and honest (it is a ranking
+    ///   with provenance, not evidence);
+    /// - does NOT touch `relevance_score`, `scored_pipeline_version`, the
+    ///   signal columns, or the `scoring_churn` telemetry — all of those
+    ///   belong to the EVIDENCE write. Item 12's bug was exactly these two
+    ///   layers sharing one column.
+    ///
+    /// Backfill/drain never call this: those paths run no batch layer, so
+    /// they have no rank to record.
+    pub fn persist_rank_scores(&self, ranks: &[(i64, f32, Option<String>)]) -> SqliteResult<usize> {
+        if ranks.is_empty() {
+            return Ok(0);
+        }
+        let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
+        let mut count = 0;
+        {
+            let mut stmt = tx.prepare_cached(
+                "UPDATE source_items
+                 SET rank_score = ?1, rank_factors = ?2, rank_scored_at = datetime('now')
+                 WHERE id = ?3",
+            )?;
+            for (id, rank, factors) in ranks {
+                count += stmt.execute(params![f64::from(*rank), factors, id])?;
+            }
+        }
+        tx.commit()?;
+        Ok(count)
+    }
+
+    /// How many already-scored items are stamped below `current_version` — the
+    /// pending stale-version drain, using the SAME predicate family (incl. the
+    /// tier window) as [`Database::get_stale_scored_items`]. The differential
+    /// gate reads this: a backlog bigger than one drain batch means a pipeline
+    /// bump just landed and the run should take the full window instead.
+    pub fn count_stale_scored_items(&self, current_version: i32) -> SqliteResult<i64> {
+        let conn = self.conn.lock();
+        let time_clause = if crate::settings::is_signal() {
+            String::new()
+        } else {
+            format!(
+                " AND created_at >= datetime('now', '-{} hours')",
+                super::sources::FREE_HISTORY_LIMIT_HOURS
+            )
+        };
+        let sql = format!(
+            "SELECT COUNT(*) FROM source_items
+             WHERE scored_pipeline_version < ?1
+               AND relevance_score IS NOT NULL{time_clause}"
+        );
+        conn.query_row(&sql, params![current_version], |r| r.get(0))
+    }
+
+    /// Among `ids`, the ones whose durable curation is FRESH: a persisted
+    /// `relevance_score` AND a `feed_verdict_at` within `max_age_days`.
+    ///
+    /// This is the working set of the degraded-input persist guard (2026-08-23
+    /// audit, item 11): a scoring run whose inputs systemically collapsed must
+    /// not overwrite these rows. `feed_verdict_at` stands in for "when the
+    /// durable score was last written" — every persisting cycle stamps it in
+    /// the same breath as the score, and no dedicated score timestamp exists.
+    /// An item older than the window (or never curated) is deliberately NOT
+    /// returned: accepting the degraded write there beats freezing forever.
+    pub fn ids_with_fresh_durable_scores(
+        &self,
+        ids: &[i64],
+        max_age_days: u32,
+    ) -> SqliteResult<std::collections::HashSet<i64>> {
+        let mut fresh = std::collections::HashSet::new();
+        if ids.is_empty() {
+            return Ok(fresh);
+        }
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT 1 FROM source_items
+             WHERE id = ?1
+               AND relevance_score IS NOT NULL
+               AND COALESCE(feed_verdict_at, '1970-01-01') > datetime('now', ?2)",
+        )?;
+        let age_modifier = format!("-{max_age_days} days");
+        for id in ids {
+            if stmt.exists(params![id, age_modifier])? {
+                fresh.insert(*id);
+            }
+        }
+        Ok(fresh)
     }
 
     /// Stamp `scored_pipeline_version` for every item that was scored this run,
@@ -354,6 +551,9 @@ impl Database {
 
     /// Get items whose scores were computed under an older pipeline version.
     /// These need re-scoring to reflect current pipeline logic.
+    ///
+    /// The pending-drain COUNT lives in [`Database::count_stale_scored_items`],
+    /// which must keep the same predicate.
     ///
     /// Ordering is deliberately NOT pure `relevance_score DESC`. A pipeline-version
     /// bump happens precisely because scoring CHANGED, and the change that matters
@@ -442,3 +642,7 @@ impl Database {
         rows.collect()
     }
 }
+
+#[cfg(test)]
+#[path = "scoring_queries_tests.rs"]
+mod stability_tests;
