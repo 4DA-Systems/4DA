@@ -100,7 +100,7 @@ export interface ActiveTopic {
 }
 
 /**
- * Learned topic affinity
+ * Retained compatibility shape for historic topic affinity data.
  */
 export interface TopicAffinity {
   topic: string;
@@ -112,7 +112,7 @@ export interface TopicAffinity {
 }
 
 /**
- * Anti-topic (learned exclusion)
+ * Retained compatibility shape for historic anti-topic data.
  */
 export interface AntiTopic {
   topic: string;
@@ -139,7 +139,7 @@ export interface UserContext {
     active_topics: ActiveTopic[];
   };
 
-  // Learned preferences (optional)
+  // Retained compatibility field; implicit learned preferences no longer score items.
   learned?: {
     topic_affinities: TopicAffinity[];
     anti_topics: AntiTopic[];

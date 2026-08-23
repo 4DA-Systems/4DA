@@ -103,7 +103,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     annotations: { readOnlyHint: true, openWorldHint: true },
   },
   get_context: {
-    summary: "What 4DA knows about the user: role, tech stack, interests, and learned affinities. Call FIRST when you need to know what the user works on before answering or recommending.",
+    summary: "What 4DA knows about the user: role, tech stack, interests, exclusions, and ACE-detected context. Call FIRST when you need to know what the user works on before answering or recommending.",
     schemaFile: "get-context.json",
     category: "intelligence",
     tags: ["context", "interests", "tech-stack", "profile"],
@@ -135,10 +135,10 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
   record_feedback: {
-    summary: "Record click/save/dismiss on a content item to sharpen future scoring. Call AFTER the user reacts to a surfaced item (opens, saves, or dismisses it).",
+    summary: "Record click/save/dismiss on a content item as explicit interaction history. Call AFTER the user reacts to a surfaced item (opens, saves, or dismisses it).",
     schemaFile: "record-feedback.json",
     category: "intelligence",
-    tags: ["feedback", "learning", "save", "dismiss"],
+    tags: ["feedback", "history", "save", "dismiss"],
     standalone: false,
     annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false, idempotentHint: false },
   },

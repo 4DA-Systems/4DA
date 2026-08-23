@@ -335,7 +335,7 @@ pub(crate) struct ScoringContext {
     // feedback_boosts (feedback-derived topic boosts) DELETED in v20a: the
     // loader had pinned it to an empty map since v19 (AD-029) and the last
     // pipeline reader was removed with the dead feedback_boost computation.
-    /// Source quality scores from learned preferences: source_type -> score (-1.0 to 1.0)
+    /// Retired source-quality scaffold: source_type -> score (-1.0 to 1.0)
     ///
     /// Loaded permanently empty and read by nothing since AD-029 demoted the
     /// behavioural scoring signals (V2 pins `source_quality_boost` to 0.0). The

@@ -1,6 +1,6 @@
 {
   "name": "get_context",
-  "description": "Get the user's context - what 4DA knows about them.\n\nReturns information about:\n- Static Identity: User-declared role, tech stack, domains, interests, and exclusions\n- ACE Context (optional): Auto-detected technologies and active topics from recent activity\n- Learned Preferences (optional): Topic affinities learned from user behavior\n\nCall FIRST when you need to understand what the user works on or cares about before answering or recommending.",
+  "description": "Get the user's context - what 4DA knows about them.\n\nReturns information about:\n- Static Identity: User-declared role, tech stack, domains, interests, and exclusions\n- ACE Context (optional): Auto-detected technologies and active topics from recent activity\n- Learned Preferences (optional): retained compatibility field; implicit preference learning no longer contributes to scoring\n\nCall FIRST when you need to understand what the user works on or cares about before answering or recommending.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -10,7 +10,7 @@
       },
       "include_learned": {
         "type": "boolean",
-        "description": "Include learned preferences (topic affinities, anti-topics). Default: true"
+        "description": "Include the retained learned-preferences compatibility field. Default: true"
       }
     }
   }

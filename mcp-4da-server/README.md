@@ -138,7 +138,7 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 | `get_relevant_content`* | Scored content feed — articles, advisories, releases ranked by relevance. |
 | `get_actionable_signals`* | Classified alerts: security advisories, breaking changes, trending repos. |
 | `knowledge_gaps`* | Dependencies you use daily but never read about. Surfaces missed CVEs and updates. |
-| `record_feedback`* | Save or dismiss items to teach 4DA what matters. Sharpens future scoring. |
+| `record_feedback`* | Save or dismiss items so 4DA can record explicit interaction history. |
 
 ### Decisions & Memory
 

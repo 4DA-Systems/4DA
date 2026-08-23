@@ -3,7 +3,7 @@
  * developer_dna tool
  *
  * Export a comprehensive Developer DNA profile built from project scans,
- * engagement data, and learned preferences.
+ * explicit interests, and local interaction history.
  */
 
 import type { FourDADatabase } from "../db.js";
@@ -24,7 +24,7 @@ export interface DeveloperDnaParams {
 
 export const developerDnaTool = {
   name: "developer_dna",
-  description: `Export your Developer DNA — a comprehensive profile of your tech identity built from project scans, engagement data, and learned preferences. Includes primary stack, adjacent tech, top dependencies, engaged topics, blind spots, source engagement rates, and aggregate stats.`,
+  description: `Export your Developer DNA — a comprehensive profile of your tech identity built from project scans, explicit interests, and local interaction history. Includes primary stack, adjacent tech, top dependencies, engaged topics, blind spots, source engagement rates, and aggregate stats.`,
   inputSchema: {
     type: "object" as const,
     properties: {

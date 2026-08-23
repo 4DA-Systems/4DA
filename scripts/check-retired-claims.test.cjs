@@ -32,6 +32,9 @@ test('flags the interaction-learning promise family (GPT audit finding 5)', () =
   assert.ok(isRetiredClaim('4DA learns from your behavior over time'));
   assert.ok(isRetiredClaim('the system learns from you'));
   assert.ok(isRetiredClaim('rate items — teaching the system what matters'));
+  assert.ok(isRetiredClaim('Record click/save/dismiss on a content item to sharpen future scoring.'));
+  assert.ok(isRetiredClaim('This feedback helps 4DA learn user preferences over time.'));
+  assert.ok(isRetiredClaim('Items are scored based on learned preferences from past interactions.'));
 });
 
 test('allows true statements about explicit, user-authored mechanisms', () => {

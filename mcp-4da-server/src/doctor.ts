@@ -30,12 +30,13 @@ export function runDoctor(): void {
   // 1. Node.js version
   const nodeVersion = process.version;
   const major = parseInt(nodeVersion.slice(1).split(".")[0], 10);
+  const nodeRequired = 20;
   checks.push({
     name: "Node.js version",
-    status: major >= 18 ? "pass" : "fail",
-    detail: major >= 18
-      ? `${nodeVersion} (>= 18 required)`
-      : `${nodeVersion} — Node.js 18+ required`,
+    status: major >= nodeRequired ? "pass" : "fail",
+    detail: major >= nodeRequired
+      ? `${nodeVersion} (>= ${nodeRequired} required)`
+      : `${nodeVersion} — Node.js ${nodeRequired}+ required`,
   });
 
   // 2. Native bindings — if we reached here, the dynamic import in db.ts succeeded
@@ -81,24 +82,27 @@ export function runDoctor(): void {
     });
   }
 
-  // 5. LLM providers (optional)
-  const llmProvider = process.env.LLM_PROVIDER;
-  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
+  // 5. Semantic recall provider (optional)
+  const embedProvider = process.env.FOURDA_EMBED_PROVIDER;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
+  const hasOllama =
+    process.env.FOURDA_EMBED_PROVIDER === "ollama" ||
+    process.env.OLLAMA_HOST ||
+    process.env.OLLAMA_BASE_URL;
 
-  if (llmProvider || hasAnthropic || hasOpenAI) {
+  if (embedProvider || hasOpenAI || hasOllama) {
     checks.push({
-      name: "LLM provider",
+      name: "Semantic recall provider",
       status: "pass",
-      detail: llmProvider
-        ? `${llmProvider} configured`
-        : hasAnthropic ? "Anthropic API key set" : "OpenAI API key set",
+      detail: embedProvider
+        ? `${embedProvider} configured`
+        : hasOllama ? "Ollama endpoint configured" : "OpenAI API key set",
     });
   } else {
     checks.push({
-      name: "LLM provider",
+      name: "Semantic recall provider",
       status: "warn",
-      detail: "No API keys set — AI synthesis tools will be unavailable",
+      detail: "Not configured — keyword recall remains available",
     });
   }
 
