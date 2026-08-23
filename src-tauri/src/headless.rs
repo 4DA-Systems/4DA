@@ -481,7 +481,7 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
             target: "4da::headless",
             judged = summary.judged,
             demoted = summary.demoted,
-            skipped = summary.skipped.as_deref().unwrap_or("none"),
+            skipped = summary.skipped.unwrap_or("none"),
             "Tier-2 LLM pass complete"
         );
     }
