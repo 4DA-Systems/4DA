@@ -28,6 +28,16 @@ pub struct StoredJudgment {
     pub judged_at: String,
 }
 
+/// A curated feed item whose fresh judgment argues for demotion
+/// (see `llm_judgments::apply_judgment_demotions`).
+#[derive(Debug, Clone)]
+pub struct LlmRejectCandidate {
+    pub item_id: i64,
+    pub title: String,
+    pub judged_relevance: f64,
+    pub confidence: f64,
+}
+
 // ============================================================================
 // Database Operations
 // ============================================================================
@@ -115,6 +125,62 @@ impl Database {
     pub fn get_judgment_count(&self) -> SqliteResult<i64> {
         let conn = self.conn.lock();
         conn.query_row("SELECT COUNT(*) FROM llm_judgments", [], |row| row.get(0))
+    }
+
+    /// Curated (`feed_relevant = 1`), score-sourced items whose judgment under
+    /// `prompt_version` is BOTH clearly irrelevant (`relevance_score <
+    /// relevance_below`) AND confident (`confidence >= confidence_min`) AND
+    /// fresh (judged within `window_days`).
+    ///
+    /// Serendipity-sourced verdicts are deliberately excluded: anti-bubble
+    /// picks are SUPPOSED to look irrelevant to a relevance judge, and this
+    /// query feeds a demote-only pass — including them would silently delete
+    /// the serendipity feature (the exact mis-classification `VerdictSource`
+    /// exists to prevent; see `db/verdicts.rs`).
+    ///
+    /// Ordered newest-judgment-first and bounded by `limit` — the caller's
+    /// per-run demotion cap.
+    pub fn get_llm_reject_candidates(
+        &self,
+        prompt_version: &str,
+        relevance_below: f64,
+        confidence_min: f64,
+        window_days: u32,
+        limit: usize,
+    ) -> SqliteResult<Vec<LlmRejectCandidate>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT si.id, si.title, lj.relevance_score, lj.confidence
+             FROM source_items si
+             JOIN llm_judgments lj
+               ON lj.source_item_id = si.id
+              AND lj.prompt_version = ?1
+             WHERE si.feed_relevant = 1
+               AND COALESCE(si.feed_verdict_source, 'score') = 'score'
+               AND lj.relevance_score < ?2
+               AND lj.confidence >= ?3
+               AND lj.judged_at >= datetime('now', '-' || ?4 || ' days')
+             ORDER BY lj.judged_at DESC, lj.id DESC
+             LIMIT ?5",
+        )?;
+        let rows = stmt.query_map(
+            params![
+                prompt_version,
+                relevance_below,
+                confidence_min,
+                window_days,
+                limit as i64
+            ],
+            |row| {
+                Ok(LlmRejectCandidate {
+                    item_id: row.get(0)?,
+                    title: row.get(1)?,
+                    judged_relevance: row.get(2)?,
+                    confidence: row.get(3)?,
+                })
+            },
+        )?;
+        rows.collect()
     }
 }
 

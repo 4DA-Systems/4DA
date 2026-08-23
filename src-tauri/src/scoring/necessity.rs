@@ -507,6 +507,53 @@ fn try_blind_spot_path(
     ))
 }
 
+// ============================================================================
+// Persistence
+// ============================================================================
+
+/// Persist a cycle's computed necessity onto `item_necessity` so downstream
+/// consumers (the MCP server's actionable-signals surface) read what the
+/// pipeline actually computed instead of an empty table. Necessity has been
+/// computed in-memory and thrown away since the lane shipped —
+/// `Database::persist_necessity_scores` had zero callers (measured 0 rows
+/// live 2026-08-24, BYOK active).
+///
+/// Only items whose breakdown carries a non-zero necessity are written: a
+/// zero row informs no action (Intelligence Doctrine rule 3), and writing the
+/// whole result set would be hundreds of no-op upserts per cycle. Upsert
+/// semantics mean a re-scored item refreshes its row (score, reason,
+/// `scored_at`); consumers judge staleness by `scored_at`.
+///
+/// Best-effort by design: a failed write logs and never fails the cycle,
+/// matching every other persist step in `persist_cycle_results`.
+pub(crate) fn persist_from_results(db: &crate::db::Database, results: &[crate::SourceRelevance]) {
+    let rows: Vec<(u64, f32, Option<String>, Option<String>, Option<String>)> = results
+        .iter()
+        .filter_map(|r| {
+            let b = r.score_breakdown.as_ref()?;
+            if b.necessity_score <= 0.0 {
+                return None;
+            }
+            Some((
+                r.id,
+                b.necessity_score,
+                b.necessity_reason.clone(),
+                b.necessity_category.clone(),
+                b.necessity_urgency.clone(),
+            ))
+        })
+        .collect();
+    if rows.is_empty() {
+        return;
+    }
+    let count = rows.len();
+    if let Err(e) = db.persist_necessity_scores(&rows) {
+        tracing::warn!(target: "4da::necessity", error = %e, "Failed to persist necessity scores");
+    } else {
+        debug!(target: "4da::necessity", persisted = count, "Persisted necessity scores");
+    }
+}
+
 #[cfg(test)]
 #[path = "necessity_tests.rs"]
 mod tests;

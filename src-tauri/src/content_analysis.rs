@@ -53,12 +53,16 @@ impl std::fmt::Display for AudienceLevel {
 
 impl AudienceLevel {
     /// Parse from a stored string, defaulting to Intermediate on unknown values.
+    ///
+    /// Case-insensitive: stored rows carry the canonical `Display` casing
+    /// ("Beginner"), but the judge lane parses this straight from LLM output,
+    /// which drifts to lowercase ("beginner") regardless of prompt casing.
     pub fn from_str_lossy(s: &str) -> Self {
-        match s {
-            "Beginner" => Self::Beginner,
-            "Intermediate" => Self::Intermediate,
-            "Advanced" => Self::Advanced,
-            "Expert" => Self::Expert,
+        match s.trim().to_ascii_lowercase().as_str() {
+            "beginner" => Self::Beginner,
+            "intermediate" => Self::Intermediate,
+            "advanced" => Self::Advanced,
+            "expert" => Self::Expert,
             _ => Self::Intermediate,
         }
     }
@@ -141,6 +145,53 @@ pub fn get_cached_analysis(db: &Database, hash: &str) -> Result<Option<ContentAn
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(e.into()),
     }
+}
+
+/// Upsert a content analysis row (the cache's WRITE side).
+///
+/// The judge pass (`llm_judgments`, prompt v2) is the production writer: one
+/// batched LLM call yields the relevance judgment AND these fields. This
+/// upsert is what lights up the read side — `get_cached_analysis` →
+/// [`analysis_to_multiplier`] in the scoring pipeline, plus the Stretch
+/// bucket in feed composition (`scoring::composition::categorize_item`).
+/// Until it existed the table had a reader wired into scoring since Phase 41
+/// and no writer anywhere (measured 0 rows live, 2026-08-24, BYOK active).
+///
+/// Keyed by `content_hash` (the table's UNIQUE constraint), matching the
+/// read side's lookup. `analyzed_at` is stamped by the DB at write time; the
+/// value on `analysis` is ignored. The empty-content digest is refused
+/// defensively: every empty body hashes to the same SHA-256, so one row
+/// would cross-contaminate the multiplier of every content-less item
+/// (callers gate on this too — see `llm_judgments::analysis_from_response`).
+pub fn store_analysis(
+    db: &Database,
+    source_item_id: i64,
+    analysis: &ContentAnalysis,
+) -> Result<()> {
+    if analysis.content_hash.is_empty() || analysis.content_hash == content_hash("") {
+        return Ok(());
+    }
+    let conn = db.conn.lock();
+    conn.execute(
+        "INSERT INTO content_analyses (source_item_id, content_hash, technical_depth, novelty, audience_level, key_insight)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(content_hash) DO UPDATE SET
+             source_item_id = excluded.source_item_id,
+             technical_depth = excluded.technical_depth,
+             novelty = excluded.novelty,
+             audience_level = excluded.audience_level,
+             key_insight = excluded.key_insight,
+             analyzed_at = datetime('now')",
+        rusqlite::params![
+            source_item_id,
+            analysis.content_hash,
+            i64::from(analysis.technical_depth),
+            i64::from(analysis.novelty),
+            analysis.audience_level.to_string(),
+            analysis.key_insight,
+        ],
+    )?;
+    Ok(())
 }
 
 // =============================================================================
@@ -295,5 +346,93 @@ mod tests {
     fn test_audience_level_unknown_defaults_intermediate() {
         let parsed = AudienceLevel::from_str_lossy("UnknownLevel");
         assert_eq!(parsed, AudienceLevel::Intermediate);
+    }
+
+    #[test]
+    fn test_audience_level_parses_llm_lowercase() {
+        assert_eq!(
+            AudienceLevel::from_str_lossy("expert"),
+            AudienceLevel::Expert
+        );
+        assert_eq!(
+            AudienceLevel::from_str_lossy(" advanced "),
+            AudienceLevel::Advanced
+        );
+    }
+
+    // --- store_analysis / get_cached_analysis (write + read) tests ---
+
+    fn sample_analysis(hash: &str) -> ContentAnalysis {
+        ContentAnalysis {
+            technical_depth: 4,
+            novelty: 3,
+            audience_level: AudienceLevel::Advanced,
+            key_insight: Some("Async cancellation is the sharp edge".into()),
+            content_hash: hash.to_string(),
+            analyzed_at: String::new(),
+        }
+    }
+
+    #[test]
+    fn test_store_then_read_roundtrip() {
+        let db = crate::test_utils::test_db();
+        let id = crate::test_utils::insert_test_item(&db, "hackernews", "ca-1", "T", "body text");
+        let hash = content_hash("body text");
+
+        store_analysis(&db, id, &sample_analysis(&hash)).unwrap();
+
+        let read = get_cached_analysis(&db, &hash).unwrap().expect("cache hit");
+        assert_eq!(read.technical_depth, 4);
+        assert_eq!(read.novelty, 3);
+        assert_eq!(read.audience_level, AudienceLevel::Advanced);
+        assert_eq!(
+            read.key_insight.as_deref(),
+            Some("Async cancellation is the sharp edge")
+        );
+        assert_eq!(read.content_hash, hash);
+        assert!(!read.analyzed_at.is_empty(), "DB stamps analyzed_at");
+    }
+
+    #[test]
+    fn test_store_upserts_by_content_hash() {
+        let db = crate::test_utils::test_db();
+        let id = crate::test_utils::insert_test_item(&db, "hackernews", "ca-2", "T", "same body");
+        let hash = content_hash("same body");
+
+        store_analysis(&db, id, &sample_analysis(&hash)).unwrap();
+        let mut updated = sample_analysis(&hash);
+        updated.technical_depth = 2;
+        updated.audience_level = AudienceLevel::Beginner;
+        store_analysis(&db, id, &updated).unwrap();
+
+        let read = get_cached_analysis(&db, &hash).unwrap().expect("cache hit");
+        assert_eq!(read.technical_depth, 2);
+        assert_eq!(read.audience_level, AudienceLevel::Beginner);
+
+        let count: i64 = db
+            .conn
+            .lock()
+            .query_row(
+                "SELECT COUNT(*) FROM content_analyses WHERE content_hash = ?1",
+                rusqlite::params![hash],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "upsert must not duplicate rows");
+    }
+
+    #[test]
+    fn test_store_refuses_empty_content_digest() {
+        let db = crate::test_utils::test_db();
+        let id = crate::test_utils::insert_test_item(&db, "hackernews", "ca-3", "T", "");
+        let empty_hash = content_hash("");
+
+        store_analysis(&db, id, &sample_analysis(&empty_hash)).unwrap();
+        store_analysis(&db, id, &sample_analysis("")).unwrap();
+
+        assert!(
+            get_cached_analysis(&db, &empty_hash).unwrap().is_none(),
+            "the shared empty-content digest must never be written"
+        );
     }
 }
