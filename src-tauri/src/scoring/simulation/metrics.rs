@@ -220,6 +220,8 @@ mod unit_tests {
             applicability: None,
             advisory_id: None,
             primary_topic: None,
+            evidence_score: score,
+            rank_factors: None,
         }
     }
 

@@ -270,7 +270,14 @@ pub(crate) async fn score_items_full(
 
     crate::diagnostics::log_rss("scoring:loop_done_before_cross_encoder");
     let post_score_started = Instant::now();
+    // Everything below this line is the BATCH-RELATIVE layer: it may reorder
+    // and rewrite `top_score` (the rank value) but never `evidence_score`
+    // (the pure score_item output, set at construction), which is what
+    // persists as `relevance_score`. RankProvenance diffs `top_score` around
+    // each stage so the persisted rank carries honest provenance.
+    let mut rank_prov = crate::analysis::RankProvenance::begin(&results);
     crate::cross_encoder_rerank::apply_cross_encoder_reranking(&mut results, &scoring_ctx);
+    rank_prov.record(&results, "ce");
     crate::diagnostics::log_rss("scoring:after_cross_encoder");
 
     scoring::sort_results(&mut results);
@@ -284,12 +291,17 @@ pub(crate) async fn score_items_full(
     scoring::topic_dedup_results(&mut results);
     telemetry.topic_dedup_removed = pre_topic - results.len();
     scoring::temporal_cluster_results(&mut results);
+    // Dedup/cluster stages can BOOST a surviving representative
+    // (topic-corroboration) — a batch-relative move worth naming.
+    rank_prov.record(&results, "corroboration");
     telemetry.domain_diversity_adjusted = scoring::apply_domain_diversity(&mut results);
     scoring::apply_source_topic_diversity(&mut results);
+    rank_prov.record(&results, "diversity");
 
     // Per-source score normalization: blend raw score with source-relative
     // percentile so high-volume sources don't crowd out niche sources
     crate::source_tiers::normalize_scores_by_source(&mut results);
+    rank_prov.record(&results, "percentile");
     scoring::sort_results(&mut results); // Re-sort after normalization
 
     // Serendipity Engine: inject anti-bubble items
@@ -357,6 +369,7 @@ pub(crate) async fn score_items_full(
     } else {
         info!(target: "4da::analysis", "LLM rerank skipped for this run");
     }
+    rank_prov.record(&results, "llm");
     crate::diagnostics::log_rss("scoring:after_llm_rerank");
 
     // Feed consumes the Brief's verdicts: items the narrated Brief rejected
@@ -372,13 +385,17 @@ pub(crate) async fn score_items_full(
         }
     }
 
-    // Final top-end de-saturation on the PERSISTED score. The cross-encoder
+    // Final top-end de-saturation on the RANK value. The cross-encoder
     // (and LLM reconciler) overwrite `top_score` AFTER score_item, so its
-    // soft-ceiling no longer governs the stored value — top matches land near
-    // ~0.99 and tie. Re-apply the canonical cap here, downstream of every score
-    // mutation, so relevance_score honors the 0.95 invariant and the top stays
-    // rankable. Re-sort since values shifted (stable order preserved).
+    // soft-ceiling no longer governs the batch-layer output — top matches land
+    // near ~0.99 and tie. Re-apply the canonical cap here, downstream of every
+    // score mutation, so rank_score honors the 0.95 invariant and the top stays
+    // rankable. (The persisted relevance_score is `evidence_score`, which
+    // already honors score_item's own ceilings.) Re-sort since values shifted
+    // (stable order preserved).
     scoring::finalize_scores(&mut results);
+    rank_prov.record(&results, "cap");
+    rank_prov.finish(&mut results);
     scoring::sort_results(&mut results);
 
     emit_progress(

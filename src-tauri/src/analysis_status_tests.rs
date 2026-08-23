@@ -164,6 +164,9 @@ mod tests {
 
         // Build SourceRelevance via serde defaults — only id/title/url/top_score/
         // matches/relevant are required; every other field defaults.
+        // `evidence_score` mirrors top_score, as score_item sets it at
+        // construction (items 12+26): persistence writes relevance_score from
+        // evidence, so a fixture modelling a scored result must carry it.
         let make = |id: i64, top_score: f32, relevant: bool| -> SourceRelevance {
             serde_json::from_value(serde_json::json!({
                 "id": id,
@@ -172,6 +175,7 @@ mod tests {
                 "top_score": top_score,
                 "matches": [],
                 "relevant": relevant,
+                "evidence_score": top_score,
             }))
             .expect("construct SourceRelevance")
         };
@@ -226,7 +230,7 @@ mod tests {
             "all three items stamped at current pipeline version"
         );
 
-        // Relevance scores persisted only for top_score > 0 items (noise skipped).
+        // Relevance scores persisted only for evidence > 0 items (noise skipped).
         let scored: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM source_items WHERE relevance_score IS NOT NULL",
@@ -264,6 +268,8 @@ mod tests {
     // ========================================================================
 
     /// SourceRelevance with a breakdown carrying the given degraded markers.
+    /// `evidence_score` mirrors top_score (score_item sets it at construction;
+    /// persistence writes relevance_score from evidence — items 12+26).
     fn make_with_markers(
         id: i64,
         top_score: f32,
@@ -277,6 +283,7 @@ mod tests {
             "top_score": top_score,
             "matches": [],
             "relevant": relevant,
+            "evidence_score": top_score,
             "score_breakdown": {
                 "context_score": 0.0,
                 "interest_score": 0.0,

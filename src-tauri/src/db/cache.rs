@@ -131,16 +131,21 @@ impl Database {
     ) -> SqliteResult<Vec<DigestSourceItem>> {
         let conn = self.conn.lock();
 
-        let mut stmt = conn.prepare(
+        // Ranked read: ORDER BY the shared rank-then-evidence expression
+        // (audit items 12+26). The membership FILTER stays on
+        // relevance_score — evidence decides membership, rank decides order.
+        let sql = format!(
             "SELECT id, title, url, source_type, created_at, content, relevance_score, content_type
              FROM source_items
              WHERE created_at >= ?1
                AND COALESCE(detected_lang, 'en') = ?3
                AND COALESCE(relevance_score, 0.0) >= ?4
-             ORDER BY CASE WHEN relevance_score IS NULL THEN 1 ELSE 0 END,
-                      relevance_score DESC, created_at DESC
+             ORDER BY CASE WHEN COALESCE(rank_score, relevance_score) IS NULL THEN 1 ELSE 0 END,
+                      {ranked}, created_at DESC
              LIMIT ?2",
-        )?;
+            ranked = super::RANKED_ORDER_EXPR
+        );
+        let mut stmt = conn.prepare(&sql)?;
 
         let since_str = since.format("%Y-%m-%d %H:%M:%S").to_string();
 

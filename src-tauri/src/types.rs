@@ -440,6 +440,28 @@ pub struct SourceRelevance {
     /// Primary extracted topic for frontend topic clustering (e.g. "webassembly", "rust")
     #[serde(default)]
     pub primary_topic: Option<String>,
+    /// EVIDENCE score (audit 2026-08-23 §3.5, items 12+26): the pure
+    /// `score_item` output for this item — post the pipeline's own ceilings,
+    /// pre every batch-relative layer (cross-encoder blend, dedup cluster
+    /// boost, diversity decay, per-source percentile, LLM advisor delta).
+    /// Set once at construction in `pipeline_v2::score_item` and never
+    /// mutated afterwards; this is what persists as
+    /// `source_items.relevance_score`. `top_score` remains the final
+    /// display/rank value the batch layer produces (persisted separately as
+    /// `source_items.rank_score`). 0.0 on excluded items.
+    #[serde(default)]
+    pub evidence_score: f32,
+    /// Batch-layer rank provenance: compact JSON naming the batch-relative
+    /// factors that actually moved `top_score` away from `evidence_score`
+    /// this run, with their deltas (e.g. `{"ce":-0.12,"percentile":0.03}`).
+    /// Recorded by `scoring::analyzer::RankProvenance`; persisted as
+    /// `source_items.rank_factors`. In-process plumbing only — deliberately
+    /// excluded from IPC events and the TS binding (`serde(skip)`), so the
+    /// frontend contract is untouched. `None` = no factor fired (or the
+    /// path does not record provenance).
+    #[serde(skip)]
+    #[ts(skip)]
+    pub rank_factors: Option<String>,
 }
 
 pub(crate) fn default_lang_en() -> String {

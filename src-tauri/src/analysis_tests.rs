@@ -38,6 +38,8 @@ mod tests {
             applicability: None,
             advisory_id: None,
             primary_topic: None,
+            evidence_score: top_score,
+            rank_factors: None,
         }
     }
 

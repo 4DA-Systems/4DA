@@ -228,6 +228,16 @@ impl Database {
     /// by the current brain), NOT `>= 1` (scored by *any* brain): the stale tail
     /// becomes prune-eligible only after the drain reaches it and re-confirms it
     /// as noise. The version constant is compile-time — no injection risk.
+    ///
+    /// **Eviction keys on EVIDENCE, deliberately.** The predicate and the
+    /// `relevance_score ASC` orderings below stay on `relevance_score` and do
+    /// NOT adopt the ranked-read expression (`db::RANKED_ORDER_EXPR`, Phase
+    /// 110): `rank_score` is a batch-relative display rank (cross-encoder /
+    /// diversity / percentile / LLM deltas) that legitimately churns run to
+    /// run, and deleting data on a value that depends on which batch an item
+    /// last shared a run with would make eviction unstable and unauditable.
+    /// What an item IS worth (evidence) decides what is forgotten; how it
+    /// displays (rank) never does.
     fn noise_prune_predicate(noise_threshold: f64, min_age_days: i64) -> String {
         let current_version = crate::scoring::PIPELINE_VERSION;
         format!(

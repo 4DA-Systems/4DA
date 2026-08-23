@@ -309,6 +309,10 @@ pub(crate) async fn run_multi_source_analysis_impl(
                                                 applicability: None,
                                                 advisory_id: None,
                                                 primary_topic: None,
+                                                // Injected, never scored: the 0.45
+                                                // cap IS its durable evidence.
+                                                evidence_score: 0.45,
+                                                rank_factors: None,
                                             };
                                             info!(
                                                 target: "4da::analysis",

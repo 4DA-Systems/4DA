@@ -640,6 +640,8 @@ fn relevance_with_necessity(
         applicability: None,
         advisory_id: None,
         primary_topic: None,
+        evidence_score: 0.5,
+        rank_factors: None,
     }
 }
 

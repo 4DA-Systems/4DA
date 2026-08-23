@@ -19,7 +19,9 @@ use crate::{
     AnalysisState, SourceRelevance, ANALYSIS_TIMEOUT_SECS,
 };
 
-use super::analysis_cycle::{merge_stale_drain_batch, persist_cycle_results, CycleResults};
+use super::analysis_cycle::{
+    merge_stale_drain_batch, persist_cycle_results, CycleResults, RankProvenance,
+};
 use super::analysis_deep_scan::run_multi_source_analysis_impl;
 use super::analysis_fast_path::{elapsed_ms, spawn_post_foreground_cache_fill, CachedAnalysisRun};
 use super::{is_aborted, SIGNAL_CLASSIFIER};
@@ -640,6 +642,12 @@ async fn analyze_cached_content_inner_impl(
             ));
         }
 
+        // Rank provenance (audit items 12+26): on the differential path only
+        // the LLM advisor can move `top_score` away from `evidence_score`
+        // (which score_item set at construction). Recording it keeps the
+        // persisted rank layer honest about why differential ranks differ
+        // from full-pass ranks.
+        let mut rank_prov = RankProvenance::begin(&new_results);
         if run.llm_rerank {
             // LLM Reranking on new items only (if enabled)
             // 120s timeout: LLM API calls can hang on provider outages
@@ -669,6 +677,8 @@ async fn analyze_cached_content_inner_impl(
         } else {
             info!(target: "4da::analysis", "Skipping LLM rerank on foreground fast path");
         }
+        rank_prov.record(&new_results, "llm");
+        rank_prov.finish(&mut new_results);
 
         // Merge: take previous results (display optimization), update/add new
         // ones by ID. Without a merge base (headless / cold process) the set

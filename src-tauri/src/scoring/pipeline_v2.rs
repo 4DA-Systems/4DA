@@ -2216,6 +2216,8 @@ pub(crate) fn score_item(
             applicability: None,
             advisory_id: None,
             primary_topic: topics.first().cloned(),
+            evidence_score: 0.0,
+            rank_factors: None,
         };
     }
 
@@ -2966,6 +2968,10 @@ pub(crate) fn score_item(
         applicability,
         advisory_id,
         primary_topic: raw.topics.first().cloned(),
+        // The EVIDENCE snapshot (audit items 12+26): identical to top_score at
+        // construction; batch-relative writers downstream mutate top_score only.
+        evidence_score: combined_score,
+        rank_factors: None,
     }
 }
 

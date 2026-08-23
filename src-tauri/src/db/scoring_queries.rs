@@ -21,6 +21,30 @@ use super::{blob_to_embedding, parse_datetime, Database, StoredSourceItem};
 /// damper eats was already invisible to the churn counters.
 pub const SCORE_WRITE_HYSTERESIS: f64 = 0.05;
 
+/// THE shared ranked-read ORDER BY expression (audit 2026-08-23 §3.5, items
+/// 12+26): rank when a batch layer has ranked the item, evidence otherwise.
+///
+/// `relevance_score` is the EVIDENCE score (pure `score_item` output,
+/// hysteresis-damped, batch-independent); `rank_score` is the batch-relative
+/// display rank the analysis cycle's rerank/diversity/percentile/LLM layer
+/// produced, stamped with provenance (`rank_factors`, `rank_scored_at`).
+/// Every ranked read surface orders by this ONE expression so ranking
+/// semantics cannot fork per-surface again. Membership/threshold FILTERS keep
+/// comparing `relevance_score` — evidence decides membership, rank decides
+/// order. Mirrored (with a column-existence guard for older DBs) in
+/// `mcp-4da-server/src/db.ts`; that mirror names this const as its source of
+/// truth.
+///
+/// SQLite sorts NULLs last under DESC, so items with neither column set sink
+/// to the bottom without extra clauses.
+pub const RANKED_ORDER_EXPR: &str = "COALESCE(rank_score, relevance_score) DESC";
+
+/// [`RANKED_ORDER_EXPR`] with a table alias, for joined queries
+/// (e.g. `ranked_order_expr("si")` → `COALESCE(si.rank_score, si.relevance_score) DESC`).
+pub fn ranked_order_expr(alias: &str) -> String {
+    format!("COALESCE({alias}.rank_score, {alias}.relevance_score) DESC")
+}
+
 /// Row for the relevance-triage recall audit (Phase 0 of the scoring funnel).
 /// Carries exactly what the cheap gate reads plus the stored relevance_score.
 #[derive(Debug, Clone)]
@@ -403,6 +427,43 @@ impl Database {
         Ok(count)
     }
 
+    /// Persist the batch-relative RANK layer for the set the analysis cycle's
+    /// batch layer actually ranked: `rank_score` (the final `top_score`),
+    /// `rank_factors` (compact JSON provenance of the factors that fired, NULL
+    /// when none did or the path records none), and `rank_scored_at` (now,
+    /// UTC canonical format).
+    ///
+    /// Deliberately NOT [`Database::persist_analysis_scores`]:
+    /// - no hysteresis — rank churn is expected and honest (it is a ranking
+    ///   with provenance, not evidence);
+    /// - does NOT touch `relevance_score`, `scored_pipeline_version`, the
+    ///   signal columns, or the `scoring_churn` telemetry — all of those
+    ///   belong to the EVIDENCE write. Item 12's bug was exactly these two
+    ///   layers sharing one column.
+    ///
+    /// Backfill/drain never call this: those paths run no batch layer, so
+    /// they have no rank to record.
+    pub fn persist_rank_scores(&self, ranks: &[(i64, f32, Option<String>)]) -> SqliteResult<usize> {
+        if ranks.is_empty() {
+            return Ok(0);
+        }
+        let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
+        let mut count = 0;
+        {
+            let mut stmt = tx.prepare_cached(
+                "UPDATE source_items
+                 SET rank_score = ?1, rank_factors = ?2, rank_scored_at = datetime('now')
+                 WHERE id = ?3",
+            )?;
+            for (id, rank, factors) in ranks {
+                count += stmt.execute(params![f64::from(*rank), factors, id])?;
+            }
+        }
+        tx.commit()?;
+        Ok(count)
+    }
+
     /// How many already-scored items are stamped below `current_version` — the
     /// pending stale-version drain, using the SAME predicate family (incl. the
     /// tier window) as [`Database::get_stale_scored_items`]. The differential
@@ -583,208 +644,5 @@ impl Database {
 }
 
 #[cfg(test)]
-mod stability_tests {
-    use super::*;
-    use crate::test_utils::{insert_test_item, test_db};
-
-    fn score_and_version(db: &Database, id: i64) -> (Option<f64>, i64) {
-        let conn = db.conn.lock();
-        conn.query_row(
-            "SELECT relevance_score, scored_pipeline_version FROM source_items WHERE id = ?1",
-            params![id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .unwrap()
-    }
-
-    /// Item 10 (score side): a sub-hysteresis re-score keeps the durable score
-    /// but STILL advances the version stamp — skipping the stamp would trap the
-    /// item in the version-drain set forever. A move at/above the hysteresis
-    /// writes through, and a first-ever score (old NULL) always writes.
-    #[test]
-    fn hysteresis_keeps_score_but_stamps_version() {
-        let db = test_db();
-        let wobble = insert_test_item(&db, "hackernews", "hy1", "Wobbler", "x");
-        let mover = insert_test_item(&db, "hackernews", "hy2", "Mover", "x");
-        let fresh = insert_test_item(&db, "hackernews", "hy3", "First score", "x");
-
-        // Seed wobble+mover with a prior score at an OLD pipeline version, so
-        // the version stamp is observable.
-        {
-            let conn = db.conn.lock();
-            conn.execute(
-                "UPDATE source_items SET relevance_score = 0.50, scored_pipeline_version = 1
-                 WHERE id IN (?1, ?2)",
-                params![wobble, mover],
-            )
-            .unwrap();
-        }
-
-        db.persist_analysis_scores(
-            &[
-                (wobble, 0.52, None, None), // |Δ| = 0.02 < 0.05 → damped
-                (mover, 0.60, None, None),  // |Δ| = 0.10 ≥ 0.05 → written
-                (fresh, 0.03, None, None),  // old NULL → always written
-            ],
-            "analysis",
-        )
-        .unwrap();
-
-        let (s_wobble, v_wobble) = score_and_version(&db, wobble);
-        assert_eq!(
-            s_wobble,
-            Some(0.50),
-            "sub-hysteresis move keeps the old score"
-        );
-        assert_eq!(
-            v_wobble,
-            i64::from(crate::scoring::PIPELINE_VERSION),
-            "damped write must still stamp the pipeline version (drain safety)"
-        );
-        let (s_mover, _) = score_and_version(&db, mover);
-        assert!(
-            (s_mover.unwrap() - 0.60).abs() < 1e-6,
-            "real move writes through"
-        );
-        let (s_fresh, v_fresh) = score_and_version(&db, fresh);
-        assert!(s_fresh.is_some(), "first-ever score always writes");
-        assert_eq!(v_fresh, i64::from(crate::scoring::PIPELINE_VERSION));
-    }
-
-    /// Item 13: the churn row names WHICH items moved (top_offenders, raw
-    /// deltas, largest first) and how many writes the damper suppressed.
-    #[test]
-    fn churn_row_carries_offender_list_and_suppressed_count() {
-        let db = test_db();
-        let a = insert_test_item(&db, "hackernews", "off_a", "big mover", "x");
-        let b = insert_test_item(&db, "hackernews", "off_b", "small mover", "x");
-        let c = insert_test_item(&db, "hackernews", "off_c", "damped", "x");
-        db.persist_analysis_scores(
-            &[
-                (a, 0.90, None, None),
-                (b, 0.40, None, None),
-                (c, 0.50, None, None),
-            ],
-            "analysis",
-        )
-        .unwrap();
-        db.persist_analysis_scores(
-            &[
-                (a, 0.50, None, None), // Δ = −0.40 → offender #1
-                (b, 0.48, None, None), // Δ = +0.08 → offender #2 (written)
-                (c, 0.52, None, None), // Δ = +0.02 → damped, below offender floor? 0.02 ≥ 0.01 → listed
-            ],
-            "analysis",
-        )
-        .unwrap();
-
-        let conn = db.conn.lock();
-        let (suppressed, offenders_json): (Option<i64>, Option<String>) = conn
-            .query_row(
-                "SELECT suppressed_writes, top_offenders FROM scoring_churn ORDER BY id DESC LIMIT 1",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .unwrap();
-        assert_eq!(suppressed, Some(1), "exactly c's write was damped");
-        let offenders: Vec<serde_json::Value> =
-            serde_json::from_str(&offenders_json.expect("offender list present")).unwrap();
-        assert_eq!(offenders.len(), 3, "all rescored movers ≥0.01 are listed");
-        assert_eq!(
-            offenders[0]["id"],
-            serde_json::json!(a),
-            "largest |Δ| first"
-        );
-        assert!((offenders[0]["old"].as_f64().unwrap() - 0.90).abs() < 1e-6);
-        assert!((offenders[0]["new"].as_f64().unwrap() - 0.50).abs() < 1e-6);
-
-        // First-ever batch (all old NULL) records no offenders and 0 suppressed.
-        let (first_suppressed, first_offenders): (Option<i64>, Option<String>) = conn
-            .query_row(
-                "SELECT suppressed_writes, top_offenders FROM scoring_churn ORDER BY id ASC LIMIT 1",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .unwrap();
-        assert_eq!(first_suppressed, Some(0));
-        assert!(
-            first_offenders.is_none(),
-            "first-ever scores are not movers"
-        );
-    }
-
-    /// The differential gate's pending-drain count mirrors the drain predicate:
-    /// stale = scored below the current version AND has a persisted score.
-    #[test]
-    fn count_stale_scored_items_mirrors_drain_predicate() {
-        let db = test_db();
-        let stale = insert_test_item(&db, "hackernews", "st1", "stale", "x");
-        let current = insert_test_item(&db, "hackernews", "st2", "current", "x");
-        let never = insert_test_item(&db, "hackernews", "st3", "never scored", "x");
-        let v = crate::scoring::PIPELINE_VERSION;
-        {
-            let conn = db.conn.lock();
-            conn.execute(
-                "UPDATE source_items SET relevance_score = 0.5, scored_pipeline_version = ?1 WHERE id = ?2",
-                params![v - 1, stale],
-            )
-            .unwrap();
-            conn.execute(
-                "UPDATE source_items SET relevance_score = 0.5, scored_pipeline_version = ?1 WHERE id = ?2",
-                params![v, current],
-            )
-            .unwrap();
-            // `never` keeps relevance_score NULL / version 0 — that is the
-            // NEVER-scored backlog (backfill's job), not the stale drain's.
-            let _ = never;
-        }
-        assert_eq!(db.count_stale_scored_items(v).unwrap(), 1);
-        assert_eq!(db.count_stale_scored_items(v - 1).unwrap(), 0);
-    }
-
-    /// Item 11's working-set probe: fresh durable curation = persisted score +
-    /// recent verdict stamp. Old or never-curated rows fall out of protection
-    /// (the escape hatch that prevents a permanently-degraded run from
-    /// freezing the corpus).
-    #[test]
-    fn fresh_durable_score_probe_honors_the_age_escape_hatch() {
-        let db = test_db();
-        let fresh = insert_test_item(&db, "hackernews", "fd1", "fresh", "x");
-        let old = insert_test_item(&db, "hackernews", "fd2", "old verdict", "x");
-        let unscored = insert_test_item(&db, "hackernews", "fd3", "no score", "x");
-        {
-            let conn = db.conn.lock();
-            conn.execute(
-                "UPDATE source_items SET relevance_score = 0.6, feed_verdict_at = datetime('now') WHERE id = ?1",
-                params![fresh],
-            )
-            .unwrap();
-            conn.execute(
-                "UPDATE source_items SET relevance_score = 0.6, feed_verdict_at = datetime('now', '-8 days') WHERE id = ?1",
-                params![old],
-            )
-            .unwrap();
-            conn.execute(
-                "UPDATE source_items SET feed_verdict_at = datetime('now') WHERE id = ?1",
-                params![unscored],
-            )
-            .unwrap();
-        }
-        let protected = db
-            .ids_with_fresh_durable_scores(&[fresh, old, unscored], 7)
-            .unwrap();
-        assert!(
-            protected.contains(&fresh),
-            "fresh durable score is protected"
-        );
-        assert!(
-            !protected.contains(&old),
-            ">7-day-old curation accepts the write"
-        );
-        assert!(
-            !protected.contains(&unscored),
-            "no durable score → nothing to protect"
-        );
-        assert!(db.ids_with_fresh_durable_scores(&[], 7).unwrap().is_empty());
-    }
-}
+#[path = "scoring_queries_tests.rs"]
+mod stability_tests;

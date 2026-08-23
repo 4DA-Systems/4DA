@@ -1000,7 +1000,17 @@ export class FourDADatabase {
       params.push(sourceType);
     }
 
-    query += ` ORDER BY relevance_score DESC LIMIT ?`;
+    // Ranked read (desktop audit items 12+26, schema 110): order by the
+    // batch-relative rank when the analysis cycle has ranked the item, falling
+    // back to the evidence score. This mirrors the Rust source of truth —
+    // `RANKED_ORDER_EXPR` in `src-tauri/src/db/scoring_queries.rs` — and must
+    // stay textually in sync with it. The `relevance_score >= ?` membership
+    // filter above deliberately stays on evidence: evidence decides membership,
+    // rank decides order. Guarded on column existence for pre-110 DBs.
+    const rankedOrder = this.hasColumn("source_items", "rank_score")
+      ? `COALESCE(rank_score, relevance_score) DESC`
+      : `relevance_score DESC`;
+    query += ` ORDER BY ${rankedOrder} LIMIT ?`;
     // Over-fetch so near-duplicate collapsing below can still fill `limit`
     // (the same story arrives via reddit + rss + mastodon: live feeds showed
     // three copies of "Rust 1.98.0" in one 20-item response).

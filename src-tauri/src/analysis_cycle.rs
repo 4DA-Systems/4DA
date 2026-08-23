@@ -14,6 +14,82 @@ use tracing::warn;
 use crate::scoring;
 use crate::SourceRelevance;
 
+// ============================================================================
+// Rank provenance (audit 2026-08-23 §3.5, items 12+26)
+// ============================================================================
+
+/// A `top_score` move smaller than this did not "fire" — float noise from
+/// multiplying by 1.0-ish factors is not provenance.
+const RANK_FACTOR_FIRED_EPSILON: f32 = 5e-4;
+
+/// Records which batch-relative stages actually moved each item's rank value
+/// (`top_score`) away from its evidence score this run, by diffing `top_score`
+/// snapshots around each stage. `finish` serializes the fired factors into
+/// [`SourceRelevance::rank_factors`] as compact JSON
+/// (e.g. `{"ce":-0.12,"percentile":0.03}`), which [`persist_cycle_results`]
+/// stamps into `source_items.rank_factors` next to `rank_score`.
+///
+/// Factor names in use: `"ce"` (cross-encoder blend), `"corroboration"`
+/// (dedup/cluster boosts), `"diversity"` (domain + source-topic decay),
+/// `"percentile"` (per-source normalization), `"llm"` (LLM advisor delta),
+/// `"cap"` (final ceiling reassertion).
+///
+/// Items removed between snapshots (dedup, clustering) simply drop out; items
+/// that appear between snapshots (serendipity swaps re-insert clones of ids
+/// already tracked, so in practice none) are adopted without a delta.
+pub(crate) struct RankProvenance {
+    /// id → top_score as of the previous snapshot.
+    last: std::collections::HashMap<u64, f32>,
+    /// id → (factor name, delta) for every factor that fired.
+    deltas: std::collections::HashMap<u64, Vec<(&'static str, f32)>>,
+}
+
+impl RankProvenance {
+    /// Snapshot the pre-batch-layer scores (call right after the scoring loop).
+    pub(crate) fn begin(results: &[SourceRelevance]) -> Self {
+        Self {
+            last: results.iter().map(|r| (r.id, r.top_score)).collect(),
+            deltas: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Diff current `top_score`s against the previous snapshot, attributing any
+    /// move to `factor`, then advance the snapshot.
+    pub(crate) fn record(&mut self, results: &[SourceRelevance], factor: &'static str) {
+        for r in results {
+            if let Some(prev) = self.last.get(&r.id) {
+                let delta = r.top_score - prev;
+                if delta.abs() >= RANK_FACTOR_FIRED_EPSILON {
+                    self.deltas.entry(r.id).or_default().push((factor, delta));
+                }
+            }
+            self.last.insert(r.id, r.top_score);
+        }
+    }
+
+    /// Serialize each item's fired factors into `rank_factors` (None when no
+    /// factor fired — an honest "the batch layer was an identity here").
+    pub(crate) fn finish(self, results: &mut [SourceRelevance]) {
+        for r in results.iter_mut() {
+            r.rank_factors = self.deltas.get(&r.id).and_then(|fired| {
+                let mut map = serde_json::Map::new();
+                for (factor, delta) in fired {
+                    // 3 decimals: compact, and finer moves are sub-noise.
+                    let rounded = (f64::from(*delta) * 1000.0).round() / 1000.0;
+                    if let Some(num) = serde_json::Number::from_f64(rounded) {
+                        map.insert((*factor).to_string(), serde_json::Value::Number(num));
+                    }
+                }
+                if map.is_empty() {
+                    None
+                } else {
+                    serde_json::to_string(&serde_json::Value::Object(map)).ok()
+                }
+            });
+        }
+    }
+}
+
 /// What one analysis cycle produced (internal to the analysis boundary).
 pub(crate) struct CycleResults {
     /// The cycle's result set. On a differential run with in-memory previous
@@ -98,9 +174,26 @@ pub(crate) fn merge_stale_drain_batch(
     count
 }
 
-/// Persist everything a completed analysis cycle owes the DB: relevance scores,
+/// Persist everything a completed analysis cycle owes the DB: EVIDENCE scores
+/// (`relevance_score` ← `evidence_score`), the batch-relative RANK layer
+/// (`rank_score`/`rank_factors`/`rank_scored_at` ← `top_score` + provenance),
 /// pipeline-version stamps, the per-item curation VERDICT (`feed_relevant`), and
 /// the `scoring_events` telemetry row.
+///
+/// ## Evidence / rank separation (audit 2026-08-23 §3.5, items 12+26)
+///
+/// `relevance_score` is the item's EVIDENCE: pure `score_item` output, a fixed
+/// point independent of whatever batch the item happened to share a run with.
+/// The batch-relative layer (cross-encoder blend, dedup corroboration boosts,
+/// diversity decay, per-source percentile, LLM advisor delta, final cap) writes
+/// `top_score` only, and lands in its own columns with provenance. The audit's
+/// ±0.43 durable-score oscillation was exactly these factors being persisted
+/// INTO `relevance_score`: the same item's stored score depended on the rest of
+/// its batch and on which path (GUI with cross-encoder vs headless without)
+/// last persisted it. Rank churn is expected and honest — it is a ranking with
+/// a provenance stamp, no longer poisoning evidence. Ranked read surfaces order
+/// by `db::RANKED_ORDER_EXPR` (rank when present, evidence otherwise);
+/// membership/threshold filters keep reading evidence.
 ///
 /// This is the SINGLE curation-persistence site for every real analysis path.
 /// Foreground (`run_cached_analysis`), scheduled (`run_scheduled_analysis`), and
@@ -134,14 +227,16 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
     }
     let persistable = |r: &SourceRelevance| !protected.contains(&(r.id as i64));
 
-    // Relevance scores — only items that scored > 0 (noise is version-stamped below).
+    // EVIDENCE scores — only items whose evidence is > 0 (noise is
+    // version-stamped below). `evidence_score`, not `top_score`: the write
+    // goes through the same hysteresis damper, which now stabilizes evidence.
     let score_data: Vec<(i64, f32, Option<String>, Option<String>)> = results
         .iter()
-        .filter(|r| r.top_score > 0.0 && persistable(r))
+        .filter(|r| r.evidence_score > 0.0 && persistable(r))
         .map(|r| {
             (
                 r.id as i64,
-                r.top_score,
+                r.evidence_score,
                 r.signal_type.clone(),
                 r.signal_priority.clone(),
             )
@@ -150,6 +245,25 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
     if !score_data.is_empty() {
         if let Err(e) = db.persist_analysis_scores(&score_data, "analysis") {
             warn!(target: "4da::scoring", error = %e, "Failed to persist relevance scores");
+        }
+    }
+
+    // RANK layer — the WHOLE ranked result set this run (`results` is exactly
+    // what the batch layer ranked: the full survivor set on a full pass, the
+    // scored subset on a differential run — carried-over display items were
+    // not re-ranked and keep the rank of the run that ranked them). Written
+    // without hysteresis (rank churn is honest), and `persist_rank_scores`
+    // touches neither `scored_pipeline_version` nor the churn telemetry —
+    // both track evidence. The degraded guard applies: a systemically
+    // degraded run's ranks are as confidently wrong as its scores.
+    let rank_data: Vec<(i64, f32, Option<String>)> = results
+        .iter()
+        .filter(|r| r.top_score > 0.0 && persistable(r))
+        .map(|r| (r.id as i64, r.top_score, r.rank_factors.clone()))
+        .collect();
+    if !rank_data.is_empty() {
+        if let Err(e) = db.persist_rank_scores(&rank_data) {
+            warn!(target: "4da::scoring", error = %e, "Failed to persist rank scores");
         }
     }
 
@@ -263,5 +377,150 @@ fn degraded_protected_ids(
             warn!(target: "4da::scoring", error = %e, "Degraded-guard freshness probe failed — persisting (fail-open)");
             std::collections::HashSet::new()
         }
+    }
+}
+
+#[cfg(test)]
+mod evidence_rank_tests {
+    use super::*;
+    use crate::test_utils::{insert_test_item, test_db};
+
+    /// Minimal result carrying distinct evidence and rank values, as the
+    /// analyzer produces after the batch layer: `evidence_score` is the pure
+    /// score_item output; `top_score` carries the batch-relative mutations.
+    fn make_result(id: u64, evidence: f32, rank: f32, relevant: bool) -> SourceRelevance {
+        let mut r: SourceRelevance = serde_json::from_value(serde_json::json!({
+            "id": id,
+            "title": format!("item {id}"),
+            "url": null,
+            "top_score": rank,
+            "matches": [],
+            "relevant": relevant,
+            "source_type": "hackernews",
+            "evidence_score": evidence,
+        }))
+        .expect("SourceRelevance from JSON");
+        r.rank_factors = None;
+        r
+    }
+
+    /// Items 12+26 (provenance): only factors that actually moved `top_score`
+    /// are recorded, with their deltas; untouched items get `None`, and
+    /// sub-epsilon float noise never counts as a fired factor.
+    #[test]
+    fn rank_provenance_records_only_fired_factors() {
+        let mut results = vec![
+            make_result(1, 0.50, 0.50, true),
+            make_result(2, 0.70, 0.70, true),
+            make_result(3, 0.40, 0.40, false),
+        ];
+        let mut prov = RankProvenance::begin(&results);
+        // "ce" moves item 1 up; item 3 wobbles below the fired epsilon.
+        results[0].top_score = 0.62;
+        results[2].top_score += 1.0e-5;
+        prov.record(&results, "ce");
+        // "percentile" moves item 2 down.
+        results[1].top_score = 0.65;
+        prov.record(&results, "percentile");
+        prov.finish(&mut results);
+
+        let f1: serde_json::Value =
+            serde_json::from_str(results[0].rank_factors.as_deref().expect("item 1 fired"))
+                .unwrap();
+        assert!(
+            (f1["ce"].as_f64().unwrap() - 0.12).abs() < 1e-9,
+            "ce delta recorded: {f1}"
+        );
+        assert!(f1.get("percentile").is_none(), "unfired factor absent");
+        let f2: serde_json::Value =
+            serde_json::from_str(results[1].rank_factors.as_deref().expect("item 2 fired"))
+                .unwrap();
+        assert!((f2["percentile"].as_f64().unwrap() + 0.05).abs() < 1e-9);
+        assert!(
+            results[2].rank_factors.is_none(),
+            "sub-epsilon wobble is not provenance"
+        );
+    }
+
+    /// Items 12+26 (the contract): a batch-layer mutation changes what lands
+    /// in `rank_score` but NOT what lands in `relevance_score`. One persist
+    /// call writes both layers to their own columns, with provenance and a
+    /// timestamp on the rank side and the version stamp on the evidence side.
+    #[test]
+    fn persist_cycle_separates_evidence_from_rank() {
+        let db = test_db();
+        let id = insert_test_item(&db, "hackernews", "er1", "separated", "x");
+        let mut r = make_result(id as u64, 0.62, 0.87, true);
+        r.rank_factors = Some(r#"{"ce":0.25}"#.to_string());
+
+        persist_cycle_results(&db, std::slice::from_ref(&r));
+
+        let conn = db.conn.lock();
+        let (evidence, rank, factors, ranked_at, version): (
+            Option<f64>,
+            Option<f64>,
+            Option<String>,
+            Option<String>,
+            i64,
+        ) = conn
+            .query_row(
+                "SELECT relevance_score, rank_score, rank_factors, rank_scored_at,
+                        scored_pipeline_version
+                 FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert!(
+            (evidence.unwrap() - 0.62).abs() < 1e-6,
+            "relevance_score is the EVIDENCE value, not the batch-mutated top_score"
+        );
+        assert!(
+            (rank.unwrap() - 0.87).abs() < 1e-6,
+            "rank_score is the batch layer's final top_score"
+        );
+        assert_eq!(factors.as_deref(), Some(r#"{"ce":0.25}"#));
+        assert!(
+            ranked_at.is_some(),
+            "rank write is provenance-stamped in time"
+        );
+        assert_eq!(version, i64::from(scoring::PIPELINE_VERSION));
+    }
+
+    /// Item 12 (churn side): the evidence write is hysteresis-damped, the rank
+    /// write is not — a batch-relative wobble re-ranks freely while the
+    /// durable evidence stays put.
+    #[test]
+    fn evidence_damped_while_rank_rewrites_freely() {
+        let db = test_db();
+        let id = insert_test_item(&db, "hackernews", "er2", "damped", "x");
+        persist_cycle_results(&db, &[make_result(id as u64, 0.60, 0.60, true)]);
+        // Next cycle: evidence wobbles sub-hysteresis, rank swings hard.
+        persist_cycle_results(&db, &[make_result(id as u64, 0.62, 0.31, true)]);
+
+        let conn = db.conn.lock();
+        let (evidence, rank): (Option<f64>, Option<f64>) = conn
+            .query_row(
+                "SELECT relevance_score, rank_score FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert!(
+            (evidence.unwrap() - 0.60).abs() < 1e-6,
+            "sub-hysteresis evidence wobble keeps the old durable score"
+        );
+        assert!(
+            (rank.unwrap() - 0.31).abs() < 1e-6,
+            "rank rewrites without hysteresis — rank churn is honest"
+        );
     }
 }

@@ -308,6 +308,22 @@ fn batch_layer_is_identity_for_non_colliding_items() {
             a.top_score,
             b.top_score
         );
+        // Item 12 landed: the analyzer now PERSISTS `evidence_score` (pure
+        // score_item output) as relevance_score, so evidence parity with the
+        // backfill family must hold UNCONDITIONALLY — including for items the
+        // batch layer mutates, and including the env-gated stages (CE/LLM)
+        // this harness deliberately excludes: they write top_score (the rank
+        // layer) only. The top_score identity above remains the batch-layer
+        // regression tripwire; this is the persist-contract tripwire.
+        assert!(
+            (a.evidence_score - b.top_score).abs() <= 1e-6,
+            "evidence-family divergence for '{}': analyzer evidence {:.6} vs \
+             backfill persisted {:.6} — a batch stage mutated evidence_score, \
+             re-poisoning the durable score (audit §3.5, item 12)",
+            a.title,
+            a.evidence_score,
+            b.top_score
+        );
         assert_eq!(
             a.relevant, b.relevant,
             "relevance verdict for '{}' differs between persistence families",

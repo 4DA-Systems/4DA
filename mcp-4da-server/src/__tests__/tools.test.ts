@@ -593,6 +593,53 @@ describe("4DA MCP Tool Handlers", () => {
       expect(ids).not.toContain(rejected);
     });
 
+    it("orders by rank_score when present, falling back to evidence (schema 110)", () => {
+      // Evidence/rank separation (desktop audit items 12+26): relevance_score
+      // is the batch-independent EVIDENCE score; rank_score is the analysis
+      // cycle's batch-relative display rank. Ranked reads order by
+      // COALESCE(rank_score, relevance_score) DESC — mirroring the Rust
+      // RANKED_ORDER_EXPR (src-tauri/src/db/scoring_queries.rs) — while the
+      // min_score membership filter stays on evidence.
+      seedUserContext(db);
+      const raw = db.getRawDb();
+      raw.exec("ALTER TABLE source_items ADD COLUMN relevance_score REAL");
+      raw.exec("ALTER TABLE source_items ADD COLUMN content_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_priority TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN rank_score REAL");
+
+      // Evidence order would be evidenceHigh > ranked > unranked; the batch
+      // layer ranked `ranked` to the top. Ranked order must win, and the
+      // never-ranked items must still appear, ordered by their evidence.
+      // Titles are deliberately dissimilar: the response path collapses
+      // near-duplicate titles, which must not eat these fixtures.
+      const evidenceHigh = insertSourceItem(db, { title: "Tokio scheduler internals deep dive", content: "rust" });
+      const ranked = insertSourceItem(db, { title: "SQLite WAL checkpoint tuning guide", content: "rust" });
+      const unranked = insertSourceItem(db, { title: "Kubernetes operator reconciliation patterns", content: "rust" });
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.80, rank_score = NULL WHERE id = ?")
+        .run(evidenceHigh);
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.60, rank_score = 0.92 WHERE id = ?")
+        .run(ranked);
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.50, rank_score = NULL WHERE id = ?")
+        .run(unranked);
+
+      const result = executeGetRelevantContent(db, { min_score: 0.35, since_hours: 24, limit: 50 });
+      const ids = result.map((r) => r.id);
+      expect(ids).toEqual([ranked, evidenceHigh, unranked]);
+
+      // Membership stays on EVIDENCE: a huge rank cannot buy membership for
+      // an item whose evidence is below the floor.
+      const noiseWithRank = insertSourceItem(db, { title: "noise with a stale rank", content: "rust" });
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.10, rank_score = 0.99 WHERE id = ?")
+        .run(noiseWithRank);
+      const second = executeGetRelevantContent(db, { min_score: 0.35, since_hours: 24, limit: 50 });
+      expect(second.map((r) => r.id)).not.toContain(noiseWithRank);
+    });
+
     it("deep-fallback actionable signals never trust stale-version stored signals", () => {
       // get_actionable_signals trusts persisted signal_type/signal_priority at
       // confidence 0.90 — on the deep fallback those columns MUST come from the
