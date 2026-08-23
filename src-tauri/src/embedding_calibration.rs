@@ -112,11 +112,10 @@ pub(crate) fn lookup_known_model(model_name: &str) -> Option<(f32, f32)> {
 /// 2. Calibrated default — applied EXPLICITLY, so switching away from a known
 ///    model (reembed) cannot leave the previous model's parameters active.
 ///
-/// `_conn` is retained for call-site stability (`app_setup`, `reembed`): the
-/// DB-driven auto-compute stage that consumed it was deleted 2026-08-23 — it
-/// queried `context_score`/`interest_score` columns that never existed on
-/// `source_items`, so it silently returned nothing on every launch.
-pub(crate) fn initialize_calibration(_conn: &rusqlite::Connection, model_name: &str) {
+/// (Pure lookup — no DB. The `_conn` parameter kept for call-site stability
+/// after the dead DB-driven auto-compute stage was deleted 2026-08-23 was
+/// dropped once the `app_setup` / `reembed` call sites came into scope.)
+pub(crate) fn initialize_calibration(model_name: &str) {
     if let Some((center, scale)) = lookup_known_model(model_name) {
         info!(
             model = model_name,
@@ -183,8 +182,7 @@ mod tests {
     #[test]
     fn initialize_prefers_known_model() {
         clear_active_params_for_current_test_thread();
-        let conn = rusqlite::Connection::open_in_memory().expect("in-memory conn");
-        initialize_calibration(&conn, "nomic-embed-text");
+        initialize_calibration("nomic-embed-text");
         assert!((get_sigmoid_center() - 0.42).abs() < 0.001);
         assert!((get_sigmoid_scale() - 14.0).abs() < 0.1);
         clear_active_params_for_current_test_thread();
@@ -193,11 +191,10 @@ mod tests {
     #[test]
     fn initialize_unknown_model_applies_defaults_even_after_known_model() {
         clear_active_params_for_current_test_thread();
-        let conn = rusqlite::Connection::open_in_memory().expect("in-memory conn");
         // A reembed switch known → unknown must not leave the known model's
         // parameters active.
-        initialize_calibration(&conn, "nomic-embed-text");
-        initialize_calibration(&conn, "totally-custom-model");
+        initialize_calibration("nomic-embed-text");
+        initialize_calibration("totally-custom-model");
         assert!((get_sigmoid_center() - DEFAULT_CENTER).abs() < 0.001);
         assert!((get_sigmoid_scale() - DEFAULT_SCALE).abs() < 0.1);
         clear_active_params_for_current_test_thread();

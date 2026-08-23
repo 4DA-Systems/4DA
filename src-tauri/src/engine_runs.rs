@@ -352,6 +352,136 @@ pub(crate) fn freshness_snapshot() -> Result<FreshnessSnapshot> {
 }
 
 // ============================================================================
+// Scoring watermark — the DB-derived differential boundary (2026-08-23 audit, item 9)
+// ============================================================================
+
+/// The most recent SUCCESSFUL scoring run, read from `engine_runs`.
+///
+/// This is what makes differential scoring survive process boundaries: the old
+/// gate lived in in-memory `AnalysisState` (`last_completed_at` +
+/// `previous_results`), which a fresh `fourda-engine --once` process NEVER has —
+/// so every OS-scheduled cycle re-scored the full window (~660 items every 30
+/// minutes, measured live 2026-08-23). GUI and headless share the database, so
+/// the watermark deliberately accepts ANY trigger.
+#[derive(Debug, Clone)]
+pub(crate) struct ScoringWatermark {
+    /// The run's `started_at` in SQLite-canonical UTC (`%Y-%m-%d %H:%M:%S`) —
+    /// the `since` bound for `get_items_since_timestamp_tiered`, which
+    /// string-compares against `source_items.last_seen`. Two deliberate choices:
+    ///
+    /// - **Canonical format, not RFC3339.** The receipt stores RFC3339
+    ///   (`2026-08-23T14:04:40+00:00`); SQLite compares TEXT byte-wise, and
+    ///   `'T' > ' '`, so an unconverted RFC3339 bound would silently exclude
+    ///   every same-day item.
+    /// - **`started_at`, not `completed_at`.** Items that arrived while the run
+    ///   was scoring were not in its selection; a completed-at bound would skip
+    ///   them until the never-scored backfill mopped them up. The cost is
+    ///   re-scoring one cycle's worth of overlap, which the persist-boundary
+    ///   hysteresis flattens to zero churn.
+    pub since_utc: String,
+    /// Minutes since the run COMPLETED — the freshness of the watermark.
+    /// Negative means the receipt claims a future completion (clock skew);
+    /// callers must treat that as "no usable watermark".
+    pub completed_age_minutes: i64,
+}
+
+/// Read the differential watermark: the newest `engine_runs` row that recorded a
+/// successful cycle which actually scored something (`ok = 1 AND items_scored >
+/// 0`, any trigger). `None` when no such run exists or its timestamps do not
+/// parse — callers fall back to the full window, which is always safe.
+pub(crate) fn last_scoring_watermark() -> Option<ScoringWatermark> {
+    let db = crate::get_database().ok()?;
+    let conn = db.conn.lock();
+    ensure_table(&conn).ok()?;
+    let (started_at, completed_at): (String, String) = conn
+        .query_row(
+            "SELECT started_at, completed_at FROM engine_runs
+             WHERE ok = 1 AND items_scored > 0
+             ORDER BY id DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .ok()?;
+    watermark_from_run(&started_at, &completed_at, chrono::Utc::now())
+}
+
+/// Parse a receipt timestamp: RFC3339 (what [`now_rfc3339`] writes) with a
+/// canonical-format fallback for defensiveness. `None` = unparseable.
+fn parse_receipt_time(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        return Some(dt.with_timezone(&chrono::Utc));
+    }
+    chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+        .ok()
+        .map(|n| n.and_utc())
+}
+
+/// Pure core of [`last_scoring_watermark`]: convert one receipt row into a
+/// watermark relative to `now`. Split out so the format conversion and age
+/// arithmetic are unit-testable without a database.
+fn watermark_from_run(
+    started_at: &str,
+    completed_at: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Option<ScoringWatermark> {
+    let started = parse_receipt_time(started_at)?;
+    let completed = parse_receipt_time(completed_at)?;
+    Some(ScoringWatermark {
+        since_utc: started.format("%Y-%m-%d %H:%M:%S").to_string(),
+        completed_age_minutes: now.signed_duration_since(completed).num_minutes(),
+    })
+}
+
+/// A watermark older than this cannot bound a differential run — after a day
+/// of downtime the corpus needs the full window (staleness, decay, drift).
+pub(crate) const DIFFERENTIAL_WATERMARK_MAX_AGE_MINUTES: i64 = 24 * 60;
+
+/// The largest pending stale-version drain a differential run may absorb —
+/// exactly one drain batch (`get_stale_scored_items`' 500 cap), which the
+/// differential path's own `drain_stale_backlog` merge clears in the same run.
+/// A bigger backlog means a pipeline-version bump just landed: take the full
+/// window so the visible feed converges immediately (and keep taking it until
+/// the drain has caught up to within one batch).
+pub(crate) const DIFFERENTIAL_MAX_STALE_BACKLOG: i64 = 500;
+
+/// The differential admission rule (audit item 9). Returns the `since` bound
+/// when this run may score differentially, `None` for the full window.
+///
+/// Pure — DB facts come in as arguments — so the decision table is testable:
+/// - No watermark / stale (>24h) / future-dated (clock skew) → full window.
+/// - Pending stale-version drain beyond one batch (version bump) → full
+///   window. The FIRST run after activating a scoring change is therefore
+///   full, which is correct — and version-stale items within the bound still
+///   drain on differential runs via the existing `drain_stale_backlog` merge.
+/// - A non-silent (foreground) run without in-memory previous results → full
+///   window: its result set REPLACES the shared display state and the
+///   `analysis-complete` feed wholesale, so it must be a complete corpus.
+///   Silent runs (scheduled + headless) deliver via the frontend's MERGING
+///   `background-results` path (or no UI at all), so they take the
+///   differential even from a cold process — that cold headless process is
+///   precisely the case the in-memory gate could never serve.
+pub(crate) fn differential_since(
+    watermark: Option<&ScoringWatermark>,
+    stale_backlog: i64,
+    has_previous_results: bool,
+    merge_delivery: bool,
+) -> Option<String> {
+    let w = watermark?;
+    if w.completed_age_minutes < 0
+        || w.completed_age_minutes > DIFFERENTIAL_WATERMARK_MAX_AGE_MINUTES
+    {
+        return None;
+    }
+    if stale_backlog > DIFFERENTIAL_MAX_STALE_BACKLOG {
+        return None;
+    }
+    if !merge_delivery && !has_previous_results {
+        return None;
+    }
+    Some(w.since_utc.clone())
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -509,5 +639,149 @@ mod tests {
             vk.verify(replay.as_bytes(), &sig).is_err(),
             "replaying a signature under a fresh task nonce must fail"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Scoring watermark (2026-08-23 audit, item 9)
+    // ------------------------------------------------------------------
+
+    fn utc(s: &str) -> chrono::DateTime<chrono::Utc> {
+        chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+            .unwrap()
+            .and_utc()
+    }
+
+    /// The receipt stores RFC3339; the watermark MUST come out in SQLite
+    /// canonical form. `'T' > ' '` in byte-wise TEXT comparison, so an
+    /// unconverted bound would exclude every same-day item from the
+    /// differential selection — silently.
+    #[test]
+    fn watermark_converts_rfc3339_to_sqlite_canonical_form() {
+        let w = watermark_from_run(
+            "2026-08-23T14:04:40.123456+00:00",
+            "2026-08-23T14:09:40+00:00",
+            utc("2026-08-23 14:39:40"),
+        )
+        .expect("valid receipt row must yield a watermark");
+        assert_eq!(w.since_utc, "2026-08-23 14:04:40");
+        assert_eq!(w.completed_age_minutes, 30);
+        // The load-bearing property: the canonical form sorts BELOW a
+        // later same-day canonical `last_seen`, where raw RFC3339 would not.
+        assert!(w.since_utc.as_str() < "2026-08-23 15:00:00");
+        assert!("2026-08-23T14:04:40+00:00" > "2026-08-23 15:00:00");
+    }
+
+    /// Non-UTC offsets normalize to UTC before formatting — the DB's
+    /// `last_seen` is UTC, so a local-offset watermark would shift the
+    /// differential window by hours.
+    #[test]
+    fn watermark_normalizes_offsets_to_utc() {
+        let w = watermark_from_run(
+            "2026-08-24T00:04:40+10:00",
+            "2026-08-24T00:09:40+10:00",
+            utc("2026-08-23 14:39:40"),
+        )
+        .unwrap();
+        assert_eq!(w.since_utc, "2026-08-23 14:04:40");
+        assert_eq!(w.completed_age_minutes, 30);
+    }
+
+    /// Unparseable timestamps yield no watermark (the caller falls back to
+    /// the full window), and a future completion surfaces as a NEGATIVE age
+    /// the caller must reject rather than treat as ultra-fresh.
+    #[test]
+    fn watermark_rejects_garbage_and_flags_clock_skew() {
+        assert!(watermark_from_run(
+            "not-a-date",
+            "2026-08-23T14:09:40+00:00",
+            utc("2026-08-23 15:00:00")
+        )
+        .is_none());
+        assert!(watermark_from_run(
+            "2026-08-23T14:04:40+00:00",
+            "garbage",
+            utc("2026-08-23 15:00:00")
+        )
+        .is_none());
+        let skewed = watermark_from_run(
+            "2026-08-23T14:04:40+00:00",
+            "2026-08-23T16:00:00+00:00",
+            utc("2026-08-23 15:00:00"),
+        )
+        .unwrap();
+        assert!(
+            skewed.completed_age_minutes < 0,
+            "future completion must read as negative age"
+        );
+    }
+
+    /// The canonical-format fallback parses legacy rows too.
+    #[test]
+    fn watermark_accepts_canonical_format_rows() {
+        let w = watermark_from_run(
+            "2026-08-23 14:04:40",
+            "2026-08-23 14:09:40",
+            utc("2026-08-23 14:19:40"),
+        )
+        .unwrap();
+        assert_eq!(w.since_utc, "2026-08-23 14:04:40");
+        assert_eq!(w.completed_age_minutes, 10);
+    }
+
+    // ------------------------------------------------------------------
+    // Differential admission rule (item 9's decision table)
+    // ------------------------------------------------------------------
+
+    fn wm(age_minutes: i64) -> ScoringWatermark {
+        ScoringWatermark {
+            since_utc: "2026-08-23 14:04:40".into(),
+            completed_age_minutes: age_minutes,
+        }
+    }
+
+    /// A recent watermark and no pending drain admit the differential path —
+    /// for a cold silent process (headless: no in-memory previous results),
+    /// which is exactly what the old in-memory gate could never grant.
+    #[test]
+    fn recent_watermark_and_clean_backlog_admit_differential() {
+        let since = differential_since(Some(&wm(30)), 0, false, true);
+        assert_eq!(since.as_deref(), Some("2026-08-23 14:04:40"));
+        // With in-memory previous results a foreground run qualifies too.
+        assert!(differential_since(Some(&wm(30)), 0, true, false).is_some());
+    }
+
+    /// A stale (>24h), missing, or future-dated watermark falls back to the
+    /// full window.
+    #[test]
+    fn stale_missing_or_skewed_watermark_takes_full_window() {
+        assert!(differential_since(None, 0, true, true).is_none());
+        assert!(differential_since(Some(&wm(24 * 60 + 1)), 0, true, true).is_none());
+        assert!(differential_since(Some(&wm(-5)), 0, true, true).is_none());
+        assert!(differential_since(Some(&wm(24 * 60)), 0, true, true).is_some());
+    }
+
+    /// A pending stale-version drain within one batch rides along on the
+    /// differential run (its drain merge clears it); beyond one batch — a
+    /// pipeline bump just landed — the run takes the full window.
+    #[test]
+    fn version_bump_backlog_forces_full_window_small_backlog_rides_along() {
+        assert!(
+            differential_since(Some(&wm(30)), DIFFERENTIAL_MAX_STALE_BACKLOG, false, true)
+                .is_some()
+        );
+        assert!(differential_since(
+            Some(&wm(30)),
+            DIFFERENTIAL_MAX_STALE_BACKLOG + 1,
+            false,
+            true
+        )
+        .is_none());
+    }
+
+    /// A foreground run without in-memory previous results REPLACES the
+    /// visible feed, so it may never return a partial differential set.
+    #[test]
+    fn cold_foreground_run_takes_full_window() {
+        assert!(differential_since(Some(&wm(30)), 0, false, false).is_none());
     }
 }

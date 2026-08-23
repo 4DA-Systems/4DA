@@ -663,9 +663,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 settings_model
             }
         };
+        crate::embedding_calibration::initialize_calibration(&model_name);
         let needs_reembed = {
             let conn = db.conn.lock();
-            crate::embedding_calibration::initialize_calibration(&conn, &model_name);
             crate::reembed::check_embedding_model_changed(&conn)
         };
         if needs_reembed {
@@ -2257,18 +2257,37 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
     // update the feed without clearing a foreground manual analysis state.
     info!(target: "4da::monitor", "Step 2: Analyzing cached content (silent)...");
     match analysis::analyze_cached_content_silent(&handle).await {
-        Ok(results) => {
-            let relevant_count = results.iter().filter(|r| r.relevant).count();
+        Ok(cycle) => {
+            // "New this cycle" = the scored subset (audit item 9). On a
+            // differential run the returned set is a merged display corpus;
+            // receipts and notifications must count the real work, or every
+            // 30-minute cycle re-reports (and re-notifies) the whole feed.
+            let new_results: Vec<crate::SourceRelevance> =
+                cycle.scored_results().cloned().collect();
+            let results = cycle.results;
+            let relevant_count = new_results.iter().filter(|r| r.relevant).count();
 
             // Record this cycle's freshness receipt (engine_runs) so the MCP server and external
             // verifiers can distinguish fresh data from stale — see engine_runs.rs.
-            receipt.items_scored = results.len();
+            // This receipt is also the next run's differential watermark
+            // (`ok=1 AND items_scored>0`, engine_runs::last_scoring_watermark).
+            receipt.items_scored = new_results.len();
             receipt.relevant_count = relevant_count;
             receipt.duration_ms = started.elapsed().as_millis() as u64;
             crate::engine_runs::record(receipt);
 
-            // Build signal summary for notifications
-            let signal_summary = build_signal_summary(&results);
+            // Tier-2 LLM passes (judge + content analysis + LlmReject
+            // demotions) — non-blocking, budget- and BYOK-gated inside.
+            if let Ok(db) = crate::get_database() {
+                let db = db.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = crate::llm_judgments::run_post_cycle_llm_passes(&db).await;
+                });
+            }
+
+            // Build signal summary for notifications — over the NEWLY scored
+            // subset, so a standing critical no longer re-notifies every cycle.
+            let signal_summary = build_signal_summary(&new_results);
 
             // Extract notification info before moving signal_summary
             let notification_info = signal_summary

@@ -438,9 +438,10 @@ fn reconcile_stamps_stale_version_reason_and_clears_on_confirm() {
     );
 }
 
-/// A full-cycle verdict write clears a repair-pass reason: the fresh judgment
-/// supersedes the old explanation. This is the composition contract the
-/// verdict-flip hysteresis wave builds on at the same persist boundary.
+/// A recovered item (repair-pass demotion, then the cycle wants it back) is an
+/// unreasoned 0→1 flip: Phase 109 defers it one run. The SECOND agreeing cycle
+/// applies the flip and clears the repair-pass reason — the fresh judgment
+/// supersedes the old explanation, one confirmation later than pre-109.
 #[test]
 fn persist_clears_a_prior_repair_reason() {
     let db = test_db();
@@ -451,7 +452,20 @@ fn persist_clears_a_prior_repair_reason() {
     db.demote_sunk_verdicts(18, demote_line()).unwrap();
     assert_eq!(reason_of(&db, item), Some("score_sunk_in_version".into()));
 
-    // The next full analysis cycle re-selects the item (its score recovered).
+    // First re-selecting cycle: the flip is recorded pending, not applied —
+    // the standing (demoted) verdict and its reason survive untouched.
+    db.persist_feed_verdicts(&[(item, true, VerdictSource::Score)], 18)
+        .unwrap();
+    assert_eq!(verdict_of(&db, item).0, Some(0), "flip deferred one run");
+    assert_eq!(
+        reason_of(&db, item),
+        Some("score_sunk_in_version".into()),
+        "the standing verdict keeps its explanation while the flip is pending"
+    );
+    assert!(pending_of(&db, item).is_some());
+
+    // Second consecutive agreeing cycle: the flip applies and clears both the
+    // pending marker and the superseded repair reason.
     db.persist_feed_verdicts(&[(item, true, VerdictSource::Score)], 18)
         .unwrap();
     assert_eq!(verdict_of(&db, item).0, Some(1));
@@ -460,6 +474,7 @@ fn persist_clears_a_prior_repair_reason() {
         None,
         "a fresh cycle verdict needs no explanation"
     );
+    assert_eq!(pending_of(&db, item), None);
 }
 
 /// The reason strings are a persisted schema contract, same as
@@ -471,6 +486,225 @@ fn reason_codes_are_stable_strings() {
         "score_sunk_in_version"
     );
     assert_eq!(VerdictReason::StaleVersion.as_str(), "stale_version");
+}
+
+// ---------------------------------------------------------------------------
+// Verdict-flip damping (Phase 109, 2026-08-23 audit item 10)
+// ---------------------------------------------------------------------------
+
+/// Read the persisted `feed_verdict_pending` marker for an item.
+fn pending_of(db: &Database, id: i64) -> Option<String> {
+    let conn = db.conn.lock();
+    conn.query_row(
+        "SELECT feed_verdict_pending FROM source_items WHERE id = ?1",
+        rusqlite::params![id],
+        |r| r.get(0),
+    )
+    .unwrap()
+}
+
+/// The audit's membership-churn case: a curated item whose next cycle scores
+/// it irrelevant, with NO categorical reason. The flip is deferred — the item
+/// stays in the feed, the pending marker records the direction — and only a
+/// second consecutive agreeing run applies it. The standing verdict's stamps
+/// stay untouched while pending (the row keeps describing the run that
+/// decided it).
+#[test]
+fn unreasoned_flip_defers_then_applies_on_second_agreeing_run() {
+    let db = test_db();
+    let item = insert_test_item(&db, "hackernews", "fl1", "Boundary wobbler", "body");
+    db.persist_feed_verdicts(&[(item, true, VerdictSource::Score)], 18)
+        .unwrap();
+
+    // Run 1: wants 1→0, unreasoned — deferred.
+    db.persist_feed_verdicts(&[(item, false, VerdictSource::Score)], 18)
+        .unwrap();
+    assert_eq!(
+        verdict_of(&db, item),
+        (Some(1), Some(18), Some("score".into())),
+        "standing verdict (and its stamps) survive the first unreasoned flip"
+    );
+    let marker = pending_of(&db, item).expect("pending marker recorded");
+    assert!(
+        marker.starts_with("0@"),
+        "marker carries the pending direction, got {marker}"
+    );
+
+    // Run 2 agrees: the flip applies and the marker clears.
+    db.persist_feed_verdicts(&[(item, false, VerdictSource::Score)], 18)
+        .unwrap();
+    assert_eq!(
+        verdict_of(&db, item).0,
+        Some(0),
+        "second agreeing run applies"
+    );
+    assert_eq!(pending_of(&db, item), None);
+}
+
+/// A run that re-confirms the standing verdict DISAGREES with a pending flip:
+/// the marker clears and the verdict never moves. One noisy run can no longer
+/// evict a feed member.
+#[test]
+fn disagreeing_run_clears_a_pending_flip() {
+    let db = test_db();
+    let item = insert_test_item(&db, "hackernews", "fl2", "One noisy run", "body");
+    db.persist_feed_verdicts(&[(item, true, VerdictSource::Score)], 18)
+        .unwrap();
+
+    db.persist_feed_verdicts(&[(item, false, VerdictSource::Score)], 18)
+        .unwrap();
+    assert!(pending_of(&db, item).is_some());
+
+    // The next run re-confirms relevance — the pending eviction is cancelled.
+    db.persist_feed_verdicts(&[(item, true, VerdictSource::Score)], 18)
+        .unwrap();
+    assert_eq!(verdict_of(&db, item).0, Some(1));
+    assert_eq!(
+        pending_of(&db, item),
+        None,
+        "a disagreeing run must clear the pending marker"
+    );
+
+    // And the flip does NOT apply on a later run as if it had been confirmed.
+    db.persist_feed_verdicts(&[(item, false, VerdictSource::Score)], 18)
+        .unwrap();
+    assert_eq!(
+        verdict_of(&db, item).0,
+        Some(1),
+        "after a reset, a flip needs two consecutive runs again"
+    );
+}
+
+/// Reasoned flips and serendipity injections are never damped: the repair
+/// passes and the anti-bubble rotation stay single-run, and a reasoned write
+/// also cancels any pending unreasoned flip.
+#[test]
+fn reasoned_and_serendipity_flips_apply_immediately() {
+    let db = test_db();
+    let reasoned = insert_test_item(&db, "hackernews", "fl3", "LLM reject", "body");
+    let lucky = insert_test_item(&db, "lemmy", "fl4", "Anti-bubble", "body");
+
+    db.persist_feed_verdicts(&[(reasoned, true, VerdictSource::Score)], 18)
+        .unwrap();
+    // Leave an unreasoned flip pending, then land a reasoned one.
+    db.persist_feed_verdicts(&[(reasoned, false, VerdictSource::Score)], 18)
+        .unwrap();
+    assert!(pending_of(&db, reasoned).is_some());
+    db.persist_feed_verdicts_with_reasons(
+        &[(
+            reasoned,
+            false,
+            VerdictSource::Score,
+            Some(VerdictReason::LlmReject),
+        )],
+        18,
+    )
+    .unwrap();
+    assert_eq!(
+        verdict_of(&db, reasoned).0,
+        Some(0),
+        "reasoned flip is immediate"
+    );
+    assert_eq!(reason_of(&db, reasoned), Some("llm_reject".into()));
+    assert_eq!(pending_of(&db, reasoned), None);
+
+    // Serendipity: scorer said no (0), injection flips to 1 — immediately.
+    db.persist_feed_verdicts(&[(lucky, false, VerdictSource::Score)], 18)
+        .unwrap();
+    db.persist_feed_verdicts(&[(lucky, true, VerdictSource::Serendipity)], 18)
+        .unwrap();
+    assert_eq!(
+        verdict_of(&db, lucky),
+        (Some(1), Some(18), Some("serendipity".into())),
+        "the anti-bubble rotation must never wait for confirmation"
+    );
+    assert_eq!(pending_of(&db, lucky), None);
+}
+
+/// First verdicts and re-confirmations are untouched by the damper: NULL→any
+/// applies immediately, and the normal cycle's re-CONFIRMATION of a standing
+/// verdict keeps refreshing the stamps exactly as before.
+#[test]
+fn first_verdicts_and_confirmations_are_not_damped() {
+    let db = test_db();
+    let item = insert_test_item(&db, "hackernews", "fl5", "First judgment", "body");
+
+    // NULL → false: a first verdict is not a flip.
+    db.persist_feed_verdicts(&[(item, false, VerdictSource::Score)], 17)
+        .unwrap();
+    assert_eq!(
+        verdict_of(&db, item),
+        (Some(0), Some(17), Some("score".into()))
+    );
+    assert_eq!(pending_of(&db, item), None);
+
+    // false → false at a newer version: re-confirmation refreshes the stamp.
+    db.persist_feed_verdicts(&[(item, false, VerdictSource::Score)], 18)
+        .unwrap();
+    assert_eq!(
+        verdict_of(&db, item),
+        (Some(0), Some(18), Some("score".into()))
+    );
+}
+
+/// The repair writers (in-version sunk sweep, version-scoped reconciliation)
+/// are authoritative: their writes clear any pending unreasoned flip so a
+/// stale marker cannot later apply against a repaired verdict.
+#[test]
+fn repair_writers_clear_pending_markers() {
+    let db = test_db();
+    let sunk = insert_test_item(&db, "hackernews", "fl6", "Sunk with pending", "body");
+    db.persist_feed_verdicts(&[(sunk, true, VerdictSource::Score)], 18)
+        .unwrap();
+    db.persist_feed_verdicts(&[(sunk, false, VerdictSource::Score)], 18)
+        .unwrap();
+    assert!(pending_of(&db, sunk).is_some());
+    set_live_score(&db, sunk, 0.17, 18);
+    assert_eq!(db.demote_sunk_verdicts(18, demote_line()).unwrap(), 1);
+    assert_eq!(pending_of(&db, sunk), None, "sunk sweep clears pending");
+
+    let stale = insert_test_item(&db, "hackernews", "fl7", "Reconciled with pending", "body");
+    db.persist_feed_verdicts(&[(stale, true, VerdictSource::Score)], 17)
+        .unwrap();
+    db.persist_feed_verdicts(&[(stale, false, VerdictSource::Score)], 18)
+        .unwrap();
+    assert!(pending_of(&db, stale).is_some());
+    db.reconcile_feed_verdicts(&[stale], &[], 18).unwrap();
+    assert_eq!(
+        pending_of(&db, stale),
+        None,
+        "reconciliation clears pending"
+    );
+}
+
+/// Phase 109 adds `feed_verdict_pending` (nullable, no default) plus the two
+/// `scoring_churn` observability columns, all guarded — re-running the
+/// migration from a rewound version must not duplicate any of them.
+#[test]
+fn phase_109_stability_columns_added_idempotently() {
+    let db = test_db();
+    let count_col = |table: &str, name: &str| -> i64 {
+        let conn = db.conn.lock();
+        conn.query_row(
+            &format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"),
+            [name],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(count_col("source_items", "feed_verdict_pending"), 1);
+    assert_eq!(count_col("scoring_churn", "top_offenders"), 1);
+    assert_eq!(count_col("scoring_churn", "suppressed_writes"), 1);
+
+    {
+        let conn = db.conn.lock();
+        conn.execute_batch("UPDATE schema_version SET version = 108;")
+            .unwrap();
+    }
+    db.migrate().expect("re-running migrations from v108");
+    assert_eq!(count_col("source_items", "feed_verdict_pending"), 1);
+    assert_eq!(count_col("scoring_churn", "top_offenders"), 1);
+    assert_eq!(count_col("scoring_churn", "suppressed_writes"), 1);
 }
 
 /// Phase 108 adds `feed_verdict_reason` — nullable, no default (NULL means

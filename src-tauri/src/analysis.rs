@@ -28,6 +28,13 @@ fn is_aborted() -> bool {
 
 // --- Sibling modules ---
 
+#[path = "analysis_cycle.rs"]
+mod analysis_cycle;
+// Re-exported for the sibling test modules (`crate::analysis::persist_cycle_results`
+// et al.); production callers reach these through `analysis_status`'s wrappers.
+#[allow(unused_imports)]
+pub(crate) use analysis_cycle::*;
+
 #[path = "analysis_deep_scan.rs"]
 mod analysis_deep_scan;
 

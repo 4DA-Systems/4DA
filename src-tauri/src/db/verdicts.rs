@@ -48,9 +48,20 @@
 //! `feed_verdict_reason` column records why each repaired verdict flipped
 //! ([`VerdictReason`]).
 
-use rusqlite::{params, Result as SqliteResult};
+use rusqlite::{params, OptionalExtension, Result as SqliteResult};
 
 use super::{blob_to_embedding, parse_datetime, Database, StoredSourceItem};
+
+/// Parse the direction of a `feed_verdict_pending` marker (`"1@<rfc3339>"` /
+/// `"0@<rfc3339>"`, Phase 109). `None` for NULL/garbled markers — a corrupt
+/// marker is treated as "no flip pending" and rewritten, never trusted.
+fn pending_flip_direction(marker: Option<&str>) -> Option<bool> {
+    match marker?.split_once('@')?.0 {
+        "1" => Some(true),
+        "0" => Some(false),
+        _ => None,
+    }
+}
 
 /// Provenance of a persisted `feed_relevant` verdict.
 ///
@@ -128,6 +139,9 @@ pub enum VerdictReason {
     /// A superseded pipeline version decided the verdict and the current
     /// pipeline rejects the item (the Phase-101 reconciliation pass).
     StaleVersion,
+    /// The LLM judge pass (Tier 2) rated a curated item clearly irrelevant
+    /// with high confidence — demote-only, like every repair reason.
+    LlmReject,
 }
 
 impl VerdictReason {
@@ -137,6 +151,7 @@ impl VerdictReason {
         match self {
             Self::ScoreSunkInVersion => "score_sunk_in_version",
             Self::StaleVersion => "stale_version",
+            Self::LlmReject => "llm_reject",
         }
     }
 }
@@ -224,9 +239,30 @@ impl Database {
 
     /// [`Database::persist_feed_verdicts`] with an optional per-verdict
     /// [`VerdictReason`]. This is THE persist boundary for feed verdicts —
-    /// the later verdict-flip hysteresis wave extends this entry point (the
-    /// tuple already carries per-verdict metadata) instead of adding another
-    /// writer next to it.
+    /// every cycle writer routes through here.
+    ///
+    /// ## Verdict-flip damping (Phase 109, 2026-08-23 audit item 10)
+    ///
+    /// The audit measured daily feed-membership churn driven by unreasoned
+    /// verdict flips: the same item entering and leaving the curated set as its
+    /// score wobbled around the threshold. The boundary now distinguishes:
+    ///
+    /// - **Immediate writes** — a reasoned flip (any [`VerdictReason`]), a
+    ///   serendipity injection (the anti-bubble rotation is a deliberate
+    ///   feature), a FIRST verdict (`feed_relevant` NULL), or a
+    ///   re-confirmation (new == standing). These apply exactly as before and
+    ///   clear any pending marker — a run that re-confirms the standing
+    ///   verdict is a run DISAGREEING with a pending flip.
+    /// - **Deferred flips** — an unreasoned, score-sourced flip against a
+    ///   standing verdict (1→0, or 0→1 on an item with a prior verdict) is
+    ///   recorded in `feed_verdict_pending` ("direction@first-seen") and the
+    ///   standing verdict row is left UNTOUCHED. A second consecutive judging
+    ///   run wanting the same flip applies it (and clears the marker).
+    ///
+    /// A deferred flip does not refresh the verdict stamps: the row keeps
+    /// describing the run that decided the STANDING verdict, so version-scoped
+    /// reconciliation (which is reasoned and therefore immediate) still owns
+    /// cross-version convergence.
     pub fn persist_feed_verdicts_with_reasons(
         &self,
         verdicts: &[(i64, bool, VerdictSource, Option<VerdictReason>)],
@@ -238,28 +274,70 @@ impl Database {
         let conn = self.conn.lock();
         let tx = conn.unchecked_transaction()?;
         let mut count = 0;
+        let mut deferred = 0usize;
+        let mut confirmed_flips = 0usize;
         {
-            let mut stmt = tx.prepare_cached(
+            let mut read_stmt = tx.prepare_cached(
+                "SELECT feed_relevant, feed_verdict_pending FROM source_items WHERE id = ?1",
+            )?;
+            let mut apply_stmt = tx.prepare_cached(
                 "UPDATE source_items
                  SET feed_relevant = ?1,
                      feed_verdict_at = datetime('now'),
                      feed_verdict_version = ?2,
                      feed_verdict_source = ?3,
-                     feed_verdict_reason = ?4
+                     feed_verdict_reason = ?4,
+                     feed_verdict_pending = NULL
                  WHERE id = ?5",
             )?;
+            let mut defer_stmt = tx.prepare_cached(
+                "UPDATE source_items SET feed_verdict_pending = ?1 WHERE id = ?2",
+            )?;
             for (id, relevant, source, reason) in verdicts {
-                stmt.execute(params![
-                    i64::from(*relevant),
-                    version,
-                    source.as_str(),
-                    reason.map(VerdictReason::as_str),
-                    id
-                ])?;
+                // Standing state first, same transaction — exact, not racy.
+                let (old_relevant, pending): (Option<i64>, Option<String>) = read_stmt
+                    .query_row(params![id], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .optional()?
+                    .unwrap_or((None, None));
+                let is_flip = matches!(old_relevant, Some(old) if (old != 0) != *relevant);
+                let immediate =
+                    reason.is_some() || *source == VerdictSource::Serendipity || !is_flip;
+                if immediate || pending_flip_direction(pending.as_deref()) == Some(*relevant) {
+                    if !immediate {
+                        confirmed_flips += 1;
+                    }
+                    apply_stmt.execute(params![
+                        i64::from(*relevant),
+                        version,
+                        source.as_str(),
+                        reason.map(VerdictReason::as_str),
+                        id
+                    ])?;
+                } else {
+                    // First sighting of an unreasoned flip: record the pending
+                    // direction, keep the standing verdict row untouched.
+                    deferred += 1;
+                    defer_stmt.execute(params![
+                        format!(
+                            "{}@{}",
+                            i64::from(*relevant),
+                            chrono::Utc::now().to_rfc3339()
+                        ),
+                        id
+                    ])?;
+                }
                 count += 1;
             }
         }
         tx.commit()?;
+        if deferred > 0 || confirmed_flips > 0 {
+            tracing::debug!(
+                target: "4da::verdicts",
+                deferred,
+                confirmed_flips,
+                "Unreasoned verdict flips damped at the persist boundary"
+            );
+        }
         Ok(count)
     }
 
@@ -366,7 +444,8 @@ impl Database {
                  SET feed_relevant = 0,
                      feed_verdict_version = ?1,
                      feed_verdict_source = 'score',
-                     feed_verdict_reason = ?2
+                     feed_verdict_reason = ?2,
+                     feed_verdict_pending = NULL
                  WHERE id = ?3 AND feed_relevant = 1",
             )?;
             for id in demote {
@@ -380,7 +459,8 @@ impl Database {
                 "UPDATE source_items
                  SET feed_verdict_version = ?1,
                      feed_verdict_source = 'score',
-                     feed_verdict_reason = NULL
+                     feed_verdict_reason = NULL,
+                     feed_verdict_pending = NULL
                  WHERE id = ?2 AND feed_relevant = 1",
             )?;
             for id in confirm {
@@ -427,7 +507,8 @@ impl Database {
         let mut stmt = conn.prepare_cached(
             "UPDATE source_items
              SET feed_relevant = 0,
-                 feed_verdict_reason = ?3
+                 feed_verdict_reason = ?3,
+                 feed_verdict_pending = NULL
              WHERE feed_relevant = 1
                AND COALESCE(feed_verdict_source, 'score') = 'score'
                AND feed_verdict_version = ?1

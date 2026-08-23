@@ -19,6 +19,7 @@ use crate::{
     AnalysisState, SourceRelevance, ANALYSIS_TIMEOUT_SECS,
 };
 
+use super::analysis_cycle::{merge_stale_drain_batch, persist_cycle_results, CycleResults};
 use super::analysis_deep_scan::run_multi_source_analysis_impl;
 use super::analysis_fast_path::{elapsed_ms, spawn_post_foreground_cache_fill, CachedAnalysisRun};
 use super::{is_aborted, SIGNAL_CLASSIFIER};
@@ -246,44 +247,13 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// Merge a batch of items still scored under an older `PIPELINE_VERSION` into
-/// `items` (skipping any already present), so a version bump drains the backlog
-/// a bounded batch per analysis run. Returns the number of items added.
-///
-/// Runs on BOTH the differential and full-analysis paths. Gating it behind
-/// differential mode (the previous behaviour) meant a version bump only drained
-/// via the scheduler's differential runs and never on first-run-after-restart or
-/// manual `run_cached_analysis` invokes, so the backlog re-scored far slower than
-/// intended. The 500-item cap and the stack-release-first ordering both live in
-/// `get_stale_scored_items`.
-fn merge_stale_drain_batch(
-    db: &crate::db::Database,
-    items: &mut Vec<crate::db::StoredSourceItem>,
-) -> usize {
-    // Scoped-epoch promotion before pulling the batch: provably-unaffected
-    // items are re-stamped instead of re-scored, so the 500-item budget is
-    // spent only on the slice the version bump could actually change.
-    // ~0ms no-op when nothing is registered or the corpus is current.
-    scoring::epochs::promote_unaffected_stale_logged(db);
-    let stale = db
-        .get_stale_scored_items(scoring::PIPELINE_VERSION, 500)
-        .unwrap_or_default();
-    if stale.is_empty() {
-        return 0;
-    }
-    let existing: std::collections::HashSet<i64> = items.iter().map(|i| i.id).collect();
-    let added: Vec<_> = stale
-        .into_iter()
-        .filter(|s| !existing.contains(&s.id))
-        .collect();
-    let count = added.len();
-    items.extend(added);
-    count
-}
-
 /// Uses differential analysis when previous results exist (only scores new items)
 pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<SourceRelevance>> {
-    analyze_cached_content_inner(app, CachedAnalysisRun::foreground_fast()).await
+    Ok(
+        analyze_cached_content_inner(app, CachedAnalysisRun::foreground_fast())
+            .await?
+            .results,
+    )
 }
 
 /// Cache-first analysis with control over user-facing progress emission.
@@ -292,101 +262,25 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
 /// refresh does not hijack the user's visible progress bar. The work (fetch,
 /// score, persist) still runs from the caller's orchestration path; only the
 /// intermediate `emit_progress`/`emit_narration` surface events are suppressed.
-pub(crate) async fn analyze_cached_content_silent(app: &AppHandle) -> Result<Vec<SourceRelevance>> {
-    analyze_cached_content_inner(app, CachedAnalysisRun::background_deep()).await
-}
-
-/// Persist everything a completed analysis cycle owes the DB: relevance scores,
-/// pipeline-version stamps, the per-item curation VERDICT (`feed_relevant`), and
-/// the `scoring_events` telemetry row.
-///
-/// This is the SINGLE curation-persistence site for every real analysis path.
-/// Foreground (`run_cached_analysis`), scheduled (`run_scheduled_analysis`), and
-/// headless (`headless::run_cycle`) all reach the scorer through
-/// `analyze_cached_content_inner`, so persisting here guarantees all three curate
-/// the corpus identically. Previously each caller wrapper hand-copied this block
-/// and the scheduled wrapper omitted the verdict + scoring-event writes — so
-/// background / tray-resident / headless runs SCORED without ever CURATING:
-/// `feed_relevant` froze, and the content graph + calibration telemetry silently
-/// went stale (live 2026-07-22: 586 items unjudged across 14 scheduled cycles).
-/// Centralising here makes score-without-curate structurally impossible.
-pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceRelevance]) {
-    // Relevance scores — only items that scored > 0 (noise is version-stamped below).
-    let score_data: Vec<(i64, f32, Option<String>, Option<String>)> = results
-        .iter()
-        .filter(|r| r.top_score > 0.0)
-        .map(|r| {
-            (
-                r.id as i64,
-                r.top_score,
-                r.signal_type.clone(),
-                r.signal_priority.clone(),
-            )
-        })
-        .collect();
-    if !score_data.is_empty() {
-        if let Err(e) = db.persist_analysis_scores(&score_data, "analysis") {
-            tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist relevance scores");
+pub(crate) async fn analyze_cached_content_silent(app: &AppHandle) -> Result<CycleResults> {
+    let cycle = analyze_cached_content_inner(app, CachedAnalysisRun::background_deep()).await?;
+    // Item 9 state-restore fix: the scheduled path used to TAKE state.results
+    // for the differential merge and never put them back, so the next run's
+    // merge base (and the frontend's get_analysis_status hydration) was empty.
+    // Mirror the foreground completion handler — but only with a full-fidelity
+    // corpus (a partial differential set must never shrink the shared feed),
+    // and never over a foreground run that started mid-cycle.
+    if cycle.full_display {
+        let state = get_analysis_state();
+        let mut guard = state.lock();
+        if !guard.running {
+            guard.near_misses = crate::types::extract_near_misses(&cycle.results);
+            guard.results = Some(cycle.results.clone());
+            guard.last_completed_at =
+                Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
         }
     }
-
-    // Stamp the pipeline version for EVERY item scored this run — including noise
-    // items (top_score == 0) that persist_analysis_scores skips. Without this,
-    // zero-scoring stale items never leave the version-bump drain set.
-    let scored_ids: Vec<i64> = results.iter().map(|r| r.id as i64).collect();
-    if let Err(e) = db.mark_items_scored_version(&scored_ids, crate::scoring::PIPELINE_VERSION) {
-        tracing::warn!(target: "4da::scoring", error = %e, "Failed to stamp scored pipeline version");
-    }
-
-    // Persist the curation VERDICT for every item judged this run (relevant = in
-    // the curated corpus). Corpus-parity surfaces (content graph) select on this
-    // instead of re-deriving a corpus from raw cross-epoch scores.
-    //
-    // Stamped with the pipeline version AND the provenance of the decision
-    // (Phase 101). Provenance is read from `SourceRelevance::serendipity`, which
-    // BOTH anti-bubble paths already set — `compute_serendipity_candidates`
-    // (flips a scorer-rejected item to relevant) and the concept-graph injection
-    // (never scores the item at all). Reading the flag rather than inferring a
-    // signature matters: an inferred one ("top_score == 0.45") catches only the
-    // second path, and the first keeps its original score, so it is
-    // indistinguishable from a stale verdict by score alone.
-    let verdicts: Vec<(i64, bool, crate::db::VerdictSource)> = results
-        .iter()
-        .map(|r| {
-            (
-                r.id as i64,
-                r.relevant,
-                crate::db::VerdictSource::from_serendipity(r.serendipity),
-            )
-        })
-        .collect();
-    if let Err(e) = db.persist_feed_verdicts(&verdicts, crate::scoring::PIPELINE_VERSION) {
-        tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist feed verdicts");
-    }
-
-    // Scoring-event telemetry row — drives calibration + recalibration backtesting.
-    let total_scored = results.len();
-    let relevant_count = results.iter().filter(|r| r.relevant).count();
-    let scores: Vec<f32> = results.iter().map(|r| r.top_score).collect();
-    let avg_score = if scores.is_empty() {
-        0.0
-    } else {
-        scores.iter().sum::<f32>() / scores.len() as f32
-    };
-    let max_score = scores.iter().copied().fold(0.0f32, f32::max);
-    // The three per-cycle counters are NOT measured on this path (gate/cap
-    // detail lives in ScoringTelemetry logs; briefing_items only exists when a
-    // briefing builds). They used to be hardcoded 0, which read as "gates
-    // never fire" in any analysis of the table — absent data is NULL.
-    let _ = db.record_scoring_event(
-        total_scored,
-        relevant_count,
-        avg_score,
-        max_score,
-        None, // gate_rejections — not measured here; see ScoringTelemetry logs
-        None, // commodity_caps — not measured here; see ScoringTelemetry logs
-        None, // briefing_items — only meaningful on briefing build
-    );
+    Ok(cycle)
 }
 
 /// Persistence boundary over `analyze_cached_content_inner_impl`. EVERY analysis
@@ -395,13 +289,29 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
 /// corpus (`feed_relevant` + `scoring_events`) advances for all of them. Do NOT
 /// move persistence back into the individual caller wrappers — that split is the
 /// regression this consolidation fixed (see `persist_cycle_results`).
+///
+/// Persists ONLY what this run actually scored (`CycleResults::scored_ids`):
+/// on a differential run the carried-over previous results are display state,
+/// and re-writing them would stamp hours-old in-memory scores/verdicts over
+/// whatever the backfill, drain, and repair passes wrote since.
 async fn analyze_cached_content_inner(
     app: &AppHandle,
     run: CachedAnalysisRun,
-) -> Result<Vec<SourceRelevance>> {
-    let results = analyze_cached_content_inner_impl(app, run).await?;
+) -> Result<CycleResults> {
+    let cycle = analyze_cached_content_inner_impl(app, run).await?;
     if let Ok(db) = get_database() {
-        persist_cycle_results(db, &results);
+        match &cycle.scored_ids {
+            None => persist_cycle_results(db, &cycle.results),
+            Some(ids) => {
+                let scored: Vec<SourceRelevance> = cycle
+                    .results
+                    .iter()
+                    .filter(|r| ids.contains(&r.id))
+                    .cloned()
+                    .collect();
+                persist_cycle_results(db, &scored);
+            }
+        }
     }
     // Converge the verdicts this cycle did NOT touch. The cycle only re-judges
     // what `get_items_tiered` selects, so an item that ages out of that window
@@ -411,13 +321,13 @@ async fn analyze_cached_content_inner(
     // headless path reaches) means the guard converges on end-user machines
     // without an operator-run drain. No-op probe when nothing is stale.
     crate::analysis_backfill::reconcile_stale_verdicts_logged().await;
-    Ok(results)
+    Ok(cycle)
 }
 
 async fn analyze_cached_content_inner_impl(
     app: &AppHandle,
     run: CachedAnalysisRun,
-) -> Result<Vec<SourceRelevance>> {
+) -> Result<CycleResults> {
     let analysis_started = Instant::now();
     let silent = run.silent;
     info!(
@@ -530,25 +440,52 @@ async fn analyze_cached_content_inner_impl(
         info!(target: "4da::analysis", "Skipping pending-embedding repair on foreground fast path");
     }
 
-    // Check if we can do differential analysis (have previous results + timestamp)
+    // Previous in-memory results are ONLY a merge/display optimization now.
     // Use .take() to move results out of the guard instead of cloning the entire Vec.
     // This is safe: analysis is running, so old results will be replaced when it completes.
-    let (last_completed_at, previous_results) = {
+    let previous_results = {
         let state = get_analysis_state();
         let mut guard = state.lock();
-        (guard.last_completed_at.clone(), guard.results.take())
+        guard.results.take()
     };
 
-    let is_differential = last_completed_at.is_some() && previous_results.is_some();
+    // ── DB-watermark differential gate (2026-08-23 audit, item 9) ────────
+    // The old gate lived in in-memory state (`last_completed_at` + previous
+    // results), which the headless engine — a fresh process every 30 minutes —
+    // NEVER had, and which the scheduled path drained and never restored. So
+    // differential scoring was structurally dead: every background run
+    // re-scored the full window (~660 items to write ~30 new ones, measured
+    // live). The watermark now comes from `engine_runs`, which every scoring
+    // cycle of every trigger records against the shared database. The
+    // admission rule (freshness, pending-drain bound, display safety) lives in
+    // `engine_runs::differential_since`.
+    let watermark = crate::engine_runs::last_scoring_watermark();
+    let stale_backlog = if watermark.is_some() {
+        // Probe failure counts as "unbounded backlog" → full window (safe).
+        db.count_stale_scored_items(scoring::PIPELINE_VERSION)
+            .unwrap_or(i64::MAX)
+    } else {
+        0
+    };
+    let differential_since = crate::engine_runs::differential_since(
+        watermark.as_ref(),
+        stale_backlog,
+        previous_results.is_some(),
+        run.silent,
+    );
 
-    if is_differential {
-        // Safe: guarded by is_differential check above
-        let since = last_completed_at.as_deref().unwrap_or("");
-        info!(target: "4da::analysis", since = since, "Differential analysis - checking for new items since last run");
+    if let Some(since) = differential_since {
+        info!(
+            target: "4da::analysis",
+            since = %since,
+            stale_backlog,
+            merge_base = previous_results.is_some(),
+            "Differential analysis (DB watermark) - checking for new items since the last successful scoring run"
+        );
 
         let select_started = Instant::now();
         let mut new_items = db
-            .get_items_since_timestamp_tiered(since, 500)
+            .get_items_since_timestamp_tiered(&since, 500)
             .map_err(|e| format!("Failed to load new items: {e}"))?;
         info!(
             target: "4da::analysis",
@@ -613,7 +550,9 @@ async fn analyze_cached_content_inner_impl(
                     0,
                     0,
                 );
-                return run_multi_source_analysis_impl(app, silent).await;
+                return Ok(CycleResults::full(
+                    run_multi_source_analysis_impl(app, silent).await?,
+                ));
             }
 
             let results =
@@ -624,7 +563,7 @@ async fn analyze_cached_content_inner_impl(
                 elapsed_ms = elapsed_ms(analysis_started),
                 "Cache-first analysis finished"
             );
-            return Ok(results);
+            return Ok(CycleResults::full(results));
         }
 
         info!(target: "4da::analysis", new_items = new_items.len(), "Found new items for differential scoring");
@@ -731,11 +670,14 @@ async fn analyze_cached_content_inner_impl(
             info!(target: "4da::analysis", "Skipping LLM rerank on foreground fast path");
         }
 
-        // Merge: take previous results, update/add new ones by ID
+        // Merge: take previous results (display optimization), update/add new
+        // ones by ID. Without a merge base (headless / cold process) the set
+        // stays partial — flagged via `full_display` so it can never REPLACE
+        // the shared feed, only merge into it frontend-side.
+        let scored_ids: std::collections::HashSet<u64> = new_results.iter().map(|r| r.id).collect();
+        let full_display = previous_results.is_some();
         let mut prev = previous_results.unwrap_or_default();
-        let existing_ids: std::collections::HashSet<u64> =
-            new_results.iter().map(|r| r.id).collect();
-        prev.retain(|r| !existing_ids.contains(&r.id));
+        prev.retain(|r| !scored_ids.contains(&r.id));
         prev.extend(new_results);
         scoring::sort_results(&mut prev);
 
@@ -775,7 +717,11 @@ async fn analyze_cached_content_inner_impl(
             elapsed_ms = elapsed_ms(analysis_started),
             "Cache-first analysis finished"
         );
-        return Ok(prev);
+        return Ok(CycleResults {
+            results: prev,
+            scored_ids: Some(scored_ids),
+            full_display,
+        });
     }
 
     // Full analysis path (no previous results or first run)
@@ -805,7 +751,9 @@ async fn analyze_cached_content_inner_impl(
             0,
             0,
         );
-        return run_multi_source_analysis_impl(app, silent).await;
+        return Ok(CycleResults::full(
+            run_multi_source_analysis_impl(app, silent).await?,
+        ));
     }
 
     // Background/headless full passes also drain stale pipeline-version backlog.
@@ -833,7 +781,7 @@ async fn analyze_cached_content_inner_impl(
         elapsed_ms = elapsed_ms(analysis_started),
         "Cache-first analysis finished"
     );
-    Ok(results)
+    Ok(CycleResults::full(results))
 }
 
 /// Cancel a running analysis

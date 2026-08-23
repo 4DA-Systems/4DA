@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 108;
+        const TARGET_VERSION: i64 = 109;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -4704,6 +4704,78 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Phase 108: feed_verdict_reason column added"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 109 {
+                Self::run_versioned_migration(
+                    &conn,
+                    108,
+                    109,
+                    "Phase 109: stability columns — verdict-flip damping + churn top offenders",
+                    |c| {
+                        // The 2026-08-23 adversarial audit measured ~1,350 score
+                        // moves >0.1/day on a 532-item feed with single-run
+                        // swings of ±0.43, and daily membership churn driven by
+                        // unreasoned verdict flips. Two columns close the loop:
+                        //
+                        // - `source_items.feed_verdict_pending` — an unreasoned
+                        //   verdict FLIP (true→false or false→true against a
+                        //   standing verdict) is deferred until a second
+                        //   consecutive run agrees. The marker holds the pending
+                        //   direction + first-seen timestamp ("1@<rfc3339>");
+                        //   NULL means no flip is pending. Reasoned flips
+                        //   (score_sunk_in_version / stale_version / llm_reject
+                        //   / serendipity rotations) never use it.
+                        // - `scoring_churn.top_offenders` — the aggregate row
+                        //   said HOW MUCH moved but never WHICH items; every
+                        //   investigation started with an ad-hoc snapshot diff.
+                        //   JSON array of up to 10 {id, old, new} largest-|Δ|
+                        //   movers per persist batch.
+                        // - `scoring_churn.suppressed_writes` — how many writes
+                        //   the |Δ|<0.05 persist hysteresis kept at the old
+                        //   score (still version-stamped, so the drain
+                        //   converges). NULL on pre-109 rows: not measured.
+                        //
+                        // All nullable, NO backfill/default — NULL means "not
+                        // recorded", which is the truth for every existing row.
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when absent.
+                        let has_column =
+                            |c: &Connection, table: &str, name: &str| -> SqliteResult<bool> {
+                                c.prepare(&format!(
+                                "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"
+                            ))?
+                                .query_row([name], |r| r.get::<_, i64>(0))
+                                .map(|n| n > 0)
+                            };
+                        if !has_column(c, "source_items", "feed_verdict_pending")? {
+                            c.execute(
+                                "ALTER TABLE source_items ADD COLUMN feed_verdict_pending TEXT",
+                                [],
+                            )?;
+                        }
+                        if !has_column(c, "scoring_churn", "top_offenders")? {
+                            c.execute(
+                                "ALTER TABLE scoring_churn ADD COLUMN top_offenders TEXT",
+                                [],
+                            )?;
+                        }
+                        if !has_column(c, "scoring_churn", "suppressed_writes")? {
+                            c.execute(
+                                "ALTER TABLE scoring_churn ADD COLUMN suppressed_writes INTEGER",
+                                [],
+                            )?;
+                        }
+                        // No indexes: feed_verdict_pending is read row-at-a-time
+                        // inside the verdict persist loop (id-keyed); the churn
+                        // columns are forensic payload on an ops table.
+                        info!(
+                            target: "4da::db",
+                            "Phase 109: verdict-flip pending + churn observability columns added"
                         );
                         Ok(())
                     },

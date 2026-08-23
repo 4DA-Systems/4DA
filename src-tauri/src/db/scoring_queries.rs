@@ -12,6 +12,15 @@ use rusqlite::{params, Result as SqliteResult};
 
 use super::{blob_to_embedding, parse_datetime, Database, StoredSourceItem};
 
+/// Persist-boundary score hysteresis (2026-08-23 audit, item 10): a same-item
+/// re-score moving less than this keeps the OLD durable score (the version
+/// stamp still advances). The audit measured ~300 items jittering 0.37–0.43
+/// across consecutive 30-minute runs — sub-0.05 wobble is measurement noise,
+/// not information, and re-writing it churned every ranking surface daily.
+/// Deliberately BELOW the 0.10 churn-telemetry threshold: everything the
+/// damper eats was already invisible to the churn counters.
+pub const SCORE_WRITE_HYSTERESIS: f64 = 0.05;
+
 /// Row for the relevance-triage recall audit (Phase 0 of the scoring funnel).
 /// Carries exactly what the cheap gate reads plus the stored relevance_score.
 #[derive(Debug, Clone)]
@@ -247,6 +256,16 @@ impl Database {
     /// existed the only way to see that churn was an ad-hoc snapshot diff of
     /// the whole table. The old score is read inside the same transaction, so
     /// the delta is exact, not racy.
+    ///
+    /// **Persist hysteresis (2026-08-23 audit, item 10):** a re-score whose
+    /// move is smaller than [`SCORE_WRITE_HYSTERESIS`] keeps the OLD durable
+    /// score — sub-noise jitter (the audit measured ~300 items wobbling
+    /// 0.37–0.43 every 30 minutes) stops rewriting the feed's ranking substrate.
+    /// The row is STILL stamped (`scored_pipeline_version` + signal columns):
+    /// skipping the stamp would trap damped items in the version-drain set
+    /// forever. First-ever scores (old NULL) always write. Churn statistics
+    /// are computed over the RAW deltas (what the scorer produced), with
+    /// `suppressed_writes` recording how many the damper kept at the old value.
     pub fn persist_analysis_scores(
         &self,
         scores: &[(i64, f32, Option<String>, Option<String>)],
@@ -255,6 +274,11 @@ impl Database {
         /// A move this large is churn worth counting (matches the forensic
         /// threshold the 2026-08-22/23 audits used).
         const CHURN_DELTA: f64 = 0.10;
+        /// Raw moves below this floor are invisible at every consumer and are
+        /// excluded from the `top_offenders` forensic list.
+        const OFFENDER_FLOOR: f64 = 0.01;
+        /// Largest-|Δ| movers recorded per persist batch.
+        const TOP_OFFENDERS_CAP: usize = 10;
 
         let conn = self.conn.lock();
         let tx = conn.unchecked_transaction()?;
@@ -265,6 +289,9 @@ impl Database {
         let mut max_up: f64 = 0.0;
         let mut max_down: f64 = 0.0;
         let mut sum_abs: f64 = 0.0;
+        let mut suppressed: i64 = 0;
+        // (id, old, new) raw movers — sorted/truncated into `top_offenders`.
+        let mut movers: Vec<(i64, f64, f64)> = Vec::new();
         {
             let mut read_stmt =
                 tx.prepare_cached("SELECT relevance_score FROM source_items WHERE id = ?1")?;
@@ -276,8 +303,9 @@ impl Database {
                 let old: Option<f64> = read_stmt
                     .query_row(params![id], |r| r.get::<_, Option<f64>>(0))
                     .unwrap_or(None);
+                let mut write_score = f64::from(*score);
                 if let Some(old) = old {
-                    let delta = f64::from(*score) - old;
+                    let delta = write_score - old;
                     rescored += 1;
                     sum_abs += delta.abs();
                     if delta > CHURN_DELTA {
@@ -287,9 +315,17 @@ impl Database {
                     }
                     max_up = max_up.max(delta);
                     max_down = max_down.max(-delta);
+                    if delta.abs() >= OFFENDER_FLOOR {
+                        movers.push((*id, old, write_score));
+                    }
+                    if delta.abs() < SCORE_WRITE_HYSTERESIS {
+                        // Keep the durable score; the stamp below still writes.
+                        suppressed += 1;
+                        write_score = old;
+                    }
                 }
                 stmt.execute(params![
-                    *score as f64,
+                    write_score,
                     crate::scoring::PIPELINE_VERSION,
                     signal_type,
                     signal_priority,
@@ -304,10 +340,50 @@ impl Database {
             } else {
                 0.0
             };
+            movers.sort_by(|a, b| {
+                (b.2 - b.1)
+                    .abs()
+                    .partial_cmp(&(a.2 - a.1).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            movers.truncate(TOP_OFFENDERS_CAP);
+            // One grep instead of a forensic hunt: name the biggest movers.
+            if !movers.is_empty() {
+                let top3 = movers
+                    .iter()
+                    .take(3)
+                    .map(|(id, old, new)| format!("id={id} {old:.3}->{new:.3}"))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                tracing::info!(
+                    target: "4da::churn",
+                    path,
+                    rescored,
+                    suppressed_writes = suppressed,
+                    top_movers = %top3,
+                    "Score churn summary"
+                );
+            }
+            let top_offenders: Option<String> = if movers.is_empty() {
+                None
+            } else {
+                let arr: Vec<serde_json::Value> = movers
+                    .iter()
+                    .map(|(id, old, new)| {
+                        serde_json::json!({
+                            "id": id,
+                            "old": (old * 1000.0).round() / 1000.0,
+                            "new": (new * 1000.0).round() / 1000.0,
+                        })
+                    })
+                    .collect();
+                serde_json::to_string(&arr).ok()
+            };
             tx.execute(
                 "INSERT INTO scoring_churn (path, pipeline_version, items_written, rescored,
-                    moved_up_gt_010, moved_down_gt_010, max_up, max_down, mean_abs_delta)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    moved_up_gt_010, moved_down_gt_010, max_up, max_down, mean_abs_delta,
+                    suppressed_writes, top_offenders)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     path,
                     crate::scoring::PIPELINE_VERSION,
@@ -317,12 +393,72 @@ impl Database {
                     moved_down,
                     max_up,
                     max_down,
-                    mean_abs
+                    mean_abs,
+                    suppressed,
+                    top_offenders
                 ],
             )?;
         }
         tx.commit()?;
         Ok(count)
+    }
+
+    /// How many already-scored items are stamped below `current_version` — the
+    /// pending stale-version drain, using the SAME predicate family (incl. the
+    /// tier window) as [`Database::get_stale_scored_items`]. The differential
+    /// gate reads this: a backlog bigger than one drain batch means a pipeline
+    /// bump just landed and the run should take the full window instead.
+    pub fn count_stale_scored_items(&self, current_version: i32) -> SqliteResult<i64> {
+        let conn = self.conn.lock();
+        let time_clause = if crate::settings::is_signal() {
+            String::new()
+        } else {
+            format!(
+                " AND created_at >= datetime('now', '-{} hours')",
+                super::sources::FREE_HISTORY_LIMIT_HOURS
+            )
+        };
+        let sql = format!(
+            "SELECT COUNT(*) FROM source_items
+             WHERE scored_pipeline_version < ?1
+               AND relevance_score IS NOT NULL{time_clause}"
+        );
+        conn.query_row(&sql, params![current_version], |r| r.get(0))
+    }
+
+    /// Among `ids`, the ones whose durable curation is FRESH: a persisted
+    /// `relevance_score` AND a `feed_verdict_at` within `max_age_days`.
+    ///
+    /// This is the working set of the degraded-input persist guard (2026-08-23
+    /// audit, item 11): a scoring run whose inputs systemically collapsed must
+    /// not overwrite these rows. `feed_verdict_at` stands in for "when the
+    /// durable score was last written" — every persisting cycle stamps it in
+    /// the same breath as the score, and no dedicated score timestamp exists.
+    /// An item older than the window (or never curated) is deliberately NOT
+    /// returned: accepting the degraded write there beats freezing forever.
+    pub fn ids_with_fresh_durable_scores(
+        &self,
+        ids: &[i64],
+        max_age_days: u32,
+    ) -> SqliteResult<std::collections::HashSet<i64>> {
+        let mut fresh = std::collections::HashSet::new();
+        if ids.is_empty() {
+            return Ok(fresh);
+        }
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT 1 FROM source_items
+             WHERE id = ?1
+               AND relevance_score IS NOT NULL
+               AND COALESCE(feed_verdict_at, '1970-01-01') > datetime('now', ?2)",
+        )?;
+        let age_modifier = format!("-{max_age_days} days");
+        for id in ids {
+            if stmt.exists(params![id, age_modifier])? {
+                fresh.insert(*id);
+            }
+        }
+        Ok(fresh)
     }
 
     /// Stamp `scored_pipeline_version` for every item that was scored this run,
@@ -354,6 +490,9 @@ impl Database {
 
     /// Get items whose scores were computed under an older pipeline version.
     /// These need re-scoring to reflect current pipeline logic.
+    ///
+    /// The pending-drain COUNT lives in [`Database::count_stale_scored_items`],
+    /// which must keep the same predicate.
     ///
     /// Ordering is deliberately NOT pure `relevance_score DESC`. A pipeline-version
     /// bump happens precisely because scoring CHANGED, and the change that matters
@@ -440,5 +579,212 @@ impl Database {
             })
         })?;
         rows.collect()
+    }
+}
+
+#[cfg(test)]
+mod stability_tests {
+    use super::*;
+    use crate::test_utils::{insert_test_item, test_db};
+
+    fn score_and_version(db: &Database, id: i64) -> (Option<f64>, i64) {
+        let conn = db.conn.lock();
+        conn.query_row(
+            "SELECT relevance_score, scored_pipeline_version FROM source_items WHERE id = ?1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap()
+    }
+
+    /// Item 10 (score side): a sub-hysteresis re-score keeps the durable score
+    /// but STILL advances the version stamp — skipping the stamp would trap the
+    /// item in the version-drain set forever. A move at/above the hysteresis
+    /// writes through, and a first-ever score (old NULL) always writes.
+    #[test]
+    fn hysteresis_keeps_score_but_stamps_version() {
+        let db = test_db();
+        let wobble = insert_test_item(&db, "hackernews", "hy1", "Wobbler", "x");
+        let mover = insert_test_item(&db, "hackernews", "hy2", "Mover", "x");
+        let fresh = insert_test_item(&db, "hackernews", "hy3", "First score", "x");
+
+        // Seed wobble+mover with a prior score at an OLD pipeline version, so
+        // the version stamp is observable.
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET relevance_score = 0.50, scored_pipeline_version = 1
+                 WHERE id IN (?1, ?2)",
+                params![wobble, mover],
+            )
+            .unwrap();
+        }
+
+        db.persist_analysis_scores(
+            &[
+                (wobble, 0.52, None, None), // |Δ| = 0.02 < 0.05 → damped
+                (mover, 0.60, None, None),  // |Δ| = 0.10 ≥ 0.05 → written
+                (fresh, 0.03, None, None),  // old NULL → always written
+            ],
+            "analysis",
+        )
+        .unwrap();
+
+        let (s_wobble, v_wobble) = score_and_version(&db, wobble);
+        assert_eq!(
+            s_wobble,
+            Some(0.50),
+            "sub-hysteresis move keeps the old score"
+        );
+        assert_eq!(
+            v_wobble,
+            i64::from(crate::scoring::PIPELINE_VERSION),
+            "damped write must still stamp the pipeline version (drain safety)"
+        );
+        let (s_mover, _) = score_and_version(&db, mover);
+        assert!(
+            (s_mover.unwrap() - 0.60).abs() < 1e-6,
+            "real move writes through"
+        );
+        let (s_fresh, v_fresh) = score_and_version(&db, fresh);
+        assert!(s_fresh.is_some(), "first-ever score always writes");
+        assert_eq!(v_fresh, i64::from(crate::scoring::PIPELINE_VERSION));
+    }
+
+    /// Item 13: the churn row names WHICH items moved (top_offenders, raw
+    /// deltas, largest first) and how many writes the damper suppressed.
+    #[test]
+    fn churn_row_carries_offender_list_and_suppressed_count() {
+        let db = test_db();
+        let a = insert_test_item(&db, "hackernews", "off_a", "big mover", "x");
+        let b = insert_test_item(&db, "hackernews", "off_b", "small mover", "x");
+        let c = insert_test_item(&db, "hackernews", "off_c", "damped", "x");
+        db.persist_analysis_scores(
+            &[
+                (a, 0.90, None, None),
+                (b, 0.40, None, None),
+                (c, 0.50, None, None),
+            ],
+            "analysis",
+        )
+        .unwrap();
+        db.persist_analysis_scores(
+            &[
+                (a, 0.50, None, None), // Δ = −0.40 → offender #1
+                (b, 0.48, None, None), // Δ = +0.08 → offender #2 (written)
+                (c, 0.52, None, None), // Δ = +0.02 → damped, below offender floor? 0.02 ≥ 0.01 → listed
+            ],
+            "analysis",
+        )
+        .unwrap();
+
+        let conn = db.conn.lock();
+        let (suppressed, offenders_json): (Option<i64>, Option<String>) = conn
+            .query_row(
+                "SELECT suppressed_writes, top_offenders FROM scoring_churn ORDER BY id DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(suppressed, Some(1), "exactly c's write was damped");
+        let offenders: Vec<serde_json::Value> =
+            serde_json::from_str(&offenders_json.expect("offender list present")).unwrap();
+        assert_eq!(offenders.len(), 3, "all rescored movers ≥0.01 are listed");
+        assert_eq!(
+            offenders[0]["id"],
+            serde_json::json!(a),
+            "largest |Δ| first"
+        );
+        assert!((offenders[0]["old"].as_f64().unwrap() - 0.90).abs() < 1e-6);
+        assert!((offenders[0]["new"].as_f64().unwrap() - 0.50).abs() < 1e-6);
+
+        // First-ever batch (all old NULL) records no offenders and 0 suppressed.
+        let (first_suppressed, first_offenders): (Option<i64>, Option<String>) = conn
+            .query_row(
+                "SELECT suppressed_writes, top_offenders FROM scoring_churn ORDER BY id ASC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(first_suppressed, Some(0));
+        assert!(
+            first_offenders.is_none(),
+            "first-ever scores are not movers"
+        );
+    }
+
+    /// The differential gate's pending-drain count mirrors the drain predicate:
+    /// stale = scored below the current version AND has a persisted score.
+    #[test]
+    fn count_stale_scored_items_mirrors_drain_predicate() {
+        let db = test_db();
+        let stale = insert_test_item(&db, "hackernews", "st1", "stale", "x");
+        let current = insert_test_item(&db, "hackernews", "st2", "current", "x");
+        let never = insert_test_item(&db, "hackernews", "st3", "never scored", "x");
+        let v = crate::scoring::PIPELINE_VERSION;
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET relevance_score = 0.5, scored_pipeline_version = ?1 WHERE id = ?2",
+                params![v - 1, stale],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE source_items SET relevance_score = 0.5, scored_pipeline_version = ?1 WHERE id = ?2",
+                params![v, current],
+            )
+            .unwrap();
+            // `never` keeps relevance_score NULL / version 0 — that is the
+            // NEVER-scored backlog (backfill's job), not the stale drain's.
+            let _ = never;
+        }
+        assert_eq!(db.count_stale_scored_items(v).unwrap(), 1);
+        assert_eq!(db.count_stale_scored_items(v - 1).unwrap(), 0);
+    }
+
+    /// Item 11's working-set probe: fresh durable curation = persisted score +
+    /// recent verdict stamp. Old or never-curated rows fall out of protection
+    /// (the escape hatch that prevents a permanently-degraded run from
+    /// freezing the corpus).
+    #[test]
+    fn fresh_durable_score_probe_honors_the_age_escape_hatch() {
+        let db = test_db();
+        let fresh = insert_test_item(&db, "hackernews", "fd1", "fresh", "x");
+        let old = insert_test_item(&db, "hackernews", "fd2", "old verdict", "x");
+        let unscored = insert_test_item(&db, "hackernews", "fd3", "no score", "x");
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET relevance_score = 0.6, feed_verdict_at = datetime('now') WHERE id = ?1",
+                params![fresh],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE source_items SET relevance_score = 0.6, feed_verdict_at = datetime('now', '-8 days') WHERE id = ?1",
+                params![old],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE source_items SET feed_verdict_at = datetime('now') WHERE id = ?1",
+                params![unscored],
+            )
+            .unwrap();
+        }
+        let protected = db
+            .ids_with_fresh_durable_scores(&[fresh, old, unscored], 7)
+            .unwrap();
+        assert!(
+            protected.contains(&fresh),
+            "fresh durable score is protected"
+        );
+        assert!(
+            !protected.contains(&old),
+            ">7-day-old curation accepts the write"
+        );
+        assert!(
+            !protected.contains(&unscored),
+            "no durable score → nothing to protect"
+        );
+        assert!(db.ids_with_fresh_durable_scores(&[], 7).unwrap().is_empty());
     }
 }
