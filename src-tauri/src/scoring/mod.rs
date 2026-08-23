@@ -299,7 +299,29 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // observed 2026-08-17). No scoring-logic change in this commit; the bump
 // makes the drain re-stamp the corpus with the merged logic. Unregistered
 // (full drain), same cost basis as v20.
-pub(crate) const PIPELINE_VERSION: i32 = 21;
+// v22 (2026-08-24): the adversarial-audit fix queue (2026-08-23, all phases).
+// Scoring-semantics changes landing under this bump: the 6-hour UGC community
+// cliff defused (engagement-based signal from age 0 for federated sources),
+// deterministic dep-interest synthesis (lottery killed; cap 15→40; direct dev
+// deps at 0.2 weight), the ace_independent tautology fixed (keyword-fallback
+// ACE no longer double-counts against a keyword-confirmed interest),
+// own-stack single-word keyword confirmation (corroborated, confirmation-only),
+// family/sub-crate dependency grounding (serde_derive-class lockfile children
+// of direct deps), scoped-package/Go-module advisory raw-name matching +
+// metadata-first survivor filtering, dev-dep grounding at 0.8 discount,
+// published_at staleness discount, the dep-gate bypass conf_mult lift,
+// negative-stack token-boundary matching + migration carve-out, dedup
+// grounded-first retention, platform-domain diversity exemption, serendipity
+// ceiling exclusion, and the job-seeker hiring classification.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS: this bump changes
+// global gate machinery (confirmation gate evidence, keyword confirmation,
+// community signal, staleness evidence — the epochs module contract's
+// explicit do-not-register class), so no predicate can provably bound its
+// reach. The whole corpus drains — correct, just slower; the differential
+// watermark's stale-backlog gate forces full windows until the drain
+// converges to <=500 pending.
+pub(crate) const PIPELINE_VERSION: i32 = 22;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

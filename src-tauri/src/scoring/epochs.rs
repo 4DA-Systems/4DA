@@ -84,6 +84,13 @@ use crate::db::Database;
 /// value computed at score time, so intersecting on it could under-cover — the
 /// one hazard the module contract names. Source type is assigned at ingest and
 /// never re-derived, so it is safe to key on.
+///
+/// **v22 — deliberately absent** (2026-08-24 audit fix queue): the bump
+/// changes global gate machinery (confirmation-gate evidence, keyword
+/// confirmation, community signal, staleness evidence) — the module
+/// contract's explicit do-not-register class. No predicate can provably
+/// bound its reach, so the whole corpus drains. The mechanism stays for
+/// future narrow bumps.
 const SCOPED_EPOCHS: &[(i32, &str)] = &[(
     18,
     "source_type IN ('npm_registry','npm','crates_io','crates','pypi',\

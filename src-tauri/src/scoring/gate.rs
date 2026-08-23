@@ -100,7 +100,10 @@ const OWN_STACK_KEYWORD_CORROBORATION: f32 = 0.35;
 ///
 /// Legacy entry point: identical to `count_confirmed_signals_with_evidence`
 /// with `GateEvidence::default()` (semantic treated as embedding-derived, no
-/// own-stack keyword evidence) — the pre-2026-08-23 behavior.
+/// own-stack keyword evidence) — the pre-2026-08-23 behavior. Production
+/// (pipeline_v2) now passes real evidence; this shim survives only for the
+/// gate tests that pin default-evidence behavior, hence `cfg(test)`.
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn count_confirmed_signals(
     context_score: f32,

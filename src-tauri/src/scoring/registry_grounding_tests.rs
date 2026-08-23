@@ -606,7 +606,7 @@ fn stale_published_content_scores_below_fresh_twin() {
         trend_topics: vec![],
     };
     let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
-    let mut score_published_at = |id: u64, published: chrono::DateTime<chrono::Utc>| {
+    let score_published_at = |id: u64, published: chrono::DateTime<chrono::Utc>| {
         let input = ScoringInput {
             id,
             title: "TypeScript 5.1 Beta is OUT! Deep dive into the new features",
