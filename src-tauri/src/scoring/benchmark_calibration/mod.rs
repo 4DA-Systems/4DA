@@ -608,6 +608,127 @@ fn quality_gate_ratchet_rejects_pre_audit_drift_levels() {
     );
 }
 
+/// Cross-machine noise-margin semantics (2026-08-25, see quality_gate.rs
+/// module doc): hosted CI runners' float paths can flip exactly ONE
+/// near-threshold scenario (observed: edge_deprecated_tech 0.413 vs band max
+/// 0.30 on ubuntu-hosted, in-band across 3 byte-identical local runs — PR
+/// #527 run 32734979346, a PR with zero scoring changes). The floors absorb
+/// exactly one such flip; a second concurrent failure is drift and stays red.
+#[test]
+fn quality_gate_tolerates_one_cross_machine_flip_but_not_two() {
+    use super::benchmark_scenarios::{BenchmarkReport, CategoryResult};
+
+    let base_categories = |edge_passed: usize| {
+        let mut m = HashMap::new();
+        m.insert(
+            "true_positive".to_string(),
+            CategoryResult {
+                total: 20,
+                passed: 17,
+                accuracy: 0.85,
+            },
+        );
+        m.insert(
+            "true_negative".to_string(),
+            CategoryResult {
+                total: 20,
+                passed: 20,
+                accuracy: 1.00,
+            },
+        );
+        m.insert(
+            "security".to_string(),
+            CategoryResult {
+                total: 12,
+                passed: 12,
+                accuracy: 1.00,
+            },
+        );
+        m.insert(
+            "cold_start".to_string(),
+            CategoryResult {
+                total: 12,
+                passed: 12,
+                accuracy: 1.00,
+            },
+        );
+        m.insert(
+            "harness_coverage".to_string(),
+            CategoryResult {
+                total: 7,
+                passed: 7,
+                accuracy: 1.00,
+            },
+        );
+        m.insert(
+            "edge_case".to_string(),
+            CategoryResult {
+                total: 14,
+                passed: edge_passed,
+                accuracy: edge_passed as f32 / 14.0,
+            },
+        );
+        m
+    };
+
+    // Exactly the #527 CI state: one edge scenario flipped, 81/85 overall.
+    let one_flip = BenchmarkReport {
+        total: 85,
+        passed: 81,
+        failed: 4,
+        accuracy: 0.9529,
+        relevance_accuracy: 0.76,
+        by_category: base_categories(13),
+        failures: vec![],
+    };
+    assert!(
+        quality_gate::model_meets_quality_gate(&one_flip),
+        "one cross-machine threshold-flip (81/85, edge 13/14) must pass — \
+         this exact state red-blocked the zero-scoring-change PR #527"
+    );
+
+    // A second concurrent flip is drift, not noise: red via BOTH the overall
+    // floor (80/85 = 94.1% < 0.95) and the edge floor (12/14 = 85.7% < 0.92).
+    let two_flips = BenchmarkReport {
+        total: 85,
+        passed: 80,
+        failed: 5,
+        accuracy: 0.9412,
+        relevance_accuracy: 0.75,
+        by_category: base_categories(12),
+        failures: vec![],
+    };
+    assert!(
+        !quality_gate::model_meets_quality_gate(&two_flips),
+        "two concurrent flips (80/85) must stay red — that is drift"
+    );
+
+    // A single TRUE-NEGATIVE flip must stay red regardless of the overall
+    // margin: precision-first is a hard gate, not a noise candidate.
+    let mut tn_flip_categories = base_categories(14);
+    tn_flip_categories.insert(
+        "true_negative".to_string(),
+        CategoryResult {
+            total: 20,
+            passed: 19,
+            accuracy: 0.95,
+        },
+    );
+    let tn_flip = BenchmarkReport {
+        total: 85,
+        passed: 81,
+        failed: 4,
+        accuracy: 0.9529,
+        relevance_accuracy: 0.76,
+        by_category: tn_flip_categories,
+        failures: vec![],
+    };
+    assert!(
+        !quality_gate::model_meets_quality_gate(&tn_flip),
+        "a false positive (TN 19/20) must stay red even inside the overall margin"
+    );
+}
+
 /// Diagnostic: dump every scenario's actual score, relevance, and signals
 /// to identify which scenarios need re-calibration.
 #[cfg(feature = "fastembed-local")]
