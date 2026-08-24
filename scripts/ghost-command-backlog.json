@@ -160,12 +160,6 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
-      "command": "get_attention_report",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/attention.rs:272",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
       "command": "get_blind_spot_sensitivity",
       "since": "2026-08-14",
       "rust": "src-tauri/src/settings_commands_context.rs:501",
@@ -232,12 +226,6 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
-      "command": "get_developer_dna",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/developer_dna.rs:509",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
       "command": "get_diagnostics",
       "since": "2026-08-14",
       "rust": "src-tauri/src/commands.rs:533",
@@ -298,12 +286,6 @@
       "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
     },
     {
-      "command": "get_lesson_translation_status",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/playbook_commands.rs:445",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
       "command": "get_llm_capability_tier",
       "since": "2026-08-14",
       "rust": "src-tauri/src/llm_capability.rs:432",
@@ -334,42 +316,6 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
-      "command": "get_personalization_context_summary",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/content_personalization/commands.rs:177",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "get_personalized_lesson",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/content_personalization/commands.rs:24",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "get_personalized_lessons_batch",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/content_personalization/commands.rs:104",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "get_playbook_content",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/playbook_commands.rs:232",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "get_playbook_modules",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/playbook_commands.rs:199",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "get_playbook_progress",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/playbook_commands.rs:270",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
       "command": "get_preference_evidence",
       "since": "2026-08-14",
       "rust": "src-tauri/src/preference_commands.rs:104",
@@ -379,12 +325,6 @@
       "command": "get_project_deps",
       "since": "2026-08-14",
       "rust": "src-tauri/src/dependency_commands.rs:135",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "get_project_health",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/project_health.rs:124",
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
@@ -454,12 +394,6 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
-      "command": "get_sovereign_developer_profile",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/sovereign_developer_profile_intelligence.rs:624",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
       "command": "get_sovereign_profile",
       "since": "2026-08-14",
       "rust": "src-tauri/src/sovereign_profile.rs:63",
@@ -488,12 +422,6 @@
       "since": "2026-08-15",
       "rust": "src-tauri/src/standing_queries.rs:332",
       "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
-    },
-    {
-      "command": "get_street_health",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/suns_commands.rs:37",
-      "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
       "command": "get_tech_convergence",
@@ -538,12 +466,6 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
-      "command": "hydrate_lesson_with_llm",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/content_personalization/commands.rs:217",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
       "command": "list_provider_models",
       "since": "2026-08-14",
       "rust": "src-tauri/src/settings_commands_llm/mod.rs:84",
@@ -554,12 +476,6 @@
       "since": "2026-08-15",
       "rust": "src-tauri/src/standing_queries.rs:164",
       "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
-    },
-    {
-      "command": "mark_lesson_complete",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/playbook_commands.rs:336",
-      "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
       "command": "measure_noise_prune",
@@ -769,12 +685,6 @@
       "command": "translate_content",
       "since": "2026-08-14",
       "rust": "src-tauri/src/content_translation_commands.rs:20",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "translate_playbook_module",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/playbook_commands.rs:395",
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
