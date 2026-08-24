@@ -882,24 +882,64 @@ function isTestCode(entry) {
   return isTestFile(entry.file) || /\#\[cfg\(test\)\]|\#\[test\]|FAKE_|TESTKEYDONOTUSE|sk-ant-test/.test(entry.text);
 }
 
+/**
+ * First line of a file's `#[cfg(test)]` module, or Infinity when it has none.
+ *
+ * WHY: `isTestFile` is FILENAME-only and `isTestCode` only inspects the matched
+ * line's own text — neither can tell that a `.unwrap()` sits inside an inline
+ * `#[cfg(test)] mod tests` block of an otherwise-production file. Rust
+ * convention puts that module at the bottom, so the marker line is a reliable
+ * cut point.
+ *
+ * Measured 2026-08-24 without this: ".unwrap() in prod code" reported 1472 when
+ * the true production figure was 9 (scoring/benchmark.rs + benchmark_calibration).
+ * That pinned the row's own "< 10 = OK" status permanently at REVIEW, and made
+ * sentinel-scan.cjs raise a Security warning routed to 4da-rust-expert every
+ * time somebody ADDED TESTS — i.e. the metric punished good behaviour.
+ */
+const testModuleStartCache = new Map();
+function testModuleStartLine(relFile) {
+  if (testModuleStartCache.has(relFile)) return testModuleStartCache.get(relFile);
+  let start = Infinity;
+  try {
+    const lines = fs.readFileSync(path.join(ROOT, relFile), "utf-8").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (/#\[cfg\(test\)\]/.test(lines[i])) {
+        start = i + 1; // grepFiles reports 1-indexed lines
+        break;
+      }
+    }
+  } catch {
+    // Unreadable: fall back to "no test module" so matches stay VISIBLE
+    // (conservative — this metric must never hide production findings).
+  }
+  testModuleStartCache.set(relFile, start);
+  return start;
+}
+
+/** True when a match is in a test file OR inside a `#[cfg(test)]` module. */
+function isTestContext(entry) {
+  return isTestFile(entry.file) || entry.line >= testModuleStartLine(entry.file);
+}
+
 function generateSecuritySurface() {
   // Key security patterns — separate production from test code
   // Exclude test files, error context (.with_context, .map_err), and doc comments
   const apiKeyLogs = grepFiles(RUST_SRC, [".rs"], /(?:log|debug|info|warn|error|println|eprintln).*(?:api_key|secret|token|password)/i)
-    .filter((v) => !isTestFile(v.file))
+    .filter((v) => !isTestContext(v))
     .filter((v) => !/(with_context|map_err|\/\/\/|\/\/ )/.test(v.text));
   const allUnwraps = grepFiles(RUST_SRC, [".rs"], /\.unwrap\(\)/);
-  const prodUnwraps = allUnwraps.filter((u) => !isTestFile(u.file));
-  const testUnwraps = allUnwraps.filter((u) => isTestFile(u.file));
+  const prodUnwraps = allUnwraps.filter((u) => !isTestContext(u));
+  const testUnwraps = allUnwraps.filter((u) => isTestContext(u));
   const allPanics = grepFiles(RUST_SRC, [".rs"], /panic!\(|todo!\(|unimplemented!\(/);
-  const prodPanics = allPanics.filter((p) => !isTestFile(p.file));
+  const prodPanics = allPanics.filter((p) => !isTestContext(p));
   const unsafeBlocks = grepFiles(RUST_SRC, [".rs"], /unsafe\s*\{/);
   // Exclude error context formatting — only match format! used in actual SQL string building
   const sqlInjection = grepFiles(RUST_SRC, [".rs"], /format!\(.*(?:SELECT|INSERT|UPDATE|DELETE|DROP)/i)
-    .filter((s) => !isTestFile(s.file))
+    .filter((s) => !isTestContext(s))
     .filter((s) => !/(with_context|map_err|context\()/.test(s.text));
   const hardcodedSecrets = grepFiles(RUST_SRC, [".rs"], /(?:api_key|secret|password|token)\s*=\s*"/i)
-    .filter((s) => !isTestFile(s.file) && !isTestCode(s));
+    .filter((s) => !isTestContext(s) && !isTestCode(s));
 
   // Frontend security
   const dangerousHTML = grepFiles(REACT_SRC, [".tsx"], /dangerouslySetInnerHTML/);
