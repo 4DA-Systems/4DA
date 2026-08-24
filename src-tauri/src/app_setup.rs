@@ -136,9 +136,26 @@ fn install_console_ctrl_handler() {
     unsafe extern "system" fn handler(ctrl_type: u32) -> i32 {
         const CTRL_C_EVENT: u32 = 0;
         const CTRL_CLOSE_EVENT: u32 = 2;
+        // Exit attribution (#501): this handler is the ONLY in-process code
+        // that runs when the attached console delivers Ctrl+C or closes —
+        // e.g. when the hidden cmd / bash job that launched a detached dev
+        // run is torn down. Log the event BEFORE the default handler
+        // terminates the process, then give the non-blocking log worker a
+        // beat to flush; without this line such deaths are indistinguishable
+        // from crashes (observed live 2026-08-24 12:19:20Z — only the
+        // mark_clean_shutdown fingerprint made it to disk).
+        warn!(
+            target: "4da::shutdown",
+            ctrl_type,
+            "Console control event received — external termination imminent (#501)"
+        );
         if ctrl_type == CTRL_C_EVENT || ctrl_type == CTRL_CLOSE_EVENT {
             crate::startup_watchdog::mark_clean_shutdown();
         }
+        // Bounded drain window for the tracing-appender worker thread. The
+        // system allows console handlers seconds before force-killing; 200ms
+        // costs nothing on a path that ends in process death either way.
+        std::thread::sleep(std::time::Duration::from_millis(200));
         0 // FALSE — let the default handler terminate the process
     }
     #[allow(unsafe_code)]
@@ -1993,13 +2010,50 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
     // Forensics: the main window has died with no CloseRequested and no
     // app-side destroy caller (2026-08-19). Log every window destruction so
     // the next occurrence names its moment instead of vanishing silently.
+    // `remaining` counts the windows still alive AFTER this destruction
+    // (tauri's manager removes the destroyed window before this callback
+    // runs) — remaining=0 means the ExitRequested guard below is what now
+    // stands between the app and process death (#501).
     if let tauri::RunEvent::WindowEvent {
         label,
         event: tauri::WindowEvent::Destroyed,
         ..
     } = &event
     {
-        warn!(target: "4da::window", label = %label, "Window destroyed");
+        let remaining = app_handle.webview_windows().len();
+        warn!(target: "4da::window", label = %label, remaining, "Window destroyed");
+    }
+
+    // Exit guard (#501): tauri-runtime-wry fires ExitRequested with
+    // code=None when the LAST window is destroyed. Unanswered, tao's event
+    // loop terminates and `process::exit()`s — no further app code runs and
+    // the non-blocking log appender's buffered tail is lost, so the death is
+    // silent. The zero-window moment is reachable in normal operation: the
+    // notification/briefing "JS never loaded — recreating" recovery destroys
+    // its stale window BEFORE the replacement exists. A tray-resident app
+    // must survive window teardown; explicit exits (tray quit `app.exit(0)`,
+    // restart) carry Some(code) and proceed. `prevent_exit()` must be called
+    // synchronously here — the runtime reads the answer with `try_recv`
+    // immediately after this callback returns.
+    if let tauri::RunEvent::ExitRequested { code, api, .. } = &event {
+        let tray_alive = app_handle
+            .try_state::<parking_lot::Mutex<Option<tauri::tray::TrayIcon<tauri::Wry>>>>()
+            .map(|state| state.lock().is_some())
+            .unwrap_or(false);
+        if crate::exit_guard::should_prevent_exit(*code, tray_alive) {
+            api.prevent_exit();
+            warn!(
+                target: "4da::shutdown",
+                "Exit requested by window teardown (all windows destroyed) — PREVENTED; tray keeps the app alive (#501)"
+            );
+        } else {
+            info!(
+                target: "4da::shutdown",
+                code = ?code,
+                tray_alive,
+                "Exit requested — proceeding to shutdown"
+            );
+        }
     }
 
     // Hide-to-tray: intercept window close when enabled

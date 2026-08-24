@@ -7,7 +7,16 @@
  * worktree that has:
  *
  *   1. Uncommitted changes in its working tree
- *   2. Commits that aren't already reachable from main
+ *   2. Commits whose content is not already in main — where "in main" means
+ *      EITHER ancestry (tip reachable from main) OR squash-merge tree
+ *      identity (the branch tip's tree object appears in recent main
+ *      history). This repo squash-merges every PR, so a merged branch's
+ *      commits are NEVER reachable from main — ancestry alone refused every
+ *      merged lane forever and 40+ of them accumulated (2026-08-24 audit
+ *      follow-up). Tree identity is the content-level proof: if main ever
+ *      held this branch's exact final state, deleting the branch loses
+ *      nothing the squash-merge flow didn't already discard (intermediate
+ *      commit states were never merged to begin with; reflog keeps 90 days).
  *
  * Run modes:
  *
@@ -86,6 +95,36 @@ function isReachableFromMain(ref) {
   return typeof tip === "string" && typeof mergeBase === "string" && tip === mergeBase;
 }
 
+// Squash-merge awareness: how far back in main history to look for a
+// branch's tree. Main lands ~5-15 commits/day, so 500 covers a month-plus;
+// a lane older than the window simply stays protected (fail-safe).
+const MAIN_TREE_DEPTH = 500;
+let mainTreesCache = null;
+function mainTrees() {
+  if (!mainTreesCache) {
+    const out = sh(`git log --format=%T -${MAIN_TREE_DEPTH} main`);
+    mainTreesCache = new Set(
+      typeof out === "string" ? out.split(/\r?\n/).filter(Boolean) : []
+    );
+  }
+  return mainTreesCache;
+}
+
+// True when the branch tip's TREE object is byte-identical to the tree of
+// some commit in recent main history — i.e. main has held this branch's
+// exact final state (the squash-merge signature). Content-level proof:
+// deleting the branch cannot lose anything the merge flow kept.
+function isSquashMergedIntoMain(ref) {
+  const tree = sh(`git rev-parse "${ref}^{tree}"`);
+  return typeof tree === "string" && mainTrees().has(tree);
+}
+
+// The combined safety predicate: content is in main by ancestry or by
+// squash-merge tree identity.
+function contentPreservedInMain(ref) {
+  return isReachableFromMain(ref) || isSquashMergedIntoMain(ref);
+}
+
 function hasUncommittedChanges(dirPath) {
   if (!fs.existsSync(dirPath)) return { empty: true, status: "" };
   const out = sh(`git -C "${dirPath}" status --short`);
@@ -129,15 +168,16 @@ function main() {
   // Phase 1: worktrees that git knows about
   for (const w of worktreeWorktrees) {
     const branchName = w.branch.replace(/^refs\/heads\//, "");
-    const reachable = isReachableFromMain(branchName);
+    const preserved = contentPreservedInMain(branchName);
     const { empty, status } = hasUncommittedChanges(w.path);
 
-    if (!reachable) {
+    if (!preserved) {
       plan.unsafe.push({
         kind: "worktree",
         path: w.path,
         branch: branchName,
-        reason: "branch tip NOT reachable from main — has unique commits",
+        reason:
+          "branch content NOT in main (no ancestry, no squash-merge tree match) — has unique work",
       });
       continue;
     }
@@ -160,11 +200,12 @@ function main() {
   );
   for (const b of orphanBranches) {
     if (stillLiveBranches.has(b)) continue; // already handled above
-    if (!isReachableFromMain(b)) {
+    if (!contentPreservedInMain(b)) {
       plan.unsafe.push({
         kind: "branch",
         branch: b,
-        reason: "branch tip NOT reachable from main — unique commits",
+        reason:
+          "branch content NOT in main (no ancestry, no squash-merge tree match) — unique work",
       });
       continue;
     }
