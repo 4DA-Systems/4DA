@@ -1,7 +1,7 @@
 {
   "name": "4da",
   "description": "Stack-aware developer intelligence for your agent: CVE scans against your real lockfile tree, dependency health, ranked upgrade plans, decision memory. Privacy-first — only public package names and versions ever leave your machine.",
-  "version": "5.0.3",
+  "version": "5.0.4",
   "author": { "name": "4DA Systems", "url": "https://4da.ai" },
   "homepage": "https://4da.ai/mcp/",
   "repository": "https://github.com/4DA-Systems/4DA",
