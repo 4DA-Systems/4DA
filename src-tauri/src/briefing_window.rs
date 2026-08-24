@@ -115,6 +115,11 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
     // Recovery: if the window's JS never loaded (dev server race condition on
     // startup), destroy the stale window so it gets recreated with a fresh load.
     // By the time a briefing fires, the dev server is guaranteed to be up.
+    //
+    // Exit safety (#501): this destroy is processed on the event loop BEFORE
+    // the replacement window exists — if it is the last live window, only the
+    // exit guard in `app_setup::handle_run_event` (prevent_exit on
+    // code=None ExitRequested) keeps the process alive. Do not remove it.
     if !WINDOW_READY.load(Ordering::Relaxed) {
         if let Some(w) = app.get_webview_window(WINDOW_LABEL) {
             info!(target: "4da::briefing", "Briefing window JS never loaded — recreating");

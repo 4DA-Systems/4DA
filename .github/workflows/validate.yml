@@ -209,10 +209,23 @@ jobs:
         # Catches the Vite dep-reshuffle class of failures (see CLAUDE.md
         # "Vite dep updates + running fourda.exe" gotcha). Cheap and
         # identifies module-resolution regressions before they reach prod.
-        # Kill fourda.exe first — self-hosted runner may have it holding port 4444.
-        run: |
-          taskkill /F /IM fourda.exe 2>$null; $true
-          pnpm run validate:vite-smoke
+        #
+        # NEVER add a `taskkill /F /IM fourda.exe` (or any image-name kill)
+        # here. This job runs on the self-hosted dev box: a blanket kill
+        # murders the operator's live app and every agent-launched instance
+        # with exit code exactly 1, silently — no RunEvent::Exit, no panic,
+        # no Event Log record — which is precisely the issue #501 "silent
+        # exit(1)" signature, and it poisoned that investigation for days
+        # (every frontend-touching CI run assassinated whatever fourda.exe
+        # was alive on the box). The kill also bought nothing: fourda.exe is
+        # the vite dev server's CLIENT, never the listener on 4444 (node
+        # holds the port), and this workspace has its own node_modules, so
+        # neither the port nor the .vite/deps cache is shared with the dev
+        # tree. Instead, CI runs the smoke on a dedicated port so the
+        # cold-start never contends with a live dev server at all.
+        env:
+          VITE_SMOKE_PORT: '4445'
+        run: pnpm run validate:vite-smoke
 
       - name: Run tests and verify count floor
         run: |
