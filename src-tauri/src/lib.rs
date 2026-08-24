@@ -263,6 +263,7 @@ mod engagement_telemetry;
 mod engine_runs;
 mod engine_scheduler;
 mod evidence;
+mod exit_guard;
 mod external;
 pub mod extractors;
 mod free_briefing;
