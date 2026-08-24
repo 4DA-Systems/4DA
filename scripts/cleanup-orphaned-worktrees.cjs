@@ -7,10 +7,28 @@
  * worktree that has:
  *
  *   1. Uncommitted changes in its working tree
- *   2. Commits that are not already merged — established EITHER by ancestry
- *      (tip reachable from main) OR by a merged PR whose head OID is exactly
- *      the branch tip. The second criterion is required because this repo
- *      squash-merges, which never makes a branch an ancestor of main.
+ *   2. Commits whose content is not already in main. "In main" is established
+ *      by ANY of three independent proofs — this repo squash-merges every PR,
+ *      so a merged branch's commits are NEVER reachable from main, and
+ *      ancestry alone refused every merged lane forever while 40+ of them
+ *      accumulated (2026-08-24 audit):
+ *
+ *        a. ANCESTRY — tip reachable from main (non-squash flows).
+ *        b. TREE IDENTITY — the branch tip's tree object appears in recent
+ *           main history, i.e. main once held this branch's exact final
+ *           state. Offline, needs no API.
+ *        c. MERGED PR HEAD — a merged PR's headRefOid is exactly the tip.
+ *
+ *      (b) and (c) are COMPLEMENTARY, not redundant. Tree identity only
+ *      matches when the branch was up to date with main at merge time; that
+ *      is guaranteed today by the strict "branches must be up to date"
+ *      ruleset, but was NOT for older merges, and it is bounded by
+ *      MAIN_TREE_DEPTH. Measured 2026-08-24 on this tree: (a)+(b) reclaimed
+ *      2 branches, adding (c) reclaimed 30 — the extra 28 were verified
+ *      MERGED with exact OID match (e.g. #357, #414, #465, #471).
+ *
+ *      Every proof is content-level and conservative: anything unproven stays
+ *      protected, and reflog keeps 90 days regardless.
  *
  * Run modes:
  *
@@ -89,20 +107,43 @@ function isReachableFromMain(ref) {
   return typeof tip === "string" && typeof mergeBase === "string" && tip === mergeBase;
 }
 
+// Squash-merge awareness (proof b): how far back in main history to look for
+// a branch's tree. Main lands ~5-15 commits/day, so 500 covers a month-plus;
+// a lane older than the window simply stays protected (fail-safe).
+const MAIN_TREE_DEPTH = 500;
+let mainTreesCache = null;
+function mainTrees() {
+  if (!mainTreesCache) {
+    const out = sh(`git log --format=%T -${MAIN_TREE_DEPTH} main`);
+    mainTreesCache = new Set(
+      typeof out === "string" ? out.split(/\r?\n/).filter(Boolean) : []
+    );
+  }
+  return mainTreesCache;
+}
+
+// True when the branch tip's TREE object is byte-identical to the tree of
+// some commit in recent main history — i.e. main has held this branch's
+// exact final state (the squash-merge signature). Content-level proof:
+// deleting the branch cannot lose anything the merge flow kept.
+function isSquashMergedIntoMain(ref) {
+  const tree = sh(`git rev-parse "${ref}^{tree}"`);
+  return typeof tree === "string" && mainTrees().has(tree);
+}
+
 /**
- * Head refs of merged PRs, as Map<branchName, headRefOid>.
+ * Proof (c): head refs of merged PRs, as Map<branchName, headRefOid>.
  *
- * WHY THIS EXISTS: this repo merges by SQUASH. A squash merge replays the
- * branch as a NEW commit on main, so the branch tip is never an ancestor of
- * main and `isReachableFromMain` is permanently FALSE for every successfully
- * merged PR. Ancestry alone therefore protects everything forever: measured
- * 2026-08-24 on this repo — 44 registered worktrees, 46 `worktree-*` branches,
- * and a plan of "0 dirs, 0 branches", with #488/#493/#427 (all MERGED) each
- * reported as "has unique commits".
+ * Tree identity (b) only matches when the branch was up to date with main at
+ * merge time — guaranteed by today's strict ruleset, but NOT for older merges,
+ * where main had moved on and the squash commit's tree therefore differs from
+ * the branch tip's. Those lanes are still fully merged; the PR record proves it
+ * when the tree cannot. Measured 2026-08-24: (a)+(b) alone reclaimed 2 lanes,
+ * (a)+(b)+(c) reclaimed 30.
  *
  * Returns null when `gh` is missing, unauthenticated, or returns junk — the
- * caller then falls back to ancestry-only, i.e. the original conservative
- * behaviour. This must never make the script LESS safe than before.
+ * caller then simply relies on (a)+(b). This must never make the script LESS
+ * safe than before.
  */
 function getMergedPrHeads() {
   const out = sh(
@@ -129,10 +170,10 @@ function getMergedPrHeads() {
  * True only when `ref`'s PR is merged AND the local tip is EXACTLY the commit
  * that was merged.
  *
- * The OID equality is what makes this as safe as the ancestry check: a branch
- * that received further commits after its PR merged will not match, so that
- * unmerged work stays protected. A branch older than the `--limit` window
- * simply will not be found, which is likewise conservative.
+ * The OID equality is what makes this as strict as ancestry: a branch that
+ * received further commits after its PR merged will not match, so that unmerged
+ * work stays protected. A branch older than the `--limit` window simply is not
+ * found, which is likewise conservative.
  */
 function isMergedPrHead(ref, mergedHeads) {
   if (!mergedHeads) return false;
@@ -140,6 +181,16 @@ function isMergedPrHead(ref, mergedHeads) {
   if (!mergedOid) return false;
   const tip = sh(`git rev-parse ${ref}`);
   return typeof tip === "string" && tip === mergedOid;
+}
+
+// The combined safety predicate: content is in main by ancestry (a), by
+// squash-merge tree identity (b), or by merged-PR head OID (c).
+function contentPreservedInMain(ref, mergedHeads) {
+  return (
+    isReachableFromMain(ref) ||
+    isSquashMergedIntoMain(ref) ||
+    isMergedPrHead(ref, mergedHeads)
+  );
 }
 
 function hasUncommittedChanges(dirPath) {
@@ -176,9 +227,9 @@ function main() {
   console.log(`Worktree-* branches: ${orphanBranches.length}`);
   console.log(
     mergedHeads
-      ? `Merged PR heads:     ${mergedHeads.size} (squash-merge detection ACTIVE)`
-      : "Merged PR heads:     unavailable — `gh` missing/unauthenticated;" +
-        " falling back to ancestry-only (conservative, squash-merged branches stay protected)"
+      ? `Merged PR heads:     ${mergedHeads.size} (proof c ACTIVE, alongside ancestry + tree identity)`
+      : "Merged PR heads:     unavailable — `gh` missing/unauthenticated; using" +
+        " ancestry + tree identity only (conservative: older merges stay protected)"
   );
   console.log("");
 
@@ -192,17 +243,16 @@ function main() {
   // Phase 1: worktrees that git knows about
   for (const w of worktreeWorktrees) {
     const branchName = w.branch.replace(/^refs\/heads\//, "");
-    const merged =
-      isReachableFromMain(branchName) || isMergedPrHead(branchName, mergedHeads);
+    const preserved = contentPreservedInMain(branchName, mergedHeads);
     const { empty, status } = hasUncommittedChanges(w.path);
 
-    if (!merged) {
+    if (!preserved) {
       plan.unsafe.push({
         kind: "worktree",
         path: w.path,
         branch: branchName,
         reason:
-          "not merged — tip is not reachable from main and no merged PR has this tip",
+          "branch content NOT in main (no ancestry, no tree match, no merged-PR head) — has unique work",
       });
       continue;
     }
@@ -225,12 +275,12 @@ function main() {
   );
   for (const b of orphanBranches) {
     if (stillLiveBranches.has(b)) continue; // already handled above
-    if (!isReachableFromMain(b) && !isMergedPrHead(b, mergedHeads)) {
+    if (!contentPreservedInMain(b, mergedHeads)) {
       plan.unsafe.push({
         kind: "branch",
         branch: b,
         reason:
-          "not merged — tip is not reachable from main and no merged PR has this tip",
+          "branch content NOT in main (no ancestry, no tree match, no merged-PR head) — unique work",
       });
       continue;
     }
