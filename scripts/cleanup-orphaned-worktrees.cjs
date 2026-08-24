@@ -7,7 +7,10 @@
  * worktree that has:
  *
  *   1. Uncommitted changes in its working tree
- *   2. Commits that aren't already reachable from main
+ *   2. Commits that are not already merged — established EITHER by ancestry
+ *      (tip reachable from main) OR by a merged PR whose head OID is exactly
+ *      the branch tip. The second criterion is required because this repo
+ *      squash-merges, which never makes a branch an ancestor of main.
  *
  * Run modes:
  *
@@ -86,6 +89,59 @@ function isReachableFromMain(ref) {
   return typeof tip === "string" && typeof mergeBase === "string" && tip === mergeBase;
 }
 
+/**
+ * Head refs of merged PRs, as Map<branchName, headRefOid>.
+ *
+ * WHY THIS EXISTS: this repo merges by SQUASH. A squash merge replays the
+ * branch as a NEW commit on main, so the branch tip is never an ancestor of
+ * main and `isReachableFromMain` is permanently FALSE for every successfully
+ * merged PR. Ancestry alone therefore protects everything forever: measured
+ * 2026-08-24 on this repo — 44 registered worktrees, 46 `worktree-*` branches,
+ * and a plan of "0 dirs, 0 branches", with #488/#493/#427 (all MERGED) each
+ * reported as "has unique commits".
+ *
+ * Returns null when `gh` is missing, unauthenticated, or returns junk — the
+ * caller then falls back to ancestry-only, i.e. the original conservative
+ * behaviour. This must never make the script LESS safe than before.
+ */
+function getMergedPrHeads() {
+  const out = sh(
+    "gh pr list --state merged --limit 500 --json number,headRefName,headRefOid"
+  );
+  if (typeof out !== "string" || out.length === 0) return null;
+  let rows;
+  try {
+    rows = JSON.parse(out);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(rows)) return null;
+  const heads = new Map();
+  for (const row of rows) {
+    if (row && row.headRefName && row.headRefOid) {
+      heads.set(row.headRefName, row.headRefOid);
+    }
+  }
+  return heads;
+}
+
+/**
+ * True only when `ref`'s PR is merged AND the local tip is EXACTLY the commit
+ * that was merged.
+ *
+ * The OID equality is what makes this as safe as the ancestry check: a branch
+ * that received further commits after its PR merged will not match, so that
+ * unmerged work stays protected. A branch older than the `--limit` window
+ * simply will not be found, which is likewise conservative.
+ */
+function isMergedPrHead(ref, mergedHeads) {
+  if (!mergedHeads) return false;
+  const mergedOid = mergedHeads.get(ref);
+  if (!mergedOid) return false;
+  const tip = sh(`git rev-parse ${ref}`);
+  return typeof tip === "string" && tip === mergedOid;
+}
+
 function hasUncommittedChanges(dirPath) {
   if (!fs.existsSync(dirPath)) return { empty: true, status: "" };
   const out = sh(`git -C "${dirPath}" status --short`);
@@ -102,6 +158,7 @@ function main() {
 
   const worktrees = listWorktrees();
   const orphanBranches = listOrphanBranches();
+  const mergedHeads = getMergedPrHeads();
 
   // Split worktrees: main vs worktree-*
   // `git worktree list --porcelain` writes `branch refs/heads/<name>`, so
@@ -117,6 +174,12 @@ function main() {
   console.log(`Main worktree:       ${mainEntry?.path ?? "(unknown)"}`);
   console.log(`Worktree-* dirs:     ${worktreeWorktrees.length}`);
   console.log(`Worktree-* branches: ${orphanBranches.length}`);
+  console.log(
+    mergedHeads
+      ? `Merged PR heads:     ${mergedHeads.size} (squash-merge detection ACTIVE)`
+      : "Merged PR heads:     unavailable — `gh` missing/unauthenticated;" +
+        " falling back to ancestry-only (conservative, squash-merged branches stay protected)"
+  );
   console.log("");
 
   const plan = {
@@ -129,15 +192,17 @@ function main() {
   // Phase 1: worktrees that git knows about
   for (const w of worktreeWorktrees) {
     const branchName = w.branch.replace(/^refs\/heads\//, "");
-    const reachable = isReachableFromMain(branchName);
+    const merged =
+      isReachableFromMain(branchName) || isMergedPrHead(branchName, mergedHeads);
     const { empty, status } = hasUncommittedChanges(w.path);
 
-    if (!reachable) {
+    if (!merged) {
       plan.unsafe.push({
         kind: "worktree",
         path: w.path,
         branch: branchName,
-        reason: "branch tip NOT reachable from main — has unique commits",
+        reason:
+          "not merged — tip is not reachable from main and no merged PR has this tip",
       });
       continue;
     }
@@ -160,11 +225,12 @@ function main() {
   );
   for (const b of orphanBranches) {
     if (stillLiveBranches.has(b)) continue; // already handled above
-    if (!isReachableFromMain(b)) {
+    if (!isReachableFromMain(b) && !isMergedPrHead(b, mergedHeads)) {
       plan.unsafe.push({
         kind: "branch",
         branch: b,
-        reason: "branch tip NOT reachable from main — unique commits",
+        reason:
+          "not merged — tip is not reachable from main and no merged PR has this tip",
       });
       continue;
     }
