@@ -10,7 +10,7 @@
   "devDependencies": {
     "@types/node": "^26.2.0",
     "typescript": "^5.7.0",
-    "vercel": "^54.20.1"
+    "vercel": "^59.3.0"
   },
   "pnpm": {
     "overrides": {
