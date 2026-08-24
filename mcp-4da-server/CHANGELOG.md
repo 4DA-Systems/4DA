@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 5.0.4 (2026-08-24)
 
 ### Fixed: vulnerability_scan could recommend a downgrade
 
