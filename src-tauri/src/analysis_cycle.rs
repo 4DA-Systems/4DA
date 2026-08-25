@@ -174,6 +174,51 @@ pub(crate) fn merge_stale_drain_batch(
     count
 }
 
+/// Rolling freshness-refresh budget per background cycle (2026-08-25
+/// tightening T1). Now that the differential selection keys on CHANGE
+/// (`created_at` / `content_updated_at`) instead of `last_seen` touches, an
+/// unchanged item is never re-selected — so without a rotation, an item
+/// scored once while young would keep its fresh-boost score forever (the old
+/// quiet-cycle full re-score fired only when the differential set was EMPTY,
+/// which it almost never is). 100 per cycle guarantees the ~650-item 7-day
+/// window re-scores every ~7 cycles ≈ 3.5 h on the 30-minute scheduler,
+/// preserving freshness-tier decay cadence at ~1/5th of the old
+/// re-score-everything compute.
+pub(crate) const FRESHNESS_REFRESH_PER_CYCLE: usize = 100;
+
+/// Window the freshness refresh walks — mirrors the 7-day (168 h) window the
+/// full-analysis and quiet-cycle paths score (`get_items_tiered(168, ...)`).
+pub(crate) const FRESHNESS_REFRESH_WINDOW_HOURS: i64 = 168;
+
+/// Merge the stalest-scored slice of the recent window into `items` (skipping
+/// any already selected), so freshness-tier decay keeps re-scoring the whole
+/// window on a bounded per-cycle budget. Returns the number of items added.
+///
+/// Rotation is guaranteed by the `scored_at` stamp: every scoring path stamps
+/// it on evaluation (suppressed and zero-score evaluations included), so the
+/// items this batch feeds into a cycle sort to the BACK of the stalest-first
+/// ordering ([`crate::db::Database::get_freshness_refresh_batch`]) and the
+/// next cycle picks the next-stalest slice instead.
+pub(crate) fn merge_freshness_refresh_batch(
+    db: &crate::db::Database,
+    items: &mut Vec<crate::db::StoredSourceItem>,
+) -> usize {
+    let batch = db
+        .get_freshness_refresh_batch(FRESHNESS_REFRESH_WINDOW_HOURS, FRESHNESS_REFRESH_PER_CYCLE)
+        .unwrap_or_default();
+    if batch.is_empty() {
+        return 0;
+    }
+    let existing: std::collections::HashSet<i64> = items.iter().map(|i| i.id).collect();
+    let added: Vec<_> = batch
+        .into_iter()
+        .filter(|s| !existing.contains(&s.id))
+        .collect();
+    let count = added.len();
+    items.extend(added);
+    count
+}
+
 /// Persist everything a completed analysis cycle owes the DB: EVIDENCE scores
 /// (`relevance_score` ← `evidence_score`), the batch-relative RANK layer
 /// (`rank_score`/`rank_factors`/`rank_scored_at` ← `top_score` + provenance),

@@ -20,7 +20,8 @@ use crate::{
 };
 
 use super::analysis_cycle::{
-    merge_stale_drain_batch, persist_cycle_results, CycleResults, RankProvenance,
+    merge_freshness_refresh_batch, merge_stale_drain_batch, persist_cycle_results, CycleResults,
+    RankProvenance,
 };
 use super::analysis_deep_scan::run_multi_source_analysis_impl;
 use super::analysis_fast_path::{elapsed_ms, spawn_post_foreground_cache_fill, CachedAnalysisRun};
@@ -489,9 +490,10 @@ async fn analyze_cached_content_inner_impl(
         let mut new_items = db
             .get_items_since_timestamp_tiered(&since, 500)
             .map_err(|e| format!("Failed to load new items: {e}"))?;
+        let changed_count = new_items.len();
         info!(
             target: "4da::analysis",
-            items = new_items.len(),
+            items = changed_count,
             elapsed_ms = elapsed_ms(select_started),
             "Selected differential candidates"
         );
@@ -500,7 +502,7 @@ async fn analyze_cached_content_inner_impl(
         // pipeline version. Foreground manual analysis skips this maintenance
         // work so a user click scores visible cache instead of inheriting a
         // bounded-but-slow backlog repair.
-        if run.drain_stale_backlog {
+        let drained = if run.drain_stale_backlog {
             let stale_started = Instant::now();
             let drained = merge_stale_drain_batch(db, &mut new_items);
             if drained > 0 {
@@ -519,12 +521,44 @@ async fn analyze_cached_content_inner_impl(
                     drained,
                 );
             }
+            drained
         } else {
             info!(target: "4da::analysis", "Skipping stale-version backlog drain on foreground fast path");
-        }
+            0
+        };
+
+        // ── Rolling freshness refresh (2026-08-25 tightening T1) ─────────
+        // The differential selection now keys on CHANGE (created_at /
+        // content_updated_at), no longer on last_seen touches — so unchanged
+        // items are never re-selected, and the quiet-cycle full re-score
+        // below (which fires only when this set is EMPTY) almost never runs.
+        // Merge the stalest-scored slice of the 7-day window each background
+        // cycle so freshness-tier decay keeps its cadence on a bounded
+        // budget (FRESHNESS_REFRESH_PER_CYCLE = 100 → the whole window every
+        // ~7 cycles ≈ 3.5 h). Foreground fast path skips it like the other
+        // maintenance work; the scheduled/headless cycles carry the cadence.
+        let freshness = if run.drain_stale_backlog {
+            merge_freshness_refresh_batch(db, &mut new_items)
+        } else {
+            0
+        };
+        info!(
+            target: "4da::analysis",
+            changed = changed_count,
+            drain = drained,
+            freshness,
+            total = new_items.len(),
+            "Differential batch composition"
+        );
 
         if new_items.is_empty() {
-            // No new items AND nothing stale — re-score recent cache (7 days) for freshness.
+            // Nothing changed, nothing stale, AND the freshness batch found
+            // nothing (background: the 7-day window is empty; foreground: a
+            // quiet cycle with maintenance skipped) — fall back to the full
+            // 7-day re-score. Before tightening T1 this was the ONLY
+            // freshness-decay path, and it almost never fired because the
+            // touch-based differential was never empty; the rolling refresh
+            // above now carries the cadence, and this stays as the fallback.
             info!(target: "4da::analysis", "No new or stale items, re-scoring existing for freshness");
             emit_progress(
                 app,
