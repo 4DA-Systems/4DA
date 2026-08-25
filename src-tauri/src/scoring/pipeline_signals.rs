@@ -119,6 +119,7 @@ mod tests {
             ecosystem: "rust".to_string(),
             corroborated: true,
             raw_name: None,
+            project_paths: Vec::new(),
         }
     }
 

@@ -11,6 +11,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { OsvEcosystem, ResolvedDependency } from "./types.js";
 import { targetActiveOnHost } from "./platform.js";
+import { activeCratesForHost, hostTriple } from "./cargo-platform.js";
 
 // Alias -> OSV ecosystem. Mirrors the desktop app's canonical
 // `Ecosystem::parse` (src-tauri/src/ecosystem.rs) so both sides recognize the
@@ -120,12 +121,26 @@ export function resolveAuditVersions(
   const seen = new Set(direct.map((dep) => dependencyKey(dep)));
   const results = [...direct];
 
+  // Cargo.lock is target-agnostic, so a Windows lockfile still lists the whole
+  // Linux GTK3 stack Tauri pulls in. `[target.'cfg(...)']` parsing only ever
+  // covered DIRECT gated deps, and that cluster is entirely transitive — which
+  // is why nine unreachable crates were reported while the scan claimed to be
+  // platform-filtered. Ask cargo to resolve the graph for this host instead.
+  // `null` means cargo could not answer; every crate then stays active, because
+  // "unknown" must never silently hide a real advisory.
+  const hostCrates = ecosystem === "crates.io" ? activeCratesForHost(cwd) : null;
+  const triple = hostCrates ? hostTriple() : null;
+
   for (const [name, version] of versionMap) {
     const normalized = normalizePackageName(name, ecosystem);
     const isDirect = directNames.has(normalized) || devNames.has(normalized);
-    // Transitive deps from the lockfile carry no per-dep target info (Cargo.lock
-    // doesn't encode it), so they are treated as unconditionally active.
-    const target = targets[name] ?? null;
+    const declaredTarget = targets[name] ?? null;
+    const builtOnHost = hostCrates ? hostCrates.has(name) : true;
+    // Prefer the manifest's own cfg() spec when it has one — it is the more
+    // precise, human-readable explanation. Fall back to naming the triple the
+    // crate is absent from.
+    const target =
+      declaredTarget ?? (builtOnHost || !triple ? null : `not built for ${triple}`);
     const candidate: ResolvedDependency = {
       name,
       version,
@@ -134,7 +149,7 @@ export function resolveAuditVersions(
       isDirect,
       devScopeKnown: isDirect,
       target,
-      platformActive: targetActiveOnHost(target),
+      platformActive: targetActiveOnHost(declaredTarget) && builtOnHost,
       sourceDirs: [cwd],
     };
     const key = dependencyKey(candidate);

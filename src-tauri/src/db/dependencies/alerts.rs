@@ -52,11 +52,24 @@ impl Database {
         let conn = self.conn.lock();
         // Look up the advisory's row REGARDLESS of resolution state. Scoping
         // this to unresolved rows is what produced the duplicate churn.
+        // Prefer an ALREADY-ACTIVE row, then the oldest resolved one.
+        //
+        // Ordering by `detected_at` alone picks the oldest row of all — and on
+        // a table that already carries churn history (measured live: 157 rows
+        // for 13 advisories) the oldest row for an advisory is a RESOLVED
+        // duplicate while a newer unresolved row is the live one. Reopening the
+        // old row then ADDS a second active alert for the same advisory,
+        // growing exactly the count this fix exists to hold flat. A clean table
+        // has one row and never exposes it; the operator's did, immediately.
+        //
+        // `resolved_at IS NULL` sorts 1 before 0 under DESC, so an active row
+        // always wins; among resolved rows the oldest keeps its first-seen date.
         let existing: Option<(i64, Option<String>)> = conn
             .query_row(
                 "SELECT id, resolved_at FROM dependency_alerts
                  WHERE package_name = ?1 AND ecosystem = ?2 AND title = ?3
-                 ORDER BY detected_at ASC LIMIT 1",
+                 ORDER BY (resolved_at IS NULL) DESC, detected_at ASC
+                 LIMIT 1",
                 params![alert.package_name, ecosystem, alert.title],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
