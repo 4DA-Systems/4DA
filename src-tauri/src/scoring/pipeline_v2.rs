@@ -934,10 +934,18 @@ const DAYS_PER_MONTH: f32 = 30.44;
 /// * security advisories — an old unpatched CVE can still matter;
 /// * strongly dep-grounded items are softened to grounded_floor (0.80), not
 ///   killed — a 2-year-old deep-dive on YOUR exact stack can still be gold.
+/// * RELEASE ANNOUNCEMENTS get neither exemption and a deeper floor
+///   (`release_floor`, 0.30): a release note is time-indexed news, superseded
+///   by definition once it ages past the ramp — the registry signal is
+///   *current* releases of your dependencies, so grounding must not soften it
+///   (live 2026-08-25: a 2023 "TypeScript 5.1 Beta is OUT!" held 0.882 and sat
+///   feed-relevant because dev-dep grounding lifted its base while the
+///   grounded floor kept its staleness discount shallow).
 fn stale_published_multiplier(
     published: &chrono::DateTime<chrono::Utc>,
     is_security: bool,
     strongly_grounded: bool,
+    is_release: bool,
 ) -> f32 {
     if is_security {
         return 1.0;
@@ -945,7 +953,11 @@ fn stale_published_multiplier(
     let age_months = ((chrono::Utc::now() - *published).num_days().max(0) as f32) / DAYS_PER_MONTH;
     let fresh = scoring_config::STALE_CONTENT_FRESH_MONTHS;
     let stale = scoring_config::STALE_CONTENT_STALE_MONTHS;
-    let floor = scoring_config::STALE_CONTENT_STALE_FLOOR;
+    let floor = if is_release {
+        scoring_config::STALE_CONTENT_RELEASE_FLOOR
+    } else {
+        scoring_config::STALE_CONTENT_STALE_FLOOR
+    };
     let mult = if age_months <= fresh {
         1.0
     } else if age_months >= stale {
@@ -953,7 +965,8 @@ fn stale_published_multiplier(
     } else {
         1.0 - (1.0 - floor) * (age_months - fresh) / (stale - fresh)
     };
-    if strongly_grounded {
+    // Grounding softens a stale deep-dive, never a superseded announcement.
+    if strongly_grounded && !is_release {
         mult.max(scoring_config::STALE_CONTENT_GROUNDED_FLOOR)
     } else {
         mult
@@ -1253,6 +1266,10 @@ fn compute_quality_composite(
                 published,
                 novelty.is_security || matches!(input.source_type, "cve" | "osv"),
                 grounding.strong,
+                // The classification computed THIS run (not the stored column
+                // — stored/computed divergence is a documented hazard, see the
+                // epochs registry comment).
+                content_type == crate::content_dna::ContentType::ReleaseNotes,
             )
         })
     } else {
@@ -4647,16 +4664,16 @@ mod tests {
     #[test]
     fn stale_multiplier_ramp() {
         // Fresh content: untouched.
-        let fresh = stale_published_multiplier(&published_months_ago(6.0), false, false);
+        let fresh = stale_published_multiplier(&published_months_ago(6.0), false, false, false);
         assert!((fresh - 1.0).abs() < 1e-6, "6mo old → 1.0 (got {fresh})");
         // Past the stale horizon: floored.
-        let old = stale_published_multiplier(&published_months_ago(40.0), false, false);
+        let old = stale_published_multiplier(&published_months_ago(40.0), false, false, false);
         assert!(
             (old - scoring_config::STALE_CONTENT_STALE_FLOOR).abs() < 1e-6,
             "40mo old → stale floor (got {old})"
         );
         // Mid-ramp: linear between the two (24mo = halfway 12→36 → 0.775).
-        let mid = stale_published_multiplier(&published_months_ago(24.0), false, false);
+        let mid = stale_published_multiplier(&published_months_ago(24.0), false, false, false);
         assert!(
             (mid - 0.775).abs() < 0.02,
             "24mo old → ~0.775 mid-ramp (got {mid})"
@@ -4668,14 +4685,49 @@ mod tests {
     #[test]
     fn stale_multiplier_exempts_security_and_softens_grounded() {
         // An old unpatched CVE can still matter — no discount.
-        let sec = stale_published_multiplier(&published_months_ago(40.0), true, false);
+        let sec = stale_published_multiplier(&published_months_ago(40.0), true, false, false);
         assert!((sec - 1.0).abs() < 1e-6, "security exempt (got {sec})");
         // A years-old deep-dive on YOUR exact stack: softened, not killed.
-        let grounded = stale_published_multiplier(&published_months_ago(40.0), false, true);
+        let grounded = stale_published_multiplier(&published_months_ago(40.0), false, true, false);
         assert!(
             (grounded - scoring_config::STALE_CONTENT_GROUNDED_FLOOR).abs() < 1e-6,
             "grounded floor (got {grounded})"
         );
+    }
+
+    /// Tightening T3 (2026-08-25): a superseded RELEASE announcement gets
+    /// neither the grounded softening nor the shallow stale floor — the live
+    /// "TypeScript 5.1 Beta is OUT!" (2023, typescript IS a dep) held 0.882
+    /// and sat feed-relevant on exactly that combination.
+    #[test]
+    fn stale_multiplier_deepens_for_superseded_releases() {
+        let release = stale_published_multiplier(&published_months_ago(40.0), false, false, true);
+        assert!(
+            (release - scoring_config::STALE_CONTENT_RELEASE_FLOOR).abs() < 1e-6,
+            "40mo release → release floor (got {release})"
+        );
+        // Grounding must NOT soften it (the live defect).
+        let grounded_release =
+            stale_published_multiplier(&published_months_ago(40.0), false, true, true);
+        assert!(
+            (grounded_release - scoring_config::STALE_CONTENT_RELEASE_FLOOR).abs() < 1e-6,
+            "grounding never softens a superseded release (got {grounded_release})"
+        );
+        // Deeper than the generic stale floor, and strictly ordered.
+        assert!(
+            scoring_config::STALE_CONTENT_RELEASE_FLOOR < scoring_config::STALE_CONTENT_STALE_FLOOR
+        );
+        // A CURRENT release is untouched — this discounts age, not releases.
+        let fresh_release =
+            stale_published_multiplier(&published_months_ago(1.0), false, true, true);
+        assert!(
+            (fresh_release - 1.0).abs() < 1e-6,
+            "a current release is untouched (got {fresh_release})"
+        );
+        // Security still wins over everything.
+        let sec_release =
+            stale_published_multiplier(&published_months_ago(40.0), true, false, true);
+        assert!((sec_release - 1.0).abs() < 1e-6);
     }
 
     // ========================================================================
