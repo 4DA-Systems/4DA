@@ -2490,6 +2490,29 @@ pub(crate) fn score_item(
                 | crate::content_dna::ContentType::BreakingChange
         )
         && !grounding.strong;
+
+    // A release announcement old enough to be categorically superseded (v24).
+    // The v23 staleness MULTIPLIER cuts these but cannot evict them: it scales
+    // the structural term, and a strongly dep-grounded item keeps enough
+    // dep/interest signal to clear 0.40 anyway (measured live 2026-08-25 —
+    // 18 stale-published items still feed-relevant, none below the line, e.g.
+    // a 2022 "What's new in axum 0.5" at 0.562 for an axum-0.8 user). Note
+    // this deliberately does NOT require grounding: an ungrounded superseded
+    // release is already handled above, and a GROUNDED one is precisely the
+    // case the multiplier could not reach.
+    //
+    // Security exemption (an old unpatched advisory can still matter): the
+    // classifier tests security BEFORE release and returns ONE type, so a
+    // `ReleaseNotes` item is already provably not a `SecurityAdvisory`. Only
+    // the raw advisory SOURCES need an explicit guard — their zero-embedding
+    // retention path can reach scoring without the classifier's verdict.
+    let superseded_release = matches!(content_type, crate::content_dna::ContentType::ReleaseNotes)
+        && !matches!(input.source_type, "cve" | "osv")
+        && input.created_at.is_some_and(|published| {
+            let age_months =
+                ((chrono::Utc::now() - *published).num_days().max(0) as f32) / DAYS_PER_MONTH;
+            age_months >= scoring_config::STALE_CONTENT_SUPERSEDED_MONTHS
+        });
     let combined_score = apply_final_adjustments(
         gated_score,
         input.title,
@@ -2605,6 +2628,16 @@ pub(crate) fn score_item(
             && community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD
             && is_low_community_ugc_source(input.source_type))
         .then_some(0.50);
+        // Superseded release (v24): same shape as the commodity ceiling —
+        // the offset is added here so the cap survives `normalize_score_offset`.
+        let superseded = superseded_release.then_some(
+            scoring_config::STALE_CONTENT_SUPERSEDED_CEILING
+                + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR,
+        );
+        let commodity = match (commodity, superseded) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
         match (commodity, ugc) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
@@ -2645,7 +2678,14 @@ pub(crate) fn score_item(
     // `grounding.strong`, which `ungrounded_registry_release` negates, so a
     // genuine security fast-path is structurally unreachable here — the gate
     // costs zero recall. The score keeps its capped value for ranking/display.
+    // `superseded_release` is gated the same way and for the same reason: its
+    // 0.35 ceiling plus the +0.02 offset and a +0.05 topic boost lands at 0.42
+    // — above the threshold — so capping the SCORE alone would repeat the v18
+    // incident verbatim. Gating the VERDICT makes it score-independent. The
+    // security exemption is already inside the flag, so a genuine advisory is
+    // untouched; the score keeps its capped value for ranking/display.
     let relevant = !ungrounded_registry_release
+        && !superseded_release
         && ((critical_fast_path && !lang_mismatch)  // Critical items always relevant
             || (combined_score >= get_relevance_threshold()
                 && (signal_count >= min_signals
@@ -4758,6 +4798,51 @@ mod tests {
         assert!(
             (grounded - scoring_config::STALE_CONTENT_GROUNDED_FLOOR).abs() < 1e-6,
             "grounded floor (got {grounded})"
+        );
+    }
+
+    /// v24: the superseded-release CEILING is what the v23 multiplier could
+    /// not do — evict a strongly dep-grounded aged release. Both halves are
+    /// pinned: the capped score AND the categorical verdict (0.35 + 0.02
+    /// offset + a 0.05 topic boost reaches 0.42, so the score cap alone would
+    /// repeat the v18 incident).
+    #[test]
+    fn superseded_release_is_ceilinged_and_categorically_not_relevant() {
+        let db = crate::test_utils::test_db();
+        let ctx = fastpath_ctx(&[("tokio", "rust")]);
+        let opts = ScoringOptions {
+            apply_freshness: true,
+            apply_signals: true,
+            trend_topics: vec![],
+        };
+        let published = published_months_ago(45.0);
+        let input = ScoringInput {
+            id: 1,
+            title: "crates.io: tokio v1.20.0",
+            url: Some("https://crates.io/crates/tokio"),
+            content: "An event-driven, non-blocking I/O platform for Rust. \
+                      This release improves the multi-threaded scheduler.",
+            source_type: "crates_io",
+            embedding: &crate::test_utils::seed_embedding("tokio-superseded"),
+            created_at: Some(&published),
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+            source_id: Some("crate-tokio"),
+        };
+        let r = score_item(&input, &ctx, &db, &opts, None);
+        assert!(
+            r.top_score
+                <= scoring_config::STALE_CONTENT_SUPERSEDED_CEILING
+                    + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR
+                    + 1e-4,
+            "a superseded release must be held at the ceiling (got {})",
+            r.top_score
+        );
+        assert!(
+            !r.relevant,
+            "the verdict is gated categorically, not left to the score"
         );
     }
 

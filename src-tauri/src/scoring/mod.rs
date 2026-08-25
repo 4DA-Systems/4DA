@@ -334,7 +334,18 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // fresh_months, so "published_at older than 12 months" is a provable superset
 // of the change's reach — only that slice drains (~127 items live), the rest
 // of the corpus is promoted untouched.
-pub(crate) const PIPELINE_VERSION: i32 = 23;
+// v24 (2026-08-25): superseded-release CEILING. v23 gave aged release
+// announcements a deeper staleness multiplier; one day of live data showed
+// that demotes but does not evict them — a multiplier scales the structural
+// term, and a strongly dep-grounded item keeps enough dep/interest signal to
+// clear 0.40 anyway (18 stale-published items still feed-relevant, NONE below
+// the line; a 2022 "What's new in axum 0.5" at 0.562 for an axum-0.8 user).
+// Releases past `stale_content.superseded_months` (24) now take a categorical
+// ceiling AND a categorical verdict gate — the v18/v19 lesson restated: caps
+// applied as ceilings hold, multipliers get out-voted, and the verdict must be
+// gated too because 0.35 + offset + topic boost lands at 0.42. Security is
+// exempt. REGISTERED in epochs::SCOPED_EPOCHS on published age.
+pub(crate) const PIPELINE_VERSION: i32 = 24;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///
