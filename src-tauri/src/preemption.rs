@@ -1129,15 +1129,34 @@ fn chain_to_alert(
                 }
                 _ => 1,
             };
+            // Honesty: this sentence used to be a hardcoded "No advisory
+            // issued." — a lie whenever a chain link's own title IS a
+            // published advisory (measured live 2026-08-25: two critical
+            // chains titled "[CVE-...] ...").
+            let advisory_sentence = if chain
+                .links
+                .iter()
+                .any(|link| crate::adversarial::contains_advisory_id(&link.title))
+            {
+                "Includes a published advisory."
+            } else {
+                "No advisory issued."
+            };
             format!(
-                "{source_count} sources discussing {} over {days_span} day{}. No advisory issued.",
+                "{source_count} sources discussing {} over {days_span} day{}. {advisory_sentence}",
                 chain.chain_name,
                 if days_span == 1 { "" } else { "s" }
             )
         },
         evidence,
         affected_projects: vec![],
-        affected_dependencies: vec![],
+        // `SignalChain::verified_dep` is the ONLY trustworthy affected
+        // dependency for a chain: it is set IFF the chain's topic exactly
+        // matches one of the user's installed dependencies, corroborated by
+        // >=2 grounded items across >=2 dates with dev-deps excluded (see the
+        // field doc in signal_chains.rs and `dependency_evidence`). Empty for
+        // ungrounded chains — never fabricated from the chain name.
+        affected_dependencies: chain.verified_dep.clone().into_iter().collect(),
         urgency,
         confidence: prediction.confidence as f32,
         predicted_window,
@@ -1986,6 +2005,118 @@ mod tests {
             chain_alert_urgency("critical", &ChainPhase::Nascent),
             AlertUrgency::Watch
         ));
+    }
+
+    // ─── chain_to_alert grounding propagation + explanation honesty ──
+    // The alert's affected deps come from `SignalChain::verified_dep` (the
+    // only trustworthy dep for a chain), and the explanation may only claim
+    // "No advisory issued." when no link title carries an advisory id.
+
+    fn chain_fixture(
+        verified_dep: Option<&str>,
+        link_titles: &[&str],
+    ) -> crate::signal_chains::SignalChain {
+        crate::signal_chains::SignalChain {
+            id: "chain_vm2_2026-08-20".to_string(),
+            chain_name: "vm2 signal chain (2 events)".to_string(),
+            links: link_titles
+                .iter()
+                .enumerate()
+                .map(|(i, title)| crate::signal_chains::ChainLink {
+                    signal_type: "security_alert".to_string(),
+                    source_item_id: i as i64 + 1,
+                    title: (*title).to_string(),
+                    timestamp: "2026-08-20T00:00:00Z".to_string(),
+                    description: String::new(),
+                })
+                .collect(),
+            overall_priority: "critical".to_string(),
+            resolution: ChainResolution::Open,
+            suggested_action: "Review the trend".to_string(),
+            confidence: 0.8,
+            created_at: "2026-08-20T00:00:00Z".to_string(),
+            updated_at: "2026-08-21T00:00:00Z".to_string(),
+            verified_dep: verified_dep.map(String::from),
+        }
+    }
+
+    fn chain_prediction_fixture() -> crate::signal_chains::ChainPrediction {
+        crate::signal_chains::ChainPrediction {
+            phase: crate::signal_chains::ChainPhase::Escalating,
+            intervals_hours: vec![24.0],
+            acceleration: -1.0,
+            predicted_next_hours: Some(24.0),
+            confidence: 0.7,
+            forecast: "test".to_string(),
+        }
+    }
+
+    #[test]
+    fn chain_to_alert_propagates_verified_dep() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        let chain = chain_fixture(
+            Some("vm2"),
+            &["vm2 maintenance status", "vm2 escape writeup"],
+        );
+        let alert = chain_to_alert(&chain, &chain_prediction_fixture(), &conn);
+        assert_eq!(
+            alert.affected_dependencies,
+            vec!["vm2".to_string()],
+            "the verified installed-dep topic must reach the alert's affected deps"
+        );
+    }
+
+    #[test]
+    fn chain_to_alert_ungrounded_chain_emits_no_affected_deps() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        let chain = chain_fixture(None, &["sandbox escape discussion"]);
+        let alert = chain_to_alert(&chain, &chain_prediction_fixture(), &conn);
+        assert!(
+            alert.affected_dependencies.is_empty(),
+            "no dep may be fabricated for an ungrounded chain"
+        );
+    }
+
+    #[test]
+    fn chain_to_alert_explanation_admits_published_advisory() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        // The live 2026-08-25 shape: the chain's representative link title IS
+        // a published advisory.
+        let chain = chain_fixture(
+            None,
+            &[
+                "[CVE-2026-47698] vm2: Sandbox Breakout via Custom inspect Function",
+                "vm2 sandbox discussion",
+            ],
+        );
+        let alert = chain_to_alert(&chain, &chain_prediction_fixture(), &conn);
+        assert!(
+            alert
+                .explanation
+                .ends_with("Includes a published advisory."),
+            "explanation must admit the advisory, got: {}",
+            alert.explanation
+        );
+        assert!(
+            !alert.explanation.contains("No advisory issued"),
+            "the hardcoded lie must be gone, got: {}",
+            alert.explanation
+        );
+    }
+
+    #[test]
+    fn chain_to_alert_explanation_no_advisory_when_links_carry_none() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        let chain = chain_fixture(
+            Some("tokio"),
+            &["tokio runtime deep dive", "tokio scheduler benchmarks"],
+        );
+        let alert = chain_to_alert(&chain, &chain_prediction_fixture(), &conn);
+        assert!(
+            alert.explanation.ends_with("No advisory issued."),
+            "advisory-free links keep the original sentence, got: {}",
+            alert.explanation
+        );
     }
 
     // ─── Compound-prefix detection ───────────────────────────────────

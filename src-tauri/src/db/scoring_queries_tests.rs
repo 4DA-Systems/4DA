@@ -70,6 +70,60 @@ fn hysteresis_keeps_score_but_stamps_version() {
     assert_eq!(v_fresh, i64::from(crate::scoring::PIPELINE_VERSION));
 }
 
+/// Tightening T1 (2026-08-25): `scored_at` stamps on EVERY evaluation —
+/// hysteresis-suppressed writes included (a suppressed write still means
+/// "re-evaluated now"), and zero-evidence items via
+/// `mark_items_scored_version` (persist_analysis_scores never sees them).
+/// The rolling freshness refresh rotates on this stamp; miss either case and
+/// the stalest-first ordering re-picks the same items every cycle.
+#[test]
+fn scored_at_stamps_on_suppressed_and_zero_evidence_evaluations() {
+    let db = test_db();
+    let wobble = insert_test_item(&db, "hackernews", "sa1", "Damped wobbler", "x");
+    let noise = insert_test_item(&db, "hackernews", "sa2", "Zero evidence", "x");
+    let scored_at = |id: i64| -> Option<String> {
+        let conn = db.conn.lock();
+        conn.query_row(
+            "SELECT scored_at FROM source_items WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert!(
+        scored_at(wobble).is_none(),
+        "no stamp before any evaluation"
+    );
+
+    // Seed a prior score, then re-score inside the hysteresis band: the
+    // durable score is kept, the evaluation stamp is not skipped.
+    {
+        let conn = db.conn.lock();
+        conn.execute(
+            "UPDATE source_items SET relevance_score = 0.50, scored_pipeline_version = 1
+             WHERE id = ?1",
+            params![wobble],
+        )
+        .unwrap();
+    }
+    db.persist_analysis_scores(&[(wobble, 0.52, None, None)], "analysis")
+        .unwrap();
+    let (score, _) = score_and_version(&db, wobble);
+    assert_eq!(score, Some(0.50), "sub-hysteresis move keeps the old score");
+    assert!(
+        scored_at(wobble).is_some(),
+        "a suppressed write still stamps scored_at (re-evaluated now)"
+    );
+
+    // Zero-evidence path: the cycle stamps noise via mark_items_scored_version.
+    db.mark_items_scored_version(&[noise], crate::scoring::PIPELINE_VERSION)
+        .unwrap();
+    assert!(
+        scored_at(noise).is_some(),
+        "zero-evidence evaluations stamp scored_at via the version stamp"
+    );
+}
+
 /// Item 13: the churn row names WHICH items moved (top_offenders, raw
 /// deltas, largest first) and how many writes the damper suppressed.
 #[test]
