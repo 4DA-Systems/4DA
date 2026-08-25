@@ -19,7 +19,7 @@
  * they doubled the count — `quinn-proto` read as "2 high" for one bug.
  */
 import { describe, it, expect } from "vitest";
-import { collapseAliases, relativeDir } from "../tools/vulnerability-scan.js";
+import { collapseAliases, relativeDir, isMaintenanceNotice } from "../tools/vulnerability-scan.js";
 import type { VulnerabilityEntry } from "../live/types.js";
 
 function entry(over: Partial<VulnerabilityEntry> = {}): VulnerabilityEntry {
@@ -126,5 +126,38 @@ describe("relativeDir", () => {
     const vulnerable = entry({ currentVersion: "0.11.14", sourceDirs: ["d:/4da/victauri-gauntlet"] });
     expect(relativeDir(vulnerable.sourceDirs[0], root)).toBe("victauri-gauntlet");
     expect(relativeDir(vulnerable.sourceDirs[0], root)).not.toBe("src-tauri");
+  });
+});
+
+describe("isMaintenanceNotice", () => {
+  // Live scan: 23 of 41 findings were unmaintained-dependency notices, which
+  // generated 27 "Review X" recommendations around six real upgrades.
+  it("classifies RustSec unmaintained advisories", () => {
+    for (const summary of [
+      "gtk-rs GTK3 bindings - no longer maintained",
+      "paste - no longer maintained",
+      "proc-macro-error is unmaintained",
+      "`ttf-parser` is unmaintained",
+      "`unic-char-property` is unmaintained",
+    ]) {
+      expect(isMaintenanceNotice(entry({ summary })), summary).toBe(true);
+    }
+  });
+
+  it("never reclassifies a real vulnerability as maintenance", () => {
+    for (const summary of [
+      "Quinn: Remote memory exhaustion in quinn-proto from unbounded reassembly",
+      "rust-openssl has undefined behavior in X509Ref::ocsp_responders",
+      "Marvin Attack: potential key recovery through timing sidechannels",
+      "jsonwebtoken has Type Confusion that leads to potential authorization bypass",
+      // "deprecated" is deliberately NOT a trigger — it appears in real CVEs.
+      "Use of a deprecated cipher allows plaintext recovery",
+    ]) {
+      expect(isMaintenanceNotice(entry({ summary })), summary).toBe(false);
+    }
+  });
+
+  it("tolerates a missing summary", () => {
+    expect(isMaintenanceNotice(entry({ summary: "" }))).toBe(false);
   });
 });

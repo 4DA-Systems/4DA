@@ -73,7 +73,15 @@ describe("activeCratesForHost", () => {
   const dir = repoCargoDir();
   const runnable = dir !== null && cargoAvailable() && hostTriple() !== null;
 
-  it.runIf(runnable)("excludes transitive crates that never build on this host", () => {
+  // These two shell out to real cargo. `cargo metadata` normally answers in
+  // ~1s, but it takes the same lock a concurrent `cargo build`/`cargo test`
+  // holds, and CI runs both. The default 5s test timeout made them flake under
+  // that contention; the work itself is bounded by execFileSync's own 30s.
+  const CARGO_TEST_TIMEOUT_MS = 90_000;
+
+  it.runIf(runnable)(
+    "excludes transitive crates that never build on this host",
+    () => {
     const crates = activeCratesForHost(dir!);
     expect(crates).not.toBeNull();
     expect(crates!.size).toBeGreaterThan(50);
@@ -84,14 +92,20 @@ describe("activeCratesForHost", () => {
         expect(crates!.has(linuxOnly), `${linuxOnly} must not be active on Windows`).toBe(false);
       }
       expect(crates!.has("windows-sys"), "windows-sys must be active on Windows").toBe(true);
-    }
-  });
+      }
+    },
+    CARGO_TEST_TIMEOUT_MS,
+  );
 
-  it.runIf(runnable)("memoizes per directory", () => {
-    const first = activeCratesForHost(dir!);
-    const second = activeCratesForHost(dir!);
-    expect(second).toBe(first); // same object identity => served from cache
-  });
+  it.runIf(runnable)(
+    "memoizes per directory",
+    () => {
+      const first = activeCratesForHost(dir!);
+      const second = activeCratesForHost(dir!);
+      expect(second).toBe(first); // same object identity => served from cache
+    },
+    CARGO_TEST_TIMEOUT_MS,
+  );
 });
 
 function entry(over: Partial<VulnerabilityEntry> = {}): VulnerabilityEntry {
