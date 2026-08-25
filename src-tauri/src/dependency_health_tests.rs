@@ -560,6 +560,47 @@ fn returning_finding_reopens_its_original_row() {
     );
 }
 
+/// A table that ALREADY carries churn history must not gain another active
+/// row. Found on the operator's real database, which held 157 rows for 13
+/// advisories: the oldest row for an advisory is a resolved duplicate while a
+/// newer unresolved row is the live one, so reopening "the oldest" added a
+/// second active alert for the same advisory. A clean table has one row and
+/// never exposes this.
+#[test]
+fn re_reporting_against_churn_history_does_not_add_an_active_row() {
+    let db = crate::test_utils::test_db();
+    let title = "RUSTSEC-2026-0007: overflow";
+
+    // Reproduce the accumulated shape: several resolved rows, then a live one.
+    for _ in 0..3 {
+        store_audit_alert(&db, "bytes", "rust", title, None);
+        let id = db.get_active_alerts().unwrap()[0].id;
+        db.resolve_alert(id).unwrap();
+    }
+    store_audit_alert(&db, "bytes", "rust", title, None);
+    let active_before = db.get_active_alerts().unwrap();
+    assert_eq!(
+        active_before.len(),
+        1,
+        "one live alert on top of the history"
+    );
+    let live_id = active_before[0].id;
+
+    // The next scan reports it again.
+    store_audit_alert(&db, "bytes", "rust", title, None);
+
+    let after = db.get_active_alerts().unwrap();
+    assert_eq!(
+        after.len(),
+        1,
+        "re-reporting must not resurrect a resolved duplicate alongside the live row"
+    );
+    assert_eq!(
+        after[0].id, live_id,
+        "the already-active row is the one kept"
+    );
+}
+
 /// Present in the fresh scan => keep. Absent => retire.
 #[test]
 fn reconcile_retires_only_what_the_audit_stopped_reporting() {
@@ -615,6 +656,95 @@ fn reconcile_leaves_unaudited_ecosystems_untouched() {
         0
     );
     assert_eq!(db.get_active_alerts().unwrap().len(), 1);
+}
+
+/// Live-data verification against a real snapshot, opt-in.
+///
+/// The unit tests above prove the logic on synthetic rows. This one proves it
+/// on the operator's actual `dependency_alerts` table, which at the time of
+/// writing held 157 rows for 13 distinct advisories — the churn this fix
+/// exists to stop. It is `#[ignore]`d because it needs a real database:
+///
+///   FOURDA_VERIFY_DB=/path/to/snapshot.db cargo test --lib \
+///       live_snapshot_alert_lifecycle -- --ignored --nocapture
+///
+/// Point it at a SNAPSHOT, never at the live file — it writes.
+#[test]
+#[ignore = "requires FOURDA_VERIFY_DB pointing at a real database snapshot"]
+fn live_snapshot_alert_lifecycle() {
+    let Ok(path) = std::env::var("FOURDA_VERIFY_DB") else {
+        eprintln!("FOURDA_VERIFY_DB not set — nothing to verify");
+        return;
+    };
+    let db = Database::new(std::path::Path::new(&path)).expect("open snapshot");
+
+    let active_before = db.get_active_alerts().unwrap();
+    println!("active audit-era alerts before: {}", active_before.len());
+
+    // 1. CHURN: re-reporting an advisory that is already tracked must not
+    //    create a second row. This is the exact insert the old dedup key let
+    //    through once the alert had been resolved.
+    let Some(existing) = active_before
+        .iter()
+        .find(|a| a.alert_type == "audit")
+        .cloned()
+    else {
+        eprintln!("no audit alerts in this snapshot — churn arm skipped");
+        return;
+    };
+    let rowid = db
+        .store_dependency_alert(&crate::db::DependencyAlert {
+            id: 0,
+            package_name: existing.package_name.clone(),
+            ecosystem: existing.ecosystem.clone(),
+            alert_type: "audit".to_string(),
+            severity: existing.severity.clone(),
+            title: existing.title.clone(),
+            description: None,
+            affected_versions: existing.affected_versions.clone(),
+            source_url: None,
+            source_item_id: None,
+            detected_at: String::new(),
+            resolved_at: None,
+        })
+        .unwrap();
+    assert_eq!(rowid, 0, "a re-reported advisory must not insert a new row");
+    assert_eq!(
+        db.get_active_alerts().unwrap().len(),
+        active_before.len(),
+        "active alert count must not grow when the same advisory is re-reported"
+    );
+    println!(
+        "churn: re-report of {} inserted nothing",
+        existing.package_name
+    );
+
+    // 2. RECONCILE: an audit alert the tool no longer reports is retired, and
+    //    only for an ecosystem that actually produced a verdict this cycle.
+    let mut audited = std::collections::HashSet::new();
+    audited.insert(existing.ecosystem.clone());
+    let retired = db
+        .reconcile_audit_alerts(&audited, &std::collections::HashSet::new())
+        .unwrap();
+    println!(
+        "reconcile retired {retired} alert(s) for {}",
+        existing.ecosystem
+    );
+    assert!(retired > 0, "an unreported audit alert must be retired");
+
+    let after = db.get_active_alerts().unwrap();
+    assert!(
+        after
+            .iter()
+            .all(|a| a.alert_type != "audit" || a.ecosystem != existing.ecosystem),
+        "no audit alert may survive in an ecosystem that reported nothing"
+    );
+    // Non-audit alerts are untouched by reconcile.
+    println!(
+        "active alerts after: {} (was {})",
+        after.len(),
+        active_before.len()
+    );
 }
 
 /// Reconcile is scoped to audit-sourced rows; CVE/OSV alerts have their own
