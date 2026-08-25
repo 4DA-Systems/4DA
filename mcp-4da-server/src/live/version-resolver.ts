@@ -89,6 +89,9 @@ export function resolveVersions(
       devScopeKnown: true,
       target,
       platformActive: targetActiveOnHost(target),
+      // Provenance recorded at the point of resolution: this version came from
+      // THIS manifest directory's lock file, not from "the project" generally.
+      sourceDirs: [cwd],
     };
   };
 
@@ -132,6 +135,7 @@ export function resolveAuditVersions(
       devScopeKnown: isDirect,
       target,
       platformActive: targetActiveOnHost(target),
+      sourceDirs: [cwd],
     };
     const key = dependencyKey(candidate);
     if (!seen.has(key)) {

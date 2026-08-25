@@ -668,8 +668,32 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
     }
 
     // 5. Run local audit tools (npm audit, cargo audit) if available
-    let local_findings = crate::local_audit::run_local_audits().await;
-    for finding in local_findings {
+    let outcome = crate::local_audit::run_local_audits().await;
+
+    // The fresh scan is the authoritative set for every ecosystem it covered.
+    // Reconcile BEFORE storing so a returning finding reopens its original row
+    // rather than being retired and re-added in the same pass.
+    let current: std::collections::HashSet<(String, String, String)> =
+        outcome.findings.iter().map(|f| f.alert_key()).collect();
+
+    match db.reconcile_audit_alerts(&outcome.audited_ecosystems, &current) {
+        Ok(0) => {}
+        Ok(n) => {
+            info!(target: "4da::jobs", retired = n, "Audit alerts retired — no longer reported")
+        }
+        Err(e) => warn!(target: "4da::jobs", error = %e, "Audit alert reconcile failed"),
+    }
+
+    for finding in outcome.findings {
+        // Surface the published fix alongside the advisory text. The audit tool
+        // reports it and the user's next action depends on it ("upgrade to
+        // what?"), but `dependency_alerts` has no column for it — so it rides
+        // in the description rather than being parsed and discarded.
+        let description = match (&finding.fix_version, &finding.description) {
+            (Some(fix), Some(d)) => Some(format!("{d}\n\nFixed in {fix}")),
+            (Some(fix), None) => Some(format!("Fixed in {fix}")),
+            (None, d) => d.clone(),
+        };
         let alert = crate::db::DependencyAlert {
             id: 0,
             package_name: finding.package_name,
@@ -677,7 +701,7 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
             alert_type: "audit".to_string(),
             severity: finding.severity,
             title: finding.title,
-            description: finding.description,
+            description,
             affected_versions: finding.affected_versions,
             source_url: finding.source_url,
             source_item_id: None,

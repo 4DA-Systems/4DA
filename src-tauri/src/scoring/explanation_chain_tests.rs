@@ -595,3 +595,134 @@ fn subtitle_is_top_factor_display() {
         "subtitle must lead with the top factor: {subtitle}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Project-context similarity: truthfulness gate (2026-08-25 live Signal audit)
+//
+// The live feed rendered, on a real axios CVE:
+//   Similar to your code: "/// Maximum content length per feed item (100KB)"
+// A doc comment, matched to advisory prose by embedding, presented as evidence
+// about the reader's code — sitting directly beside the hard dependency fact
+// that actually justified the item.
+// ---------------------------------------------------------------------------
+
+/// Pull the project-KNN factor (the one whose evidence names a source file).
+fn knn_factor(chain: &[crate::ExplanationFactor]) -> Option<&crate::ExplanationFactor> {
+    chain.iter().find(|f| {
+        f.kind == crate::FactorKind::ContextMatch && f.display.contains("Similar to your code")
+    })
+}
+
+#[test]
+fn code_similarity_names_the_file_never_quotes_a_comment() {
+    let mut f = Fixture::default();
+    f.context_score = 0.62;
+    f.matches = vec![RelevanceMatch {
+        source_file: "src/sources/cve.rs".to_string(),
+        // A chunk that OPENS with its doc comment, exactly as Rust chunks do.
+        matched_text:
+            "/// Maximum content length per feed item (100KB)\nconst MAX: usize = 100_000;"
+                .to_string(),
+        similarity: 0.71,
+    }];
+
+    let chain = f.build();
+    let factor = knn_factor(&chain).expect("a strong match must still be surfaced");
+    assert!(
+        factor.display.contains("sources/cve.rs"),
+        "display must name the file: {}",
+        factor.display
+    );
+    assert!(
+        !factor.display.contains("Maximum content length"),
+        "a doc comment must never be quoted back as the reader's code: {}",
+        factor.display
+    );
+    assert!(
+        factor.evidence.contains("71%"),
+        "the similarity that justifies the claim must be shown: {}",
+        factor.evidence
+    );
+}
+
+#[test]
+fn weak_match_makes_no_code_similarity_claim() {
+    let mut f = Fixture::default();
+    // Aggregate clears the OLD 0.3 gate but the match itself is weak. The old
+    // code displayed on the aggregate and quoted this match's text anyway.
+    f.context_score = 0.35;
+    f.matches = vec![RelevanceMatch {
+        source_file: "src/sources/cve.rs".to_string(),
+        matched_text: "/// Strict manifest mode: the GitHub Advisory feed".to_string(),
+        similarity: 0.31,
+    }];
+    let chain = f.build();
+    assert!(
+        knn_factor(&chain).is_none(),
+        "a match below the pipeline's own confirmation bar must stay silent"
+    );
+}
+
+#[test]
+fn code_similarity_is_silent_when_a_dependency_already_grounds_the_item() {
+    let mut f = Fixture::default();
+    f.display_deps = vec![dep("axios", 0.9, true, Some("1.12.2"))];
+    f.dep_match_score = 0.9;
+    // Strong enough to display on its own merits...
+    f.context_score = 0.70;
+    f.matches = vec![RelevanceMatch {
+        source_file: "src/sources/cve.rs".to_string(),
+        matched_text: "fn parse_advisory(body: &str) -> Advisory".to_string(),
+        similarity: 0.80,
+    }];
+
+    let chain = f.build();
+    assert!(
+        chain
+            .iter()
+            .any(|c| c.kind == crate::FactorKind::DependencyMatch),
+        "the hard dependency factor must still lead"
+    );
+    assert!(
+        knn_factor(&chain).is_none(),
+        "prose resemblance adds nothing beside a named dependency and only \
+         discredits it"
+    );
+}
+
+#[test]
+fn code_similarity_is_silent_beside_a_security_advisory() {
+    let mut f = Fixture::default();
+    f.is_security = true;
+    f.necessity_score = 0.95;
+    f.advisory_id = Some("GHSA-xj6q-8x83-jv6g".to_string());
+    f.cvss_score = Some(9.1);
+    f.display_deps = vec![dep("axios", 0.9, true, Some("1.12.2"))];
+    f.dep_match_score = 0.9;
+    f.context_score = 0.70;
+    f.matches = vec![RelevanceMatch {
+        source_file: "src/sources/cve.rs".to_string(),
+        matched_text: "fn parse_advisory(body: &str) -> Advisory".to_string(),
+        similarity: 0.80,
+    }];
+
+    let chain = f.build();
+    assert!(chain
+        .iter()
+        .any(|c| c.kind == crate::FactorKind::SecurityAdvisory));
+    assert!(
+        knn_factor(&chain).is_none(),
+        "this is the exact live shape that produced the fabricated evidence"
+    );
+}
+
+#[test]
+fn short_source_path_keeps_the_last_two_segments() {
+    assert_eq!(short_source_path("src/db/vector.rs"), "db/vector.rs");
+    assert_eq!(short_source_path("vector.rs"), "vector.rs");
+    assert_eq!(
+        short_source_path(r"D:\4DA\src-tauri\src\sources\cve.rs"),
+        "sources/cve.rs"
+    );
+    assert_eq!(short_source_path("./a/b.rs"), "a/b.rs");
+}

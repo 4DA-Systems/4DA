@@ -27,8 +27,19 @@ impl Database {
         Ok(count > 0)
     }
 
-    /// Store a new dependency alert, skipping duplicates.
-    /// Returns the row ID if inserted, or 0 if the alert already exists.
+    /// Store a dependency alert, collapsing repeats onto a single row.
+    ///
+    /// Returns the row ID if inserted, or 0 when an existing row already
+    /// carries this advisory (whether active or reopened).
+    ///
+    /// CHURN NOTE (2026-08-25): the existence check used to be scoped to
+    /// `resolved_at IS NULL`, so a resolved row was invisible to it and the
+    /// next scan inserted a *fresh duplicate*. Paired with an auto-resolver
+    /// that ran on a different schedule, this oscillated forever — 129 rows
+    /// accumulated for 13 distinct advisories, four more every six hours, and
+    /// the alert blinked in and out of the UI on that cycle. The identity of an
+    /// advisory does not change when someone dismisses it, so the lookup is
+    /// unscoped and a returning finding REOPENS its original row.
     pub fn store_dependency_alert(&self, alert: &DependencyAlert) -> SqliteResult<i64> {
         // Normalize on the write path so dependency_alerts keeps a single
         // canonical form: severity uppercase (CRITICAL/HIGH/MEDIUM/LOW) and
@@ -39,17 +50,30 @@ impl Database {
             crate::sources::cve_matching::normalize_ecosystem(&alert.ecosystem).to_string();
         let severity = alert.severity.trim().to_uppercase();
         let conn = self.conn.lock();
-        // Check for existing unresolved alert with same package/ecosystem/title
-        let exists: bool = conn
+        // Look up the advisory's row REGARDLESS of resolution state. Scoping
+        // this to unresolved rows is what produced the duplicate churn.
+        let existing: Option<(i64, Option<String>)> = conn
             .query_row(
-                "SELECT COUNT(*) FROM dependency_alerts WHERE package_name = ?1 AND ecosystem = ?2 AND title = ?3 AND resolved_at IS NULL",
+                "SELECT id, resolved_at FROM dependency_alerts
+                 WHERE package_name = ?1 AND ecosystem = ?2 AND title = ?3
+                 ORDER BY detected_at ASC LIMIT 1",
                 params![alert.package_name, ecosystem, alert.title],
-                |row| row.get::<_, i64>(0).map(|c| c > 0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
-            .unwrap_or(false);
+            .ok();
 
-        if exists {
-            return Ok(0); // Duplicate — skip insertion
+        if let Some((id, resolved_at)) = existing {
+            if resolved_at.is_some() {
+                // The advisory is being reported again by its source after
+                // having been resolved — reopen the original row rather than
+                // growing a parallel one. `detected_at` keeps its first-seen
+                // value; only the resolution is cleared.
+                conn.execute(
+                    "UPDATE dependency_alerts SET resolved_at = NULL WHERE id = ?1",
+                    params![id],
+                )?;
+            }
+            return Ok(0); // Already tracked — no new row
         }
 
         conn.execute(
@@ -125,5 +149,78 @@ impl Database {
             params![alert_id],
         )?;
         Ok(())
+    }
+
+    /// Retire audit-sourced alerts that their producing tool no longer reports.
+    ///
+    /// `npm audit` / `cargo audit` read the real lockfile and are the authority
+    /// on what is vulnerable there. Creation was already authority-driven;
+    /// resolution was not — it went through a semver re-derivation that
+    /// answered a *different* question from a stored range. When those two
+    /// disagreed the alert oscillated, and when the range was wrong the
+    /// resolver closed live advisories. Alerts opened by an authority are now
+    /// closed by the same authority: present in the fresh scan means keep,
+    /// absent means retire.
+    ///
+    /// Safety: only ecosystems in `audited_ecosystems` — those where a tool
+    /// actually ran to completion this cycle — are eligible. An ecosystem whose
+    /// audit was skipped (tool absent, timed out, unparseable output, or a
+    /// lockfile format the tool does not read) keeps every alert untouched, so
+    /// a broken toolchain can never be mistaken for a clean bill of health.
+    ///
+    /// `current` holds `(package_name, normalized_ecosystem, title)` for every
+    /// finding in this cycle. Returns the number of alerts retired.
+    pub fn reconcile_audit_alerts(
+        &self,
+        audited_ecosystems: &std::collections::HashSet<String>,
+        current: &std::collections::HashSet<(String, String, String)>,
+    ) -> SqliteResult<usize> {
+        if audited_ecosystems.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, package_name, ecosystem, title FROM dependency_alerts
+             WHERE alert_type = 'audit' AND resolved_at IS NULL",
+        )?;
+        let rows: Vec<(i64, String, String, String)> = stmt
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in audit reconcile: {e}");
+                    None
+                }
+            })
+            .collect();
+        drop(stmt);
+
+        let mut retired = 0usize;
+        for (id, package, ecosystem, title) in rows {
+            // Ecosystem had no completed audit this cycle — say nothing.
+            if !audited_ecosystems.contains(&ecosystem) {
+                continue;
+            }
+            if current.contains(&(package.clone(), ecosystem.clone(), title.clone())) {
+                continue; // still reported — leave open
+            }
+            conn.execute(
+                "UPDATE dependency_alerts SET resolved_at = datetime('now') WHERE id = ?1",
+                params![id],
+            )?;
+            retired += 1;
+            tracing::info!(
+                target: "4da::health",
+                package = package.as_str(),
+                ecosystem = ecosystem.as_str(),
+                alert_id = id,
+                "Retired audit alert — the audit tool no longer reports it"
+            );
+        }
+
+        Ok(retired)
     }
 }

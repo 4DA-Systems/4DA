@@ -464,6 +464,175 @@ fn resolve_patched_alerts_is_noop_without_alerts() {
     assert_eq!(resolve_patched_dependency_alerts(&db).unwrap(), 0);
 }
 
+// ---------------------------------------------------------------------------
+// Audit-alert lifecycle: opened by an authority, closed by the same authority.
+// ---------------------------------------------------------------------------
+
+fn store_audit_alert(db: &Database, pkg: &str, eco: &str, title: &str, affected: Option<&str>) {
+    db.store_dependency_alert(&crate::db::DependencyAlert {
+        id: 0,
+        package_name: pkg.to_string(),
+        ecosystem: eco.to_string(),
+        alert_type: "audit".to_string(),
+        severity: "MEDIUM".to_string(),
+        title: title.to_string(),
+        description: None,
+        affected_versions: affected.map(String::from),
+        source_url: None,
+        source_item_id: None,
+        detected_at: String::new(),
+        resolved_at: None,
+    })
+    .unwrap();
+}
+
+/// `(package, normalized_ecosystem, title)` — the shape reconcile compares on.
+fn key(pkg: &str, eco: &str, title: &str) -> (String, String, String) {
+    (
+        pkg.to_string(),
+        crate::sources::cve_matching::normalize_ecosystem(eco).to_string(),
+        title.to_string(),
+    )
+}
+
+fn eco_set(ecos: &[&str]) -> std::collections::HashSet<String> {
+    ecos.iter()
+        .map(|e| crate::sources::cve_matching::normalize_ecosystem(e).to_string())
+        .collect()
+}
+
+/// The semver resolver must not touch audit-sourced alerts even when it thinks
+/// the install is out of range. `cargo audit` read the real lockfile; this
+/// function is re-deriving a verdict from a stored range with strictly less
+/// information, and when the two disagreed it closed live advisories.
+#[test]
+fn resolve_skips_audit_sourced_alerts() {
+    let db = crate::test_utils::test_db();
+    // Range says "< 1.2.1" and the install is 1.10.1, so the generic resolver
+    // would happily clear this. It must not, because the alert is audit-owned.
+    store_audit_alert(
+        &db,
+        "bytes",
+        "rust",
+        "RUSTSEC-2026-0007: overflow",
+        Some("<1.2.1"),
+    );
+    db.store_dependency("/p/app", "bytes", Some("1.10.1"), "rust", false, None)
+        .unwrap();
+
+    assert_eq!(
+        resolve_patched_dependency_alerts(&db).unwrap(),
+        0,
+        "audit alerts are the reconciler's to retire, not this function's"
+    );
+    assert_eq!(db.get_active_alerts().unwrap().len(), 1);
+}
+
+/// A finding that disappears and comes back must land on its ORIGINAL row.
+/// Re-inserting instead is what grew 129 rows for 13 advisories.
+#[test]
+fn returning_finding_reopens_its_original_row() {
+    let db = crate::test_utils::test_db();
+    let title = "RUSTSEC-2026-0007: overflow";
+    store_audit_alert(&db, "bytes", "rust", title, None);
+
+    let first = db.get_active_alerts().unwrap();
+    assert_eq!(first.len(), 1);
+    let original_id = first[0].id;
+    let original_detected = first[0].detected_at.clone();
+
+    // The alert gets resolved (by reconcile, or by the user).
+    db.resolve_alert(original_id).unwrap();
+    assert!(db.get_active_alerts().unwrap().is_empty());
+
+    // The next scan reports it again.
+    store_audit_alert(&db, "bytes", "rust", title, None);
+
+    let reopened = db.get_active_alerts().unwrap();
+    assert_eq!(reopened.len(), 1, "must not create a parallel row");
+    assert_eq!(
+        reopened[0].id, original_id,
+        "the same advisory must reopen its original row"
+    );
+    assert_eq!(
+        reopened[0].detected_at, original_detected,
+        "first-seen time is history and must survive a reopen"
+    );
+}
+
+/// Present in the fresh scan => keep. Absent => retire.
+#[test]
+fn reconcile_retires_only_what_the_audit_stopped_reporting() {
+    let db = crate::test_utils::test_db();
+    store_audit_alert(&db, "bytes", "rust", "RUSTSEC-2026-0007: overflow", None);
+    store_audit_alert(&db, "rkyv", "rust", "RUSTSEC-2026-0233: uaf", None);
+    assert_eq!(db.get_active_alerts().unwrap().len(), 2);
+
+    // This cycle cargo-audit reports only rkyv — bytes was upgraded.
+    let current = [key("rkyv", "rust", "RUSTSEC-2026-0233: uaf")]
+        .into_iter()
+        .collect();
+
+    let retired = db
+        .reconcile_audit_alerts(&eco_set(&["crates.io"]), &current)
+        .unwrap();
+    assert_eq!(retired, 1);
+
+    let active = db.get_active_alerts().unwrap();
+    assert_eq!(active.len(), 1);
+    assert_eq!(active[0].package_name, "rkyv");
+}
+
+/// THE safety property. If an ecosystem's audit never ran — tool missing,
+/// timed out, unreadable output, or a lockfile format it does not parse — its
+/// alerts must survive untouched. An empty finding set from a broken toolchain
+/// must never read as "nothing is vulnerable any more".
+#[test]
+fn reconcile_leaves_unaudited_ecosystems_untouched() {
+    let db = crate::test_utils::test_db();
+    store_audit_alert(&db, "bytes", "rust", "RUSTSEC-2026-0007: overflow", None);
+    store_audit_alert(&db, "lodash", "npm", "GHSA-x: prototype pollution", None);
+
+    // Only the Rust audit completed; npm was skipped (e.g. pnpm-only tree).
+    // Nothing was reported by either.
+    let empty = std::collections::HashSet::new();
+    let retired = db
+        .reconcile_audit_alerts(&eco_set(&["crates.io"]), &empty)
+        .unwrap();
+    assert_eq!(retired, 1, "only the audited ecosystem may be retired");
+
+    let active = db.get_active_alerts().unwrap();
+    assert_eq!(active.len(), 1);
+    assert_eq!(
+        active[0].package_name, "lodash",
+        "the un-audited npm alert must survive"
+    );
+
+    // And with NO ecosystem audited at all, nothing moves.
+    assert_eq!(
+        db.reconcile_audit_alerts(&std::collections::HashSet::new(), &empty)
+            .unwrap(),
+        0
+    );
+    assert_eq!(db.get_active_alerts().unwrap().len(), 1);
+}
+
+/// Reconcile is scoped to audit-sourced rows; CVE/OSV alerts have their own
+/// lifecycle and must be invisible to it.
+#[test]
+fn reconcile_ignores_non_audit_alerts() {
+    let db = crate::test_utils::test_db();
+    store_active_alert(&db, "liquidjs", "npm", "CRITICAL", "< 10.26.0");
+    let empty = std::collections::HashSet::new();
+
+    assert_eq!(
+        db.reconcile_audit_alerts(&eco_set(&["npm"]), &empty)
+            .unwrap(),
+        0
+    );
+    assert_eq!(db.get_active_alerts().unwrap().len(), 1);
+}
+
 #[test]
 fn resolve_keeps_alert_when_affected_range_unparseable() {
     let db = crate::test_utils::test_db();
