@@ -354,6 +354,24 @@ stale_content {
     # untouched (13 months ≈ ×0.97), so only genuinely superseded
     # announcements are crushed.
     release_floor: 0.22     # [0.15, 0.37]
+    # Age past which a release announcement is CATEGORICALLY superseded and
+    # takes a hard ceiling instead of merely a multiplier. Measured 2026-08-25,
+    # one day after release_floor shipped: the multiplier alone did NOT evict
+    # the class. It cuts the structural term, but a strongly dep-grounded item
+    # has enough dep/interest signal left to stay above the 0.40 line — live,
+    # 18 stale-published items remained feed-relevant with ZERO below the line
+    # ("What's new in axum 0.5" from 2022 still at 0.562 for an axum-0.8 user).
+    # This is the v18/v19 lesson restated: caps applied as CEILINGS hold,
+    # multipliers get out-voted. 24 months = two major-version cycles; it
+    # captures the 2022-2023 offenders while leaving the current major and the
+    # one behind it (axum 0.8 at 20mo, 0.7 at 21mo) to the graduated ramp.
+    superseded_months: 24.0     # [18.0, 48.0]
+    # Ceiling for a superseded release. Mirrors registry_release_ungrounded
+    # (0.35) — and for the same arithmetic reason: score-offset adds ~+0.02 and
+    # the topic-attention boost up to +0.05, so 0.35 + 0.07 = 0.42 would land
+    # ABOVE the 0.40 threshold. That is exactly the v18 incident, which is why
+    # the VERDICT is gated categorically too, not just the score.
+    superseded_ceiling: 0.35    # [0.20, 0.37]
 }
 
 # Community quality signal thresholds - extracted from source metadata

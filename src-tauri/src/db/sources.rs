@@ -924,9 +924,20 @@ impl Database {
 
     /// The stalest-scored slice of the recent window, for the rolling
     /// freshness refresh: items still inside the source window
-    /// (`last_seen > now - window_hours`), the longest-unscored first
-    /// (`COALESCE(scored_at, '1970-01-01') ASC` — never-stamped legacy rows
-    /// rotate through first).
+    /// (`last_seen > now - window_hours`), **curated items first**, then the
+    /// longest-unscored (`feed_relevant DESC, COALESCE(scored_at,
+    /// '1970-01-01') ASC` — never-stamped legacy rows rotate through first).
+    ///
+    /// The feed-first ordering is measured, not cosmetic. The 7-day window
+    /// holds ~25,000 items live (2026-08-25), so a 100-item budget re-walks
+    /// the whole window in ~250 cycles — roughly a day and a half, NOT the
+    /// few hours an earlier version of this comment claimed. Raising the
+    /// budget to close that gap would spend 3x the compute on drift that the
+    /// 0.05 write hysteresis mostly absorbs anyway. The ~500-item curated feed
+    /// is what the user actually sees ranked, and at 100/cycle it refreshes
+    /// completely every ~5 cycles (~50 minutes) — accurate decay exactly where
+    /// it is visible, at the same cost. Background items still rotate, just
+    /// behind the feed.
     ///
     /// Companion to the change-based differential selection
     /// ([`Database::get_items_since_timestamp`]): once the differential stops
@@ -952,7 +963,7 @@ impl Database {
             "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
              FROM source_items
              WHERE last_seen > datetime('now', ?1)
-             ORDER BY COALESCE(scored_at, '1970-01-01') ASC
+             ORDER BY feed_relevant DESC, COALESCE(scored_at, '1970-01-01') ASC
              LIMIT ?2"
         )?;
 

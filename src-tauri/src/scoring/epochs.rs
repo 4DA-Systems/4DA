@@ -116,6 +116,17 @@ const SCOPED_EPOCHS: &[(i32, &str)] = &[
         23,
         "published_at IS NOT NULL AND published_at < datetime('now','-12 months')",
     ),
+    // v24 — superseded-release ceiling. The flag requires an age at or beyond
+    // `superseded_months` (24), so nothing published inside 24 months can be
+    // affected: the predicate is a provable superset of the change's reach.
+    // Same reasoning as v23, one band deeper. `published_at` is assigned at
+    // ingest and never re-derived, and NULL evaluates as not-matching →
+    // promoted, which is correct (those items carry no publication date, so
+    // the ceiling can never fire for them).
+    (
+        24,
+        "published_at IS NOT NULL AND published_at < datetime('now','-24 months')",
+    ),
 ];
 
 /// Promote stale items that the registered epoch predicates prove unaffected,
