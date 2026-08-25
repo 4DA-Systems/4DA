@@ -321,7 +321,20 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // reach. The whole corpus drains — correct, just slower; the differential
 // watermark's stale-backlog gate forces full windows until the drain
 // converges to <=500 pending.
-pub(crate) const PIPELINE_VERSION: i32 = 22;
+// v23 (2026-08-25): superseded-release staleness floor. Day-1 live assessment
+// of the v22 arc found "TypeScript 5.1 Beta is OUT!" (published 2023-04-19,
+// content_type release_notes, typescript IS a dep) still holding 0.882 and
+// feed-relevant: dev-dep grounding lifted its base while the grounded
+// softening (0.80) kept its staleness discount shallow. A release
+// announcement is time-indexed news — superseded by definition once it ages
+// past the ramp, even for your own dependency (the registry signal is
+// CURRENT releases). ReleaseNotes past the ramp now floor at
+// `stale_content.release_floor` (0.30) with the grounded softening withheld.
+// REGISTERED in epochs::SCOPED_EPOCHS: the multiplier is 1.0 at or below
+// fresh_months, so "published_at older than 12 months" is a provable superset
+// of the change's reach — only that slice drains (~127 items live), the rest
+// of the corpus is promoted untouched.
+pub(crate) const PIPELINE_VERSION: i32 = 23;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

@@ -312,6 +312,9 @@ fn advisory_linked_chain_on_corroborated_dep_keeps_critical() {
     assert_eq!(item.urgency, Urgency::Critical);
 }
 
+/// NON-chain items keep the own-title arm (id is `test-*` here): an advisory
+/// id in a non-chain item's title is about the item itself. Chains lost this
+/// arm — see `chain_with_cve_in_own_title_and_empty_deps_demotes`.
 #[test]
 fn advisory_id_in_title_counts_as_linkage() {
     let mut item = make_test_item(Urgency::Critical, "CVE-2026-22222 in next.js middleware");
@@ -346,6 +349,45 @@ fn chain_with_advisory_titled_citations_still_demotes() {
         "a chain must not keep critical through cited neighbors' advisory ids"
     );
     assert_eq!(item.urgency, Urgency::Medium);
+}
+
+/// The live 2026-08-25 shape: a chain whose OWN alert title is a published
+/// advisory ("[CVE-...] vm2: ...") arriving Critical with EMPTY affected
+/// deps. The title is just the chain's first link — an off-stack neighbor's
+/// advisory, not the user's exposure — so the own-title arm must no longer
+/// corroborate a chain's escalation.
+#[test]
+fn chain_with_cve_in_own_title_and_empty_deps_demotes() {
+    let mut item = make_test_item(
+        Urgency::Critical,
+        "[CVE-2026-47698] vm2: Sandbox Breakout via Custom inspect Function",
+    );
+    item.id = "chain-1f0c9f3a-52aa-4f10-8a7e-0f6f4be51c02".to_string();
+
+    assert!(
+        gate_escalation(&mut item),
+        "an off-stack advisory in a chain's own title must not uphold the escalation"
+    );
+    assert_eq!(item.urgency, Urgency::Medium);
+}
+
+/// A dep-grounded chain passes legitimately: `chain_to_alert` propagates
+/// `SignalChain::verified_dep` into affected deps, and the deps arm upholds
+/// the floor — even when the first-link title also carries an advisory id.
+#[test]
+fn chain_with_verified_dep_keeps_critical() {
+    let mut item = make_test_item(
+        Urgency::Critical,
+        "[CVE-2026-40001] tokio: task starvation in current-thread runtime",
+    );
+    item.id = "chain-2b1d8e4c-9c31-4d5f-9a02-6d1f0be51c03".to_string();
+    item.affected_deps.push("tokio".to_string());
+
+    assert!(
+        !gate_escalation(&mut item),
+        "a verified installed dep corroborates the chain's escalation"
+    );
+    assert_eq!(item.urgency, Urgency::Critical);
 }
 
 /// A NON-chain item keeps citation-derived linkage (the citation is about the

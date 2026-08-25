@@ -91,11 +91,32 @@ use crate::db::Database;
 /// contract's explicit do-not-register class. No predicate can provably
 /// bound its reach, so the whole corpus drains. The mechanism stays for
 /// future narrow bumps.
-const SCOPED_EPOCHS: &[(i32, &str)] = &[(
-    18,
-    "source_type IN ('npm_registry','npm','crates_io','crates','pypi',\
+///
+/// **v23 — superseded-release staleness floor.** The change deepens the
+/// `published_at` staleness discount for ReleaseNotes and withholds the
+/// grounded softening from them. `stale_published_multiplier` returns 1.0 for
+/// anything at or below `fresh_months` (12), so an item whose published age is
+/// under 12 months is arithmetically untouchable by this change — the
+/// predicate below (published_at present AND older than 12 months) is a
+/// provable SUPERSET of its reach. Deliberately NOT narrowed with
+/// `content_type IN ('release_notes')`: the stored column is a persisted
+/// classification while the multiplier uses the value computed at score time,
+/// so intersecting on it could UNDER-cover — the one hazard the module
+/// contract names. `published_at` is assigned at ingest and never re-derived,
+/// so it is safe to key on (same reasoning as v18's source_type). NULL
+/// published_at evaluates as not-matching → promoted, which is correct: those
+/// items age from first-seen and carry no publication date to discount.
+const SCOPED_EPOCHS: &[(i32, &str)] = &[
+    (
+        18,
+        "source_type IN ('npm_registry','npm','crates_io','crates','pypi',\
      'go_modules','go','maven','nuget','packagist','rubygems','cocoapods')",
-)];
+    ),
+    (
+        23,
+        "published_at IS NOT NULL AND published_at < datetime('now','-12 months')",
+    ),
+];
 
 /// Promote stale items that the registered epoch predicates prove unaffected,
 /// re-stamping them at the version whose change cannot touch them. Returns

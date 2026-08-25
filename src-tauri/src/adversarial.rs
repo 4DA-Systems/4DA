@@ -12,7 +12,8 @@
 //!   reached, allowing the item to pass through unmodified.
 //! - Critical/High urgency items bypass deliberation entirely.
 //! - Escalation gate: Critical/High is only honored when corroborated (real
-//!   advisory linkage or non-empty affected deps). Uncorroborated escalations
+//!   advisory linkage or non-empty affected deps; signal chains: OSV-verified
+//!   provenance or non-empty affected deps only). Uncorroborated escalations
 //!   are capped at Medium before the safety floor is computed.
 
 use crate::error::Result;
@@ -218,7 +219,11 @@ const UNCORROBORATED_ESCALATION_CAP: Urgency = Urgency::Medium;
 /// matches "MAL-". Numeric families additionally require a digit right after
 /// the prefix, so "go-to-definition" never matches "GO-". ASCII-only case
 /// folding keeps byte offsets stable (all prefixes are pure ASCII).
-fn contains_advisory_id(text: &str) -> bool {
+///
+/// `pub(crate)`: preemption's `chain_to_alert` uses this pure check to keep
+/// its explanation copy honest ("Includes a published advisory." vs "No
+/// advisory issued.") — display copy only, never an escalation input there.
+pub(crate) fn contains_advisory_id(text: &str) -> bool {
     let upper = text.to_ascii_uppercase();
     let bytes = upper.as_bytes();
     ADVISORY_ID_PREFIXES.iter().any(|prefix| {
@@ -246,29 +251,36 @@ fn contains_advisory_id(text: &str) -> bool {
 /// round (R3) rewrote explanation copy, and the escalation decision must
 /// rest on structured evidence, not prose.
 ///
-/// SIGNAL CHAINS (`chain-*` ids) never earn linkage through their citations:
-/// a chain AGGREGATES co-tokened items, so its evidence list routinely
-/// includes advisory-titled neighbors that merely share the chain's token —
-/// live post-activation proof (2026-08-24): all three phantom single-token
-/// chains ("table"/"sandbox"/"next") survived the gate through exactly this
-/// arm, the "table" chain citing an unrelated XWiki "Live Table" CVE. A cited
-/// neighbor's advisory id is evidence about the NEIGHBOR, not the chain; a
-/// chain keeps critical only via OSV-verified provenance, an advisory id in
-/// its own title, or corroborated affected deps (checked by the gate).
+/// SIGNAL CHAINS (`chain-*` ids): the ONLY advisory linkage a chain can earn
+/// here is machine-verified OSV provenance — advisory ids in a chain's title
+/// or citations never count. This is the single place the chain rule lives.
+///
+/// Why neither text arm works for chains: a chain AGGREGATES co-tokened
+/// items, so its evidence list routinely includes advisory-titled neighbors
+/// that merely share the chain's token — live post-activation proof
+/// (2026-08-24): all three phantom single-token chains
+/// ("table"/"sandbox"/"next") survived the gate through the citation arm, the
+/// "table" chain citing an unrelated XWiki "Live Table" CVE. And a chain
+/// alert's TITLE is just its first link's title (`chain_to_alert`), i.e. the
+/// same aggregated-neighbor text — measured live 2026-08-25: two critical
+/// chains with empty affected deps rode their own "[CVE-...]" first-link
+/// titles through the former own-title arm. An off-stack advisory in a
+/// chain's text is ecosystem awareness, not the user's exposure. A chain
+/// whose topic IS a verified installed dep carries that dep in
+/// `affected_deps` (`chain_to_alert` propagates `SignalChain::verified_dep`)
+/// and passes the escalation gate through its deps arm instead.
 fn has_advisory_linkage(item: &EvidenceItem) -> bool {
     if item.confidence.provenance == crate::evidence::ConfidenceProvenance::OsvVerified {
-        return true;
-    }
-    if contains_advisory_id(&item.title) {
         return true;
     }
     if item.id.starts_with("chain-") {
         return false;
     }
-    item.evidence.iter().any(|citation| {
-        contains_advisory_id(&citation.title)
-            || citation.url.as_deref().is_some_and(contains_advisory_id)
-    })
+    contains_advisory_id(&item.title)
+        || item.evidence.iter().any(|citation| {
+            contains_advisory_id(&citation.title)
+                || citation.url.as_deref().is_some_and(contains_advisory_id)
+        })
 }
 
 /// The escalation gate at the deliberation boundary. A Critical/High item
@@ -276,11 +288,16 @@ fn has_advisory_linkage(item: &EvidenceItem) -> bool {
 /// only when the escalation is corroborated: real advisory linkage, or
 /// non-empty affected deps confirmed by an upstream materializer.
 ///
-/// Signal chains assembled from bare single-token topic matches ("table",
-/// "sandbox", "next") arrive here Critical with neither — `chain_to_alert`
-/// always emits empty deps, and by the chain's own explanation no advisory
-/// has been issued — so they are demoted below the floor instead of
-/// bypassing deliberation as critical alerts.
+/// For `chain-*` items, corroboration means OSV-verified provenance or
+/// non-empty affected deps ONLY (see [`has_advisory_linkage`] for the chain
+/// rule and its live evidence). This should be a pure safety net:
+/// `chain_policy` only mints an escalation-capable priority for dep-grounded
+/// chains, and `chain_to_alert` propagates `SignalChain::verified_dep` into
+/// affected deps — so a legitimately escalated chain arrives carrying its
+/// dep. The gate catches drift (stale persisted chains predating
+/// `verified_dep`, future policy changes) and demotes any chain that arrives
+/// escalated with neither, instead of letting it bypass deliberation as a
+/// critical alert.
 ///
 /// Returns `true` when the item was demoted (the caller logs the demotion).
 ///

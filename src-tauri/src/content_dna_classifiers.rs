@@ -179,11 +179,33 @@ pub(super) fn is_breaking_change(title: &str) -> bool {
 }
 
 pub(super) fn is_release(title: &str) -> bool {
+    // "Announcing <thing> <version>" / "Introducing <thing> <version>" — the
+    // most canonical release-post phrasing, and it was invisible here until
+    // 2026-08-25: the live feed carried "Announcing axum 0.6.0" (2022),
+    // "0.7.0" (2023) and "0.8.0" as content_type NULL, i.e. classified as
+    // plain DISCUSSION, so neither the release treatment nor the superseded-
+    // release staleness floor (v23) could reach three of the five oldest
+    // release announcements sitting in the feed at ~0.886. The version token
+    // is required, so project launches with no version ("Announcing Toasty,
+    // an async ORM for Rust") and company news ("Announcing our Series B")
+    // are untouched.
+    let announces = title.contains("announcing") || title.contains("introducing");
+
     // "vX.Y released/is out/available/launched/beta/rc/alpha"
+    //
+    // Bound is `len - 2`, not `len - 3`: reading `bytes[i + 2]` only requires
+    // `i + 2 < len`. The old bound skipped the final valid index, so a version
+    // sitting in the last two characters was invisible — "Announcing Tokio
+    // Metrics 0.1" (live 2026-08-25) missed for exactly that reason, masked
+    // everywhere else by the "what's new in" / " beta" terms catching the
+    // title first.
     let bytes = title.as_bytes();
-    for i in 0..title.len().saturating_sub(3) {
+    for i in 0..title.len().saturating_sub(2) {
         // Look for digit.digit pattern
         if bytes[i].is_ascii_digit() && bytes[i + 1] == b'.' && bytes[i + 2].is_ascii_digit() {
+            if announces {
+                return true;
+            }
             // Check if followed by release-related words
             let rest = &title[i..];
             if rest.contains("released")

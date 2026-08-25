@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 110;
+        const TARGET_VERSION: i64 = 111;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -4854,6 +4854,74 @@ impl Database {
                 )?;
             }
 
+            if current_version < 111 {
+                Self::run_versioned_migration(
+                    &conn,
+                    110,
+                    111,
+                    "Phase 111: differential honesty — content_updated_at + scored_at",
+                    |c| {
+                        // The 2026-08-25 live re-assessment (stability arc, day
+                        // 1) found the DB-watermark differential selecting on
+                        // `last_seen > watermark` — but every fetch cycle
+                        // touches all re-seen cached items, so the selection
+                        // re-picked ~500 (the cap) every cycle. The write
+                        // hysteresis suppressed 93-100% of the resulting
+                        // writes: churn was dead, compute wasn't. Touch is not
+                        // change; the differential needs a column that moves
+                        // only when the ITEM moves:
+                        //
+                        // - `source_items.content_updated_at` — when the
+                        //   item's content/engagement actually changed after
+                        //   ingest (batch-upsert content replacement, tags/
+                        //   engagement refresh, embedding upgrade, content
+                        //   enrichment). The bare `last_seen` touch never
+                        //   sets it.
+                        // - `source_items.scored_at` — when a scoring run
+                        //   last EVALUATED the item (hysteresis-suppressed
+                        //   writes included: a suppressed write still means
+                        //   "re-evaluated now"). The rolling freshness
+                        //   refresh rotates on it, stalest first.
+                        //
+                        // Both nullable, NO backfill: NULL content_updated_at
+                        // = "never changed since tracking began" (such rows
+                        // enter the differential only via `created_at`), and
+                        // NULL scored_at = "not scored since tracking began"
+                        // (sorts oldest, so legacy rows rotate through the
+                        // freshness refresh first) — the truth for every
+                        // existing row. NO index: both columns are written
+                        // hot (every fetch/persist cycle), and every reader
+                        // is a bounded ORDER BY over the ~7-day recent
+                        // window — measure before indexing.
+                        //
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when absent.
+                        let has_column =
+                            |c: &Connection, table: &str, name: &str| -> SqliteResult<bool> {
+                                c.prepare(&format!(
+                                "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"
+                            ))?
+                                .query_row([name], |r| r.get::<_, i64>(0))
+                                .map(|n| n > 0)
+                            };
+                        if !has_column(c, "source_items", "content_updated_at")? {
+                            c.execute(
+                                "ALTER TABLE source_items ADD COLUMN content_updated_at TEXT",
+                                [],
+                            )?;
+                        }
+                        if !has_column(c, "source_items", "scored_at")? {
+                            c.execute("ALTER TABLE source_items ADD COLUMN scored_at TEXT", [])?;
+                        }
+                        info!(
+                            target: "4da::db",
+                            "Phase 111: content_updated_at/scored_at columns added"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -6079,6 +6147,77 @@ mod tests {
             "rank data survives the re-run"
         );
         assert_eq!(factors.as_deref(), Some("{\"ce\":0.2}"));
+    }
+
+    /// Phase 111 lifts TARGET_VERSION to 111 and adds the differential-honesty
+    /// columns (`content_updated_at`, `scored_at`). Verify the version, the
+    /// columns, and idempotency under version-rewind (the harness convention:
+    /// wind back one phase, re-run, nothing breaks and data survives).
+    #[test]
+    fn test_phase_111_change_tracking_columns_added_and_idempotent() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 111,
+            "schema_version should be >= 111 after migration; got {version}"
+        );
+        let count_cols = |name: &str| -> i64 {
+            conn.query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name = ?1",
+                [name],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        for col in ["content_updated_at", "scored_at"] {
+            assert_eq!(
+                count_cols(col),
+                1,
+                "source_items.{col} must exist exactly once"
+            );
+        }
+
+        // Wind back to 110 and re-run: the has_column guards make the ALTERs
+        // no-ops, existing stamps survive, and the version returns to 111.
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, url, content_hash,
+                                       embedding, content_updated_at, scored_at)
+             VALUES ('hackernews', 'p111:test', 'stamped survivor', 'x', 'https://example.com/p111',
+                     'hash-p111', X'00', '2026-08-25 01:02:03', '2026-08-25 04:05:06');
+             UPDATE schema_version SET version = 110;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v110");
+
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 111,
+            "re-run must restore the version; got {version}"
+        );
+        let (changed_at, scored_at): (Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT content_updated_at, scored_at FROM source_items WHERE source_id = 'p111:test'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            changed_at.as_deref(),
+            Some("2026-08-25 01:02:03"),
+            "content_updated_at survives the re-run"
+        );
+        assert_eq!(
+            scored_at.as_deref(),
+            Some("2026-08-25 04:05:06"),
+            "scored_at survives the re-run"
+        );
     }
 
     /// Phase 92 lifts TARGET_VERSION to 92. Verify the test DB reached it.

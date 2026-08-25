@@ -521,6 +521,46 @@ mod tests {
         assert_eq!(ct, ContentType::Hiring);
     }
 
+    /// "Announcing <thing> <version>" is the canonical release-post form, and
+    /// it was classified as plain DISCUSSION until 2026-08-25 — live proof:
+    /// "Announcing axum 0.6.0/0.7.0/0.8.0" sat in the feed at ~0.886 with
+    /// content_type NULL, invisible to both the release treatment and the v23
+    /// superseded-release staleness floor.
+    #[test]
+    fn test_announcing_a_version_is_release_notes() {
+        for title in [
+            "Announcing axum 0.6.0",
+            "Announcing axum 0.8.0",
+            "Announcing Tokio Metrics 0.1",
+            "Introducing Serde 2.0",
+        ] {
+            let (ct, _) = classify_content(title, "");
+            assert_eq!(
+                ct,
+                ContentType::ReleaseNotes,
+                "{title} should classify as a release"
+            );
+        }
+    }
+
+    /// The version token is load-bearing: an announcement with no version is a
+    /// project launch or company news, not a release.
+    #[test]
+    fn test_announcing_without_a_version_is_not_release_notes() {
+        for title in [
+            "Announcing Toasty, an async ORM for Rust",
+            "Announcing our Series B",
+            "Introducing our new pricing",
+        ] {
+            let (ct, _) = classify_content(title, "");
+            assert_ne!(
+                ct,
+                ContentType::ReleaseNotes,
+                "{title} has no version - must not be a release"
+            );
+        }
+    }
+
     #[test]
     fn test_job_seeker_post_is_hiring_class() {
         // The mirror of a job ad (live FP 2026-08-23): the poster's stack

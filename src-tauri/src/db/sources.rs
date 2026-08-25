@@ -201,6 +201,10 @@ impl Database {
             let mut check_stmt = tx.prepare_cached(
                 "SELECT id FROM source_items WHERE source_type = ?1 AND source_id = ?2",
             )?;
+            // The UPDATE arm REPLACES content (this path only fires for items
+            // the fetch pipeline decided to fully re-ingest — re-seen cached
+            // items go through `touch_source_item` instead), so it stamps
+            // `content_updated_at`: the differential selection re-scores on it.
             let mut update_stmt = tx.prepare_cached(
                 "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, \
                  embedding = ?5, detected_lang = ?6, \
@@ -208,7 +212,8 @@ impl Database {
                  cve_ids = COALESCE(?8, source_items.cve_ids), \
                  feed_origin = COALESCE(?9, source_items.feed_origin), \
                  tags = COALESCE(?10, source_items.tags), \
-                 published_at = COALESCE(source_items.published_at, ?11), \n                 last_seen = datetime('now') WHERE id = ?12",
+                 published_at = COALESCE(source_items.published_at, ?11), \n                 content_updated_at = datetime('now'), \
+                 last_seen = datetime('now') WHERE id = ?12",
             )?;
             let mut update_vec_stmt =
                 tx.prepare_cached("UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2")?;
@@ -370,14 +375,19 @@ impl Database {
         rows.collect()
     }
 
-    /// Upgrade a pending item to complete after successful re-embedding
+    /// Upgrade a pending item to complete after successful re-embedding.
+    ///
+    /// Stamps `content_updated_at`: the embedding (and often the enriched
+    /// content it was computed from) just arrived, so the item's scoring
+    /// inputs changed and the differential selection must re-score it.
     pub fn upgrade_pending_to_complete(&self, id: i64, embedding: &[f32]) -> SqliteResult<()> {
         let conn = self.conn.lock();
         let embedding_blob = embedding_to_blob(embedding);
 
         let tx = conn.unchecked_transaction()?;
         tx.execute(
-            "UPDATE source_items SET embedding = ?1, embedding_status = 'complete', embed_text = NULL WHERE id = ?2",
+            "UPDATE source_items SET embedding = ?1, embedding_status = 'complete', embed_text = NULL, \
+             content_updated_at = datetime('now') WHERE id = ?2",
             params![embedding_blob, id],
         )?;
         // `source_vec` is a sqlite-vec `vec0` VIRTUAL table, which does NOT honour
@@ -447,7 +457,9 @@ impl Database {
     /// Update an item with enriched content fetched from its URL.
     ///
     /// Sets `embedding_status = 'pending'` so the embedding pipeline picks it up
-    /// for re-embedding with the richer content on the next cycle.
+    /// for re-embedding with the richer content on the next cycle, and stamps
+    /// `content_updated_at` — enrichment replaced the content, so the
+    /// differential selection must re-score the item.
     pub fn update_enriched_content(
         &self,
         id: i64,
@@ -458,7 +470,8 @@ impl Database {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE source_items
-             SET content = ?1, content_hash = ?2, embed_text = ?3, embedding_status = 'pending'
+             SET content = ?1, content_hash = ?2, embed_text = ?3, embedding_status = 'pending',
+                 content_updated_at = datetime('now')
              WHERE id = ?4",
             params![content, content_hash, embed_text, id],
         )?;
@@ -561,7 +574,13 @@ impl Database {
         rows.collect()
     }
 
-    /// Update last_seen timestamp for an existing item
+    /// Update last_seen timestamp for an existing item.
+    ///
+    /// Deliberately does NOT stamp `content_updated_at`: a touch means "the
+    /// source window still contains this item", not "this item changed".
+    /// Selecting the differential on touches was exactly the 2026-08-25
+    /// finding — every fetch cycle touches all re-seen cached items, so the
+    /// selection re-picked the whole cap every cycle.
     pub fn touch_source_item(&self, source_type: &str, source_id: &str) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -577,6 +596,10 @@ impl Database {
     /// source window is the ONLY moment they can refresh — without this, a
     /// post fetched minutes after publication carries `0` engagement forever
     /// and the community-signal escape hatch never opens for it.
+    ///
+    /// Stamps `content_updated_at`: refreshed engagement MUST trigger
+    /// re-scoring — the UGC community-signal escape hatch depends on the
+    /// differential re-selecting the item after its counts grow.
     pub fn update_source_item_tags(
         &self,
         source_type: &str,
@@ -585,7 +608,8 @@ impl Database {
     ) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute(
-            "UPDATE source_items SET tags = ?3 WHERE source_type = ?1 AND source_id = ?2",
+            "UPDATE source_items SET tags = ?3, content_updated_at = datetime('now') \
+             WHERE source_type = ?1 AND source_id = ?2",
             params![source_type, source_id, tags],
         )?;
         Ok(())
@@ -818,7 +842,21 @@ impl Database {
         }
     }
 
-    /// Get items added since a specific ISO timestamp (for differential analysis)
+    /// Items that are NEW or CHANGED since a specific timestamp — the
+    /// differential-analysis selection.
+    ///
+    /// The predicate is `created_at > since OR content_updated_at > since`,
+    /// NOT `last_seen > since`. `last_seen` was wrong because touch != change:
+    /// every fetch cycle touches ALL re-seen cached items, so the old
+    /// predicate re-selected the whole window up to the cap every cycle
+    /// (headless receipts showed items_scored=500 constantly, 2026-08-25 live)
+    /// — the write hysteresis then suppressed 93-100% of the resulting writes,
+    /// so the compute was pure waste. `content_updated_at` moves only when the
+    /// item actually changed (content replaced, engagement/tags refreshed,
+    /// embedding upgraded, enrichment landed); a NULL simply never matches, so
+    /// legacy rows are selected only when newly created. Freshness decay for
+    /// unchanged items is the rolling refresh's job
+    /// ([`Database::get_freshness_refresh_batch`]), not this selection's.
     pub(crate) fn get_items_since_timestamp(
         &self,
         since: &str,
@@ -828,12 +866,74 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
              FROM source_items
-             WHERE last_seen > ?1
-             ORDER BY last_seen DESC
+             WHERE created_at > ?1 OR content_updated_at > ?1
+             ORDER BY COALESCE(content_updated_at, created_at) DESC
              LIMIT ?2"
         )?;
 
         let rows = stmt.query_map(params![since, limit as i64], |row| {
+            let embedding_blob: Vec<u8> = row.get(7)?;
+            Ok(StoredSourceItem {
+                id: row.get(0)?,
+                source_type: row.get(1)?,
+                source_id: row.get(2)?,
+                url: row.get(3)?,
+                title: row.get(4)?,
+                content: row.get(5)?,
+                content_hash: row.get(6)?,
+                embedding: blob_to_embedding(&embedding_blob),
+                created_at: parse_datetime(row.get::<_, String>(8)?),
+                last_seen: parse_datetime(row.get::<_, String>(9)?),
+                detected_lang: row
+                    .get::<_, String>(10)
+                    .unwrap_or_else(|_| "en".to_string()),
+                feed_origin: row.get(11).ok().flatten(),
+                tags: row.get(12).ok().flatten(),
+                published_at: crate::db::parse_datetime_opt(
+                    row.get::<_, Option<String>>(13).ok().flatten(),
+                ),
+            })
+        })?;
+
+        rows.collect()
+    }
+
+    /// The stalest-scored slice of the recent window, for the rolling
+    /// freshness refresh: items still inside the source window
+    /// (`last_seen > now - window_hours`), the longest-unscored first
+    /// (`COALESCE(scored_at, '1970-01-01') ASC` — never-stamped legacy rows
+    /// rotate through first).
+    ///
+    /// Companion to the change-based differential selection
+    /// ([`Database::get_items_since_timestamp`]): once the differential stops
+    /// re-selecting everything the fetch path touches, an unchanged item
+    /// would keep the score of its last evaluation forever — an item scored
+    /// once while young would hold its fresh-boost score long after the boost
+    /// decayed. Merging this batch every background cycle re-walks the whole
+    /// window on a bounded budget, so freshness-tier decay keeps its cadence.
+    /// Rotation is guaranteed because every scoring path stamps `scored_at`
+    /// on evaluation (`persist_analysis_scores` + `mark_items_scored_version`
+    /// — suppressed and zero-score evaluations included), pushing the items
+    /// just evaluated to the back of this ordering.
+    ///
+    /// No tier clamp: callers pass a window (7 days) well inside the 30-day
+    /// free-history gate.
+    pub fn get_freshness_refresh_batch(
+        &self,
+        window_hours: i64,
+        limit: usize,
+    ) -> SqliteResult<Vec<StoredSourceItem>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
+             FROM source_items
+             WHERE last_seen > datetime('now', ?1)
+             ORDER BY COALESCE(scored_at, '1970-01-01') ASC
+             LIMIT ?2"
+        )?;
+
+        let modifier = format!("-{window_hours} hours");
+        let rows = stmt.query_map(params![modifier, limit as i64], |row| {
             let embedding_blob: Vec<u8> = row.get(7)?;
             Ok(StoredSourceItem {
                 id: row.get(0)?,
@@ -1502,6 +1602,196 @@ mod tests {
         assert_eq!(
             status, "complete",
             "a successfully re-embedded item must leave the pending queue"
+        );
+    }
+
+    /// Tightening T1 (2026-08-25): the differential selection keys on CHANGE,
+    /// not on touch. A bare `touch_source_item` (what every fetch cycle does
+    /// to all re-seen cached items) must NOT re-select an item; a tags/
+    /// engagement refresh MUST (the UGC escape hatch depends on it); and a
+    /// newly created item selects via `created_at`. Under the old
+    /// `last_seen > since` predicate the touched item WAS selected every
+    /// cycle — that is the ~500-items-scored-per-cycle bug this closes.
+    #[test]
+    fn differential_selects_change_not_touch() {
+        let db = test_db();
+        let touched = insert_test_item(&db, "hackernews", "diff-touch", "Touched", "x");
+        let refreshed = insert_test_item(&db, "hackernews", "diff-tags", "Tags refreshed", "x");
+        let created = insert_test_item(&db, "hackernews", "diff-new", "Newly created", "x");
+
+        // Backdate the two cached items to before the watermark; `created`
+        // keeps its insert-time created_at (after the watermark).
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET created_at = '2020-01-01 00:00:00',
+                                         last_seen = '2020-01-02 00:00:00'
+                 WHERE id IN (?1, ?2)",
+                rusqlite::params![touched, refreshed],
+            )
+            .unwrap();
+        }
+
+        // The fetch path re-sees both cached items: both touched, one also
+        // gets an engagement/tags refresh.
+        db.touch_source_item("hackernews", "diff-touch").unwrap();
+        db.touch_source_item("hackernews", "diff-tags").unwrap();
+        db.update_source_item_tags("hackernews", "diff-tags", r#"{"score":42}"#)
+            .unwrap();
+
+        let since = "2024-01-01 00:00:00";
+        let selected: Vec<i64> = db
+            .get_items_since_timestamp(since, 10)
+            .unwrap()
+            .iter()
+            .map(|i| i.id)
+            .collect();
+        assert!(
+            !selected.contains(&touched),
+            "a bare touch must NOT re-select an unchanged item (touch != change)"
+        );
+        assert!(
+            selected.contains(&refreshed),
+            "a tags/engagement refresh MUST re-select the item"
+        );
+        assert!(
+            selected.contains(&created),
+            "an item created after the watermark selects via created_at"
+        );
+        assert_eq!(selected.len(), 2, "exactly the changed + new items");
+    }
+
+    /// Every content-change writer stamps `content_updated_at`; the bare
+    /// touch never does. (The differential predicate above is only as honest
+    /// as its writers.)
+    #[test]
+    fn content_writers_stamp_content_updated_at() {
+        let db = test_db();
+        let changed_at = |id: i64| -> Option<String> {
+            let conn = db.conn.lock();
+            conn.query_row(
+                "SELECT content_updated_at FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+
+        // INSERT arm: no stamp — a new item enters the differential via
+        // created_at, and NULL keeps "never changed since ingest" true.
+        let emb = seed_embedding("rss:cw1");
+        db.batch_upsert_source_items(&[batch_tuple("cw1", None, &emb)])
+            .unwrap();
+        let id = {
+            let conn = db.conn.lock();
+            conn.query_row(
+                "SELECT id FROM source_items WHERE source_type = 'rss' AND source_id = 'cw1'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap()
+        };
+        assert!(changed_at(id).is_none(), "insert arm must not stamp");
+
+        // Bare touch: still no stamp.
+        db.touch_source_item("rss", "cw1").unwrap();
+        assert!(changed_at(id).is_none(), "touch must not stamp");
+
+        // Batch-upsert UPDATE arm (content replaced): stamps.
+        db.batch_upsert_source_items(&[batch_tuple("cw1", None, &emb)])
+            .unwrap();
+        assert!(
+            changed_at(id).is_some(),
+            "batch-upsert UPDATE arm must stamp"
+        );
+
+        // Enrichment: stamps.
+        let enriched = insert_test_item(&db, "rss", "cw2", "To enrich", "thin");
+        assert!(changed_at(enriched).is_none());
+        db.update_enriched_content(enriched, "much richer body", "hash2", "embed text")
+            .unwrap();
+        assert!(
+            changed_at(enriched).is_some(),
+            "content enrichment must stamp"
+        );
+
+        // Embedding upgrade (pending → complete): stamps.
+        let upgraded = insert_test_item(&db, "rss", "cw3", "Pending embed", "x");
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET embedding_status = 'pending', content_updated_at = NULL
+                 WHERE id = ?1",
+                rusqlite::params![upgraded],
+            )
+            .unwrap();
+        }
+        db.upgrade_pending_to_complete(upgraded, &seed_embedding("rss:cw3:v2"))
+            .unwrap();
+        assert!(
+            changed_at(upgraded).is_some(),
+            "embedding upgrade must stamp"
+        );
+    }
+
+    /// The rolling freshness refresh picks the stalest-scored items of the
+    /// recent window first, and ROTATES: once a batch is scored (stamped),
+    /// the next round picks the next-stalest slice instead of the same items.
+    #[test]
+    fn freshness_batch_orders_stalest_first_and_rotates() {
+        let db = test_db();
+        let never = insert_test_item(&db, "hackernews", "fr-never", "Never scored", "x");
+        let oldest = insert_test_item(&db, "hackernews", "fr-old", "Scored long ago", "x");
+        let recent = insert_test_item(&db, "hackernews", "fr-recent", "Scored recently", "x");
+        let outside = insert_test_item(&db, "hackernews", "fr-outside", "Out of window", "x");
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET scored_at = '2026-01-01 00:00:00' WHERE id = ?1",
+                rusqlite::params![oldest],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE source_items SET scored_at = '2026-06-01 00:00:00' WHERE id = ?1",
+                rusqlite::params![recent],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE source_items SET last_seen = '2020-01-01 00:00:00' WHERE id = ?1",
+                rusqlite::params![outside],
+            )
+            .unwrap();
+        }
+
+        let first: Vec<i64> = db
+            .get_freshness_refresh_batch(168, 2)
+            .unwrap()
+            .iter()
+            .map(|i| i.id)
+            .collect();
+        assert_eq!(
+            first,
+            vec![never, oldest],
+            "stalest first: never-stamped (NULL → 1970) before the oldest stamp; \
+             the out-of-window item excluded"
+        );
+
+        // The cycle scores the batch — every scoring path stamps scored_at
+        // (mark_items_scored_version covers zero-evidence items too).
+        db.mark_items_scored_version(&[never, oldest], crate::scoring::PIPELINE_VERSION)
+            .unwrap();
+
+        let second: Vec<i64> = db
+            .get_freshness_refresh_batch(168, 1)
+            .unwrap()
+            .iter()
+            .map(|i| i.id)
+            .collect();
+        assert_eq!(
+            second,
+            vec![recent],
+            "after scoring, the just-evaluated items rotate to the back and the \
+             next-stalest item is picked instead"
         );
     }
 

@@ -290,6 +290,13 @@ impl Database {
     /// forever. First-ever scores (old NULL) always write. Churn statistics
     /// are computed over the RAW deltas (what the scorer produced), with
     /// `suppressed_writes` recording how many the damper kept at the old value.
+    ///
+    /// **`scored_at` (schema 111):** stamped `datetime('now')` UNCONDITIONALLY
+    /// — hysteresis-suppressed writes included, like the version stamp. A
+    /// suppressed write still means "re-evaluated now", and the rolling
+    /// freshness refresh ([`Database::get_freshness_refresh_batch`]) rotates
+    /// on this stamp: skipping it on suppressed writes would re-pick the same
+    /// stable items every refresh cycle.
     pub fn persist_analysis_scores(
         &self,
         scores: &[(i64, f32, Option<String>, Option<String>)],
@@ -320,7 +327,7 @@ impl Database {
             let mut read_stmt =
                 tx.prepare_cached("SELECT relevance_score FROM source_items WHERE id = ?1")?;
             let mut stmt = tx.prepare_cached(
-                "UPDATE source_items SET relevance_score = ?1, scored_pipeline_version = ?2, signal_type = ?3, signal_priority = ?4 WHERE id = ?5",
+                "UPDATE source_items SET relevance_score = ?1, scored_pipeline_version = ?2, signal_type = ?3, signal_priority = ?4, scored_at = datetime('now') WHERE id = ?5",
             )?;
             for (id, score, signal_type, signal_priority) in scores {
                 // Old score first (same txn): NULL = first-ever score, not churn.
@@ -529,6 +536,13 @@ impl Database {
     /// the relevance-ordered drain would re-pick the same zero-scorers every run —
     /// the backlog could never fully drain past a band of zero-scoring items. An
     /// item we scored IS scored at the current version even if the verdict is "noise".
+    ///
+    /// Also stamps `scored_at` (schema 111) — the SAME invariant for the rolling
+    /// freshness refresh: `persist_analysis_scores` never sees zero-evidence
+    /// items, so without this stamp the stalest-first refresh ordering would
+    /// re-pick the same zero-scorers every cycle and the rotation could never
+    /// get past them. Every call site of this function stamps exactly the items
+    /// a scoring run evaluated, so "scored_at = now" is the truth here too.
     pub fn mark_items_scored_version(&self, ids: &[i64], version: i32) -> SqliteResult<usize> {
         if ids.is_empty() {
             return Ok(0);
@@ -538,7 +552,7 @@ impl Database {
         let mut count = 0;
         {
             let mut stmt = tx.prepare_cached(
-                "UPDATE source_items SET scored_pipeline_version = ?1 WHERE id = ?2",
+                "UPDATE source_items SET scored_pipeline_version = ?1, scored_at = datetime('now') WHERE id = ?2",
             )?;
             for id in ids {
                 stmt.execute(params![version, id])?;

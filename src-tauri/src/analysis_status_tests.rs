@@ -433,4 +433,47 @@ mod tests {
             "an already-selected item is never duplicated"
         );
     }
+
+    // ========================================================================
+    // Rolling freshness refresh (2026-08-25 tightening T1)
+    // ========================================================================
+
+    /// The freshness merge folds the stalest-scored slice of the recent
+    /// window into the differential batch WITHOUT duplicating ids already
+    /// selected by the change-based differential or the stale drain.
+    #[test]
+    fn freshness_refresh_merges_deduped_into_the_differential_batch() {
+        use crate::test_utils::{insert_test_item, test_db};
+
+        let db = test_db();
+        let a = insert_test_item(&db, "hackernews", "fm1", "In window A", "body");
+        let b = insert_test_item(&db, "hackernews", "fm2", "In window B", "body");
+
+        // The differential already selected one of the window's items.
+        let mut items = db
+            .get_freshness_refresh_batch(168, 1)
+            .expect("freshness batch");
+        assert_eq!(items.len(), 1);
+        let preselected = items[0].id;
+
+        let added = crate::analysis::merge_freshness_refresh_batch(&db, &mut items);
+        assert_eq!(added, 1, "only the not-yet-selected item is merged");
+        assert_eq!(items.len(), 2);
+        let ids: std::collections::HashSet<i64> = items.iter().map(|i| i.id).collect();
+        assert_eq!(
+            ids,
+            std::collections::HashSet::from([a, b]),
+            "both window items present exactly once"
+        );
+        let _ = preselected;
+
+        // Re-merging without scoring adds nothing — everything the batch
+        // returns is already selected.
+        let added_again = crate::analysis::merge_freshness_refresh_batch(&db, &mut items);
+        assert_eq!(
+            added_again, 0,
+            "an already-selected item is never duplicated"
+        );
+        assert_eq!(items.len(), 2);
+    }
 }
