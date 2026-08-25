@@ -543,8 +543,14 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         // Check if user has engaged with any items about this dep
         let days_since = days_since_last_engagement(conn, &dep.package_name)?;
 
-        // Classify severity
-        let severity = classify_severity(&missed, days_since, &dep.package_name);
+        // Classify severity. A security advisory only escalates the gap while
+        // the installed version is genuinely still inside its affected range.
+        let severity = classify_severity(
+            &missed,
+            days_since,
+            &dep.package_name,
+            still_vulnerable(conn, &dep.package_name, dep.version.as_deref()),
+        );
 
         if severity == GapSeverity::Low && days_since < 14 {
             continue; // Skip low-severity recent items
@@ -845,7 +851,51 @@ fn quality_weight(title: &str) -> f32 {
     }
 }
 
-fn classify_severity(missed: &[MissedItem], days_since: u32, dep_name: &str) -> GapSeverity {
+/// Is the installed version of `package` still inside ANY stored advisory's
+/// affected range?
+///
+/// An advisory naming your dependency is only a gap if you are still exposed.
+/// Without this, widening the scan (four-character names, the raised cap, the
+/// direct-dependency exemption) surfaces `hono` — whose three unread CVEs are
+/// all fixed in 4.12.34, against an installed 4.13.2 that this repo had already
+/// pinned past via `pnpm.overrides`. The panel would report a CRITICAL gap for
+/// something the user had already remediated, which is exactly the false
+/// positive the widening was meant to avoid creating.
+///
+/// Conservative in every direction: no advisories stored for the package, an
+/// unreadable range, or an unknown installed version all count as STILL
+/// VULNERABLE. `check_version_affected` is the same primitive the OSV matcher
+/// uses, so the two surfaces cannot drift apart.
+fn still_vulnerable(conn: &rusqlite::Connection, package: &str, version: Option<&str>) -> bool {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT affected_ranges FROM osv_advisories
+         WHERE lower(package_name) = lower(?1) AND withdrawn_at IS NULL",
+    ) else {
+        return true;
+    };
+    let Ok(rows) = stmt.query_map(params![package], |row| row.get::<_, Option<String>>(0)) else {
+        return true;
+    };
+
+    let mut saw_any = false;
+    for ranges in rows.flatten() {
+        saw_any = true;
+        let (affected, _confirmed) = crate::osv::matching::check_version_affected(version, &ranges);
+        if affected {
+            return true;
+        }
+    }
+
+    // Nothing stored about this package — say nothing about its safety.
+    !saw_any
+}
+
+fn classify_severity(
+    missed: &[MissedItem],
+    days_since: u32,
+    dep_name: &str,
+    still_vulnerable: bool,
+) -> GapSeverity {
     let dep_lower = dep_name.to_lowercase();
 
     let has_security = missed.iter().any(|item| {
@@ -878,7 +928,10 @@ fn classify_severity(missed: &[MissedItem], days_since: u32, dep_name: &str) -> 
     };
     let gap_score = weighted_score * days_factor;
 
-    if has_security {
+    // A security advisory only escalates while the install is still exposed.
+    // An already-patched dependency can still be worth reading about, so the
+    // gap survives at its unweighted tier — it just stops shouting.
+    if has_security && still_vulnerable {
         GapSeverity::Critical
     } else if has_breaking || gap_score >= 5.0 {
         GapSeverity::High
@@ -1718,6 +1771,99 @@ mod tests {
         assert!(
             gap_is_substantive(&gap),
             "a CVE-bearing gap must reach the panel"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Already-patched suppression
+    //
+    // Widening the scan (four-character names, the raised cap, the direct-dep
+    // exemption) makes `hono` reachable — and all three of its unread CVEs are
+    // fixed in 4.12.34 against an installed 4.13.2 this repo had already pinned
+    // past. Without a version check the widening would trade one false negative
+    // for a false CRITICAL, which is a strictly worse deal on a security
+    // surface.
+    // -----------------------------------------------------------------------
+
+    /// The real OSV ranges for the three Hono advisories, verbatim.
+    const HONO_RANGES: &str =
+        r#"[{"type":"SEMVER","events":[{"introduced":"3.8.0"},{"fixed":"4.12.34"}]}]"#;
+
+    fn osv_conn() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE osv_advisories (
+                 advisory_id TEXT, package_name TEXT, ecosystem TEXT,
+                 affected_ranges TEXT, withdrawn_at TEXT
+             );",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn add_advisory(conn: &rusqlite::Connection, package: &str, ranges: &str) {
+        conn.execute(
+            "INSERT INTO osv_advisories (advisory_id, package_name, ecosystem, affected_ranges)
+             VALUES ('GHSA-test', ?1, 'npm', ?2)",
+            params![package, ranges],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn an_install_past_every_fix_is_not_still_vulnerable() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+        assert!(
+            !still_vulnerable(&conn, "hono", Some("4.13.2")),
+            "4.13.2 is past the 4.12.34 fix — the user already remediated this"
+        );
+    }
+
+    #[test]
+    fn an_install_inside_the_range_is_still_vulnerable() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+        assert!(still_vulnerable(&conn, "hono", Some("4.12.0")));
+    }
+
+    #[test]
+    fn safety_is_never_claimed_on_missing_information() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+
+        // Unknown installed version.
+        assert!(still_vulnerable(&conn, "hono", None));
+        // Package OSV knows nothing about.
+        assert!(still_vulnerable(&conn, "some-unscanned-pkg", Some("1.0.0")));
+        // Unreadable range.
+        let conn2 = osv_conn();
+        add_advisory(&conn2, "hono", "not json");
+        assert!(still_vulnerable(&conn2, "hono", Some("4.13.2")));
+        // No osv_advisories table at all (older database).
+        let bare = rusqlite::Connection::open_in_memory().unwrap();
+        assert!(still_vulnerable(&bare, "hono", Some("4.13.2")));
+    }
+
+    #[test]
+    fn a_patched_dependency_does_not_escalate_to_critical() {
+        let missed = vec![MissedItem {
+            item_id: 192,
+            title: "[CVE-2026-71850] Hono: memo() retains SSR output across requests".to_string(),
+            url: None,
+            source_type: "cve".to_string(),
+            created_at: "2026-08-12 01:34:41".to_string(),
+        }];
+
+        assert_eq!(
+            classify_severity(&missed, 13, "hono", true),
+            GapSeverity::Critical,
+            "a genuinely exposed install still escalates"
+        );
+        assert_ne!(
+            classify_severity(&missed, 13, "hono", false),
+            GapSeverity::Critical,
+            "an already-patched install must not be reported as critical"
         );
     }
 }
