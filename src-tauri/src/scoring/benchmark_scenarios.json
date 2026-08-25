@@ -1711,6 +1711,28 @@
     }
   },
   {
+    "id": "hc_superseded_release_ceiling_evicts",
+    "category": "harness_coverage",
+    "description": "v24: a 45-month-old release of a dependency you really have is categorically superseded - the ceiling evicts it where the v23 multiplier could not",
+    "item": {
+      "title": "crates.io: tokio v1.20.0",
+      "content": "An event-driven, non-blocking I/O platform for writing asynchronous I/O backed applications in Rust. This release improves the multi-threaded scheduler and reduces task wakeup latency.\nDownloads: 250000000",
+      "source_type": "crates_io",
+      "tags_json": null,
+      "created_hours_ago": 33000,
+      "source_id": "crate-tokio"
+    },
+    "profile": "rust_developer",
+    "apply_freshness": true,
+    "expected": {
+      "score_min": 0.0,
+      "score_max": 0.38,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "The live gap v23 could not close: a strongly dep-grounded aged release. The v23 multiplier cuts the structural term but dep/interest signal kept such items above 0.40 in production (18 items, none below the line). v24 caps at superseded_ceiling 0.35 (+0.02 offset = 0.37) AND gates the verdict categorically, because 0.35 + offset + a topic boost reaches 0.42 - the v18 incident verbatim. Ceiling 0.38 pins the capped band; should_be_relevant false pins the categorical gate."
+    }
+  },
+  {
     "id": "hc_stale_grounded_release_superseded",
     "category": "harness_coverage",
     "description": "v23: a SUPERSEDED release of a dependency you really have - grounding must not soften a 3-year-old announcement",
