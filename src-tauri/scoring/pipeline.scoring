@@ -337,6 +337,23 @@ stale_content {
     stale_months: 36.0      # [24.0, 60.0]
     stale_floor: 0.55       # [0.30, 0.80]
     grounded_floor: 0.80    # [0.60, 0.95]
+    # Superseded release announcements. A release note is time-indexed news:
+    # "TypeScript 5.1 Beta is OUT!" is superseded by definition three years
+    # later, even when typescript IS your dependency — the registry signal is
+    # CURRENT releases of your deps. So the grounded softening (0.80) does NOT
+    # apply to ReleaseNotes past the ramp, and the floor deepens instead.
+    # Live evidence 2026-08-25: that exact item held 0.882 and sat feed-relevant
+    # because dev-dep grounding (v22) lifted its base while grounded_floor kept
+    # the staleness discount shallow.
+    # 0.22 is MEASURED, not guessed: at 0.30 the canonical grounded-stale
+    # release (hc_stale_grounded_release_superseded) landed at 0.381 — under
+    # the 0.40 line, but by 0.019, i.e. INSIDE the 0.03 verdict-reconciliation
+    # epsilon, so it would jitter across the boundary. At 0.22 the same
+    # scenario measures 0.349 (margin 0.051, outside the epsilon) and its
+    # fresh control is untouched at 0.761. The ramp keeps early ages nearly
+    # untouched (13 months ≈ ×0.97), so only genuinely superseded
+    # announcements are crushed.
+    release_floor: 0.22     # [0.15, 0.37]
 }
 
 # Community quality signal thresholds - extracted from source metadata

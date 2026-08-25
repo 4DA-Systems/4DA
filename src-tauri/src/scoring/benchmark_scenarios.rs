@@ -691,8 +691,8 @@ fn scenarios_parse_correctly() {
     let scenarios = load_scenarios();
     assert_eq!(
         scenarios.len(),
-        85,
-        "Expected 85 scenarios, got {}",
+        86,
+        "Expected 86 scenarios, got {}",
         scenarios.len()
     );
     for s in &scenarios {

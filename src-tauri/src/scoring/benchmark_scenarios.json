@@ -1711,6 +1711,28 @@
     }
   },
   {
+    "id": "hc_stale_grounded_release_superseded",
+    "category": "harness_coverage",
+    "description": "v23: a SUPERSEDED release of a dependency you really have - grounding must not soften a 3-year-old announcement",
+    "item": {
+      "title": "crates.io: tokio v1.47.0",
+      "content": "An event-driven, non-blocking I/O platform for writing asynchronous I/O backed applications in Rust. This release improves the multi-threaded scheduler and reduces task wakeup latency.\nDownloads: 250000000",
+      "source_type": "crates_io",
+      "tags_json": null,
+      "created_hours_ago": 30000,
+      "source_id": "crate-tokio"
+    },
+    "profile": "rust_developer",
+    "apply_freshness": true,
+    "expected": {
+      "score_min": 0.05,
+      "score_max": 0.39,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Measured 0.349 (2026-08-25) vs its fresh control at 0.761. The exact live defect shape: identical to hc_registry_grounded_dep_release except ~3.4 years old. Under v22 this took the grounded softening (0.80) and stayed high - live proof: 'TypeScript 5.1 Beta is OUT!' (published 2023, typescript IS a dep) held 0.882 and sat feed-relevant. v23 withholds grounding's softening from ReleaseNotes and floors them at 0.30, so a superseded announcement falls below the 0.40 line even for a package you really depend on. The fresh twin (hc_registry_grounded_dep_release, 0.761) is the control: same item, same grounding, current date - untouched."
+    }
+  },
+  {
     "id": "hc_registry_ungrounded_lookalike_capped",
     "category": "harness_coverage",
     "description": "v18 registry-subject route: a stack-shaped look-alike crate (NOT a dependency) is categorically capped and never relevant",
@@ -1769,11 +1791,11 @@
     "profile": "fullstack_js",
     "apply_freshness": true,
     "expected": {
-      "score_min": 0.35,
-      "score_max": 0.53,
-      "should_be_relevant": true,
+      "score_min": 0.2,
+      "score_max": 0.36,
+      "should_be_relevant": false,
       "required_signals": [],
-      "notes": "Measured 0.463 (2026-08-24) vs fresh twin 0.828 - a 44% discount for the ~3.4-year-old publish date (stale_content ramp + freshness tiers stacking). The live-audit class ('TS 5.1 Beta' published 2023 scored 0.882) is dead: ceiling 0.53 < the fresh twin's floor 0.74 pins the non-overlap. Still relevant at 0.463 by design - staleness discounts, it does not kill."
+      "notes": "RE-BASELINED 2026-08-25 (v23, tightening T3), consciously: 0.463 -> 0.237 measured. This item IS a release announcement ('...Beta is OUT!'), so it now takes stale_content.release_floor (0.30) instead of stale_floor (0.55). The v22 note said 'still relevant by design - staleness discounts, it does not kill'; that doctrine stands for evergreen content but NOT for time-indexed news: a 3-year-old release announcement is superseded by definition, so it now falls below the 0.40 relevance line. Ceiling 0.36 pins it under that line; the fresh twin (0.828, floor 0.74) is untouched, so the pair still proves the discount is about AGE, not about releases."
     }
   },
   {
