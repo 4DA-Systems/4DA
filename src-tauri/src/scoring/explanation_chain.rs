@@ -181,18 +181,41 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
         // your ecosystem" line is exactly the un-evidenced template this
         // module exists to kill.
         if !evidence_parts.is_empty() || named_dep.is_some() {
-            let display = match named_dep {
-                Some(dep) => format!("Security advisory affects your dependency {dep}"),
-                None => match inp.advisory_id.map(str::trim).filter(|s| !s.is_empty()) {
+            // Name the project when it is known. "your dependency axios" reads
+            // as a claim about the app the reader is looking at; the package
+            // can equally belong to a different repository on their machine,
+            // and without the location they cannot act on the finding.
+            let dep_location = inp
+                .display_deps
+                .first()
+                .and_then(|d| super::dependencies::project_label(&d.project_paths));
+            let display = match (named_dep, dep_location.as_deref()) {
+                (Some(dep), Some(location)) => {
+                    format!("Security advisory affects {dep} in {location}")
+                }
+                (Some(dep), None) => format!("Security advisory affects your dependency {dep}"),
+                (None, _) => match inp.advisory_id.map(str::trim).filter(|s| !s.is_empty()) {
                     Some(id) => format!("Security advisory {id}"),
                     None => String::new(),
                 },
             };
             if !display.is_empty() {
-                if evidence_parts.is_empty() {
-                    // named_dep is Some here (display would be empty otherwise)
-                    if let (Some(dep), Some(dm)) = (named_dep, inp.display_deps.first()) {
-                        evidence_parts.push(format!("{dep} ({})", provenance(dm)));
+                // The package line is a FALLBACK when nothing else is nameable
+                // — but its location is not. A reader who has the advisory id
+                // and the CVSS still cannot act without knowing which checkout
+                // holds the vulnerable copy, so the location is carried
+                // whenever it is known.
+                if let (Some(dep), Some(dm)) = (named_dep, inp.display_deps.first()) {
+                    match (evidence_parts.is_empty(), dep_location.as_deref()) {
+                        (true, Some(location)) => {
+                            evidence_parts
+                                .push(format!("{dep} ({} in {location})", provenance(dm)));
+                        }
+                        (true, None) => {
+                            evidence_parts.push(format!("{dep} ({})", provenance(dm)));
+                        }
+                        (false, Some(location)) => evidence_parts.push(format!("in {location}")),
+                        (false, None) => {}
                     }
                 }
                 factors.push(WeightedFactor {

@@ -27,6 +27,69 @@ function mentionsPackage(text: string, pkg: string): boolean {
   return regex.test(text);
 }
 
+/** The subset of an item this grading needs. */
+export interface GradableItem {
+  title: string | null;
+  source_type?: string | null;
+  content_type?: string | null;
+}
+
+/**
+ * Grade a knowledge gap by CONSEQUENCE, never by volume.
+ *
+ * - `critical` — a real advisory whose TITLE names this dependency. The
+ *   advisory is about the dep, not merely co-mentioning it in a body.
+ * - `high` — a security-keyword item whose title names the dep.
+ * - `medium` — an unread item that names the dep in its title and carries
+ *   consequence: a breaking change, a deprecation, or a release.
+ * - `low` — everything else, including a large pile of passing mentions.
+ *
+ * `medium` used to mean "3+ recent unread mentions", and a mention could match
+ * on the content body rather than the title. That graded unread VOLUME as a
+ * knowledge gap, and since `min_severity` defaults to medium it shipped: a
+ * `tracing` gap evidenced by "The Matrix: Writing Code That Doesn't Need
+ * Comments", a `typescript` gap evidenced by a Databricks job posting, a `uuid`
+ * gap evidenced by Go's standard library, a `vite` gap evidenced by a
+ * period-tracker app. Fourteen of fifteen gaps were noise.
+ *
+ * The Rust surface already draws exactly this line —
+ * `knowledge_decay::gap_is_substantive` requires a security advisory, breaking
+ * change, or version update, and calls anything else "unread VOLUME, not a
+ * knowledge gap". Two implementations of one concept disagreeing is what let
+ * this tool report 18 gaps while the app reported none.
+ */
+export function gradeGap(items: GradableItem[], packageName: string): string {
+  const namesDep = (item: GradableItem) => mentionsPackage(item.title || "", packageName);
+
+  const isAdvisory = (item: GradableItem) =>
+    item.source_type === "cve" ||
+    item.source_type === "osv" ||
+    item.content_type === "security_advisory";
+
+  const securityKeywords = (title: string) =>
+    hasWordBoundary(title, "cve") ||
+    hasWordBoundary(title, "security") ||
+    hasWordBoundary(title, "vulnerability");
+
+  // "Announcing <thing> <version>" is the canonical release phrasing and names
+  // no other keyword. The version token is REQUIRED, matching the rule
+  // `content_dna_classifiers` settled on: it keeps "Announcing axum 0.8.0" and
+  // rejects "Announcing Toasty, an async ORM" and "Announcing our Series B".
+  const announcesAVersion = (title: string) =>
+    (hasWordBoundary(title, "announcing") || hasWordBoundary(title, "introducing")) &&
+    /\bv?\d+\.\d+/.test(title);
+
+  const carriesConsequence = (title: string) =>
+    ["breaking", "deprecated", "eol", "release", "released", "update", "upgrade"].some((kw) =>
+      hasWordBoundary(title, kw),
+    ) || announcesAVersion(title);
+
+  if (items.some((item) => isAdvisory(item) && namesDep(item))) return "critical";
+  if (items.some((item) => namesDep(item) && securityKeywords(item.title || ""))) return "high";
+  if (items.some((item) => namesDep(item) && carriesConsequence(item.title || ""))) return "medium";
+  return "low";
+}
+
 // Escape SQL LIKE wildcards so a package name containing % or _ (npm names may
 // contain _) is matched literally rather than as a pattern. Paired with ESCAPE '\'.
 function escapeLike(s: string): string {
@@ -152,35 +215,7 @@ export function executeKnowledgeGaps(
       .slice(0, 5);
 
     if (mentionedItems.length > 0) {
-      const isAdvisory = (item: (typeof mentionedItems)[number]) =>
-        item.source_type === "cve" ||
-        item.source_type === "osv" ||
-        item.content_type === "security_advisory";
-      const securityKeywords = (title: string) =>
-        hasWordBoundary(title, "cve") ||
-        hasWordBoundary(title, "security") ||
-        hasWordBoundary(title, "vulnerability");
-
-      // Graded honestly:
-      // - critical: an actual advisory whose TITLE names this dependency — the
-      //   advisory is about the dep, not merely co-mentioning it in a body.
-      // - high: a security-keyword item whose title names the dep.
-      // - medium: 3+ recent unread mentions; low: 1-2.
-      const advisoryAboutDep = mentionedItems.some(
-        (item) => isAdvisory(item) && mentionsPackage(item.title || "", dep.package_name),
-      );
-      const securityTitleMention = mentionedItems.some(
-        (item) =>
-          securityKeywords(item.title || "") &&
-          mentionsPackage(item.title || "", dep.package_name),
-      );
-      const severity = advisoryAboutDep
-        ? "critical"
-        : securityTitleMention
-          ? "high"
-          : mentionedItems.length >= 3
-            ? "medium"
-            : "low";
+      const severity = gradeGap(mentionedItems, dep.package_name);
 
       gaps.push({
         dependency: dep.package_name,

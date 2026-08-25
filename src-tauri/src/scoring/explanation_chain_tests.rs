@@ -107,6 +107,15 @@ fn dep(name: &str, confidence: f32, is_direct: bool, version: Option<&str>) -> D
         ecosystem: "rust".to_string(),
         corroborated: true,
         raw_name: None,
+        project_paths: Vec::new(),
+    }
+}
+
+/// A dependency that knows which project declares it.
+fn dep_in(name: &str, project: &str) -> DepMatch {
+    DepMatch {
+        project_paths: vec![project.to_string()],
+        ..dep(name, 0.9, true, Some("1.12.2"))
     }
 }
 
@@ -725,4 +734,97 @@ fn short_source_path_keeps_the_last_two_segments() {
         "sources/cve.rs"
     );
     assert_eq!(short_source_path("./a/b.rs"), "a/b.rs");
+}
+
+// ---------------------------------------------------------------------------
+// Project attribution (2026-08-25 live Signal audit)
+//
+// The live feed said "Security advisory affects your dependency axios" on an
+// app whose manifests never mention axios — the package belongs to a different
+// repository on the same machine. The reader is told they are exposed and given
+// no way to find the code to change.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn security_factor_names_the_project_that_declares_the_dependency() {
+    let mut f = Fixture::default();
+    f.is_security = true;
+    f.necessity_score = 0.95;
+    f.advisory_id = Some("GHSA-xj6q-8x83-jv6g".to_string());
+    f.cvss_score = Some(9.1);
+    f.display_deps = vec![dep_in(
+        "axios",
+        "c:/users/admin/documents/kairos-mvp/backend",
+    )];
+    f.dep_match_score = 0.9;
+
+    let chain = f.build();
+    let sec = chain
+        .iter()
+        .find(|c| c.kind == crate::FactorKind::SecurityAdvisory)
+        .expect("security factor must be emitted");
+
+    assert!(
+        sec.display.contains("kairos-mvp/backend"),
+        "the advisory must say WHICH project to fix: {}",
+        sec.display
+    );
+    assert!(
+        !sec.display.contains("your dependency"),
+        "the possessive claim is what made this read as a finding about THIS app: {}",
+        sec.display
+    );
+    assert!(
+        sec.evidence.contains("kairos-mvp/backend"),
+        "evidence carries the location too: {}",
+        sec.evidence
+    );
+}
+
+#[test]
+fn security_factor_keeps_its_old_wording_when_provenance_is_unknown() {
+    // Never degrade to a dangling "in ". Synthetic and legacy matches carry no
+    // project, and must read exactly as they did before.
+    let mut f = Fixture::default();
+    f.is_security = true;
+    f.necessity_score = 0.95;
+    f.advisory_id = Some("GHSA-aaaa-bbbb-cccc".to_string());
+    f.cvss_score = Some(9.1);
+    f.display_deps = vec![dep("lodash", 0.9, true, Some("1.9.0"))]; // no project_paths
+    f.dep_match_score = 0.9;
+
+    let chain = f.build();
+    let sec = chain
+        .iter()
+        .find(|c| c.kind == crate::FactorKind::SecurityAdvisory)
+        .expect("security factor must be emitted");
+    assert_eq!(
+        sec.display, "Security advisory affects your dependency lodash",
+        "unknown provenance falls back cleanly"
+    );
+}
+
+#[test]
+fn a_dependency_in_several_projects_names_one_and_counts_the_rest() {
+    let mut f = Fixture::default();
+    f.is_security = true;
+    f.necessity_score = 0.95;
+    f.advisory_id = Some("RUSTSEC-2026-0007".to_string());
+    f.cvss_score = Some(7.0);
+    f.display_deps = vec![DepMatch {
+        project_paths: vec!["d:/4da/relay".to_string(), "d:/4da/src-tauri".to_string()],
+        ..dep("bytes", 0.9, false, Some("1.10.1"))
+    }];
+    f.dep_match_score = 0.9;
+
+    let chain = f.build();
+    let sec = chain
+        .iter()
+        .find(|c| c.kind == crate::FactorKind::SecurityAdvisory)
+        .expect("security factor must be emitted");
+    assert!(
+        sec.display.contains("4da/relay (+1 more)"),
+        "one named location plus a count, never a wall of paths: {}",
+        sec.display
+    );
 }

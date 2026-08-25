@@ -18,6 +18,7 @@ fn ctx_with_dep(name: &str) -> ScoringContext {
             is_direct: true,
             search_terms: extract_search_terms(name),
             ecosystem: "rust".to_string(),
+            project_paths: Vec::new(),
         },
     );
     ScoringContext::builder().ace_ctx(ace).build()

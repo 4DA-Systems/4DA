@@ -179,6 +179,7 @@ fn install_bench_dep(ace: &mut ace_context::ACEContext, name: &str, ecosystem: &
         is_direct: direct,
         search_terms: super::dependencies::extract_search_terms(name),
         ecosystem: ecosystem.to_string(),
+        project_paths: Vec::new(),
     };
     for term in &info.search_terms {
         ace.dependency_names.insert(term.clone());
@@ -836,6 +837,7 @@ fn direct_dep_cve_clears_the_direct_dep_floor() {
             is_direct: true,
             search_terms: super::dependencies::extract_search_terms(name),
             ecosystem: "rust".to_string(),
+            project_paths: Vec::new(),
         }
     }
 
