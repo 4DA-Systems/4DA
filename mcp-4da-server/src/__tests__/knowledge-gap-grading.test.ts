@@ -146,3 +146,80 @@ describe("gradeGap — release announcements (aligned with content_dna_classifie
     ).toBe("low");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Already-patched suppression
+//
+// The audit's own headline claim was WRONG on impact, and this is the code that
+// makes it wrong. `knowledge_gaps` graded the three Hono CVEs `critical` on
+// hono 4.13.2 — every one of them is fixed in 4.12.34, and this repo had
+// already pinned past it via `pnpm.overrides` ("hono": ">=4.12.34 <5"). The
+// tool never compared the installed version against the fix.
+// ---------------------------------------------------------------------------
+
+import { versionInAnyRange, type AdvisoryRangeEvent } from "../tools/knowledge-gaps.js";
+
+/** The real OSV ranges for the three Hono advisories, verbatim. */
+const HONO_RANGES: AdvisoryRangeEvent[][] = [
+  [{ introduced: "3.8.0" }, { fixed: "4.12.34" }], // GHSA-f23p-vx2j-j53r
+  [{ introduced: "4.7.0" }, { fixed: "4.12.34" }], // GHSA-79qm-7rj5-m7r9
+  [{ introduced: "4.12.0" }, { fixed: "4.12.34" }], // GHSA-54fx-42gc-7vw4
+];
+
+describe("versionInAnyRange", () => {
+  it("reports the installed version as SAFE when it is past every fix", () => {
+    // 4.13.2 — the version actually installed when the audit called this critical.
+    expect(versionInAnyRange(HONO_RANGES, "4.13.2")).toBe(false);
+    expect(versionInAnyRange(HONO_RANGES, "4.12.34")).toBe(false);
+  });
+
+  it("reports a genuinely behind version as affected", () => {
+    expect(versionInAnyRange(HONO_RANGES, "4.12.33")).toBe(true);
+    expect(versionInAnyRange(HONO_RANGES, "4.8.0")).toBe(true);
+  });
+
+  it("treats a version below every `introduced` as unaffected", () => {
+    expect(versionInAnyRange(HONO_RANGES, "3.0.0")).toBe(false);
+  });
+
+  it("handles an open-ended range with no fix", () => {
+    const unfixed: AdvisoryRangeEvent[][] = [[{ introduced: "1.0.0" }]];
+    expect(versionInAnyRange(unfixed, "2.0.0")).toBe(true);
+    expect(versionInAnyRange(unfixed, "0.9.0")).toBe(false);
+  });
+
+  it("treats `introduced: 0` as affecting everything below the fix", () => {
+    const fromZero: AdvisoryRangeEvent[][] = [[{ introduced: "0" }, { fixed: "4.12.34" }]];
+    expect(versionInAnyRange(fromZero, "1.0.0")).toBe(true);
+    expect(versionInAnyRange(fromZero, "4.13.2")).toBe(false);
+  });
+
+  it("never claims safety on missing or unreadable version data", () => {
+    expect(versionInAnyRange(HONO_RANGES, null)).toBe(true);
+    expect(versionInAnyRange(HONO_RANGES, undefined)).toBe(true);
+    expect(versionInAnyRange(HONO_RANGES, "not-a-version")).toBe(true);
+    expect(versionInAnyRange([], "4.13.2")).toBe(false);
+  });
+});
+
+describe("gradeGap — already-patched dependencies", () => {
+  const honoCves = [
+    item("[CVE-2026-71850] Hono: `memo()` retains SSR output across requests", "cve"),
+    item("[CVE-2026-71849] Hono: Proxy Helper does not remove response headers", "cve"),
+    item("[CVE-2026-71848] Hono: Algorithmic Complexity DoS in Language Middleware", "cve"),
+  ];
+
+  it("does not raise a security grade for a dependency already past the fix", () => {
+    // The exact live case. Was `critical`; must not be.
+    expect(gradeGap(honoCves, "hono", versionInAnyRange(HONO_RANGES, "4.13.2"))).toBe("low");
+  });
+
+  it("still raises critical when the install really is behind", () => {
+    expect(gradeGap(honoCves, "hono", versionInAnyRange(HONO_RANGES, "4.12.0"))).toBe("critical");
+  });
+
+  it("defaults to the conservative grade when no version data is passed", () => {
+    // Callers without version information must not silently lose the alert.
+    expect(gradeGap(honoCves, "hono")).toBe("critical");
+  });
+});
