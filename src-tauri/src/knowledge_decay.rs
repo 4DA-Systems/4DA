@@ -549,7 +549,7 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
             &missed,
             days_since,
             &dep.package_name,
-            still_vulnerable(conn, &dep.package_name, dep.version.as_deref()),
+            still_vulnerable(conn, &dep.package_name, dep.version.as_deref(), &paths),
         );
 
         if severity == GapSeverity::Low && days_since < 14 {
@@ -866,7 +866,77 @@ fn quality_weight(title: &str) -> f32 {
 /// unreadable range, or an unknown installed version all count as STILL
 /// VULNERABLE. `check_version_affected` is the same primitive the OSV matcher
 /// uses, so the two surfaces cannot drift apart.
-fn still_vulnerable(conn: &rusqlite::Connection, package: &str, version: Option<&str>) -> bool {
+/// Installed versions of `package` in the projects this gap is actually about.
+///
+/// The gap scan iterates `project_dependencies`, which records what a MANIFEST
+/// declares — and its `version` column is NULL for every row in practice
+/// (measured live: 245 of 245), because versions are resolved from lockfiles
+/// into `user_dependencies`. Reading only the manifest table therefore handed
+/// `still_vulnerable` a `None` every single time, which took the conservative
+/// branch and made the version check inert: `hono` shipped as CRITICAL on
+/// 4.13.2 against advisories fixed in 4.12.34.
+///
+/// Scoped to `project_paths` on purpose. A package can sit at different
+/// versions in different checkouts — `hono` is 4.13.2 in `mcp-4da-server` but
+/// 4.9.10 and 4.11.1 in two unrelated repos — and a gap that names one project
+/// must be judged on THAT project's install, not on the worst copy anywhere on
+/// the machine.
+fn installed_versions_for(
+    conn: &rusqlite::Connection,
+    package: &str,
+    project_paths: &[String],
+) -> Vec<String> {
+    if project_paths.is_empty() {
+        return Vec::new();
+    }
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT project_path, version FROM user_dependencies
+         WHERE lower(package_name) = lower(?1) AND version IS NOT NULL AND version != ''",
+    ) else {
+        return Vec::new();
+    };
+    let Ok(rows) = stmt.query_map(params![package], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    }) else {
+        return Vec::new();
+    };
+
+    let wanted: Vec<String> = project_paths
+        .iter()
+        .map(|p| normalize_project_path(p))
+        .collect();
+
+    rows.flatten()
+        .filter(|(path, _)| {
+            let p = normalize_project_path(path);
+            wanted.iter().any(|w| &p == w)
+        })
+        .map(|(_, version)| version)
+        .collect()
+}
+
+/// Is the installed version of `package` still inside ANY stored advisory's
+/// affected range, for the projects this gap names?
+///
+/// Conservative in every direction: no advisories stored for the package, an
+/// unreadable range, or NO resolvable installed version all count as STILL
+/// VULNERABLE. Safety is never claimed on missing information.
+fn still_vulnerable(
+    conn: &rusqlite::Connection,
+    package: &str,
+    version: Option<&str>,
+    project_paths: &[String],
+) -> bool {
+    // Prefer the version the caller already has; otherwise resolve it from the
+    // lockfile-backed table for the projects this gap is about.
+    let resolved: Vec<String> = match version {
+        Some(v) if !v.trim().is_empty() => vec![v.to_string()],
+        _ => installed_versions_for(conn, package, project_paths),
+    };
+    if resolved.is_empty() {
+        return true; // no version anywhere -> cannot prove safety
+    }
+
     let Ok(mut stmt) = conn.prepare(
         "SELECT affected_ranges FROM osv_advisories
          WHERE lower(package_name) = lower(?1) AND withdrawn_at IS NULL",
@@ -880,9 +950,13 @@ fn still_vulnerable(conn: &rusqlite::Connection, package: &str, version: Option<
     let mut saw_any = false;
     for ranges in rows.flatten() {
         saw_any = true;
-        let (affected, _confirmed) = crate::osv::matching::check_version_affected(version, &ranges);
-        if affected {
-            return true;
+        // ANY installed copy still in range keeps the whole gap live.
+        for v in &resolved {
+            let (affected, _confirmed) =
+                crate::osv::matching::check_version_affected(Some(v.as_str()), &ranges);
+            if affected {
+                return true;
+            }
         }
     }
 
@@ -1795,11 +1869,29 @@ mod tests {
             "CREATE TABLE osv_advisories (
                  advisory_id TEXT, package_name TEXT, ecosystem TEXT,
                  affected_ranges TEXT, withdrawn_at TEXT
+             );
+             CREATE TABLE user_dependencies (
+                 project_path TEXT, package_name TEXT, version TEXT, ecosystem TEXT
              );",
         )
         .unwrap();
         conn
     }
+
+    /// Mirror of the live layout: `project_dependencies` carries the manifest
+    /// entry with a NULL version, and `user_dependencies` carries the resolved
+    /// one per checkout.
+    fn add_installed(conn: &rusqlite::Connection, project: &str, package: &str, version: &str) {
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem)
+             VALUES (?1, ?2, ?3, 'javascript')",
+            params![project, package, version],
+        )
+        .unwrap();
+    }
+
+    /// These cases pass an explicit version, so project scope never applies.
+    const NO_PROJECTS: &[String] = &[];
 
     fn add_advisory(conn: &rusqlite::Connection, package: &str, ranges: &str) {
         conn.execute(
@@ -1815,7 +1907,7 @@ mod tests {
         let conn = osv_conn();
         add_advisory(&conn, "hono", HONO_RANGES);
         assert!(
-            !still_vulnerable(&conn, "hono", Some("4.13.2")),
+            !still_vulnerable(&conn, "hono", Some("4.13.2"), NO_PROJECTS),
             "4.13.2 is past the 4.12.34 fix — the user already remediated this"
         );
     }
@@ -1824,7 +1916,7 @@ mod tests {
     fn an_install_inside_the_range_is_still_vulnerable() {
         let conn = osv_conn();
         add_advisory(&conn, "hono", HONO_RANGES);
-        assert!(still_vulnerable(&conn, "hono", Some("4.12.0")));
+        assert!(still_vulnerable(&conn, "hono", Some("4.12.0"), NO_PROJECTS));
     }
 
     #[test]
@@ -1833,16 +1925,205 @@ mod tests {
         add_advisory(&conn, "hono", HONO_RANGES);
 
         // Unknown installed version.
-        assert!(still_vulnerable(&conn, "hono", None));
+        assert!(still_vulnerable(&conn, "hono", None, NO_PROJECTS));
         // Package OSV knows nothing about.
-        assert!(still_vulnerable(&conn, "some-unscanned-pkg", Some("1.0.0")));
+        assert!(still_vulnerable(
+            &conn,
+            "some-unscanned-pkg",
+            Some("1.0.0"),
+            NO_PROJECTS
+        ));
         // Unreadable range.
         let conn2 = osv_conn();
         add_advisory(&conn2, "hono", "not json");
-        assert!(still_vulnerable(&conn2, "hono", Some("4.13.2")));
+        assert!(still_vulnerable(
+            &conn2,
+            "hono",
+            Some("4.13.2"),
+            NO_PROJECTS
+        ));
         // No osv_advisories table at all (older database).
         let bare = rusqlite::Connection::open_in_memory().unwrap();
-        assert!(still_vulnerable(&bare, "hono", Some("4.13.2")));
+        assert!(still_vulnerable(&bare, "hono", Some("4.13.2"), NO_PROJECTS));
+    }
+
+    // -----------------------------------------------------------------------
+    // Version resolution (2026-08-26, found by running the fix live)
+    //
+    // The gap scan walks `project_dependencies`, whose `version` column is NULL
+    // for every row in practice (245 of 245 live) — versions are resolved from
+    // lockfiles into `user_dependencies`. So `still_vulnerable` received `None`
+    // every time, took the conservative branch, and the whole version check was
+    // inert: `hono` shipped CRITICAL on 4.13.2 against advisories fixed in
+    // 4.12.34. Unit tests passed throughout because they supplied a version.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn a_null_manifest_version_resolves_from_the_installed_set() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+        // Exactly the live row: manifest version NULL, lockfile says 4.13.2.
+        add_installed(&conn, "d:/4da/mcp-4da-server", "hono", "4.13.2");
+
+        let paths = vec!["d:/4da/mcp-4da-server".to_string()];
+        assert!(
+            !still_vulnerable(&conn, "hono", None, &paths),
+            "a NULL manifest version must resolve from user_dependencies, not \
+             fall through to the conservative branch"
+        );
+    }
+
+    #[test]
+    fn resolution_is_scoped_to_the_projects_the_gap_names() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+        // The live spread: patched here, behind in two unrelated checkouts.
+        add_installed(&conn, "d:/4da/mcp-4da-server", "hono", "4.13.2");
+        add_installed(&conn, "c:/users/admin/documents/4da-repo", "hono", "4.11.1");
+        add_installed(&conn, "c:/users/admin/documents/navcal", "hono", "4.9.10");
+
+        assert!(
+            !still_vulnerable(&conn, "hono", None, &["d:/4da/mcp-4da-server".to_string()]),
+            "a gap naming the patched project must not be judged on a sibling repo's copy"
+        );
+        assert!(
+            still_vulnerable(
+                &conn,
+                "hono",
+                None,
+                &["c:/users/admin/documents/navcal".to_string()]
+            ),
+            "a gap naming the lagging project stays live"
+        );
+    }
+
+    #[test]
+    fn any_named_project_still_in_range_keeps_the_gap_live() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+        add_installed(&conn, "d:/4da/mcp-4da-server", "hono", "4.13.2");
+        add_installed(&conn, "d:/4da/other", "hono", "4.9.10");
+
+        assert!(
+            still_vulnerable(
+                &conn,
+                "hono",
+                None,
+                &[
+                    "d:/4da/mcp-4da-server".to_string(),
+                    "d:/4da/other".to_string()
+                ]
+            ),
+            "one exposed copy among the named projects is enough"
+        );
+    }
+
+    #[test]
+    fn resolution_normalizes_path_separators_and_case() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+        add_installed(&conn, "d:/4da/mcp-4da-server", "hono", "4.13.2");
+        // git_signals-style native path against the stored forward-slash form.
+        let paths = vec![r"D:\4DA\mcp-4da-server".to_string()];
+        assert!(
+            !still_vulnerable(&conn, "hono", None, &paths),
+            "path form must not decide whether a version is found"
+        );
+    }
+
+    #[test]
+    fn resolution_never_claims_safety_without_a_version() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+        // Package present in the advisory set but installed nowhere we can see.
+        assert!(still_vulnerable(
+            &conn,
+            "hono",
+            None,
+            &["d:/4da/unscanned".to_string()]
+        ));
+        // No projects named at all.
+        assert!(still_vulnerable(&conn, "hono", None, NO_PROJECTS));
+        // Empty-string version is not a version.
+        add_installed(&conn, "d:/4da/blank", "hono", "");
+        assert!(still_vulnerable(
+            &conn,
+            "hono",
+            None,
+            &["d:/4da/blank".to_string()]
+        ));
+    }
+
+    #[test]
+    fn an_explicit_version_still_wins_over_resolution() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+        // A lagging install exists, but the caller already knows the version.
+        add_installed(&conn, "d:/4da/mcp-4da-server", "hono", "4.9.10");
+        assert!(
+            !still_vulnerable(
+                &conn,
+                "hono",
+                Some("4.13.2"),
+                &["d:/4da/mcp-4da-server".to_string()]
+            ),
+            "an explicit version is authoritative and skips resolution"
+        );
+    }
+
+    /// Live check against the real database, opt-in and READ-ONLY.
+    ///
+    /// The previous version of this fix passed every unit test and was still
+    /// inert in production, because the table it read carried no versions. A
+    /// synthetic fixture cannot catch that class — only the real schema can.
+    ///
+    ///   FOURDA_VERIFY_DB=D:/4DA/data/4da.db cargo test --lib \
+    ///       live_hono_is_recognised_as_patched -- --ignored --nocapture
+    #[test]
+    #[ignore = "requires FOURDA_VERIFY_DB pointing at a real database"]
+    fn live_hono_is_recognised_as_patched() {
+        let Ok(path) = std::env::var("FOURDA_VERIFY_DB") else {
+            eprintln!("FOURDA_VERIFY_DB not set — nothing to verify");
+            return;
+        };
+        let conn = rusqlite::Connection::open_with_flags(
+            &path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("open live DB read-only");
+
+        // The manifest row really does carry a NULL version — that is the
+        // premise this fix exists to handle. If it ever stops being true the
+        // fix is still correct, but this assertion documents what was measured.
+        let manifest_version: Option<String> = conn
+            .query_row(
+                "SELECT version FROM project_dependencies WHERE package_name = 'hono' LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(None);
+        println!("project_dependencies.hono.version = {manifest_version:?}");
+
+        let installed =
+            installed_versions_for(&conn, "hono", &["d:/4da/mcp-4da-server".to_string()]);
+        println!("resolved installed versions       = {installed:?}");
+        assert!(
+            !installed.is_empty(),
+            "resolution must find the lockfile version for the named project"
+        );
+
+        let vulnerable = still_vulnerable(
+            &conn,
+            "hono",
+            manifest_version.as_deref(),
+            &["d:/4da/mcp-4da-server".to_string()],
+        );
+        println!("still_vulnerable(hono @ mcp-4da-server) = {vulnerable}");
+        assert!(
+            !vulnerable,
+            "hono is 4.13.2 in mcp-4da-server and every advisory is fixed in \
+             4.12.34 — it must not be reported as still vulnerable"
+        );
     }
 
     #[test]
