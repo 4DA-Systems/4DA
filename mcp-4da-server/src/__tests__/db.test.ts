@@ -304,6 +304,18 @@ describe("FourDADatabase.queryWithRetry", () => {
 // =============================================================================
 
 describe("standalone schema compatibility (is_direct regression)", () => {
+  // These two create a real SQLite file on disk and run the open-path migration
+  // over it. That is genuinely slow on a cold hosted Windows runner — measured
+  // at 11.7s and 12.6s in the `Fresh clone (windows-latest)` job against
+  // vitest's 5s default, while the same tests finish in well under a second
+  // locally. They failed that job on timeout alone, with 217 of 219 tests
+  // passing and no assertion ever failing: a red build reporting runner speed
+  // rather than a regression.
+  //
+  // The budget is deliberately generous. A timeout should catch a hang, not
+  // adjudicate how fast a disk is.
+  const COLD_RUNNER_TIMEOUT_MS = 60_000;
+
   async function withTmpDb(
     name: string,
     fn: (tmpPath: string) => void | Promise<void>,
@@ -350,7 +362,7 @@ describe("standalone schema compatibility (is_direct regression)", () => {
         db.close();
       }
     });
-  });
+  }, COLD_RUNNER_TIMEOUT_MS);
 
   it("legacy 5.0.2 standalone DB (no is_direct) is upgraded on open and the query succeeds", async () => {
     await withTmpDb("standalone-legacy", (tmpPath) => {
@@ -390,5 +402,5 @@ describe("standalone schema compatibility (is_direct regression)", () => {
         db.close();
       }
     });
-  });
+  }, COLD_RUNNER_TIMEOUT_MS);
 });

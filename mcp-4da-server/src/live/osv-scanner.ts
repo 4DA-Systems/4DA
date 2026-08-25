@@ -242,6 +242,7 @@ function mapVulnerability(
       .slice(0, 3),
     target: dep.target,
     platformActive: dep.platformActive,
+    sourceDirs: dep.sourceDirs ?? [],
   };
 }
 

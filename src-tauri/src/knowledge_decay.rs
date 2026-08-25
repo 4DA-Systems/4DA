@@ -14,7 +14,7 @@
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::error::Result;
 use crate::evidence::{
@@ -363,6 +363,60 @@ const NODE_BUILTINS: &[&str] = &[
 ];
 
 /// Detect knowledge gaps across all tracked dependencies
+/// Shortest dependency name accepted for title matching. Four characters is
+/// where real packages begin in practice (`hono`, `axum`, `sqlx`, `uuid`);
+/// below that a word-boundary hit is still dominated by English noise.
+const MIN_MATCHABLE_NAME_LEN: usize = 4;
+
+/// Runaway guard on the number of unique dependencies scanned in one pass.
+/// Set far above any realistic dependency surface (a large multi-workspace repo
+/// measured 184) because the per-dependency cost is now a pass over a
+/// pre-loaded candidate slice, not a fresh table scan.
+const MAX_SCANNED_DEPS: usize = 500;
+
+/// May this dependency name be matched against item titles at all?
+///
+/// This replaces a blanket `len() < 5` cutoff — a character count standing in
+/// for "might match the wrong thing". That cutoff was both redundant and
+/// harmful. Redundant because [`keyword_misses_from`] already requires a
+/// WORD-BOUNDARY match, which is the real defence against `co` matching
+/// "code". Harmful because it silently excluded 216 real packages, 125 of them
+/// exactly four characters — `axum`, `clap`, `sqlx`, `uuid`, `vite`, `next`,
+/// `rkyv` — and `hono`, whose three unread advisories included a cross-user
+/// data disclosure (CVE-2026-71850). The panel reported "no gaps detected —
+/// your knowledge is current" while holding all three.
+///
+/// Ambiguity is now decided by `package_ambiguity`, a curated list built from
+/// live false-positive audits: precision by evidence rather than by name
+/// length. Names of three characters or fewer still stay out — at that length
+/// even a word-boundary hit is dominated by English noise ("ai", "co", "ws")
+/// and no curated list can enumerate them all.
+fn dep_name_is_matchable(name: &str) -> bool {
+    name.len() >= MIN_MATCHABLE_NAME_LEN
+        && !crate::package_ambiguity::is_ambiguous_package_name(name)
+}
+
+/// Is this dependency close enough to the user to be worth a gap?
+///
+/// A direct, non-dev dependency needs no further proof: the user wrote it into
+/// a manifest by hand, which IS the statement that it is their stack. Requiring
+/// it to *also* appear in [`build_tech_domain`] can only produce false
+/// negatives, because that domain is small and hand-entered — measured live at
+/// five entries (`axum`, `react`, `tauri`, `typescript`, +1). `hono`, a direct
+/// runtime dependency of `mcp-4da-server`, matched none of them and was dropped
+/// along with three unread advisories, one a cross-user data disclosure.
+///
+/// Transitive and dev dependencies still face the domain filter: there are
+/// thousands of them and the user chose none individually.
+fn dep_is_relevant(
+    is_direct: bool,
+    is_dev: bool,
+    name: &str,
+    domain: &std::collections::HashSet<String>,
+) -> bool {
+    (is_direct && !is_dev) || is_dep_in_domain(name, domain)
+}
+
 pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<KnowledgeGap>> {
     let start = std::time::Instant::now();
     // Get all tracked dependencies
@@ -405,6 +459,9 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         "Processing dependencies for knowledge gaps"
     );
 
+    // One scan, reused by every dependency below.
+    let candidates = load_gap_candidates(conn)?;
+
     let mut gaps = Vec::new();
     let mut processed_count: usize = 0;
 
@@ -416,12 +473,19 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         };
 
         processed_count += 1;
-        if processed_count > 50 {
-            break; // Hard cap: don't scan more than 50 unique deps
+        if processed_count > MAX_SCANNED_DEPS {
+            // Runaway guard only. Never a silent truncation: if this fires, the
+            // surface is knowingly incomplete and must say so.
+            warn!(
+                target: "4da::knowledge_decay",
+                scanned = MAX_SCANNED_DEPS,
+                remaining = seen_deps.len(),
+                "Knowledge-gap scan hit its dependency ceiling — coverage is incomplete"
+            );
+            break;
         }
 
-        // Skip deps with very short names — too generic for matching
-        if dep.package_name.len() < 5 {
+        if !dep_name_is_matchable(&dep.package_name) {
             continue;
         }
 
@@ -435,8 +499,19 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
             continue;
         }
 
-        // Domain filter: only show gaps for deps relevant to user's tech stack
-        if !is_dep_in_domain(&dep.package_name, &domain) {
+        // Domain filter — applied only to dependencies the user did NOT choose.
+        //
+        // A direct, non-dev dependency IS the user's stack: they wrote it into a
+        // manifest by hand. Asking it to *also* appear in the onboarding domain
+        // can only produce false negatives, because that domain is tiny and
+        // hand-entered (measured live: five entries — axum, react, tauri,
+        // typescript, +1). `hono`, a direct runtime dependency of
+        // `mcp-4da-server`, matched none of them and was dropped along with
+        // three unread advisories, one a cross-user data disclosure.
+        //
+        // Transitive and dev dependencies still need the filter: there are
+        // thousands of them and the user never chose any individually.
+        if !dep_is_relevant(dep.is_direct, dep.is_dev, &dep.package_name, &domain) {
             continue;
         }
 
@@ -460,7 +535,7 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         }
 
         // Unread items whose title names this dependency (word-boundary matched).
-        let missed = find_keyword_misses(conn, &dep.package_name)?;
+        let missed = keyword_misses_from(&candidates, &dep.package_name);
         if missed.is_empty() {
             continue;
         }
@@ -468,8 +543,14 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         // Check if user has engaged with any items about this dep
         let days_since = days_since_last_engagement(conn, &dep.package_name)?;
 
-        // Classify severity
-        let severity = classify_severity(&missed, days_since, &dep.package_name);
+        // Classify severity. A security advisory only escalates the gap while
+        // the installed version is genuinely still inside its affected range.
+        let severity = classify_severity(
+            &missed,
+            days_since,
+            &dep.package_name,
+            still_vulnerable(conn, &dep.package_name, dep.version.as_deref()),
+        );
 
         if severity == GapSeverity::Low && days_since < 14 {
             continue; // Skip low-severity recent items
@@ -513,42 +594,56 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
     Ok(gaps)
 }
 
-/// Keyword (title) matches for a dependency: SQL LIKE + word-boundary + dedup +
-/// quality filter, capped at 5. The fast, exact path — items that name the
-/// dependency in their title.
-fn find_keyword_misses(conn: &rusqlite::Connection, package_name: &str) -> Result<Vec<MissedItem>> {
-    // Title-only matching (content LIKE is too noisy for short dep names).
-    // content_type filtering: drop noise categories at the DB level using the
-    // classification already computed at ingestion by content_dna. Items with
-    // NULL content_type (legacy rows) pass through and get title-based fallback.
-    let pattern = format!("%{package_name}%");
+/// One unread item eligible to become a missed signal, with its title
+/// pre-lowercased for matching.
+struct GapCandidate {
+    item: MissedItem,
+    content_type: Option<String>,
+    /// Lowercased title. Precomputed because the word-boundary matcher is
+    /// applied once per (candidate, dependency) pair — lowercasing inside that
+    /// loop allocated a fresh `String` millions of times per pass.
+    title_lower: String,
+}
 
+/// Load every unread, un-dismissed candidate item ONCE per detection pass.
+///
+/// This replaces a per-dependency `title LIKE '%name%'` query. That shape cost
+/// one full 44k-row scan per dependency, which is why the caller carried a hard
+/// 50-dependency cap — and that cap, not any relevance judgement, is what hid
+/// the `hono` CVEs: `hono` sits at unique position 96 of 184, so the scan
+/// stopped 46 dependencies before reaching it.
+///
+/// One scan feeding many matchers removes the reason for the cap. The
+/// `content_type` exclusions stay at the DB level, where the classification
+/// computed at ingestion by `content_dna` already lives; rows with a NULL
+/// `content_type` (legacy) pass through to the title-based fallback below.
+fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>> {
     let mut stmt = conn.prepare(
         "SELECT si.id, si.title, si.url, si.source_type, si.created_at, si.content_type
              FROM source_items si
              LEFT JOIN feedback f ON f.source_item_id = si.id
-             WHERE si.title LIKE ?1
-               AND si.created_at >= datetime('now', '-30 days')
+             WHERE si.created_at >= datetime('now', '-30 days')
                AND f.id IS NULL
                AND (si.content_type IS NULL
                     OR si.content_type NOT IN ('show_and_tell','tutorial','question',
                                                'help_request','hiring','clickbait'))
-             ORDER BY si.created_at DESC
-             LIMIT 30",
+             ORDER BY si.created_at DESC",
     )?;
 
-    let candidates: Vec<(MissedItem, Option<String>)> = stmt
-        .query_map(params![pattern], |row| {
-            Ok((
-                MissedItem {
+    let candidates: Vec<GapCandidate> = stmt
+        .query_map([], |row| {
+            let title: String = row.get(1)?;
+            Ok(GapCandidate {
+                title_lower: title.to_lowercase(),
+                item: MissedItem {
                     item_id: row.get(0)?,
-                    title: row.get(1)?,
+                    title,
                     url: row.get(2)?,
                     source_type: row.get(3)?,
                     created_at: row.get(4)?,
                 },
-                row.get::<_, Option<String>>(5)?,
-            ))
+                content_type: row.get::<_, Option<String>>(5)?,
+            })
         })?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
@@ -559,26 +654,31 @@ fn find_keyword_misses(conn: &rusqlite::Connection, package_name: &str) -> Resul
         })
         .collect();
 
-    // Post-filter: verify word-boundary match in title to avoid false positives
-    // e.g. "next" should match "Next.js" or "next release" but not "unexpected"
+    Ok(candidates)
+}
+
+/// Keyword (title) matches for one dependency, drawn from the pre-loaded
+/// candidate set: word-boundary + dedup + quality filter, capped at 5.
+///
+/// Word-boundary matching is what keeps short names honest — "next" matches
+/// "Next.js" and "next release" but never "unexpected". It is the reason the
+/// caller does not need to exclude dependencies by name length.
+fn keyword_misses_from(candidates: &[GapCandidate], package_name: &str) -> Vec<MissedItem> {
     let dep_lower = package_name.to_lowercase();
 
     // Deduplicate by normalized title (first 10 words, lowercased, stripped punctuation)
     let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let items: Vec<MissedItem> = candidates
-        .into_iter()
-        .filter(|(item, _ct)| has_word_boundary_match(&item.title, &dep_lower))
-        .filter(|(item, _ct)| {
-            let normalized = normalize_gap_title(&item.title);
-            seen_titles.insert(normalized)
-        })
+    candidates
+        .iter()
+        // Cheap substring reject first; the boundary walk only runs on hits.
+        .filter(|c| c.title_lower.contains(&dep_lower))
+        .filter(|c| crate::utils::has_word_boundary_match_with_ext(&c.title_lower, &dep_lower))
+        .filter(|c| seen_titles.insert(normalize_gap_title(&c.item.title)))
         // Title-based fallback only for legacy items without stored content_type
-        .filter(|(item, ct)| ct.is_some() || !is_low_quality_signal(&item.title))
-        .map(|(item, _ct)| item)
+        .filter(|c| c.content_type.is_some() || !is_low_quality_signal(&c.item.title))
+        .map(|c| c.item.clone())
         .take(5)
-        .collect();
-
-    Ok(items)
+        .collect()
 }
 
 /// Check if `text` contains `term` at a word boundary (not embedded in a larger
@@ -751,7 +851,51 @@ fn quality_weight(title: &str) -> f32 {
     }
 }
 
-fn classify_severity(missed: &[MissedItem], days_since: u32, dep_name: &str) -> GapSeverity {
+/// Is the installed version of `package` still inside ANY stored advisory's
+/// affected range?
+///
+/// An advisory naming your dependency is only a gap if you are still exposed.
+/// Without this, widening the scan (four-character names, the raised cap, the
+/// direct-dependency exemption) surfaces `hono` — whose three unread CVEs are
+/// all fixed in 4.12.34, against an installed 4.13.2 that this repo had already
+/// pinned past via `pnpm.overrides`. The panel would report a CRITICAL gap for
+/// something the user had already remediated, which is exactly the false
+/// positive the widening was meant to avoid creating.
+///
+/// Conservative in every direction: no advisories stored for the package, an
+/// unreadable range, or an unknown installed version all count as STILL
+/// VULNERABLE. `check_version_affected` is the same primitive the OSV matcher
+/// uses, so the two surfaces cannot drift apart.
+fn still_vulnerable(conn: &rusqlite::Connection, package: &str, version: Option<&str>) -> bool {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT affected_ranges FROM osv_advisories
+         WHERE lower(package_name) = lower(?1) AND withdrawn_at IS NULL",
+    ) else {
+        return true;
+    };
+    let Ok(rows) = stmt.query_map(params![package], |row| row.get::<_, Option<String>>(0)) else {
+        return true;
+    };
+
+    let mut saw_any = false;
+    for ranges in rows.flatten() {
+        saw_any = true;
+        let (affected, _confirmed) = crate::osv::matching::check_version_affected(version, &ranges);
+        if affected {
+            return true;
+        }
+    }
+
+    // Nothing stored about this package — say nothing about its safety.
+    !saw_any
+}
+
+fn classify_severity(
+    missed: &[MissedItem],
+    days_since: u32,
+    dep_name: &str,
+    still_vulnerable: bool,
+) -> GapSeverity {
     let dep_lower = dep_name.to_lowercase();
 
     let has_security = missed.iter().any(|item| {
@@ -784,7 +928,10 @@ fn classify_severity(missed: &[MissedItem], days_since: u32, dep_name: &str) -> 
     };
     let gap_score = weighted_score * days_factor;
 
-    if has_security {
+    // A security advisory only escalates while the install is still exposed.
+    // An already-patched dependency can still be worth reading about, so the
+    // gap survives at its unweighted tier — it just stops shouting.
+    if has_security && still_vulnerable {
         GapSeverity::Critical
     } else if has_breaking || gap_score >= 5.0 {
         GapSeverity::High
@@ -1438,6 +1585,285 @@ mod tests {
             !item.evidence[0].relevance_note.contains("missed item #"),
             "citation note should not be generic: {}",
             item.evidence[0].relevance_note
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Short-name blind spot (2026-08-25 live Signal audit)
+    //
+    // The app rendered "No gaps detected — your knowledge is current" while the
+    // corpus held three unread Hono advisories, one a cross-user data
+    // disclosure. Two independent causes, both required for the miss:
+    //   * `hono` is four characters and a `len() < 5` gate dropped it outright;
+    //   * the scan stopped after 50 unique dependencies; `hono` sits at 96/184.
+    // -----------------------------------------------------------------------
+
+    fn cand(id: i64, title: &str, content_type: Option<&str>) -> GapCandidate {
+        GapCandidate {
+            title_lower: title.to_lowercase(),
+            item: MissedItem {
+                item_id: id,
+                title: title.to_string(),
+                url: None,
+                source_type: "cve".to_string(),
+                created_at: "2026-08-12 01:34:41".to_string(),
+            },
+            content_type: content_type.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn four_character_package_names_are_matchable() {
+        // The name that was lost, plus the rest of the four-character bucket
+        // measured in the live dependency set (125 packages).
+        for name in [
+            "hono", "axum", "sqlx", "uuid", "vite", "rkyv", "yaml", "zstd",
+        ] {
+            assert!(
+                dep_name_is_matchable(name),
+                "{name} is a real package and must be scanned"
+            );
+        }
+    }
+
+    #[test]
+    fn ambiguous_names_are_still_excluded_regardless_of_length() {
+        // Curated from live false-positive audits ("Tower Bridge", "Defense
+        // Express"). Length never decided these; evidence did.
+        // `next` and `clap` belong here, not with the matchable four-character
+        // names: both are four characters AND everyday words, so the curated
+        // list — not the length rule — is what keeps them out. That split is
+        // the whole point: length was never the right discriminator.
+        for name in [
+            "log", "http", "ring", "time", "rand", "tower", "next", "clap",
+        ] {
+            assert!(
+                !dep_name_is_matchable(name),
+                "{name} is audit-confirmed ambiguous and must stay excluded"
+            );
+        }
+    }
+
+    #[test]
+    fn very_short_names_stay_excluded() {
+        for name in ["ai", "co", "ws", "rc", "bl", "der", "nom"] {
+            assert!(
+                !dep_name_is_matchable(name),
+                "{name} is too short for title matching to be meaningful"
+            );
+        }
+    }
+
+    #[test]
+    fn short_dependency_name_finds_its_real_advisories() {
+        let candidates = vec![
+            cand(
+                192,
+                "[CVE-2026-71850] Hono: memo() retains SSR output across requests",
+                None,
+            ),
+            cand(
+                193,
+                "[CVE-2026-71849] Hono: Proxy Helper does not remove response headers",
+                None,
+            ),
+            cand(
+                194,
+                "[CVE-2026-71848] Hono: Algorithmic Complexity DoS in Language Middleware",
+                None,
+            ),
+            // Must NOT match: `hono` embedded inside a longer word.
+            cand(900, "Phonology of consonant clusters in synthesis", None),
+            cand(901, "Building a phonograph simulator in Rust", None),
+        ];
+
+        let missed = keyword_misses_from(&candidates, "hono");
+        let ids: Vec<i64> = missed.iter().map(|m| m.item_id).collect();
+        assert_eq!(
+            ids,
+            vec![192, 193, 194],
+            "all three real advisories surface; no embedded-substring match does"
+        );
+    }
+
+    #[test]
+    fn word_boundary_still_rejects_embedded_matches_for_short_names() {
+        let candidates = vec![
+            cand(1, "Unexpected panic in the parser", None),
+            cand(2, "Next.js 15 release notes", None),
+        ];
+        let missed = keyword_misses_from(&candidates, "next");
+        assert_eq!(missed.len(), 1, "next matches Next.js but not 'unexpected'");
+        assert_eq!(missed[0].item_id, 2);
+    }
+
+    #[test]
+    fn keyword_misses_dedupe_and_cap_at_five() {
+        let mut candidates: Vec<GapCandidate> = (0..8)
+            .map(|i| cand(i, &format!("hono security advisory number {i}"), None))
+            .collect();
+        // An identical title must collapse into the first.
+        candidates.push(cand(100, "hono security advisory number 0", None));
+
+        let missed = keyword_misses_from(&candidates, "hono");
+        assert_eq!(missed.len(), 5, "capped at five citations");
+        let unique: std::collections::HashSet<String> = missed
+            .iter()
+            .map(|m| normalize_gap_title(&m.title))
+            .collect();
+        assert_eq!(unique.len(), missed.len(), "no duplicate titles survive");
+    }
+
+    /// The live onboarding domain, verbatim from the machine that produced the
+    /// miss. Deliberately small — that is the point.
+    fn live_domain() -> std::collections::HashSet<String> {
+        ["axum", "react", "tauri", "typescript"]
+            .into_iter()
+            .map(str::to_string)
+            .collect()
+    }
+
+    #[test]
+    fn a_declared_direct_dependency_needs_no_domain_membership() {
+        let domain = live_domain();
+        // Premise: the domain genuinely does not admit hono. If this ever
+        // starts passing, the exemption below is no longer load-bearing.
+        assert!(
+            !is_dep_in_domain("hono", &domain),
+            "guard premise: a 5-entry hand-entered domain does not contain hono"
+        );
+
+        assert!(
+            dep_is_relevant(true, false, "hono", &domain),
+            "a direct runtime dependency IS the user's stack"
+        );
+    }
+
+    #[test]
+    fn transitive_and_dev_dependencies_still_face_the_domain_filter() {
+        let domain = live_domain();
+        // Transitive: user never chose it individually.
+        assert!(!dep_is_relevant(false, false, "hono", &domain));
+        // Dev-only direct dep: declared, but not shipped.
+        assert!(!dep_is_relevant(true, true, "hono", &domain));
+        // In-domain transitive still passes on its own merits.
+        assert!(dep_is_relevant(false, false, "axum", &domain));
+    }
+
+    #[test]
+    fn a_gap_built_from_short_name_advisories_is_substantive() {
+        // End of the chain: the panel only ships gaps carrying consequence, so
+        // the short-name fix only matters if the resulting gap passes that bar.
+        let candidates = vec![cand(
+            192,
+            "[CVE-2026-71850] Hono: memo() retains SSR output across requests",
+            None,
+        )];
+        let gap = KnowledgeGap {
+            dependency: "hono".to_string(),
+            version: Some("4.13.2".to_string()),
+            project_path: "d:/4da/mcp-4da-server".to_string(),
+            missed_items: keyword_misses_from(&candidates, "hono"),
+            gap_severity: GapSeverity::Critical,
+            days_since_last_engagement: 13,
+        };
+        assert!(!gap.missed_items.is_empty());
+        assert!(
+            gap_is_substantive(&gap),
+            "a CVE-bearing gap must reach the panel"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Already-patched suppression
+    //
+    // Widening the scan (four-character names, the raised cap, the direct-dep
+    // exemption) makes `hono` reachable — and all three of its unread CVEs are
+    // fixed in 4.12.34 against an installed 4.13.2 this repo had already pinned
+    // past. Without a version check the widening would trade one false negative
+    // for a false CRITICAL, which is a strictly worse deal on a security
+    // surface.
+    // -----------------------------------------------------------------------
+
+    /// The real OSV ranges for the three Hono advisories, verbatim.
+    const HONO_RANGES: &str =
+        r#"[{"type":"SEMVER","events":[{"introduced":"3.8.0"},{"fixed":"4.12.34"}]}]"#;
+
+    fn osv_conn() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE osv_advisories (
+                 advisory_id TEXT, package_name TEXT, ecosystem TEXT,
+                 affected_ranges TEXT, withdrawn_at TEXT
+             );",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn add_advisory(conn: &rusqlite::Connection, package: &str, ranges: &str) {
+        conn.execute(
+            "INSERT INTO osv_advisories (advisory_id, package_name, ecosystem, affected_ranges)
+             VALUES ('GHSA-test', ?1, 'npm', ?2)",
+            params![package, ranges],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn an_install_past_every_fix_is_not_still_vulnerable() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+        assert!(
+            !still_vulnerable(&conn, "hono", Some("4.13.2")),
+            "4.13.2 is past the 4.12.34 fix — the user already remediated this"
+        );
+    }
+
+    #[test]
+    fn an_install_inside_the_range_is_still_vulnerable() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+        assert!(still_vulnerable(&conn, "hono", Some("4.12.0")));
+    }
+
+    #[test]
+    fn safety_is_never_claimed_on_missing_information() {
+        let conn = osv_conn();
+        add_advisory(&conn, "hono", HONO_RANGES);
+
+        // Unknown installed version.
+        assert!(still_vulnerable(&conn, "hono", None));
+        // Package OSV knows nothing about.
+        assert!(still_vulnerable(&conn, "some-unscanned-pkg", Some("1.0.0")));
+        // Unreadable range.
+        let conn2 = osv_conn();
+        add_advisory(&conn2, "hono", "not json");
+        assert!(still_vulnerable(&conn2, "hono", Some("4.13.2")));
+        // No osv_advisories table at all (older database).
+        let bare = rusqlite::Connection::open_in_memory().unwrap();
+        assert!(still_vulnerable(&bare, "hono", Some("4.13.2")));
+    }
+
+    #[test]
+    fn a_patched_dependency_does_not_escalate_to_critical() {
+        let missed = vec![MissedItem {
+            item_id: 192,
+            title: "[CVE-2026-71850] Hono: memo() retains SSR output across requests".to_string(),
+            url: None,
+            source_type: "cve".to_string(),
+            created_at: "2026-08-12 01:34:41".to_string(),
+        }];
+
+        assert_eq!(
+            classify_severity(&missed, 13, "hono", true),
+            GapSeverity::Critical,
+            "a genuinely exposed install still escalates"
+        );
+        assert_ne!(
+            classify_severity(&missed, 13, "hono", false),
+            GapSeverity::Critical,
+            "an already-patched install must not be reported as critical"
         );
     }
 }

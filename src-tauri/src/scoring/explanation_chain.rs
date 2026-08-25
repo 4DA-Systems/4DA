@@ -34,9 +34,8 @@ use super::ace_context::ACEContext;
 use super::aliases;
 use super::context::is_low_quality_topic;
 use super::dependencies::DepMatch;
-use super::explanation::extract_short_phrase;
 use super::utils::has_word_boundary_match;
-use crate::{context_engine, ExplanationFactor, FactorKind, RelevanceMatch};
+use crate::{context_engine, scoring_config, ExplanationFactor, FactorKind, RelevanceMatch};
 
 /// Everything the chain builder needs, gathered from values the pipeline
 /// already computed. All evidence must come from here — the builder performs
@@ -114,6 +113,22 @@ fn trust_rank(kind: FactorKind) -> u8 {
     }
 }
 
+/// Shorten a source path to its last two segments (`db/vector.rs`), enough to
+/// identify the file without a wall of absolute path. The full path always
+/// travels in the factor's `evidence`, so nothing is lost.
+fn short_source_path(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    let segments: Vec<&str> = normalized
+        .split('/')
+        .filter(|s| !s.is_empty() && *s != ".")
+        .collect();
+    match segments.as_slice() {
+        [] => normalized.clone(),
+        [only] => (*only).to_string(),
+        [.., parent, file] => format!("{parent}/{file}"),
+    }
+}
+
 fn provenance(d: &DepMatch) -> &'static str {
     if d.is_dev {
         "dev-only"
@@ -166,18 +181,41 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
         // your ecosystem" line is exactly the un-evidenced template this
         // module exists to kill.
         if !evidence_parts.is_empty() || named_dep.is_some() {
-            let display = match named_dep {
-                Some(dep) => format!("Security advisory affects your dependency {dep}"),
-                None => match inp.advisory_id.map(str::trim).filter(|s| !s.is_empty()) {
+            // Name the project when it is known. "your dependency axios" reads
+            // as a claim about the app the reader is looking at; the package
+            // can equally belong to a different repository on their machine,
+            // and without the location they cannot act on the finding.
+            let dep_location = inp
+                .display_deps
+                .first()
+                .and_then(|d| super::dependencies::project_label(&d.project_paths));
+            let display = match (named_dep, dep_location.as_deref()) {
+                (Some(dep), Some(location)) => {
+                    format!("Security advisory affects {dep} in {location}")
+                }
+                (Some(dep), None) => format!("Security advisory affects your dependency {dep}"),
+                (None, _) => match inp.advisory_id.map(str::trim).filter(|s| !s.is_empty()) {
                     Some(id) => format!("Security advisory {id}"),
                     None => String::new(),
                 },
             };
             if !display.is_empty() {
-                if evidence_parts.is_empty() {
-                    // named_dep is Some here (display would be empty otherwise)
-                    if let (Some(dep), Some(dm)) = (named_dep, inp.display_deps.first()) {
-                        evidence_parts.push(format!("{dep} ({})", provenance(dm)));
+                // The package line is a FALLBACK when nothing else is nameable
+                // — but its location is not. A reader who has the advisory id
+                // and the CVSS still cannot act without knowing which checkout
+                // holds the vulnerable copy, so the location is carried
+                // whenever it is known.
+                if let (Some(dep), Some(dm)) = (named_dep, inp.display_deps.first()) {
+                    match (evidence_parts.is_empty(), dep_location.as_deref()) {
+                        (true, Some(location)) => {
+                            evidence_parts
+                                .push(format!("{dep} ({} in {location})", provenance(dm)));
+                        }
+                        (true, None) => {
+                            evidence_parts.push(format!("{dep} ({})", provenance(dm)));
+                        }
+                        (false, Some(location)) => evidence_parts.push(format!("in {location}")),
+                        (false, None) => {}
                     }
                 }
                 factors.push(WeightedFactor {
@@ -333,21 +371,56 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
     }
 
     // ── 5. Project-context similarity (KNN against the user's own files) ─
-    if inp.context_score >= 0.3 {
-        if let Some(m) = inp.matches.first() {
-            let phrase = extract_short_phrase(&m.matched_text);
-            if !phrase.is_empty() && !m.source_file.trim().is_empty() {
-                factors.push(WeightedFactor {
-                    kind: FactorKind::ContextMatch,
-                    display: format!("Similar to your code: \"{phrase}\""),
-                    evidence: format!(
-                        "{} ({}% similar)",
-                        m.source_file,
-                        (m.similarity * 100.0).round() as i32
-                    ),
-                    weight: inp.context_score,
-                });
-            }
+    //
+    // TRUTHFULNESS GATE (2026-08-25 live Signal audit). Three defects together
+    // made this factor read as fabricated evidence on real security advisories:
+    //
+    //  1. The claim was gated on the AGGREGATE `context_score >= 0.3` while the
+    //     evidence quoted the individual match's own similarity — so a weak
+    //     match displayed whenever the aggregate cleared the bar. Worse, 0.3 is
+    //     BELOW `CONTEXT_THRESHOLD`, the bar this same pipeline uses to call a
+    //     context axis confirmed: the chain asserted a relationship the scorer
+    //     itself would not have counted.
+    //
+    //  2. `extract_short_phrase` returns the chunk's opening sentence, and a
+    //     Rust chunk opens with its doc comment — so the quoted "code" was
+    //     systematically a natural-language COMMENT. Live output paired the
+    //     axios `maxBodyLength` bypass with `/// Maximum content length per
+    //     feed item (100KB)`. `context_admission` is right that the FILE is
+    //     code; the quoted LINE is the one part of it that is not, and prose
+    //     embeddings match arbitrary text by construction — the same mechanism
+    //     that produced `Similar to your code: "Nunca perca entregas"`.
+    //
+    //  3. It fired alongside hard evidence. An advisory already grounded in a
+    //     real dependency gains nothing from a prose resemblance, and a
+    //     visibly weak one discredits the hard factor sitting beside it.
+    //
+    // So: require the MATCH itself to clear the confirmation bar, name the file
+    // (identity-bearing and openable by the reader) instead of quoting a
+    // comment, and stay silent when harder evidence already carries the item.
+    let already_grounded = factors.iter().any(|f| {
+        matches!(
+            f.kind,
+            FactorKind::SecurityAdvisory | FactorKind::DependencyMatch
+        )
+    });
+    if !already_grounded && inp.context_score >= scoring_config::CONTEXT_THRESHOLD {
+        if let Some(m) = inp.matches.iter().find(|m| {
+            m.similarity >= scoring_config::CONTEXT_THRESHOLD && !m.source_file.trim().is_empty()
+        }) {
+            factors.push(WeightedFactor {
+                kind: FactorKind::ContextMatch,
+                display: format!(
+                    "Similar to your code in {}",
+                    short_source_path(&m.source_file)
+                ),
+                evidence: format!(
+                    "{} ({}% similar)",
+                    m.source_file,
+                    (m.similarity * 100.0).round() as i32
+                ),
+                weight: inp.context_score,
+            });
         }
     }
 

@@ -531,6 +531,7 @@ mod tests {
             is_direct: direct,
             search_terms: vec![],
             ecosystem: "rust".to_string(),
+            project_paths: Vec::new(),
         }
     }
 

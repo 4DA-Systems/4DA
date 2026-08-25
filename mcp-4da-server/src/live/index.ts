@@ -113,6 +113,8 @@ export class LiveIntelligence {
     const allResolved: ResolvedDependency[] = [];
     const allAudit: ResolvedDependency[] = [];
     for (const { dir, language, deps, devDeps } of groups) {
+      // Each resolver stamps `sourceDirs: [dir]` at the point of resolution, so
+      // the dedupe below can union provenance instead of discarding it.
       allResolved.push(...resolveVersions(dir, deps, devDeps, language));
       allAudit.push(...resolveAuditVersions(dir, deps, devDeps, language));
     }
@@ -318,8 +320,14 @@ function dedupeDependencies(deps: ResolvedDependency[]): ResolvedDependency[] {
       // A crate reachable via ANY active path is active; keep a target label if present.
       existing.platformActive ||= dep.platformActive;
       existing.target = existing.target ?? dep.target;
+      // Union the provenance rather than discarding it — the same version can
+      // legitimately be pinned by several workspaces, and the reader needs all
+      // of them to know where to apply the fix.
+      for (const dir of dep.sourceDirs ?? []) {
+        if (!existing.sourceDirs.includes(dir)) existing.sourceDirs.push(dir);
+      }
     } else {
-      unique.set(key, { ...dep });
+      unique.set(key, { ...dep, sourceDirs: [...(dep.sourceDirs ?? [])] });
     }
   }
   return [...unique.values()];

@@ -7,6 +7,7 @@
 
 import type { FourDADatabase } from "../db.js";
 import type { DependencyWithProjectRow, SourceItemBriefRow } from "../types.js";
+import { compareSemver, parseSemver } from "../live/semver-utils.js";
 
 // Word-boundary matching prevents "cve" matching inside "achieve", "receiver", etc.
 function hasWordBoundary(text: string, term: string): boolean {
@@ -25,6 +26,126 @@ function escapeRegExp(s: string): string {
 function mentionsPackage(text: string, pkg: string): boolean {
   const regex = new RegExp(`(^|[^A-Za-z0-9_-])${escapeRegExp(pkg)}($|[^A-Za-z0-9_-])`, "i");
   return regex.test(text);
+}
+
+/** One `introduced`/`fixed` event pair from an OSV affected range. */
+export interface AdvisoryRangeEvent {
+  introduced?: string;
+  fixed?: string;
+}
+
+/**
+ * Is `installed` inside `[introduced, fixed)` for any of these advisory ranges?
+ *
+ * An advisory naming your dependency is only a gap if you are actually exposed.
+ * Grading skipped this entirely: the live tool reported the three Hono CVEs as
+ * a `critical` gap on hono **4.13.2**, when all three are fixed in **4.12.34** —
+ * a version this repo had already pinned past via `pnpm.overrides`. The user
+ * was told to worry about something they had already remediated.
+ *
+ * Conservative by construction: an unparseable installed version, or an
+ * advisory whose range cannot be read, counts as AFFECTED. Never claim someone
+ * is safe on missing information.
+ */
+export function versionInAnyRange(
+  ranges: AdvisoryRangeEvent[][],
+  installed: string | null | undefined,
+): boolean {
+  if (!installed || parseSemver(installed) === null) return true;
+
+  for (const events of ranges) {
+    let introduced: string | null = null;
+    for (const event of events) {
+      if (typeof event.introduced === "string") introduced = event.introduced;
+      if (typeof event.fixed === "string" && introduced !== null) {
+        const atOrAfterIntroduced =
+          introduced === "0" || compareSemver(installed, introduced) >= 0;
+        const beforeFix = compareSemver(installed, event.fixed) < 0;
+        if (atOrAfterIntroduced && beforeFix) return true;
+        introduced = null;
+      }
+    }
+    // An `introduced` with no matching `fixed` means "affected from here on".
+    if (introduced !== null) {
+      if (introduced === "0" || compareSemver(installed, introduced) >= 0) return true;
+    }
+  }
+  return false;
+}
+
+/** The subset of an item this grading needs. */
+export interface GradableItem {
+  title: string | null;
+  source_type?: string | null;
+  content_type?: string | null;
+}
+
+/**
+ * Grade a knowledge gap by CONSEQUENCE, never by volume.
+ *
+ * - `critical` — a real advisory whose TITLE names this dependency. The
+ *   advisory is about the dep, not merely co-mentioning it in a body.
+ * - `high` — a security-keyword item whose title names the dep.
+ * - `medium` — an unread item that names the dep in its title and carries
+ *   consequence: a breaking change, a deprecation, or a release.
+ * - `low` — everything else, including a large pile of passing mentions.
+ *
+ * `medium` used to mean "3+ recent unread mentions", and a mention could match
+ * on the content body rather than the title. That graded unread VOLUME as a
+ * knowledge gap, and since `min_severity` defaults to medium it shipped: a
+ * `tracing` gap evidenced by "The Matrix: Writing Code That Doesn't Need
+ * Comments", a `typescript` gap evidenced by a Databricks job posting, a `uuid`
+ * gap evidenced by Go's standard library, a `vite` gap evidenced by a
+ * period-tracker app. Fourteen of fifteen gaps were noise.
+ *
+ * The Rust surface already draws exactly this line —
+ * `knowledge_decay::gap_is_substantive` requires a security advisory, breaking
+ * change, or version update, and calls anything else "unread VOLUME, not a
+ * knowledge gap". Two implementations of one concept disagreeing is what let
+ * this tool report 18 gaps while the app reported none.
+ */
+export function gradeGap(
+  items: GradableItem[],
+  packageName: string,
+  /**
+   * False when every advisory for this package is already fixed at or below the
+   * installed version. Security tiers then cannot apply — you cannot be
+   * "critically behind" on something you have already patched. Defaults to
+   * `true` so callers without version data keep the conservative grade.
+   */
+  stillVulnerable = true,
+): string {
+  const namesDep = (item: GradableItem) => mentionsPackage(item.title || "", packageName);
+
+  const isAdvisory = (item: GradableItem) =>
+    item.source_type === "cve" ||
+    item.source_type === "osv" ||
+    item.content_type === "security_advisory";
+
+  const securityKeywords = (title: string) =>
+    hasWordBoundary(title, "cve") ||
+    hasWordBoundary(title, "security") ||
+    hasWordBoundary(title, "vulnerability");
+
+  // "Announcing <thing> <version>" is the canonical release phrasing and names
+  // no other keyword. The version token is REQUIRED, matching the rule
+  // `content_dna_classifiers` settled on: it keeps "Announcing axum 0.8.0" and
+  // rejects "Announcing Toasty, an async ORM" and "Announcing our Series B".
+  const announcesAVersion = (title: string) =>
+    (hasWordBoundary(title, "announcing") || hasWordBoundary(title, "introducing")) &&
+    /\bv?\d+\.\d+/.test(title);
+
+  const carriesConsequence = (title: string) =>
+    ["breaking", "deprecated", "eol", "release", "released", "update", "upgrade"].some((kw) =>
+      hasWordBoundary(title, kw),
+    ) || announcesAVersion(title);
+
+  if (stillVulnerable) {
+    if (items.some((item) => isAdvisory(item) && namesDep(item))) return "critical";
+    if (items.some((item) => namesDep(item) && securityKeywords(item.title || ""))) return "high";
+  }
+  if (items.some((item) => namesDep(item) && carriesConsequence(item.title || ""))) return "medium";
+  return "low";
 }
 
 // Escape SQL LIKE wildcards so a package name containing % or _ (npm names may
@@ -80,6 +201,42 @@ export function executeKnowledgeGaps(
   // degrade to word-boundary + recency grounding there, never throw.
   const hasRelevance = db.hasColumn("source_items", "relevance_score");
   const hasContentType = db.hasColumn("source_items", "content_type");
+
+  // Advisory-driven grades must not fire on a dependency the user already
+  // patched. `osv_advisories` carries the affected ranges the OSV sync stored;
+  // when it is absent or silent about a package, stay conservative and grade as
+  // if still exposed — never claim someone is safe on missing data.
+  const hasOsvTable = db.hasColumn("osv_advisories", "affected_ranges");
+  const advisoryRanges = hasOsvTable
+    ? rawDb.prepare(
+        `SELECT affected_ranges FROM osv_advisories
+         WHERE lower(package_name) = lower(?) AND withdrawn_at IS NULL`,
+      )
+    : null;
+
+  const stillVulnerable = (packageName: string, version: string | null): boolean => {
+    if (!advisoryRanges) return true;
+    let rows: Array<{ affected_ranges: string | null }>;
+    try {
+      rows = advisoryRanges.all(packageName) as Array<{ affected_ranges: string | null }>;
+    } catch {
+      return true;
+    }
+    if (rows.length === 0) return true; // nothing known about this package
+
+    const ranges: AdvisoryRangeEvent[][] = [];
+    for (const row of rows) {
+      if (!row.affected_ranges) continue;
+      try {
+        const parsed = JSON.parse(row.affected_ranges) as Array<{ events?: AdvisoryRangeEvent[] }>;
+        for (const r of parsed) if (Array.isArray(r.events)) ranges.push(r.events);
+      } catch {
+        return true; // unreadable range — assume exposed
+      }
+    }
+    if (ranges.length === 0) return true;
+    return versionInAnyRange(ranges, version);
+  };
   const hasIsDirect = db.hasColumn("project_dependencies", "is_direct");
 
   // Direct dependencies only — a transitive dep's news is not the user's
@@ -152,35 +309,11 @@ export function executeKnowledgeGaps(
       .slice(0, 5);
 
     if (mentionedItems.length > 0) {
-      const isAdvisory = (item: (typeof mentionedItems)[number]) =>
-        item.source_type === "cve" ||
-        item.source_type === "osv" ||
-        item.content_type === "security_advisory";
-      const securityKeywords = (title: string) =>
-        hasWordBoundary(title, "cve") ||
-        hasWordBoundary(title, "security") ||
-        hasWordBoundary(title, "vulnerability");
-
-      // Graded honestly:
-      // - critical: an actual advisory whose TITLE names this dependency — the
-      //   advisory is about the dep, not merely co-mentioning it in a body.
-      // - high: a security-keyword item whose title names the dep.
-      // - medium: 3+ recent unread mentions; low: 1-2.
-      const advisoryAboutDep = mentionedItems.some(
-        (item) => isAdvisory(item) && mentionsPackage(item.title || "", dep.package_name),
+      const severity = gradeGap(
+        mentionedItems,
+        dep.package_name,
+        stillVulnerable(dep.package_name, dep.version),
       );
-      const securityTitleMention = mentionedItems.some(
-        (item) =>
-          securityKeywords(item.title || "") &&
-          mentionsPackage(item.title || "", dep.package_name),
-      );
-      const severity = advisoryAboutDep
-        ? "critical"
-        : securityTitleMention
-          ? "high"
-          : mentionedItems.length >= 3
-            ? "medium"
-            : "low";
 
       gaps.push({
         dependency: dep.package_name,
