@@ -939,14 +939,25 @@ function isTestContext(entry) {
 // argument position — never merely inside the message text.
 // ---------------------------------------------------------------------------
 
+/** A `//` or `///` line — documentation ABOUT code, never code itself. */
+function isCommentLine(text) {
+  return /^\s*\/\//.test(text);
+}
+
 const LOG_MACRO = /\b(?:log|trace|debug|info|warn|error|println|eprintln|print|eprint)\s*!/;
 const SECRET_WORD = /(api[_-]?key|secret|password|passwd|token|credential|bearer)/i;
 
 // Identifiers that CONTAIN a secret word but denote a count, a name, or an id —
 // never a credential. Accepting a false negative on a plural `tokens` variable
 // is the deliberate trade for removing 23 false positives.
+// The metering prefixes are enumerated deliberately. A blanket `_tokens?\b`
+// also swallowed `bearer_token`, `access_token`, `auth_token` and
+// `refresh_token` — real credentials, silently unreportable. Caught by
+// generate-knowledge.test.cjs on its first run (2026-08-26). Anything not on
+// this list is treated as a credential, so the failure mode is a false
+// POSITIVE (visible, fixable) rather than a false negative (silent).
 const NOT_A_SECRET =
-  /(\btokens\b|_tokens?\b|\btokens?_(?:used|limit|count|per|remaining|in|out)|max_tokens|n_tokens|token_count|cost_per_token|_id\b|\btokeniz)/i;
+  /(\btokens\b|\b(?:input|output|prompt|completion|total|cache|cached|max|min|n|num|used|remaining|reasoning)_tokens?\b|\btokens?_(?:used|limit|count|per|remaining|in|out)\b|\bcost_per_token\b|\btoken_count\b|_id\b|\btokeniz)/i;
 
 /** Identifiers appearing in interpolation / argument position on a log line. */
 function logValueCandidates(text) {
@@ -1033,7 +1044,13 @@ function generateSecuritySurface() {
   const prodUnwraps = allUnwraps.filter((u) => !isTestContext(u));
   const testUnwraps = allUnwraps.filter((u) => isTestContext(u));
   const allPanics = grepFiles(RUST_SRC, [".rs"], /panic!\(|todo!\(|unimplemented!\(/);
-  const prodPanics = allPanics.filter((p) => !isTestContext(p));
+  // Comment lines are documentation ABOUT panics, not panic sites. task_guard.rs
+  // explains payload recovery with `/// panic!("literal") boxes a &'static str`
+  // and was counted as the 5th "panic point", which alone pinned the row at
+  // REVIEW (threshold is < 5). apiKeyLogs already excluded `///`; this did not.
+  const prodPanics = allPanics.filter(
+    (p) => !isTestContext(p) && !isCommentLine(p.text)
+  );
   const unsafeBlocks = grepFiles(RUST_SRC, [".rs"], /unsafe\s*\{/);
   // Only format! calls that actually BUILD SQL (string opens with a SQL verb).
   const dynamicSql = grepFiles(RUST_SRC, [".rs"], /format!/)
@@ -1189,4 +1206,21 @@ function main() {
   );
 }
 
-main();
+// Only generate when invoked as a CLI. Requiring this file (from
+// generate-knowledge.test.cjs) must not write 7 manifests as a side effect.
+if (require.main === module) {
+  main();
+}
+
+// Exported for scripts/generate-knowledge.test.cjs. These predicates decide
+// whether a line is a CRITICAL security finding, and they have been wrong in
+// both directions (2026-08-25 audit: 53 false positives; then a hand-written
+// probe caught this file MISSING `WHERE name = '{user}'`). They are pinned by
+// self-tests so neither failure can recur silently.
+module.exports = {
+  isTestFile,
+  isCommentLine,
+  logsSecretValue,
+  isSqlFormat,
+  sqlInterpolatesValue,
+};
