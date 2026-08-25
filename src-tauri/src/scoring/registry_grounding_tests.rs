@@ -246,6 +246,7 @@ fn patched_advisory_is_not_affected_and_never_critical() {
         is_direct: true,
         search_terms: super::dependencies::extract_search_terms("axios"),
         ecosystem: "javascript".to_string(),
+        project_paths: Vec::new(),
     };
     ctx.ace_ctx.dependency_names.insert("axios".to_string());
     ctx.ace_ctx
@@ -449,6 +450,7 @@ fn dev_dep_registry_release_grounds_but_never_pages() {
         is_direct: true,
         search_terms: super::dependencies::extract_search_terms("vitest"),
         ecosystem: "javascript".to_string(),
+        project_paths: Vec::new(),
     };
     ctx.ace_ctx.dependency_names.insert("vitest".to_string());
     ctx.ace_ctx

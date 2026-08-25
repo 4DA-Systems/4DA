@@ -107,6 +107,15 @@ fn dep(name: &str, confidence: f32, is_direct: bool, version: Option<&str>) -> D
         ecosystem: "rust".to_string(),
         corroborated: true,
         raw_name: None,
+        project_paths: Vec::new(),
+    }
+}
+
+/// A dependency that knows which project declares it.
+fn dep_in(name: &str, project: &str) -> DepMatch {
+    DepMatch {
+        project_paths: vec![project.to_string()],
+        ..dep(name, 0.9, true, Some("1.12.2"))
     }
 }
 
@@ -593,5 +602,229 @@ fn subtitle_is_top_factor_display() {
     assert!(
         subtitle.starts_with(&chain[0].display),
         "subtitle must lead with the top factor: {subtitle}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Project-context similarity: truthfulness gate (2026-08-25 live Signal audit)
+//
+// The live feed rendered, on a real axios CVE:
+//   Similar to your code: "/// Maximum content length per feed item (100KB)"
+// A doc comment, matched to advisory prose by embedding, presented as evidence
+// about the reader's code — sitting directly beside the hard dependency fact
+// that actually justified the item.
+// ---------------------------------------------------------------------------
+
+/// Pull the project-KNN factor (the one whose evidence names a source file).
+fn knn_factor(chain: &[crate::ExplanationFactor]) -> Option<&crate::ExplanationFactor> {
+    chain.iter().find(|f| {
+        f.kind == crate::FactorKind::ContextMatch && f.display.contains("Similar to your code")
+    })
+}
+
+#[test]
+fn code_similarity_names_the_file_never_quotes_a_comment() {
+    let mut f = Fixture::default();
+    f.context_score = 0.62;
+    f.matches = vec![RelevanceMatch {
+        source_file: "src/sources/cve.rs".to_string(),
+        // A chunk that OPENS with its doc comment, exactly as Rust chunks do.
+        matched_text:
+            "/// Maximum content length per feed item (100KB)\nconst MAX: usize = 100_000;"
+                .to_string(),
+        similarity: 0.71,
+    }];
+
+    let chain = f.build();
+    let factor = knn_factor(&chain).expect("a strong match must still be surfaced");
+    assert!(
+        factor.display.contains("sources/cve.rs"),
+        "display must name the file: {}",
+        factor.display
+    );
+    assert!(
+        !factor.display.contains("Maximum content length"),
+        "a doc comment must never be quoted back as the reader's code: {}",
+        factor.display
+    );
+    assert!(
+        factor.evidence.contains("71%"),
+        "the similarity that justifies the claim must be shown: {}",
+        factor.evidence
+    );
+}
+
+#[test]
+fn weak_match_makes_no_code_similarity_claim() {
+    let mut f = Fixture::default();
+    // Aggregate clears the OLD 0.3 gate but the match itself is weak. The old
+    // code displayed on the aggregate and quoted this match's text anyway.
+    f.context_score = 0.35;
+    f.matches = vec![RelevanceMatch {
+        source_file: "src/sources/cve.rs".to_string(),
+        matched_text: "/// Strict manifest mode: the GitHub Advisory feed".to_string(),
+        similarity: 0.31,
+    }];
+    let chain = f.build();
+    assert!(
+        knn_factor(&chain).is_none(),
+        "a match below the pipeline's own confirmation bar must stay silent"
+    );
+}
+
+#[test]
+fn code_similarity_is_silent_when_a_dependency_already_grounds_the_item() {
+    let mut f = Fixture::default();
+    f.display_deps = vec![dep("axios", 0.9, true, Some("1.12.2"))];
+    f.dep_match_score = 0.9;
+    // Strong enough to display on its own merits...
+    f.context_score = 0.70;
+    f.matches = vec![RelevanceMatch {
+        source_file: "src/sources/cve.rs".to_string(),
+        matched_text: "fn parse_advisory(body: &str) -> Advisory".to_string(),
+        similarity: 0.80,
+    }];
+
+    let chain = f.build();
+    assert!(
+        chain
+            .iter()
+            .any(|c| c.kind == crate::FactorKind::DependencyMatch),
+        "the hard dependency factor must still lead"
+    );
+    assert!(
+        knn_factor(&chain).is_none(),
+        "prose resemblance adds nothing beside a named dependency and only \
+         discredits it"
+    );
+}
+
+#[test]
+fn code_similarity_is_silent_beside_a_security_advisory() {
+    let mut f = Fixture::default();
+    f.is_security = true;
+    f.necessity_score = 0.95;
+    f.advisory_id = Some("GHSA-xj6q-8x83-jv6g".to_string());
+    f.cvss_score = Some(9.1);
+    f.display_deps = vec![dep("axios", 0.9, true, Some("1.12.2"))];
+    f.dep_match_score = 0.9;
+    f.context_score = 0.70;
+    f.matches = vec![RelevanceMatch {
+        source_file: "src/sources/cve.rs".to_string(),
+        matched_text: "fn parse_advisory(body: &str) -> Advisory".to_string(),
+        similarity: 0.80,
+    }];
+
+    let chain = f.build();
+    assert!(chain
+        .iter()
+        .any(|c| c.kind == crate::FactorKind::SecurityAdvisory));
+    assert!(
+        knn_factor(&chain).is_none(),
+        "this is the exact live shape that produced the fabricated evidence"
+    );
+}
+
+#[test]
+fn short_source_path_keeps_the_last_two_segments() {
+    assert_eq!(short_source_path("src/db/vector.rs"), "db/vector.rs");
+    assert_eq!(short_source_path("vector.rs"), "vector.rs");
+    assert_eq!(
+        short_source_path(r"D:\4DA\src-tauri\src\sources\cve.rs"),
+        "sources/cve.rs"
+    );
+    assert_eq!(short_source_path("./a/b.rs"), "a/b.rs");
+}
+
+// ---------------------------------------------------------------------------
+// Project attribution (2026-08-25 live Signal audit)
+//
+// The live feed said "Security advisory affects your dependency axios" on an
+// app whose manifests never mention axios — the package belongs to a different
+// repository on the same machine. The reader is told they are exposed and given
+// no way to find the code to change.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn security_factor_names_the_project_that_declares_the_dependency() {
+    let mut f = Fixture::default();
+    f.is_security = true;
+    f.necessity_score = 0.95;
+    f.advisory_id = Some("GHSA-xj6q-8x83-jv6g".to_string());
+    f.cvss_score = Some(9.1);
+    f.display_deps = vec![dep_in(
+        "axios",
+        "c:/users/admin/documents/kairos-mvp/backend",
+    )];
+    f.dep_match_score = 0.9;
+
+    let chain = f.build();
+    let sec = chain
+        .iter()
+        .find(|c| c.kind == crate::FactorKind::SecurityAdvisory)
+        .expect("security factor must be emitted");
+
+    assert!(
+        sec.display.contains("kairos-mvp/backend"),
+        "the advisory must say WHICH project to fix: {}",
+        sec.display
+    );
+    assert!(
+        !sec.display.contains("your dependency"),
+        "the possessive claim is what made this read as a finding about THIS app: {}",
+        sec.display
+    );
+    assert!(
+        sec.evidence.contains("kairos-mvp/backend"),
+        "evidence carries the location too: {}",
+        sec.evidence
+    );
+}
+
+#[test]
+fn security_factor_keeps_its_old_wording_when_provenance_is_unknown() {
+    // Never degrade to a dangling "in ". Synthetic and legacy matches carry no
+    // project, and must read exactly as they did before.
+    let mut f = Fixture::default();
+    f.is_security = true;
+    f.necessity_score = 0.95;
+    f.advisory_id = Some("GHSA-aaaa-bbbb-cccc".to_string());
+    f.cvss_score = Some(9.1);
+    f.display_deps = vec![dep("lodash", 0.9, true, Some("1.9.0"))]; // no project_paths
+    f.dep_match_score = 0.9;
+
+    let chain = f.build();
+    let sec = chain
+        .iter()
+        .find(|c| c.kind == crate::FactorKind::SecurityAdvisory)
+        .expect("security factor must be emitted");
+    assert_eq!(
+        sec.display, "Security advisory affects your dependency lodash",
+        "unknown provenance falls back cleanly"
+    );
+}
+
+#[test]
+fn a_dependency_in_several_projects_names_one_and_counts_the_rest() {
+    let mut f = Fixture::default();
+    f.is_security = true;
+    f.necessity_score = 0.95;
+    f.advisory_id = Some("RUSTSEC-2026-0007".to_string());
+    f.cvss_score = Some(7.0);
+    f.display_deps = vec![DepMatch {
+        project_paths: vec!["d:/4da/relay".to_string(), "d:/4da/src-tauri".to_string()],
+        ..dep("bytes", 0.9, false, Some("1.10.1"))
+    }];
+    f.dep_match_score = 0.9;
+
+    let chain = f.build();
+    let sec = chain
+        .iter()
+        .find(|c| c.kind == crate::FactorKind::SecurityAdvisory)
+        .expect("security factor must be emitted");
+    assert!(
+        sec.display.contains("4da/relay (+1 more)"),
+        "one named location plus a count, never a wall of paths: {}",
+        sec.display
     );
 }

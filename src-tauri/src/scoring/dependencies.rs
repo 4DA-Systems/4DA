@@ -53,6 +53,16 @@ pub(crate) struct DepInfo {
     /// Ecosystem/language from the manifest (e.g. "rust", "javascript", "python").
     /// Used for cross-referencing CVE advisories against the correct ecosystem.
     pub ecosystem: String,
+    /// Every project whose manifest or lockfile declares this package, sorted
+    /// and de-duplicated.
+    ///
+    /// The detail map is keyed by NORMALIZED PACKAGE NAME, so one entry stands
+    /// for a package that may live in several of the user's projects. Without
+    /// this list the entry could not say which — and the surfaces downstream
+    /// then say "your dependency axios" about a package that belongs to a
+    /// different repository entirely (measured live: `axios` is a direct
+    /// dependency of `kairos-mvp`, not of this app).
+    pub project_paths: Vec<String>,
 }
 
 /// A dependency that matched content
@@ -79,6 +89,10 @@ pub(crate) struct DepMatch {
     /// (`is_strong_grounding_match`); the structured-advisory route checks
     /// affected-package metadata independently at its call site.
     pub corroborated: bool,
+    /// Projects that declare this package, sorted and de-duplicated. Answers
+    /// the first question a reader asks of any dependency finding — *which of
+    /// my repositories do I go and fix?* — which a bare package name cannot.
+    pub project_paths: Vec<String>,
     /// The manifest's pre-normalization package name (`@babel/traverse`,
     /// `github.com/gin-gonic/gin`) — `package_name` is the NORMALIZED form
     /// (`babel-traverse`, `github.com-gin-gonic-gin`), which never appears in
@@ -1204,7 +1218,7 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
         .collect();
 
     let mut names = HashSet::new();
-    let mut details = HashMap::new();
+    let mut details: HashMap<String, DepInfo> = HashMap::new();
 
     for dep in all_deps {
         let normalized = normalize_package_name(&dep.package_name);
@@ -1217,20 +1231,95 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
             names.insert(term.clone());
         }
 
-        details.insert(
-            normalized,
-            DepInfo {
-                package_name: dep.package_name,
-                version: dep.version,
-                is_dev: dep.is_dev,
-                is_direct: dep.is_direct,
-                search_terms,
-                ecosystem: dep.language,
-            },
-        );
+        // MERGE, never overwrite. The map is keyed by normalized package name,
+        // so a package present in several projects previously collapsed to
+        // whichever row the iteration happened to see LAST — taking its
+        // version and its direct/dev flags with it. Union the projects, and
+        // let the strongest relationship win: direct beats transitive, runtime
+        // beats dev, and a known version beats an unknown one.
+        match details.entry(normalized) {
+            std::collections::hash_map::Entry::Occupied(mut e) => {
+                merge_dep_occurrence(
+                    e.get_mut(),
+                    dep.project_path,
+                    dep.is_direct,
+                    dep.is_dev,
+                    dep.version,
+                );
+            }
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(DepInfo {
+                    package_name: dep.package_name,
+                    version: dep.version,
+                    is_dev: dep.is_dev,
+                    is_direct: dep.is_direct,
+                    search_terms,
+                    ecosystem: dep.language,
+                    project_paths: vec![dep.project_path],
+                });
+            }
+        }
+    }
+
+    // Stable, de-duplicated provenance for every entry.
+    for info in details.values_mut() {
+        info.project_paths.sort();
+        info.project_paths.dedup();
     }
 
     (names, details)
+}
+
+/// Fold another project's row for the same package into an existing entry.
+///
+/// The detail map is keyed by normalized package name, so every project that
+/// declares a package lands on one entry. This used to be a plain `insert`,
+/// which meant last-write-wins: a package present in several projects took
+/// whichever row the iteration happened to see last, along with ITS version
+/// and its direct/dev flags. Merge instead, and let the strongest relationship
+/// survive — direct beats transitive, runtime beats dev, and a known version
+/// beats an unknown one — because those are the values every downstream
+/// urgency decision reads.
+fn merge_dep_occurrence(
+    existing: &mut DepInfo,
+    project_path: String,
+    is_direct: bool,
+    is_dev: bool,
+    version: Option<String>,
+) {
+    existing.project_paths.push(project_path);
+    existing.is_direct |= is_direct;
+    existing.is_dev &= is_dev;
+    if existing.version.is_none() {
+        existing.version = version;
+    }
+}
+
+/// Render a dependency's project list as a short, human-readable location.
+///
+/// Stored paths are absolute and lowercased (`d:/4da/mcp-4da-server`), which is
+/// unreadable in a one-line alert. Keep the last two segments — enough to
+/// identify the repository and any sub-package — and name the extras by count
+/// rather than listing them.
+///
+/// Returns `None` when there is nothing to say, so callers fall back to their
+/// existing wording instead of rendering an empty "in ".
+pub(crate) fn project_label(paths: &[String]) -> Option<String> {
+    let first = paths.first()?;
+    let normalized = first.replace('\\', "/");
+    let segments: Vec<&str> = normalized
+        .split('/')
+        .filter(|s| !s.is_empty() && *s != ".")
+        .collect();
+    let short = match segments.as_slice() {
+        [] => return None,
+        [only] => (*only).to_string(),
+        [.., parent, leaf] => format!("{parent}/{leaf}"),
+    };
+    Some(match paths.len() {
+        1 => short,
+        n => format!("{short} (+{} more)", n - 1),
+    })
 }
 
 /// How a search term occurs in a piece of text.
@@ -1575,6 +1664,7 @@ pub(crate) fn match_dependencies(
             version: info.version.clone(),
             ecosystem: info.ecosystem.clone(),
             corroborated,
+            project_paths: info.project_paths.clone(),
             raw_name: Some(info.package_name.clone()),
         });
     }
@@ -2044,6 +2134,7 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["react".to_string()],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -2084,6 +2175,7 @@ mod tests {
             ecosystem: "rust".to_string(),
             corroborated: true,
             raw_name: None,
+            project_paths: Vec::new(),
         }
     }
 
@@ -2097,6 +2189,7 @@ mod tests {
             is_direct: true,
             search_terms: extract_search_terms(name),
             ecosystem: ecosystem.to_string(),
+            project_paths: Vec::new(),
         }
     }
 
@@ -2632,6 +2725,7 @@ mod tests {
                     "sys".to_string(),
                 ],
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -2703,6 +2797,7 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -2732,6 +2827,7 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["axum".to_string()],
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
             },
         );
         let (matches, score) = match_dependencies("crates.io: axum v0.8.9", "", &[], &ace_ctx);
@@ -2766,6 +2862,7 @@ mod tests {
                     "react-query".to_string(),
                 ],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -2806,6 +2903,7 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["react".to_string()],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -2838,6 +2936,7 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["got".to_string()],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -2867,6 +2966,7 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["got".to_string()],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -2896,6 +2996,7 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["vitest".to_string()],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -2928,6 +3029,7 @@ mod tests {
                 is_direct: true,
                 search_terms: extract_search_terms("@tanstack/react-query"),
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -2973,6 +3075,7 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -2986,6 +3089,7 @@ mod tests {
                 is_direct: false,
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -3041,6 +3145,7 @@ mod tests {
                 is_direct: true,
                 search_terms: extract_search_terms("@sentry/react"),
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -3078,6 +3183,7 @@ mod tests {
                 is_direct: true,
                 search_terms: extract_search_terms("pdf-extract"),
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -3114,6 +3220,7 @@ mod tests {
                 is_direct: true,
                 search_terms: extract_search_terms("pdf-extract"),
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
             },
         );
 
@@ -3166,6 +3273,7 @@ mod tests {
             is_direct,
             search_terms: extract_search_terms(name),
             ecosystem: ecosystem.to_string(),
+            project_paths: Vec::new(),
         }
     }
 
@@ -3331,5 +3439,116 @@ mod tests {
             "a bare mention must not ground: {matches:?}"
         );
         assert!(!is_strongly_grounded(&matches));
+    }
+
+    // -----------------------------------------------------------------------
+    // Project attribution (2026-08-25 live Signal audit)
+    //
+    // The banner read "Critical: Security issue affects your dependency axios"
+    // on an app that does not depend on axios at all — the package is a direct
+    // dependency of a DIFFERENT repository on the same machine. The detail map
+    // is keyed by package name, and the project each row came from was read
+    // for the exclusion filter and then dropped, so no surface downstream
+    // could answer "which repo do I go and fix?".
+    // -----------------------------------------------------------------------
+
+    fn info_with(paths: &[&str], is_direct: bool, is_dev: bool, version: Option<&str>) -> DepInfo {
+        DepInfo {
+            package_name: "axios".to_string(),
+            version: version.map(str::to_string),
+            is_dev,
+            is_direct,
+            search_terms: vec![],
+            ecosystem: "javascript".to_string(),
+            project_paths: paths.iter().map(|p| (*p).to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn project_label_names_the_repository() {
+        assert_eq!(
+            project_label(&["d:/4da/mcp-4da-server".to_string()]).as_deref(),
+            Some("4da/mcp-4da-server")
+        );
+        assert_eq!(
+            project_label(&["c:/users/admin/documents/kairos-mvp/backend".to_string()]).as_deref(),
+            Some("kairos-mvp/backend")
+        );
+    }
+
+    #[test]
+    fn project_label_counts_extras_instead_of_listing_them() {
+        let paths = vec![
+            "d:/4da/relay".to_string(),
+            "d:/4da/src-tauri".to_string(),
+            "d:/4da/victauri-gauntlet".to_string(),
+        ];
+        assert_eq!(
+            project_label(&paths).as_deref(),
+            Some("4da/relay (+2 more)")
+        );
+    }
+
+    #[test]
+    fn project_label_is_silent_when_it_has_nothing_to_say() {
+        // Callers fall back to their existing wording rather than render "in ".
+        assert_eq!(project_label(&[]), None);
+        assert_eq!(project_label(&["".to_string()]), None);
+    }
+
+    #[test]
+    fn project_label_handles_windows_separators() {
+        assert_eq!(
+            project_label(&[r"D:\4DA\relay".to_string()]).as_deref(),
+            Some("4DA/relay")
+        );
+    }
+
+    #[test]
+    fn merging_unions_projects_instead_of_overwriting() {
+        let mut info = info_with(&["d:/4da/relay"], false, false, None);
+        merge_dep_occurrence(
+            &mut info,
+            "d:/4da/src-tauri".to_string(),
+            false,
+            false,
+            None,
+        );
+        assert_eq!(info.project_paths, ["d:/4da/relay", "d:/4da/src-tauri"]);
+    }
+
+    #[test]
+    fn merging_keeps_the_strongest_relationship() {
+        // A transitive-first, dev-first entry that is ALSO a direct runtime
+        // dependency somewhere must end up direct and runtime — those two
+        // flags drive every downstream urgency decision.
+        let mut info = info_with(&["d:/4da/relay"], false, true, None);
+        merge_dep_occurrence(
+            &mut info,
+            "d:/4da/src-tauri".to_string(),
+            true,
+            false,
+            Some("1.12.2".to_string()),
+        );
+        assert!(info.is_direct, "direct beats transitive");
+        assert!(!info.is_dev, "runtime beats dev");
+        assert_eq!(
+            info.version.as_deref(),
+            Some("1.12.2"),
+            "a known version fills an unknown one"
+        );
+    }
+
+    #[test]
+    fn merging_does_not_overwrite_a_known_version() {
+        let mut info = info_with(&["d:/4da/relay"], true, false, Some("1.0.0"));
+        merge_dep_occurrence(
+            &mut info,
+            "d:/4da/other".to_string(),
+            true,
+            false,
+            Some("9.9.9".to_string()),
+        );
+        assert_eq!(info.version.as_deref(), Some("1.0.0"));
     }
 }

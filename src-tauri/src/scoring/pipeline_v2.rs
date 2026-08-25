@@ -2043,10 +2043,21 @@ fn critical_security_action(matched_deps: &[dependencies::DepMatch]) -> String {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
     match best_dep {
-        Some(dep) => format!(
-            "Critical: Security issue affects your dependency {}",
-            dep.package_name
-        ),
+        // Name the project. "your dependency axios" reads as a claim about THIS
+        // app; measured live, `axios` is a direct dependency of a DIFFERENT
+        // repository on the same machine, and the banner gave the reader no way
+        // to tell which one to go and fix. Falls back to the old wording when
+        // provenance is unavailable, so the alert never degrades to "in ".
+        Some(dep) => match dependencies::project_label(&dep.project_paths) {
+            Some(location) => format!(
+                "Critical: Security issue affects {} in {location}",
+                dep.package_name
+            ),
+            None => format!(
+                "Critical: Security issue affects your dependency {}",
+                dep.package_name
+            ),
+        },
         None => "Critical: Security issue affects one of your dependencies".to_string(),
     }
 }
@@ -3194,6 +3205,7 @@ mod tests {
             ecosystem: "npm".to_string(),
             corroborated,
             raw_name: None,
+            project_paths: Vec::new(),
         }
     }
 
@@ -3252,6 +3264,57 @@ mod tests {
     // ========================================================================
     // critical_security_action — a Critical alert may only name a VERIFIED dep
     // ========================================================================
+
+    /// A grounded dependency that knows which project declares it.
+    fn disp_dep_in(name: &str, confidence: f32, project: &str) -> DepMatch {
+        DepMatch {
+            project_paths: vec![project.to_string()],
+            ..disp_dep(name, confidence, true)
+        }
+    }
+
+    /// 2026-08-25 live audit: the banner read "Critical: Security issue affects
+    /// your dependency axios" on an app that does not depend on axios — the
+    /// package belongs to another repository on the same machine. Telling a
+    /// reader they are exposed without telling them where is not actionable.
+    #[test]
+    fn critical_action_names_the_project_holding_the_dependency() {
+        let deps = vec![disp_dep_in(
+            "axios",
+            0.92,
+            "c:/users/admin/documents/kairos-mvp/backend",
+        )];
+        assert_eq!(
+            critical_security_action(&deps),
+            "Critical: Security issue affects axios in kairos-mvp/backend"
+        );
+    }
+
+    #[test]
+    fn critical_action_falls_back_cleanly_without_provenance() {
+        // Must never render a dangling "in ". Legacy and synthetic matches
+        // carry no project and keep the original wording.
+        let deps = vec![disp_dep("lodash", 0.92, true)];
+        assert_eq!(
+            critical_security_action(&deps),
+            "Critical: Security issue affects your dependency lodash"
+        );
+    }
+
+    #[test]
+    fn critical_action_names_one_project_and_counts_the_rest() {
+        // `rkyv`, not `bytes`: word-like single-token names are deliberately
+        // never text-grounded, so a `bytes` fixture would fail the grounding
+        // filter before it ever reached the wording under test.
+        let deps = vec![DepMatch {
+            project_paths: vec!["d:/4da/relay".to_string(), "d:/4da/src-tauri".to_string()],
+            ..disp_dep("rkyv", 0.92, true)
+        }];
+        assert_eq!(
+            critical_security_action(&deps),
+            "Critical: Security issue affects rkyv in 4da/relay (+1 more)"
+        );
+    }
 
     #[test]
     fn critical_action_names_the_highest_confidence_grounded_dep() {
@@ -3643,6 +3706,7 @@ mod tests {
                 is_direct: true,
                 search_terms: dependencies::extract_search_terms(package),
                 ecosystem: (*ecosystem).to_string(),
+                project_paths: Vec::new(),
             };
             for term in &info.search_terms {
                 ace_ctx.dependency_names.insert(term.clone());
@@ -4011,6 +4075,7 @@ mod tests {
             ecosystem: ecosystem.to_string(),
             corroborated: true,
             raw_name: None,
+            project_paths: Vec::new(),
         }
     }
 
@@ -4581,6 +4646,7 @@ mod tests {
             ecosystem: ecosystem.to_string(),
             corroborated: true,
             raw_name: Some(raw.to_string()),
+            project_paths: Vec::new(),
         }
     }
 

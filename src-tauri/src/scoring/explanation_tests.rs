@@ -2,20 +2,6 @@
 use super::*;
 
 #[test]
-fn test_extract_short_phrase_long_text() {
-    let phrase =
-        extract_short_phrase("Vector search implementation using sqlite-vss for fast KNN queries");
-    assert!(phrase.contains("Vector search"));
-    assert!(!phrase.is_empty());
-}
-
-#[test]
-fn test_extract_short_phrase_short_text() {
-    let phrase = extract_short_phrase("short");
-    assert!(phrase.is_empty()); // Too short to be useful
-}
-
-#[test]
 fn test_temporal_freshness_very_recent() {
     let now = chrono::Utc::now();
     let freshness = compute_temporal_freshness(&now);
@@ -55,79 +41,6 @@ fn test_temporal_freshness_very_old() {
     let old = chrono::Utc::now() - chrono::Duration::hours(200);
     let freshness = compute_temporal_freshness(&old);
     assert_eq!(freshness, 0.85, "Items 8+ days old should decay to 0.85");
-}
-
-// ====================================================================
-// extract_short_phrase additional tests
-// ====================================================================
-
-#[test]
-fn test_extract_short_phrase_with_period() {
-    let phrase = extract_short_phrase(
-        "Vector search is powerful. It enables fast nearest neighbor lookups.",
-    );
-    // Should stop at the first period
-    assert!(phrase.contains("Vector search"));
-    assert!(!phrase.contains("enables"));
-}
-
-#[test]
-fn test_extract_short_phrase_with_newline() {
-    let phrase = extract_short_phrase(
-        "Async runtime improvements\nThe new version includes better scheduling",
-    );
-    // Should stop at the newline
-    assert!(phrase.contains("Async runtime"));
-    assert!(!phrase.contains("new version"));
-}
-
-#[test]
-fn test_extract_short_phrase_with_ellipsis() {
-    let phrase = extract_short_phrase("A long context about development practices...");
-    assert!(!phrase.ends_with("..."));
-}
-
-#[test]
-fn test_extract_short_phrase_strips_markdown_markers() {
-    // Leading list bullet must not leak into the quoted snippet.
-    assert_eq!(
-        extract_short_phrase("- Built with Claude Code and agents"),
-        "Built with Claude Code and agents"
-    );
-    // Leading bold emphasis ("**Why ...").
-    assert_eq!(
-        extract_short_phrase("**Why this matters for your stack"),
-        "Why this matters for your stack"
-    );
-    // Blockquote + heading markers.
-    assert_eq!(
-        extract_short_phrase("> ## Important architectural note here"),
-        "Important architectural note here"
-    );
-    // snake_case identifiers must survive — no mid-token underscore stripping.
-    let phrase = extract_short_phrase("uses anthropic_ai_sdk for the integration");
-    assert!(phrase.contains("anthropic_ai_sdk"), "got: {phrase}");
-}
-
-#[test]
-fn test_extract_short_phrase_too_short_returns_empty() {
-    assert!(extract_short_phrase("tiny").is_empty());
-    assert!(extract_short_phrase("ab").is_empty());
-    assert!(extract_short_phrase("").is_empty());
-}
-
-#[test]
-fn test_extract_short_phrase_exactly_ten_chars() {
-    // 10 chars should be included
-    let phrase = extract_short_phrase("abcdefghij");
-    assert_eq!(phrase, "abcdefghij");
-}
-
-#[test]
-fn test_extract_short_phrase_nine_chars_empty() {
-    // 9 chars should be too short
-    let phrase = extract_short_phrase("abcdefghi");
-    assert!(phrase.is_empty());
 }
 
 // ====================================================================
