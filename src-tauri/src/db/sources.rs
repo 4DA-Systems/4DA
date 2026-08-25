@@ -201,18 +201,27 @@ impl Database {
             let mut check_stmt = tx.prepare_cached(
                 "SELECT id FROM source_items WHERE source_type = ?1 AND source_id = ?2",
             )?;
-            // The UPDATE arm REPLACES content (this path only fires for items
-            // the fetch pipeline decided to fully re-ingest — re-seen cached
-            // items go through `touch_source_item` instead), so it stamps
-            // `content_updated_at`: the differential selection re-scores on it.
+            // The UPDATE arm re-ingests an item the fetch pipeline chose to
+            // replace, so it stamps `content_updated_at` — the differential
+            // selection re-scores on it. Value-aware, keyed on `content_hash`:
+            // a re-ingest that produces byte-identical content is NOT a
+            // change, and stamping it anyway would degrade "changed" back into
+            // "seen" (the touch semantics the change-based differential
+            // exists to replace). SQLite evaluates every RHS against the OLD
+            // row, so the CASE compares the stored hash even though the same
+            // statement assigns the new one.
             let mut update_stmt = tx.prepare_cached(
-                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, \
+                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, \
+                 content_updated_at = CASE WHEN COALESCE(content_hash, '') <> ?4 \
+                                           THEN datetime('now') \
+                                           ELSE content_updated_at END, \
+                 content_hash = ?4, \
                  embedding = ?5, detected_lang = ?6, \
                  content_type = COALESCE(?7, source_items.content_type), \
                  cve_ids = COALESCE(?8, source_items.cve_ids), \
                  feed_origin = COALESCE(?9, source_items.feed_origin), \
                  tags = COALESCE(?10, source_items.tags), \
-                 published_at = COALESCE(source_items.published_at, ?11), \n                 content_updated_at = datetime('now'), \
+                 published_at = COALESCE(source_items.published_at, ?11), \
                  last_seen = datetime('now') WHERE id = ?12",
             )?;
             let mut update_vec_stmt =
@@ -597,9 +606,20 @@ impl Database {
     /// post fetched minutes after publication carries `0` engagement forever
     /// and the community-signal escape hatch never opens for it.
     ///
-    /// Stamps `content_updated_at`: refreshed engagement MUST trigger
-    /// re-scoring — the UGC community-signal escape hatch depends on the
-    /// differential re-selecting the item after its counts grow.
+    /// Stamps `content_updated_at` — but ONLY when the tags VALUE actually
+    /// differs. Refreshed engagement must trigger re-scoring (the UGC
+    /// community-signal escape hatch depends on the differential re-selecting
+    /// an item after its counts grow), yet the fetch path calls this on EVERY
+    /// re-seen item, most of which come back byte-identical.
+    ///
+    /// Stamping unconditionally made "changed" mean "seen", which is exactly
+    /// the touch semantics the change-based differential replaced: measured
+    /// live 2026-08-25, one cycle after the differential shipped, 700 items
+    /// had `content_updated_at` move while only 172 had genuinely arrived —
+    /// so the differential still selected its 500-item cap every cycle.
+    /// Value-aware stamping is done in ONE statement (no read-modify-write
+    /// race): the CASE compares the stored tags to the incoming ones and
+    /// leaves the timestamp untouched when they match.
     pub fn update_source_item_tags(
         &self,
         source_type: &str,
@@ -608,7 +628,11 @@ impl Database {
     ) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute(
-            "UPDATE source_items SET tags = ?3, content_updated_at = datetime('now') \
+            "UPDATE source_items \
+             SET content_updated_at = CASE WHEN COALESCE(tags, '') <> ?3 \
+                                           THEN datetime('now') \
+                                           ELSE content_updated_at END, \
+                 tags = ?3 \
              WHERE source_type = ?1 AND source_id = ?2",
             params![source_type, source_id, tags],
         )?;
@@ -1697,12 +1721,25 @@ mod tests {
         db.touch_source_item("rss", "cw1").unwrap();
         assert!(changed_at(id).is_none(), "touch must not stamp");
 
-        // Batch-upsert UPDATE arm (content replaced): stamps.
+        // Batch-upsert UPDATE arm, IDENTICAL content: must NOT stamp. Same
+        // content_hash means nothing changed; stamping here would turn
+        // "changed" back into "seen" (the live 2026-08-25 regression, where
+        // 700 items/cycle looked changed while only 172 had arrived).
         db.batch_upsert_source_items(&[batch_tuple("cw1", None, &emb)])
             .unwrap();
         assert!(
+            changed_at(id).is_none(),
+            "re-ingesting identical content must NOT stamp"
+        );
+
+        // Batch-upsert UPDATE arm, DIFFERENT content: stamps.
+        let mut changed_tuple = batch_tuple("cw1", None, &emb);
+        changed_tuple.4 = "a genuinely different body".to_string();
+        changed_tuple.5 = seed_embedding("rss:cw1:v2");
+        db.batch_upsert_source_items(&[changed_tuple]).unwrap();
+        assert!(
             changed_at(id).is_some(),
-            "batch-upsert UPDATE arm must stamp"
+            "batch-upsert UPDATE arm must stamp when the content really changed"
         );
 
         // Enrichment: stamps.
@@ -1731,6 +1768,59 @@ mod tests {
         assert!(
             changed_at(upgraded).is_some(),
             "embedding upgrade must stamp"
+        );
+    }
+
+    /// The live 2026-08-25 regression, pinned: the fetch path refreshes tags on
+    /// EVERY re-seen item to capture engagement, so stamping unconditionally
+    /// made every re-see look like a change — the differential kept selecting
+    /// its full cap (700 items "changed" in a cycle that ingested 172). Only a
+    /// real value difference is a change.
+    #[test]
+    fn tags_refresh_stamps_only_when_the_value_changes() {
+        let db = test_db();
+        let id = insert_test_item(&db, "mastodon", "tg1", "A toot", "body");
+        let changed_at = |id: i64| -> Option<String> {
+            let conn = db.conn.lock();
+            conn.query_row(
+                "SELECT content_updated_at FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .unwrap()
+        };
+
+        // First write of engagement: a real change.
+        db.update_source_item_tags("mastodon", "tg1", r#"{"score":3}"#)
+            .unwrap();
+        let first = changed_at(id);
+        assert!(first.is_some(), "first engagement write is a change");
+
+        // Re-see with IDENTICAL counts: not a change — timestamp must not move.
+        db.update_source_item_tags("mastodon", "tg1", r#"{"score":3}"#)
+            .unwrap();
+        assert_eq!(
+            changed_at(id),
+            first,
+            "an unchanged tags refresh must not restamp"
+        );
+
+        // Engagement actually grew: a change again.
+        db.update_source_item_tags("mastodon", "tg1", r#"{"score":9}"#)
+            .unwrap();
+        let tags: Option<String> = {
+            let conn = db.conn.lock();
+            conn.query_row(
+                "SELECT tags FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(tags.as_deref(), Some(r#"{"score":9}"#), "tags still write");
+        assert!(
+            changed_at(id).is_some(),
+            "grown engagement re-enters the differential"
         );
     }
 
