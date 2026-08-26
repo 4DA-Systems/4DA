@@ -347,7 +347,34 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // applied as ceilings hold, multipliers get out-voted, and the verdict must be
 // gated too because 0.35 + offset + topic boost lands at 0.42. Security is
 // exempt. REGISTERED in epochs::SCOPED_EPOCHS on published age.
-pub(crate) const PIPELINE_VERSION: i32 = 24;
+// v25 (2026-08-27): the ACE -> scoring contamination arc (2026-08-26 audit).
+// Four scoring-semantics changes land under this bump:
+//   1. The git-recency dependency scope filter compared a RAW backslash
+//      `git_signals.repo_path` against a canonicalized forward-slash
+//      `project_dependencies.project_path`, matched 0 of 245 rows on every
+//      Windows run since the column existed, and FAILED OPEN — re-admitting
+//      every dependency it existed to exclude. Ten `axios` advisories (a
+//      package this app does not ship) held nine of the top-45 feed slots.
+//      Normalized + path-boundary matched, and the fail-open now degrades
+//      loudly via `dep_scope_degraded` instead of widening in silence.
+//   2. `project_dependencies.project_relevance` — populated since migration 55,
+//      never once read by scoring — now scales `DepMatch.confidence`.
+//   3. Bare subterms can no longer ORIGINATE or STACK INTO a dependency match.
+//      Corroborated evidence carries the axis; all uncorroborated matches
+//      together are capped below `DEPENDENCY_THRESHOLD`, so they can never
+//      confirm it alone nor reach the gate bypass above it. One npm scope now
+//      contributes one match, not one per member. Measured: 1,758 title-only
+//      confirmations -> 105, of which ZERO are uncorroborated (was 75.1% by
+//      the audit's own definition, 92.8% by `corroborated`).
+//   4. Per-evidence tech weighting — four support paths no longer outvote
+//      seven primary manifests, so javascript/typescript stop scoring at 0.10.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS. The dependency axis feeds
+// the confirmation gate for ANY item, and the loaded dependency SET itself
+// shrank (184 packages -> 143), so no predicate can provably bound the reach —
+// the epochs module contract's explicit do-not-register class, same basis as
+// v22. The whole corpus drains.
+pub(crate) const PIPELINE_VERSION: i32 = 25;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///
