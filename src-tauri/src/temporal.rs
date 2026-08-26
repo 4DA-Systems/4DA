@@ -325,13 +325,36 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
         })
         .unwrap_or_default();
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned, detected_from, project_relevance
-             FROM project_dependencies
-             ORDER BY project_path, package_name",
-        )
-        ?;
+    let mut stmt = conn.prepare(
+        // The manifest parsers extract dependency NAMES only — a manifest
+        // carries a RANGE ("^2.0.0"), not an installed version — so
+        // `project_dependencies.version` has been NULL for every row since
+        // the column existed. Consequence (2026-08-26 audit, A6): the
+        // SameMajor x1.2, NewerMajor x1.1 and OlderMajor x0.5 multipliers in
+        // `match_dependencies` have NEVER fired in production, including the
+        // one documented in-code as the fix for "just because it's Tauri
+        // doesn't mean it's relevant".
+        //
+        // The resolved version was one JOIN away the whole time: the LOCKFILE
+        // parsers do capture (name, version) and write it to
+        // `user_dependencies`, which covers 175 of the 184 packages here
+        // (95.1%). Resolve it at READ time rather than backfilling once, so
+        // it tracks lockfile changes instead of going stale. Direct rows win
+        // over transitive, then most-recently-seen.
+        "SELECT pd.id, pd.project_path, pd.manifest_type, pd.package_name,
+                    COALESCE(
+                        pd.version,
+                        (SELECT ud.version FROM user_dependencies ud
+                          WHERE LOWER(ud.package_name) = LOWER(pd.package_name)
+                            AND ud.version IS NOT NULL AND ud.version <> ''
+                          ORDER BY ud.is_direct DESC, ud.last_seen_at DESC
+                          LIMIT 1)
+                    ) AS version,
+                    pd.is_dev, pd.is_direct, pd.language, pd.last_scanned,
+                    pd.detected_from, pd.project_relevance
+             FROM project_dependencies pd
+             ORDER BY pd.project_path, pd.package_name",
+    )?;
 
     let user_excluded = crate::project_inclusion::user_excluded_paths();
     let all_deps: Vec<ProjectDependency> = stmt

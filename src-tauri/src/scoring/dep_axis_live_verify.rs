@@ -69,6 +69,36 @@ fn live_dep_axis_sweep() {
         crate::temporal::dep_scope_degraded(),
     );
 
+    // A6: version intelligence is either live or it is not. Before 2026-08-27
+    // this was 0 of 184 and the OlderMajor x0.5 penalty had never once run.
+    let versioned = ctx
+        .dependency_info
+        .values()
+        .filter(|d| d.version.is_some())
+        .count();
+    let total = ctx.dependency_info.len();
+    println!(
+        "carrying an installed version: {versioned} / {total} ({:.0}%)",
+        versioned as f64 * 100.0 / total.max(1) as f64
+    );
+
+    // Rec 5, stated as an observation rather than a fix: every row this funnel
+    // returns is is_direct, because `project_dependencies` only ever holds
+    // manifest and import-scrape rows — lockfile-only (transitive) packages
+    // live in `user_dependencies` and never reach scoring at all. So the
+    // transitive x0.5 discount in `match_dependencies` is currently
+    // UNREACHABLE, and `is_direct` must never be used as a safety predicate
+    // (it always reads true). If this count ever goes non-zero, that discount
+    // has become live and wants re-examining on purpose.
+    let transitive = ctx
+        .dependency_info
+        .values()
+        .filter(|d| !d.is_direct)
+        .count();
+    println!(
+        "transitive packages in scope: {transitive} (0 means the x0.5 discount is unreachable)"
+    );
+
     let conn = rusqlite::Connection::open(&path).expect("open snapshot");
     let mut stmt = conn
         .prepare("SELECT title, COALESCE(content,'') FROM source_items WHERE created_at < ?1")
