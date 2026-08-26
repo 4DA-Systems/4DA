@@ -360,6 +360,32 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
     Ok(())
 }
 
+/// Append one row to the identity ledger: what changed about the user's
+/// modelled identity, why, and on what evidence.
+///
+/// Best-effort by design — a ledger write must never fail the operation it is
+/// recording, and a missing table (a DB older than migration 112) must not
+/// break topic minting. Errors are logged at debug and swallowed.
+///
+/// `kind`: "topic" | "tech" | "dependency".
+/// `change`: "mint" | "reinforce" | "purge".
+pub fn record_identity_change(
+    conn: &Connection,
+    kind: &str,
+    key: &str,
+    change: &str,
+    reason: &str,
+    evidence: Option<&str>,
+) {
+    if let Err(e) = conn.execute(
+        "INSERT INTO identity_ledger (entity_kind, entity_key, change, reason, evidence)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![kind, key, change, reason, evidence],
+    ) {
+        tracing::debug!(target: "ace::db", error = %e, "identity ledger write skipped");
+    }
+}
+
 /// One-shot startup self-heal (mirrors the Wave-5 agent-infra dependency
 /// purge): delete active_topics rows that can never ground scoring — generic
 /// tokens per the canonical predicate (`scoring::is_generic_topic_token`) —
@@ -373,7 +399,7 @@ pub fn purge_generic_active_topics(conn: &Connection) -> Result<usize> {
 
     // The genericness predicate lives in Rust (COMMON_ENGLISH_WORDS + topic
     // additions), not SQL — select, filter, then delete by id.
-    let generic_ids: Vec<i64> = {
+    let generic_named: Vec<(i64, String)> = {
         let mut stmt = conn
             .prepare("SELECT id, topic FROM active_topics")
             .context("select active_topics for generic prune")?;
@@ -384,9 +410,20 @@ pub fn purge_generic_active_topics(conn: &Connection) -> Result<usize> {
             .context("read active_topics")?;
         rows.flatten()
             .filter(|(_, topic)| crate::scoring::is_generic_topic_token(&topic.to_lowercase()))
-            .map(|(id, _)| id)
-            .collect()
+            .collect::<Vec<(i64, String)>>()
     };
+    let generic_ids: Vec<i64> = generic_named.iter().map(|(id, _)| *id).collect();
+
+    for (id, topic) in &generic_named {
+        record_identity_change(
+            conn,
+            "topic",
+            topic,
+            "purge",
+            "generic_topic_token",
+            Some(&format!("active_topics.id={id}")),
+        );
+    }
 
     for chunk in generic_ids.chunks(500) {
         let placeholders = vec!["?"; chunk.len()].join(",");

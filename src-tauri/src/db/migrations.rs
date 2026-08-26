@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 111;
+        const TARGET_VERSION: i64 = 112;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -4922,6 +4922,60 @@ impl Database {
                 )?;
             }
 
+            if current_version < 112 {
+                Self::run_versioned_migration(
+                    &conn,
+                    111,
+                    112,
+                    "Phase 112: identity ledger — why the system thinks you care about a thing",
+                    |c| {
+                        // The 2026-08-26 audit could not account for the
+                        // lifecycle of an ACE topic. `docker`, `aws`, `azure`
+                        // and `redis` were provably minted into
+                        // `active_topics` (file_signals, 2026-08-19/20) and are
+                        // absent today, and row identity proves it was a
+                        // DELETE rather than an expiry: `grpc` still carries
+                        // id=1141 created 2026-08-14, while `kubernetes` —
+                        // minted by the same fixture on the same scans — has
+                        // id=3953 created 2026-08-25. Something removed them.
+                        //
+                        // It is not in the source. The only DELETEs against
+                        // that table are the two inside
+                        // `purge_generic_active_topics`, no migration touches
+                        // it, every insert is ON CONFLICT DO UPDATE (never
+                        // REPLACE), the genericness predicate has not changed
+                        // since #214/#215, and none of the missing topics is
+                        // generic under it.
+                        //
+                        // Append-only, so a future reader can answer the
+                        // question that had no answer: why does the system
+                        // think I care about this, and what took it away?
+                        // Deliberately NOT foreign-keyed to active_topics —
+                        // the whole point is to survive the row's deletion.
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS identity_ledger (
+                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                 entity_kind TEXT NOT NULL,
+                                 entity_key  TEXT NOT NULL,
+                                 change      TEXT NOT NULL,
+                                 reason      TEXT,
+                                 evidence    TEXT,
+                                 at          TEXT NOT NULL DEFAULT (datetime('now'))
+                             );
+                             CREATE INDEX IF NOT EXISTS idx_identity_ledger_entity
+                                 ON identity_ledger(entity_kind, entity_key, at);
+                             CREATE INDEX IF NOT EXISTS idx_identity_ledger_at
+                                 ON identity_ledger(at);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 112: identity_ledger created"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -6153,6 +6207,75 @@ mod tests {
     /// columns (`content_updated_at`, `scored_at`). Verify the version, the
     /// columns, and idempotency under version-rewind (the harness convention:
     /// wind back one phase, re-run, nothing breaks and data survives).
+    /// Phase 112 lifts TARGET_VERSION to 112 and adds `identity_ledger` — the
+    /// append-only record of why the system believes what it believes about
+    /// the user. The 2026-08-26 audit could not account for topics that were
+    /// provably minted and are provably gone; nothing in the source deletes
+    /// them, and there was no trace to read.
+    #[test]
+    fn test_phase_112_identity_ledger_created_and_idempotent() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 112,
+            "schema_version should be >= 112 after migration; got {version}"
+        );
+
+        let table_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='identity_ledger'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_count, 1, "identity_ledger must exist exactly once");
+
+        // It must accept a row, and default its timestamp.
+        conn.execute(
+            "INSERT INTO identity_ledger (entity_kind, entity_key, change, reason, evidence)
+             VALUES ('topic','kubernetes','mint','file_content','benchmark_scenarios.json')",
+            [],
+        )
+        .unwrap();
+        let (key, at): (String, String) = conn
+            .query_row(
+                "SELECT entity_key, at FROM identity_ledger ORDER BY id DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(key, "kubernetes");
+        assert!(!at.is_empty(), "at must default to a timestamp");
+
+        // Wind back to 111 and re-run: CREATE TABLE IF NOT EXISTS makes the
+        // phase a no-op, the existing row SURVIVES (the ledger is append-only
+        // and must never be rebuilt), and the version returns to 112.
+        conn.execute_batch("UPDATE schema_version SET version = 111;")
+            .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v111");
+
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 112, "version returns to 112 after re-run");
+        let survived: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM identity_ledger WHERE entity_key = 'kubernetes'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            survived, 1,
+            "an append-only ledger must survive re-migration"
+        );
+    }
+
     #[test]
     fn test_phase_111_change_tracking_columns_added_and_idempotent() {
         let db = test_db();
