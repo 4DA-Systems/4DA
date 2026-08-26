@@ -247,6 +247,7 @@ fn patched_advisory_is_not_affected_and_never_critical() {
         search_terms: super::dependencies::extract_search_terms("axios"),
         ecosystem: "javascript".to_string(),
         project_paths: Vec::new(),
+        project_relevance: 1.0,
     };
     ctx.ace_ctx.dependency_names.insert("axios".to_string());
     ctx.ace_ctx
@@ -433,6 +434,51 @@ mod degraded_inputs {
             "a healthy load must not carry the marker"
         );
     }
+
+    /// 2026-08-26 audit, R2. The git-recency scope filter compared a raw
+    /// backslash `git_signals.repo_path` against a canonicalized forward-slash
+    /// `project_dependencies.project_path`, matched 0 of 245 rows on every
+    /// Windows run, and then FAILED OPEN — re-admitting every dependency it
+    /// existed to exclude, with no log line and no marker. The separator bug
+    /// is fixed in `temporal::dep_within_active_root`; this pins the other
+    /// half, so a future widening can never again be silent.
+    #[test]
+    fn dep_scope_degraded_marker_is_carried_and_cleared() {
+        let db = bench_db();
+        let ctx = profile_ctx("rust_developer");
+        crate::temporal::set_dep_scope_degraded_for_test(true);
+        let degraded = score(
+            &ctx,
+            &db,
+            "hackernews",
+            None,
+            "Async runtime scheduling deep dive",
+            "How work-stealing schedulers balance tasks across threads.",
+        );
+        // Clear immediately — the flag is process-global.
+        crate::temporal::set_dep_scope_degraded_for_test(false);
+        assert!(
+            breakdown_markers(&degraded)
+                .iter()
+                .any(|m| m == "dep_scope_degraded"),
+            "a widened dependency scope must mark the breakdown degraded (got {:?})",
+            breakdown_markers(&degraded)
+        );
+        let healthy = score(
+            &ctx,
+            &db,
+            "hackernews",
+            None,
+            "Async runtime scheduling deep dive",
+            "How work-stealing schedulers balance tasks across threads.",
+        );
+        assert!(
+            !breakdown_markers(&healthy)
+                .iter()
+                .any(|m| m == "dep_scope_degraded"),
+            "a correctly-scoped run must not carry the marker"
+        );
+    }
 }
 
 /// Dev-dep registry releases (2026-08-23 audit, item 16): a release of a
@@ -451,6 +497,7 @@ fn dev_dep_registry_release_grounds_but_never_pages() {
         search_terms: super::dependencies::extract_search_terms("vitest"),
         ecosystem: "javascript".to_string(),
         project_paths: Vec::new(),
+        project_relevance: 1.0,
     };
     ctx.ace_ctx.dependency_names.insert("vitest".to_string());
     ctx.ace_ctx

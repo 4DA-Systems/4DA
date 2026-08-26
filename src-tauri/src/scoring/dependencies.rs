@@ -63,6 +63,12 @@ pub(crate) struct DepInfo {
     /// different repository entirely (measured live: `axios` is a direct
     /// dependency of `kairos-mvp`, not of this app).
     pub project_paths: Vec<String>,
+    /// Strongest scan-time project relevance across [`Self::project_paths`]
+    /// (see `temporal::ProjectDependency::project_relevance`). Scales match
+    /// confidence so a package that exists only in a dormant or fixture
+    /// project cannot score like one the user ships. MAX, not min: a package
+    /// declared in both this app and a side project is the app's package.
+    pub project_relevance: f32,
 }
 
 /// A dependency that matched content
@@ -1245,6 +1251,7 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
                     dep.is_direct,
                     dep.is_dev,
                     dep.version,
+                    dep.project_relevance,
                 );
             }
             std::collections::hash_map::Entry::Vacant(e) => {
@@ -1256,6 +1263,7 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
                     search_terms,
                     ecosystem: dep.language,
                     project_paths: vec![dep.project_path],
+                    project_relevance: dep.project_relevance,
                 });
             }
         }
@@ -1286,10 +1294,12 @@ fn merge_dep_occurrence(
     is_direct: bool,
     is_dev: bool,
     version: Option<String>,
+    project_relevance: f32,
 ) {
     existing.project_paths.push(project_path);
     existing.is_direct |= is_direct;
     existing.is_dev &= is_dev;
+    existing.project_relevance = existing.project_relevance.max(project_relevance);
     if existing.version.is_none() {
         existing.version = version;
     }
@@ -1616,6 +1626,15 @@ pub(crate) fn match_dependencies(
         if !info.is_direct && !is_family_child_of_direct(info, ace_ctx) {
             confidence *= 0.5;
         }
+
+        // Project relevance (2026-08-26 audit, R1/rec 5). The column has been
+        // populated since migration 55 and was never read by scoring: a
+        // package belonging only to a dormant, non-git side project scored
+        // exactly like one this app ships. Measured consequence — ten `axios`
+        // advisories at 0.824-0.900, nine of them in the corpus top-45, for a
+        // package 4DA does not depend on. Legacy rows carry 1.0, so this is a
+        // no-op for anything the scanner has not scored down.
+        confidence *= info.project_relevance;
 
         // Infrastructure dependencies (test libraries, type declarations, linting,
         // monitoring) are present in virtually every project of their ecosystem.
@@ -2135,6 +2154,7 @@ mod tests {
                 search_terms: vec!["react".to_string()],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2190,6 +2210,7 @@ mod tests {
             search_terms: extract_search_terms(name),
             ecosystem: ecosystem.to_string(),
             project_paths: Vec::new(),
+            project_relevance: 1.0,
         }
     }
 
@@ -2726,6 +2747,7 @@ mod tests {
                 ],
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2798,6 +2820,7 @@ mod tests {
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2828,6 +2851,7 @@ mod tests {
                 search_terms: vec!["axum".to_string()],
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
         let (matches, score) = match_dependencies("crates.io: axum v0.8.9", "", &[], &ace_ctx);
@@ -2863,6 +2887,7 @@ mod tests {
                 ],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2904,6 +2929,7 @@ mod tests {
                 search_terms: vec!["react".to_string()],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2937,6 +2963,7 @@ mod tests {
                 search_terms: vec!["got".to_string()],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2967,6 +2994,7 @@ mod tests {
                 search_terms: vec!["got".to_string()],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2997,6 +3025,7 @@ mod tests {
                 search_terms: vec!["vitest".to_string()],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3030,6 +3059,7 @@ mod tests {
                 search_terms: extract_search_terms("@tanstack/react-query"),
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3076,6 +3106,7 @@ mod tests {
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3090,6 +3121,7 @@ mod tests {
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3146,6 +3178,7 @@ mod tests {
                 search_terms: extract_search_terms("@sentry/react"),
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3184,6 +3217,7 @@ mod tests {
                 search_terms: extract_search_terms("pdf-extract"),
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3221,6 +3255,7 @@ mod tests {
                 search_terms: extract_search_terms("pdf-extract"),
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3274,6 +3309,7 @@ mod tests {
             search_terms: extract_search_terms(name),
             ecosystem: ecosystem.to_string(),
             project_paths: Vec::new(),
+            project_relevance: 1.0,
         }
     }
 
@@ -3461,6 +3497,7 @@ mod tests {
             search_terms: vec![],
             ecosystem: "javascript".to_string(),
             project_paths: paths.iter().map(|p| (*p).to_string()).collect(),
+            project_relevance: 1.0,
         }
     }
 
@@ -3513,6 +3550,7 @@ mod tests {
             false,
             false,
             None,
+            1.0,
         );
         assert_eq!(info.project_paths, ["d:/4da/relay", "d:/4da/src-tauri"]);
     }
@@ -3529,6 +3567,7 @@ mod tests {
             true,
             false,
             Some("1.12.2".to_string()),
+            1.0,
         );
         assert!(info.is_direct, "direct beats transitive");
         assert!(!info.is_dev, "runtime beats dev");
@@ -3548,7 +3587,58 @@ mod tests {
             true,
             false,
             Some("9.9.9".to_string()),
+            1.0,
         );
         assert_eq!(info.version.as_deref(), Some("1.0.0"));
+    }
+
+    // ── project_relevance (2026-08-26 audit, R1 / rec 5) ────────────────
+
+    #[test]
+    fn merging_keeps_the_strongest_project_relevance() {
+        // A package declared in BOTH a dormant side project and this app is
+        // the app's package: MAX, never min, or the app's own deps would be
+        // dragged down by a stale copy elsewhere.
+        let mut info = info_with(&["c:/users/x/kairos-mvp"], true, false, None);
+        info.project_relevance = 0.5;
+        merge_dep_occurrence(
+            &mut info,
+            "d:/4da/src-tauri".to_string(),
+            true,
+            false,
+            None,
+            1.0,
+        );
+        assert_eq!(info.project_relevance, 1.0, "MAX relevance must win");
+    }
+
+    #[test]
+    fn foreign_project_relevance_scales_match_confidence_down() {
+        // The axios class: a full-name title hit on a package that exists only
+        // in a non-git side project (relevance 0.5) must not score like one
+        // this app ships. Same item, same term, relevance the only difference.
+        let mut strong = direct_dep_info("axios", None, "javascript");
+        strong.project_relevance = 1.0;
+        let mut weak = direct_dep_info("axios", None, "javascript");
+        weak.project_relevance = 0.5;
+
+        let score_with = |info: DepInfo| {
+            let mut ctx = ACEContext::default();
+            ctx.dependency_info.insert("axios".to_string(), info);
+            match_dependencies("axios 1.2.3 released", "", &[], &ctx).1
+        };
+
+        let s_strong = score_with(strong);
+        let s_weak = score_with(weak);
+        assert!(s_strong > 0.0, "baseline must actually match");
+        assert!(
+            s_weak < s_strong,
+            "relevance 0.5 must score below 1.0 (got {s_weak} vs {s_strong})"
+        );
+        assert!(
+            (s_weak - s_strong * 0.5).abs() < 1e-5,
+            "relevance must scale linearly: {s_weak} != {} ",
+            s_strong * 0.5
+        );
     }
 }

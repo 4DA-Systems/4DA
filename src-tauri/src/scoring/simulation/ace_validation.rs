@@ -40,6 +40,7 @@ fn ace_dependency_match_boosts_score() {
             version: Some("1.36".to_string()),
             ecosystem: "rust".to_string(),
             project_paths: Vec::new(),
+            project_relevance: 1.0,
         },
     );
 
@@ -249,6 +250,7 @@ fn ace_context_increases_confirmation_signals() {
             version: Some("1.36".to_string()),
             ecosystem: "rust".to_string(),
             project_paths: Vec::new(),
+            project_relevance: 1.0,
         },
     );
 

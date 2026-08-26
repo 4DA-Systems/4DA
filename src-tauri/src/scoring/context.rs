@@ -532,6 +532,7 @@ mod tests {
             search_terms: vec![],
             ecosystem: "rust".to_string(),
             project_paths: Vec::new(),
+            project_relevance: 1.0,
         }
     }
 

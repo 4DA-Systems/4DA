@@ -2284,6 +2284,13 @@ pub(crate) fn score_item(
         // indistinguishable in the scores from "user has no deps".
         degraded_inputs.push("dep_intel_load_failed".to_string());
     }
+    if crate::temporal::dep_scope_degraded() {
+        // The dependency set backing this run is WIDER than the git-recency
+        // scope asked for, so deps from projects the user has not touched in
+        // 60 days may be scoring. Silent before the 2026-08-26 audit, which is
+        // why a broken filter survived unnoticed on every Windows run.
+        degraded_inputs.push("dep_scope_degraded".to_string());
+    }
 
     let matches: Vec<RelevanceMatch> = if ctx.cached_context_count > 0 && has_real_embedding {
         // A DB error here silently zeroes the CONTEXT axis for this item —
@@ -3707,6 +3714,7 @@ mod tests {
                 search_terms: dependencies::extract_search_terms(package),
                 ecosystem: (*ecosystem).to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             };
             for term in &info.search_terms {
                 ace_ctx.dependency_names.insert(term.clone());

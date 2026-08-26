@@ -10,6 +10,38 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
+// Dependency scope health
+// ============================================================================
+
+/// Set when the git-recency scope filter in [`get_all_dependencies`] matched
+/// NOTHING and the read fell back to a wider set than it was asked for.
+///
+/// Before 2026-08-26 that fallback was silent AND total: the filter compared a
+/// raw `git_signals.repo_path` (`D:\4DA`, backslashes) against a canonicalized
+/// `project_dependencies.project_path` (`d:/4da/src-tauri`, forward slashes),
+/// so on Windows it matched zero of 245 rows on every run and
+/// `filtered.is_empty()` re-admitted every dependency the filter existed to
+/// exclude — including a dormant side project whose `axios` advisories then
+/// held nine of the top-45 feed slots. A broken filter was indistinguishable
+/// from a correctly-empty one. It is now distinguishable: this flag rides onto
+/// every breakdown scored under it as `dep_scope_degraded`.
+static DEP_SCOPE_DEGRADED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// True when the dependency set backing the current run is WIDER than the
+/// git-recency scope asked for (see [`DEP_SCOPE_DEGRADED`]).
+pub(crate) fn dep_scope_degraded() -> bool {
+    DEP_SCOPE_DEGRADED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Test hook: force the flag so pipeline tests can assert the marker reaches
+/// the breakdown without staging a real scope failure.
+#[cfg(test)]
+pub(crate) fn set_dep_scope_degraded_for_test(value: bool) {
+    DEP_SCOPE_DEGRADED.store(value, std::sync::atomic::Ordering::Relaxed);
+}
+
+// ============================================================================
 // Path Canonicalization
 // ============================================================================
 
@@ -58,6 +90,15 @@ pub struct ProjectDependency {
     /// 'lockfile', or 'unknown' (legacy rows written before migration 87).
     /// The builtin-module self-heal purge keys on this.
     pub detected_from: String,
+    /// Scan-time confidence that this project is one the user actually works
+    /// in: `path_score * git_recency` from
+    /// [`crate::ace::scanner::compute_project_relevance`] — 1.0 for a real,
+    /// recently-committed repo, 0.5 when no git repo is found, 0.1 for a stale
+    /// (>90d) repo or a fixture/example/benchmark path. Persisted since
+    /// migration 55 but never read by the scoring path until the 2026-08-26
+    /// audit: `axios` (a dependency of a non-git side project, relevance 0.5)
+    /// held nine of the top-45 feed slots at full dependency weight.
+    pub project_relevance: f32,
 }
 
 // ============================================================================
@@ -243,6 +284,9 @@ fn map_project_dependency_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proje
         detected_from: row
             .get::<_, String>(9)
             .unwrap_or_else(|_| "unknown".to_string()),
+        // Legacy rows predating migration 55 have no value — 1.0 keeps them
+        // scoring exactly as they did before this column was read.
+        project_relevance: row.get::<_, f32>(10).unwrap_or(1.0),
     })
 }
 
@@ -283,7 +327,7 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned, detected_from
+            "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned, detected_from, project_relevance
              FROM project_dependencies
              ORDER BY project_path, package_name",
         )
@@ -309,30 +353,80 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
 
     // Filter to deps from active project trees only
     if active_roots.is_empty() {
-        // No git signals yet — return all included deps (first run fallback)
+        // No git signals yet — return all included deps (first run fallback).
+        // Genuinely unscoped, so it degrades loudly like every other widening.
+        DEP_SCOPE_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
         return Ok(all_deps);
     }
 
     let filtered: Vec<ProjectDependency> = all_deps
         .iter()
-        .filter(|dep| {
-            // Normalize for case-insensitive comparison on Windows
-            let dep_path = dep.project_path.to_lowercase();
-            active_roots.iter().any(|root| {
-                let root_lower = root.to_lowercase();
-                dep_path.starts_with(&root_lower) || root_lower.starts_with(&dep_path)
-            })
-        })
+        .filter(|dep| dep_within_active_root(&dep.project_path, &active_roots))
         .cloned()
         .collect();
 
-    // If git-recency filtering eliminated everything, fall back to every
-    // included dep (still policy-filtered — never re-admit excluded rows).
-    if filtered.is_empty() {
-        return Ok(all_deps);
+    if !filtered.is_empty() {
+        DEP_SCOPE_DEGRADED.store(false, std::sync::atomic::Ordering::Relaxed);
+        return Ok(filtered);
     }
 
-    Ok(filtered)
+    // Nothing matched. Every dependency-bearing project is either gone or has
+    // had no commit in 60 days. Widening to EVERYTHING was the old behaviour
+    // and is exactly what let a dormant project's deps score at full weight;
+    // widen instead to the highest-relevance projects present (ACE's scan-time
+    // path/git score), and say so at ERROR.
+    let max_relevance = all_deps
+        .iter()
+        .map(|d| d.project_relevance)
+        .fold(f32::MIN, f32::max);
+    let primary: Vec<ProjectDependency> = all_deps
+        .iter()
+        .filter(|d| (d.project_relevance - max_relevance).abs() < f32::EPSILON)
+        .cloned()
+        .collect();
+
+    DEP_SCOPE_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
+    tracing::error!(
+        target: "4da::scoring",
+        active_roots = active_roots.len(),
+        total_deps = all_deps.len(),
+        fallback_deps = primary.len(),
+        max_relevance,
+        "dependency scope filter matched NOTHING — falling back to the highest-relevance projects; every breakdown scored under this run carries dep_scope_degraded"
+    );
+
+    if primary.is_empty() {
+        return Ok(all_deps);
+    }
+    Ok(primary)
+}
+
+/// Is this dependency's project inside one of the active repo roots?
+///
+/// Both sides go through [`crate::project_inclusion::comparison_form`] because
+/// they are captured differently: `git_signals.repo_path` is stored RAW
+/// (`D:\4DA`) while `project_dependencies.project_path` is canonicalized
+/// (`d:/4da/src-tauri`). Comparing them unnormalized matched nothing on
+/// Windows, for every row, on every run (2026-08-26 audit, R2).
+///
+/// Matching is path-BOUNDARY, not raw prefix, in both directions: a root
+/// contains its subprojects (`d:/4da` covers `d:/4da/src-tauri`) and a dep
+/// path at or above a root still counts (a repo root recorded deeper than the
+/// manifest), but `d:/4da` must never match `d:/4da-experiments`.
+fn dep_within_active_root(dep_path: &str, active_roots: &[String]) -> bool {
+    let dep = crate::project_inclusion::comparison_form(dep_path);
+    let dep = dep.trim_end_matches('/');
+    if dep.is_empty() {
+        return false;
+    }
+    active_roots.iter().any(|root| {
+        let root = crate::project_inclusion::comparison_form(root);
+        let root = root.trim_end_matches('/');
+        if root.is_empty() {
+            return false;
+        }
+        dep == root || dep.starts_with(&format!("{root}/")) || root.starts_with(&format!("{dep}/"))
+    })
 }
 
 // ============================================================================
@@ -658,5 +752,60 @@ mod tests {
         } else {
             assert_eq!(result, "C:/Users/Dev/project");
         }
+    }
+
+    // ── Dependency scope filter (2026-08-26 audit, R2) ──────────────────
+    //
+    // The bug these pin: `git_signals.repo_path` is stored RAW (`D:\\4DA`)
+    // while `project_dependencies.project_path` is canonicalized
+    // (`d:/4da/src-tauri`). The old filter lowercased both but compared them
+    // with raw `starts_with`, so on Windows it matched 0 of 245 rows on every
+    // run — and `filtered.is_empty()` then re-admitted everything, making a
+    // dead filter indistinguishable from a correctly-empty one.
+
+    #[test]
+    fn backslash_root_matches_forward_slash_dep_path() {
+        // THE regression. Fails against the pre-audit implementation.
+        let roots = vec!["D:\\4DA".to_string()];
+        assert!(dep_within_active_root("d:/4da/src-tauri", &roots));
+        assert!(dep_within_active_root("d:/4da", &roots));
+        assert!(dep_within_active_root("D:\\4DA\\relay", &roots));
+    }
+
+    #[test]
+    fn foreign_project_is_excluded() {
+        let roots = vec!["D:\\4DA".to_string()];
+        assert!(!dep_within_active_root(
+            "c:/users/administrator/documents/kairos-mvp/backend",
+            &roots
+        ));
+    }
+
+    #[test]
+    fn sibling_prefix_is_not_a_match() {
+        // Path-BOUNDARY matching: `d:/4da` must never swallow `d:/4da-experiments`.
+        let roots = vec!["D:\\4DA".to_string()];
+        assert!(!dep_within_active_root("d:/4da-experiments", &roots));
+        assert!(!dep_within_active_root("d:/4dafoo/src", &roots));
+    }
+
+    #[test]
+    fn root_recorded_deeper_than_the_manifest_still_matches() {
+        // Reverse containment: git root deeper than the dep's project path.
+        let roots = vec!["D:\\4DA\\src-tauri".to_string()];
+        assert!(dep_within_active_root("d:/4da", &roots));
+    }
+
+    #[test]
+    fn case_and_trailing_slash_are_normalized() {
+        let roots = vec!["d:/4DA/".to_string()];
+        assert!(dep_within_active_root("D:/4da/site", &roots));
+    }
+
+    #[test]
+    fn empty_inputs_never_match() {
+        assert!(!dep_within_active_root("", &["D:\\4DA".to_string()]));
+        assert!(!dep_within_active_root("d:/4da", &[String::new()]));
+        assert!(!dep_within_active_root("d:/4da", &[]));
     }
 }
