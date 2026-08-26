@@ -1596,6 +1596,21 @@ fn compute_boosts(
 /// dep_match_score at or above the bypass minimum (0.35) clears the 0.20
 /// dependency signal threshold, so the dependency axis itself confirms — but
 /// the `<= 1` guard keeps the two consumers trivially identical.
+///
+/// CORROBORATION is enforced upstream, not re-checked here: since the
+/// 2026-08-26 audit `match_dependencies` caps an uncorroborated evidence set at
+/// [`dependencies::UNCORROBORATED_DEP_CEILING`], which is strictly below the
+/// 0.35 minimum, so a `dep_match_score` that reaches this predicate has
+/// already proven the item names one of the user's packages. The doc above
+/// used to promise "a corroborated direct-dep match" while the predicate
+/// tested neither; the promise is now true.
+///
+/// DIRECTNESS is deliberately NOT required: `is_direct` is 1 for every row the
+/// scanner writes (all three manifest write sites hardcode it and no lockfile
+/// rows exist in `project_dependencies`), so requiring it would filter nothing
+/// while reading as a guarantee. `!is_dev` is also deliberately absent — the
+/// 2026-08-23 audit (item 16) established that dev-dep releases ARE stack
+/// relevant and carry their discount inside `confidence` instead.
 fn dep_gate_bypass_applies(signal_count: u8, dep_match_score: f32) -> bool {
     signal_count <= 1
         && dep_match_score >= scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_MIN_SCORE

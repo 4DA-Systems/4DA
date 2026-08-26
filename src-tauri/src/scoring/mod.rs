@@ -16,6 +16,8 @@ mod composition;
 mod context;
 pub(crate) mod cvss;
 mod dedup;
+#[cfg(test)]
+mod dep_axis_live_verify;
 mod dependencies;
 pub(crate) mod epochs;
 mod explanation;
