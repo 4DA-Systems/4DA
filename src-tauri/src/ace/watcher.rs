@@ -359,6 +359,23 @@ impl FileWatcher {
                 continue;
             }
 
+            // Never mine a project's own FIXTURES either. The data-dir guard
+            // above closed the app's runtime exhaust; the 2026-08-26 audit
+            // found the identical loop running one directory over, in source
+            // control: `src-tauri/src/scoring/benchmark_scenarios.json` — the
+            // scoring pipeline's OWN benchmark corpus — contains "kubernetes"
+            // three times and "grpc" once, so every scan of it minted both as
+            // live user interests, which fed straight back into the scoring
+            // pipeline through `active_topics`. Measured live at e0381216:
+            // `kubernetes` was an active user topic (minted from that fixture
+            // at 2026-08-25 14:33:46) while `tokio` — a crate this app
+            // actually depends on — had expired out of the 7-day window.
+            // A keyword in a test corpus is DATA, not evidence of what the
+            // developer works on.
+            if is_own_fixture_path(path) {
+                continue;
+            }
+
             // Check file size for non-delete events
             if change_type != FileChangeType::Deleted {
                 if let Ok(metadata) = std::fs::metadata(path) {
@@ -444,6 +461,40 @@ impl Drop for FileWatcher {
 /// incident this guards against.
 fn is_own_data_path(path: &Path) -> bool {
     path_is_under(path, &crate::runtime_paths::RuntimePaths::get().data_dir)
+}
+
+/// True when `path` is a test fixture, snapshot, locale bundle or benchmark
+/// corpus — a file whose technology keywords are DATA, not evidence of what
+/// the developer works on.
+///
+/// Test-file conventions are delegated to
+/// [`crate::context_admission::is_test_path`] so this layer and the context
+/// admission chokepoint can never disagree about what "test" means. The extra
+/// segments here are the ones that carry keyword-dense payloads but are not
+/// test FILES: fixture and snapshot directories, i18n locale bundles (4DA
+/// ships 13 of them), and anything named `benchmark*`.
+fn is_own_fixture_path(path: &Path) -> bool {
+    let normalized = path.to_string_lossy().replace('\\', "/").to_lowercase();
+
+    if crate::context_admission::is_test_path(&normalized) {
+        return true;
+    }
+
+    if normalized.split('/').any(|seg| {
+        matches!(
+            seg,
+            "fixtures" | "fixture" | "__snapshots__" | "snapshots" | "locales" | "testdata"
+        )
+    }) {
+        return true;
+    }
+
+    // Any component, not just the filename: benchmark corpora live in
+    // directories as often as they live in single files
+    // (`benchmark_scenarios.json`, `benchmark_calibration/`).
+    normalized
+        .split('/')
+        .any(|seg| seg.starts_with("benchmark"))
 }
 
 /// Prefix containment over normalized path strings: separators unified to `/`
@@ -1072,6 +1123,58 @@ pub struct RateLimitStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression: the SECOND self-contamination loop (2026-08-26 audit, R3).
+    /// The 2026-08-21 fix closed the app's runtime data dir; the same loop was
+    /// still running one directory over, in source control. `benchmark_scenarios.json`
+    /// — the scoring pipeline's own benchmark corpus — contains "kubernetes"
+    /// x3 and "grpc" x1, and `.json` falls through `extract_topics_from_content`
+    /// to the generic keyword scan. Measured live: `kubernetes` was an active
+    /// user topic minted from that fixture while `tokio` had expired out of the
+    /// 7-day read window entirely.
+    #[test]
+    fn own_fixture_paths_are_excluded() {
+        for p in [
+            "D:/4DA/src-tauri/src/scoring/benchmark_scenarios.json",
+            "D:/4DA/src-tauri/src/scoring/benchmark_calibration/mod.rs",
+            "D:/4DA/src/locales/de/ui.json",
+            "D:/4DA/src/locales/zh/ui.json",
+            "/home/dev/proj/tests/fixtures/payload.json",
+            "/home/dev/proj/src/__snapshots__/App.test.tsx.snap",
+            "/home/dev/proj/testdata/corpus.yaml",
+            "D:\\4DA\\src-tauri\\src\\temporal_tests.rs",
+        ] {
+            assert!(
+                is_own_fixture_path(Path::new(p)),
+                "fixture/locale/benchmark path must never mint topics: {p}"
+            );
+        }
+    }
+
+    /// The control that matters more than the test above: over-blocking would
+    /// silently starve the profile of the user's REAL work. Ordinary source
+    /// must still be mined.
+    #[test]
+    fn real_source_files_are_still_mined() {
+        for p in [
+            "D:/4DA/src-tauri/src/scoring/dependencies.rs",
+            "D:/4DA/src-tauri/src/ace/watcher.rs",
+            "D:/4DA/src/components/ResultsView.tsx",
+            "D:/4DA/src-tauri/Cargo.toml",
+            "D:/4DA/package.json",
+            "/home/dev/proj/src/main.rs",
+            "/home/dev/proj/README.md",
+            // "latest" contains no fixture segment; "contested" contains
+            // "test" but not as a path segment — neither may be blocked.
+            "/home/dev/proj/src/latest_release.rs",
+            "/home/dev/proj/src/contested_merge.rs",
+        ] {
+            assert!(
+                !is_own_fixture_path(Path::new(p)),
+                "ordinary source must still be mined: {p}"
+            );
+        }
+    }
 
     /// Regression: self-scan contamination loop (2026-08-21 audit). The
     /// watcher mined the app's own data dir — briefing_snapshot.json minted
