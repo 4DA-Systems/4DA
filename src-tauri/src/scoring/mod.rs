@@ -58,8 +58,9 @@ pub(crate) use context::{
     build_scoring_context, invalidate_scoring_context_cache, is_low_quality_topic,
 };
 pub(crate) use dedup::{
-    apply_domain_diversity, apply_source_topic_diversity, dedup_results, fuzzy_dedup_results,
-    inject_serendipity_candidates, normalize_result_url, sort_results, topic_dedup_results,
+    apply_domain_diversity, apply_source_share_diversity, apply_source_topic_diversity,
+    dedup_results, fuzzy_dedup_results, inject_serendipity_candidates, normalize_result_url,
+    sort_results, topic_dedup_results,
 };
 pub(crate) use dependencies::{
     is_ambiguous_dep_name, is_generic_topic_token, match_dependencies, STRONG_GROUNDING_CONFIDENCE,

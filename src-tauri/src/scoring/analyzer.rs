@@ -296,6 +296,7 @@ pub(crate) async fn score_items_full(
     rank_prov.record(&results, "corroboration");
     telemetry.domain_diversity_adjusted = scoring::apply_domain_diversity(&mut results);
     scoring::apply_source_topic_diversity(&mut results);
+    scoring::apply_source_share_diversity(&mut results);
     rank_prov.record(&results, "diversity");
 
     // Per-source score normalization: blend raw score with source-relative

@@ -391,6 +391,20 @@ domain_diversity {
     floor: 0.15           # [0.05, 0.30]
 }
 
+# Source-share diversity — no single SOURCE may dominate the feed.
+# domain_diversity keys on URL domain and source_topic_diversity keys on
+# (source, topic), so a federated source posting about many different things
+# escaped both: measured 2026-08-27, mastodon was 243 of 520 curated items
+# (46.7%) and carried the largest absolute error count against the LLM judge
+# (122 disputed vs 43 agreed). Items beyond the cap, weakest first, decay
+# toward the floor rather than being cut, so a genuinely strong item from a
+# dominant source still survives.
+source_share {
+    max_share: 0.30       # [0.15, 0.60]
+    decay: 0.75           # [0.40, 0.95]
+    floor: 0.20           # [0.05, 0.40]
+}
+
 # Score offset normalization — ensures all final scores are positive.
 # Negative scores map to [0, offset]. Positive scores shift by +offset.
 # Inspired by X's offset_score() pattern.

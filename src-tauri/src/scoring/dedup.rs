@@ -485,6 +485,59 @@ pub(crate) fn apply_domain_diversity(results: &mut [SourceRelevance]) -> usize {
     adjusted
 }
 
+/// Apply SOURCE-SHARE diversity: no single source may own the feed.
+///
+/// The two diversity passes either side of this one both had a blind spot for
+/// a federated source. `apply_domain_diversity` keys on URL domain, and
+/// Mastodon posts arrive from hundreds of instance domains;
+/// `apply_source_topic_diversity` keys on (source, primary topic), so posts
+/// about many different things never collide. Measured 2026-08-27: mastodon
+/// was 243 of 520 curated items — 46.7% of the feed — and carried the largest
+/// absolute error count against the LLM judge, 122 disputed against 43 agreed.
+///
+/// Items are processed in score-descending order, so a source's STRONGEST
+/// items fill its allowance and only the tail decays. Decay is exponential
+/// toward a floor rather than a hard cut: a genuinely excellent item from a
+/// dominant source still survives, it just stops crowding out everything else.
+pub(crate) fn apply_source_share_diversity(results: &mut [SourceRelevance]) -> usize {
+    let max_share = scoring_config::SOURCE_SHARE_MAX_SHARE;
+    let decay = scoring_config::SOURCE_SHARE_DECAY;
+    let floor = scoring_config::SOURCE_SHARE_FLOOR;
+
+    let live = results.iter().filter(|r| !r.excluded).count();
+    // Below a handful of items a share cap is noise, not diversity.
+    if live < 10 {
+        return 0;
+    }
+    let allowance = ((live as f32) * max_share).ceil().max(1.0) as usize;
+
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut adjusted = 0usize;
+
+    for item in results.iter_mut() {
+        if item.excluded {
+            continue;
+        }
+        let position = seen.entry(item.source_type.clone()).or_insert(0);
+        if *position >= allowance {
+            let over = (*position - allowance + 1) as f32;
+            let multiplier = (1.0 - floor) * decay.powf(over) + floor;
+            item.top_score *= multiplier;
+            adjusted += 1;
+        }
+        *position += 1;
+    }
+
+    if adjusted > 0 {
+        info!(
+            target: "4da::scoring",
+            adjusted, allowance, live,
+            "Source-share diversity applied"
+        );
+    }
+    adjusted
+}
+
 /// Apply source-type diversity: when multiple items share the same source type
 /// AND primary topic, subsequent items get decayed to prevent one source flooding
 /// results with a trending topic (e.g., 4 HN items all about "WebAssembly").

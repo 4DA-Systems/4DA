@@ -229,6 +229,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
     scoring::topic_dedup_results(&mut results);
     scoring::apply_domain_diversity(&mut results);
     scoring::apply_source_topic_diversity(&mut results);
+    scoring::apply_source_share_diversity(&mut results);
 
     // Serendipity Engine: inject anti-bubble items. Routed through
     // `inject_serendipity_candidates` so the scorer-rejected originals are
