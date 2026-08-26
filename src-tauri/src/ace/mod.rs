@@ -95,6 +95,27 @@ pub enum DetectionSource {
     UserExplicit,
 }
 
+/// How far back a topic may still count as active at all. A hard bound so the
+/// query stays cheap; ageing INSIDE it is handled by decay, not by a cliff.
+pub(crate) const TOPIC_WINDOW_DAYS: u32 = 30;
+
+/// Half-life for topic confidence. At 14 days a topic counts half as much as
+/// one seen today, at 28 days a quarter. Chosen so a dependency touched
+/// fortnightly still registers, while a keyword seen once in a JSON fixture
+/// fades toward nothing instead of holding full strength for a week and then
+/// vanishing outright.
+pub(crate) const TOPIC_CONFIDENCE_HALF_LIFE_DAYS: f64 = 14.0;
+
+/// Age-decayed confidence for a topic last seen `age_days` ago.
+///
+/// Exponential half-life, clamped so a clock skew that produces a negative age
+/// cannot amplify a topic above its stored confidence.
+pub(crate) fn decayed_topic_confidence(stored: f32, age_days: f64) -> f32 {
+    let age = age_days.max(0.0);
+    let decay = 0.5_f64.powf(age / TOPIC_CONFIDENCE_HALF_LIFE_DAYS) as f32;
+    stored * decay
+}
+
 /// Active topic detected from current work
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActiveTopic {
@@ -740,22 +761,50 @@ impl ACE {
         Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
-    /// Get active topics
+    /// Get active topics, with confidence decayed by how long ago the topic
+    /// was last seen.
+    ///
+    /// This used to be a hard `last_seen > -7 days` cliff, which measures
+    /// FILE-EDIT RECENCY and was being used as a proxy for STACK MEMBERSHIP.
+    /// Measured consequence on 2026-08-26: `kubernetes` — minted from the
+    /// scoring pipeline's own benchmark fixture — was a live user topic while
+    /// `tokio`, a crate this application actually depends on, had expired out
+    /// of the window entirely. Not because of what the operator builds, but
+    /// because of which files were saved in the last seven days.
+    ///
+    /// Two changes. The window widens to [`TOPIC_WINDOW_DAYS`], which restores
+    /// eight genuine stack topics that the 7-day cliff was evicting (tokio,
+    /// reqwest, thiserror, tauri_plugin_deep_link, tauri_plugin_autostart,
+    /// tracing_subscriber, stripe, noble). And CONFIDENCE now decays with age
+    /// on a [`TOPIC_CONFIDENCE_HALF_LIFE_DAYS`] half-life, so a topic seen this
+    /// morning outweighs one last seen three weeks ago instead of counting the
+    /// same.
+    ///
+    /// Decay is applied to CONFIDENCE, never to `weight`. Weight is what
+    /// `ace_context` admits on (>= 0.55) and the stored mint value is 0.6, so
+    /// decaying it would evict every file-content topic within days — the
+    /// opposite of the problem being fixed. Confidence is what the semantic
+    /// boost weights by, which is where age SHOULD register.
     pub fn get_active_topics(&self) -> Result<Vec<ActiveTopic>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT topic, weight, confidence, source, last_seen FROM active_topics
-             WHERE last_seen > datetime('now', '-7 days')
+            "SELECT topic, weight, confidence, source, last_seen,
+                    CAST(julianday('now') - julianday(last_seen) AS REAL) AS age_days
+             FROM active_topics
+             WHERE last_seen > datetime('now', ?1)
              ORDER BY weight DESC",
         )?;
 
-        let rows = stmt.query_map([], |row| {
+        let window = format!("-{TOPIC_WINDOW_DAYS} days");
+        let rows = stmt.query_map([window], |row| {
             let source_str: String = row.get(3)?;
+            let stored_confidence: f32 = row.get(2)?;
+            let age_days: f64 = row.get::<_, Option<f64>>(5)?.unwrap_or(0.0);
 
             Ok(ActiveTopic {
                 topic: row.get(0)?,
                 weight: row.get(1)?,
-                confidence: row.get(2)?,
+                confidence: decayed_topic_confidence(stored_confidence, age_days),
                 source: match source_str.as_str() {
                     "file_content" => TopicSource::FileContent,
                     "git_commit" => TopicSource::GitCommit,
@@ -1368,4 +1417,58 @@ mod tests {
     // test_stored_threshold_roundtrip removed in v19 (AD-029) along with
     // threshold persistence itself — a persisted tuner value must never
     // resurrect across restarts.
+}
+
+#[cfg(test)]
+mod topic_decay_tests {
+    use super::*;
+
+    /// The inversion this replaced: `kubernetes`, minted from the scoring
+    /// pipeline's own benchmark fixture, was a live user topic while `tokio` —
+    /// a crate this app depends on — had expired out of a hard 7-day window.
+    /// Measured after the change: 22 admitted topics become 30, and the eight
+    /// restored are all genuine stack (tokio, reqwest, thiserror, the two tauri
+    /// plugins, tracing_subscriber, stripe, noble).
+    #[test]
+    fn confidence_halves_every_half_life() {
+        let c = 0.70_f32;
+        assert!((decayed_topic_confidence(c, 0.0) - c).abs() < 1e-6);
+        assert!(
+            (decayed_topic_confidence(c, TOPIC_CONFIDENCE_HALF_LIFE_DAYS) - c / 2.0).abs() < 1e-5
+        );
+        assert!(
+            (decayed_topic_confidence(c, TOPIC_CONFIDENCE_HALF_LIFE_DAYS * 2.0) - c / 4.0).abs()
+                < 1e-5
+        );
+    }
+
+    #[test]
+    fn a_topic_seen_today_outweighs_one_seen_a_fortnight_ago() {
+        assert!(decayed_topic_confidence(0.70, 1.0) > decayed_topic_confidence(0.70, 14.0));
+    }
+
+    /// A topic still inside the window must keep a usable share of its
+    /// confidence — the point is to age it, not to evict it by another route.
+    #[test]
+    fn topics_inside_the_window_are_not_erased() {
+        let at_edge = decayed_topic_confidence(0.70, f64::from(TOPIC_WINDOW_DAYS));
+        assert!(
+            at_edge > 0.15,
+            "a topic at the window edge still counts for something, got {at_edge}"
+        );
+    }
+
+    /// Clock skew must never amplify a topic above what was stored.
+    #[test]
+    fn negative_age_cannot_amplify() {
+        assert!(decayed_topic_confidence(0.70, -5.0) <= 0.70);
+    }
+
+    #[test]
+    fn window_is_wider_than_the_old_seven_day_cliff() {
+        assert!(
+            TOPIC_WINDOW_DAYS > 7,
+            "the 7-day cliff is what evicted tokio while keeping a fixture keyword"
+        );
+    }
 }
