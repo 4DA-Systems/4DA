@@ -161,11 +161,24 @@ pub(crate) fn get_ace_context() -> ACEContext {
         let filtered: Vec<_> = tech
             .iter()
             .filter(|t| {
+                // Library is admitted since 2026-08-27 (audit A10). Excluding it
+                // left tokio (0.56), serde (0.56), reqwest (0.56), react-dom and
+                // sqlx absent from the tech axis entirely — the user's core async
+                // runtime and HTTP client existed ONLY in the dependency axis,
+                // the noisiest one. Platform stays excluded: developing ON
+                // Windows says nothing about caring about content ABOUT Windows.
+                //
+                // Deliberately landed in the SAME commit as the top-K change in
+                // semantic::boost. Admitting Library adds ~7 entries to what was
+                // a whole-set weighted AVERAGE, and averaging is itself finding
+                // A9 — widening the average before replacing it makes the
+                // smearing worse. Neither half is safe to ship alone.
                 matches!(
                     t.category,
                     crate::ace::TechCategory::Language
                         | crate::ace::TechCategory::Framework
                         | crate::ace::TechCategory::Database
+                        | crate::ace::TechCategory::Library
                 ) && t.confidence >= 0.5
             })
             .take(20)
