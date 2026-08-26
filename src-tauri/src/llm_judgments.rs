@@ -34,9 +34,25 @@ const INGESTION_THRESHOLD: f64 = 0.25;
 const BATCH_SIZE: usize = 5;
 
 /// Demote-only verdict feedback: judged relevance strictly below this…
-const DEMOTION_RELEVANCE_BELOW: f64 = 0.25;
+///
+/// Was 0.25, and demoted NOTHING — ever. The bound is a strict "<" and the
+/// judge's rejection scores cluster on exact quarter values, so "< 0.25" sat
+/// immediately BELOW the largest low cluster and caught none of it. Measured
+/// histogram of judged feed items scoring under 0.5 (2026-08-27):
+///
+///     0.25 -> 33 items        0.35 -> 40 items
+///     0.30 -> 22 items        0.45 -> 44 items
+///
+/// 0.30 admits the 0.25 cluster and nothing above it. The CONFIDENCE bar below
+/// is deliberately unchanged: lowering both at once would have swept in
+/// borderline calls the judge itself was unsure about ("Turbovec — vector
+/// search in Rust" at confidence 0.65, for an operator who ships sqlite-vec).
+/// At 0.30/0.7 the demotion set is 16 items and uniformly defensible — kernel
+/// release chatter, a YouTube coding challenge, Astro/Next.js posts for a
+/// Tauri/Rust developer. This is one notch, measured, not a recalibration.
+pub(crate) const DEMOTION_RELEVANCE_BELOW: f64 = 0.30;
 /// …with judge confidence at or above this…
-const DEMOTION_CONFIDENCE_MIN: f64 = 0.7;
+pub(crate) const DEMOTION_CONFIDENCE_MIN: f64 = 0.7;
 /// …capped per pass, so a systematically mis-calibrated judge cannot gut the
 /// curated feed in a single run (10 ≈ 2% of the measured 532-member live feed).
 const DEMOTION_CAP_PER_RUN: usize = 10;

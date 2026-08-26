@@ -23,6 +23,8 @@ pub(crate) mod epochs;
 mod explanation;
 mod explanation_chain;
 mod gate;
+#[cfg(test)]
+mod judge_agreement_live;
 mod keywords;
 pub(crate) mod necessity;
 mod pipeline_signals;
