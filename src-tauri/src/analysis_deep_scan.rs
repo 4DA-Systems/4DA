@@ -19,7 +19,7 @@ use super::{is_aborted, SIGNAL_CLASSIFIER};
 pub(crate) async fn run_multi_source_analysis_impl(
     app: &AppHandle,
     silent: bool,
-) -> Result<Vec<SourceRelevance>> {
+) -> Result<crate::analysis::analysis_cycle::ScoredBatch> {
     info!(target: "4da::analysis", silent, "=== MULTI-SOURCE ANALYSIS STARTED ===");
 
     // Gated emitters: when `silent` (background/scheduled run), suppress
@@ -223,6 +223,17 @@ pub(crate) async fn run_multi_source_analysis_impl(
             }
         }
     }
+
+    // Evaluated snapshot before the batch layer — `dedup_results` and
+    // `topic_dedup_results` below DELETE entries, and persistence must still
+    // stamp and score them (see `analysis_cycle::EvaluatedItem`). Serendipity
+    // injection happens after this point; `ScoredBatch::new` lets the final
+    // results win for any id present in both, so injected and re-capped items
+    // persist exactly as they did before.
+    let pre_batch: Vec<crate::analysis::analysis_cycle::EvaluatedItem> = results
+        .iter()
+        .map(crate::analysis::analysis_cycle::EvaluatedItem::from)
+        .collect();
 
     scoring::sort_results(&mut results);
     scoring::dedup_results(&mut results);
@@ -480,5 +491,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
         });
     }
 
-    Ok(results)
+    Ok(crate::analysis::analysis_cycle::ScoredBatch::new(
+        results, pre_batch,
+    ))
 }

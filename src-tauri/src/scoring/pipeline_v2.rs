@@ -2312,14 +2312,25 @@ pub(crate) fn score_item(
         // indistinguishable from "no match" downstream. Degrade gracefully,
         // but never silently (accuracy-first: a muted axis must be visible in
         // the logs AND on the persisted breakdown, 2026-08-21 audit).
-        match db.find_similar_contexts(input.embedding, 3) {
+        // Cached when current, a live KNN otherwise. This ONE call is 95.8% of
+        // the cost of scoring an item (52.0 ms of 54.7 ms, measured on the live
+        // corpus), and its answer is a pure function of the item's embedding and
+        // the context corpus — neither of which a PIPELINE_VERSION bump touches.
+        // Reads only: the refresh pass in `scoring::context_cache` owns writes,
+        // which is what keeps this safe to run across eight threads.
+        match db.context_matches_for_scoring(
+            input.id as i64,
+            input.embedding,
+            crate::db::context_cache::CONTEXT_MATCH_K,
+            ctx.context_generation,
+        ) {
             Ok(results) => results,
             Err(e) => {
                 tracing::warn!(
                     target: "4da::scoring",
                     error = %e,
                     item_id = input.id,
-                    "find_similar_contexts failed — context axis degraded to zero for this item"
+                    "context match lookup failed — context axis degraded to zero for this item"
                 );
                 degraded_inputs.push("context_knn_failed".to_string());
                 Vec::new()

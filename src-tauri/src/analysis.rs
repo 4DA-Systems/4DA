@@ -29,7 +29,7 @@ fn is_aborted() -> bool {
 // --- Sibling modules ---
 
 #[path = "analysis_cycle.rs"]
-mod analysis_cycle;
+pub(crate) mod analysis_cycle;
 // Re-exported for the sibling test modules (`crate::analysis::persist_cycle_results`
 // et al.); production callers reach these through `analysis_status`'s wrappers.
 #[allow(unused_imports)]

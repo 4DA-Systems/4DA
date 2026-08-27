@@ -77,25 +77,50 @@ pub(crate) fn get_db_path() -> PathBuf {
         }
     }
 
-    // 3. Development: relative to project root (CARGO_MANIFEST_DIR = src-tauri/)
-    let dev_path = {
-        let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        base.pop(); // up from src-tauri/ to project root
-        base.push("data");
-        base.push("4da.db");
-        base
-    };
-    if dev_path.parent().is_some_and(std::path::Path::exists) {
-        return dev_path;
+    // 3. Under `cargo test`, the development fallback below is a PRODUCTION path.
+    //
+    // It resolves to `<repo>/data/4da.db` — the operator's live corpus — so any
+    // test that reaches `get_database()` without an explicit override opens it,
+    // runs the full migration chain against it, and writes to it. That is not
+    // hypothetical: on 2026-08-28 a routine `cargo test --lib` silently migrated
+    // the live 53,838-item database to schema 113 before anyone had chosen to
+    // activate it. The corpus survived; the point is that nothing stopped it.
+    //
+    // Tests get a throwaway file instead. A test that genuinely wants a real
+    // corpus says so with `FOURDA_DB_PATH` (see `scoring::drain_cost_profile`),
+    // which is checked above and still honoured.
+    #[cfg(test)]
+    {
+        return std::env::temp_dir()
+            .join("4da-test-db")
+            .join(format!("test-{}.db", std::process::id()));
     }
 
-    // 3. Deployed: platform-specific app data directory
-    let app_data = get_platform_data_dir();
-    app_data.join("4da.db")
+    #[cfg(not(test))]
+    {
+        // 4. Development: relative to project root (CARGO_MANIFEST_DIR = src-tauri/)
+        let dev_path = {
+            let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            base.pop(); // up from src-tauri/ to project root
+            base.push("data");
+            base.push("4da.db");
+            base
+        };
+        if dev_path.parent().is_some_and(std::path::Path::exists) {
+            return dev_path;
+        }
+
+        // 5. Deployed: platform-specific app data directory
+        get_platform_data_dir().join("4da.db")
+    }
 }
 
 /// Get the platform-specific data directory for 4DA.
 /// Mirrors Tauri's app_data_dir resolution for com.4da.app.
+///
+/// Unreachable under `cfg(test)`: tests resolve to a throwaway file before this
+/// point, so that a test can never open a deployed corpus either.
+#[cfg(not(test))]
 fn get_platform_data_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
@@ -616,11 +641,40 @@ pub(crate) fn get_monitoring_state() -> &'static Arc<monitoring::MonitoringState
 mod tests {
     use super::*;
 
+    /// Under `cargo test`, `get_db_path` must NEVER resolve to a real corpus.
+    ///
+    /// This test used to assert the opposite — that the path lands in the repo's
+    /// `data/` directory — which is exactly the resolution that let a routine
+    /// `cargo test --lib` migrate the operator's live 53,838-item database to a
+    /// new schema on 2026-08-28, unasked. The dev fallback is correct for the
+    /// app and wrong for a test process, so the test build gets a throwaway file
+    /// keyed on the pid.
     #[test]
-    fn test_get_db_path_points_to_data_dir() {
+    fn get_db_path_is_isolated_under_test() {
+        // The explicit FOURDA_DB_PATH override is checked BEFORE this branch and
+        // is still honoured — the live-verification tests in
+        // `scoring::drain_cost_profile` run on it. Not asserted here because
+        // mutating the process environment needs `unsafe`, which the crate denies.
         let path = get_db_path();
-        let path_str = path.to_string_lossy();
-        assert!(path_str.contains("data") && path_str.ends_with("4da.db"));
+        let path_str = path.to_string_lossy().replace('\\', "/");
+        assert!(
+            path_str.ends_with(".db"),
+            "still a database path: {path_str}"
+        );
+        assert!(
+            path_str.contains("4da-test-db"),
+            "test builds must resolve to the throwaway directory, got {path_str}"
+        );
+        let repo_data = {
+            let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            base.pop();
+            base.push("data");
+            base.to_string_lossy().replace('\\', "/")
+        };
+        assert!(
+            !path_str.starts_with(&repo_data),
+            "a test must never resolve to the repo's live corpus ({repo_data})"
+        );
     }
 
     #[test]

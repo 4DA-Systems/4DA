@@ -107,7 +107,7 @@ impl QueryExecutor {
                 c.source_file,
                 SUBSTR(c.text, 1, 200) as preview
             FROM context_vec v
-            JOIN context_chunks c ON c.id = v.rowid
+            JOIN context_chunks c ON c.id = v.id
             WHERE v.embedding MATCH ?1 AND k = ?2
             ORDER BY v.distance
         ";

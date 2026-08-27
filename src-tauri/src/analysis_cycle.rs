@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Analysis-cycle plumbing shared by the cache-first paths: the cycle result
 //! carrier, the single curation-persistence site, the degraded-input persist
-//! guard, and the stale-version drain merger.
+//! guard, and the rolling freshness-refresh merger.
 //!
 //! Factored out of `analysis_status.rs` (2026-08-24, stability wave) when the
 //! DB-watermark differential work pushed that file past the size limit. The
@@ -11,7 +11,6 @@
 
 use tracing::warn;
 
-use crate::scoring;
 use crate::SourceRelevance;
 
 // ============================================================================
@@ -90,6 +89,73 @@ impl RankProvenance {
     }
 }
 
+/// One item the scorer actually EVALUATED this run.
+///
+/// Captured immediately after the per-item scoring loop and before the
+/// batch-relative layer, because that layer *deletes entries from the results
+/// vector*: cross-source dedup, fuzzy-title dedup, topic dedup and temporal
+/// clustering between them removed **831 of 1,458** scored items per cycle on
+/// the live corpus (measured 2026-08-27). Stamping the version from the
+/// survivors meant those 831 kept an older `scored_pipeline_version`, were
+/// re-selected by the next cycle's deterministic drain query, and were scored
+/// and discarded again — for ever. The measured conversion of a 500-item drain
+/// batch was **5**.
+///
+/// EVIDENCE is per-item and batch-independent (2026-08-23 evidence/rank
+/// separation), so an item losing a *display-ranking* contest says nothing
+/// about whether its evidence score is current. Rank and verdict are
+/// batch-relative decisions and deliberately stay on the survivors only.
+#[derive(Clone)]
+pub(crate) struct EvaluatedItem {
+    pub id: i64,
+    pub evidence_score: f32,
+    pub signal_type: Option<String>,
+    pub signal_priority: Option<String>,
+    /// Mirrors [`has_systemic_degradation`] at capture time, so the degraded
+    /// guard applies to dropped items too without needing their full result.
+    pub systemically_degraded: bool,
+}
+
+impl From<&SourceRelevance> for EvaluatedItem {
+    fn from(r: &SourceRelevance) -> Self {
+        Self {
+            id: r.id as i64,
+            evidence_score: r.evidence_score,
+            signal_type: r.signal_type.clone(),
+            signal_priority: r.signal_priority.clone(),
+            systemically_degraded: has_systemic_degradation(r),
+        }
+    }
+}
+
+/// A scoring pass's output: what survived to be displayed, and everything the
+/// scorer actually evaluated on the way there.
+pub(crate) struct ScoredBatch {
+    pub results: Vec<SourceRelevance>,
+    pub evaluated: Vec<EvaluatedItem>,
+}
+
+impl ScoredBatch {
+    /// Combine the FINAL results with a snapshot taken before the batch layer.
+    ///
+    /// Survivors are taken from `results`, byte-for-byte what persistence wrote
+    /// before this change — which matters because the batch layer legitimately
+    /// rewrites an item after the snapshot (a serendipity pick flipped to
+    /// relevant carries a 0.45 evidence cap, and the concept-graph injector
+    /// pushes items that were never in the snapshot at all). The snapshot then
+    /// contributes ONLY the ids `results` lost to dedup and clustering.
+    ///
+    /// So: identical writes for everything that used to be written, plus the
+    /// dropped items that used to be silently abandoned.
+    pub(crate) fn new(results: Vec<SourceRelevance>, pre_batch: Vec<EvaluatedItem>) -> Self {
+        let survived: std::collections::HashSet<i64> =
+            results.iter().map(|r| r.id as i64).collect();
+        let mut evaluated: Vec<EvaluatedItem> = results.iter().map(EvaluatedItem::from).collect();
+        evaluated.extend(pre_batch.into_iter().filter(|e| !survived.contains(&e.id)));
+        Self { results, evaluated }
+    }
+}
+
 /// What one analysis cycle produced (internal to the analysis boundary).
 pub(crate) struct CycleResults {
     /// The cycle's result set. On a differential run with in-memory previous
@@ -106,15 +172,22 @@ pub(crate) struct CycleResults {
     /// that partial set reaches the UI only via the frontend's merging
     /// `background-results` path, never by replacement.
     pub full_display: bool,
+    /// EVERY item the scorer evaluated this run, including the ones the batch
+    /// layer then deleted from `results`. Evidence + version stamp are written
+    /// from here; rank and verdict are written from `results`. See
+    /// [`EvaluatedItem`].
+    pub evaluated: Vec<EvaluatedItem>,
 }
 
 impl CycleResults {
-    /// A full pass: everything in `results` was scored this run.
-    pub(crate) fn full(results: Vec<SourceRelevance>) -> Self {
+    /// A full pass whose batch layer deleted entries: carries the pre-batch
+    /// evaluated set through to persistence.
+    pub(crate) fn full_from_batch(batch: ScoredBatch) -> Self {
         Self {
-            results,
+            results: batch.results,
             scored_ids: None,
             full_display: true,
+            evaluated: batch.evaluated,
         }
     }
     /// Items actually scored this run — the honest `engine_runs.items_scored`.
@@ -139,40 +212,13 @@ impl CycleResults {
     }
 }
 
-/// Merge a batch of items still scored under an older `PIPELINE_VERSION` into
-/// `items` (skipping any already present), so a version bump drains the backlog
-/// a bounded batch per analysis run. Returns the number of items added.
-///
-/// Runs on BOTH the differential and full-analysis paths. Gating it behind
-/// differential mode (the previous behaviour) meant a version bump only drained
-/// via the scheduler's differential runs and never on first-run-after-restart or
-/// manual `run_cached_analysis` invokes, so the backlog re-scored far slower than
-/// intended. The 500-item cap and the stack-release-first ordering both live in
-/// `get_stale_scored_items`.
-pub(crate) fn merge_stale_drain_batch(
-    db: &crate::db::Database,
-    items: &mut Vec<crate::db::StoredSourceItem>,
-) -> usize {
-    // Scoped-epoch promotion before pulling the batch: provably-unaffected
-    // items are re-stamped instead of re-scored, so the 500-item budget is
-    // spent only on the slice the version bump could actually change.
-    // ~0ms no-op when nothing is registered or the corpus is current.
-    scoring::epochs::promote_unaffected_stale_logged(db);
-    let stale = db
-        .get_stale_scored_items(scoring::PIPELINE_VERSION, 500)
-        .unwrap_or_default();
-    if stale.is_empty() {
-        return 0;
-    }
-    let existing: std::collections::HashSet<i64> = items.iter().map(|i| i.id).collect();
-    let added: Vec<_> = stale
-        .into_iter()
-        .filter(|s| !existing.contains(&s.id))
-        .collect();
-    let count = added.len();
-    items.extend(added);
-    count
-}
+// `merge_stale_drain_batch` lived here until 2026-08-27. It appended a 500-item
+// stale batch to the cycle's scoring set, and the batch layer below then deleted
+// most of it before `persist_cycle_results` wrote the version stamp: measured on
+// the live corpus, 495 of every 500 were re-scored and thrown away, giving a net
+// 88 items/hour against a 47,000-item backlog. The drain now runs BESIDE the
+// cycle (`analysis_backfill::drain_stale_scores_budgeted`), where nothing can
+// delete its work before it is written. Do not re-merge it.
 
 /// Rolling freshness-refresh budget per background cycle (2026-08-25
 /// tightening T1). Now that the differential selection keys on CHANGE
@@ -250,7 +296,11 @@ pub(crate) fn merge_freshness_refresh_batch(
 /// `feed_relevant` froze, and the content graph + calibration telemetry silently
 /// went stale (live 2026-07-22: 586 items unjudged across 14 scheduled cycles).
 /// Centralising here makes score-without-curate structurally impossible.
-pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceRelevance]) {
+pub(crate) fn persist_cycle_results(
+    db: &crate::db::Database,
+    results: &[SourceRelevance],
+    evaluated: &[EvaluatedItem],
+) {
     // ── Degraded-input persist guard (2026-08-23 audit, item 11) ─────────
     // A run whose inputs SYSTEMICALLY collapsed (dependency-intel load failure,
     // context-KNN failure) still produces scores — confidently wrong ones (the
@@ -262,7 +312,7 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
     // degraded write — a permanently-degraded deployment must not freeze.
     // Per-item "embedding_missing" is deliberately NOT guarded: it is an
     // attribute of the item, not a collapse of the run.
-    let protected = degraded_protected_ids(db, results);
+    let protected = degraded_protected_ids(db, evaluated);
     if !protected.is_empty() {
         warn!(
             target: "4da::scoring",
@@ -270,20 +320,29 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
             "Systemically degraded run — existing durable scores/verdicts kept (display unaffected)"
         );
     }
-    let persistable = |r: &SourceRelevance| !protected.contains(&(r.id as i64));
+    let persistable_id = |id: i64| !protected.contains(&id);
+    let persistable = |r: &SourceRelevance| persistable_id(r.id as i64);
 
-    // EVIDENCE scores — only items whose evidence is > 0 (noise is
-    // version-stamped below). `evidence_score`, not `top_score`: the write
-    // goes through the same hysteresis damper, which now stabilizes evidence.
-    let score_data: Vec<(i64, f32, Option<String>, Option<String>)> = results
+    // EVIDENCE scores — every EVALUATED item whose evidence is > 0 (noise is
+    // version-stamped below), NOT just the batch-layer survivors.
+    // `evidence_score`, not `top_score`: the write goes through the same
+    // hysteresis damper, which now stabilizes evidence.
+    //
+    // Reading from `evaluated` rather than `results` is the whole of the
+    // 2026-08-27 drain fix. Evidence is a per-item, batch-independent value; an
+    // item deleted by dedup was still judged by this pipeline version and its
+    // evidence is as current as any survivor's. Writing only survivors left the
+    // rest carrying an older version stamp AND an older score, and the drain
+    // re-selected them for ever.
+    let score_data: Vec<(i64, f32, Option<String>, Option<String>)> = evaluated
         .iter()
-        .filter(|r| r.evidence_score > 0.0 && persistable(r))
-        .map(|r| {
+        .filter(|e| e.evidence_score > 0.0 && persistable_id(e.id))
+        .map(|e| {
             (
-                r.id as i64,
-                r.evidence_score,
-                r.signal_type.clone(),
-                r.signal_priority.clone(),
+                e.id,
+                e.evidence_score,
+                e.signal_type.clone(),
+                e.signal_priority.clone(),
             )
         })
         .collect();
@@ -296,7 +355,15 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
     // RANK layer — the WHOLE ranked result set this run (`results` is exactly
     // what the batch layer ranked: the full survivor set on a full pass, the
     // scored subset on a differential run — carried-over display items were
-    // not re-ranked and keep the rank of the run that ranked them). Written
+    // not re-ranked and keep the rank of the run that ranked them).
+    //
+    // Deliberately `results`, not `evaluated`: rank IS the batch-relative
+    // value, so an item the batch layer dropped genuinely has no rank from this
+    // run and must keep whatever rank last ranked it. Same reasoning holds for
+    // the curation verdict below — dedup dropping an item is a statement about
+    // the batch, and promoting a duplicate into the feed because it "was
+    // scored" would be exactly wrong. Their staleness is owned by
+    // `feed_verdict_version` and the demote-only reconciliation pass. Written
     // without hysteresis (rank churn is honest), and `persist_rank_scores`
     // touches neither `scored_pipeline_version` nor the churn telemetry —
     // both track evidence. The degraded guard applies: a systemically
@@ -312,15 +379,18 @@ pub(crate) fn persist_cycle_results(db: &crate::db::Database, results: &[SourceR
         }
     }
 
-    // Stamp the pipeline version for EVERY item scored this run — including noise
-    // items (top_score == 0) that persist_analysis_scores skips. Without this,
-    // zero-scoring stale items never leave the version-bump drain set.
-    // Degraded-protected items are NOT stamped: stamping without writing would
-    // mark a stale score as current and silently exempt it from the drain.
-    let scored_ids: Vec<i64> = results
+    // Stamp the pipeline version for EVERY item EVALUATED this run — including
+    // noise items (evidence == 0) that persist_analysis_scores skips, and
+    // including the ones the batch layer deleted from `results`. Without the
+    // first, zero-scoring stale items never leave the version-bump drain set;
+    // without the second, 57% of every cycle's work was thrown away unstamped
+    // (2026-08-27). Degraded-protected items are NOT stamped: stamping without
+    // writing would mark a stale score as current and silently exempt it from
+    // the drain.
+    let scored_ids: Vec<i64> = evaluated
         .iter()
-        .filter(|r| persistable(r))
-        .map(|r| r.id as i64)
+        .filter(|e| persistable_id(e.id))
+        .map(|e| e.id)
         .collect();
     if let Err(e) = db.mark_items_scored_version(&scored_ids, crate::scoring::PIPELINE_VERSION) {
         warn!(target: "4da::scoring", error = %e, "Failed to stamp scored pipeline version");
@@ -406,12 +476,12 @@ fn has_systemic_degradation(r: &SourceRelevance) -> bool {
 /// on a broken probe would be the worse failure.
 fn degraded_protected_ids(
     db: &crate::db::Database,
-    results: &[SourceRelevance],
+    evaluated: &[EvaluatedItem],
 ) -> std::collections::HashSet<i64> {
-    let degraded: Vec<i64> = results
+    let degraded: Vec<i64> = evaluated
         .iter()
-        .filter(|r| has_systemic_degradation(r))
-        .map(|r| r.id as i64)
+        .filter(|e| e.systemically_degraded)
+        .map(|e| e.id)
         .collect();
     if degraded.is_empty() {
         return std::collections::HashSet::new();
@@ -498,7 +568,8 @@ mod evidence_rank_tests {
         let mut r = make_result(id as u64, 0.62, 0.87, true);
         r.rank_factors = Some(r#"{"ce":0.25}"#.to_string());
 
-        persist_cycle_results(&db, std::slice::from_ref(&r));
+        let evaluated = [EvaluatedItem::from(&r)];
+        persist_cycle_results(&db, std::slice::from_ref(&r), &evaluated);
 
         let conn = db.conn.lock();
         let (evidence, rank, factors, ranked_at, version): (
@@ -537,7 +608,7 @@ mod evidence_rank_tests {
             ranked_at.is_some(),
             "rank write is provenance-stamped in time"
         );
-        assert_eq!(version, i64::from(scoring::PIPELINE_VERSION));
+        assert_eq!(version, i64::from(crate::scoring::PIPELINE_VERSION));
     }
 
     /// Item 12 (churn side): the evidence write is hysteresis-damped, the rank
@@ -547,9 +618,13 @@ mod evidence_rank_tests {
     fn evidence_damped_while_rank_rewrites_freely() {
         let db = test_db();
         let id = insert_test_item(&db, "hackernews", "er2", "damped", "x");
-        persist_cycle_results(&db, &[make_result(id as u64, 0.60, 0.60, true)]);
+        let first = [make_result(id as u64, 0.60, 0.60, true)];
+        let first_eval: Vec<EvaluatedItem> = first.iter().map(EvaluatedItem::from).collect();
+        persist_cycle_results(&db, &first, &first_eval);
         // Next cycle: evidence wobbles sub-hysteresis, rank swings hard.
-        persist_cycle_results(&db, &[make_result(id as u64, 0.62, 0.31, true)]);
+        let second = [make_result(id as u64, 0.62, 0.31, true)];
+        let second_eval: Vec<EvaluatedItem> = second.iter().map(EvaluatedItem::from).collect();
+        persist_cycle_results(&db, &second, &second_eval);
 
         let conn = db.conn.lock();
         let (evidence, rank): (Option<f64>, Option<f64>) = conn

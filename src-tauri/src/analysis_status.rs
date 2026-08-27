@@ -20,8 +20,7 @@ use crate::{
 };
 
 use super::analysis_cycle::{
-    merge_freshness_refresh_batch, merge_stale_drain_batch, persist_cycle_results, CycleResults,
-    RankProvenance,
+    merge_freshness_refresh_batch, persist_cycle_results, CycleResults, RankProvenance,
 };
 use super::analysis_deep_scan::run_multi_source_analysis_impl;
 use super::analysis_fast_path::{elapsed_ms, spawn_post_foreground_cache_fill, CachedAnalysisRun};
@@ -301,10 +300,27 @@ async fn analyze_cached_content_inner(
     app: &AppHandle,
     run: CachedAnalysisRun,
 ) -> Result<CycleResults> {
+    let drain_backlog = run.drain_stale_backlog;
+    // Warm the context-match cache BEFORE the cycle scores anything: score_item
+    // reads that cache and never writes it, so an unwarmed cycle pays the full
+    // 52 ms KNN per item for work a previous pass already did.
+    if drain_backlog {
+        if let Ok(db) = get_database() {
+            crate::scoring::context_cache::refresh_context_cache(
+                db,
+                crate::analysis_backfill::CYCLE_CACHE_BUDGET,
+            );
+        }
+    }
     let cycle = analyze_cached_content_inner_impl(app, run).await?;
     if let Ok(db) = get_database() {
+        // `cycle.evaluated` is always exactly what the scorer judged THIS run —
+        // the pre-dedup set on a full pass, the new-items set on a differential
+        // one — so it is passed whole either way. Only the rank/verdict slice
+        // needs the `scored_ids` filter, because on a differential run
+        // `cycle.results` also carries hours-old display state.
         match &cycle.scored_ids {
-            None => persist_cycle_results(db, &cycle.results),
+            None => persist_cycle_results(db, &cycle.results, &cycle.evaluated),
             Some(ids) => {
                 let scored: Vec<SourceRelevance> = cycle
                     .results
@@ -312,7 +328,7 @@ async fn analyze_cached_content_inner(
                     .filter(|r| ids.contains(&r.id))
                     .cloned()
                     .collect();
-                persist_cycle_results(db, &scored);
+                persist_cycle_results(db, &scored, &cycle.evaluated);
             }
         }
     }
@@ -324,6 +340,17 @@ async fn analyze_cached_content_inner(
     // headless path reaches) means the guard converges on end-user machines
     // without an operator-run drain. No-op probe when nothing is stale.
     crate::analysis_backfill::reconcile_stale_verdicts_logged().await;
+
+    // Stale-SCORE drain, beside the cycle rather than inside its batch.
+    // Background / headless cycles carry it; a foreground click does not, so a
+    // user action scores visible cache instead of inheriting backlog repair.
+    // Bounded by wall clock, so it costs the same on any host at any per-item
+    // price, and it stamps 100% of what it scores (the merged-in version
+    // stamped 1%). A backlog too large for the budget is handled by the
+    // drain-to-completion trigger at engine start.
+    if drain_backlog {
+        crate::analysis_backfill::maintain_scoring_epoch().await;
+    }
     Ok(cycle)
 }
 
@@ -498,34 +525,12 @@ async fn analyze_cached_content_inner_impl(
             "Selected differential candidates"
         );
 
-        // Deep/background cycles drain a batch of items scored under an older
-        // pipeline version. Foreground manual analysis skips this maintenance
-        // work so a user click scores visible cache instead of inheriting a
-        // bounded-but-slow backlog repair.
-        let drained = if run.drain_stale_backlog {
-            let stale_started = Instant::now();
-            let drained = merge_stale_drain_batch(db, &mut new_items);
-            if drained > 0 {
-                info!(
-                    target: "4da::analysis",
-                    stale = drained,
-                    elapsed_ms = elapsed_ms(stale_started),
-                    "Re-scoring stale items from an older pipeline version (merged with new items)"
-                );
-                emit_progress(
-                    app,
-                    "cache",
-                    0.5,
-                    &format!("Re-scoring {drained} items (pipeline updated)..."),
-                    0,
-                    drained,
-                );
-            }
-            drained
-        } else {
-            info!(target: "4da::analysis", "Skipping stale-version backlog drain on foreground fast path");
-            0
-        };
+        // The stale-version drain NO LONGER merges into this batch. It ran here
+        // until 2026-08-27 and the batch layer then deleted most of it before
+        // the version stamp was written — 495 of every 500 stale items were
+        // re-scored and discarded, for ever. It now runs beside the cycle
+        // (`analyze_cached_content_inner`), where it stamps everything it scores.
+        // See `analysis_backfill::drain_stale_scores_budgeted`.
 
         // ── Rolling freshness refresh (2026-08-25 tightening T1) ─────────
         // The differential selection now keys on CHANGE (created_at /
@@ -545,7 +550,6 @@ async fn analyze_cached_content_inner_impl(
         info!(
             target: "4da::analysis",
             changed = changed_count,
-            drain = drained,
             freshness,
             total = new_items.len(),
             "Differential batch composition"
@@ -586,12 +590,12 @@ async fn analyze_cached_content_inner_impl(
                     0,
                     0,
                 );
-                return Ok(CycleResults::full(
+                return Ok(CycleResults::full_from_batch(
                     run_multi_source_analysis_impl(app, silent).await?,
                 ));
             }
 
-            let results =
+            let batch =
                 scoring::score_items_full(app, db, &all_items, silent, run.llm_rerank).await?;
             info!(
                 target: "4da::analysis",
@@ -599,7 +603,7 @@ async fn analyze_cached_content_inner_impl(
                 elapsed_ms = elapsed_ms(analysis_started),
                 "Cache-first analysis finished"
             );
-            return Ok(CycleResults::full(results));
+            return Ok(CycleResults::full_from_batch(batch));
         }
 
         info!(target: "4da::analysis", new_items = new_items.len(), "Found new items for differential scoring");
@@ -719,6 +723,14 @@ async fn analyze_cached_content_inner_impl(
         // stays partial — flagged via `full_display` so it can never REPLACE
         // the shared feed, only merge into it frontend-side.
         let scored_ids: std::collections::HashSet<u64> = new_results.iter().map(|r| r.id).collect();
+        // The differential path runs NO dedup or clustering stage, so every
+        // item it scored is still in `new_results` — the evaluated set and the
+        // survivor set are the same here. Captured before the merge because
+        // `prev` below swallows `new_results`.
+        let evaluated: Vec<crate::analysis::analysis_cycle::EvaluatedItem> = new_results
+            .iter()
+            .map(crate::analysis::analysis_cycle::EvaluatedItem::from)
+            .collect();
         let full_display = previous_results.is_some();
         let mut prev = previous_results.unwrap_or_default();
         prev.retain(|r| !scored_ids.contains(&r.id));
@@ -765,6 +777,7 @@ async fn analyze_cached_content_inner_impl(
             results: prev,
             scored_ids: Some(scored_ids),
             full_display,
+            evaluated,
         });
     }
 
@@ -772,7 +785,7 @@ async fn analyze_cached_content_inner_impl(
     // Use 7-day window to include items from recent fetches
     // Respects free-tier 30-day history gate via get_items_tiered
     let select_started = Instant::now();
-    let mut cached_items = db
+    let cached_items = db
         .get_items_tiered(168, 1000)
         .map_err(|e| format!("Failed to load cached items: {e}"))?;
     info!(
@@ -795,7 +808,7 @@ async fn analyze_cached_content_inner_impl(
             0,
             0,
         );
-        return Ok(CycleResults::full(
+        return Ok(CycleResults::full_from_batch(
             run_multi_source_analysis_impl(app, silent).await?,
         ));
     }
@@ -803,29 +816,17 @@ async fn analyze_cached_content_inner_impl(
     // Background/headless full passes also drain stale pipeline-version backlog.
     // Foreground manual passes skip it: correctness still converges in background,
     // while the visible user action returns after scoring current cache.
-    if run.drain_stale_backlog {
-        let stale_started = Instant::now();
-        let drained = merge_stale_drain_batch(db, &mut cached_items);
-        if drained > 0 {
-            info!(
-                target: "4da::analysis",
-                stale = drained,
-                elapsed_ms = elapsed_ms(stale_started),
-                "Re-scoring stale backlog items from an older pipeline version (full path)"
-            );
-        }
-    } else {
-        info!(target: "4da::analysis", "Skipping stale-version backlog drain on foreground fast path");
-    }
+    // Stale-version drain removed from this batch on 2026-08-27 — see the note
+    // on the differential path above and `drain_stale_scores_budgeted`.
 
-    let results = scoring::score_items_full(app, db, &cached_items, silent, run.llm_rerank).await?;
+    let batch = scoring::score_items_full(app, db, &cached_items, silent, run.llm_rerank).await?;
     info!(
         target: "4da::analysis",
         run_type = run.run_type,
         elapsed_ms = elapsed_ms(analysis_started),
         "Cache-first analysis finished"
     );
-    Ok(CycleResults::full(results))
+    Ok(CycleResults::full_from_batch(batch))
 }
 
 /// Cancel a running analysis

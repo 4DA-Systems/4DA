@@ -14,11 +14,14 @@ mod calibration;
 pub(crate) mod calibration_monitor;
 mod composition;
 mod context;
+pub(crate) mod context_cache;
 pub(crate) mod cvss;
 mod dedup;
 #[cfg(test)]
 mod dep_axis_live_verify;
 mod dependencies;
+#[cfg(test)]
+mod drain_cost_profile;
 pub(crate) mod epochs;
 mod explanation;
 mod explanation_chain;
@@ -397,7 +400,33 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS, same basis as v22/v25:
 // the semantic boost and the dependency axis feed the confirmation gate for ANY
 // item, so no predicate can provably bound the reach. The whole corpus drains.
-pub(crate) const PIPELINE_VERSION: i32 = 26;
+// v27 (2026-08-27): the drain arc. ONE scoring-semantics change, deliberately
+// isolated from the machinery that ships with it.
+//
+//   The grounding filter moved from a Rust-side post-filter into the vec0
+//   PARTITION KEY (schema 113). `find_similar_contexts` used to over-fetch k=24
+//   and keep the first 3 grounding-eligible rows, which vec0 makes necessary
+//   because it selects k rows BEFORE applying join predicates. That was inexact
+//   in one direction: an item whose 24 nearest chunks were all prose got fewer
+//   than three matches, or none, and then scored as though the user's codebase
+//   contained nothing like it. Measured on the live corpus over 800 items:
+//   98.00% get an identical top-3, 2.00% were under-filled by the old
+//   over-fetch, 3 items got NOTHING, and 0.38% see a different top-1 — the only
+//   band that moves a score. Strictly more grounding, never less.
+//
+// Everything else in this arc is deliberately NOT scoring semantics and could
+// not have justified a bump on its own: the per-item context-match cache is
+// exact by construction and verified against a live KNN; the evidence-stamping
+// fix writes the same values to more rows; the drain relocation and the read
+// pool sizing are scheduling.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS. The affected set is
+// "items whose 24 nearest context chunks were mostly prose", which is a fact
+// about embedding geometry and not expressible as a predicate over indexed
+// columns — the module contract's when-unsure-do-not-register rule. The whole
+// corpus drains, which after this arc is a one-off cache warm plus a few
+// minutes rather than 22 days.
+pub(crate) const PIPELINE_VERSION: i32 = 27;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///
@@ -454,6 +483,11 @@ use fourda_macros::ScoringBuilder;
 #[derive(ScoringBuilder, Clone)]
 pub(crate) struct ScoringContext {
     pub cached_context_count: i64,
+    /// Context-corpus generation this run scores against. Cached per-item
+    /// grounding matches are only served when they carry this exact value —
+    /// see [`crate::db::context_cache`]. Zero on a corpus that has not changed
+    /// since schema 113, which is a real generation, not a sentinel.
+    pub context_generation: i64,
     pub interest_count: usize,
     pub interests: Vec<context_engine::Interest>,
     pub exclusions: Vec<String>,
