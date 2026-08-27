@@ -58,9 +58,17 @@ fn judge_agreement_live() {
             |r| r.get(0),
         )
         .unwrap_or(0);
-    // Reads the SHIPPED constants, so this can never measure a threshold pair
-    // the product no longer uses.
-    let demoted_at_gate: i64 = conn
+    // Demotions the gate has actually PERFORMED. This is the number that says
+    // whether the safety net works; see the correction note on the assertion
+    // below for why the pending-candidate count is not.
+    let demotions_performed =
+        one("SELECT COUNT(*) FROM source_items WHERE feed_verdict_reason = 'llm_reject'");
+
+    // Candidates still PENDING at the shipped thresholds. Reads the shipped
+    // constants, so it can never measure a threshold pair the product no
+    // longer uses. Expected to be ~0 on a healthy system: the gate is
+    // convergent, and a demoted item stops being feed_relevant.
+    let pending_at_gate: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM source_items si
              JOIN llm_judgments lj ON lj.source_item_id = si.id AND lj.prompt_version = 'v2'
@@ -79,7 +87,8 @@ fn judge_agreement_live() {
     println!("  feed items                : {feed_total}");
     println!("  ...judged                 : {judged}");
     println!("  ...judged below {DISPUTED_BELOW}      : {disputed}");
-    println!("  demotion gate would demote: {demoted_at_gate}");
+    println!("  demotions performed       : {demotions_performed}");
+    println!("  candidates still pending  : {pending_at_gate}");
 
     println!("\n  source          judged   agree  dispute");
     let mut stmt = conn
@@ -106,15 +115,28 @@ fn judge_agreement_live() {
         return;
     }
 
-    // The invariant this arc exists to hold: the system must be ABLE to act on
-    // the judge disagreeing with it. A gate that demotes nothing while half the
-    // judged feed is disputed is inert, and an inert safety net is
-    // indistinguishable from no safety net until somebody runs an audit.
+    // The invariant: the system must be ABLE to act on the judge disagreeing
+    // with it. An inert safety net is indistinguishable from no safety net
+    // until somebody runs an audit.
+    //
+    // CORRECTION, 2026-08-27. The first version of this test asserted on
+    // PENDING CANDIDATES and read their absence as "the gate has never fired".
+    // That was wrong, and wrong in exactly the way the audit this file comes
+    // from was about: the gate is CONVERGENT — demoting an item clears its
+    // `feed_relevant`, which removes it from the candidate query — so zero
+    // candidates means "nothing left to do", not "never did anything". The
+    // 2026-08-26 snapshot that produced the "zero" already carried 120 items
+    // stamped `llm_reject`. A zero is not an absence until you have checked
+    // what it is a zero OF.
+    //
+    // So the assertion is on demotions PERFORMED. A system where the judge
+    // disputes a meaningful share of the feed and NOTHING has ever been
+    // demoted is the broken state worth failing on.
     let disputed_share = disputed as f64 / judged as f64;
     assert!(
-        disputed_share <= 0.25 || demoted_at_gate > 0,
-        "{:.0}% of judged feed items are disputed ({disputed} of {judged}) yet the demotion \
-         gate would demote NONE — it is calibrated past the judge's output distribution",
+        disputed_share <= 0.25 || demotions_performed > 0,
+        "{:.0}% of judged feed items are disputed ({disputed} of {judged}) and the demotion \
+         gate has NEVER demoted anything — it cannot act on the judge at all",
         disputed_share * 100.0
     );
 }

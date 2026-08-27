@@ -377,7 +377,27 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // shrank (184 packages -> 143), so no predicate can provably bound the reach —
 // the epochs module contract's explicit do-not-register class, same basis as
 // v22. The whole corpus drains.
-pub(crate) const PIPELINE_VERSION: i32 = 25;
+// v26 (2026-08-27): the accuracy + identity arc, second half of the same audit.
+// Scoring-semantics changes landing under this bump:
+//   1. Installed versions are resolved at read time from the lockfile-derived
+//      user_dependencies (0 -> 135 of 143 packages), so the SameMajor x1.2,
+//      NewerMajor x1.1 and OlderMajor x0.5 multipliers fire for the FIRST time
+//      in production. Live effect: title-only dep confirmations 105 -> 97.
+//   2. The semantic ACE boost takes a weighted mean of the TOP-3 closest stack
+//      elements instead of averaging over every topic and tech. Ablation proof:
+//      under the old average one unrelated topic cut an on-stack item from
+//      0.280 to 0.124.
+//   3. The Library tech category is admitted (tech axis 6 -> 13 entries), which
+//      is only safe BECAUSE of (2) — it adds seven terms to what was an average.
+//   4. Topic confidence decays on a 14-day half-life inside a 30-day window,
+//      replacing a hard 7-day cliff that had evicted tokio while keeping a
+//      keyword minted from a test fixture. Admitted topics 22 -> 30.
+//   5. apply_source_share_diversity caps any one source at 30% of a batch.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS, same basis as v22/v25:
+// the semantic boost and the dependency axis feed the confirmation gate for ANY
+// item, so no predicate can provably bound the reach. The whole corpus drains.
+pub(crate) const PIPELINE_VERSION: i32 = 26;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///
