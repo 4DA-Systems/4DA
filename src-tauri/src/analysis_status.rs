@@ -339,7 +339,7 @@ async fn analyze_cached_content_inner(
     // (after persistence, on the single boundary every foreground / scheduled /
     // headless path reaches) means the guard converges on end-user machines
     // without an operator-run drain. No-op probe when nothing is stale.
-    crate::analysis_backfill::reconcile_stale_verdicts_logged().await;
+    crate::analysis_verdicts::reconcile_stale_verdicts_logged().await;
 
     // Stale-SCORE drain, beside the cycle rather than inside its batch.
     // Background / headless cycles carry it; a foreground click does not, so a

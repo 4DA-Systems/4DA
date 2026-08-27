@@ -159,6 +159,7 @@ mod analysis;
 mod analysis_backfill;
 mod analysis_narration;
 mod analysis_rerank;
+mod analysis_verdicts;
 mod anomaly;
 mod app_setup;
 mod attention;
