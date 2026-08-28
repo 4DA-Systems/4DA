@@ -485,20 +485,33 @@ pub(crate) fn apply_domain_diversity(results: &mut [SourceRelevance]) -> usize {
     adjusted
 }
 
-/// Apply SOURCE-SHARE diversity: no single source may own the feed.
+/// Apply SOURCE-SHARE diversity: stop one source dominating the RANKING.
 ///
-/// The two diversity passes either side of this one both had a blind spot for
-/// a federated source. `apply_domain_diversity` keys on URL domain, and
-/// Mastodon posts arrive from hundreds of instance domains;
-/// `apply_source_topic_diversity` keys on (source, primary topic), so posts
-/// about many different things never collide. Measured 2026-08-27: mastodon
-/// was 243 of 520 curated items — 46.7% of the feed — and carried the largest
-/// absolute error count against the LLM judge, 122 disputed against 43 agreed.
+/// SCOPE — read this before trusting the name. This pass is batch-relative and
+/// writes `top_score` ONLY. It does not decide feed MEMBERSHIP: `relevant` is a
+/// per-item verdict computed in `score_item` and persisted long before any batch
+/// layer runs, and nothing here recomputes it. So it changes the ORDER a dominant
+/// source appears in, not how much of the feed it occupies. Measured after this
+/// shipped, on a corpus fully converged at the current pipeline version: mastodon
+/// was still 257 of 560 curated items (45.9%), against the 46.7% that motivated
+/// the change. A genuine membership cap has to be applied at the verdict boundary
+/// in the curation pass — a separate, measured change, not this one. Per AD-034
+/// this pass must therefore NOT drive a `PIPELINE_VERSION` bump: it provably
+/// cannot alter a stored `relevance_score`.
 ///
-/// Items are processed in score-descending order, so a source's STRONGEST
-/// items fill its allowance and only the tail decays. Decay is exponential
-/// toward a floor rather than a hard cut: a genuinely excellent item from a
-/// dominant source still survives, it just stops crowding out everything else.
+/// The two diversity passes either side of this one both had a blind spot for a
+/// federated source. `apply_domain_diversity` keys on URL domain, and Mastodon
+/// posts arrive from hundreds of instance domains; `apply_source_topic_diversity`
+/// keys on (source, primary topic), so posts about many different things never
+/// collide.
+///
+/// Items are processed in `sort_results` order — excluded last, then strongly
+/// grounded first, then score-descending WITHIN each tier. A source's strongest
+/// GROUNDED items therefore fill its allowance first, and a high-scoring
+/// ungrounded item can be decayed while a lower-scoring grounded one is not.
+/// Decay is exponential toward a floor rather than a hard cut: a genuinely
+/// excellent item from a dominant source still survives, it just stops crowding
+/// out everything else.
 pub(crate) fn apply_source_share_diversity(results: &mut [SourceRelevance]) -> usize {
     let max_share = scoring_config::SOURCE_SHARE_MAX_SHARE;
     let decay = scoring_config::SOURCE_SHARE_DECAY;
