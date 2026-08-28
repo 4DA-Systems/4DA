@@ -661,10 +661,22 @@ mod tests {
             path_str.ends_with(".db"),
             "still a database path: {path_str}"
         );
-        assert!(
-            path_str.contains("4da-test-db"),
-            "test builds must resolve to the throwaway directory, got {path_str}"
-        );
+
+        // The pid-keyed throwaway is the DEFAULT isolation, not the only valid
+        // one. `FOURDA_DB_PATH` and `FOURDA_DATA_DIR` are both resolved BEFORE
+        // it, and CI sets `FOURDA_DATA_DIR` to a workflow temp dir for exactly
+        // this purpose — so asserting the throwaway unconditionally failed the
+        // isolation test on the one environment that was already isolated.
+        // Assert the INVARIANT (never the live corpus, checked just below) and
+        // require the throwaway only when nothing else has been pointed at.
+        let overridden = std::env::var_os("FOURDA_DATA_DIR").is_some()
+            || std::env::var_os("FOURDA_DB_PATH").is_some();
+        if !overridden {
+            assert!(
+                path_str.contains("4da-test-db"),
+                "with no env override, a test build must resolve to the throwaway directory, got {path_str}"
+            );
+        }
         let repo_data = {
             let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             base.pop();
