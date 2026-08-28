@@ -41,6 +41,27 @@ function replaceInFile(root, file, from, to) {
   fs.writeFileSync(fullPath, original.replace(from, to));
 }
 
+// The repo's real version, read at run time. Hardcoding it here meant every
+// release bump broke these two tests with "did not include expected fixture
+// text" - a fixture-plumbing failure wearing the costume of a gate failure.
+const CURRENT_VERSION = JSON.parse(
+  fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'),
+).version;
+
+/** Rewrite the app version across all four files that must agree. */
+function setFixtureVersion(root, to) {
+  const from = CURRENT_VERSION;
+  replaceInFile(root, 'package.json', `"version": "${from}"`, `"version": "${to}"`);
+  replaceInFile(root, 'src-tauri/tauri.conf.json', `"version": "${from}"`, `"version": "${to}"`);
+  replaceInFile(root, 'src-tauri/Cargo.toml', `version = "${from}"`, `version = "${to}"`);
+  replaceInFile(
+    root,
+    'src-tauri/Cargo.lock',
+    `name = "fourda"\nversion = "${from}"`,
+    `name = "fourda"\nversion = "${to}"`,
+  );
+}
+
 test('current repo release channel is valid', () => {
   assert.deepEqual(checkReleaseChannel(REPO_ROOT), []);
 });
@@ -61,15 +82,7 @@ test('rejects GitHub global latest as a desktop updater endpoint', () => {
 
 test('rejects accidental desktop minor bump before the 1.0 hardening line is complete', () => {
   const root = copyFixture();
-  replaceInFile(root, 'package.json', '"version": "1.0.1"', '"version": "1.1.0"');
-  replaceInFile(root, 'src-tauri/tauri.conf.json', '"version": "1.0.1"', '"version": "1.1.0"');
-  replaceInFile(root, 'src-tauri/Cargo.toml', 'version = "1.0.1"', 'version = "1.1.0"');
-  replaceInFile(
-    root,
-    'src-tauri/Cargo.lock',
-    'name = "fourda"\nversion = "1.0.1"',
-    'name = "fourda"\nversion = "1.1.0"',
-  );
+  setFixtureVersion(root, '1.1.0');
 
   const errors = checkReleaseChannel(root);
   assert.ok(errors.some((error) => error.includes(`${EXPECTED_DESKTOP_VERSION_LINE}.x hardening line`)));
@@ -77,15 +90,7 @@ test('rejects accidental desktop minor bump before the 1.0 hardening line is com
 
 test('rejects exact 1.0.0 once the database schema has advanced', () => {
   const root = copyFixture();
-  replaceInFile(root, 'package.json', '"version": "1.0.1"', '"version": "1.0.0"');
-  replaceInFile(root, 'src-tauri/tauri.conf.json', '"version": "1.0.1"', '"version": "1.0.0"');
-  replaceInFile(root, 'src-tauri/Cargo.toml', 'version = "1.0.1"', 'version = "1.0.0"');
-  replaceInFile(
-    root,
-    'src-tauri/Cargo.lock',
-    'name = "fourda"\nversion = "1.0.1"',
-    'name = "fourda"\nversion = "1.0.0"',
-  );
+  setFixtureVersion(root, '1.0.0');
 
   const errors = checkReleaseChannel(root);
   assert.ok(errors.some((error) => error.includes('still 1.0.0')));
