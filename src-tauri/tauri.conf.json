@@ -53,6 +53,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "dmg", "appimage", "deb", "rpm"],
+    "createUpdaterArtifacts": true,
     "category": "DeveloperTool",
     "resources": {
       "../src/locales": "locales",

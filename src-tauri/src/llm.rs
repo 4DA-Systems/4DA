@@ -491,10 +491,11 @@ impl LLMClient {
                 .to_string()
         };
 
-        // Re-validate URL at use-time to prevent SSRF from tampered settings
-        if self.provider.provider != "ollama" {
-            crate::url_validation::validate_not_internal(&url)?;
-        }
+        // Re-validate URL at use-time to prevent SSRF from tampered settings.
+        // Keyed on the HOST, not the provider name: `provider: "ollama"` is a
+        // value the frontend can set over IPC, and it used to switch this check
+        // off for any base_url at all.
+        crate::url_validation::validate_llm_endpoint(&url)?;
 
         let system_content = system.to_string();
 
@@ -703,9 +704,7 @@ impl LLMClient {
                 .to_string()
         };
 
-        if self.provider.provider != "ollama" {
-            crate::url_validation::validate_not_internal(&url)?;
-        }
+        crate::url_validation::validate_llm_endpoint(&url)?;
 
         let StructuredOutputMode::JsonSchema { schema } = mode;
 

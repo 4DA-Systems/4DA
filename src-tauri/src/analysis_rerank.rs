@@ -81,27 +81,23 @@ fn build_rerank_context_summary(ctx: &scoring::ScoringContext) -> String {
         parts.push(format!("Interests: {}", names.join(", ")));
     }
 
-    // 7. Recent git commits (from DB)
+    // 7. Recently engaged topics (from DB)
+    //
+    // Commit MESSAGES used to be included here — the five most recent, truncated
+    // to 80 chars each — and this summary is sent verbatim to whichever cloud LLM
+    // the user has configured. NETWORK.md states: "Project files, source code,
+    // file contents, and git history never leave your machine." That was false,
+    // and `RerankConfig::enabled` defaults to true, so one saved cloud key turned
+    // it on for every analysis cycle. The `titles_only` privacy setting did not
+    // cover it either — that applies to article content, not to this summary.
+    //
+    // Removed rather than truncated further: a commit subject is prose the
+    // developer wrote, and no length makes it not-git-history. The signal it was
+    // carrying (what the developer is working on) is already supplied above by
+    // dependencies, git-derived work TOPICS, and declared interests — nouns, not
+    // the developer's own sentences. Pinned by scripts/check-privacy-egress.cjs,
+    // which fails the build if this column is read outside ace/ again.
     if let Ok(db) = crate::open_db_connection() {
-        // Recent commit messages
-        if let Ok(mut stmt) = db.prepare(
-            "SELECT commit_message FROM git_signals WHERE commit_message IS NOT NULL ORDER BY timestamp DESC LIMIT 5",
-        ) {
-            if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
-                let commits: Vec<String> = rows.flatten().collect();
-                if !commits.is_empty() {
-                    let commit_lines: Vec<String> = commits
-                        .iter()
-                        .map(|c| {
-                            let truncated: String = c.chars().take(80).collect();
-                            format!("- {truncated}")
-                        })
-                        .collect();
-                    parts.push(format!("Recent commits:\n{}", commit_lines.join("\n")));
-                }
-            }
-        }
-
         // Recently engaged topics (from feedback/interactions)
         if let Ok(mut stmt) = db.prepare(
             "SELECT DISTINCT si.title FROM feedback f JOIN source_items si ON si.id = f.source_item_id WHERE f.relevant = 1 ORDER BY f.created_at DESC LIMIT 5",

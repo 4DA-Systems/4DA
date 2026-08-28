@@ -20,6 +20,7 @@ const FIXTURE_FILES = [
   '.github/workflows/build-mcpb-extensions.yml',
   'docs/NETWORK-TRANSPARENCY.md',
   'docs/SECURITY-AUDIT-GUIDE.md',
+  'src-tauri/desktop-template.desktop',
 ];
 
 function copyFixture() {
@@ -163,4 +164,54 @@ test('rejects stale CodeSignTool pin helper assumptions', () => {
   assert.ok(errors.some((error) => error.includes('not a placeholder checksum')));
   assert.ok(errors.some((error) => error.includes('locate the current pinned')));
   assert.ok(errors.some((error) => error.includes('replace the current pinned')));
+});
+
+// ── updater artifacts + Linux deep-link scheme ────────────────────────────
+//
+// These pin the two blind spots that let a four-month-old, un-updatable,
+// wrong-scheme release stand: the gate checked that release.yml ASKED for
+// latest.json, but never that Tauri was configured to PRODUCE it, and nothing
+// in the repo referenced desktop-template.desktop at all.
+
+test('a missing createUpdaterArtifacts fails the gate', () => {
+  const root = copyFixture();
+  const file = 'src-tauri/tauri.conf.json';
+  const cfg = JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
+  delete cfg.bundle.createUpdaterArtifacts;
+  fs.writeFileSync(path.join(root, file), JSON.stringify(cfg, null, 2));
+  const failures = checkReleaseChannel(root);
+  assert.ok(
+    failures.some((f) => f.includes('createUpdaterArtifacts')),
+    `expected a createUpdaterArtifacts failure, got: ${JSON.stringify(failures)}`
+  );
+});
+
+test('createUpdaterArtifacts set to false fails the gate', () => {
+  const root = copyFixture();
+  const file = 'src-tauri/tauri.conf.json';
+  const cfg = JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
+  cfg.bundle.createUpdaterArtifacts = false;
+  fs.writeFileSync(path.join(root, file), JSON.stringify(cfg, null, 2));
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('createUpdaterArtifacts')));
+});
+
+test('a desktop entry registering a retired scheme fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    'src-tauri/desktop-template.desktop',
+    'MimeType=x-scheme-handler/fourda;',
+    'MimeType=x-scheme-handler/4da;'
+  );
+  const failures = checkReleaseChannel(root);
+  // Both directions should fire: the configured scheme is missing, and a
+  // scheme that is not configured is registered.
+  assert.ok(failures.some((f) => f.includes('x-scheme-handler/fourda')));
+  assert.ok(failures.some((f) => f.includes('not in')));
+});
+
+test('a desktop entry that drops %U fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(root, 'src-tauri/desktop-template.desktop', 'Exec={{exec}} %U', 'Exec={{exec}}');
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('%U')));
 });
