@@ -4,10 +4,17 @@ All notable changes to 4DA will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.0.1] - Unreleased
+## [1.0.1] - 2026-08-28
 
-Version bumped in the app manifests; not yet tagged or published. Curated highlights
-from a large body of work — this is a selection, not an exhaustive commit log.
+Curated highlights from a large body of work — this is a selection, not an exhaustive
+commit log.
+
+**The Windows installer in this release is not code-signed.** SSL.com eSigner rejects
+the signing credentials (`the provided authorization grant is invalid, expired, revoked`),
+and shipping a current build was judged better than continuing to serve an April build
+with known privacy and security defects. macOS is signed and notarized as normal; Linux
+is unaffected. Verify the SHA-256 against `SHASUMS256.txt` before running the Windows
+installer.
 
 ### Changed
 
