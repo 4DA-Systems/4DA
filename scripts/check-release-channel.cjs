@@ -175,6 +175,48 @@ function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
   if (!releaseYml.includes('gh release upload "$POINTER_TAG" "$WORK_DIR/latest.json"')) {
     fail('release.yml must upload latest.json to the desktop-latest release.');
   }
+
+  // A `v*` tag is not necessarily a release — the repo has eight `v0.0.N-test`
+  // dry-run tags. Both of the steps below used to be unconditional, so a dry run
+  // that SUCCEEDED would have clobbered latest.json on the pointer release every
+  // installed client polls, offering a test build to real users, and un-drafted
+  // the test release. It never fired only because all eight dry runs failed
+  // earlier in the matrix. The next release attempt is expected to open with
+  // exactly such a dry run.
+  const PRODUCTION_TAG_GUARD = "needs.create-release.outputs.production == 'true'";
+  if (!releaseYml.includes('id: tagkind')) {
+    fail('release.yml must classify the tag (id: tagkind) before publishing anything.');
+  }
+  if (!/\^v\[0-9\]\+\\.\[0-9\]\+\\.\[0-9\]\+\$/.test(releaseYml)) {
+    fail('release.yml tag classifier must match a bare vMAJOR.MINOR.PATCH tag exactly.');
+  }
+  // npm publishes are irreversible, and publish-mcp had no tag classification
+  // at all — a desktop dry-run tag would have attempted one. Gated at job level.
+  const mcpJob = releaseYml.slice(releaseYml.indexOf('  publish-mcp:'));
+  if (!releaseYml.includes('  publish-mcp:')) {
+    fail('release.yml must contain the publish-mcp job.');
+  } else if (!mcpJob.slice(0, 700).includes(PRODUCTION_TAG_GUARD)) {
+    fail(
+      'release.yml job "publish-mcp" must be gated on ' + PRODUCTION_TAG_GUARD +
+        ' — an npm publish cannot be undone, and a dry-run tag must not trigger one.'
+    );
+  }
+
+  for (const step of ['Publish desktop updater manifest', 'Publish release']) {
+    const idx = releaseYml.indexOf(`- name: ${step}`);
+    if (idx === -1) {
+      fail(`release.yml must contain the "${step}" step.`);
+      continue;
+    }
+    // The guard must be on the step itself: the next few lines, not anywhere.
+    const window = releaseYml.slice(idx, idx + 200);
+    if (!window.includes(PRODUCTION_TAG_GUARD)) {
+      fail(
+        `release.yml step "${step}" must be gated on ${PRODUCTION_TAG_GUARD} — ` +
+          'otherwise a dry-run tag publishes to real users.'
+      );
+    }
+  }
   if (releaseYml.includes('PLACEHOLDER_SHA256') || releaseYml.includes('TODO: compute the SHA-256')) {
     fail('release.yml must not contain placeholder CodeSignTool checksum instructions.');
   }
