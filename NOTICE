@@ -33,7 +33,7 @@ alloc-stdlib 0.2.2 - BSD-3-Clause - https://github.com/dropbox/rust-alloc-no-std
 allocator-api2 0.2.21 - MIT OR Apache-2.0 - https://github.com/zakarumych/allocator-api2
 ammonia 4.1.4 - MIT OR Apache-2.0 - https://github.com/rust-ammonia/ammonia
 android_system_properties 0.1.5 - MIT/Apache-2.0 - https://github.com/nical/android_system_properties
-anyhow 1.0.103 - MIT OR Apache-2.0 - https://github.com/dtolnay/anyhow
+anyhow 1.0.104 - MIT OR Apache-2.0 - https://github.com/dtolnay/anyhow
 arbitrary 1.4.2 - MIT OR Apache-2.0 - https://github.com/rust-fuzz/arbitrary/
 arg_enum_proc_macro 0.3.4 - MIT - https://github.com/lu-zero/arg_enum_proc_macro
 arrayvec 0.7.6 - MIT OR Apache-2.0 - https://github.com/bluss/arrayvec

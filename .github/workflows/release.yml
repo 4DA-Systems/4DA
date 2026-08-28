@@ -15,10 +15,29 @@ jobs:
     timeout-minutes: 10
     outputs:
       release_id: ${{ steps.create.outputs.result }}
+      production: ${{ steps.tagkind.outputs.production }}
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      # A `v*` tag is not necessarily a release. This workflow triggers on the
+      # whole `v*` glob and the repo's history holds eight `v0.0.N-test` dry-run
+      # tags. Classified ONCE here, as a job output, so every publishing step
+      # downstream reads the same answer.
+      - name: Classify the tag
+        id: tagkind
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "production=true" >> "$GITHUB_OUTPUT"
+            echo "$TAG is a production version tag - artifacts will be published."
+          else
+            echo "production=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Dry run::$TAG is not a production version tag. Everything builds and is verified, but nothing is published: the release stays a DRAFT, the desktop-latest updater pointer is untouched, and the MCP server is not published to npm."
+          fi
 
       - name: Get version from tag
         id: version
@@ -791,8 +810,8 @@ jobs:
             exit 1
           fi
           echo "All required artifacts present."
-
       - name: Publish desktop updater manifest
+        if: needs.create-release.outputs.production == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -823,7 +842,11 @@ jobs:
 
           gh release upload "$POINTER_TAG" "$WORK_DIR/latest.json" --repo "$GH_REPO" --clobber
 
+      # Only a production tag un-drafts. A dry run leaves the draft in place so
+      # the artifacts can be inspected and the draft deleted without ever having
+      # been visible to a user.
       - name: Publish release
+        if: needs.create-release.outputs.production == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
         with:
           script: |
@@ -837,6 +860,13 @@ jobs:
   publish-mcp:
     name: Publish MCP Server to npm
     needs: create-release
+    # npm publishes are IRREVERSIBLE. This job had no tag classification at
+    # all, so a `v0.0.N-test` desktop dry run would attempt to publish the MCP
+    # server. It is a no-op today only because the version in the manifest is
+    # already on npm — bump that version, run a desktop dry run, and it ships.
+    # The MCP server has its own `mcp-v*` tag and workflow; a desktop tag
+    # should never be what releases it.
+    if: needs.create-release.outputs.production == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
