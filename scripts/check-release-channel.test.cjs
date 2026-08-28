@@ -228,7 +228,7 @@ test('an unguarded updater-pointer publish fails the gate', () => {
   replaceInFile(
     root,
     '.github/workflows/release.yml',
-    "      - name: Publish desktop updater manifest\n        if: steps.tagkind.outputs.production == 'true'\n",
+    "      - name: Publish desktop updater manifest\n        if: needs.create-release.outputs.production == 'true'\n",
     '      - name: Publish desktop updater manifest\n'
   );
   const failures = checkReleaseChannel(root);
@@ -243,7 +243,7 @@ test('an unguarded un-draft step fails the gate', () => {
   replaceInFile(
     root,
     '.github/workflows/release.yml',
-    "      - name: Publish release\n        if: steps.tagkind.outputs.production == 'true'\n",
+    "      - name: Publish release\n        if: needs.create-release.outputs.production == 'true'\n",
     '      - name: Publish release\n'
   );
   assert.ok(
@@ -270,5 +270,20 @@ test('a loosened tag pattern that would accept a -test tag fails the gate', () =
   assert.ok(
     checkReleaseChannel(root).some((f) => f.includes('vMAJOR.MINOR.PATCH')),
     'a prefix-only tag pattern must be rejected'
+  );
+});
+
+test('an ungated publish-mcp job fails the gate', () => {
+  // npm publishes cannot be undone. This job had no tag classification at all.
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    "    if: needs.create-release.outputs.production == 'true'\n    runs-on: ubuntu-latest\n    timeout-minutes: 20",
+    '    runs-on: ubuntu-latest\n    timeout-minutes: 20'
+  );
+  assert.ok(
+    checkReleaseChannel(root).some((f) => f.includes('publish-mcp') && f.includes('cannot be undone')),
+    'an ungated npm publish must fail the gate'
   );
 });
