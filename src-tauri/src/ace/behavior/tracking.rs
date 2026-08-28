@@ -98,6 +98,7 @@ impl ACE {
             BehaviorAction::Share => "share",
             BehaviorAction::Dismiss => "dismiss",
             BehaviorAction::MarkIrrelevant => "mark_irrelevant",
+            BehaviorAction::Snooze => "snooze",
             BehaviorAction::BriefingClick => "briefing_click",
             BehaviorAction::BriefingDismiss => "briefing_dismiss",
             BehaviorAction::EngagementComplete { .. } => "engagement_complete",

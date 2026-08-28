@@ -90,6 +90,12 @@ pub enum BehaviorAction {
     Share,
     Dismiss,
     MarkIrrelevant,
+    /// User deferred an item rather than rejecting it — "not now", not "not this".
+    /// A distinct arm rather than an alias for `Dismiss` because the frontend
+    /// already grades it as the weaker signal (FEEDBACK_ADJUSTMENTS: snooze -0.05
+    /// against dismiss -0.10), and collapsing the two would teach ACE that a
+    /// deferral is a rejection.
+    Snooze,
     /// User clicked an item in the intelligence briefing (curated content = stronger signal)
     BriefingClick,
     /// User dismissed the briefing without clicking any item
@@ -131,6 +137,8 @@ impl BehaviorAction {
             BehaviorAction::Share => 1.0,
             BehaviorAction::Dismiss => -0.8,
             BehaviorAction::MarkIrrelevant => -1.0,
+            // Half of Dismiss, mirroring the frontend's own -0.05 vs -0.10 grading.
+            BehaviorAction::Snooze => -0.4,
             BehaviorAction::BriefingClick => 0.7, // Curated content click = stronger than general click
             BehaviorAction::BriefingDismiss => -0.2, // Mild negative — briefing wasn't useful today
             BehaviorAction::EngagementComplete {

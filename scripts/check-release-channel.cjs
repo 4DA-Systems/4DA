@@ -109,6 +109,56 @@ function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
   if (!releaseYml.includes('includeUpdaterJson: true')) {
     fail('release.yml must set includeUpdaterJson: true so Tauri emits latest.json.');
   }
+
+  // The workflow asking for latest.json is not the same as Tauri PRODUCING it.
+  // `createUpdaterArtifacts` defaults to false, and with it unset the bundler
+  // emitted no .sig at all, so "Found artifacts:" held only the .exe, the
+  // required-asset check hard-failed, and the release stayed a draft. The gate
+  // above checked the request and never the capability — text, not meaning.
+  if (tauriConfig.bundle?.createUpdaterArtifacts !== true) {
+    fail(
+      'tauri.conf.json must set bundle.createUpdaterArtifacts: true — it defaults to false, ' +
+        'and without it Tauri emits no updater signature, so latest.json can never be produced.'
+    );
+  }
+
+  // A custom desktopTemplate opts out of Tauri's generated .desktop entry, so
+  // the deep-link scheme in it is hand-maintained and drifted: the file still
+  // registered `x-scheme-handler/4da` four months after #491 renamed the scheme
+  // to `fourda`. Nothing referenced the file, which is why nothing caught it.
+  const desktopTemplateRel = tauriConfig.bundle?.linux?.deb?.desktopTemplate;
+  if (desktopTemplateRel) {
+    const templatePath = path.join(root, 'src-tauri', desktopTemplateRel);
+    if (!fs.existsSync(templatePath)) {
+      fail(`tauri.conf.json references a desktopTemplate that does not exist: ${desktopTemplateRel}`);
+    } else {
+      const template = fs.readFileSync(templatePath, 'utf8');
+      const schemes = tauriConfig.plugins?.['deep-link']?.desktop?.schemes ?? [];
+      for (const scheme of schemes) {
+        if (!template.includes(`x-scheme-handler/${scheme}`)) {
+          fail(
+            `${desktopTemplateRel} must register x-scheme-handler/${scheme} — ` +
+              'the Linux packages are the only place this is hand-maintained.'
+          );
+        }
+      }
+      const stale = template.match(/x-scheme-handler\/([A-Za-z0-9+.-]+)/g) ?? [];
+      for (const hit of stale) {
+        const name = hit.split('/')[1];
+        if (!schemes.includes(name)) {
+          fail(
+            `${desktopTemplateRel} registers x-scheme-handler/${name}, which is not in ` +
+              'tauri.conf.json deep-link schemes. A retired scheme must not stay registered.'
+          );
+        }
+      }
+      // Without %U the handler launches with no argument, so the URL that
+      // triggered it is dropped and activation silently does nothing.
+      if (!/^Exec=.*%U/m.test(template)) {
+        fail(`${desktopTemplateRel} Exec= must pass %U, or deep links arrive with no URL.`);
+      }
+    }
+  }
   const requiredAssets = releaseYml.match(/REQUIRED=\(([\s\S]*?)\n\s*\)/)?.[1] ?? '';
   if (!requiredAssets.includes('"latest.json"')) {
     fail('release.yml must require latest.json before publishing a desktop release.');

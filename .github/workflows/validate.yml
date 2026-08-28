@@ -444,6 +444,13 @@ jobs:
       - name: Retired promise language (AD-030)
         run: node scripts/check-retired-claims.cjs
 
+      # NETWORK.md promises git history and file contents never leave the
+      # machine. On 2026-08-28 the reranker was sending the five most recent
+      # commit messages to the configured cloud LLM, on by default. Nothing
+      # tested the promise, which was the real defect.
+      - name: Raw local content stays local (NETWORK.md)
+        run: node scripts/check-privacy-egress.cjs
+
       - name: Guard self-tests (scripts/*.test.cjs)
         # The guards above have their OWN unit tests, and until now those ran in
         # no hook and no workflow — nothing verified the guards still detect

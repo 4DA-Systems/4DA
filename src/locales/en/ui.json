@@ -2201,5 +2201,6 @@
   "autopsy.close": "Close",
   "settings.context.addDirectory": "Add directory",
   "settings.personalization.addSuggestion": "Add {{name}} to your interests",
-  "settings.personalization.dismissSuggestion": "Dismiss {{name}}"
+  "settings.personalization.dismissSuggestion": "Dismiss {{name}}",
+  "feedback.notFullySaved": "Feedback not fully saved ({{commands}} failed)"
 }

@@ -113,6 +113,7 @@ pub async fn ace_record_interaction(
         "share" => ace::BehaviorAction::Share,
         "dismiss" => ace::BehaviorAction::Dismiss,
         "mark_irrelevant" => ace::BehaviorAction::MarkIrrelevant,
+        "snooze" => ace::BehaviorAction::Snooze,
         "briefing_click" => ace::BehaviorAction::BriefingClick,
         "briefing_dismiss" => ace::BehaviorAction::BriefingDismiss,
         "engagement_complete" => {

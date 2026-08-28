@@ -211,6 +211,59 @@ pub(crate) fn validate_not_internal(url: &str) -> Result<()> {
     Ok(())
 }
 
+/// Is this URL pointed at the local machine itself — loopback host, any port?
+///
+/// Deliberately narrower than [`is_internal_parsed_url`]: it admits 127.0.0.0/8,
+/// `::1` and `localhost`, and nothing else. A private LAN address (192.168.x.x)
+/// or a cloud metadata endpoint (169.254.169.254) is still internal and still
+/// blocked — those are the SSRF targets; the user's own machine is not.
+pub(crate) fn is_loopback_url(url: &str) -> bool {
+    let Ok(parsed) = Url::parse(url) else {
+        return false;
+    };
+    // Credentials in the URL are the classic disguise for exactly this check
+    // (`http://api.openai.com@127.0.0.1/`), so a URL carrying them is never
+    // treated as a trusted local endpoint.
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return false;
+    }
+    match parsed.host() {
+        Some(Host::Ipv4(v4)) => v4.is_loopback(),
+        Some(Host::Ipv6(v6)) => v6.is_loopback(),
+        Some(Host::Domain(d)) => {
+            let host = d.trim_end_matches('.').to_lowercase();
+            if host == "localhost" || host.ends_with(".localhost") {
+                return true;
+            }
+            // A bare literal the parser left as a domain may still be an IP.
+            matches!(host.parse::<IpAddr>(), Ok(ip) if ip.is_loopback())
+        }
+        None => false,
+    }
+}
+
+/// Validate a user-configured LLM endpoint.
+///
+/// Replaces the provider-NAME check that used to guard these call sites
+/// (`if provider != "ollama" { validate_not_internal(url) }`). That was wrong in
+/// both directions:
+///
+///  * as a bypass — `provider: "ollama"` is a value the frontend can set over
+///    IPC, and it disabled SSRF validation for ANY `base_url`, including cloud
+///    metadata endpoints;
+///  * as a false negative (INV-032) — a local LM Studio, llama.cpp or Jan server
+///    is exactly as safe as Ollama and was blocked purely for not being called
+///    "ollama".
+///
+/// Keying on the HOST instead fixes both: any loopback endpoint is allowed
+/// whatever the provider claims to be, and everything else is validated.
+pub(crate) fn validate_llm_endpoint(url: &str) -> Result<()> {
+    if is_loopback_url(url) {
+        return Ok(());
+    }
+    validate_not_internal(url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

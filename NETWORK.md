@@ -273,8 +273,31 @@ use (`src-tauri/src/embeddings_providers/fastembed.rs`):
 - **No phoning home.** The only 4DA-operated endpoint is the user-initiated `4da.ai` license
   recovery (§2e). There is no background 4DA backend receiving data.
 - **No raw-content transmission.** Project files, source code, file contents, and git history never
-  leave your machine. The only data *derived* from local content that is sent anywhere is OSV
-  **package names** (§2c) — not code.
+  leave your machine. Not the text of your files, not your commit messages, not your diffs.
+  Enforced by `scripts/check-privacy-egress.cjs`, which fails the build if a raw-content column is
+  read outside the modules that mine and store it — because until 2026-08-28 this bullet was wrong:
+  the LLM reranker was including your five most recent commit messages in the context summary it
+  sends to your configured cloud provider, and it is on by default. That is removed, and the gate
+  exists so the claim is tested rather than asserted.
+- **What IS derived from local content and does leave, when the relevant feature runs.** This list
+  is exhaustive; if you find something not on it, that is a bug, not an omission.
+
+  | Destination | What it receives | Why |
+  |---|---|---|
+  | `api.osv.dev` | package names + versions | vulnerability matching (§2c) |
+  | `registry.npmjs.org` | your npm package names | release / version intelligence |
+  | `pypi.org` | your Python package names | as above |
+  | `crates.io` | your crate names | as above |
+  | `proxy.golang.org` | your **full Go module paths** | as above |
+  | `api.github.com/advisories` | your ecosystem names | advisory matching |
+  | `api.github.com/search` | your languages | repo discovery |
+  | Reddit / Lemmy / Mastodon | the subreddits / communities you follow | feed fetch |
+  | Stack Overflow | your tags | question fetch |
+  | your configured LLM provider | dependency **names**, git-derived work **topics**, declared interests, and the titles of items you saved — nouns, never your prose | rerank + briefing (BYOK, off unless you supply a key) |
+
+  Go module paths are the sharpest edge here: a private module path such as
+  `github.com/yourcompany/internal-service` discloses the organisation and repository name to
+  Google's module proxy. If that matters to you, disable the Go source in Settings → Sources.
 - **No device fingerprinting.** License validation sends the key only (§2d).
 - **No cookies, no tracking pixels, no third-party scripts.** The frontend loads zero external
   resources.
