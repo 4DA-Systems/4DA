@@ -296,3 +296,45 @@ if updated == 0 {
 - An adversarial audit catches a class you missed — document the class, not just the instance.
 
 Keep entries short. Link to code by `file:line`. If the fix requires more than two paragraphs, link to an ADR in `.claude/plans/` or a strategy doc.
+
+
+---
+
+## FM: A maintenance loop that reports attempts instead of conversions
+
+**Observed:** 2026-08-27. The stale-version drain logged `stale=500` every eleven
+minutes for days and looked healthy. It was converting **five** of those 500. The
+other 495 were scored at full price and then deleted from the results vector by
+the batch layer (cross-source dedup, fuzzy title, topic dedup, temporal
+clustering removed 831 of 1,458 per cycle) *before* `persist_cycle_results`
+wrote the version stamp — so they kept an older stamp, were re-selected by the
+next cycle's deterministic `ORDER BY`, and were re-scored and discarded again.
+Net drain 88 items/hour against a 46,997-item backlog: **22 days**, with 1.1% of
+the compute doing useful work. The same machine cleared it in **22m07s** the
+moment the one-shot path was run by hand.
+
+**Class:** the same one as the 90-day re-embed outage already in this file — a
+repair loop that only reports its own activity is indistinguishable from one that
+works. `stale=500` was true every time and meant nothing.
+
+**Structural fixes shipped (AD-033):**
+- `persist_cycle_results` stamps and scores every item the scorer EVALUATED, not
+  every item that survived the batch layer (`analysis_cycle::EvaluatedItem`).
+  Rank and verdict stay on survivors — they are batch-relative by doctrine.
+- The drain no longer merges into the display batch at all; it runs beside the
+  cycle (`drain_stale_scores_budgeted`), where nothing can delete its work
+  before it is written.
+- Drain logs now carry `converted`, measured as a before/after count, and warn
+  explicitly when `rescored > 0 && converted == 0`.
+- A backlog past `DRAIN_TO_COMPLETION_THRESHOLD` triggers a run-to-completion
+  drain automatically, on every path — the one-shot drain had existed since
+  PIPELINE_VERSION 7 and no code anywhere called it.
+
+**Detection:** `get_scoring_coverage` reports the pipeline-version histogram and
+the context-cache coverage. `4da::backfill` warns when more than 5% of the corpus
+is on a superseded epoch, naming the consequence: every surface except Blind
+Spots ranks items judged by two pipeline versions against each other.
+
+**The generalisable rule:** when you add a loop that is supposed to shrink
+something, log the SIZE OF THE THING, before and after. Never log the size of the
+attempt.

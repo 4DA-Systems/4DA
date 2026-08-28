@@ -422,6 +422,34 @@
 |----|-------|---------|--------|
 | — | (None currently) | — | — |
 
+### AD-033: The Scoring Drain Is a Vector-Search Problem, Not a Scoring Problem
+
+- **Decision:** Materialise the per-item context match (`item_context_cache`, schema 113) and maintain it INCREMENTALLY against a trigger-maintained context-corpus generation, rather than recomputing it on every re-score. Move the grounding filter into the vec0 partition key so that materialised value is a true top-K. Take the stale-version drain out of the analysis batch, stamp evidence for every item the scorer EVALUATED rather than every item that survived dedup, and trigger a drain-to-completion automatically when the backlog passes 5,000.
+- **Rationale:** Measured on the live 53,000-item corpus, 2026-08-27:
+  - Scoring one item costs 54.7 ms, of which **52.0 ms (95.8%) is a single sqlite-vec KNN**. All of PASIFA — topics, dependency matching across 143 packages, keywords, content DNA, the confirmation gate, every boost and ceiling — is the other 2.7 ms.
+  - That KNN is a pure function of the item's embedding and the context corpus. **145 of 15,599 context chunks changed in fifteen days**, and of 600 sampled items, **zero** had a top-3 touching a changed chunk.
+  - The v25+v26 arc was 17 commits and 4,392 lines; **none** were in `db/mod.rs`, `context_admission.rs`, `embeddings.rs` or `context_engine/`. The 96% term was provably invariant across that bump and was recomputed 47,000 times.
+  - The in-cycle drain converted **5 of every 500** stale items: the batch layer deleted 831 of 1,458 scored results before the version stamp was written, and the drain items lost that contest systematically. Net 88 items/hour, 22 days to converge, 1.1% of the compute doing useful work.
+  - `--engine-drain`, which converts 100%, cleared the same backlog in **22m07s** — but no code path could reach it; only a human typing a flag.
+  - Verified after the change: the cache is **index-exact** on 400 real items both cold and after a context-corpus change that moved 352 of 400 top-3 lists, and the incremental merge propagated that change across all 53,752 items in **10 seconds** versus **560 seconds** for a full recompute.
+- **Considered:**
+  - *A plain generation-counter cache* (as first proposed): Rejected — it would have invalidated 100% of entries on those 145 chunk writes. The measurement that motivates the cache is a PRECISE invalidation, so the implementation had to be an exact delta-merge, not a version equality check.
+  - *Lazy score-on-read:* Rejected previously and still rejected — threshold-before-rank surfaces (blind spots > 0.5, autophagy < 0.05, MCP) need scores for items that are never displayed.
+  - *Binary quantisation of the context index (recommendation 6 as published):* **Rejected on measurement.** On this corpus, 768-bit codes with exact-L2 rescoring recover only **20% / 45% / 69%** of exact top-3 lists at 4x / 10x / 32x oversampling, and even at 32x, **10% of items get a different top-1** — a different grounding axis, a different score. Code embeddings cluster too tightly for sign-only quantisation. Fast (0.25 ms/item) and wrong is not a trade this product makes.
+  - *An exact in-memory Rust f32 scan:* Measured **9.06 ms/item vs 29.78 ms** for sqlite-vec in a release build — exact, and 3.3x faster. NOT adopted: it is a second implementation of the most correctness-critical query in the product, and the cache already removes that scan from the steady state. Revisit only if the context corpus grows enough that a cold rebuild stops being a one-off (the current cold warm is ~9 minutes for 53,752 items).
+  - *Per-axis epochs for every signal axis:* Deferred with evidence. The context axis needed materialising because it is 96% of the cost, and it is now epoch-scoped independently of `PIPELINE_VERSION` (the cache is keyed on the CONTEXT generation, so a scoring bump does not invalidate it). The remaining axes are collectively 2.7 ms/item — materialising them would save ~18 seconds on a whole-corpus drain. Registering an unconsumed axis registry would be dead code, which doctrine forbids. Revisit if a future axis acquires its own expensive input.
+- **Date:** 2026-08-27
+- **Status:** Final
+
+### AD-034: A PIPELINE_VERSION Bump Declares a Blast Radius, Not a Release
+
+- **Decision:** A `PIPELINE_VERSION` bump must correspond to a change in what `score_item` writes to `relevance_score`. Batch-relative changes (cross-encoder, dedup corroboration, diversity, per-source percentile, LLM advisor, final rank cap) write `top_score`/`rank_score` only and must NOT bump it. Where several scoring changes ship together, prefer landing them under separate bumps that each register a scoped epoch over bundling them into one unregistered bump.
+- **Rationale:** v26 bundled five changes, one of which (`apply_source_share_diversity`) is a batch-relative ranking stage that provably cannot alter any stored `relevance_score`. Bundling forced the union of five blast radii onto the whole corpus and made the bump unregisterable, because no SQL predicate can bound the reach of the widest member. The version number should describe what was invalidated, not when it shipped.
+- **Considered:**
+  - *Keep bundling and rely on the drain being fast:* Rejected as the only mitigation — AD-033 makes a full drain affordable, but an affordable full drain is still strictly worse than a scoped one, and the discipline costs nothing at authoring time.
+- **Date:** 2026-08-27
+- **Status:** Final
+
 ---
 
 ## Decision Template

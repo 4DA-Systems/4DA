@@ -180,6 +180,7 @@ fn install_bench_dep(ace: &mut ace_context::ACEContext, name: &str, ecosystem: &
         search_terms: super::dependencies::extract_search_terms(name),
         ecosystem: ecosystem.to_string(),
         project_paths: Vec::new(),
+        project_relevance: 1.0,
     };
     for term in &info.search_terms {
         ace.dependency_names.insert(term.clone());
@@ -745,11 +746,59 @@ fn scenarios_have_valid_score_ranges() {
     }
 }
 
+/// Structural regression gate for the scoring pipeline. **Not** an accuracy
+/// measurement — read the caveat before trusting a number from it.
+///
+/// It was `#[ignore]`d pending "re-baseline after Arctic-M real embeddings
+/// replace synthetic test vectors", and stayed off long enough for a dependency
+/// axis that was 75% phantom to ship undetected (2026-08-26 audit). Re-measured
+/// 2026-08-27 it passes its own 0.75 bar untouched at 80.5% (70/87), and it
+/// produces byte-identical results with and without that audit's four scoring
+/// fixes — so it is stable enough to gate regressions, and it is ON again,
+/// because a gate that is switched off is worth exactly what one that does not
+/// exist is worth.
+///
+/// THE CAVEAT, and the reason the original `#[ignore]` was not merely stale:
+/// [`run_benchmark`] scores every scenario with a ZERO embedding. That puts the
+/// whole run in the documented degraded state — `embedding_missing` — where the
+/// context axis cannot run at all and the semantic ACE boost falls back to
+/// keywords. Every current failure is `signals=1 [ace]`, held under the
+/// 1-signal confirmation ceiling (0.28), and that is an artefact of the zero
+/// vector as much as anything about relevance. Do not read `true_positive
+/// 11/20` as a live recall figure.
+///
+/// What this test CAN do: fail when a change moves the structural floor. What
+/// it CANNOT do: notice that the dependency axis is 75% phantom — it did not,
+/// for months. Live accuracy is measured against real judgments; see
+/// `scoring::judge_agreement_live`.
 #[test]
-#[ignore = "re-baseline after Arctic-M real embeddings replace synthetic test vectors"]
 fn benchmark_scoring_accuracy() {
     let db = bench_db();
     let report = run_benchmark(&db);
+
+    println!(
+        "PASIFA benchmark: score-range accuracy {:.1}% ({}/{}), relevance accuracy {:.1}%",
+        report.accuracy * 100.0,
+        report.passed,
+        report.total,
+        report.relevance_accuracy * 100.0,
+    );
+    let mut cats: Vec<_> = report.by_category.iter().collect();
+    cats.sort_by_key(|(k, _)| k.as_str());
+    for (cat, r) in cats {
+        println!("  {cat:<22} {}/{}", r.passed, r.total);
+    }
+    for f in report.failures.iter().take(20) {
+        println!(
+            "  FAIL {:<26} score={:.3} signals={} [{}] expected_relevant={} actual={}",
+            f.scenario_id,
+            f.actual_score,
+            f.signal_count,
+            f.confirmed_signals.join(","),
+            f.expected_relevant,
+            f.actual_relevant
+        );
+    }
 
     assert!(
         report.accuracy >= 0.75,
@@ -838,6 +887,7 @@ fn direct_dep_cve_clears_the_direct_dep_floor() {
             search_terms: super::dependencies::extract_search_terms(name),
             ecosystem: "rust".to_string(),
             project_paths: Vec::new(),
+            project_relevance: 1.0,
         }
     }
 

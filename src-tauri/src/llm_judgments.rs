@@ -34,9 +34,25 @@ const INGESTION_THRESHOLD: f64 = 0.25;
 const BATCH_SIZE: usize = 5;
 
 /// Demote-only verdict feedback: judged relevance strictly below this…
-const DEMOTION_RELEVANCE_BELOW: f64 = 0.25;
+///
+/// Was 0.25, and demoted NOTHING — ever. The bound is a strict "<" and the
+/// judge's rejection scores cluster on exact quarter values, so "< 0.25" sat
+/// immediately BELOW the largest low cluster and caught none of it. Measured
+/// histogram of judged feed items scoring under 0.5 (2026-08-27):
+///
+///     0.25 -> 33 items        0.35 -> 40 items
+///     0.30 -> 22 items        0.45 -> 44 items
+///
+/// 0.30 admits the 0.25 cluster and nothing above it. The CONFIDENCE bar below
+/// is deliberately unchanged: lowering both at once would have swept in
+/// borderline calls the judge itself was unsure about ("Turbovec — vector
+/// search in Rust" at confidence 0.65, for an operator who ships sqlite-vec).
+/// At 0.30/0.7 the demotion set is 16 items and uniformly defensible — kernel
+/// release chatter, a YouTube coding challenge, Astro/Next.js posts for a
+/// Tauri/Rust developer. This is one notch, measured, not a recalibration.
+pub(crate) const DEMOTION_RELEVANCE_BELOW: f64 = 0.30;
 /// …with judge confidence at or above this…
-const DEMOTION_CONFIDENCE_MIN: f64 = 0.7;
+pub(crate) const DEMOTION_CONFIDENCE_MIN: f64 = 0.7;
 /// …capped per pass, so a systematically mis-calibrated judge cannot gut the
 /// curated feed in a single run (10 ≈ 2% of the measured 532-member live feed).
 const DEMOTION_CAP_PER_RUN: usize = 10;
@@ -45,6 +61,24 @@ const DEMOTION_CAP_PER_RUN: usize = 10;
 /// pipeline brain that re-curates the item, forever. Mirrors the 7-day
 /// ingestion window in `get_unjudged_item_ids`.
 const DEMOTION_JUDGMENT_WINDOW_DAYS: u32 = 7;
+
+/// Diagnostic probe bounds — deliberately NOT demotion thresholds. Nothing is
+/// demoted at these values; they exist only to answer the question a zero
+/// cannot: did the gate match nothing because the judge AGREES with the feed,
+/// or because it is calibrated past the judge's actual output distribution?
+///
+/// Measured 2026-08-27, and the reason this probe exists: the gate above had
+/// demoted ZERO items on a 520-item feed while the judge disputed 162 of the
+/// 324 feed items it had assessed. Both thresholds miss independently — the
+/// judge's rejections cluster at EXACTLY 0.25 and 0.30 against a strict
+/// `< 0.25`, and it emits low confidence precisely BECAUSE it is rejecting
+/// (every one of ten axios advisories it scored 0.22-0.35 carried confidence
+/// 0.45-0.60). At these probe bounds, 61 feed items would have qualified.
+///
+/// Retuning the real thresholds is a feed-visibility decision for the operator,
+/// not something to infer from one corpus. Making the silence audible is not.
+const DEMOTION_PROBE_RELEVANCE_BELOW: f64 = 0.40;
+const DEMOTION_PROBE_CONFIDENCE_MIN: f64 = 0.6;
 
 #[derive(Debug, Deserialize)]
 struct JudgmentResponse {
@@ -355,6 +389,37 @@ fn apply_judgment_demotions(db: &Database, cap: usize) -> Result<usize> {
         cap,
     )?;
     if candidates.is_empty() {
+        // A zero here is ambiguous, and an ambiguous zero is how a gate that has
+        // never fired stays invisible. Probe one notch looser and say which case
+        // this is — same doctrine as DEP_SCOPE_DEGRADED: a mechanism that
+        // silently does nothing must be distinguishable from one that correctly
+        // found nothing to do.
+        let probe = db
+            .get_llm_reject_candidates(
+                PROMPT_VERSION,
+                DEMOTION_PROBE_RELEVANCE_BELOW,
+                DEMOTION_PROBE_CONFIDENCE_MIN,
+                DEMOTION_JUDGMENT_WINDOW_DAYS,
+                cap,
+            )
+            .unwrap_or_default();
+        if !probe.is_empty() {
+            warn!(
+                target: "4da::llm_judgments",
+                gate_relevance_below = DEMOTION_RELEVANCE_BELOW,
+                gate_confidence_min = DEMOTION_CONFIDENCE_MIN,
+                probe_relevance_below = DEMOTION_PROBE_RELEVANCE_BELOW,
+                probe_confidence_min = DEMOTION_PROBE_CONFIDENCE_MIN,
+                would_demote_at_probe = probe.len(),
+                "LLM demotion gate matched nothing, but {} curated item(s) qualify one notch looser — the gate may be calibrated past the judge's output distribution",
+                probe.len()
+            );
+        } else {
+            debug!(
+                target: "4da::llm_judgments",
+                "LLM demotion gate matched nothing and nothing qualifies at the probe bounds either — the judge agrees with the curated feed"
+            );
+        }
         return Ok(0);
     }
 

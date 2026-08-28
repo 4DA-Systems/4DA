@@ -82,6 +82,42 @@ fn extract_project_name_from_evidence(evidence: &str) -> Option<String> {
     }
 }
 
+/// Per-evidence scoring weight for a detected technology, strongest path wins.
+///
+/// 0.85 primary project, 0.40 secondary, 0.10 support infrastructure (MCP
+/// servers, editor extensions, tooling and scripts — present because the app
+/// ships them, not because they are what the developer builds).
+///
+/// MAX across the evidence list, and the subproject test applies PER PATH. The
+/// original form ran two `any()` passes over the whole list with the
+/// subproject test first, so one support path anywhere pinned the language to
+/// 0.10 regardless of how much primary evidence sat beside it. Measured live
+/// at e0381216: `javascript` (47 evidence entries, 7 of them primary
+/// manifests) and `typescript` (26 entries, 6 primary) were both held at 0.10
+/// — below a secondary project's 0.40 — by four paths each under
+/// `editors/vscode` and `mcp-4da-server`, in an application that is roughly
+/// half TypeScript. A tech that lives ONLY in support infrastructure still
+/// scores 0.10, which is what the penalty was written for.
+fn tech_weight_from_evidence(evidence: &[String], primary_normalized: &str) -> f32 {
+    evidence
+        .iter()
+        .map(|ev| {
+            let ev_lower = ev.to_lowercase().replace('\\', "/");
+            let is_subproject = ev_lower.contains("/mcp-")
+                || ev_lower.contains("/editors/")
+                || ev_lower.contains("/tools/")
+                || ev_lower.contains("/scripts/");
+            if is_subproject {
+                0.10
+            } else if !primary_normalized.is_empty() && ev_lower.contains(primary_normalized) {
+                0.85
+            } else {
+                0.40
+            }
+        })
+        .fold(0.0_f32, f32::max)
+}
+
 /// Fetch ACE-discovered context for relevance scoring
 /// PASIFA: Now captures full context including confidence scores
 pub(crate) fn get_ace_context() -> ACEContext {
@@ -135,33 +171,29 @@ pub(crate) fn get_ace_context() -> ACEContext {
             .take(20)
             .collect();
 
+        let primary_normalized = primary_dir.replace('\\', "/");
         for t in &filtered {
             let name_lower = t.name.to_lowercase();
             ctx.detected_tech.push(name_lower.clone());
 
-            // Compute per-tech weight from evidence path (primary vs secondary project)
-            let is_primary = t.evidence.iter().any(|ev| {
-                let ev_lower = ev.to_lowercase().replace('\\', "/");
-                let primary_normalized = primary_dir.replace('\\', "/");
-                ev_lower.contains(&primary_normalized)
-            });
-
-            // Subproject penalty: MCP servers, editors, tools are support infrastructure
-            let is_subproject = t.evidence.iter().any(|ev| {
-                let ev_lower = ev.to_lowercase().replace('\\', "/");
-                ev_lower.contains("/mcp-")
-                    || ev_lower.contains("/editors/")
-                    || ev_lower.contains("/tools/")
-                    || ev_lower.contains("/scripts/")
-            });
-
-            let weight: f32 = if is_subproject {
-                0.10
-            } else if is_primary {
-                0.85
-            } else {
-                0.40
-            };
+            // Weight is computed PER EVIDENCE PATH and the strongest wins.
+            //
+            // This used to be two `any()` passes over the whole evidence list
+            // with the subproject test evaluated FIRST, so a single support
+            // path anywhere in the list pinned the language to 0.10 no matter
+            // how much primary-project evidence sat beside it. Measured live at
+            // e0381216: `javascript` had 47 evidence entries — SEVEN of them
+            // primary-project manifests — and was pinned to 0.10 by four paths
+            // under `editors/vscode`; `typescript` had 26 entries, six of them
+            // primary, pinned by four under `mcp-4da-server`. Both are primary
+            // languages of this application, weighted below a secondary
+            // project's 0.40, in an app that is roughly half TypeScript.
+            //
+            // A language present in BOTH a primary manifest and a subproject
+            // keeps the primary weight; a language that lives ONLY in support
+            // infrastructure still scores 0.10, which is the behaviour the
+            // penalty was written for.
+            let weight = tech_weight_from_evidence(&t.evidence, &primary_normalized);
             let existing = ctx
                 .tech_weights
                 .get(&name_lower)
@@ -232,6 +264,43 @@ mod tests {
         let ctx = ACEContext::default();
         assert!(ctx.active_topics.is_empty());
         assert!(ctx.detected_tech.is_empty());
+    }
+
+    fn ev(paths: &[&str]) -> Vec<String> {
+        paths.iter().map(|p| (*p).to_string()).collect()
+    }
+
+    /// 2026-08-26 audit, A7. Four support paths out of 47 must not outvote
+    /// seven primary-project manifests.
+    #[test]
+    fn primary_evidence_survives_a_subproject_path() {
+        let evidence = ev(&[
+            "Found in D:/4DA/editors/vscode/4da/package.json",
+            "Found in D:/4DA/package.json",
+            "Found in D:/4DA/site/package.json",
+        ]);
+        assert_eq!(tech_weight_from_evidence(&evidence, "d:/4da"), 0.85);
+    }
+
+    /// The penalty still does its job when support infrastructure is ALL there is.
+    #[test]
+    fn support_only_tech_keeps_the_subproject_penalty() {
+        let evidence = ev(&[
+            "Found in D:/4DA/mcp-4da-server/package.json",
+            "Found in D:/4DA/editors/vscode/4da/package.json",
+        ]);
+        assert_eq!(tech_weight_from_evidence(&evidence, "d:/4da"), 0.10);
+    }
+
+    #[test]
+    fn tech_outside_the_primary_project_is_secondary() {
+        let evidence = ev(&["Found in C:/Users/x/Documents/other-app/package.json"]);
+        assert_eq!(tech_weight_from_evidence(&evidence, "d:/4da"), 0.40);
+    }
+
+    #[test]
+    fn empty_evidence_scores_zero() {
+        assert_eq!(tech_weight_from_evidence(&[], "d:/4da"), 0.0);
     }
 
     #[test]

@@ -129,6 +129,12 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
 
     let code = match mode {
         HeadlessMode::Once => {
+            if !force && scoring_epoch_is_behind() {
+                info!(
+                    target: "4da::headless",
+                    "Feed is fresh but the scoring epoch is behind — running the cycle to converge it"
+                );
+            }
             if !force && is_cycle_fresh() {
                 info!(
                     target: "4da::headless",
@@ -183,6 +189,23 @@ async fn run_drain_to_completion() -> i32 {
     /// Checkpoint every this many drain cycles so a long drain does not append its whole
     /// output to the WAL before anything moves it into the main database file.
     const MAINTENANCE_EVERY_N_CYCLES: usize = 10;
+
+    // Warm the context-match cache first. `score_item` reads it and never writes
+    // it, so a drain against a cold cache costs the full 52 ms/item — which is
+    // exactly what the 22-minute 2026-08-27 drain measured, before this existed.
+    if let Ok(db) = crate::get_database() {
+        let budget = std::time::Duration::from_mins(10);
+        let refreshed = crate::scoring::context_cache::refresh_context_cache(db, budget);
+        info!(
+            target: "4da::headless",
+            merged = refreshed.merged,
+            recomputed = refreshed.recomputed,
+            remaining = refreshed.remaining,
+            elapsed_ms = refreshed.elapsed_ms,
+            "Context-match cache warmed ahead of the drain"
+        );
+    }
+
     let mut total = 0usize;
     for cycle in 0..MAX_CYCLES {
         if cycle > 0 && cycle % MAINTENANCE_EVERY_N_CYCLES == 0 {
@@ -805,8 +828,29 @@ fn is_osv_fresh() -> bool {
         .unwrap_or(false)
 }
 
+/// True when a scoring change has landed and the corpus has not caught up.
+///
+/// FEED freshness and SCORING-EPOCH freshness are different things, and the
+/// short-circuit above only knew about the first. Found by testing the
+/// drain-to-completion trigger on 2026-08-27: with 8,000 items stale but the feed
+/// recently fetched, `--engine-once` reported "already fresh — nothing to do" and
+/// exited in nine seconds without draining anything. A stale epoch means every
+/// surface except Blind Spots is ranking items judged by two pipeline versions
+/// against each other, which is its own reason to run a cycle regardless of how
+/// recently the sources were polled.
+///
+/// Deliberately reuses the same threshold as the drain policy: below it the
+/// budgeted per-cycle drain absorbs the remainder anyway, so waking the engine
+/// for a handful of rows would be churn.
+fn scoring_epoch_is_behind() -> bool {
+    crate::get_database().is_ok_and(|db| {
+        db.count_stale_scored_items(crate::scoring::PIPELINE_VERSION)
+            .is_ok_and(|n| n > crate::analysis_backfill::DRAIN_TO_COMPLETION_THRESHOLD)
+    })
+}
+
 fn is_cycle_fresh() -> bool {
-    is_data_fresh() && is_osv_fresh()
+    is_data_fresh() && is_osv_fresh() && !scoring_epoch_is_behind()
 }
 
 #[cfg(test)]

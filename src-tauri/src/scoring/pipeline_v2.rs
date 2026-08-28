@@ -1596,6 +1596,21 @@ fn compute_boosts(
 /// dep_match_score at or above the bypass minimum (0.35) clears the 0.20
 /// dependency signal threshold, so the dependency axis itself confirms — but
 /// the `<= 1` guard keeps the two consumers trivially identical.
+///
+/// CORROBORATION is enforced upstream, not re-checked here: since the
+/// 2026-08-26 audit `match_dependencies` caps an uncorroborated evidence set at
+/// [`dependencies::UNCORROBORATED_DEP_CEILING`], which is strictly below the
+/// 0.35 minimum, so a `dep_match_score` that reaches this predicate has
+/// already proven the item names one of the user's packages. The doc above
+/// used to promise "a corroborated direct-dep match" while the predicate
+/// tested neither; the promise is now true.
+///
+/// DIRECTNESS is deliberately NOT required: `is_direct` is 1 for every row the
+/// scanner writes (all three manifest write sites hardcode it and no lockfile
+/// rows exist in `project_dependencies`), so requiring it would filter nothing
+/// while reading as a guarantee. `!is_dev` is also deliberately absent — the
+/// 2026-08-23 audit (item 16) established that dev-dep releases ARE stack
+/// relevant and carry their discount inside `confidence` instead.
 fn dep_gate_bypass_applies(signal_count: u8, dep_match_score: f32) -> bool {
     signal_count <= 1
         && dep_match_score >= scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_MIN_SCORE
@@ -2284,20 +2299,38 @@ pub(crate) fn score_item(
         // indistinguishable in the scores from "user has no deps".
         degraded_inputs.push("dep_intel_load_failed".to_string());
     }
+    if crate::temporal::dep_scope_degraded() {
+        // The dependency set backing this run is WIDER than the git-recency
+        // scope asked for, so deps from projects the user has not touched in
+        // 60 days may be scoring. Silent before the 2026-08-26 audit, which is
+        // why a broken filter survived unnoticed on every Windows run.
+        degraded_inputs.push("dep_scope_degraded".to_string());
+    }
 
     let matches: Vec<RelevanceMatch> = if ctx.cached_context_count > 0 && has_real_embedding {
         // A DB error here silently zeroes the CONTEXT axis for this item —
         // indistinguishable from "no match" downstream. Degrade gracefully,
         // but never silently (accuracy-first: a muted axis must be visible in
         // the logs AND on the persisted breakdown, 2026-08-21 audit).
-        match db.find_similar_contexts(input.embedding, 3) {
+        // Cached when current, a live KNN otherwise. This ONE call is 95.8% of
+        // the cost of scoring an item (52.0 ms of 54.7 ms, measured on the live
+        // corpus), and its answer is a pure function of the item's embedding and
+        // the context corpus — neither of which a PIPELINE_VERSION bump touches.
+        // Reads only: the refresh pass in `scoring::context_cache` owns writes,
+        // which is what keeps this safe to run across eight threads.
+        match db.context_matches_for_scoring(
+            input.id as i64,
+            input.embedding,
+            crate::db::context_cache::CONTEXT_MATCH_K,
+            ctx.context_generation,
+        ) {
             Ok(results) => results,
             Err(e) => {
                 tracing::warn!(
                     target: "4da::scoring",
                     error = %e,
                     item_id = input.id,
-                    "find_similar_contexts failed — context axis degraded to zero for this item"
+                    "context match lookup failed — context axis degraded to zero for this item"
                 );
                 degraded_inputs.push("context_knn_failed".to_string());
                 Vec::new()
@@ -3707,6 +3740,7 @@ mod tests {
                 search_terms: dependencies::extract_search_terms(package),
                 ecosystem: (*ecosystem).to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             };
             for term in &info.search_terms {
                 ace_ctx.dependency_names.insert(term.clone());

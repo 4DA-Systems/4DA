@@ -186,7 +186,11 @@ mod tests {
             make(id_relevant2, 0.72, true),
         ];
 
-        crate::analysis::persist_cycle_results(&db, &results);
+        let evaluated: Vec<crate::analysis::EvaluatedItem> = results
+            .iter()
+            .map(crate::analysis::EvaluatedItem::from)
+            .collect();
+        crate::analysis::persist_cycle_results(&db, &results, &evaluated);
 
         let conn = db.conn.lock();
         let verdict = |id: i64| -> (Option<i64>, Option<String>) {
@@ -308,13 +312,15 @@ mod tests {
         let emb_only = insert_test_item(&db, "hackernews", "dg4", "Embedding missing", "body");
 
         // Healthy cycle seeds durable judgments for `protected` and `aged`.
-        crate::analysis::persist_cycle_results(
-            &db,
-            &[
-                make_with_markers(protected, 0.80, true, &[]),
-                make_with_markers(aged, 0.70, true, &[]),
-            ],
-        );
+        let healthy = [
+            make_with_markers(protected, 0.80, true, &[]),
+            make_with_markers(aged, 0.70, true, &[]),
+        ];
+        let healthy_eval: Vec<crate::analysis::EvaluatedItem> = healthy
+            .iter()
+            .map(crate::analysis::EvaluatedItem::from)
+            .collect();
+        crate::analysis::persist_cycle_results(&db, &healthy, &healthy_eval);
         {
             let conn = db.conn.lock();
             // Age `aged` past the escape hatch, and give both a distinguishable
@@ -332,15 +338,17 @@ mod tests {
         }
 
         // Systemically degraded cycle wants radically different judgments.
-        crate::analysis::persist_cycle_results(
-            &db,
-            &[
-                make_with_markers(protected, 0.10, false, &["dep_intel_load_failed"]),
-                make_with_markers(aged, 0.10, false, &["context_knn_failed"]),
-                make_with_markers(first, 0.30, false, &["dep_intel_load_failed"]),
-                make_with_markers(emb_only, 0.25, true, &["embedding_missing"]),
-            ],
-        );
+        let degraded = [
+            make_with_markers(protected, 0.10, false, &["dep_intel_load_failed"]),
+            make_with_markers(aged, 0.10, false, &["context_knn_failed"]),
+            make_with_markers(first, 0.30, false, &["dep_intel_load_failed"]),
+            make_with_markers(emb_only, 0.25, true, &["embedding_missing"]),
+        ];
+        let degraded_eval: Vec<crate::analysis::EvaluatedItem> = degraded
+            .iter()
+            .map(crate::analysis::EvaluatedItem::from)
+            .collect();
+        crate::analysis::persist_cycle_results(&db, &degraded, &degraded_eval);
 
         let conn = db.conn.lock();
         let row = |id: i64| -> (Option<f64>, i64, Option<i64>) {
@@ -395,43 +403,77 @@ mod tests {
     // Differential drain safety (2026-08-23 audit, item 9)
     // ========================================================================
 
-    /// Version-stale items still drain on differential runs: the batch merger
-    /// the differential path calls picks up anything scored under an older
-    /// pipeline version and folds it into the run's scoring set (deduplicated
-    /// against items already selected).
+    /// REGRESSION (2026-08-27, the drain treadmill): an item the batch layer
+    /// deleted from `results` — dedup, fuzzy title, topic, temporal clustering
+    /// — must STILL have its evidence written and its pipeline version stamped.
+    ///
+    /// Before the fix, `persist_cycle_results` derived both from the survivors,
+    /// so 831 of every 1,458 scored items per cycle kept an older version stamp,
+    /// were re-selected by the next cycle's deterministic drain query, and were
+    /// re-scored and discarded for ever. Measured conversion of a 500-item drain
+    /// batch: five.
+    ///
+    /// Rank and verdict deliberately stay on the survivors: both are
+    /// batch-relative, and promoting a de-duplicated item into the feed because
+    /// it "was scored" would be exactly wrong.
     #[test]
-    fn version_stale_items_merge_into_the_differential_batch() {
+    fn items_dropped_by_the_batch_layer_are_still_stamped_and_scored() {
         use crate::test_utils::{insert_test_item, test_db};
 
         let db = test_db();
-        let stale = insert_test_item(&db, "hackernews", "ds1", "Old-version score", "body");
-        let current = insert_test_item(&db, "hackernews", "ds2", "Current score", "body");
+        let survivor = insert_test_item(&db, "hackernews", "bl1", "Survivor", "body");
+        let dropped = insert_test_item(&db, "hackernews", "bl2", "Deduped away", "body");
         {
             let conn = db.conn.lock();
             conn.execute(
-                "UPDATE source_items SET relevance_score = 0.6, scored_pipeline_version = 1 WHERE id = ?1",
-                rusqlite::params![stale],
-            )
-            .unwrap();
-            conn.execute(
-                "UPDATE source_items SET relevance_score = 0.6, scored_pipeline_version = ?1 WHERE id = ?2",
-                rusqlite::params![crate::scoring::PIPELINE_VERSION, current],
+                "UPDATE source_items SET relevance_score = 0.10, scored_pipeline_version = 1
+                 WHERE id IN (?1, ?2)",
+                rusqlite::params![survivor, dropped],
             )
             .unwrap();
         }
 
-        let mut items = Vec::new(); // the differential selection found nothing new
-        let added = crate::analysis::merge_stale_drain_batch(&db, &mut items);
-        assert_eq!(added, 1, "exactly the stale-version item is merged");
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].id, stale);
+        // The batch layer kept only the survivor; the evaluated set remembers both.
+        let results = [make_with_markers(survivor, 0.72, true, &[])];
+        let evaluated: Vec<crate::analysis::EvaluatedItem> = [
+            make_with_markers(survivor, 0.72, true, &[]),
+            make_with_markers(dropped, 0.55, true, &[]),
+        ]
+        .iter()
+        .map(crate::analysis::EvaluatedItem::from)
+        .collect();
+        crate::analysis::persist_cycle_results(&db, &results, &evaluated);
 
-        // Already selected → not merged twice.
-        let added_again = crate::analysis::merge_stale_drain_batch(&db, &mut items);
+        let conn = db.conn.lock();
+        let row = |id: i64| -> (Option<f64>, i64, Option<f64>) {
+            conn.query_row(
+                "SELECT relevance_score, scored_pipeline_version, rank_score
+                 FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap()
+        };
+
+        let (drop_score, drop_version, drop_rank) = row(dropped);
         assert_eq!(
-            added_again, 0,
-            "an already-selected item is never duplicated"
+            drop_version,
+            i64::from(crate::scoring::PIPELINE_VERSION),
+            "a dropped item was still judged by this pipeline version and must be stamped"
         );
+        assert!(
+            (drop_score.unwrap_or_default() - 0.55).abs() < 1e-6,
+            "its evidence is batch-independent and must be written, got {drop_score:?}"
+        );
+        assert!(
+            drop_rank.is_none(),
+            "rank is batch-relative — a dropped item has no rank from this run"
+        );
+
+        let (surv_score, surv_version, surv_rank) = row(survivor);
+        assert_eq!(surv_version, i64::from(crate::scoring::PIPELINE_VERSION));
+        assert!((surv_score.unwrap_or_default() - 0.72).abs() < 1e-6);
+        assert!(surv_rank.is_some(), "the survivor WAS ranked this run");
     }
 
     // ========================================================================

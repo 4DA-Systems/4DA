@@ -2,4 +2,17 @@
 import type { FeedbackBucket } from "./FeedbackBucket";
 import type { TierMetrics } from "./TierMetrics";
 
-export type IntelligenceMetrics = { verified: TierMetrics, ai_assessed: TierMetrics, developing: TierMetrics, feedback_distribution: Array<FeedbackBucket>, prompt_versions_active: Array<string>, };
+export type IntelligenceMetrics = { verified: TierMetrics, ai_assessed: TierMetrics, developing: TierMetrics, feedback_distribution: Array<FeedbackBucket>, prompt_versions_active: Array<string>, 
+/**
+ * Curated feed items an LLM judge has assessed in the window.
+ */
+judged_feed_items: bigint, 
+/**
+ * …of those, how many the judge scored BELOW [`JUDGE_DISPUTE_BELOW`].
+ *
+ * The single number that would have made the 2026-08-26 contamination
+ * audit a dashboard reading instead of a forty-hour investigation: the
+ * judge had already written "axios is not confirmed in the user's stack"
+ * into `llm_judgments` three days earlier, and nothing counted it.
+ */
+judged_feed_disputed: bigint, };

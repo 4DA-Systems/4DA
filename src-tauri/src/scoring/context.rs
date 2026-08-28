@@ -29,6 +29,10 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         }
     }
     let cached_context_count = db.context_count()?;
+    // Read ONCE per run, not per item: every scored item checks its cached
+    // grounding match against this number, and a probe per item would put a
+    // query back on the hot path this cache exists to empty.
+    let context_generation = db.context_generation().unwrap_or(0);
     let feedback_interaction_count: i64 = db.query_feedback_count().unwrap_or(0);
 
     let context_engine = crate::get_context_engine()?;
@@ -256,6 +260,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
 
     let context = ScoringContext {
         cached_context_count,
+        context_generation,
         interest_count: interests.len(),
         interests,
         exclusions: static_identity.exclusions,
@@ -532,6 +537,7 @@ mod tests {
             search_terms: vec![],
             ecosystem: "rust".to_string(),
             project_paths: Vec::new(),
+            project_relevance: 1.0,
         }
     }
 

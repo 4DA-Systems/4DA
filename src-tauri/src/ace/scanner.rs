@@ -1950,37 +1950,91 @@ pub(crate) fn compute_project_relevance(manifest_path: &Path) -> f32 {
     (path_score * recency_score).clamp(0.0, 1.0)
 }
 
-/// Compute a recency score based on how recently the nearest git repository was modified.
-/// Returns 1.0 for active repos (< 7 days), decaying to 0.1 for stale repos (> 90 days).
+/// Compute a recency score based on how recently the nearest git repository
+/// saw activity. Returns 1.0 for active repos (< 7 days), decaying to 0.1 for
+/// stale repos (> 90 days).
+///
+/// The activity proxy is the REFLOG (`.git/logs/HEAD`), not `.git/HEAD`.
+/// `git commit` appends to the reflog and rewrites the branch ref, but leaves
+/// `.git/HEAD` alone — its content ("ref: refs/heads/<branch>") only changes
+/// on a branch SWITCH. Measured on a scratch repo: three commits two seconds
+/// apart moved `logs/HEAD` every time and never moved `HEAD`.
+///
+/// This matters because `project_relevance` (`path_score * recency`) now
+/// scales dependency-match confidence. Reading `HEAD`'s mtime measured how
+/// recently the developer changed BRANCHES, so anyone working on a long-lived
+/// branch decayed to 0.1 while committing daily — and 0.1 multiplied into a
+/// 0.5 full-package-name hit yields 0.05 against a 0.40 strong-grounding bar,
+/// silently annihilating the dependency axis, 4DA's strongest signal.
 fn compute_git_recency(manifest_path: &Path) -> f32 {
-    // Walk up from manifest to find .git directory
+    // Walk up from manifest to find the .git entry
     let mut dir = manifest_path.parent();
     while let Some(d) = dir {
-        let git_dir = d.join(".git");
-        if git_dir.exists() {
-            // Check HEAD modification time as proxy for last commit
-            let head_file = git_dir.join("HEAD");
-            if let Ok(metadata) = std::fs::metadata(&head_file) {
-                if let Ok(modified) = metadata.modified() {
-                    if let Ok(elapsed) = modified.elapsed() {
-                        let days = elapsed.as_secs() as f32 / 86400.0;
-                        return if days < 7.0 {
-                            1.0
-                        } else if days < 30.0 {
-                            0.7
-                        } else if days < 90.0 {
-                            0.3
-                        } else {
-                            0.1
-                        };
-                    }
+        let git_path = d.join(".git");
+        if git_path.exists() {
+            if let Some(git_dir) = resolve_git_dir(&git_path) {
+                if let Some(days) = git_activity_age_days(&git_dir) {
+                    return recency_from_age_days(days);
                 }
             }
-            return 0.5; // git exists but can't read metadata
+            return 0.5; // git exists but its activity is unreadable
         }
         dir = d.parent();
     }
     0.5 // no git found, neutral
+}
+
+/// Resolve the real git directory for a `.git` entry.
+///
+/// In a normal checkout `.git` is a directory. Inside a LINKED WORKTREE it is
+/// a file containing `gitdir: <path>`, and the previous implementation read
+/// neither — `.git/HEAD` does not exist beside a file, so every
+/// worktree-hosted project silently scored the neutral 0.5. A linked
+/// worktree's gitdir has its own `HEAD` and `logs/HEAD`, which is exactly the
+/// per-worktree activity we want.
+fn resolve_git_dir(git_path: &Path) -> Option<PathBuf> {
+    if git_path.is_dir() {
+        return Some(git_path.to_path_buf());
+    }
+    let contents = fs::read_to_string(git_path).ok()?;
+    let rest = contents.trim().strip_prefix("gitdir:")?.trim();
+    if rest.is_empty() {
+        return None;
+    }
+    let p = PathBuf::from(rest);
+    if p.is_absolute() {
+        Some(p)
+    } else {
+        Some(git_path.parent()?.join(p))
+    }
+}
+
+/// Age in days of the most recent git activity marker.
+///
+/// Takes the NEWEST of the reflog and `HEAD`: the reflog moves on
+/// commit/checkout/merge/reset, and `HEAD` is kept as a fallback for repos
+/// with `core.logAllRefUpdates=false`, where no reflog file exists at all.
+fn git_activity_age_days(git_dir: &Path) -> Option<f32> {
+    let newest = ["logs/HEAD", "HEAD"]
+        .iter()
+        .filter_map(|f| fs::metadata(git_dir.join(f)).ok())
+        .filter_map(|m| m.modified().ok())
+        .max()?;
+    let elapsed = newest.elapsed().ok()?;
+    Some(elapsed.as_secs() as f32 / 86400.0)
+}
+
+/// Step function shared by the recency path so the thresholds live in one place.
+fn recency_from_age_days(days: f32) -> f32 {
+    if days < 7.0 {
+        1.0
+    } else if days < 30.0 {
+        0.7
+    } else if days < 90.0 {
+        0.3
+    } else {
+        0.1
+    }
 }
 
 // ============================================================================
@@ -4374,5 +4428,178 @@ BUNDLED WITH
             "Should only find the real project, not the .claude/plans fixture"
         );
         assert_eq!(signals[0].manifest_type, ManifestType::CargoToml);
+    }
+
+    // ── git recency ──────────────────────────────────────────────────────
+    //
+    // Regression guard for the proxy defect: `compute_git_recency` read
+    // `.git/HEAD`'s mtime, which `git commit` never touches. A developer on a
+    // long-lived branch aged to 0.1 while committing daily, and that 0.1
+    // multiplies into `project_relevance`, which now scales dependency-match
+    // confidence. These tests drive the mtimes directly rather than shelling
+    // out to git, so they are hermetic and fast.
+
+    /// Backdate a file's mtime by `days`. Returns the file it touched.
+    fn backdate(path: &Path, days: u64) {
+        let when = std::time::SystemTime::now() - std::time::Duration::from_secs(days * 86_400);
+        let f = fs::File::options().write(true).open(path).unwrap();
+        f.set_times(fs::FileTimes::new().set_accessed(when).set_modified(when))
+            .unwrap();
+    }
+
+    /// Build a fake `.git` directory with the given marker files present.
+    fn fake_git_dir(root: &Path, with_reflog: bool) -> PathBuf {
+        let git = root.join(".git");
+        fs::create_dir_all(&git).unwrap();
+        fs::write(
+            git.join("HEAD"),
+            "ref: refs/heads/main
+",
+        )
+        .unwrap();
+        if with_reflog {
+            fs::create_dir_all(git.join("logs")).unwrap();
+            fs::write(
+                git.join("logs").join("HEAD"),
+                "0000 1111 t <t@t> 0 +0000	commit
+",
+            )
+            .unwrap();
+        }
+        git
+    }
+
+    #[test]
+    fn git_recency_survives_committing_on_a_long_lived_branch() {
+        // THE regression: HEAD is 100 days stale (no branch switch in months)
+        // but the reflog is fresh (commits are landing daily). The old
+        // implementation read HEAD and returned 0.1.
+        let dir = tempfile::tempdir().unwrap();
+        let git = fake_git_dir(dir.path(), true);
+        backdate(&git.join("HEAD"), 100);
+
+        let manifest = dir.path().join("Cargo.toml");
+        fs::write(
+            &manifest,
+            "[package]
+name = \"x\"
+",
+        )
+        .unwrap();
+
+        assert_eq!(
+            compute_git_recency(&manifest),
+            1.0,
+            "a repo committed to today must score as active even when HEAD has not moved since the last branch switch"
+        );
+    }
+
+    #[test]
+    fn git_recency_falls_back_to_head_when_there_is_no_reflog() {
+        // core.logAllRefUpdates=false — no logs/HEAD exists at all. HEAD is
+        // then the only marker, and must still be honoured.
+        let dir = tempfile::tempdir().unwrap();
+        let git = fake_git_dir(dir.path(), false);
+        backdate(&git.join("HEAD"), 45);
+
+        let manifest = dir.path().join("Cargo.toml");
+        fs::write(
+            &manifest,
+            "[package]
+name = \"x\"
+",
+        )
+        .unwrap();
+
+        assert_eq!(
+            compute_git_recency(&manifest),
+            0.3,
+            "with no reflog, a 45-day-old HEAD must land in the 30-90 day band"
+        );
+    }
+
+    #[test]
+    fn git_recency_reports_a_genuinely_abandoned_repo_as_stale() {
+        // Negative control: the function must still be able to say "stale".
+        // Without this, the fix above could be satisfied by always returning 1.0.
+        let dir = tempfile::tempdir().unwrap();
+        let git = fake_git_dir(dir.path(), true);
+        backdate(&git.join("HEAD"), 400);
+        backdate(&git.join("logs").join("HEAD"), 400);
+
+        let manifest = dir.path().join("Cargo.toml");
+        fs::write(
+            &manifest,
+            "[package]
+name = \"x\"
+",
+        )
+        .unwrap();
+
+        assert_eq!(compute_git_recency(&manifest), 0.1);
+    }
+
+    #[test]
+    fn git_recency_resolves_a_linked_worktree_gitdir() {
+        // In a linked worktree `.git` is a FILE containing `gitdir: <path>`.
+        // Previously `.git/HEAD` did not exist beside it, so every
+        // worktree-hosted project fell through to the neutral 0.5.
+        let dir = tempfile::tempdir().unwrap();
+        let real_git = dir.path().join("real-gitdir");
+        fs::create_dir_all(&real_git).unwrap();
+        fs::write(
+            real_git.join("HEAD"),
+            "ref: refs/heads/wt
+",
+        )
+        .unwrap();
+        fs::create_dir_all(real_git.join("logs")).unwrap();
+        fs::write(
+            real_git.join("logs").join("HEAD"),
+            "0000 1111 t <t@t> 0 +0000	commit
+",
+        )
+        .unwrap();
+
+        let wt = dir.path().join("worktree");
+        fs::create_dir_all(&wt).unwrap();
+        fs::write(
+            wt.join(".git"),
+            format!(
+                "gitdir: {}
+",
+                real_git.display()
+            ),
+        )
+        .unwrap();
+
+        let manifest = wt.join("Cargo.toml");
+        fs::write(
+            &manifest,
+            "[package]
+name = \"x\"
+",
+        )
+        .unwrap();
+
+        assert_eq!(
+            compute_git_recency(&manifest),
+            1.0,
+            "a linked worktree must be scored from its own gitdir, not written off as unreadable"
+        );
+    }
+
+    #[test]
+    fn git_recency_is_neutral_with_no_repository() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = dir.path().join("Cargo.toml");
+        fs::write(
+            &manifest,
+            "[package]
+name = \"x\"
+",
+        )
+        .unwrap();
+        assert_eq!(compute_git_recency(&manifest), 0.5);
     }
 }
