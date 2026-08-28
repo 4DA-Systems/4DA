@@ -112,6 +112,34 @@ function extractRunBlocks(file) {
   return blocks;
 }
 
+/**
+ * Resolve a PowerShell that can run the parser.
+ *
+ * `pwsh` (PowerShell 7) first, because it is the one that exists on all three
+ * GitHub runner images - including ubuntu, where `powershell` does not exist
+ * at all. Hardcoding `powershell` made every PowerShell block on Linux CI
+ * report "parser unavailable" and get skipped, so the gate silently checked
+ * nothing on the exact runner that gates the pull request.
+ *
+ * Returns null when neither is installed; callers must treat that as
+ * inconclusive, never as clean.
+ */
+let _pwshCache;
+function resolvePowerShell() {
+  if (_pwshCache !== undefined) return _pwshCache;
+  for (const exe of ['pwsh', 'powershell']) {
+    const probe = spawnSync(exe, ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'], {
+      encoding: 'utf8',
+    });
+    if (!probe.error && probe.status === 0) {
+      _pwshCache = exe;
+      return _pwshCache;
+    }
+  }
+  _pwshCache = null;
+  return _pwshCache;
+}
+
 function tmpFile(ext, content) {
   const dir = process.env.TEMP || process.env.TMPDIR || '.';
   const p = path.join(dir, `wf-syntax-${process.pid}-${Math.random().toString(36).slice(2)}${ext}`);
@@ -120,11 +148,13 @@ function tmpFile(ext, content) {
 }
 
 function checkPowerShell(script) {
+  const exe = resolvePowerShell();
+  if (!exe) return { error: new Error('no pwsh or powershell on PATH') };
   const f = tmpFile('.ps1', script);
   try {
     const lit = f.replace(/'/g, "''");
     return spawnSync(
-      'powershell',
+      exe,
       [
         '-NoProfile',
         '-NonInteractive',
@@ -210,4 +240,4 @@ if (require.main === module) {
   console.log(`Workflow shell syntax: ${checked} inline script(s) parse cleanly.`);
 }
 
-module.exports = { run, extractRunBlocks, stripExpr };
+module.exports = { run, extractRunBlocks, stripExpr, resolvePowerShell };

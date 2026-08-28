@@ -6,7 +6,18 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { run, extractRunBlocks, stripExpr } = require('./check-workflow-shell-syntax.cjs');
+const {
+  run,
+  extractRunBlocks,
+  stripExpr,
+  resolvePowerShell,
+} = require('./check-workflow-shell-syntax.cjs');
+
+// ubuntu runners have `pwsh` but no `powershell`; a bare container may have
+// neither. Where no parser exists the gate reports the block inconclusive, so
+// these cases would assert against a skip rather than a check. Skip them
+// honestly instead of asserting something the environment cannot answer.
+const NO_PS = resolvePowerShell() ? false : 'no pwsh or powershell on PATH';
 
 /** Write a throwaway workflow dir containing the given files. */
 function fixture(files) {
@@ -49,14 +60,14 @@ ${body
   .join('\n')}
 `;
 
-test('accepts a well-formed PowerShell block', () => {
+test('accepts a well-formed PowerShell block', { skip: NO_PS }, () => {
   const dir = fixture({ 'a.yml': PS_STEP('if ($x -gt 0) {\n  Write-Host "ok"\n} else {\n  exit 1\n}') });
   const { checked, failures } = run(dir);
   assert.strictEqual(failures.length, 0, JSON.stringify(failures));
   assert.strictEqual(checked, 1);
 });
 
-test('catches the stray closing brace that broke the v1.0.1 release', () => {
+test('catches the stray closing brace that broke the v1.0.1 release', { skip: NO_PS }, () => {
   // This is the exact shape of the defect: the if/else is already balanced,
   // then one extra `}` follows.
   const body = 'if ($failed -gt 0) {\n  Write-Host "warn"\n}\n}\nWrite-Host "done"';
@@ -67,13 +78,13 @@ test('catches the stray closing brace that broke the v1.0.1 release', () => {
   assert.strictEqual(failures[0].step, 'Verify something');
 });
 
-test('catches an unterminated PowerShell block', () => {
+test('catches an unterminated PowerShell block', { skip: NO_PS }, () => {
   const dir = fixture({ 'a.yml': PS_STEP('if ($x) {\n  Write-Host "no close"') });
   const { failures } = run(dir);
   assert.strictEqual(failures.length, 1);
 });
 
-test('honours job-level defaults.run.shell (pwsh is not parsed as bash)', () => {
+test('honours job-level defaults.run.shell (pwsh is not parsed as bash)', { skip: NO_PS }, () => {
   // Without job-default resolution this PowerShell would be handed to
   // `bash -n` and reported as a syntax error that does not exist.
   const dir = fixture({ 'a.yml': JOB_DEFAULT_PWSH('if ($x -ne 0) {\n  Write-Output "fine"\n}') });
@@ -102,7 +113,7 @@ jobs:
   assert.strictEqual(failures.length, 0, JSON.stringify(failures));
 });
 
-test('job scope resets between jobs', () => {
+test('job scope resets between jobs', { skip: NO_PS }, () => {
   const yml = `name: T
 on: [push]
 jobs:
@@ -146,7 +157,7 @@ jobs:
   assert.strictEqual(failures[0].step, 'broken bash');
 });
 
-test('GitHub expressions do not themselves cause a parse failure', () => {
+test('GitHub expressions do not themselves cause a parse failure', { skip: NO_PS }, () => {
   const dir = fixture({
     'a.yml': PS_STEP('$dir = "src-tauri\\target\\${{ matrix.target }}\\release"\nWrite-Host $dir'),
   });
