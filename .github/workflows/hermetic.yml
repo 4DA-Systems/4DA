@@ -137,6 +137,18 @@ jobs:
       - name: Install Linux system dependencies (tauri / webkit)
         if: runner.os == 'Linux'
         run: |
+          # The GitHub-hosted runner images ship third-party apt sources that
+          # 4DA does not use — Azure CLI and microsoft-prod among them — and
+          # `apt-get update` fails WHOLESALE when any single one is unreachable.
+          # On 2026-08-28 packages.microsoft.com returned 403 for the `noble`
+          # azure-cli repo and killed the Rust job at 14 seconds, before a line
+          # of 4DA compiled. The identical step passed on ubuntu-22.04 in the
+          # same run, which is what localised it to the image's extra sources.
+          # gtk/webkit come from Ubuntu's own repos, so drop the rest first.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
 
