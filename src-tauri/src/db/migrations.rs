@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 111;
+        const TARGET_VERSION: i64 = 113;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -4922,6 +4922,211 @@ impl Database {
                 )?;
             }
 
+            if current_version < 112 {
+                Self::run_versioned_migration(
+                    &conn,
+                    111,
+                    112,
+                    "Phase 112: identity ledger — why the system thinks you care about a thing",
+                    |c| {
+                        // The 2026-08-26 audit could not account for the
+                        // lifecycle of an ACE topic. `docker`, `aws`, `azure`
+                        // and `redis` were provably minted into
+                        // `active_topics` (file_signals, 2026-08-19/20) and are
+                        // absent today, and row identity proves it was a
+                        // DELETE rather than an expiry: `grpc` still carries
+                        // id=1141 created 2026-08-14, while `kubernetes` —
+                        // minted by the same fixture on the same scans — has
+                        // id=3953 created 2026-08-25. Something removed them.
+                        //
+                        // It is not in the source. The only DELETEs against
+                        // that table are the two inside
+                        // `purge_generic_active_topics`, no migration touches
+                        // it, every insert is ON CONFLICT DO UPDATE (never
+                        // REPLACE), the genericness predicate has not changed
+                        // since #214/#215, and none of the missing topics is
+                        // generic under it.
+                        //
+                        // Append-only, so a future reader can answer the
+                        // question that had no answer: why does the system
+                        // think I care about this, and what took it away?
+                        // Deliberately NOT foreign-keyed to active_topics —
+                        // the whole point is to survive the row's deletion.
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS identity_ledger (
+                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                 entity_kind TEXT NOT NULL,
+                                 entity_key  TEXT NOT NULL,
+                                 change      TEXT NOT NULL,
+                                 reason      TEXT,
+                                 evidence    TEXT,
+                                 at          TEXT NOT NULL DEFAULT (datetime('now'))
+                             );
+                             CREATE INDEX IF NOT EXISTS idx_identity_ledger_entity
+                                 ON identity_ledger(entity_kind, entity_key, at);
+                             CREATE INDEX IF NOT EXISTS idx_identity_ledger_at
+                                 ON identity_ledger(at);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 112: identity_ledger created"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 113 {
+                Self::run_versioned_migration(
+                    &conn,
+                    112,
+                    113,
+                    "Phase 113: grounding-partitioned vector index + item context-match cache",
+                    |c| {
+                        // -- 1. Partition the context vector index -------------
+                        //
+                        // `find_similar_contexts` wants the top-3 GROUNDING-ELIGIBLE
+                        // chunks (code/config). vec0 selects k rows first and applies
+                        // join predicates afterwards, so the old query over-fetched
+                        // k=24 and filtered in Rust. That is wasteful (3,128 of 15,599
+                        // chunks are doc/test_code and can never be returned, yet were
+                        // scanned and materialised on every query) and, worse, INEXACT:
+                        // an item whose 24 nearest chunks are all prose got fewer than
+                        // three matches, or none, and then scored as though the user's
+                        // codebase contained nothing like it.
+                        //
+                        // sqlite-vec 0.1.9 supports partition keys (verified against the
+                        // linked build, not assumed from the 0.1.10 docs), so the filter
+                        // moves INSIDE the index: k=3 returns the exact top-3 eligible
+                        // rows and scans only the eligible partition. Exactness is also
+                        // load-bearing for the context-match cache below - a truncated
+                        // top-K cannot be maintained by merging a delta into it.
+                        //
+                        // The index is 100% derivable from context_chunks.embedding, so
+                        // dropping and rebuilding it loses nothing.
+                        c.execute_batch(
+                            "DROP TABLE IF EXISTS context_vec;
+                             CREATE VIRTUAL TABLE context_vec USING vec0(
+                                 id integer primary key,
+                                 grounds integer partition key,
+                                 embedding float[768]
+                             );",
+                        )?;
+                        // LENGTH guard: a malformed blob would abort the whole
+                        // migration inside vec0. Skipping it costs that one chunk its
+                        // grounding, which the next re-index repairs.
+                        let rebuilt = c.execute(
+                            "INSERT INTO context_vec (id, grounds, embedding)
+                             SELECT id,
+                                    CASE WHEN source_type IN ('code','config') THEN 1 ELSE 0 END,
+                                    embedding
+                             FROM context_chunks
+                             WHERE embedding IS NOT NULL AND LENGTH(embedding) = 3072",
+                            [],
+                        )?;
+
+                        // -- 2. Context-corpus change log ----------------------
+                        //
+                        // A monotonic generation counter over the grounding corpus.
+                        // Trigger-maintained so no write path can bypass it (same
+                        // reasoning as the schema-104 FTS triggers). AFTER UPDATE is
+                        // deliberately unqualified: over-invalidation is cheap and safe
+                        // here, under-invalidation is a silent wrong score.
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS context_change_log (
+                                 gen        INTEGER PRIMARY KEY AUTOINCREMENT,
+                                 context_id INTEGER NOT NULL,
+                                 deleted    INTEGER NOT NULL DEFAULT 0
+                             );
+                             DROP TRIGGER IF EXISTS context_chunks_change_ai;
+                             DROP TRIGGER IF EXISTS context_chunks_change_au;
+                             DROP TRIGGER IF EXISTS context_chunks_change_ad;
+                             CREATE TRIGGER context_chunks_change_ai
+                                 AFTER INSERT ON context_chunks BEGIN
+                                 INSERT INTO context_change_log(context_id, deleted)
+                                     VALUES (new.id, 0);
+                             END;
+                             CREATE TRIGGER context_chunks_change_au
+                                 AFTER UPDATE ON context_chunks BEGIN
+                                 INSERT INTO context_change_log(context_id, deleted)
+                                     VALUES (new.id, 0);
+                             END;
+                             CREATE TRIGGER context_chunks_change_ad
+                                 AFTER DELETE ON context_chunks BEGIN
+                                 INSERT INTO context_change_log(context_id, deleted)
+                                     VALUES (old.id, 1);
+                             END;",
+                        )?;
+
+                        // -- 3. Per-item materialised context match ------------
+                        //
+                        // The measured reason this exists: the context KNN is 52.0 ms
+                        // of the 54.7 ms it costs to score one item (95.8%), and it is
+                        // a pure function of (item embedding, context corpus). Neither
+                        // input changes when the SCORING pipeline changes - the v25+v26
+                        // arc touched 4,392 lines and none of them were in db/mod.rs,
+                        // context_admission.rs, embeddings.rs or context_engine/ - so a
+                        // 47,000-item drain spent 96% of its time recomputing a value
+                        // that provably could not have moved.
+                        //
+                        // Raw (context_id, distance) only: the boilerplate filter and
+                        // the 100-char truncation stay at the read site, so the cached
+                        // list is exactly what find_similar_contexts returns and the
+                        // incremental merge is exact.
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS item_context_cache (
+                                 item_id    INTEGER PRIMARY KEY,
+                                 generation INTEGER NOT NULL,
+                                 builder    INTEGER NOT NULL
+                             ) WITHOUT ROWID;
+                             CREATE INDEX IF NOT EXISTS idx_item_context_cache_gen
+                                 ON item_context_cache(generation);
+                             CREATE TABLE IF NOT EXISTS item_context_match (
+                                 item_id    INTEGER NOT NULL,
+                                 rank       INTEGER NOT NULL,
+                                 context_id INTEGER NOT NULL,
+                                 distance   REAL NOT NULL,
+                                 PRIMARY KEY (item_id, rank)
+                             ) WITHOUT ROWID;",
+                        )?;
+
+                        // The generation counter tracks the CONTEXT corpus. An
+                        // item's own embedding is the cache's other input, and it
+                        // does change: `repair_pending_embeddings` rewrites it
+                        // (db/sources.rs), and a dimension migration rewrites all
+                        // of them. Nothing about the context corpus notices, so
+                        // without this the cache would serve matches computed for
+                        // a vector the item no longer has. Trigger rather than a
+                        // call-site delete, for the same reason as the change log:
+                        // a write path cannot forget to do it.
+                        c.execute_batch(
+                            "DROP TRIGGER IF EXISTS item_context_cache_reembed;
+                             DROP TRIGGER IF EXISTS item_context_cache_gone;
+                             CREATE TRIGGER item_context_cache_reembed
+                                 AFTER UPDATE OF embedding ON source_items
+                                 WHEN old.embedding IS NOT new.embedding
+                             BEGIN
+                                 DELETE FROM item_context_cache WHERE item_id = new.id;
+                                 DELETE FROM item_context_match WHERE item_id = new.id;
+                             END;
+                             CREATE TRIGGER item_context_cache_gone
+                                 AFTER DELETE ON source_items
+                             BEGIN
+                                 DELETE FROM item_context_cache WHERE item_id = old.id;
+                                 DELETE FROM item_context_match WHERE item_id = old.id;
+                             END;",
+                        )?;
+
+                        info!(
+                            target: "4da::db",
+                            rebuilt,
+                            "Phase 113: context_vec repartitioned on grounding eligibility; change log + item context-match cache created"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -6153,6 +6358,177 @@ mod tests {
     /// columns (`content_updated_at`, `scored_at`). Verify the version, the
     /// columns, and idempotency under version-rewind (the harness convention:
     /// wind back one phase, re-run, nothing breaks and data survives).
+    /// Phase 113 partitions the context vector index on grounding eligibility
+    /// and creates the per-item context-match cache with its change log.
+    ///
+    /// The partition is what makes `find_similar_contexts` return a true top-K
+    /// instead of whatever survived a k=24 over-fetch — which the incremental
+    /// merge in `scoring::context_cache` depends on for exactness, not just for
+    /// speed. The triggers are what make the generation counter unbypassable.
+    #[test]
+    fn test_phase_113_grounding_partition_and_context_cache() {
+        let db = test_db();
+
+        // Seed one grounding-eligible and one doc chunk through the REAL write
+        // path, so the partition key is exercised the way production sets it.
+        let code = crate::test_utils::seed_embedding("fn handler() { invoke(); }");
+        let prose = crate::test_utils::seed_embedding("welcome to the project readme");
+        db.upsert_context("src/main.rs", "fn handler() { invoke(); }", &code)
+            .expect("code chunk");
+        db.upsert_context("README.md", "welcome to the project readme", &prose)
+            .expect("doc chunk");
+
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
+            .unwrap();
+        assert!(version >= 113, "schema_version >= 113; got {version}");
+
+        // The vec table carries the partition key.
+        let ddl: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE name = 'context_vec'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            ddl.contains("partition key"),
+            "context_vec must be partitioned on grounding eligibility: {ddl}"
+        );
+
+        // Cache tables and the change log exist.
+        for table in [
+            "context_change_log",
+            "item_context_cache",
+            "item_context_match",
+        ] {
+            let n: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?1",
+                    rusqlite::params![table],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "{table} must exist");
+        }
+
+        // The triggers fired for both upserts — that is the generation counter.
+        let logged: i64 = conn
+            .query_row("SELECT COUNT(*) FROM context_change_log", [], |r| r.get(0))
+            .unwrap();
+        assert!(
+            logged >= 2,
+            "context_chunks writes must be logged; got {logged}"
+        );
+
+        // And the doc chunk landed OUTSIDE the grounding partition.
+        let (eligible, ineligible): (i64, i64) = conn
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM context_vec WHERE grounds = 1),
+                        (SELECT COUNT(*) FROM context_vec WHERE grounds = 0)",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(eligible, 1, "the code chunk grounds");
+        assert_eq!(ineligible, 1, "the README chunk does not");
+
+        // Re-running the phase is a no-op that preserves the corpus.
+        conn.execute_batch("UPDATE schema_version SET version = 112;")
+            .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v112");
+        let conn = db.conn.lock();
+        let rebuilt: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM context_vec WHERE grounds = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            rebuilt, 1,
+            "the vector index is rebuilt from context_chunks, so nothing is lost"
+        );
+    }
+
+    /// Phase 112 lifts TARGET_VERSION to 112 and adds `identity_ledger` — the
+    /// append-only record of why the system believes what it believes about
+    /// the user. The 2026-08-26 audit could not account for topics that were
+    /// provably minted and are provably gone; nothing in the source deletes
+    /// them, and there was no trace to read.
+    #[test]
+    fn test_phase_112_identity_ledger_created_and_idempotent() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 112,
+            "schema_version should be >= 112 after migration; got {version}"
+        );
+
+        let table_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='identity_ledger'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_count, 1, "identity_ledger must exist exactly once");
+
+        // It must accept a row, and default its timestamp.
+        conn.execute(
+            "INSERT INTO identity_ledger (entity_kind, entity_key, change, reason, evidence)
+             VALUES ('topic','kubernetes','mint','file_content','benchmark_scenarios.json')",
+            [],
+        )
+        .unwrap();
+        let (key, at): (String, String) = conn
+            .query_row(
+                "SELECT entity_key, at FROM identity_ledger ORDER BY id DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(key, "kubernetes");
+        assert!(!at.is_empty(), "at must default to a timestamp");
+
+        // Wind back to 111 and re-run: CREATE TABLE IF NOT EXISTS makes the
+        // phase a no-op, the existing row SURVIVES (the ledger is append-only
+        // and must never be rebuilt), and the version returns to 112.
+        conn.execute_batch("UPDATE schema_version SET version = 111;")
+            .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v111");
+
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        // Re-running from 111 replays the whole remaining chain, so this lands on
+        // TARGET_VERSION rather than 112. Asserting the literal made this test a
+        // tripwire on every later phase; asserting ">= 112" keeps what it is
+        // actually about (phase 112 re-ran and was a no-op) without that.
+        assert!(
+            version >= 112,
+            "version returns to at least 112 after re-run; got {version}"
+        );
+        let survived: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM identity_ledger WHERE entity_key = 'kubernetes'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            survived, 1,
+            "an append-only ledger must survive re-migration"
+        );
+    }
+
     #[test]
     fn test_phase_111_change_tracking_columns_added_and_idempotent() {
         let db = test_db();

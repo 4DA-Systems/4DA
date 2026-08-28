@@ -1012,3 +1012,111 @@ fn inject_serendipity_zero_budget_leaves_results_untouched() {
     assert_eq!(results.len(), 5);
     assert!(results.iter().all(|r| !r.serendipity));
 }
+
+/// Source-share diversity (2026-08-27, audit rec 6).
+///
+/// The blind spot this closes: `apply_domain_diversity` keys on URL domain and
+/// federated posts arrive from hundreds of instance domains, while
+/// `apply_source_topic_diversity` keys on (source, topic) so posts about many
+/// different things never collide. Mastodon was 46.7% of the curated feed.
+mod source_share_tests {
+    use super::*;
+
+    fn from_source(source: &str, title: &str, score: f32) -> SourceRelevance {
+        let mut i = make_item(
+            title,
+            Some(&format!("https://{source}.example/{title}")),
+            score,
+        );
+        i.source_type = source.to_string();
+        i
+    }
+
+    /// A source that owns most of the batch has its TAIL decayed — and only
+    /// its tail. Items arrive score-descending, so the allowance is spent on
+    /// that source's strongest items.
+    #[test]
+    fn a_dominant_source_has_its_tail_decayed() {
+        let mut results: Vec<SourceRelevance> = (0..16)
+            .map(|i| from_source("mastodon", &format!("m{i}"), 0.9 - (i as f32 * 0.01)))
+            .chain((0..4).map(|i| from_source("hackernews", &format!("h{i}"), 0.5)))
+            .collect();
+        let before_first = results[0].top_score;
+
+        let adjusted = apply_source_share_diversity(&mut results);
+        assert!(adjusted > 0, "a 16-of-20 source must be decayed somewhere");
+
+        // strongest mastodon item untouched
+        assert!(
+            (results[0].top_score - before_first).abs() < 1e-6,
+            "the allowance is spent on the source's best items first"
+        );
+        // the tail is decayed
+        assert!(
+            results[15].top_score < 0.9 - 0.15,
+            "the 16th item from one source must be decayed, got {}",
+            results[15].top_score
+        );
+        // a different source is never touched
+        for r in results.iter().filter(|r| r.source_type == "hackernews") {
+            assert!(
+                (r.top_score - 0.5).abs() < 1e-6,
+                "other sources are untouched"
+            );
+        }
+    }
+
+    /// A balanced batch is left completely alone.
+    #[test]
+    fn a_balanced_batch_is_untouched() {
+        let mut results: Vec<SourceRelevance> = ["mastodon", "hackernews", "devto", "reddit"]
+            .iter()
+            .flat_map(|s| (0..5).map(move |i| from_source(s, &format!("{s}{i}"), 0.6)))
+            .collect();
+        let adjusted = apply_source_share_diversity(&mut results);
+        assert_eq!(
+            adjusted, 0,
+            "no source exceeds its share in a balanced batch"
+        );
+    }
+
+    /// Below a handful of items a share cap is noise, not diversity.
+    #[test]
+    fn tiny_batches_are_exempt() {
+        let mut results: Vec<SourceRelevance> = (0..6)
+            .map(|i| from_source("mastodon", &format!("m{i}"), 0.7))
+            .collect();
+        assert_eq!(apply_source_share_diversity(&mut results), 0);
+    }
+
+    /// Decay is toward a FLOOR, never to zero: a genuinely excellent item from
+    /// a dominant source still survives, it just stops crowding the feed.
+    #[test]
+    fn decay_never_reaches_zero() {
+        let mut results: Vec<SourceRelevance> = (0..40)
+            .map(|i| from_source("mastodon", &format!("m{i}"), 0.9))
+            .collect();
+        apply_source_share_diversity(&mut results);
+        let worst = results.last().expect("items").top_score;
+        assert!(worst > 0.0, "decay has a floor; got {worst}");
+    }
+
+    /// Excluded items neither consume an allowance nor get decayed.
+    #[test]
+    fn excluded_items_are_ignored() {
+        let mut results: Vec<SourceRelevance> = (0..20)
+            .map(|i| {
+                let mut r = from_source("mastodon", &format!("m{i}"), 0.8);
+                r.excluded = i < 12;
+                r
+            })
+            .collect();
+        apply_source_share_diversity(&mut results);
+        for r in results.iter().filter(|r| r.excluded) {
+            assert!(
+                (r.top_score - 0.8).abs() < 1e-6,
+                "excluded items are untouched"
+            );
+        }
+    }
+}

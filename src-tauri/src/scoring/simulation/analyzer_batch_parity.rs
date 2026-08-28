@@ -211,6 +211,7 @@ fn apply_analyzer_batch_layer(results: &mut Vec<crate::SourceRelevance>) -> usiz
     super::super::temporal_cluster_results(results);
     super::super::apply_domain_diversity(results);
     super::super::apply_source_topic_diversity(results);
+    super::super::apply_source_share_diversity(results);
     crate::source_tiers::normalize_scores_by_source(results);
     super::super::sort_results(results);
     // Serendipity budget mirrors the default settings value; the injector

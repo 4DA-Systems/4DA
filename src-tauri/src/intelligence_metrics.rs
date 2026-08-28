@@ -19,7 +19,21 @@ pub struct IntelligenceMetrics {
     pub developing: TierMetrics,
     pub feedback_distribution: Vec<FeedbackBucket>,
     pub prompt_versions_active: Vec<String>,
+    /// Curated feed items an LLM judge has assessed in the window.
+    pub judged_feed_items: i64,
+    /// …of those, how many the judge scored BELOW [`JUDGE_DISPUTE_BELOW`].
+    ///
+    /// The single number that would have made the 2026-08-26 contamination
+    /// audit a dashboard reading instead of a forty-hour investigation: the
+    /// judge had already written "axios is not confirmed in the user's stack"
+    /// into `llm_judgments` three days earlier, and nothing counted it.
+    pub judged_feed_disputed: i64,
 }
+
+/// A judged relevance below this counts as the judge DISPUTING the pipeline's
+/// decision to curate the item. Deliberately looser than the demotion gate:
+/// this is a visibility signal, not an action threshold.
+const JUDGE_DISPUTE_BELOW: f64 = 0.5;
 
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
@@ -118,6 +132,8 @@ pub fn collect_metrics(days: i64) -> IntelligenceMetrics {
                 },
                 feedback_distribution: vec![],
                 prompt_versions_active: vec![],
+                judged_feed_items: 0,
+                judged_feed_disputed: 0,
             };
         }
     };
@@ -211,10 +227,16 @@ pub fn collect_metrics(days: i64) -> IntelligenceMetrics {
         })
         .unwrap_or_default();
 
+    // `llm_judgments` has no `created_at` — the column is `judged_at`. The old
+    // query therefore errored on EVERY call and `unwrap_or_default()` turned
+    // that into an empty list, so this metric silently reported "no prompt
+    // versions active" for its entire life (found 2026-08-27 while adding the
+    // dispute counter below — the same swallow-and-default pattern the audit
+    // found in the dependency scope filter).
     let prompt_versions_active: Vec<String> = conn
         .prepare(
             "SELECT DISTINCT prompt_version FROM llm_judgments
-             WHERE created_at >= datetime('now', ?1)
+             WHERE judged_at >= datetime('now', ?1)
              ORDER BY prompt_version",
         )
         .and_then(|mut stmt| {
@@ -224,12 +246,43 @@ pub fn collect_metrics(days: i64) -> IntelligenceMetrics {
         })
         .unwrap_or_default();
 
+    let judged_feed_items: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_items si
+             JOIN llm_judgments lj ON lj.source_item_id = si.id
+             WHERE si.feed_relevant = 1 AND lj.judged_at >= datetime('now', ?1)",
+            [format!("-{days} days")],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let judged_feed_disputed: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_items si
+             JOIN llm_judgments lj ON lj.source_item_id = si.id
+             WHERE si.feed_relevant = 1
+               AND lj.judged_at >= datetime('now', ?1)
+               AND lj.relevance_score < ?2",
+            rusqlite::params![format!("-{days} days"), JUDGE_DISPUTE_BELOW],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    if judged_feed_items > 0 && judged_feed_disputed * 4 > judged_feed_items {
+        tracing::warn!(
+            target: "4da::intelligence_metrics",
+            judged = judged_feed_items,
+            disputed = judged_feed_disputed,
+            "the LLM judge disputes more than a quarter of the curated feed it has assessed"
+        );
+    }
+
     IntelligenceMetrics {
         verified,
         ai_assessed,
         developing,
         feedback_distribution,
         prompt_versions_active,
+        judged_feed_items,
+        judged_feed_disputed,
     }
 }
 

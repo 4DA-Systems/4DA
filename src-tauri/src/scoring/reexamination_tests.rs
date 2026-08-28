@@ -16,6 +16,7 @@ fn dep_info(name: &str) -> DepInfo {
         search_terms: extract_search_terms(name),
         ecosystem: "rust".to_string(),
         project_paths: Vec::new(),
+        project_relevance: 1.0,
     }
 }
 

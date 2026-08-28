@@ -185,6 +185,7 @@ pub(super) fn enrich_persona(
                     search_terms: dep.search_terms.iter().map(|s| s.to_string()).collect(),
                     ecosystem: dep.ecosystem.to_string(),
                     project_paths: Vec::new(),
+                    project_relevance: 1.0,
                 }
             });
         }

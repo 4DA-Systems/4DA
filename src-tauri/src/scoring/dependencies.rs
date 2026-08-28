@@ -63,6 +63,12 @@ pub(crate) struct DepInfo {
     /// different repository entirely (measured live: `axios` is a direct
     /// dependency of `kairos-mvp`, not of this app).
     pub project_paths: Vec<String>,
+    /// Strongest scan-time project relevance across [`Self::project_paths`]
+    /// (see `temporal::ProjectDependency::project_relevance`). Scales match
+    /// confidence so a package that exists only in a dormant or fixture
+    /// project cannot score like one the user ships. MAX, not min: a package
+    /// declared in both this app and a side project is the app's package.
+    pub project_relevance: f32,
 }
 
 /// A dependency that matched content
@@ -109,6 +115,27 @@ pub(crate) enum VersionDelta {
     OlderMajor,
     Unknown,
 }
+
+/// Ceiling applied to `dep_match_score` when NOT ONE match in the surviving
+/// evidence set is name-corroborated — i.e. the item never names any package
+/// the user depends on, and every point of confidence came from bare subterm
+/// expansions ("apps" for `@tauri-apps/api`, "single" for
+/// `tauri-plugin-single-instance`, "deep" for `tauri-plugin-deep-link`).
+///
+/// Measured on the live corpus at `e0381216` (2026-08-26 audit, A1-A3): of
+/// 1,758 items whose dependency axis was CONFIRMED from the title alone, 1,320
+/// never named a package — 75.1% — rising to 92.8% by this very predicate.
+/// 166 of the 169 items in the >=0.90 band were pure subterm noise, and one
+/// English word ("apps", shared by four `@tauri-apps/*` packages) produced a
+/// 0.95 dependency axis on an article about Supabase row-level security.
+///
+/// Derived from [`scoring_config::DEPENDENCY_THRESHOLD`] rather than written as
+/// a literal so the invariant survives retuning: uncorroborated evidence can
+/// never confirm the dependency axis, and therefore can never reach the
+/// gate-bypass minimum above it either. `uncorroborated_ceiling_holds_the_invariant`
+/// pins both halves.
+pub(crate) const UNCORROBORATED_DEP_CEILING: f32 =
+    crate::scoring_config::DEPENDENCY_THRESHOLD - 0.01;
 
 /// Confidence at or above which a single non-dev dependency match is "strong"
 /// enough to ground an item in the user's stack. A full-package-name title hit
@@ -1245,6 +1272,7 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
                     dep.is_direct,
                     dep.is_dev,
                     dep.version,
+                    dep.project_relevance,
                 );
             }
             std::collections::hash_map::Entry::Vacant(e) => {
@@ -1256,6 +1284,7 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
                     search_terms,
                     ecosystem: dep.language,
                     project_paths: vec![dep.project_path],
+                    project_relevance: dep.project_relevance,
                 });
             }
         }
@@ -1286,10 +1315,12 @@ fn merge_dep_occurrence(
     is_direct: bool,
     is_dev: bool,
     version: Option<String>,
+    project_relevance: f32,
 ) {
     existing.project_paths.push(project_path);
     existing.is_direct |= is_direct;
     existing.is_dev &= is_dev;
+    existing.project_relevance = existing.project_relevance.max(project_relevance);
     if existing.version.is_none() {
         existing.version = version;
     }
@@ -1505,6 +1536,39 @@ fn is_family_child_of_direct(child: &DepInfo, ace_ctx: &ACEContext) -> bool {
 
 /// Match content (title + body) against user's dependency graph.
 /// Returns matched packages and an aggregate score (0.0-1.0).
+/// The npm scope a package belongs to, if any: `@tauri-apps/api` -> `tauri-apps`.
+/// Read from the RAW manifest name, because `normalize_package_name` has
+/// already folded the `/` into a `-` by the time the match is built.
+fn npm_scope_of(m: &DepMatch) -> Option<String> {
+    let raw = m.raw_name.as_deref()?;
+    let (scope, _rest) = raw.strip_prefix('@')?.split_once('/')?;
+    if scope.is_empty() {
+        None
+    } else {
+        Some(scope.to_lowercase())
+    }
+}
+
+/// One scope family contributes ONE match, not one per member.
+///
+/// `@tauri-apps/{api,cli,plugin-opener,plugin-updater}` are four rows in
+/// `project_dependencies` and four entries in `dependency_info`, but they are
+/// one product. Every one of them carries the bare subterm `apps`, so a single
+/// English word in a title produced FOUR independent `DepMatch`es at ~0.5 each
+/// and `min(sum_of_top5 / 2, 1.0)` turned that into a near-maximal dependency
+/// axis — measured live at 0.95 on "Row Level Security in Lovable apps"
+/// (2026-08-26 audit, A2). Keeps the STRONGEST member, so a genuine hit on one
+/// package in the family still scores; the siblings just stop stacking.
+///
+/// Expects `matched` already sorted by confidence descending.
+fn collapse_scope_families(matched: &mut Vec<DepMatch>) {
+    let mut seen: HashSet<String> = HashSet::new();
+    matched.retain(|m| match npm_scope_of(m) {
+        Some(scope) => seen.insert(scope),
+        None => true,
+    });
+}
+
 pub(crate) fn match_dependencies(
     title: &str,
     content: &str,
@@ -1617,6 +1681,15 @@ pub(crate) fn match_dependencies(
             confidence *= 0.5;
         }
 
+        // Project relevance (2026-08-26 audit, R1/rec 5). The column has been
+        // populated since migration 55 and was never read by scoring: a
+        // package belonging only to a dormant, non-git side project scored
+        // exactly like one this app ships. Measured consequence — ten `axios`
+        // advisories at 0.824-0.900, nine of them in the corpus top-45, for a
+        // package 4DA does not depend on. Legacy rows carry 1.0, so this is a
+        // no-op for anything the scanner has not scored down.
+        confidence *= info.project_relevance;
+
         // Infrastructure dependencies (test libraries, type declarations, linting,
         // monitoring) are present in virtually every project of their ecosystem.
         // Matching "testing" against testing-library-jest-dom doesn't mean the content
@@ -1675,10 +1748,39 @@ pub(crate) fn match_dependencies(
             .partial_cmp(&a.confidence)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+    // Collapse scope families BEFORE truncating, or four siblings of one
+    // product can occupy the whole top-5 and crowd out real evidence.
+    collapse_scope_families(&mut matched);
     matched.truncate(5);
 
-    // Aggregate score: sum of confidences, normalized
-    let total: f32 = matched.iter().map(|m| m.confidence).sum();
+    // Aggregate score. Subterms may CORROBORATE a full-name hit; they may
+    // never ORIGINATE one, and they may never STACK into one either.
+    //
+    // Splitting the sum is the whole point. Gating only the all-uncorroborated
+    // case is not enough: one real hit anywhere in a long body unlocks the
+    // entire subterm pile to sum freely, which is how a CVE for a package the
+    // user does not ship ("rclone `serve restic` authorization bypass") scored
+    // 0.56 off `tauri-plugin-single-instance` + `size-limit` +
+    // `i18next-resources-to-backend`. Corroborated evidence — the item
+    // demonstrably names one of the user's packages — carries the axis; every
+    // uncorroborated match TOGETHER contributes a bounded top-up that cannot
+    // reach the confirmation threshold on its own, let alone the gate bypass
+    // above it. See [`UNCORROBORATED_DEP_CEILING`] for the measured scale.
+    let corroborated_total: f32 = matched
+        .iter()
+        .filter(|m| m.corroborated)
+        .map(|m| m.confidence)
+        .sum();
+    let subterm_total: f32 = matched
+        .iter()
+        .filter(|m| !m.corroborated)
+        .map(|m| m.confidence)
+        .sum();
+    // Doubled because the sum is halved below: this bounds the SCORE
+    // contribution, not the raw confidence sum.
+    let subterm_capped = subterm_total.min(UNCORROBORATED_DEP_CEILING * 2.0);
+    // Same normalization as before the split — NOT a midpoint of two operands.
+    let total = corroborated_total + subterm_capped;
     let score = (total / 2.0).min(1.0);
 
     (matched, score)
@@ -2135,6 +2237,7 @@ mod tests {
                 search_terms: vec!["react".to_string()],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2190,6 +2293,7 @@ mod tests {
             search_terms: extract_search_terms(name),
             ecosystem: ecosystem.to_string(),
             project_paths: Vec::new(),
+            project_relevance: 1.0,
         }
     }
 
@@ -2726,6 +2830,7 @@ mod tests {
                 ],
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2798,6 +2903,7 @@ mod tests {
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2828,6 +2934,7 @@ mod tests {
                 search_terms: vec!["axum".to_string()],
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
         let (matches, score) = match_dependencies("crates.io: axum v0.8.9", "", &[], &ace_ctx);
@@ -2863,6 +2970,7 @@ mod tests {
                 ],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2904,6 +3012,7 @@ mod tests {
                 search_terms: vec!["react".to_string()],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2937,6 +3046,7 @@ mod tests {
                 search_terms: vec!["got".to_string()],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2967,6 +3077,7 @@ mod tests {
                 search_terms: vec!["got".to_string()],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2997,6 +3108,7 @@ mod tests {
                 search_terms: vec!["vitest".to_string()],
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3030,6 +3142,7 @@ mod tests {
                 search_terms: extract_search_terms("@tanstack/react-query"),
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3076,6 +3189,7 @@ mod tests {
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3090,6 +3204,7 @@ mod tests {
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3146,6 +3261,7 @@ mod tests {
                 search_terms: extract_search_terms("@sentry/react"),
                 ecosystem: "javascript".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3184,6 +3300,7 @@ mod tests {
                 search_terms: extract_search_terms("pdf-extract"),
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3221,6 +3338,7 @@ mod tests {
                 search_terms: extract_search_terms("pdf-extract"),
                 ecosystem: "rust".to_string(),
                 project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -3274,6 +3392,7 @@ mod tests {
             search_terms: extract_search_terms(name),
             ecosystem: ecosystem.to_string(),
             project_paths: Vec::new(),
+            project_relevance: 1.0,
         }
     }
 
@@ -3461,6 +3580,7 @@ mod tests {
             search_terms: vec![],
             ecosystem: "javascript".to_string(),
             project_paths: paths.iter().map(|p| (*p).to_string()).collect(),
+            project_relevance: 1.0,
         }
     }
 
@@ -3513,6 +3633,7 @@ mod tests {
             false,
             false,
             None,
+            1.0,
         );
         assert_eq!(info.project_paths, ["d:/4da/relay", "d:/4da/src-tauri"]);
     }
@@ -3529,6 +3650,7 @@ mod tests {
             true,
             false,
             Some("1.12.2".to_string()),
+            1.0,
         );
         assert!(info.is_direct, "direct beats transitive");
         assert!(!info.is_dev, "runtime beats dev");
@@ -3548,7 +3670,236 @@ mod tests {
             true,
             false,
             Some("9.9.9".to_string()),
+            1.0,
         );
         assert_eq!(info.version.as_deref(), Some("1.0.0"));
+    }
+
+    // ── project_relevance (2026-08-26 audit, R1 / rec 5) ────────────────
+
+    // ── Subterms corroborate, never originate (2026-08-26 audit, A1-A3) ──
+
+    /// The whole fix rests on one ordering: an uncorroborated evidence set is
+    /// capped BELOW the confirmation threshold, which is itself below the
+    /// gate-bypass minimum. If anyone retunes the DSL so that stops holding,
+    /// bare English words can confirm the dependency axis again — and reach
+    /// the 2.22x/2.57x bypass lever — so fail the build here rather than
+    /// silently in the feed.
+    #[test]
+    fn uncorroborated_ceiling_holds_the_invariant() {
+        assert!(
+            UNCORROBORATED_DEP_CEILING < crate::scoring_config::DEPENDENCY_THRESHOLD,
+            "uncorroborated evidence must never CONFIRM the dependency axis"
+        );
+        assert!(
+            UNCORROBORATED_DEP_CEILING
+                < crate::scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_MIN_SCORE,
+            "uncorroborated evidence must never reach the gate bypass"
+        );
+        assert!(UNCORROBORATED_DEP_CEILING >= 0.0);
+    }
+
+    /// T2 from the audit: run the real matcher over a FIXED adversarial title
+    /// corpus and assert ZERO subterm-only dependency confirmations.
+    ///
+    /// Every title here is a real item from the live corpus at `e0381216` that
+    /// confirmed the dependency axis on a bare subterm alone, with the term
+    /// that did it. Hermetic — no database, no network — so it gates every
+    /// build, unlike the opt-in live sweep.
+    #[test]
+    fn adversarial_corpus_yields_zero_subterm_only_confirmations() {
+        let mut ctx = ACEContext::default();
+        for name in [
+            "@tauri-apps/api",
+            "@tauri-apps/cli",
+            "@tauri-apps/plugin-opener",
+            "@tauri-apps/plugin-updater",
+            "tauri-plugin-single-instance",
+            "tauri-plugin-deep-link",
+            "@anthropic-ai/sdk",
+            "better-sqlite3",
+            "@types/better-sqlite3",
+            "express-rate-limit",
+            "@size-limit/esbuild",
+            "i18next-resources-to-backend",
+            "@alpacahq/alpaca-trade-api",
+            "helmet",
+            "@tanstack/react-virtual",
+            "framer-motion",
+            "react-router-dom",
+        ] {
+            let info = direct_dep_info(name, None, "javascript");
+            ctx.dependency_info
+                .insert(normalize_package_name(name), info);
+        }
+
+        // (title, the bare subterm that used to carry it)
+        let adversarial = [
+            (
+                "A 2,000 year old hololith ring carved entirely from a single massive sapphire",
+                "single",
+            ),
+            (
+                "I hate dropping youtube links, but I am knee deep in the python today",
+                "deep",
+            ),
+            (
+                "Did Anthropic just kill the indie hacker business model?",
+                "anthropic",
+            ),
+            (
+                "Row Level Security in Lovable apps: why your database might be public",
+                "apps",
+            ),
+            (
+                "High Schooler Plays Football With Venomous Snake in His Helmet for an Hour",
+                "helmet",
+            ),
+            (
+                "Should the cache padding size of x86-64 be 128 bytes?",
+                "size",
+            ),
+            (
+                "How to convert variable into type associated data?",
+                "types",
+            ),
+            (
+                "Backend Engineer Ships a Browser Game With One Unintentional Requirement",
+                "backend",
+            ),
+            (
+                "When Your VPS Never Had the Resources It Was Sold With",
+                "resources",
+            ),
+            (
+                "A better way to think about rate limiting in distributed systems",
+                "better/rate",
+            ),
+            ("Trade-offs in virtual DOM diffing", "trade/virtual"),
+            ("Motion design principles for the web", "motion"),
+        ];
+
+        let mut offenders = Vec::new();
+        for (title, term) in adversarial {
+            let (matches, score) = match_dependencies(title, "", &[], &ctx);
+            if score >= crate::scoring_config::DEPENDENCY_THRESHOLD {
+                offenders.push(format!(
+                    "[{score:.2}] via '{term}' :: {title} (evidence: {:?})",
+                    matches.iter().map(|m| &m.package_name).collect::<Vec<_>>()
+                ));
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "subterm-only titles must never confirm the dependency axis:\n  {}",
+            offenders.join("\n  ")
+        );
+    }
+
+    /// The other half of the contract: naming a package the user actually
+    /// depends on must still confirm. A cap that silenced real evidence would
+    /// pass the test above and destroy the feed.
+    #[test]
+    fn full_name_hits_still_confirm_the_dependency_axis() {
+        let mut ctx = ACEContext::default();
+        for name in [
+            "better-sqlite3",
+            "framer-motion",
+            "react-router-dom",
+            "axios",
+        ] {
+            let info = direct_dep_info(name, None, "javascript");
+            ctx.dependency_info
+                .insert(normalize_package_name(name), info);
+        }
+        for title in [
+            "better-sqlite3 12.9.0 released with a faster prepared-statement cache",
+            "framer-motion: layout animations that do not thrash the compositor",
+            "Migrating react-router-dom v6 to v7",
+            "npm: axios v1.12.2",
+        ] {
+            let (_m, score) = match_dependencies(title, "", &[], &ctx);
+            assert!(
+                score >= crate::scoring_config::DEPENDENCY_THRESHOLD,
+                "a full package-name hit must still confirm: {title} scored {score:.3}"
+            );
+        }
+    }
+
+    /// One scope family contributes ONE match. Live, "Row Level Security in
+    /// Lovable apps" drew four `@tauri-apps/*` matches at ~0.5 each and landed
+    /// a 0.95 dependency axis off one English word.
+    #[test]
+    fn scope_family_contributes_one_match_not_four() {
+        let mut ctx = ACEContext::default();
+        for name in [
+            "@tauri-apps/api",
+            "@tauri-apps/cli",
+            "@tauri-apps/plugin-opener",
+            "@tauri-apps/plugin-updater",
+        ] {
+            let info = direct_dep_info(name, None, "javascript");
+            ctx.dependency_info
+                .insert(normalize_package_name(name), info);
+        }
+        let (matches, _score) =
+            match_dependencies("Row Level Security in Lovable apps", "", &[], &ctx);
+        let tauri_apps = matches
+            .iter()
+            .filter(|m| m.package_name.starts_with("tauri-apps"))
+            .count();
+        assert!(
+            tauri_apps <= 1,
+            "one npm scope must contribute at most one match, got {tauri_apps}: {:?}",
+            matches.iter().map(|m| &m.package_name).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn merging_keeps_the_strongest_project_relevance() {
+        // A package declared in BOTH a dormant side project and this app is
+        // the app's package: MAX, never min, or the app's own deps would be
+        // dragged down by a stale copy elsewhere.
+        let mut info = info_with(&["c:/users/x/kairos-mvp"], true, false, None);
+        info.project_relevance = 0.5;
+        merge_dep_occurrence(
+            &mut info,
+            "d:/4da/src-tauri".to_string(),
+            true,
+            false,
+            None,
+            1.0,
+        );
+        assert_eq!(info.project_relevance, 1.0, "MAX relevance must win");
+    }
+
+    #[test]
+    fn foreign_project_relevance_scales_match_confidence_down() {
+        // The axios class: a full-name title hit on a package that exists only
+        // in a non-git side project (relevance 0.5) must not score like one
+        // this app ships. Same item, same term, relevance the only difference.
+        let mut strong = direct_dep_info("axios", None, "javascript");
+        strong.project_relevance = 1.0;
+        let mut weak = direct_dep_info("axios", None, "javascript");
+        weak.project_relevance = 0.5;
+
+        let score_with = |info: DepInfo| {
+            let mut ctx = ACEContext::default();
+            ctx.dependency_info.insert("axios".to_string(), info);
+            match_dependencies("axios 1.2.3 released", "", &[], &ctx).1
+        };
+
+        let s_strong = score_with(strong);
+        let s_weak = score_with(weak);
+        assert!(s_strong > 0.0, "baseline must actually match");
+        assert!(
+            s_weak < s_strong,
+            "relevance 0.5 must score below 1.0 (got {s_weak} vs {s_strong})"
+        );
+        assert!(
+            (s_weak - s_strong * 0.5).abs() < 1e-5,
+            "relevance must scale linearly: {s_weak} != {} ",
+            s_strong * 0.5
+        );
     }
 }

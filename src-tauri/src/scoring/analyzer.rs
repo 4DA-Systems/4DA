@@ -64,7 +64,7 @@ pub(crate) async fn score_items_full(
     cached_items: &[crate::db::StoredSourceItem],
     silent: bool,
     llm_rerank: bool,
-) -> Result<Vec<SourceRelevance>> {
+) -> Result<crate::analysis::analysis_cycle::ScoredBatch> {
     use std::sync::atomic::Ordering;
 
     let scoring_started = Instant::now();
@@ -209,6 +209,22 @@ pub(crate) async fn score_items_full(
         "PASIFA scoring loop complete"
     );
 
+    // ── Evaluated snapshot — the persistence boundary's second input ──────
+    // Everything below this line is the batch-relative layer, and four of its
+    // stages DELETE entries from `results` (cross-source dedup, fuzzy title,
+    // topic, temporal clustering — 831 of 1,458 per cycle, measured on the live
+    // corpus 2026-08-27). `evidence_score` is fixed at construction by
+    // `score_item` and no batch stage touches it (`finalize_scores` shapes
+    // `top_score` only), so this snapshot carries the FINAL evidence for every
+    // item the scorer evaluated — including the ones about to be deleted.
+    //
+    // Without it, `persist_cycle_results` stamped only survivors and the drain
+    // re-selected the rest for ever: a 500-item drain batch converted 5.
+    let pre_batch: Vec<crate::analysis::analysis_cycle::EvaluatedItem> = results
+        .iter()
+        .map(crate::analysis::analysis_cycle::EvaluatedItem::from)
+        .collect();
+
     // Candidate-selection instrumentation for THIS pass.
     //
     // This used to be logged as "Pre-score coverage — items not selected this
@@ -296,6 +312,7 @@ pub(crate) async fn score_items_full(
     rank_prov.record(&results, "corroboration");
     telemetry.domain_diversity_adjusted = scoring::apply_domain_diversity(&mut results);
     scoring::apply_source_topic_diversity(&mut results);
+    scoring::apply_source_share_diversity(&mut results);
     rank_prov.record(&results, "diversity");
 
     // Per-source score normalization: blend raw score with source-relative
@@ -440,7 +457,18 @@ pub(crate) async fn score_items_full(
         tracing::warn!(target: "4da::analysis", error = %e, "Failed to record scoring stats");
     }
 
-    Ok(results)
+    // Report the gap the batch layer opened, so a dedup stage that starts
+    // eating the whole batch is visible rather than silent.
+    let batch = crate::analysis::analysis_cycle::ScoredBatch::new(results, pre_batch);
+    info!(
+        target: "4da::analysis",
+        evaluated = batch.evaluated.len(),
+        survivors,
+        dropped_by_batch_layer = batch.evaluated.len().saturating_sub(survivors),
+        "Scoring pass complete — evidence + version stamped for every evaluated item"
+    );
+
+    Ok(batch)
 }
 
 // ============================================================================
