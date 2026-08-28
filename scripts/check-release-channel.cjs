@@ -190,6 +190,46 @@ function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
   if (!/\^v\[0-9\]\+\\.\[0-9\]\+\\.\[0-9\]\+\$/.test(releaseYml)) {
     fail('release.yml tag classifier must match a bare vMAJOR.MINOR.PATCH tag exactly.');
   }
+  // The Windows signing waiver (ALLOW_UNSIGNED_WINDOWS) is the one deliberate
+  // hole in a gate that exists because unsigned builds once shipped silently.
+  // Three properties keep it honest, and all three are asserted here.
+  //
+  // 1. TAG-SCOPED, NOT BOOLEAN. The variable's value must equal the tag being
+  //    built. A boolean left set to true authorises every future release; a tag
+  //    name cannot, because the next tag differs and the gate closes again.
+  if (releaseYml.includes('unsigned_windows_ok')) {
+    const waiverLine = releaseYml
+      .split(String.fromCharCode(10))
+      .find((l) => l.includes('ALLOW_UNSIGNED_WINDOWS') && l.includes('"$TAG"'));
+    if (!waiverLine) {
+      fail(
+        'release.yml must compare ALLOW_UNSIGNED_WINDOWS against the tag being built. ' +
+          'A boolean waiver silently authorises every subsequent release.'
+      );
+    }
+
+    // 2. WINDOWS ONLY. An un-notarized macOS .app is REFUSED by Gatekeeper, not
+    //    warned about, so a waiver there ships a build nobody can open.
+    const macCase = releaseYml.slice(releaseYml.indexOf('            macOS)'));
+    const macBlock = macCase.slice(0, macCase.indexOf(';;'));
+    if (/ALLOW_UNSIGNED|UNSIGNED_WINDOWS_OK/.test(macBlock)) {
+      fail('the signing waiver must never apply to macOS — Gatekeeper refuses an un-notarized app outright.');
+    }
+    if (!/require APPLE_CERTIFICATE/.test(macBlock) || !/require APPLE_TEAM_ID/.test(macBlock)) {
+      fail('release.yml must still require every Apple signing credential unconditionally.');
+    }
+
+    // 3. THE CHECK STILL RUNS. The waiver may change the verdict, never whether
+    //    the measurement happens — that distinction is what #437 was about.
+    const verifyIdx = releaseYml.indexOf('- name: Verify Windows Authenticode signature');
+    const verifyHead = releaseYml.slice(verifyIdx, verifyIdx + 900);
+    if (!verifyHead.includes("if: runner.os == \'Windows\'" + String.fromCharCode(10))) {
+      fail(
+        'the Windows signature check must stay unconditional on Windows. Skipping the ' +
+          'check under a waiver recreates the 2026-04 defect: unsigned artifacts under a green tick.'
+      );
+    }
+  }
   // npm publishes are irreversible, and publish-mcp had no tag classification
   // at all — a desktop dry-run tag would have attempted one. Gated at job level.
   const mcpJob = releaseYml.slice(releaseYml.indexOf('  publish-mcp:'));

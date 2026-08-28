@@ -287,3 +287,61 @@ test('an ungated publish-mcp job fails the gate', () => {
     'an ungated npm publish must fail the gate'
   );
 });
+
+// ── Windows signing waiver (ALLOW_UNSIGNED_WINDOWS) ───────────────────────
+//
+// This is the one deliberate hole in a gate that exists because unsigned
+// builds once shipped silently under a green tick. A green run proves nothing
+// about a hole; these three tests are what make it safe.
+
+test('a BOOLEAN waiver fails the gate — it must be scoped to one tag', () => {
+  // A boolean left set to true authorises every future release. A tag name
+  // cannot, because the next release has a different tag.
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    '[ "${ALLOW_UNSIGNED_WINDOWS}" = "$TAG" ]',
+    '[ "${ALLOW_UNSIGNED_WINDOWS}" = "true" ]'
+  );
+  assert.ok(
+    checkReleaseChannel(root).some((f) => f.includes('against the tag being built')),
+    'a boolean waiver must be rejected'
+  );
+});
+
+test('extending the waiver to macOS fails the gate', () => {
+  // An un-notarized .app is REFUSED by Gatekeeper, not warned about. Waiving
+  // it ships a macOS build that cannot be opened at all.
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    '              require APPLE_CERTIFICATE',
+    '              if [ "${UNSIGNED_WINDOWS_OK:-}" != "true" ]; then require APPLE_CERTIFICATE; fi'
+  );
+  assert.ok(
+    checkReleaseChannel(root).some((f) => f.includes('Gatekeeper')),
+    'a macOS waiver must be rejected'
+  );
+});
+
+test('skipping the signature CHECK under the waiver fails the gate', () => {
+  // The waiver may change the verdict. It must never stop the measurement —
+  // that distinction is the entire subject of #437.
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    "        if: runner.os == 'Windows'\n        env:\n          ALLOW_UNSIGNED_WINDOWS:",
+    "        if: runner.os == 'Windows' && needs.create-release.outputs.unsigned_windows_ok != 'true'\n        env:\n          ALLOW_UNSIGNED_WINDOWS:"
+  );
+  assert.ok(
+    checkReleaseChannel(root).some((f) => f.includes('unconditional')),
+    'making the check conditional on the waiver must be rejected'
+  );
+});
+
+test('the current workflow, with the waiver present, passes all three', () => {
+  assert.deepEqual(checkReleaseChannel(REPO_ROOT), []);
+});

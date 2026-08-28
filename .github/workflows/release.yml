@@ -16,6 +16,7 @@ jobs:
     outputs:
       release_id: ${{ steps.create.outputs.result }}
       production: ${{ steps.tagkind.outputs.production }}
+      unsigned_windows_ok: ${{ steps.tagkind.outputs.unsigned_windows_ok }}
     permissions:
       contents: write
     steps:
@@ -27,6 +28,12 @@ jobs:
       # downstream reads the same answer.
       - name: Classify the tag
         id: tagkind
+        env:
+          # A REPOSITORY VARIABLE (visible in Settings, not a secret), whose value
+          # must be the exact tag it authorises — not a boolean. A boolean left set
+          # to true silently authorises every future release; a tag name cannot,
+          # because the next release has a different tag and fails closed again.
+          ALLOW_UNSIGNED_WINDOWS: ${{ vars.ALLOW_UNSIGNED_WINDOWS }}
         shell: bash
         run: |
           set -euo pipefail
@@ -39,6 +46,20 @@ jobs:
             echo "::notice title=Dry run::$TAG is not a production version tag. Everything builds and is verified, but nothing is published: the release stays a DRAFT, the desktop-latest updater pointer is untouched, and the MCP server is not published to npm."
           fi
 
+          # Windows Authenticode is the ONLY signature this can waive. macOS
+          # notarization is untouched: an un-notarized .app is REFUSED by
+          # Gatekeeper, not merely warned about, so waiving it would ship a mac
+          # build that cannot be opened. The updater signature is untouched too.
+          if [ -n "${ALLOW_UNSIGNED_WINDOWS:-}" ] && [ "${ALLOW_UNSIGNED_WINDOWS}" = "$TAG" ]; then
+            echo "unsigned_windows_ok=true" >> "$GITHUB_OUTPUT"
+            echo "::warning title=UNSIGNED WINDOWS BUILD::ALLOW_UNSIGNED_WINDOWS is set to ${TAG}, so the Windows installer in this release will NOT be code-signed. Users will see a SmartScreen warning and Windows cannot tell them who published it. This authorisation applies to ${TAG} only."
+          else
+            echo "unsigned_windows_ok=false" >> "$GITHUB_OUTPUT"
+            if [ -n "${ALLOW_UNSIGNED_WINDOWS:-}" ]; then
+              echo "::notice::ALLOW_UNSIGNED_WINDOWS is set to '${ALLOW_UNSIGNED_WINDOWS}' which does not match this tag (${TAG}) — Windows signing is REQUIRED for this release."
+            fi
+          fi
+
       - name: Get version from tag
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
@@ -48,12 +69,19 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
         with:
           script: |
+            // If this release ships an unsigned Windows installer, the release
+            // notes must say so. The download page cannot be the only place a
+            // user learns that Windows cannot verify the publisher.
+            const unsignedWindows = '${{ steps.tagkind.outputs.unsigned_windows_ok }}' === 'true';
+            const unsignedNote = unsignedWindows
+              ? '> **The Windows installer in this release is not code-signed.** Windows SmartScreen will warn you and cannot tell you who published it. Verify the SHA-256 against `SHASUMS256.txt` before running it. macOS and Linux builds are unaffected.\n\n'
+              : '';
             const { data } = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: `v${{ steps.version.outputs.version }}`,
               name: `4DA v${{ steps.version.outputs.version }}`,
-              body: `## Download\n\nPick the installer for your platform below.\n\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` (NSIS installer) |\n| macOS | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |\n\n---\n\nSee [CHANGELOG](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/CHANGELOG.md) for details.`,
+              body: `${unsignedNote}## Download\n\nPick the installer for your platform below.\n\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` (NSIS installer) |\n| macOS | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |\n\n---\n\nSee [CHANGELOG](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/CHANGELOG.md) for details.`,
               draft: true,
               prerelease: false,
             })
@@ -123,6 +151,7 @@ jobs:
           SSL_COM_PASSWORD: ${{ secrets.SSL_COM_PASSWORD }}
           SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
           SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
+          UNSIGNED_WINDOWS_OK: ${{ needs.create-release.outputs.unsigned_windows_ok }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -142,10 +171,18 @@ jobs:
 
           case "${{ runner.os }}" in
             Windows)
-              require SSL_COM_USERNAME
-              require SSL_COM_PASSWORD
-              require SSL_COM_CREDENTIAL_ID
-              require SSL_COM_TOTP_SECRET
+              # Windows Authenticode is waivable, per tag, via the
+              # ALLOW_UNSIGNED_WINDOWS repository variable. macOS is NOT: an
+              # un-notarized .app is refused by Gatekeeper outright, so a waiver
+              # there would ship a build that cannot be opened at all.
+              if [ "${UNSIGNED_WINDOWS_OK:-}" = "true" ]; then
+                echo "::warning title=Windows signing waived::ALLOW_UNSIGNED_WINDOWS authorises this exact tag, so the Windows credential requirement is skipped and this build will be UNSIGNED."
+              else
+                require SSL_COM_USERNAME
+                require SSL_COM_PASSWORD
+                require SSL_COM_CREDENTIAL_ID
+                require SSL_COM_TOTP_SECRET
+              fi
               ;;
             macOS)
               require APPLE_CERTIFICATE
@@ -277,11 +314,13 @@ jobs:
         run: cargo deny check
 
       - name: Install SSL.com CodeSignTool (Windows EV signing)
-        # Platform-conditional ONLY. Credential presence is already asserted by
-        # the preflight gate, so re-gating on the secret here would recreate the
-        # original defect: two independent steps testing the same condition, one
-        # of which is supposed to police the other.
-        if: runner.os == 'Windows'
+        # NOT gated on the secret. Credential presence is asserted once, by the
+        # preflight; re-testing the secret here would recreate the original
+        # defect — two independent steps testing the same condition, one of
+        # which is supposed to police the other. The waiver check is a
+        # different question (is signing expected at all?) and is safe: with it
+        # active nothing calls CodeSignTool, so installing it is dead weight.
+        if: runner.os == 'Windows' && needs.create-release.outputs.unsigned_windows_ok != 'true'
         shell: powershell
         run: |
           # Download CodeSignTool for Windows
@@ -378,6 +417,10 @@ jobs:
           SSL_COM_PASSWORD: ${{ secrets.SSL_COM_PASSWORD }}
           SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
           SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
+          # Read by scripts/sign-windows.ps1, which Tauri invokes per artifact
+          # via signCommand. With the waiver active the script exits 0 without
+          # signing, instead of failing the build on absent credentials.
+          ALLOW_UNSIGNED_WINDOWS: ${{ needs.create-release.outputs.unsigned_windows_ok }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
@@ -411,6 +454,8 @@ jobs:
         # skipped signing AND skipped the detection of that skip, publishing
         # unsigned installers under a green tick.
         if: runner.os == 'Windows'
+        env:
+          ALLOW_UNSIGNED_WINDOWS: ${{ needs.create-release.outputs.unsigned_windows_ok }}
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -449,9 +494,17 @@ jobs:
             Write-Host "::error::No .exe or .msi found under $bundleDir - the build produced no installer, or the bundle layout changed. Release blocked."
             exit 1
           }
+          # The waiver changes the VERDICT, never the measurement: the check
+          # still runs, still inspects every artifact, and still says out loud
+          # that they are unsigned. It only stops that being fatal.
           if ($failed -gt 0) {
-            Write-Host "::error::One or more binaries are unsigned - release blocked"
-            exit 1
+            if ($env:ALLOW_UNSIGNED_WINDOWS -eq 'true') {
+              Write-Host "::warning::$failed Windows artifact(s) are UNSIGNED. Allowed because ALLOW_UNSIGNED_WINDOWS authorises this tag. Users will see a SmartScreen warning."
+            } else {
+              Write-Host "::error::One or more binaries are unsigned - release blocked"
+              exit 1
+            }
+          }
           }
           Write-Host "All $signed Windows artifact(s) carry a valid Authenticode signature."
 
