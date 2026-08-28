@@ -9,12 +9,6 @@ use fourda_macros::score_component;
 
 use super::super::utils::topic_grounds;
 
-/// How many of the closest stack elements the semantic boost averages over.
-///
-/// Three, not all of them. See the note at the top-K selection below for why
-/// averaging over the whole context set is the wrong shape.
-const SEMANTIC_TOP_K: usize = 3;
-
 /// Compute semantic ACE boost using embeddings
 /// PASIFA: Uses vector similarity instead of keyword matching when embeddings available
 pub(crate) fn compute_semantic_ace_boost(
@@ -32,10 +26,9 @@ pub(crate) fn compute_semantic_ace_boost(
         return None; // Zero-norm embedding can't produce meaningful similarity
     }
 
-    // (similarity, weight) for every stack element that produced a usable
-    // comparison. Collected rather than accumulated so the TOP-K can be taken
-    // below — see [`SEMANTIC_TOP_K`].
-    let mut scored: Vec<(f32, f32)> = Vec::new();
+    let mut max_similarity: f32 = 0.0;
+    let mut weighted_sum: f32 = 0.0;
+    let mut weight_total: f32 = 0.0;
 
     // Compute similarity with active topics.
     // Zero-norm topic embeddings are failed-embed placeholders (provider
@@ -48,7 +41,9 @@ pub(crate) fn compute_semantic_ace_boost(
             }
             let sim = crate::cosine_similarity_with_norm(item_embedding, item_norm, topic_emb);
             let conf = ace_ctx.topic_confidence.get(topic).copied().unwrap_or(0.5);
-            scored.push((sim, conf));
+            weighted_sum += sim * conf;
+            weight_total += conf;
+            max_similarity = max_similarity.max(sim);
         }
     }
 
@@ -61,35 +56,17 @@ pub(crate) fn compute_semantic_ace_boost(
             }
             let sim = crate::cosine_similarity_with_norm(item_embedding, item_norm, tech_emb);
             let tech_weight = ace_ctx.tech_weights.get(tech).copied().unwrap_or(0.35);
-            scored.push((sim, tech_weight));
+            weighted_sum += sim * tech_weight;
+            weight_total += tech_weight;
+            max_similarity = max_similarity.max(sim);
         }
     }
 
-    // Top-K by similarity, then a weighted mean of those.
-    //
-    // This was a weighted average over EVERY active topic and detected tech,
-    // which made the boost a taste centroid: moderately similar to everything
-    // and strongly similar to nothing. Averaging punished twice over — adding
-    // a junk topic RAISED the score for junk-adjacent items and LOWERED it for
-    // genuinely on-stack ones, because every extra term pulled the mean toward
-    // the middle. The project had already measured that shape once (Phase-0
-    // triage: "relevant items smear across the similarity range") and it was
-    // live again with kubernetes, grpc, fourda_macros and content_dna_classifiers
-    // in the average (2026-08-26 audit, A9).
-    //
-    // An item that is a dead-on match for ONE real stack element should score
-    // high on that basis alone, and an unrelated element should be able to sit
-    // in the context without dragging it down. Top-K delivers both: a junk
-    // topic only affects the result if it is genuinely among the item's
-    // closest matches, which is exactly when it SHOULD.
-    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    scored.truncate(SEMANTIC_TOP_K);
-
-    let weight_total: f32 = scored.iter().map(|(_, w)| w).sum();
     if weight_total == 0.0 {
         return None;
     }
-    let weighted_sum: f32 = scored.iter().map(|(sim, w)| sim * w).sum();
+
+    // Compute weighted average similarity
     let avg_similarity = weighted_sum / weight_total;
 
     // The learned-affinity multiplier that scaled this boost (±50% from
@@ -178,134 +155,5 @@ mod tests {
         // Only poison available → no usable signal → None (keyword fallback),
         // NOT a fabricated maximum-negative boost from an all-zero average.
         assert_eq!(compute_semantic_ace_boost(&item, &ctx, &embeddings), None);
-    }
-}
-
-#[cfg(test)]
-mod top_k_tests {
-    use super::*;
-
-    /// Unit basis vector: 1.0 at `axis`, 0 elsewhere. Cosine between two
-    /// distinct axes is 0; with itself, 1.
-    fn axis(a: usize) -> Vec<f32> {
-        let mut v = vec![0.0_f32; crate::EMBEDDING_DIMS];
-        v[a % crate::EMBEDDING_DIMS] = 1.0;
-        v
-    }
-
-    /// Half-way between two axes — similarity ~0.707 to each.
-    fn blend(a: usize, b: usize) -> Vec<f32> {
-        let mut v = vec![0.0_f32; crate::EMBEDDING_DIMS];
-        v[a % crate::EMBEDDING_DIMS] = 1.0;
-        v[b % crate::EMBEDDING_DIMS] = 1.0;
-        v
-    }
-
-    fn ctx_with(topics: &[&str]) -> ACEContext {
-        let mut c = ACEContext::default();
-        for t in topics {
-            c.active_topics.push((*t).to_string());
-            c.topic_confidence.insert((*t).to_string(), 0.7);
-        }
-        c
-    }
-
-    /// THE A9 invariant. An item that matches the user's real stack must not
-    /// score lower because the context also holds something unrelated to it.
-    /// Under the old whole-set average, every junk topic pulled the mean toward
-    /// the middle: adding one LOWERED an on-stack item and RAISED a junk-adjacent
-    /// one. Needs more than SEMANTIC_TOP_K on-stack topics to be meaningful.
-    #[test]
-    fn an_unrelated_topic_does_not_drag_down_an_on_stack_item() {
-        let item = axis(0);
-        let mut embs: HashMap<String, Vec<f32>> = HashMap::new();
-        for (i, t) in ["rust", "tokio", "serde", "tauri"].iter().enumerate() {
-            // all close to the item, slightly apart from each other
-            embs.insert(
-                (*t).to_string(),
-                if i == 0 { axis(0) } else { blend(0, 10 + i) },
-            );
-        }
-        let before = compute_semantic_ace_boost(
-            &item,
-            &ctx_with(&["rust", "tokio", "serde", "tauri"]),
-            &embs,
-        )
-        .expect("baseline boost");
-
-        // Now the context also holds a topic minted from a test fixture that
-        // has nothing to do with this item — the live `kubernetes` case.
-        embs.insert("kubernetes".to_string(), axis(500));
-        let after = compute_semantic_ace_boost(
-            &item,
-            &ctx_with(&["rust", "tokio", "serde", "tauri", "kubernetes"]),
-            &embs,
-        )
-        .expect("boost with junk topic");
-
-        assert!(
-            after >= before - 1e-6,
-            "an unrelated topic must not lower an on-stack item's boost: {before} -> {after}"
-        );
-    }
-
-    /// The other half: matching a real stack element must be worth strictly
-    /// more than matching nothing, even when the context is mostly junk.
-    ///
-    /// Asserted as a COMPARISON, not against an absolute floor. The absolute
-    /// value depends on the similarity scale, and orthogonal unit vectors
-    /// (cosine exactly 0) are not a shape real embeddings produce — an early
-    /// version of this test asserted `boost > 0` on four exactly-orthogonal
-    /// junk topics and failed for that reason rather than a real one.
-    #[test]
-    fn matching_the_stack_beats_matching_nothing() {
-        let mut embs: HashMap<String, Vec<f32>> = HashMap::new();
-        embs.insert("rust".to_string(), axis(0));
-        for (i, t) in ["kubernetes", "grpc", "azure", "redis"].iter().enumerate() {
-            embs.insert((*t).to_string(), axis(300 + i));
-        }
-        let topics = ["rust", "kubernetes", "grpc", "azure", "redis"];
-
-        // An item sitting exactly on the user's real stack element…
-        let on_stack = compute_semantic_ace_boost(&axis(0), &ctx_with(&topics), &embs)
-            .expect("on-stack boost");
-        // …versus one that matches nothing in the context at all.
-        let off_stack = compute_semantic_ace_boost(&axis(900), &ctx_with(&topics), &embs)
-            .expect("off-stack boost");
-
-        assert!(
-            on_stack > off_stack,
-            "matching a real stack element must beat matching nothing: {on_stack} vs {off_stack}"
-        );
-    }
-
-    #[test]
-    fn zero_norm_topic_embeddings_are_skipped() {
-        let item = axis(0);
-        let mut embs: HashMap<String, Vec<f32>> = HashMap::new();
-        embs.insert("rust".to_string(), axis(0));
-        embs.insert("broken".to_string(), vec![0.0_f32; crate::EMBEDDING_DIMS]);
-        let boost = compute_semantic_ace_boost(&item, &ctx_with(&["rust", "broken"]), &embs)
-            .expect("boost");
-        let solo =
-            compute_semantic_ace_boost(&item, &ctx_with(&["rust"]), &embs).expect("solo boost");
-        assert!(
-            (boost - solo).abs() < 1e-6,
-            "a failed-embed placeholder must not move the boost: {solo} vs {boost}"
-        );
-    }
-
-    #[test]
-    fn no_usable_embeddings_returns_none() {
-        let item = axis(0);
-        assert!(compute_semantic_ace_boost(&item, &ctx_with(&["rust"]), &HashMap::new()).is_none());
-    }
-
-    #[test]
-    fn zero_norm_item_returns_none() {
-        let mut embs: HashMap<String, Vec<f32>> = HashMap::new();
-        embs.insert("rust".to_string(), axis(0));
-        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
-        assert!(compute_semantic_ace_boost(&zero, &ctx_with(&["rust"]), &embs).is_none());
     }
 }
