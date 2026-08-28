@@ -4,7 +4,13 @@ All notable changes to 4DA will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.0.1] - 2026-08-28
+## [1.0.2] - 2026-08-29
+
+Supersedes 1.0.1, which was tagged and built but never published: a syntax error in the
+release workflow’s Windows verification step failed the job after the installers had already
+been produced. No 1.0.1 artifacts were ever released. The contents below are that same body
+of work, plus a gate (`scripts/check-workflow-shell-syntax.cjs`) that parses every inline
+workflow script so a shell typo cannot reach a release tag again.
 
 Curated highlights from a large body of work — this is a selection, not an exhaustive
 commit log.
