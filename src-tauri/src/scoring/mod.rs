@@ -50,7 +50,7 @@ mod utils;
 pub(crate) mod validation;
 
 // Public API — external callers use crate::scoring::function_name unchanged
-pub(crate) use ace_context::{get_ace_context, ACEContext};
+pub(crate) use ace_context::{get_ace_context, primary_project_dirs, ACEContext};
 pub(crate) use analyzer::{run_post_analysis_hooks, score_items_full};
 pub(crate) use calibration::calibrate_score;
 pub(crate) use calibration_monitor::{

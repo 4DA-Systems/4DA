@@ -891,18 +891,24 @@ pub(crate) fn build_enriched_briefing(
 
     // Compute project scope for each alert — distinguishes "your shipping code"
     // from side projects and dev dependencies.
-    let project_root = std::env::current_dir()
-        .ok()
-        .map(|p| p.to_string_lossy().to_lowercase().replace('\\', "/"));
+    // The user's nominated project roots, not cwd. Reading cwd meant an
+    // installed build compared alert paths against its own install directory,
+    // and the scheduled background refresh — which is registered with no
+    // working directory, so Task Scheduler hands it %windir%/system32 —
+    // compared against that. Either way nothing matched, and the briefing
+    // labelled the user's own shipping code "external".
+    let project_roots = crate::scoring::primary_project_dirs();
     let preemption_alerts: Vec<BriefingPreemptionAlert> = preemption_alerts
         .into_iter()
         .map(|mut alert| {
             let scope = if alert.is_dev == Some(true) {
                 "dev"
-            } else if let Some(ref root) = project_root {
+            } else if !project_roots.is_empty() {
                 let is_primary = alert.affected_projects.iter().any(|p| {
                     let normalized = p.to_lowercase().replace('\\', "/");
-                    normalized.starts_with(root.as_str())
+                    project_roots
+                        .iter()
+                        .any(|r| normalized.starts_with(r.as_str()))
                 });
                 if is_primary {
                     "primary"

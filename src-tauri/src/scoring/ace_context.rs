@@ -98,7 +98,7 @@ fn extract_project_name_from_evidence(evidence: &str) -> Option<String> {
 /// `editors/vscode` and `mcp-4da-server`, in an application that is roughly
 /// half TypeScript. A tech that lives ONLY in support infrastructure still
 /// scores 0.10, which is what the penalty was written for.
-fn tech_weight_from_evidence(evidence: &[String], primary_normalized: &str) -> f32 {
+fn tech_weight_from_evidence(evidence: &[String], primary_dirs: &[String]) -> f32 {
     evidence
         .iter()
         .map(|ev| {
@@ -109,13 +109,56 @@ fn tech_weight_from_evidence(evidence: &[String], primary_normalized: &str) -> f
                 || ev_lower.contains("/scripts/");
             if is_subproject {
                 0.10
-            } else if !primary_normalized.is_empty() && ev_lower.contains(primary_normalized) {
+            } else if primary_dirs.iter().any(|d| ev_lower.contains(d.as_str())) {
                 0.85
             } else {
                 0.40
             }
         })
         .fold(0.0_f32, f32::max)
+}
+
+/// The user's own project roots, lowercased and slash-normalised for substring
+/// matching against ACE evidence paths.
+///
+/// Sourced from `context_dirs` — the directories the user actually nominated —
+/// NOT from the current working directory.
+///
+/// CWD was the wrong source in every deployment that matters. In an installed
+/// build it is the install directory, so no evidence path can contain it and
+/// every technology collapses to the 0.40 default, silently discarding the
+/// primary/secondary distinction this weight exists to draw. Worse, the
+/// background refresh is registered with `schtasks /Create` and no working
+/// directory (see `engine_scheduler.rs`), so Task Scheduler hands it
+/// `%windir%\system32` — verified on this machine: the task XML has no
+/// `<WorkingDirectory>` element. That unattended run is the one that produces
+/// the user's feed. Even in dev it was wrong: cwd is `src-tauri/` while the
+/// evidence lives at the repo root.
+///
+/// All configured roots count, not just the first — a user with three project
+/// directories is the author of all three.
+pub(crate) fn primary_project_dirs() -> Vec<String> {
+    #[allow(unused_mut)]
+    let mut dirs: Vec<String> = crate::get_context_dirs()
+        .iter()
+        .map(|p| p.to_string_lossy().to_lowercase().replace('\\', "/"))
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    // Dev convenience only, and only when nothing is configured: a debug run
+    // before onboarding has no context_dirs yet. Never in a release build,
+    // where cwd is the install directory.
+    #[cfg(debug_assertions)]
+    if dirs.is_empty() {
+        if let Ok(cwd) = std::env::current_dir() {
+            let s = cwd.to_string_lossy().to_lowercase().replace('\\', "/");
+            if !s.is_empty() {
+                dirs.push(s);
+            }
+        }
+    }
+
+    dirs
 }
 
 /// Fetch ACE-discovered context for relevance scoring
@@ -153,10 +196,8 @@ pub(crate) fn get_ace_context() -> ACEContext {
     // Exclude Platform (e.g. "windows", "macos", "linux") — developing ON a platform
     // doesn't mean the user is interested in content ABOUT that platform.
     if let Ok(tech) = ace.get_detected_tech() {
-        // Determine primary project directory (CWD or first context_dir)
-        let primary_dir = std::env::current_dir()
-            .map(|p| p.to_string_lossy().to_lowercase())
-            .unwrap_or_default();
+        // The user's nominated project roots. NOT cwd — see primary_project_dirs.
+        let primary_dirs = primary_project_dirs();
 
         let filtered: Vec<_> = tech
             .iter()
@@ -171,7 +212,6 @@ pub(crate) fn get_ace_context() -> ACEContext {
             .take(20)
             .collect();
 
-        let primary_normalized = primary_dir.replace('\\', "/");
         for t in &filtered {
             let name_lower = t.name.to_lowercase();
             ctx.detected_tech.push(name_lower.clone());
@@ -193,7 +233,7 @@ pub(crate) fn get_ace_context() -> ACEContext {
             // keeps the primary weight; a language that lives ONLY in support
             // infrastructure still scores 0.10, which is the behaviour the
             // penalty was written for.
-            let weight = tech_weight_from_evidence(&t.evidence, &primary_normalized);
+            let weight = tech_weight_from_evidence(&t.evidence, &primary_dirs);
             let existing = ctx
                 .tech_weights
                 .get(&name_lower)
@@ -265,6 +305,10 @@ mod tests {
         assert!(ctx.active_topics.is_empty());
         assert!(ctx.detected_tech.is_empty());
     }
+    /// The single configured project root these cases were written against.
+    fn roots() -> Vec<String> {
+        vec!["d:/4da".to_string()]
+    }
 
     fn ev(paths: &[&str]) -> Vec<String> {
         paths.iter().map(|p| (*p).to_string()).collect()
@@ -279,7 +323,7 @@ mod tests {
             "Found in D:/4DA/package.json",
             "Found in D:/4DA/site/package.json",
         ]);
-        assert_eq!(tech_weight_from_evidence(&evidence, "d:/4da"), 0.85);
+        assert_eq!(tech_weight_from_evidence(&evidence, &roots()), 0.85);
     }
 
     /// The penalty still does its job when support infrastructure is ALL there is.
@@ -289,18 +333,61 @@ mod tests {
             "Found in D:/4DA/mcp-4da-server/package.json",
             "Found in D:/4DA/editors/vscode/4da/package.json",
         ]);
-        assert_eq!(tech_weight_from_evidence(&evidence, "d:/4da"), 0.10);
+        assert_eq!(tech_weight_from_evidence(&evidence, &roots()), 0.10);
     }
 
     #[test]
     fn tech_outside_the_primary_project_is_secondary() {
         let evidence = ev(&["Found in C:/Users/x/Documents/other-app/package.json"]);
-        assert_eq!(tech_weight_from_evidence(&evidence, "d:/4da"), 0.40);
+        assert_eq!(tech_weight_from_evidence(&evidence, &roots()), 0.40);
     }
 
     #[test]
     fn empty_evidence_scores_zero() {
-        assert_eq!(tech_weight_from_evidence(&[], "d:/4da"), 0.0);
+        assert_eq!(tech_weight_from_evidence(&[], &roots()), 0.0);
+    }
+
+    /// THE regression. With no configured roots — which is what an installed
+    /// build and the `schtasks` background refresh both produced, because the
+    /// old code read cwd and cwd is the install dir or `system32` — every
+    /// technology collapsed to the 0.40 default and the primary/secondary
+    /// distinction this weight exists to draw disappeared silently.
+    #[test]
+    fn no_configured_roots_cannot_promote_anything_to_primary() {
+        let evidence = ev(&["Found in D:/4DA/package.json"]);
+        assert_eq!(tech_weight_from_evidence(&evidence, &[]), 0.40);
+        // ...and the subproject penalty must still apply, so the absence of
+        // roots degrades one axis rather than flattening all of them.
+        let support = ev(&["Found in D:/4DA/mcp-4da-server/package.json"]);
+        assert_eq!(tech_weight_from_evidence(&support, &[]), 0.10);
+    }
+
+    /// A user with several project directories is the author of all of them.
+    /// The old signature took ONE root, so the second and third project's code
+    /// scored as somebody else's.
+    #[test]
+    fn every_configured_root_counts_as_primary() {
+        let many = vec![
+            "d:/4da".to_string(),
+            "d:/runyourempire/victauri".to_string(),
+            "c:/work/thing".to_string(),
+        ];
+        for path in [
+            "Found in D:/4DA/package.json",
+            "Found in D:/runyourempire/victauri/Cargo.toml",
+            "Found in C:/work/thing/go.mod",
+        ] {
+            assert_eq!(
+                tech_weight_from_evidence(&ev(&[path]), &many),
+                0.85,
+                "{path} should be primary"
+            );
+        }
+        // Something outside every configured root is still secondary.
+        assert_eq!(
+            tech_weight_from_evidence(&ev(&["Found in C:/elsewhere/app/package.json"]), &many),
+            0.40
+        );
     }
 
     #[test]
