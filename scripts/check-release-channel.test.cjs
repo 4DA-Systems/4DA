@@ -215,3 +215,60 @@ test('a desktop entry that drops %U fails the gate', () => {
   replaceInFile(root, 'src-tauri/desktop-template.desktop', 'Exec={{exec}} %U', 'Exec={{exec}}');
   assert.ok(checkReleaseChannel(root).some((f) => f.includes('%U')));
 });
+
+// ── dry-run tag safety ────────────────────────────────────────────────────
+//
+// The two publishing steps were unconditional. Eight `v0.0.N-test` dry-run tags
+// exist in this repo's history; every one failed earlier in the matrix, which is
+// the only reason a dry run never clobbered the production updater pointer and
+// offered a test build to installed clients as an update.
+
+test('an unguarded updater-pointer publish fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    "      - name: Publish desktop updater manifest\n        if: steps.tagkind.outputs.production == 'true'\n",
+    '      - name: Publish desktop updater manifest\n'
+  );
+  const failures = checkReleaseChannel(root);
+  assert.ok(
+    failures.some((f) => f.includes('Publish desktop updater manifest') && f.includes('dry-run')),
+    `expected an unguarded-pointer failure, got: ${JSON.stringify(failures)}`
+  );
+});
+
+test('an unguarded un-draft step fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    "      - name: Publish release\n        if: steps.tagkind.outputs.production == 'true'\n",
+    '      - name: Publish release\n'
+  );
+  assert.ok(
+    checkReleaseChannel(root).some((f) => f.includes('Publish release') && f.includes('dry-run'))
+  );
+});
+
+test('removing the tag classifier fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(root, '.github/workflows/release.yml', 'id: tagkind', 'id: something-else');
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('classify the tag')));
+});
+
+test('a loosened tag pattern that would accept a -test tag fails the gate', () => {
+  // The whole point is that `v0.0.14-test` must NOT classify as production.
+  // A pattern without the `$` anchor would let it through.
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    String.raw`^v[0-9]+\.[0-9]+\.[0-9]+$`,
+    String.raw`^v[0-9]+\.[0-9]+\.[0-9]+`
+  );
+  assert.ok(
+    checkReleaseChannel(root).some((f) => f.includes('vMAJOR.MINOR.PATCH')),
+    'a prefix-only tag pattern must be rejected'
+  );
+});
