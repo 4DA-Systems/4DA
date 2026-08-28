@@ -162,6 +162,21 @@ jobs:
           set -o pipefail
           MISSING=()
           require() { if [ -z "${!1:-}" ]; then MISSING+=("$1"); fi; }
+          MALFORMED=()
+
+          # Presence is not validity. On 2026-08-28 a dry run spent 25 minutes
+          # per platform to discover that TAURI_SIGNING_PRIVATE_KEY began with a
+          # SPACE: "failed to decode base64 secret key: Invalid symbol 32,
+          # offset 0". That secret had been set since February and was non-empty,
+          # so every presence check passed it. No credential should ever carry
+          # leading or trailing whitespace, and checking costs microseconds.
+          shape() {
+            local v="${!1:-}"
+            [ -z "$v" ] && return 0   # absence is `require`'s job, not ours
+            case "$v" in
+              " "*|*" "|"	"*|*"	") MALFORMED+=("$1 (leading/trailing whitespace)") ;;
+            esac
+          }
 
           # Updater manifest signing - required on EVERY platform. Without this
           # key tauri-action emits no updater artifacts and no latest.json, and
@@ -193,6 +208,25 @@ jobs:
               require APPLE_TEAM_ID
               ;;
           esac
+
+          # Shape-check everything present, on every platform. A malformed
+          # credential otherwise fails 25 minutes later, and surfaces from deep
+          # inside a bundler rather than here.
+          for s in TAURI_SIGNING_PRIVATE_KEY SSL_COM_USERNAME SSL_COM_PASSWORD \
+                   SSL_COM_CREDENTIAL_ID SSL_COM_TOTP_SECRET APPLE_SIGNING_IDENTITY \
+                   APPLE_ID APPLE_TEAM_ID; do
+            shape "$s"
+          done
+
+          if [ ${#MALFORMED[@]} -gt 0 ]; then
+            echo "::error::Signing credentials are present but MALFORMED - release blocked."
+            printf '  - %s\n' "${MALFORMED[@]}"
+            echo ""
+            echo "Re-save these secrets with no surrounding whitespace. A value pasted"
+            echo "with a stray leading space is non-empty, passes every presence check,"
+            echo "and then fails deep inside the bundler after a full compile."
+            exit 1
+          fi
 
           if [ ${#MISSING[@]} -gt 0 ]; then
             echo "::error::Signing credentials missing for ${{ matrix.label }} - release blocked."
