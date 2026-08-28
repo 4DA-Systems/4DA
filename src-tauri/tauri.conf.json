@@ -47,7 +47,7 @@
       "endpoints": [
         "https://github.com/4DA-Systems/4DA/releases/download/desktop-latest/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5QUY0MkIxQjY5NzE3MDMKUldRREY1ZTJzVUt2R1lDUHhrYS9LYXpPWTZzLzh3ODV0SzdDOHJENklSQWIxdWNPaFZmZVBSWkYK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ2RUNFMUQ2QTk3ODQ5RUYKUldUdlNYaXAxdUhzUnVyTzV2QzBUT1NFVmxpcFVxU3pzSGluT0RudTdEWDVUdzExZ3VEdkhRUVoK"
     }
   },
   "bundle": {
