@@ -444,6 +444,21 @@ jobs:
       - name: Retired promise language (AD-030)
         run: node scripts/check-retired-claims.cjs
 
+      # The check above scans `git ls-files`. A GitHub release body is not a
+      # tracked file, so it sat outside every gate — and the v1.0.0 notes, which
+      # 4da.ai/download links every visitor to, still carried two retired claims
+      # four months after AD-030. The repo was clean; the shopfront was not.
+      - name: Retired promise language on published releases (AD-030)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-release-notes-claims.cjs
+
+      # pnpm 11 does not read the `pnpm` field in package.json — it warns and
+      # carries on. 69 security overrides live there. Bumping the pin would
+      # resolve every held package back to its vulnerable version and green-pass.
+      - name: pnpm security overrides are still honoured by the pinned pnpm
+        run: node scripts/check-pnpm-overrides.cjs
+
       # NETWORK.md promises git history and file contents never leave the
       # machine. On 2026-08-28 the reranker was sending the five most recent
       # commit messages to the configured cloud LLM, on by default. Nothing
