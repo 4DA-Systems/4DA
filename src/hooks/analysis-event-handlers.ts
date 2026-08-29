@@ -56,6 +56,7 @@ export function handleAnalysisComplete(event: Event<SourceRelevance[]>): void {
   const results = event.payload;
   const relevantCount = results.filter((r) => r.relevant).length;
   const nearMisses = extractNearMisses(results, relevantCount);
+  clearStaleAnalysisFailureToasts();
 
   useAppStore.getState().setAppStateFull((s) => ({
     ...s,
@@ -89,6 +90,23 @@ export function handleAnalysisComplete(event: Event<SourceRelevance[]>): void {
       void useAppStore.getState().loadMonitoringStatus();
     }).catch((e) => console.debug('[analysis] auto-enable monitoring:', e));
   }
+}
+
+/**
+ * Clear failure toasts superseded by this completion. Error toasts never
+ * auto-dismiss (by design, for accessibility) — but once the SAME operation
+ * has succeeded, the failure banner is stale information: live 2026-08-30,
+ * "Analysis failed: Scoring context build timed out" outlived its successful
+ * retry by 20+ minutes, on every tab. Prefixes are derived through i18n so the
+ * match survives locale switches; the raw English prefix covers the
+ * `startAnalysis` catch path, which is not localized.
+ */
+export function clearStaleAnalysisFailureToasts(): void {
+  const { removeToastsByPrefix } = useAppStore.getState();
+  removeToastsByPrefix(i18n.t('analysis.failed', { message: '' }).trimEnd());
+  removeToastsByPrefix(i18n.t('analysis.apiError'));
+  removeToastsByPrefix(i18n.t('analysis.networkError'));
+  removeToastsByPrefix('Analysis failed:');
 }
 
 export function handleAnalysisError(event: Event<string>): void {
@@ -169,6 +187,7 @@ export function createBackgroundResultsHandler(
   return (event: Event<SourceRelevance[]>): void => {
     const newItems = event.payload;
     if (newItems.length === 0) return;
+    clearStaleAnalysisFailureToasts();
     const relevantNew = newItems.filter((r) => r.relevant).length;
     useAppStore.getState().setAppStateFull((s) => {
       const existingIds = new Set(newItems.map((n) => n.id));
