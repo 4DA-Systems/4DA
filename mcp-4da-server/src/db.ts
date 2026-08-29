@@ -984,6 +984,17 @@ export class FourDADatabase {
     const curationGuard = this.hasColumn("source_items", "feed_relevant")
       ? ` AND (feed_relevant IS NULL OR feed_relevant = 1)`
       : ``;
+    // Historical-advisory guard: OSV/CVE backfills ingest decades-old advisories
+    // whose created_at (discovery time) is days old but whose published_at is
+    // ancient — and the scoring brain rates them 0.9 because they name the
+    // user's deps. Live 2026-08-30: half the top-20 was React XSS fixed in 0.14
+    // (2015) and tokio races fixed in 2021, on a react 19 / tokio 1.52 stack.
+    // A reading feed is about what is CURRENT; version-aware exposure checking
+    // is vulnerability_scan / knowledge_gaps territory. NULL published_at is
+    // kept — absence of a date is not evidence of age.
+    const advisoryFreshnessGuard = this.hasColumn("source_items", "published_at")
+      ? ` AND NOT (source_type IN ('osv', 'cve') AND published_at IS NOT NULL AND datetime(published_at) < datetime('now', '-90 days'))`
+      : ``;
     let query = `
       SELECT id, source_type, source_id, url, title, content, content_hash,
              created_at, last_seen, relevance_score, content_type,
@@ -991,7 +1002,7 @@ export class FourDADatabase {
              ${depCount} AS dep_match_count
       FROM source_items
       WHERE relevance_score >= ?
-        AND datetime(created_at) >= datetime(?)${versionGuard}${curationGuard}
+        AND datetime(created_at) >= datetime(?)${versionGuard}${curationGuard}${advisoryFreshnessGuard}
     `;
     const params: (string | number)[] = [minScore, sinceDate];
 
@@ -1074,10 +1085,15 @@ export class FourDADatabase {
   ): RelevantItem[] {
     const context = this.getUserContext(true, true);
 
+    // Same historical-advisory guard as the Rust-score path: a backfilled
+    // 2015 advisory is not current reading, whatever its keyword score.
+    const advisoryFreshnessGuard = this.hasColumn("source_items", "published_at")
+      ? ` AND NOT (source_type IN ('osv', 'cve') AND published_at IS NOT NULL AND datetime(published_at) < datetime('now', '-90 days'))`
+      : ``;
     let query = `
       SELECT id, source_type, source_id, url, title, content, content_hash, created_at, last_seen
       FROM source_items
-      WHERE datetime(created_at) >= datetime(?)
+      WHERE datetime(created_at) >= datetime(?)${advisoryFreshnessGuard}
     `;
     const params: (string | number)[] = [sinceDate];
 

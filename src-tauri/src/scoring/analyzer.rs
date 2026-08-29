@@ -108,12 +108,7 @@ pub(crate) async fn score_items_full(
 
     crate::diagnostics::log_rss("scoring:before_build_context");
     let context_started = Instant::now();
-    let scoring_ctx = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        scoring::build_scoring_context(db),
-    )
-    .await
-    .map_err(|_| String::from("Scoring context build timed out after 10s"))??;
+    let scoring_ctx = scoring::build_scoring_context_with_timeout(db).await?;
     info!(
         target: "4da::analysis",
         elapsed_ms = context_started.elapsed().as_millis(),

@@ -1573,6 +1573,8 @@
   "calibration.onboarding.summaryProjects": "{{count}} 件の技術を検出",
   "calibration.action.working": "処理中...",
   "health.issueCount": "{{count}}件のシステム問題を検出",
+  "health.circuitReset": "{{source}} はリセットされ、再試行されます",
+  "health.sourceMissed": "{{source}} が利用できない間、アイテムを取得できなかった可能性があります",
   "health.openSettings": "設定を開く",
   "missed.title": "見逃していたもの",
   "missed.scanned": "{{count}}件をスキャン",

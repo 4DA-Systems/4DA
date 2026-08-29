@@ -184,13 +184,7 @@ pub(crate) async fn backfill_unscored_cycle(chunk_size: usize) -> Result<Backfil
     }
 
     // Same scoring context + options as the real pipeline (minus LLM rerank).
-    let ctx = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        scoring::build_scoring_context(db),
-    )
-    .await
-    .map_err(|_| String::from("Scoring context build timed out after 10s"))?
-    .map_err(|e| format!("Failed to build scoring context: {e}"))?;
+    let ctx = scoring::build_scoring_context_with_timeout(db).await?;
     let trend_topics = crate::detect_trend_topics(
         items
             .iter()
@@ -447,13 +441,7 @@ pub(crate) async fn drain_stale_scores_cycle(chunk_size: usize) -> Result<Backfi
         });
     }
 
-    let ctx = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        scoring::build_scoring_context(db),
-    )
-    .await
-    .map_err(|_| String::from("Scoring context build timed out after 10s"))?
-    .map_err(|e| format!("Failed to build scoring context: {e}"))?;
+    let ctx = scoring::build_scoring_context_with_timeout(db).await?;
     let trend_topics = crate::detect_trend_topics(
         items
             .iter()

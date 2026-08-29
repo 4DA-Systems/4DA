@@ -52,7 +52,7 @@ const DISPATCH_MAP: Record<string, ToolExecutor> = {
   get_context: executeGetContext,
   get_relevant_content: executeGetRelevantContent,
   get_actionable_signals: executeGetActionableSignals,
-  knowledge_gaps: executeKnowledgeGaps,
+  knowledge_gaps: (db, params) => executeKnowledgeGaps(db, params, getLiveIntelligence()),
   record_feedback: executeRecordFeedback,
 
   // Decisions

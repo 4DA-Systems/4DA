@@ -15,6 +15,7 @@ import { RateLimiter, DEFAULT_RATE_LIMITS } from "./rate-limiter.js";
 import { OsvScanner } from "./osv-scanner.js";
 import { HNFetcher } from "./hn-fetcher.js";
 import { resolveAuditVersions, resolveVersions, mapEcosystem } from "./version-resolver.js";
+import { computeSemverDistance } from "./semver-utils.js";
 import { NpmRegistry } from "./npm-registry.js";
 import { CratesRegistry } from "./crates-registry.js";
 import { PyPIRegistry } from "./pypi-registry.js";
@@ -247,7 +248,8 @@ export class LiveIntelligence {
           } as RegistryPackageInfo;
         }
         try {
-          return await registry.getPackageInfo(dep.name, dep.version, dep.isDev);
+          const info = await registry.getPackageInfo(dep.name, dep.version, dep.isDev);
+          return restampRegistryContext(info, dep);
         } catch {
           return {
             name: dep.name, ecosystem: dep.ecosystem, currentVersion: dep.version,
@@ -306,6 +308,29 @@ function commonPathRoot(dirs: string[]): string | null {
     if (common.length === 0) break;
   }
   return common.length > 0 ? common.join("/") : null;
+}
+
+/**
+ * Registry caches key by package NAME, but the cached record embeds the
+ * QUERYING dependency's `currentVersion`, `versionsBehind`, and `isDev`. Two
+ * instances of one package at different versions (better-sqlite3 11.10.0 and
+ * 12.11.1 across workspaces) therefore both came back wearing the first
+ * instance's version — the upgrade planner then showed two identical rows and
+ * lost the older instance entirely. Registry facts (latest version,
+ * deprecation, downloads) are per-package and cacheable; the per-instance
+ * fields are re-stamped here from the dep actually being asked about.
+ */
+function restampRegistryContext(
+  info: RegistryPackageInfo,
+  dep: ResolvedDependency,
+): RegistryPackageInfo {
+  const latest = info.latestStableVersion || info.latestVersion;
+  return {
+    ...info,
+    currentVersion: dep.version,
+    isDev: dep.isDev,
+    versionsBehind: dep.version && latest ? computeSemverDistance(dep.version, latest) : null,
+  };
 }
 
 function dedupeDependencies(deps: ResolvedDependency[]): ResolvedDependency[] {

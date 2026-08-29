@@ -1573,6 +1573,8 @@
   "calibration.onboarding.summaryProjects": "Обнаружено технологий: {{count}}",
   "calibration.action.working": "Работает...",
   "health.issueCount": "Обнаружено {{count}} системных проблем",
+  "health.circuitReset": "{{source}} сброшен и будет повторён",
+  "health.sourceMissed": "Элементы из {{source}} могли быть пропущены, пока источник был недоступен",
   "health.openSettings": "Открыть настройки",
   "missed.title": "Что вы бы пропустили",
   "missed.scanned": "{{count}} элементов просканировано",

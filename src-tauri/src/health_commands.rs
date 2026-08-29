@@ -17,30 +17,28 @@ pub struct SourceHealthStatus {
 fn relative_time(iso: &str) -> String {
     let lang = crate::i18n::get_user_language();
     // Parse "YYYY-MM-DD HH:MM:SS" from SQLite datetime()
+    //
+    // Uses the `time.*` keys every locale already ships. This asked for
+    // `health.justNow`/`health.minutesAgo`/… — keys that never existed in any
+    // ui.json — so `t()`'s fallback returned the raw key and the IPC payload
+    // carried "ui:health.daysAgo" as a display string (observed live
+    // 2026-08-30 in get_source_health_status).
     let now = chrono::Utc::now().naive_utc();
     if let Ok(parsed) = chrono::NaiveDateTime::parse_from_str(iso, "%Y-%m-%d %H:%M:%S") {
         let diff = now - parsed;
         let mins = diff.num_minutes();
         if mins < 1 {
-            return crate::i18n::t("ui:health.justNow", &lang, &[]);
+            return crate::i18n::t("ui:time.justNow", &lang, &[]);
         }
         if mins < 60 {
-            return crate::i18n::t(
-                "ui:health.minutesAgo",
-                &lang,
-                &[("count", &mins.to_string())],
-            );
+            return crate::i18n::t("ui:time.minutesAgo", &lang, &[("count", &mins.to_string())]);
         }
         let hours = diff.num_hours();
         if hours < 24 {
-            return crate::i18n::t(
-                "ui:health.hoursAgo",
-                &lang,
-                &[("count", &hours.to_string())],
-            );
+            return crate::i18n::t("ui:time.hoursAgo", &lang, &[("count", &hours.to_string())]);
         }
         let days = diff.num_days();
-        return crate::i18n::t("ui:health.daysAgo", &lang, &[("count", &days.to_string())]);
+        return crate::i18n::t("ui:time.daysAgo", &lang, &[("count", &days.to_string())]);
     }
     iso.to_string()
 }
@@ -50,20 +48,15 @@ fn gap_message(source: &str, status: &str) -> Option<String> {
         return None;
     }
     let lang = crate::i18n::get_user_language();
-    let key = match source {
-        "hackernews" => "ui:health.hnMissed",
-        "github" => "ui:health.githubMissed",
-        "reddit" => "ui:health.redditMissed",
-        "arxiv" => "ui:health.arxivMissed",
-        "rss" => "ui:health.rssMissed",
-        "twitter" => "ui:health.twitterMissed",
-        "youtube" => "ui:health.youtubeMissed",
-        "lobsters" => "ui:health.lobstersMissed",
-        "devto" => "ui:health.devtoMissed",
-        "producthunt" => "ui:health.phMissed",
-        _ => "ui:health.sourceMissed",
-    };
-    Some(crate::i18n::t(key, &lang, &[]))
+    // One parameterized key. This used to fan out to eleven per-source keys
+    // (health.hnMissed, health.githubMissed, …) that never existed in any
+    // locale file, so every unhealthy source shipped the raw key as its
+    // message. The source label is data, not copy.
+    Some(crate::i18n::t(
+        "ui:health.sourceMissed",
+        &lang,
+        &[("source", source)],
+    ))
 }
 
 #[tauri::command]
@@ -187,8 +180,8 @@ mod tests {
         let result = relative_time(&iso);
         // The result is locale-dependent, so compare against i18n outputs
         let lang = crate::i18n::get_user_language();
-        let just_now = crate::i18n::t("ui:health.justNow", &lang, &[]);
-        let one_min_ago = crate::i18n::t("ui:health.minutesAgo", &lang, &[("count", "1")]);
+        let just_now = crate::i18n::t("ui:time.justNow", &lang, &[]);
+        let one_min_ago = crate::i18n::t("ui:time.minutesAgo", &lang, &[("count", "1")]);
         // Timestamp is essentially "now", so we should get either "just now" or "1m ago"
         // (in whatever locale is active). Must NOT be the raw ISO fallback.
         assert!(
