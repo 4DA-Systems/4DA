@@ -30,7 +30,9 @@ fn test_check_engine_block_surfaces_marker() {
     assert_eq!(issues.len(), 1);
     assert_eq!(issues[0].component, "engine");
     assert_eq!(issues[0].severity, HealthSeverity::Error);
-    assert!(issues[0].message.contains("blocked since 2026-08-30T02:00:01Z"));
+    assert!(issues[0]
+        .message
+        .contains("blocked since 2026-08-30T02:00:01Z"));
     assert!(issues[0].message.contains("max 111"));
 
     let _ = fs::remove_dir_all(&tmp);

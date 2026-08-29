@@ -261,6 +261,7 @@ pub(crate) mod context_admission;
 /// that every intelligence surface emits after Phases 3-5. Read
 /// `docs/strategy/INTELLIGENCE-RECONCILIATION.md` before touching intelligence.
 mod engagement_telemetry;
+mod engine_block;
 mod engine_runs;
 mod engine_scheduler;
 mod evidence;
@@ -271,7 +272,6 @@ mod free_briefing;
 /// Intelligence Reconciliation Phase 7 — Cold Start Layer 1.
 mod git_decision_miner;
 mod hardware_detect;
-mod engine_block;
 mod headless;
 mod health;
 mod health_commands;
