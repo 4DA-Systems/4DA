@@ -16,6 +16,40 @@ fn test_run_startup_health_check_returns_vec() {
 }
 
 #[test]
+fn test_check_engine_block_surfaces_marker() {
+    let tmp = std::env::temp_dir().join("4da_health_test_engine_block");
+    let _ = fs::create_dir_all(&tmp);
+    fs::write(
+        tmp.join(crate::engine_block::MARKER_FILE),
+        r#"{"at":"2026-08-30T02:00:01Z","error":"Database schema version 113 is newer than this version of 4DA supports (max 111)"}"#,
+    )
+    .expect("write marker");
+
+    let mut issues = Vec::new();
+    check_engine_block(&tmp, &mut issues);
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0].component, "engine");
+    assert_eq!(issues[0].severity, HealthSeverity::Error);
+    assert!(issues[0].message.contains("blocked since 2026-08-30T02:00:01Z"));
+    assert!(issues[0].message.contains("max 111"));
+
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn test_check_engine_block_silent_without_marker() {
+    let tmp = std::env::temp_dir().join("4da_health_test_engine_block_none");
+    let _ = fs::create_dir_all(&tmp);
+    let _ = fs::remove_file(tmp.join(crate::engine_block::MARKER_FILE));
+
+    let mut issues = Vec::new();
+    check_engine_block(&tmp, &mut issues);
+    assert!(issues.is_empty());
+
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+#[test]
 fn test_check_database_missing() {
     let tmp = std::env::temp_dir().join("4da_health_test_db_missing");
     let _ = fs::create_dir_all(&tmp);

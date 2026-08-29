@@ -10,6 +10,7 @@ import type { CallToolResult } from "@modelcontextprotocol/server";
 
 import type { FourDADatabase } from "./db.js";
 import { assertToolPermission } from "./auth-context.js";
+import { checkBuildStaleness } from "./build-staleness.js";
 
 import {
   executeGetRelevantContent,
@@ -137,13 +138,27 @@ function attachFreshness(db: FourDADatabase, result: unknown): unknown {
   } catch {
     return result;
   }
+  // Repo checkouts only (null in the published package): when the running
+  // dist/ predates src/, every DB-backed answer reflects code the repo has
+  // already replaced. Saying so on the payload is what would have caught the
+  // 2026-08-30 two-day-stale server before its bugs were re-diagnosed.
+  let server_build: { stale: true; note: string } | undefined;
+  try {
+    const staleness = checkBuildStaleness();
+    if (staleness?.stale && staleness.note) {
+      server_build = { stale: true, note: staleness.note };
+    }
+  } catch {
+    // Never let the self-check break a tool response.
+  }
+  const extras = server_build ? { server_build } : {};
   if (Array.isArray(result)) {
-    return { data_freshness, item_count: result.length, items: result };
+    return { data_freshness, ...extras, item_count: result.length, items: result };
   }
   if (result && typeof result === "object") {
-    return { data_freshness, ...(result as Record<string, unknown>) };
+    return { data_freshness, ...extras, ...(result as Record<string, unknown>) };
   }
-  return { data_freshness, result };
+  return { data_freshness, ...extras, result };
 }
 
 /** Check if a tool exists in the dispatch map */

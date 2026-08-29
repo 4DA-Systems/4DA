@@ -271,6 +271,7 @@ mod free_briefing;
 /// Intelligence Reconciliation Phase 7 — Cold Start Layer 1.
 mod git_decision_miner;
 mod hardware_detect;
+mod engine_block;
 mod headless;
 mod health;
 mod health_commands;

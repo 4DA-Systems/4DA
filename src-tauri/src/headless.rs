@@ -302,19 +302,28 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // engine scored 701 items with a zero context axis: relevant collapsed
     // 24 -> 3 and the daily briefing reported a false "thin day". The scores
     // self-correct on a later cycle, but the silence was the real failure.
-    if let Ok(db) = crate::get_database() {
-        match db.context_health() {
-            Ok(h) if h.collapsed => warn!(
-                target: "4da::headless",
-                total = h.total,
-                "Grounding corpus COLLAPSED (wipe signature) — this cycle's context scoring is degraded; reindex needed"
-            ),
-            Ok(h) if h.grounding_chunks == 0 => warn!(
-                target: "4da::headless",
-                total = h.total,
-                "Grounding corpus has ZERO code/config chunks — scoring runs UNGROUNDED this cycle"
-            ),
-            _ => {}
+    match crate::get_database() {
+        Ok(db) => {
+            // The database opens — any standing engine-block marker is over.
+            crate::engine_block::clear();
+            match db.context_health() {
+                Ok(h) if h.collapsed => warn!(
+                    target: "4da::headless",
+                    total = h.total,
+                    "Grounding corpus COLLAPSED (wipe signature) — this cycle's context scoring is degraded; reindex needed"
+                ),
+                Ok(h) if h.grounding_chunks == 0 => warn!(
+                    target: "4da::headless",
+                    total = h.total,
+                    "Grounding corpus has ZERO code/config chunks — scoring runs UNGROUNDED this cycle"
+                ),
+                _ => {}
+            }
+        }
+        Err(e) => {
+            // A schema-too-new refusal repeats silently forever (the 08-28→30
+            // two-day freeze); leave a marker the app and MCP server surface.
+            crate::engine_block::note_db_error(&e.to_string());
         }
     }
 

@@ -48,6 +48,7 @@ pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
     let allow_keychain_probe = !crate::startup_frontend::victauri_e2e_active();
 
     check_database(&data_dir, &mut issues);
+    check_engine_block(&data_dir, &mut issues);
     check_settings(&data_dir, &mut issues);
     if allow_keychain_probe {
         check_embedding_provider(&data_dir, &mut issues);
@@ -134,6 +135,25 @@ pub(crate) fn initialize_startup_health_cache() -> Vec<HealthIssue> {
 /// Resolve the data directory via centralized RuntimePaths.
 fn get_data_dir() -> PathBuf {
     crate::runtime_paths::RuntimePaths::get().data_dir.clone()
+}
+
+/// Check 1b: a scheduled refresh has been refusing on a newer database schema.
+///
+/// The refusing engine cannot record this in the database (it is exactly what
+/// it cannot open), so `engine_block` leaves `data/.engine-blocked` beside it.
+/// Surfacing it here puts the two-day-silent failure class of 2026-08-28→30 in
+/// the user's face the next time the app opens — instead of in a log tail.
+pub(crate) fn check_engine_block(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
+    if let Some((at, error)) = crate::engine_block::read_marker(data_dir) {
+        issues.push(HealthIssue {
+            component: "engine",
+            severity: HealthSeverity::Error,
+            message: format!(
+                "The scheduled background refresh has been blocked since {at}: {error} — \
+                 rebuild/update 4DA so the refresh binary matches the database"
+            ),
+        });
+    }
 }
 
 /// Check 1: Database file exists and is readable.

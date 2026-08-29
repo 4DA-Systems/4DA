@@ -15,6 +15,7 @@
 
 import { existsSync } from "node:fs";
 import { FourDADatabase } from "./db.js";
+import { checkBuildStaleness } from "./build-staleness.js";
 
 interface Check {
   name: string;
@@ -82,7 +83,22 @@ export function runDoctor(): void {
     });
   }
 
-  // 5. Semantic recall provider (optional)
+  // 5. Build freshness — repo checkouts only. `.mcp.json` runs dist/, and
+  // nothing rebuilds it on a merge; a stale dist served two-day-old behavior
+  // on 2026-08-30 with zero symptoms. The published npm package ships no src/
+  // (check returns null there) so users never see a false alarm.
+  const staleness = checkBuildStaleness();
+  if (staleness) {
+    checks.push({
+      name: "Server build freshness",
+      status: staleness.stale ? "fail" : "pass",
+      detail: staleness.stale
+        ? staleness.note ?? "dist/ is older than src/ — rebuild"
+        : "dist/ is at least as new as src/",
+    });
+  }
+
+  // 6. Semantic recall provider (optional)
   const embedProvider = process.env.FOURDA_EMBED_PROVIDER;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
   const hasOllama =
