@@ -6,8 +6,10 @@
  */
 
 import type { FourDADatabase } from "../db.js";
+import type { LiveIntelligence } from "../live/index.js";
 import type { DependencyWithProjectRow, SourceItemBriefRow } from "../types.js";
 import { compareSemver, parseSemver } from "../live/semver-utils.js";
+import { mapEcosystem } from "../live/version-resolver.js";
 
 // Word-boundary matching prevents "cve" matching inside "achieve", "receiver", etc.
 function hasWordBoundary(text: string, term: string): boolean {
@@ -154,6 +156,27 @@ function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => "\\" + c);
 }
 
+/**
+ * Dependency names that are ordinary English words. A word-boundary match on
+ * these is no evidence the item is about the PACKAGE: live 2026-08-30, a
+ * `tower` gap was evidenced by a one-tap tower-stacker game and a drivable-car
+ * post. For these names the item must also carry an ecosystem cue before it
+ * counts as a mention.
+ */
+const GENERIC_WORD_DEPS = new Set([
+  "tower", "base64", "image", "time", "rand", "log", "tracing", "url", "zip",
+  "tar", "glob", "regex", "chrono", "notify", "either", "bytes", "flate",
+]);
+
+// A token that ties the text to software packaging rather than the English word:
+// an ecosystem noun, a security noun, or a version number.
+const ECOSYSTEM_CUE =
+  /\b(crate|crates\.io|cargo|rust|npm|node|package|library|dependenc|version|release[ds]?|upgrad|deprecat|cve|advisory|vulnerab)|\bv?\d+\.\d+/i;
+
+function hasEcosystemCue(item: { title: string | null; content_head?: string }): boolean {
+  return ECOSYSTEM_CUE.test(`${item.title || ""} ${item.content_head || ""}`);
+}
+
 export interface KnowledgeGapsParams {
   min_severity?: string;
   limit?: number;
@@ -182,7 +205,7 @@ export const knowledgeGapsTool = {
 
 export interface KnowledgeGap {
   dependency: string;
-  version: string;
+  version: string | null;
   project_path: string;
   language: string;
   missed_items: SourceItemBriefRow[];
@@ -193,14 +216,44 @@ export interface KnowledgeGap {
 export function executeKnowledgeGaps(
   db: FourDADatabase,
   params: KnowledgeGapsParams,
+  liveIntel?: Pick<LiveIntelligence, "getResolvedDeps" | "isInitialized"> | null,
 ) {
   const rawDb = db.getRawDb();
+
+  // The desktop DB's project_dependencies rows often carry `version: NULL`
+  // (manifest scrapes record presence, not pins). The advisory range check then
+  // stays conservative and grades decade-old, long-fixed advisories as a
+  // critical gap — observed live: tokio graded critical on RUSTSEC-2021/2023
+  // advisories while every project ran tokio 1.50+. The lockfile-resolved dep
+  // set knows the installed version; use it as the fallback.
+  const lockfileVersions = new Map<string, string>();
+  if (liveIntel && liveIntel.isInitialized()) {
+    for (const dep of liveIntel.getResolvedDeps()) {
+      if (!dep.version) continue;
+      const key = `${dep.ecosystem}\0${dep.name.toLowerCase()}`;
+      if (!lockfileVersions.has(key)) lockfileVersions.set(key, dep.version);
+      // crates.io: `-` and `_` are one namespace; index both spellings.
+      if (dep.ecosystem === "crates.io") {
+        const swapped = dep.name.includes("_")
+          ? dep.name.replace(/_/g, "-")
+          : dep.name.replace(/-/g, "_");
+        const altKey = `${dep.ecosystem}\0${swapped.toLowerCase()}`;
+        if (!lockfileVersions.has(altKey)) lockfileVersions.set(altKey, dep.version);
+      }
+    }
+  }
+  const installedVersionFor = (dep: DependencyWithProjectRow): string | null => {
+    if (dep.version) return dep.version;
+    const eco = mapEcosystem(dep.language || "");
+    return lockfileVersions.get(`${eco}\0${dep.package_name.toLowerCase()}`) ?? null;
+  };
 
   // Feature-detect optional columns: a pure-standalone database has no scoring
   // pipeline (no relevance_score) and may predate content_type — the tool must
   // degrade to word-boundary + recency grounding there, never throw.
   const hasRelevance = db.hasColumn("source_items", "relevance_score");
   const hasContentType = db.hasColumn("source_items", "content_type");
+  const hasPublishedAt = db.hasColumn("source_items", "published_at");
 
   // Advisory-driven grades must not fire on a dependency the user already
   // patched. `osv_advisories` carries the affected ranges the OSV sync stored;
@@ -283,6 +336,10 @@ export function executeKnowledgeGaps(
     //   rejected can still be a legitimate unread dep mention — surfacing those
     //   is this tool's niche. The relevance floor already excludes noise.
     const pattern = `%${escapeLike(dep.package_name)}%`;
+    // - published_at guard: OSV/CVE backfills ingest decades-old advisories
+    //   whose created_at (discovery) is days old but whose published_at is
+    //   ancient. A 2021 advisory is not "missed intelligence" in 2026; keep
+    //   NULL (many sources never set it) and anything published recently.
     const candidates = rawDb
       .prepare(`SELECT si.id, si.title, si.url, si.source_type, ${hasContentType ? "si.content_type" : "NULL AS content_type"}, si.created_at,
                ${hasRelevance ? "si.relevance_score" : "NULL AS relevance_score"}, substr(COALESCE(si.content, ''), 1, 2000) AS content_head
@@ -290,6 +347,7 @@ export function executeKnowledgeGaps(
         WHERE (si.title LIKE ? ESCAPE '\\' OR si.content LIKE ? ESCAPE '\\')
         ${hasRelevance ? "AND si.relevance_score IS NOT NULL AND si.relevance_score >= 0.2" : ""}
         AND si.created_at >= datetime('now', '-30 days')
+        ${hasPublishedAt ? "AND (si.published_at IS NULL OR datetime(si.published_at) >= datetime('now', '-90 days'))" : ""}
         AND si.id NOT IN (SELECT item_id FROM interactions WHERE action_type IN ('click', 'save'))
         ORDER BY si.created_at DESC LIMIT 25`)
       .all(pattern, pattern) as Array<SourceItemBriefRow & {
@@ -299,25 +357,30 @@ export function executeKnowledgeGaps(
       }>;
 
     // Word-boundary verification: the mention must be the package name as a
-    // whole word in the title or the content head, not a substring.
+    // whole word in the title or the content head, not a substring. For deps
+    // named by ordinary English words, the text must also carry an ecosystem
+    // cue — "one-tap tower stacker" mentions the word, not the crate.
+    const isGenericName = GENERIC_WORD_DEPS.has(dep.package_name.toLowerCase());
     const mentionedItems = candidates
       .filter(
         (item) =>
           mentionsPackage(item.title || "", dep.package_name) ||
           mentionsPackage(item.content_head || "", dep.package_name),
       )
+      .filter((item) => !isGenericName || hasEcosystemCue(item))
       .slice(0, 5);
 
     if (mentionedItems.length > 0) {
+      const installedVersion = installedVersionFor(dep);
       const severity = gradeGap(
         mentionedItems,
         dep.package_name,
-        stillVulnerable(dep.package_name, dep.version),
+        stillVulnerable(dep.package_name, installedVersion),
       );
 
       gaps.push({
         dependency: dep.package_name,
-        version: dep.version,
+        version: installedVersion,
         project_path: dep.project_path,
         language: dep.language,
         missed_items: mentionedItems.map((item) => ({
