@@ -54,4 +54,24 @@ export const createToastSlice: StateCreator<AppStore, [], [], ToastSlice> = (set
     }
     set(state => ({ toasts: state.toasts.filter(t => t.id !== id) }));
   },
+
+  // Error toasts deliberately never auto-dismiss (accessibility) — but an error
+  // superseded by the SAME operation later succeeding is stale information, not
+  // an unread alert. Live 2026-08-30: "Analysis failed: Scoring context build
+  // timed out" sat on screen for 20+ minutes beside a completed analysis. The
+  // succeeding path clears its own failure toasts by message prefix.
+  removeToastsByPrefix: (prefix) => {
+    set(state => {
+      const stale = state.toasts.filter(t => t.message.startsWith(prefix));
+      if (stale.length === 0) return state;
+      for (const t of stale) {
+        const timer = toastTimers.get(t.id);
+        if (timer) {
+          clearTimeout(timer);
+          toastTimers.delete(t.id);
+        }
+      }
+      return { toasts: state.toasts.filter(t => !t.message.startsWith(prefix)) };
+    });
+  },
 });

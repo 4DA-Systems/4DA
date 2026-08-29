@@ -61,7 +61,7 @@ export class OsvScanner {
       const cacheKey = `osv:${dep.ecosystem}:${dep.name}:${dep.version}`;
       const cached = this.cache.get<VulnerabilityEntry[]>(cacheKey);
       if (cached !== null) {
-        cachedVulns.push(...cached);
+        cachedVulns.push(...cached.map((v) => restampDepContext(v, dep)));
       } else {
         uncached.push(dep);
       }
@@ -83,7 +83,7 @@ export class OsvScanner {
           for (const dep of uncached) {
             const cacheKey = `osv:${dep.ecosystem}:${dep.name}:${dep.version}`;
             const stale = this.cache.getStale<VulnerabilityEntry[]>(cacheKey);
-            if (stale) cachedVulns.push(...stale.data);
+            if (stale) cachedVulns.push(...stale.data.map((v) => restampDepContext(v, dep)));
           }
         }
       }
@@ -213,6 +213,34 @@ export class OsvScanner {
       return null;
     }
   }
+}
+
+/**
+ * Overwrite the dep-context fields of a cached advisory entry with the CURRENT
+ * resolution's context. The advisory facts (id, severity, summary, fix version)
+ * are stable and cacheable; `platformActive`, `target`, `sourceDirs`, and the
+ * dev/direct flags are functions of TODAY's dependency resolution, not of the
+ * advisory. Serving them from cache bakes yesterday's context into today's
+ * scan — observed live 2026-08-30: a pre-platform-filter scan cached `glib`
+ * as platform-active and `sandbox` with no source dirs, and every scan for the
+ * next hour repeated both errors while the fixed resolver sat idle.
+ */
+export function restampDepContext(
+  cached: VulnerabilityEntry,
+  dep: ResolvedDependency,
+): VulnerabilityEntry {
+  return {
+    ...cached,
+    package: dep.name,
+    currentVersion: dep.version || "unknown",
+    ecosystem: dep.ecosystem,
+    isDev: dep.isDev,
+    isDirect: dep.isDirect,
+    devScopeKnown: dep.devScopeKnown,
+    target: dep.target,
+    platformActive: dep.platformActive,
+    sourceDirs: dep.sourceDirs ?? [],
+  };
 }
 
 function mapVulnerability(

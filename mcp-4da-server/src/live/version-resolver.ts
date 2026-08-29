@@ -68,6 +68,24 @@ export function mapEcosystem(language: string): OsvEcosystem {
   return ECOSYSTEM_MAP[language.trim().toLowerCase()] || "npm";
 }
 
+/**
+ * crates.io treats `-` and `_` as one namespace (you cannot publish both
+ * `http-body-util` and `http_body_util`), but the two spellings reach this
+ * resolver from different sources: Cargo.lock records the publisher's canonical
+ * name while ACE's import scraper reports the IMPORT identifier, which is
+ * always underscored. An exact-match lookup then fails for the import spelling
+ * and the same crate surfaces twice — once versioned, once `version: null`
+ * (observed live 2026-08-30: http_body_util, async_trait, tower_http,
+ * ed25519_dalek, ts_rs, proc_macro2, victauri_test, all null beside their
+ * hyphenated versioned twins). Resolve via the spelling the lock file actually
+ * uses and RETURN that spelling, so downstream dedupe merges the variants.
+ */
+function canonicalCrateName(name: string, versionMap: Map<string, string>): string {
+  if (versionMap.has(name)) return name;
+  const swapped = name.includes("_") ? name.replace(/_/g, "-") : name.replace(/-/g, "_");
+  return versionMap.has(swapped) ? swapped : name;
+}
+
 export function resolveVersions(
   cwd: string,
   deps: string[],
@@ -79,8 +97,10 @@ export function resolveVersions(
   const results: ResolvedDependency[] = [];
   const versionMap = resolveVersionMap(cwd, ecosystem);
 
-  const build = (name: string, isDev: boolean): ResolvedDependency => {
-    const target = targets[name] ?? null;
+  const build = (rawName: string, isDev: boolean): ResolvedDependency => {
+    const name =
+      ecosystem === "crates.io" ? canonicalCrateName(rawName, versionMap) : rawName;
+    const target = targets[rawName] ?? targets[name] ?? null;
     return {
       name,
       version: versionMap.get(normalizePackageName(name, ecosystem)) || null,
@@ -116,8 +136,15 @@ export function resolveAuditVersions(
   const ecosystem = mapEcosystem(language);
   const direct = resolveVersions(cwd, deps, devDeps, language, targets);
   const versionMap = resolveVersionMap(cwd, ecosystem);
-  const directNames = new Set(deps.map((name) => normalizePackageName(name, ecosystem)));
-  const devNames = new Set(devDeps.map((name) => normalizePackageName(name, ecosystem)));
+  // Canonicalize the same way resolveVersions does, so a dep declared under its
+  // import spelling still marks the lock file's canonical entry as direct.
+  const canonical = (name: string) =>
+    normalizePackageName(
+      ecosystem === "crates.io" ? canonicalCrateName(name, versionMap) : name,
+      ecosystem,
+    );
+  const directNames = new Set(deps.map(canonical));
+  const devNames = new Set(devDeps.map(canonical));
   const seen = new Set(direct.map((dep) => dependencyKey(dep)));
   const results = [...direct];
 

@@ -133,4 +133,27 @@ describe('toast-slice', () => {
       expect(useAppStore.getState().toasts).toHaveLength(1);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // removeToastsByPrefix — supersede-on-success for persistent error toasts
+  // ---------------------------------------------------------------------------
+  describe('removeToastsByPrefix', () => {
+    it('clears every toast matching the prefix and keeps the rest', () => {
+      useAppStore.getState().addToast('error', 'Analysis failed: timeout A');
+      useAppStore.getState().addToast('error', 'Analysis failed: timeout B');
+      useAppStore.getState().addToast('info', 'Unrelated info');
+
+      useAppStore.getState().removeToastsByPrefix('Analysis failed:');
+
+      const remaining = useAppStore.getState().toasts;
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0]!.message).toBe('Unrelated info');
+    });
+
+    it('is a no-op when nothing matches', () => {
+      useAppStore.getState().addToast('error', 'Something else broke');
+      useAppStore.getState().removeToastsByPrefix('Analysis failed:');
+      expect(useAppStore.getState().toasts).toHaveLength(1);
+    });
+  });
 });

@@ -27,13 +27,17 @@ export interface BlindSpotsSlice {
   loadBlindSpots: () => Promise<void>;
 }
 
-export const createBlindSpotsSlice: StateCreator<AppStore, [], [], BlindSpotsSlice> = (set) => ({
+export const createBlindSpotsSlice: StateCreator<AppStore, [], [], BlindSpotsSlice> = (set, get) => ({
   blindSpotReport: null,
   blindSpotsLoading: false,
   blindSpotsError: null,
   blindSpotsPaywalled: false,
 
   loadBlindSpots: async () => {
+    // In-flight guard: `get_blind_spots` is a ~9s backend query, and
+    // StrictMode's double-mount (plus any second consumer) fired it twice in
+    // parallel for identical results (2026-08-30 audit, IPC log ids 272/275).
+    if (get().blindSpotsLoading) return;
     set({ blindSpotsLoading: true, blindSpotsError: null, blindSpotsPaywalled: false });
     try {
       const report = await cmd('get_blind_spots');

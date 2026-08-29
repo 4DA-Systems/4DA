@@ -58,7 +58,8 @@ pub(crate) use calibration_monitor::{
 };
 pub(crate) use composition::{enforce_composition_floors, FloorConfig};
 pub(crate) use context::{
-    build_scoring_context, invalidate_scoring_context_cache, is_low_quality_topic,
+    build_scoring_context, build_scoring_context_with_timeout, invalidate_scoring_context_cache,
+    is_low_quality_topic,
 };
 pub(crate) use dedup::{
     apply_domain_diversity, apply_source_share_diversity, apply_source_topic_diversity,

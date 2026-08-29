@@ -1050,6 +1050,8 @@
   "cmdk.untitledItem": "Başlıksız öğe",
   "cmdk.clear": "Temizle",
   "health.issueCount": "{{count}} sistem sorunu algılandı",
+  "health.circuitReset": "{{source}} sıfırlandı ve yeniden denenecek",
+  "health.sourceMissed": "{{source}} kullanılamazken bazı öğeler kaçırılmış olabilir",
   "health.openSettings": "Ayarları Aç",
   "intelligence.antiPatterns": "{{count}} puanlama karşı kalıp(lar) algılandı ve düzeltildi",
   "intelligence.calibration": "Kalibrasyon Doğruluğu",

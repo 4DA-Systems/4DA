@@ -27,6 +27,19 @@ function depNameFromItem(item: EvidenceItem): string {
   return item.title.replace(/^Knowledge gap:\s*/, '');
 }
 
+// Module-level in-flight share: `get_knowledge_gaps` is a ~6s backend query,
+// and StrictMode's double-mount fired it twice in parallel for identical
+// results (2026-08-30 audit, IPC log ids 322/323). Every concurrent mount
+// awaits ONE call; the slot clears on settle so a later remount refetches.
+let gapsInFlight: Promise<{ items: EvidenceItem[] }> | null = null;
+
+function fetchKnowledgeGaps(): Promise<{ items: EvidenceItem[] }> {
+  gapsInFlight ??= cmd('get_knowledge_gaps').finally(() => {
+    gapsInFlight = null;
+  });
+  return gapsInFlight;
+}
+
 export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const { t } = useTranslation();
   const { getTranslated } = useTranslatedContent();
@@ -38,7 +51,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   useEffect(() => {
     const load = async () => {
       try {
-        const feed = await cmd('get_knowledge_gaps');
+        const feed = await fetchKnowledgeGaps();
         setItems(feed.items);
         setLoaded(true);
       } catch {

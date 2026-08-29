@@ -1095,6 +1095,8 @@
   "cmdk.untitledItem": "बिना शीर्षक आइटम",
   "cmdk.clear": "साफ़ करें",
   "health.issueCount": "{{count}} सिस्टम समस्याएँ पाई गईं",
+  "health.circuitReset": "{{source}} रीसेट कर दिया गया है और पुनः प्रयास किया जाएगा",
+  "health.sourceMissed": "{{source}} अनुपलब्ध रहने के दौरान कुछ आइटम छूट गए हो सकते हैं",
   "health.openSettings": "सेटिंग्स खोलें",
   "intelligence.antiPatterns": "{{count}} स्कोरिंग एंटी-पैटर्न पहचाना और सही किया गया",
   "intelligence.calibration": "कैलिब्रेशन सटीकता",
