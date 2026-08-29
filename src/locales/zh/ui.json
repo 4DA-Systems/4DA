@@ -1573,6 +1573,8 @@
   "calibration.onboarding.summaryProjects": "检测到 {{count}} 项技术",
   "calibration.action.working": "处理中...",
   "health.issueCount": "检测到{{count}}个系统问题",
+  "health.circuitReset": "{{source}} 已重置，将重新尝试",
+  "health.sourceMissed": "{{source}} 不可用期间可能遗漏了部分内容",
   "health.openSettings": "打开设置",
   "missed.title": "你可能错过的内容",
   "missed.scanned": "已扫描{{count}}条",

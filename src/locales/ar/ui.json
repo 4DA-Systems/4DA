@@ -1037,6 +1037,8 @@
   "cmdk.untitledItem": "عنصر بلا عنوان",
   "cmdk.clear": "مسح",
   "health.issueCount": "تم اكتشاف {{count}} مشكلة في النظام",
+  "health.circuitReset": "تمت إعادة تعيين {{source}} وستتم إعادة المحاولة",
+  "health.sourceMissed": "ربما فاتتك عناصر من {{source}} أثناء عدم توفره",
   "health.openSettings": "فتح الإعدادات",
   "intelligence.antiPatterns": "{{count}} نمط مضاد في التقييم تم اكتشافه وتصحيحه",
   "intelligence.calibration": "دقة المعايرة",

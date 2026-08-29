@@ -223,13 +223,29 @@ const PYTHON_STDLIB_MODULES: &[&str] = &[
     "zoneinfo",
 ];
 
-static NODE_BUILTIN_SET: LazyLock<HashSet<&'static str>> =
-    LazyLock::new(|| NODE_BUILTIN_MODULES.iter().copied().collect());
+/// Host-ambient JS modules: import specifiers resolved by the RUNTIME hosting
+/// the code, not by npm. `import * as vscode from "vscode"` in an extension
+/// binds the editor's own API — there is nothing to install, no version to
+/// resolve, and the same-named npm package is a deprecated shim. Observed live
+/// 2026-08-30: the import scraper recorded `vscode` as a direct, version-null
+/// npm dependency of `editors/vscode/4da`, and every dependency surface
+/// downstream (get_context, dependency_health, blind spots) inherited a
+/// phantom deprecated dep. `electron` behaves identically inside a renderer.
+const HOST_AMBIENT_MODULES: &[&str] = &["vscode", "electron"];
+
+static NODE_BUILTIN_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    NODE_BUILTIN_MODULES
+        .iter()
+        .chain(HOST_AMBIENT_MODULES.iter())
+        .copied()
+        .collect()
+});
 
 static PYTHON_STDLIB_SET: LazyLock<HashSet<&'static str>> =
     LazyLock::new(|| PYTHON_STDLIB_MODULES.iter().copied().collect());
 
-/// True when a JS/TS import specifier names a Node builtin. ANY `node:`-prefixed
+/// True when a JS/TS import specifier names a Node builtin or a host-ambient
+/// module ([`HOST_AMBIENT_MODULES`]). ANY `node:`-prefixed
 /// specifier is a builtin by definition (npm package names cannot contain `:`);
 /// bare specifiers are checked against the builtin list. Case-sensitive on
 /// purpose for bare names (npm names are lowercase; builtins are too), but the
@@ -366,6 +382,11 @@ mod tests {
     fn ecosystem_predicate_scopes_to_js_and_python_only() {
         assert!(is_builtin_for_ecosystem("javascript", "http"));
         assert!(is_builtin_for_ecosystem("javascript", "node:fs"));
+        // Host-ambient modules: provided by the hosting runtime, never
+        // installable from npm at the imported name.
+        assert!(is_builtin_for_ecosystem("javascript", "vscode"));
+        assert!(is_builtin_for_ecosystem("javascript", "electron"));
+        assert!(!is_builtin_for_ecosystem("rust", "vscode"));
         assert!(is_builtin_for_ecosystem("python", "os"));
         // The rust http CRATE and any other ecosystem never match.
         assert!(!is_builtin_for_ecosystem("rust", "http"));

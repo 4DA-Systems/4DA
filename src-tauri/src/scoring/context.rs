@@ -13,6 +13,31 @@ static SCORING_CONTEXT_CACHE: LazyLock<Mutex<Option<(ScoringContext, Instant)>>>
     LazyLock::new(|| Mutex::new(None));
 const SCORING_CONTEXT_TTL_SECS: u64 = 300;
 
+/// Hard ceiling for one scoring-context build.
+///
+/// This was 10s, duplicated at five call sites. Live 2026-08-30: the startup
+/// auto-analysis lost that race against a cold, write-contended DB (OSV zip
+/// sync + first touch of the phase-113 partitioned vector index) and the user's
+/// first screen was an "Analysis failed: Scoring context build timed out after
+/// 10s" toast; the manual retry succeeded almost immediately. 45s keeps the
+/// hang protection the timeout exists for while surviving startup contention.
+pub(crate) const BUILD_TIMEOUT_SECS: u64 = 45;
+
+/// [`build_scoring_context`] under the standard timeout, with the standard
+/// error strings. The one entry point for every analysis path, so the budget
+/// and its failure message can never drift apart across call sites again.
+pub(crate) async fn build_scoring_context_with_timeout(
+    db: &Database,
+) -> std::result::Result<ScoringContext, String> {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(BUILD_TIMEOUT_SECS),
+        build_scoring_context(db),
+    )
+    .await
+    .map_err(|_| format!("Scoring context build timed out after {BUILD_TIMEOUT_SECS}s"))?
+    .map_err(|e| format!("Failed to build scoring context: {e}"))
+}
+
 /// Build a ScoringContext by loading all needed state. Call once per analysis run.
 /// Results are cached with a 5-minute TTL to avoid redundant DB queries.
 pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContext> {

@@ -535,7 +535,42 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
         })
     })?;
 
-    let mut result: Vec<DepCoverage> = rows.filter_map(|r| r.ok()).collect();
+    let result_raw: Vec<DepCoverage> = rows.filter_map(|r| r.ok()).collect();
+
+    // Canonical-ecosystem merge: the SQL groups by (norm_name, language), but
+    // language labels for one ecosystem drift across writers ('javascript',
+    // 'typescript', and 'npm' in older rows). The same dep then splits into
+    // sibling rows — the Blind Spots list rendered "react (npm)" beside a bare
+    // "react" (2026-08-30 audit). Fold rows whose (normalized name, canonical
+    // ecosystem) agree, unioning their project lists and keeping the canonical
+    // display label.
+    let mut result: Vec<DepCoverage> = Vec::with_capacity(result_raw.len());
+    let mut merge_index: std::collections::HashMap<(String, String), usize> =
+        std::collections::HashMap::new();
+    for mut cov in result_raw {
+        let norm_name = cov.package_name.to_lowercase().replace('-', "_");
+        let eco_key = match crate::ecosystem::Ecosystem::parse(&cov.ecosystem) {
+            Some(e) => {
+                cov.ecosystem = e.display_label().to_string();
+                cov.ecosystem.clone()
+            }
+            None => cov.ecosystem.to_lowercase(),
+        };
+        match merge_index.entry((norm_name, eco_key)) {
+            std::collections::hash_map::Entry::Occupied(slot) => {
+                let existing = &mut result[*slot.get()];
+                for p in cov.projects {
+                    if !existing.projects.contains(&p) {
+                        existing.projects.push(p);
+                    }
+                }
+            }
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                slot.insert(result.len());
+                result.push(cov);
+            }
+        }
+    }
 
     // Canonical project-inclusion policy: the blind-spot universe must not
     // track deps that exist ONLY in agent infra / fixture scaffolding
@@ -5767,8 +5802,9 @@ mod tests {
         );
 
         let deps = get_dependency_coverage(&conn).unwrap();
-        // The SQL groups by (normalized_name, language), so "jsonwebtoken" in
-        // javascript vs rust should produce two separate DepCoverage entries.
+        // Different ecosystems must stay separate DepCoverage entries — the
+        // canonical-ecosystem merge folds LABEL DRIFT within one ecosystem
+        // ('javascript'/'typescript'/'npm'), never npm into crates.io.
         let jwt_deps: Vec<_> = deps
             .iter()
             .filter(|d| d.package_name == "jsonwebtoken")
@@ -5780,10 +5816,11 @@ mod tests {
             jwt_deps.len()
         );
 
-        // Verify ecosystems are distinct
+        // Ecosystem labels are canonicalized for display ("react (npm)"), so
+        // the two entries carry the registry names, still distinct.
         let ecosystems: Vec<&str> = jwt_deps.iter().map(|d| d.ecosystem.as_str()).collect();
-        assert!(ecosystems.contains(&"javascript"));
-        assert!(ecosystems.contains(&"rust"));
+        assert!(ecosystems.contains(&"npm"), "got: {ecosystems:?}");
+        assert!(ecosystems.contains(&"crates.io"), "got: {ecosystems:?}");
     }
 
     #[test]

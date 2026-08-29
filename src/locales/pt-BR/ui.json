@@ -1075,6 +1075,8 @@
   "cmdk.untitledItem": "Item sem título",
   "cmdk.clear": "Limpar",
   "health.issueCount": "{{count}} problemas do sistema detectados",
+  "health.circuitReset": "{{source}} foi redefinida e será tentada novamente",
+  "health.sourceMissed": "Itens de {{source}} podem ter sido perdidos enquanto estava indisponível",
   "health.openSettings": "Abrir Configurações",
   "intelligence.antiPatterns": "{{count}} anti-padrão(ões) de pontuação detectado(s) e corrigido(s)",
   "intelligence.calibration": "Precisão de calibração",

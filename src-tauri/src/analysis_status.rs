@@ -616,14 +616,9 @@ async fn analyze_cached_content_inner_impl(
             new_items.len(),
         );
 
-        // Score only new items (10s timeout on context build — it's local DB + ACE, should be fast)
-        let scoring_ctx = tokio::time::timeout(
-            std::time::Duration::from_secs(10),
-            scoring::build_scoring_context(db),
-        )
-        .await
-        .map_err(|_| String::from("Scoring context build timed out after 10s"))?
-        .map_err(|e| format!("Failed to build scoring context for differential analysis: {e}"))?;
+        // Score only new items (shared timeout on context build — see
+        // scoring::context::BUILD_TIMEOUT_SECS for why it is not 10s anymore).
+        let scoring_ctx = scoring::build_scoring_context_with_timeout(db).await?;
         let trend_topics = crate::detect_trend_topics(
             new_items
                 .iter()
