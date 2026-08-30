@@ -76,10 +76,11 @@ pub(crate) async fn get_calibration_snapshot(threshold: Option<f32>) -> Result<C
         .map_err(|e| format!("Failed to compute calibration snapshot: {e}"))?;
     // The dep-scoped high-stakes recall needs the live dependency graph; build the
     // scoring context best-effort (None if it can't be built / no deps yet).
-    let high_stakes_recall = match crate::scoring::build_scoring_context(db).await {
-        Ok(ctx) => crate::scoring::compute_high_stakes_recall(db, &ctx, t).ok(),
-        Err(_) => None,
-    };
+    let high_stakes_recall =
+        match crate::scoring::build_scoring_context_tagged(db, "calibration_snapshot").await {
+            Ok(ctx) => crate::scoring::compute_high_stakes_recall(db, &ctx, t).ok(),
+            Err(_) => None,
+        };
     Ok(CalibrationReport {
         snapshot,
         high_stakes_recall,
@@ -199,7 +200,7 @@ pub(crate) async fn measure_triage_recall(
 
     // Build the same scoring context the real pipeline uses, so topic/dep
     // signals are identical to production.
-    let ctx = scoring::build_scoring_context(db)
+    let ctx = scoring::build_scoring_context_tagged(db, "measure_triage_recall")
         .await
         .map_err(|e| format!("Failed to build scoring context: {e}"))?;
     let defaults = TriageThresholds::default();
