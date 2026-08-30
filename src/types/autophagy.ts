@@ -82,6 +82,8 @@ export interface DataHealth {
   retention_days: number;
   db_size_mb: number;
   health_status: 'healthy' | 'growing' | 'needs_attention';
+  /** One concrete action; present only when health_status is 'needs_attention'. */
+  recommendation: string | null;
 }
 
 export interface MaintenanceResult {

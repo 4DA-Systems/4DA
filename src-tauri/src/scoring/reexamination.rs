@@ -53,10 +53,12 @@ pub(crate) fn dep_epoch_hash(ctx: &ScoringContext) -> u64 {
     for name in names {
         name.hash(&mut hasher);
     }
-    // Mask to 63 bits: the epoch is persisted via scheduler_state, which stores values
-    // as a signed i64 and clamps negatives to 0. A full u64 would fail to round-trip
-    // (the gate would never close → re-queue every cycle). 63 bits keeps collisions
-    // astronomically unlikely while guaranteeing a safe non-negative round-trip.
+    // Mask to 63 bits. Historically required because the epoch lived in
+    // scheduler_state.last_run_unix (a signed i64 that clamps negatives to 0);
+    // schema 114 moved it to kv_store as TEXT, but the mask STAYS: dropping it
+    // would change every existing hash, triggering one spurious full re-queue
+    // for every user on upgrade — for zero benefit. 63 bits keeps collisions
+    // astronomically unlikely.
     hasher.finish() & 0x7FFF_FFFF_FFFF_FFFF
 }
 

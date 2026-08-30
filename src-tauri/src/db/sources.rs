@@ -1108,13 +1108,18 @@ impl Database {
         let conn = self.conn.lock();
 
         if success {
+            // last_error resets to NULL: a healthy check that still shows the
+            // previous failure text is a contradiction (live rows were observed
+            // 2026-08-31 with status='healthy' + a stale error at the same
+            // checked_at). error_count stays — it is cumulative history.
             conn.execute(
                 "INSERT INTO source_health (source_type, status, last_success, items_fetched, response_time_ms, consecutive_failures, checked_at)
                  VALUES (?1, 'healthy', datetime('now'), ?2, ?3, 0, datetime('now'))
                  ON CONFLICT(source_type) DO UPDATE SET
                    status = 'healthy', last_success = datetime('now'),
                    items_fetched = ?2, response_time_ms = ?3,
-                   consecutive_failures = 0, checked_at = datetime('now')",
+                   consecutive_failures = 0, last_error = NULL,
+                   checked_at = datetime('now')",
                 params![source_type, items_fetched, response_time_ms],
             )?;
         } else {
@@ -2078,6 +2083,23 @@ mod tests {
         assert_eq!(health.len(), 1);
         assert_eq!(health[0].status, "error");
         assert_eq!(health[0].consecutive_failures, 1);
+        assert_eq!(health[0].last_error.as_deref(), Some("timeout"));
+
+        // A later successful check must clear the stale error text — a
+        // 'healthy' row still carrying the old failure is a contradiction
+        // (observed live 2026-08-31). error_count stays cumulative.
+        db.record_source_health("hackernews", true, 10, 90, None)
+            .unwrap();
+
+        let health = db.get_source_health().unwrap();
+        assert_eq!(health.len(), 1);
+        assert_eq!(health[0].status, "healthy");
+        assert_eq!(
+            health[0].last_error, None,
+            "success must reset last_error to NULL"
+        );
+        assert_eq!(health[0].consecutive_failures, 0);
+        assert_eq!(health[0].error_count, 1, "cumulative history is kept");
     }
 
     #[test]
