@@ -93,7 +93,7 @@
       },
       "signCommand": {
         "cmd": "powershell",
-        "args": ["-NoProfile", "-File", "..\\scripts\\sign-windows.ps1", "%1"]
+        "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "..\\scripts\\sign-windows.ps1", "%1"]
       },
       "nsis": {
         "displayLanguageSelector": false,
