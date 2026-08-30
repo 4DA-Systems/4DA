@@ -52,7 +52,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "dmg", "appimage", "deb", "rpm"],
+    "targets": ["app", "nsis", "dmg", "appimage", "deb", "rpm"],
     "createUpdaterArtifacts": true,
     "category": "DeveloperTool",
     "resources": {
