@@ -31,7 +31,11 @@ const MUST_CATCH = {
   'Stripe restricted': 'rk_live_' + 'a1B2c3D4e5F6g7H8i9J0k1L2',
   'DeepL': '12345678-90ab-cdef-1234-567890abcdef:fx',
   'JWT': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9' + '.' + 'eyJzdWIiOiIxMjM0NTY3ODkwIn0' + '.' + 'dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXkA',
-  'Private key block': '-----' + 'BEGIN OPENSSH PRIVATE KEY' + '-----',
+  // Split INSIDE the token, not just at the dashes: the public-readiness
+  // audit's key-block pattern matches without the dashes, so a dash-only
+  // split left this fixture tripping the very gate it exists to test
+  // (audit:public-ready went permanently red on its own test file, 2026-08-30).
+  'Private key block': '-----' + 'BEGIN OPEN' + 'SSH PRIVATE KEY' + '-----',
 };
 
 // Strings that must NOT trip the scanner. A gate that fires on ordinary source
