@@ -101,6 +101,44 @@ pub struct NotificationData {
     pub item_id: Option<i64>,
 }
 
+/// A notification plus everything needed to render it in *either* style.
+///
+/// The custom window and the native OS toast use different titles (the native
+/// toast has no subtitle row, so it carries the severity in its title). Bundling
+/// both means callers describe the notification once, and the style choice —
+/// and the interruption gate — live in exactly one place instead of being
+/// re-implemented at every call site.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Dispatch {
+    /// Payload for the custom notification window.
+    pub data: NotificationData,
+    /// Title used when the user prefers native OS toasts.
+    pub native_title: String,
+}
+
+impl Dispatch {
+    /// Build a dispatch whose native toast reuses the custom title.
+    pub fn new(data: NotificationData) -> Self {
+        Self {
+            native_title: data.title.clone(),
+            data,
+        }
+    }
+
+    /// Override the title used for native OS toasts.
+    #[must_use]
+    pub fn with_native_title(mut self, title: impl Into<String>) -> Self {
+        self.native_title = title.into();
+        self
+    }
+}
+
+/// Read the notification style setting ("custom" or "native").
+pub(crate) fn notification_style() -> String {
+    let settings = crate::get_settings_manager().lock();
+    settings.get().monitoring.notification_style.clone()
+}
+
 // ============================================================================
 // Window Lifecycle
 // ============================================================================
@@ -195,13 +233,52 @@ pub fn reanchor_for_briefing<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// Show the notification window with the given data payload.
+/// Deliver a notification in the user's preferred style, **subject to the
+/// interruption gate**.
+///
+/// This is the entry point for every *autonomous* notification — anything 4DA
+/// decided to show on its own. If the user is in a fullscreen app, presenting,
+/// in quiet hours, or has Do Not Disturb on, the notification is held and
+/// delivered when they are available again. It is never dropped.
+pub fn dispatch<R: Runtime>(app: &AppHandle<R>, dispatch: &Dispatch) {
+    if let Some(reason) = crate::presence::current().busy_reason() {
+        crate::presence::queue::hold_toast(dispatch, reason);
+        return;
+    }
+    dispatch_now(app, dispatch);
+}
+
+/// Deliver a notification immediately, **bypassing the interruption gate**.
+///
+/// For explicit user actions (the settings preview button) and for the
+/// deferral queue's own flush — re-consulting the gate there would re-hold the
+/// very items we just decided to release.
+pub fn dispatch_now<R: Runtime>(app: &AppHandle<R>, dispatch: &Dispatch) {
+    if notification_style() == "custom" {
+        show_notification_now(app, dispatch.data.clone());
+        return;
+    }
+    show_native_toast(app, &dispatch.native_title, &dispatch.data.title);
+}
+
+/// Send a native OS toast.
+fn show_native_toast<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    if let Err(e) = app.notification().builder().title(title).body(body).show() {
+        warn!(target: "4da::notify", error = %e, "Failed to send native notification");
+    } else {
+        info!(target: "4da::notify", body = %body, "Sent native notification");
+    }
+}
+
+/// Show the notification window with the given data payload, bypassing the
+/// interruption gate.
 ///
 /// Positions the window in the bottom-right corner of the primary monitor (or
 /// top-right when the briefing widget is showing), emits the data payload to the
 /// frontend, and starts an auto-dismiss timer. If the window has not been created
 /// yet it will be initialised on the fly.
-pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData) {
+pub fn show_notification_now<R: Runtime>(app: &AppHandle<R>, data: NotificationData) {
     // Cancel any existing dismiss timer before doing anything else.
     cancel_dismiss_timer();
 

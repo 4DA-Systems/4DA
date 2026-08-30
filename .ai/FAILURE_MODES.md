@@ -231,6 +231,26 @@ if updated == 0 {
 
 **Full antibody (this machine, gitignored ops memory).** `.claude/wisdom/antibodies/2026-06-02-proxy-derived-state.md` — the per-site lurking-scan table and verified-clean list.
 
+### Autonomous windows with no presence check (the briefing-over-a-game class)
+**Symptom.** The 560x780 intelligence briefing appeared, always-on-top, over a fullscreen game (observed 2026-08-31, `Screenshot_3787`). More generally: any autonomous surface fires on a clock and paints over whatever the user is actually doing — a game, a presentation, a screen share — with no way for the OS or the user to say "not now".
+
+**Root cause — three compounding failures, not one.**
+1. **No presence input at all.** Nothing in the codebase called `SHQueryUserNotificationState`, the API Windows has shipped since Vista for exactly this question. The briefing's only gate was the clock (`is_morning_briefing_due`). Settings had no quiet hours, no Do Not Disturb, no focus concept.
+2. **The doc asserted the opposite of the code.** `monitoring_briefing.rs` documented the window as *"pinned to the desktop level — behind all normal windows, never stealing focus, never interrupting fullscreen applications."* `briefing_window.rs` set `.always_on_top(true)` at build **and** re-raised it on every show. The prose described an earlier design; nobody re-read it when the behaviour changed, so code review kept passing over a false invariant.
+3. **Suppression would have been a second bug.** `check_morning_briefing` persists `last_briefing_date = today` *before* delivery. A naive "just don't show it" fix therefore silently costs the user that whole day's intelligence — the brief is consumed without ever being seen.
+
+**The cure — one gate, and defer rather than drop.** `crate::presence` is the single chokepoint. Every *autonomous* surface consults `presence::current()`; every *explicit user action* (tray "Show today's brief", settings preview, manual trigger) calls a `_now` variant and is never gated. A blocked surface goes to `presence::queue` and is delivered, coalesced, once the user has been available for a settle period. Two detectors, because one is insufficient: `SHQueryUserNotificationState` misses **borderless-windowed** games (they look like ordinary windows to the OS), so a foreground-window-covers-`rcMonitor` check backs it up — compared against `rcMonitor`, not `rcWork`, so a merely *maximised* window does not read as fullscreen.
+
+**Deliberate policy.** No severity breaks through. A critical CVE does not paint over a fullscreen game: a user mid-firefight cannot act on it, and an unactionable interruption teaches distrust of every later one. It is delivered the moment they are back, which is the first moment it was ever actionable.
+
+**Guards in place (2026-08-31).**
+- `presence::current()` is consulted by `briefing_window::show_briefing`, `monitoring_briefing::send_morning_briefing_notification`, and `notification_window::dispatch` — the only three autonomous entry points. The custom/native style branch was collapsed into `dispatch`, so a new toast path cannot re-implement the branch and skip the gate.
+- An on-top watchdog re-checks presence every 2s while the brief is pinned and withdraws it if the user goes fullscreen mid-display — the gate answers "is now a good time?", the watchdog answers "is it *still*?".
+- Unit tests cover the failure direction explicitly: a **maximised** window is not fullscreen, `QUNS_ACCEPTS_NOTIFICATIONS` is available, an unknown future `QUNS_*` degrades to available (never mute-forever), a zero-width quiet-hours window is disabled rather than always-on, and a malformed `HH:MM` disables quiet hours instead of meaning midnight.
+- `presence::platform::tests::live_probe` (`#[ignore]`d) exercises the real FFI on demand; run it once on a normal desktop and once behind a game.
+
+**Prevention rule (enforce in review).** Any new surface that appears without the user asking for it goes through `presence::current()`, and holds via `presence::queue` rather than returning early. If a doc comment claims a window is non-intrusive, verify it against the actual `always_on_top` / focus flags in the same review — failure 2 above is what let failure 1 survive.
+
 ---
 
 ## Release & CI

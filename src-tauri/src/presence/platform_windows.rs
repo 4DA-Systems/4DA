@@ -1,0 +1,317 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
+// Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
+// Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
+
+//! Windows presence detection.
+//!
+//! Two independent detectors, because neither is sufficient alone:
+//!
+//! 1. `SHQueryUserNotificationState` — the API Windows has shipped since Vista
+//!    for exactly this question ("may I show a notification right now?"). It
+//!    catches exclusive-fullscreen D3D games, presentation mode, Focus Assist
+//!    quiet time, and the locked/screensaver state.
+//!
+//! 2. Foreground-window geometry — catches what (1) misses. A **borderless
+//!    windowed** game (the default for most modern titles) is, to Windows, an
+//!    ordinary top-level window that happens to be the size of the monitor, so
+//!    `SHQueryUserNotificationState` cheerfully returns
+//!    `QUNS_ACCEPTS_NOTIFICATIONS`. Comparing the foreground window's rect
+//!    against its monitor's *full* rect (not the work area) distinguishes a
+//!    borderless-fullscreen app from a merely maximised one, since a maximised
+//!    window stops at the taskbar.
+//!
+//! Detector 2 deliberately ignores windows owned by this process — 4DA's own
+//! maximised main window must never read as "the user is busy".
+
+use windows_sys::Win32::Foundation::{HWND, RECT};
+use windows_sys::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+};
+use windows_sys::Win32::System::Threading::GetCurrentProcessId;
+use windows_sys::Win32::UI::Shell::{
+    SHQueryUserNotificationState, QUERY_USER_NOTIFICATION_STATE, QUNS_ACCEPTS_NOTIFICATIONS,
+    QUNS_APP, QUNS_BUSY, QUNS_NOT_PRESENT, QUNS_PRESENTATION_MODE, QUNS_QUIET_TIME,
+    QUNS_RUNNING_D3D_FULL_SCREEN,
+};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible,
+};
+
+use super::BusyReason;
+
+/// Query the OS for whether this is a good moment to interrupt.
+///
+/// Returns `None` when the user appears available. Never panics: every failure
+/// path degrades to "available", because wrongly muting the daily brief forever
+/// is a worse failure than one mistimed popup.
+pub(super) fn detect() -> Option<BusyReason> {
+    if let Some(reason) = query_notification_state() {
+        return Some(reason);
+    }
+    detect_borderless_fullscreen()
+}
+
+/// Detector 1: `SHQueryUserNotificationState`.
+#[allow(unsafe_code)]
+fn query_notification_state() -> Option<BusyReason> {
+    let mut state: QUERY_USER_NOTIFICATION_STATE = 0;
+    // SAFETY: `state` is a live, correctly-typed, stack-allocated out-param.
+    // The call has no other side effects and does not retain the pointer.
+    let hr = unsafe { SHQueryUserNotificationState(&raw mut state) };
+    if hr < 0 {
+        // S_OK is 0; any negative HRESULT means we learned nothing. Treat an
+        // unreadable OS state as "available" rather than muting 4DA silently.
+        tracing::debug!(
+            target: "4da::presence",
+            hresult = hr,
+            "SHQueryUserNotificationState failed"
+        );
+        return None;
+    }
+    map_notification_state(state)
+}
+
+/// Pure mapping from the Win32 state constant to a 4DA busy reason.
+///
+/// Split out from the FFI call so the policy is unit-testable without Windows
+/// in the loop.
+pub(super) fn map_notification_state(state: QUERY_USER_NOTIFICATION_STATE) -> Option<BusyReason> {
+    match state {
+        QUNS_NOT_PRESENT => Some(BusyReason::ScreenLocked),
+        QUNS_BUSY | QUNS_RUNNING_D3D_FULL_SCREEN | QUNS_APP => Some(BusyReason::FullscreenApp),
+        QUNS_PRESENTATION_MODE => Some(BusyReason::Presentation),
+        QUNS_QUIET_TIME => Some(BusyReason::OsQuietTime),
+        QUNS_ACCEPTS_NOTIFICATIONS => None,
+        // Any future state we do not know: assume available rather than
+        // muting 4DA forever.
+        _ => None,
+    }
+}
+
+/// Detector 2: is the foreground window a borderless-fullscreen app?
+#[allow(unsafe_code)]
+fn detect_borderless_fullscreen() -> Option<BusyReason> {
+    // SAFETY: no arguments; returns a borrowed HWND or null. We never free it.
+    let hwnd: HWND = unsafe { GetForegroundWindow() };
+    if hwnd.is_null() {
+        return None;
+    }
+
+    // SAFETY: `hwnd` is a live foreground handle from the OS.
+    if unsafe { IsWindowVisible(hwnd) } == 0 {
+        return None;
+    }
+
+    if is_own_window(hwnd) {
+        return None;
+    }
+
+    let window = window_rect(hwnd)?;
+    let monitor = monitor_rect(hwnd)?;
+
+    if covers_monitor(&window, &monitor) {
+        Some(BusyReason::FullscreenWindow)
+    } else {
+        None
+    }
+}
+
+/// True when `hwnd` belongs to this process (4DA's own windows never count as
+/// "the user is busy with something else").
+#[allow(unsafe_code)]
+fn is_own_window(hwnd: HWND) -> bool {
+    let mut pid: u32 = 0;
+    // SAFETY: `hwnd` is live; `pid` is a valid out-param.
+    unsafe { GetWindowThreadProcessId(hwnd, &raw mut pid) };
+    // SAFETY: no arguments, no side effects.
+    pid != 0 && pid == unsafe { GetCurrentProcessId() }
+}
+
+#[allow(unsafe_code)]
+fn window_rect(hwnd: HWND) -> Option<RECT> {
+    let mut rect = zeroed_rect();
+    // SAFETY: `hwnd` is live; `rect` is a valid out-param.
+    if unsafe { GetWindowRect(hwnd, &raw mut rect) } == 0 {
+        return None;
+    }
+    Some(rect)
+}
+
+/// The *full* bounds of the monitor `hwnd` sits on — deliberately `rcMonitor`
+/// and not `rcWork`, so a maximised window (which stops at the taskbar) does
+/// not read as fullscreen.
+#[allow(unsafe_code)]
+fn monitor_rect(hwnd: HWND) -> Option<RECT> {
+    // SAFETY: `hwnd` is live; DEFAULTTONEAREST always yields a valid monitor.
+    let hmon = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+    if hmon.is_null() {
+        return None;
+    }
+
+    let mut info = MONITORINFO {
+        cbSize: u32::try_from(size_of::<MONITORINFO>()).ok()?,
+        rcMonitor: zeroed_rect(),
+        rcWork: zeroed_rect(),
+        dwFlags: 0,
+    };
+    // SAFETY: `hmon` is valid and `info.cbSize` is set as the API requires.
+    if unsafe { GetMonitorInfoW(hmon, &raw mut info) } == 0 {
+        return None;
+    }
+    Some(info.rcMonitor)
+}
+
+const fn zeroed_rect() -> RECT {
+    RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    }
+}
+
+/// Tolerance (px) for the fullscreen comparison. Some titles are off by a
+/// pixel or two, and some report a 1px-larger rect to defeat compositing.
+const EDGE_TOLERANCE: i32 = 2;
+
+/// Does `window` cover the whole of `monitor` (within [`EDGE_TOLERANCE`])?
+///
+/// Pure and platform-independent so the geometry rule is unit-testable.
+pub(super) fn covers_monitor(window: &RECT, monitor: &RECT) -> bool {
+    // A degenerate monitor rect would make every window "fullscreen".
+    if monitor.right <= monitor.left || monitor.bottom <= monitor.top {
+        return false;
+    }
+    window.left <= monitor.left + EDGE_TOLERANCE
+        && window.top <= monitor.top + EDGE_TOLERANCE
+        && window.right >= monitor.right - EDGE_TOLERANCE
+        && window.bottom >= monitor.bottom - EDGE_TOLERANCE
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rect(left: i32, top: i32, right: i32, bottom: i32) -> RECT {
+        RECT {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+
+    #[test]
+    fn d3d_fullscreen_is_busy() {
+        assert_eq!(
+            map_notification_state(QUNS_RUNNING_D3D_FULL_SCREEN),
+            Some(BusyReason::FullscreenApp)
+        );
+    }
+
+    #[test]
+    fn every_documented_state_maps() {
+        assert_eq!(
+            map_notification_state(QUNS_NOT_PRESENT),
+            Some(BusyReason::ScreenLocked)
+        );
+        assert_eq!(
+            map_notification_state(QUNS_BUSY),
+            Some(BusyReason::FullscreenApp)
+        );
+        assert_eq!(
+            map_notification_state(QUNS_PRESENTATION_MODE),
+            Some(BusyReason::Presentation)
+        );
+        assert_eq!(
+            map_notification_state(QUNS_QUIET_TIME),
+            Some(BusyReason::OsQuietTime)
+        );
+        assert_eq!(
+            map_notification_state(QUNS_APP),
+            Some(BusyReason::FullscreenApp)
+        );
+    }
+
+    #[test]
+    fn accepts_notifications_is_available() {
+        assert_eq!(map_notification_state(QUNS_ACCEPTS_NOTIFICATIONS), None);
+    }
+
+    #[test]
+    fn unknown_state_degrades_to_available() {
+        // A future Windows release adding QUNS_* = 99 must not mute 4DA forever.
+        assert_eq!(map_notification_state(99), None);
+    }
+
+    #[test]
+    fn exact_fullscreen_covers_monitor() {
+        let mon = rect(0, 0, 2560, 1440);
+        assert!(covers_monitor(&rect(0, 0, 2560, 1440), &mon));
+    }
+
+    #[test]
+    fn borderless_overshoot_covers_monitor() {
+        // Some titles report a slightly larger rect than the monitor.
+        let mon = rect(0, 0, 2560, 1440);
+        assert!(covers_monitor(&rect(-1, -1, 2561, 1441), &mon));
+    }
+
+    #[test]
+    fn maximised_window_is_not_fullscreen() {
+        // A maximised window stops above the taskbar (~48px) — the exact case
+        // that must NOT read as "the user is gaming".
+        let mon = rect(0, 0, 2560, 1440);
+        assert!(!covers_monitor(&rect(0, 0, 2560, 1392), &mon));
+    }
+
+    #[test]
+    fn windowed_app_is_not_fullscreen() {
+        let mon = rect(0, 0, 2560, 1440);
+        assert!(!covers_monitor(&rect(100, 100, 1300, 900), &mon));
+    }
+
+    #[test]
+    fn fullscreen_on_secondary_monitor_is_detected() {
+        // Secondary monitor to the right: origin is non-zero.
+        let mon = rect(2560, 0, 5120, 1440);
+        assert!(covers_monitor(&rect(2560, 0, 5120, 1440), &mon));
+    }
+
+    #[test]
+    fn degenerate_monitor_rect_is_never_fullscreen() {
+        let mon = rect(0, 0, 0, 0);
+        assert!(!covers_monitor(&rect(0, 0, 0, 0), &mon));
+    }
+
+    /// Live probe against the real desktop. Ignored by default because the
+    /// answer legitimately depends on what the machine is doing right now — it
+    /// exists so the FFI can be exercised on demand:
+    ///
+    /// ```text
+    /// cargo test --lib presence::platform::tests::live_probe -- --ignored --nocapture
+    /// ```
+    ///
+    /// Run it once with a normal desktop (expect `None`) and once with a game
+    /// or any fullscreen window in front (expect `FullscreenApp` or
+    /// `FullscreenWindow`). That pair is the only real proof the detector
+    /// works on this hardware.
+    #[test]
+    #[ignore = "queries the live desktop; run explicitly with --ignored"]
+    fn live_probe() {
+        let mut raw: QUERY_USER_NOTIFICATION_STATE = 0;
+        #[allow(unsafe_code)]
+        // SAFETY: valid stack out-param, same contract as query_notification_state.
+        let hr = unsafe { SHQueryUserNotificationState(&raw mut raw) };
+
+        println!("SHQueryUserNotificationState -> hr={hr} state={raw}");
+        println!("  mapped              -> {:?}", map_notification_state(raw));
+        println!("  full detect()       -> {:?}", detect());
+
+        assert!(hr >= 0, "SHQueryUserNotificationState failed with {hr}");
+        assert!(
+            (1..=7).contains(&raw),
+            "state {raw} outside the documented QUNS_* range 1..=7"
+        );
+    }
+}

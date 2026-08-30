@@ -10,11 +10,24 @@
 //!
 //! The briefing window is:
 //! - 560×780 logical pixels, positioned bottom-right above the taskbar
-//! - Transparent, borderless, always-on-top for 8 seconds then normal z-order
+//! - Transparent, borderless, always-on-top for 30 seconds then normal z-order
 //! - Pre-created on app startup (hidden) for instant display
 //! - Visible in taskbar, accessible via Alt+Tab
 //! - Auto-dismisses after 5 minutes of no interaction
 //! - Never steals focus on creation (focused: false)
+//!
+//! ## Interruption policy
+//!
+//! Because this window *is* always-on-top, it will happily paint itself over a
+//! fullscreen game — which is exactly what it did on 2026-08-31. Autonomous
+//! showings therefore go through [`show_briefing`], which consults the
+//! interruption gate in [`crate::presence`] and defers to the queue when the
+//! user is busy. Explicit user actions (the tray's "Show today's brief", the
+//! settings preview) call [`show_briefing_now`] and are never gated.
+//!
+//! A watchdog also drops the always-on-top flag and hides the window if the
+//! user goes fullscreen during the on-top period — the gate answers "is now a
+//! good time?" once, and this answers "is it *still* a good time?".
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -41,6 +54,10 @@ const AUTO_DISMISS_MS: u64 = 300_000;
 /// The window never steals focus, so "always-on-top" just means visible — the user
 /// can still click through to their IDE. JS hover/click handles actual dismissal.
 const ALWAYS_ON_TOP_MS: u64 = 30_000;
+
+/// How often the on-top watchdog re-checks presence while the brief is pinned.
+/// Must divide [`ALWAYS_ON_TOP_MS`] exactly (asserted in tests).
+const ALWAYS_ON_TOP_POLL_MS: u64 = 2_000;
 
 // ============================================================================
 // Auto-dismiss cancellation
@@ -96,12 +113,27 @@ pub fn is_briefing_visible() -> bool {
     WINDOW_VISIBLE.load(Ordering::Relaxed)
 }
 
-/// Show the briefing window with enriched morning briefing data.
+/// Show the briefing window, **subject to the interruption gate**.
 ///
-/// Positions bottom-right above the taskbar, emits the data payload,
-/// shows always-on-top for 8 seconds (so the user notices it), then
-/// drops to normal z-order. Auto-dismisses after 5 minutes.
+/// The entry point for autonomous showings. If the user is in a fullscreen app,
+/// presenting, in quiet hours, or has Do Not Disturb on, the briefing is held
+/// and delivered when they are available again — never dropped.
 pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotification) {
+    if let Some(reason) = crate::presence::current().busy_reason() {
+        crate::presence::queue::hold_briefing(briefing, reason);
+        return;
+    }
+    show_briefing_now(app, briefing);
+}
+
+/// Show the briefing window with enriched morning briefing data, **bypassing
+/// the interruption gate**.
+///
+/// For explicit user actions (tray "Show today's brief", settings preview) and
+/// for the deferral queue's flush. Positions bottom-right above the taskbar,
+/// emits the data payload, shows always-on-top for 30 seconds (so the user
+/// notices it), then drops to normal z-order. Auto-dismisses after 5 minutes.
+pub fn show_briefing_now<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotification) {
     // Cancel any existing dismiss timer.
     cancel_dismiss_timer();
 
@@ -227,10 +259,30 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
 
     // After ALWAYS_ON_TOP_MS, drop to normal z-order so the briefing doesn't
     // block the user's work. The window remains visible and in the taskbar.
+    //
+    // The gate answered "is now a good time?" before we showed. This watchdog
+    // answers "is it STILL a good time?" — if the user launches a game in the
+    // 30 seconds the brief is pinned on top, we get out of the way immediately
+    // rather than sitting over their screen for the remainder of the timer.
     {
         let aot_window = window.clone();
+        let aot_app = app.clone();
         tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(ALWAYS_ON_TOP_MS)).await;
+            let step = std::time::Duration::from_millis(ALWAYS_ON_TOP_POLL_MS);
+            let steps = ALWAYS_ON_TOP_MS / ALWAYS_ON_TOP_POLL_MS;
+            for _ in 0..steps {
+                tokio::time::sleep(step).await;
+                if let Some(reason) = crate::presence::current().busy_reason() {
+                    info!(
+                        target: "4da::briefing",
+                        reason = reason.as_str(),
+                        "User became busy while the brief was on top — withdrawing"
+                    );
+                    let _ = aot_window.set_always_on_top(false);
+                    hide_briefing(&aot_app);
+                    return;
+                }
+            }
             if let Err(e) = aot_window.set_always_on_top(false) {
                 tracing::debug!(target: "4da::briefing", error = %e, "Failed to drop always-on-top (non-fatal)");
             }
@@ -420,7 +472,9 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
     let preemption = briefing.preemption_alerts.len();
 
     // Show briefing window + OS notification
-    crate::monitoring_notifications::send_morning_briefing_notification(&app, &briefing);
+    // Explicit user action — never gated. The user pressed the button; showing
+    // them what they asked for is not an interruption.
+    crate::monitoring_briefing::deliver_morning_briefing(&app, &briefing);
 
     // Spawn async LLM synthesis (same as scheduler path)
     {

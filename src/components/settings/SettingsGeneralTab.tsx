@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { MonitoringStatus } from '../../types/settings';
 import type { MaintenanceResult } from '../../types/autophagy';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
+import { InterruptionsSection } from './InterruptionsSection';
 import { LocaleSection } from './LocaleSection';
 import { MonitoringSection } from './MonitoringSection';
 import { cmd } from '../../lib/commands';
@@ -89,6 +90,10 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
             onToggle={onToggleMonitoring}
             onUpdateInterval={onUpdateInterval}
           />
+        </PanelErrorBoundary>
+
+        <PanelErrorBoundary name="Interruptions">
+          <InterruptionsSection />
         </PanelErrorBoundary>
 
         <div className="bg-bg-tertiary rounded-lg p-4 border border-border">

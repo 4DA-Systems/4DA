@@ -311,6 +311,8 @@ mod platform_filter;
 pub mod plugins;
 mod preemption;
 mod preference_commands;
+pub mod presence;
+mod presence_commands;
 mod probes_corpus;
 mod probes_engine;
 pub(crate) mod project_inclusion;
@@ -926,6 +928,14 @@ pub fn run() {
             monitoring_commands::get_morning_briefing_config,
             monitoring_commands::set_briefing_time,
             monitoring_commands::trigger_briefing_preview,
+            // Interruption gate — presence, quiet hours, Do Not Disturb
+            presence_commands::get_presence_status,
+            presence_commands::get_interruption_config,
+            presence_commands::set_respect_focus,
+            presence_commands::set_quiet_hours,
+            presence_commands::set_do_not_disturb,
+            presence_commands::flush_held_notifications,
+            presence_commands::discard_held_notifications,
             // Notification window
             notification_window::notification_clicked,
             // Briefing window
