@@ -154,6 +154,10 @@ export interface DataFreshness {
   is_stale: boolean;
   /** Human-readable summary with the remedy when stale. */
   note: string;
+  /** Set when `data/.engine-blocked` reports a schema-refused scheduled refresh. */
+  engine_blocked_at?: string;
+  /** The refusal error recorded by the blocked engine. */
+  engine_blocked_error?: string;
 }
 
 /** Minutes a feed may go without a fetch before DB-backed tools flag it stale. */
@@ -871,12 +875,23 @@ export class FourDADatabase {
 
     const ageMinutes = minutesSince(lastFetchAt);
     const isStale = ageMinutes === null || ageMinutes > STALE_AFTER_MINUTES;
-    const note = isStale
+    let note = isStale
       ? `Feed data ${
           ageMinutes === null ? "has never been fetched" : `is ~${ageMinutes} min old`
         } and may be stale: the MCP server reads the database but does not fetch. Run ` +
         "`fourda-engine --once` (or open the 4DA app) to refresh."
       : `Feed data is ~${ageMinutes} min old (fresh).`;
+
+    // Engine-block marker: a scheduled refresh that can only REFUSE (binary
+    // older than the DB schema) cannot record its failure in the database, so
+    // the Rust engine leaves `data/.engine-blocked` beside it. That exact
+    // failure froze the feed for two days (2026-08-28→30) with ERROR-log-only
+    // symptoms; this reader is the one that caught it, so it now names the
+    // cause instead of just the staleness.
+    const engineBlock = this.readEngineBlockMarker();
+    if (engineBlock) {
+      note += ` ENGINE BLOCKED since ${engineBlock.at}: ${engineBlock.error} — a rebuilt/updated 4DA binary is required; a plain refresh will keep refusing.`;
+    }
 
     return {
       source_items_total: total,
@@ -888,7 +903,29 @@ export class FourDADatabase {
       age_minutes: ageMinutes,
       is_stale: isStale,
       note,
+      ...(engineBlock
+        ? { engine_blocked_at: engineBlock.at, engine_blocked_error: engineBlock.error }
+        : {}),
     };
+  }
+
+  /**
+   * Read `data/.engine-blocked` beside the database file, if present. Written
+   * by the Rust engine (`engine_block.rs`) when a scheduled refresh is refused
+   * by a newer database schema; cleared the moment a cycle opens the DB again.
+   */
+  private readEngineBlockMarker(): { at: string; error: string } | null {
+    try {
+      const markerPath = path.join(path.dirname(this.db.name), ".engine-blocked");
+      const raw = fs.readFileSync(markerPath, "utf-8");
+      const v = JSON.parse(raw) as { at?: unknown; error?: unknown };
+      if (typeof v.at === "string" && typeof v.error === "string") {
+        return { at: v.at, error: v.error };
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /** `MAX(sources.last_fetch)`, tolerant of a missing `sources` table (returns null). */

@@ -51,6 +51,7 @@ import { getSlimToolList, getSchemaResources, hasToolSchema, getSchemaFilename, 
 
 // Map-based tool dispatch (replaces per-tool imports + switch statement)
 import { dispatchTool } from "./tool-dispatch.js";
+import { checkBuildStaleness } from "./build-staleness.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -374,6 +375,19 @@ export function buildServer(): Server {
  */
 async function main() {
   const args = process.argv.slice(2);
+
+  // Say it before anything else: a stale dist answers with code the repo has
+  // already replaced (the 2026-08-30 server was two days behind its src and
+  // its already-fixed bugs were nearly re-diagnosed as live). stderr only —
+  // stdout is the MCP protocol.
+  try {
+    const staleness = checkBuildStaleness();
+    if (staleness?.stale && staleness.note) {
+      console.error(`[4DA] WARNING: ${staleness.note}`);
+    }
+  } catch {
+    // The self-check must never block startup.
+  }
 
   // Version
   if (args.includes("--version") || args.includes("-v")) {
