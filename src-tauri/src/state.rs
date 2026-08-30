@@ -418,6 +418,12 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
         };
 
         info!(target: "4da::db", "Database ready");
+        // The database opened under THIS binary — any standing engine-block
+        // marker (schema-refused scheduled refresh) is provably over. The
+        // headless cycle clears it too, but a GUI-only user whose binary was
+        // fixed should not stare at yesterday's outage banner until the next
+        // scheduled run.
+        crate::engine_block::clear();
         Ok(Arc::new(db))
     })?;
 
