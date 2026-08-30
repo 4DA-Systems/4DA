@@ -79,7 +79,7 @@ pub(crate) fn estimate_cost(provider: &str, model: &str, tokens_in: u32, tokens_
         ("openai", m) if m.contains("gpt-4.1-mini") => (0.40, 1.60),
         ("openai", m) if m.contains("gpt-4.1") => (2.00, 8.00),
         // Anthropic
-        ("anthropic", m) if m.contains("haiku") => (0.80, 4.00),
+        ("anthropic", m) if m.contains("haiku") => (1.00, 5.00),
         ("anthropic", m) if m.contains("sonnet") => (3.00, 15.00),
         ("anthropic", m) if m.contains("opus") => (15.00, 75.00),
         // Local models (free)

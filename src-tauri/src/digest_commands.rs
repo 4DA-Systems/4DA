@@ -601,7 +601,7 @@ End your response with exactly one fenced block listing the items you filtered o
         batched = batched_section,
     );
 
-    let llm_client = crate::llm::LLMClient::new(llm_settings.clone());
+    let llm_client = crate::llm::LLMClient::with_purpose(llm_settings.clone(), "digest");
     let messages = vec![crate::llm::Message {
         role: "user".to_string(),
         content: user_prompt,
