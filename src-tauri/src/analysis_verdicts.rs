@@ -151,13 +151,7 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
         });
     }
 
-    let ctx = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        scoring::build_scoring_context(db),
-    )
-    .await
-    .map_err(|_| String::from("Scoring context build timed out after 10s"))?
-    .map_err(|e| format!("Failed to build scoring context: {e}"))?;
+    let ctx = scoring::build_scoring_context_with_timeout(db).await?;
     let trend_topics = crate::detect_trend_topics(
         items
             .iter()

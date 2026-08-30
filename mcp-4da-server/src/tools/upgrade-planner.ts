@@ -129,14 +129,23 @@ export async function executeUpgradePlanner(
   // Vulnerability data from the last scan this session (no network here).
   const vulnResult = liveIntel.getVulnerabilities();
   const vulnerabilityDataAvailable = vulnResult !== null;
+  // Keyed by ecosystem + name + INSTANCE version. A name-only key attached every
+  // instance's CVEs to whichever row asked first: the direct anyhow 1.0.104 was
+  // charged with RUSTSEC-2026-0190 (fixed in 1.0.103 — it isn't affected) while
+  // the actually-vulnerable transitive anyhow 1.0.102 was hidden by the
+  // direct-name skip below. Scan entries are created per scanned instance, so
+  // the instance version is exact.
+  const instanceKey = (ecosystem: string, name: string, version: string | null) =>
+    `${ecosystem}\0${name}\0${version ?? "unknown"}`;
   const vulnsByPackage = new Map<
     string,
     Array<{ severity: string; vulnId: string; summary: string; fixedVersion: string | null; platformActive: boolean }>
   >();
   if (vulnResult) {
     for (const v of vulnResult.vulnerabilities) {
-      if (!vulnsByPackage.has(v.package)) vulnsByPackage.set(v.package, []);
-      vulnsByPackage.get(v.package)!.push({
+      const key = instanceKey(v.ecosystem, v.package, v.currentVersion);
+      if (!vulnsByPackage.has(key)) vulnsByPackage.set(key, []);
+      vulnsByPackage.get(key)!.push({
         severity: v.severity,
         vulnId: v.vulnId,
         summary: v.summary,
@@ -151,14 +160,14 @@ export async function executeUpgradePlanner(
   const directPackages = new Set<string>();
 
   for (const dep of registryData) {
-    directPackages.add(`${dep.ecosystem}\0${dep.name}`);
+    directPackages.add(instanceKey(dep.ecosystem, dep.name, dep.currentVersion));
     const reasons: string[] = [];
     let risk: UpgradeRecommendation["risk"] = "low";
     let targetVersion = dep.latestStableVersion || dep.latestVersion;
     let platformActive = true;
 
     // Check vulnerabilities
-    const vulns = vulnsByPackage.get(dep.name);
+    const vulns = vulnsByPackage.get(instanceKey(dep.ecosystem, dep.name, dep.currentVersion));
     if (vulns && vulns.length > 0) {
       risk = severityToRisk(vulns.map((v) => v.severity));
       reasons.push(`${vulns.length} known CVE${vulns.length !== 1 ? "s" : ""} (${vulns.map((v) => v.vulnId).join(", ")})`);
@@ -234,13 +243,16 @@ export async function executeUpgradePlanner(
 
   // Transitive vulnerable packages — previously counted in scan totals but
   // never recommended. Surfaced as waiting_on_upstream with honest labels.
+  // The skip is instance-aware: a transitive instance at a DIFFERENT version
+  // than a same-named direct dep is its own finding (anyhow 1.0.102 transitive
+  // beside anyhow 1.0.104 direct), not a duplicate of the direct row.
   if (vulnResult) {
     const transitive = new Map<string, typeof vulnResult.vulnerabilities>();
     for (const v of vulnResult.vulnerabilities) {
       if (v.isDirect) continue;
-      if (directPackages.has(`${v.ecosystem}\0${v.package}`)) continue;
+      if (directPackages.has(instanceKey(v.ecosystem, v.package, v.currentVersion))) continue;
       if (!includeDev && v.isDev && v.devScopeKnown) continue;
-      const key = `${v.ecosystem}\0${v.package}`;
+      const key = instanceKey(v.ecosystem, v.package, v.currentVersion);
       if (!transitive.has(key)) transitive.set(key, []);
       transitive.get(key)!.push(v);
     }
@@ -274,11 +286,21 @@ export async function executeUpgradePlanner(
     }
   }
 
+  // Defensive dedupe: identical (ecosystem, package, version, scope) rows can
+  // still arrive when upstream dep lists carry duplicates. Keep the first.
+  const seenRecs = new Set<string>();
+  const deduped = recommendations.filter((r) => {
+    const key = `${r.ecosystem}\0${r.package}\0${r.currentVersion ?? ""}\0${r.scope}`;
+    if (seenRecs.has(key)) return false;
+    seenRecs.add(key);
+    return true;
+  });
+
   // Filter by risk threshold
   const threshold = params.risk_threshold ?? "all";
   const filtered = threshold === "all"
-    ? recommendations
-    : recommendations.filter((r) => RISK_LEVELS[r.risk] >= RISK_LEVELS[threshold]);
+    ? deduped
+    : deduped.filter((r) => RISK_LEVELS[r.risk] >= RISK_LEVELS[threshold]);
 
   // Sort: critical > high > medium > low, then fixable-now (direct) before
   // waiting-on-upstream (transitive), then non-breaking first (quick wins).

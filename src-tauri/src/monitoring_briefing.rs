@@ -2568,6 +2568,19 @@ pub(crate) async fn synthesize_morning_briefing(
     briefing: &BriefingNotification,
 ) -> std::result::Result<SynthesisResult, String> {
     const MAX_ATTEMPTS: u32 = 3;
+    // A brief with NO evidence at all has nothing an LLM can ground a narrative
+    // in — every citation it produces is fabricated by construction. Observed
+    // live 2026-08-30: the cold-boot brief ran with items=0, the model returned
+    // a cluster citing evidence_id 1 (range 1..=0), and the groundedness gate
+    // logged the violation as a warning while the synthesis "passed". Skip the
+    // LLM entirely; the quiet state is the honest brief (Accurate-first,
+    // doctrine rule 5), and the tokens are not spent.
+    if briefing.items.is_empty() && briefing.preemption_alerts.is_empty() {
+        return Err(
+            "Brief carries no evidence items or alerts — nothing to synthesize (quiet state served without LLM)"
+                .into(),
+        );
+    }
     // A brief with <2 pieces of content has nothing to synthesize; a first-pass
     // abstention there is legitimate, so don't retry (and don't burn LLM calls).
     let has_content = briefing.items.len() + briefing.preemption_alerts.len() >= 2;
@@ -3921,6 +3934,40 @@ mod tests {
         assert_eq!(briefing.knowledge_gaps[0].days_since_last, 7);
         assert_eq!(briefing.escalating_chains.len(), 1);
         assert_eq!(briefing.escalating_chains[0].phase, "escalating");
+    }
+
+    /// 2026-08-30 audit: the cold-boot brief ran synthesis with items=0 and the
+    /// model fabricated a cluster citing evidence_id 1 against an empty corpus
+    /// (the groundedness gate only warned). An evidence-free brief must refuse
+    /// synthesis BEFORE any provider or LLM work — deterministically, with no
+    /// settings configured, which is exactly how this test runs.
+    #[tokio::test]
+    async fn test_synthesis_refuses_evidence_free_brief() {
+        let briefing = BriefingNotification {
+            title: "Quiet morning".to_string(),
+            items: vec![],
+            total_relevant: 0,
+            ongoing_topics: vec![],
+            knowledge_gaps: vec![],
+            escalating_chains: vec![],
+            synthesis: None,
+            preemption_alerts: vec![],
+            blind_spot_score: None,
+            labels: None,
+            personalization_context: None,
+            data_freshness: None,
+            corroboration_available: false,
+            coverage_building: false,
+            synthesis_hint: None,
+        };
+        let err = match synthesize_morning_briefing(&briefing).await {
+            Ok(_) => panic!("an evidence-free brief must not synthesize"),
+            Err(e) => e,
+        };
+        assert!(
+            err.contains("nothing to synthesize"),
+            "guard message should say why: {err}"
+        );
     }
 
     #[test]

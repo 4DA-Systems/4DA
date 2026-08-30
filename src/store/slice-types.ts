@@ -32,6 +32,8 @@ export interface ToastSlice {
   toasts: Toast[];
   addToast: (type: ToastType, message: string, action?: ToastAction) => void;
   removeToast: (id: number) => void;
+  /** Clear toasts superseded by a later success of the same operation. */
+  removeToastsByPrefix: (prefix: string) => void;
 }
 
 export type EmbeddingStatus = 'active' | 'degraded' | 'unavailable';

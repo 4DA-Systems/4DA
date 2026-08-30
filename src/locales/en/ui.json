@@ -1639,6 +1639,8 @@
   "calibration.onboarding.summaryProjects": "{{count}} technologies detected",
   "calibration.action.working": "Working...",
   "health.issueCount": "{{count}} system issues detected",
+  "health.circuitReset": "{{source}} has been reset and will be retried",
+  "health.sourceMissed": "Items from {{source}} may have been missed while it was unavailable",
   "health.openSettings": "Open Settings",
   "missed.title": "What you would have missed",
   "missed.scanned": "{{count}} items scanned",
