@@ -4,7 +4,39 @@ All notable changes to 4DA will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.0.1] - 2026-08-28
+## [1.0.2] - 2026-08-30
+
+Supersedes 1.0.1, which was tagged and built but never published: a syntax error in the
+release workflow’s Windows verification step failed the job after the installers had already
+been produced. No 1.0.1 artifacts were ever released. The contents below are that same body
+of work, plus a gate (`scripts/check-workflow-shell-syntax.cjs`) that parses every inline
+workflow script so a shell typo cannot reach a release tag again.
+
+### Fixed since the 1.0.1 build (2026-08-30 live audit)
+
+Eleven defects found by a full live audit of the running app and MCP server, all fixed and
+regression-tested before this release:
+
+- The first analysis after a cold start could fail with a spurious timeout while the app
+  was still warming up, leaving an error banner that never went away. The timeout budget
+  now survives startup contention, and a completed analysis clears its own stale failure
+  banner (other errors still stay until dismissed).
+- Source health showed raw placeholder keys (`ui:health.daysAgo`) instead of times; all
+  health strings now translate in every language.
+- A phantom deprecated `vscode` dependency (an editor-provided module, never installable)
+  polluted every dependency surface; host-provided modules are now recognized as such.
+- The Blind Spots list could show the same dependency twice under drifting ecosystem
+  labels; entries now merge under one canonical registry label.
+- The reading feed could flood with years-old security advisories newly imported by a
+  backfill; historical advisories stay in the security tools, not the feed.
+- MCP server: CVEs are attributed to the exact scanned package instance — a safe direct
+  dependency is no longer blamed for a vulnerable transitive twin, per-instance versions
+  are no longer clobbered by name-keyed caches, and knowledge gaps resolve installed
+  versions before grading, so long-patched advisories no longer read as critical.
+- An empty morning brief no longer invokes AI synthesis (nothing to ground a narrative
+  in means nothing is generated), and a background refresh blocked by a version mismatch
+  now announces itself in the app’s health banner and the MCP server’s freshness block
+  instead of failing silently in a log.
 
 Curated highlights from a large body of work — this is a selection, not an exhaustive
 commit log.

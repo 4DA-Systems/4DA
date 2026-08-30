@@ -538,9 +538,9 @@ jobs:
               Write-Host "::error::One or more binaries are unsigned - release blocked"
               exit 1
             }
+          } else {
+            Write-Host "All $signed Windows artifact(s) carry a valid Authenticode signature."
           }
-          }
-          Write-Host "All $signed Windows artifact(s) carry a valid Authenticode signature."
 
       - name: Verify macOS code signature and notarization
         # UNCONDITIONAL on macOS - gating this on APPLE_CERTIFICATE meant a
