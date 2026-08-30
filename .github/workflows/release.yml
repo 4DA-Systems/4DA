@@ -909,6 +909,43 @@ jobs:
             exit 1
           fi
           echo "All required artifacts present."
+
+      - name: Verify updater manifest platform coverage
+        # latest.json EXISTING is not latest.json being COMPLETE. The
+        # v0.0.15-test rehearsal (2026-08-30) published a manifest carrying
+        # only Linux and Windows — the explicit bundle.targets list omitted
+        # "app", so macOS produced no updater archive and tauri-action merged
+        # a manifest with no darwin entries — and this job called the release
+        # a success. A platform silently absent from the manifest means those
+        # users never see another update, and nothing says so. Every released
+        # platform must be present, with a non-empty signature.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          rm -f updater-manifest-check.json
+          gh release download "$TAG" --repo "$GH_REPO" -p latest.json -O updater-manifest-check.json
+          node -e '
+            const m = require("./updater-manifest-check.json");
+            const platforms = m.platforms || {};
+            const required = ["windows-x86_64", "linux-x86_64", "darwin-aarch64", "darwin-x86_64"];
+            const missing = required.filter((p) => !platforms[p]);
+            const unsigned = required.filter((p) => platforms[p] && !(platforms[p].signature || "").trim());
+            console.log("manifest version:", m.version);
+            console.log("platforms present:", Object.keys(platforms).sort().join(", "));
+            if (missing.length) {
+              console.error("::error::latest.json is missing updater entries for: " + missing.join(", ") + " — users on those platforms would never see another update. Release blocked.");
+              process.exit(1);
+            }
+            if (unsigned.length) {
+              console.error("::error::latest.json entries lack signatures for: " + unsigned.join(", ") + " — the updater would reject them. Release blocked.");
+              process.exit(1);
+            }
+            console.log("Updater manifest covers every released platform, all entries signed.");
+          '
       - name: Publish desktop updater manifest
         if: needs.create-release.outputs.production == 'true'
         env:
