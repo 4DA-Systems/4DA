@@ -141,6 +141,24 @@ pub(crate) fn primary_project_dirs() -> Vec<String> {
     #[allow(unused_mut)]
     let mut dirs: Vec<String> = crate::get_context_dirs()
         .iter()
+        .filter(|p| {
+            // Liveness gate (2026-08-31 audit): context_dirs accumulated
+            // roots that do not exist on this machine — a Linux path sat in
+            // a Windows install's settings, silently accepted. A dead root
+            // can never match evidence anyway, but it must be NAMED, not
+            // silently carried. Checked on the ORIGINAL path: the lowercase
+            // below is for substring matching only and would falsify
+            // exists() on case-sensitive filesystems.
+            let exists = p.exists();
+            if !exists {
+                warn!(
+                    target: "4da::scoring",
+                    path = %p.display(),
+                    "Skipping non-existent context dir for primary-project weighting"
+                );
+            }
+            exists
+        })
         .map(|p| p.to_string_lossy().to_lowercase().replace('\\', "/"))
         .filter(|s| !s.is_empty())
         .collect();

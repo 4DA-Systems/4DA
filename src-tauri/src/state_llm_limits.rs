@@ -201,14 +201,62 @@ fn get_llm_daily_cost_limit() -> u64 {
 // Configuration
 // ============================================================================
 
-/// Get context directories from settings (no fallback - empty means no context)
+/// Missing context dirs already warned about, so a dead configured root logs
+/// once per process run instead of once per scoring pass. A path that comes
+/// back (drive replugged) is removed, so a later disappearance warns again.
+static MISSING_CONTEXT_DIR_WARNED: Lazy<Mutex<std::collections::HashSet<String>>> =
+    Lazy::new(|| Mutex::new(std::collections::HashSet::new()));
+
+/// Get context directories from settings, EXISTING ONLY (no fallback — empty
+/// means no context). Central liveness chokepoint (2026-08-31 live audit):
+/// settings accumulated roots that do not exist on this machine — a Linux
+/// path in a Windows install, dirs deleted since onboarding — and every
+/// consumer silently carried them. Each skipped path is warned once per run.
+/// The configured-as-stored list stays available via
+/// [`configured_context_dirs`] (settings UI) and [`missing_context_dirs`]
+/// (health surfacing).
 pub(crate) fn get_context_dirs() -> Vec<PathBuf> {
+    let mut valid = Vec::new();
+    for path in configured_context_dirs() {
+        if path.exists() {
+            MISSING_CONTEXT_DIR_WARNED
+                .lock()
+                .remove(path.to_string_lossy().as_ref());
+            valid.push(path);
+        } else {
+            let key = path.to_string_lossy().to_string();
+            if MISSING_CONTEXT_DIR_WARNED.lock().insert(key) {
+                warn!(
+                    target: "4da::context",
+                    path = %path.display(),
+                    "Configured context directory does not exist on this machine — skipping"
+                );
+            }
+        }
+    }
+    valid
+}
+
+/// Context directories exactly as configured (normalized, NOT existence-
+/// filtered). For surfaces that must show the user what is stored — the
+/// settings UI list — so a dead entry stays visible and removable.
+pub(crate) fn configured_context_dirs() -> Vec<PathBuf> {
     let settings = get_settings_manager().lock();
     let dirs = settings.get().context_dirs.clone();
     drop(settings);
 
     dirs.into_iter()
         .map(|d| normalize_context_path(&d))
+        .collect()
+}
+
+/// Configured context directories that do not exist on this machine.
+/// Surfaced through `get_context_stats` so dead roots are diagnosable.
+pub(crate) fn missing_context_dirs() -> Vec<String> {
+    configured_context_dirs()
+        .into_iter()
+        .filter(|p| !p.exists())
+        .map(|p| p.to_string_lossy().to_string())
         .collect()
 }
 
