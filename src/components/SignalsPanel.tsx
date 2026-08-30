@@ -8,6 +8,7 @@ import { SIGNAL_CONFIG, PRIORITY_CONFIG, SIGNAL_LABELS, EVIDENCE_POOLS } from '.
 import { SignalRow } from './signals/SignalRow';
 import type { SignalItem } from './signals/SignalRow';
 import { computeEvidencePool, groundingDeps, type EvidencePool } from './signals/evidence-pool';
+import { normalizeUrlForDedup } from '../utils/normalize-url';
 
 // ============================================================================
 // Types
@@ -29,7 +30,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   const { isPro } = useLicense();
 
   const { signals, filtered, typeCounts, priorityCounts, poolCounts, pools } = useMemo(() => {
-    const signals: SignalItem[] = results
+    const raw: SignalItem[] = results
       .filter((r) => r.signal_type && r.signal_priority && r.signal_action)
       .map((r) => ({
         id: r.id,
@@ -48,13 +49,28 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
       }));
 
     const priorityOrder: Record<string, number> = { critical: 4, alert: 3, advisory: 2, watch: 1 };
-    const sorted = [...signals].sort((a, b) => {
+    const sorted = [...raw].sort((a, b) => {
       const pd = (priorityOrder[b.signal_priority] || 0) - (priorityOrder[a.signal_priority] || 0);
       if (pd !== 0) return pd;
       return b.top_score - a.top_score;
     });
 
-    const filtered = sorted
+    // One story, one row (live audit 2026-08-31): the same URL rendered as
+    // THREE consecutive ALERT rows in Key Signals — the panel receives the RAW
+    // relevanceResults, not the URL-deduped feed, and cross-cycle differential
+    // merges accumulate same-URL rows under different item ids. Dedup by the
+    // canonical URL identity, keeping the first copy in priority-then-score
+    // order (the highest-priority, highest-scoring row survives).
+    const seenUrls = new Set<string>();
+    const signals = sorted.filter((s) => {
+      const key = normalizeUrlForDedup(s.url);
+      if (!key) return true;
+      if (seenUrls.has(key)) return false;
+      seenUrls.add(key);
+      return true;
+    });
+
+    const filtered = signals
       .filter((s) => !typeFilter || s.signal_type === typeFilter)
       .filter((s) => !priorityFilter || s.signal_priority === priorityFilter);
 
@@ -75,7 +91,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
       items: filtered.filter((s) => s.pool === config.key),
     }));
 
-    return { signals, sorted, filtered, typeCounts, priorityCounts, poolCounts, pools };
+    return { signals, filtered, typeCounts, priorityCounts, poolCounts, pools };
   }, [results, typeFilter, priorityFilter]);
 
   // Hide-when-empty: a bordered card whose only content is "no signals" is dead
