@@ -167,7 +167,26 @@ jobs:
         # This is THE fresh-clone path. The root postinstall hook runs
         # scripts/fetch-ocr-models.cjs, which downloads the gitignored bundle
         # resources that Finding 1 proved a clone cannot build without.
-        run: pnpm install --frozen-lockfile
+        #
+        # Retried (up to 3 attempts): better-sqlite3 — a direct root dependency
+        # — falls back to a node-gyp source build whenever no prebuilt binary
+        # matches the image's Node ABI (the 13.x line in particular), and that
+        # native build flakes on windows-latest, which ships no Visual Studio.
+        # A transient install failure must not masquerade as a broken fresh
+        # clone; three attempts separates flake from finding. Anything still
+        # failing after 3 tries IS the finding.
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::pnpm install --frozen-lockfile failed (attempt ${attempt}/3) - retrying"
+              sleep 20
+            fi
+          done
+          echo "::error::pnpm install --frozen-lockfile failed on all 3 attempts"
+          exit 1
 
       - name: Assert OCR bundle resources present (regression guard, Finding 1)
         run: |
@@ -187,8 +206,23 @@ jobs:
           pnpm run test
 
       - name: MCP server — fresh install, build, tests
+        # The install line carries the same better-sqlite3 native-build flake
+        # as the root install above (better-sqlite3 is a direct dependency of
+        # mcp-4da-server too — the 13.x bump PRs target exactly this package),
+        # so it gets the same 3-attempt retry. Build and tests stay
+        # single-shot: a failure there is real signal, not network weather.
         run: |
-          pnpm --dir mcp-4da-server install --frozen-lockfile
+          for attempt in 1 2 3; do
+            if pnpm --dir mcp-4da-server install --frozen-lockfile; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::mcp-4da-server pnpm install failed on all 3 attempts"
+              exit 1
+            fi
+            echo "::warning::mcp-4da-server pnpm install failed (attempt ${attempt}/3) - retrying"
+            sleep 20
+          done
           pnpm --dir mcp-4da-server run build
           pnpm --dir mcp-4da-server run test
 
