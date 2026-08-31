@@ -15,10 +15,19 @@
 //!    windowed** game (the default for most modern titles) is, to Windows, an
 //!    ordinary top-level window that happens to be the size of the monitor, so
 //!    `SHQueryUserNotificationState` cheerfully returns
-//!    `QUNS_ACCEPTS_NOTIFICATIONS`. Comparing the foreground window's rect
-//!    against its monitor's *full* rect (not the work area) distinguishes a
-//!    borderless-fullscreen app from a merely maximised one, since a maximised
-//!    window stops at the taskbar.
+//!    `QUNS_ACCEPTS_NOTIFICATIONS`. The foreground window's rect is compared
+//!    against its monitor's *full* rect (not the work area).
+//!
+//!    Geometry alone is not enough to separate a fullscreen app from a merely
+//!    **maximised** one. A maximised window's rect deliberately overhangs the
+//!    monitor by the frame width on every side (measured: `-8,-8 - 2568,1448`
+//!    on a 2560x1440 display), so it covers the monitor rect by construction.
+//!    This code previously relied on a maximised window "stopping at the
+//!    taskbar" — true only while the taskbar *reserves* space. Set the taskbar
+//!    to auto-hide, or move it to another monitor, and `rcWork` equals
+//!    `rcMonitor`: every maximised window then read as a fullscreen game and
+//!    silently held the morning brief. So detector 2 additionally requires the
+//!    window to be **undecorated** — see [`maximised_decorated`].
 //!
 //! Detector 2 deliberately ignores windows owned by this process — 4DA's own
 //! maximised main window must never read as "the user is busy".
@@ -36,7 +45,8 @@ use windows_sys::Win32::UI::Shell::{
     QUNS_RUNNING_D3D_FULL_SCREEN,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible,
+    GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible,
+    IsZoomed, GWL_STYLE, WS_CAPTION, WS_THICKFRAME,
 };
 
 use super::BusyReason;
@@ -136,6 +146,13 @@ fn detect_borderless_fullscreen() -> Option<BusyReason> {
         return None;
     }
 
+    // A maximised, decorated window is somebody reading email — not a game.
+    // Checked before the geometry test because the geometry test cannot tell
+    // the two apart (see the module docs).
+    if is_maximised_decorated_window(hwnd) {
+        return None;
+    }
+
     let window = window_rect(hwnd)?;
     let monitor = monitor_rect(hwnd)?;
 
@@ -144,6 +161,35 @@ fn detect_borderless_fullscreen() -> Option<BusyReason> {
     } else {
         None
     }
+}
+
+/// Is `hwnd` a maximised *ordinary* window rather than a fullscreen app?
+///
+/// The discriminator is decoration. "Borderless fullscreen" means the app has
+/// dropped its caption bar and resize frame; a window that still carries them
+/// and is merely zoomed is a normal application the user has maximised.
+///
+/// Reads the live window state, then defers to the pure [`maximised_decorated`]
+/// for the policy so the rule is unit-testable without a live `HWND`.
+#[allow(unsafe_code)]
+fn is_maximised_decorated_window(hwnd: HWND) -> bool {
+    // SAFETY: `hwnd` is a live foreground handle from the OS.
+    let zoomed = unsafe { IsZoomed(hwnd) } != 0;
+    // SAFETY: `hwnd` is live and `GWL_STYLE` is a documented index. Window
+    // styles are 32-bit, so `GetWindowLongW` is the correct accessor even on
+    // 64-bit Windows.
+    let style = unsafe { GetWindowLongW(hwnd, GWL_STYLE) } as u32;
+    maximised_decorated(zoomed, style)
+}
+
+/// Pure decoration rule: a *zoomed* window that still has a caption or a
+/// resize frame is a maximised ordinary window, not a fullscreen app.
+///
+/// Deliberately does NOT exclude every zoomed window: an undecorated window
+/// that happens to be in the maximised state is still fullscreen from the
+/// user's point of view, and must keep holding the brief.
+pub(super) const fn maximised_decorated(zoomed: bool, style: u32) -> bool {
+    zoomed && (style & (WS_CAPTION | WS_THICKFRAME)) != 0
 }
 
 /// True when `hwnd` belongs to this process (4DA's own windows never count as
@@ -337,6 +383,58 @@ mod tests {
         // that must NOT read as "the user is gaming".
         let mon = rect(0, 0, 2560, 1440);
         assert!(!covers_monitor(&rect(0, 0, 2560, 1392), &mon));
+    }
+
+    // -- maximised vs fullscreen (the auto-hide taskbar false positive) ----
+
+    /// The exact window that broke this in the field, captured live on
+    /// 2026-09-01: Paint 3D maximised on a 2560x1440 display with the taskbar
+    /// set to auto-hide. `GWL_STYLE` was `0x95CF_0000` and `IsZoomed` true.
+    /// Geometry said "fullscreen" (rect `-8,-8 - 2568,1448` covers the monitor
+    /// rect); the brief was held for an ordinary maximised window.
+    #[test]
+    fn maximised_paint3d_is_not_fullscreen() {
+        assert!(
+            maximised_decorated(true, 0x95CF_0000),
+            "a maximised window with a caption and a resize frame is not a game"
+        );
+    }
+
+    #[test]
+    fn maximised_window_overhanging_the_monitor_still_covers_it() {
+        // Guards the premise of the fix: geometry ALONE cannot reject this
+        // window, which is why the decoration check has to exist.
+        let mon = rect(0, 0, 2560, 1440);
+        assert!(
+            covers_monitor(&rect(-8, -8, 2568, 1448), &mon),
+            "maximised windows overhang the monitor by the frame width"
+        );
+    }
+
+    #[test]
+    fn borderless_fullscreen_game_is_still_detected() {
+        // WS_POPUP | WS_VISIBLE, no caption, no thick frame, not zoomed.
+        assert!(!maximised_decorated(false, 0x9000_0000));
+    }
+
+    #[test]
+    fn undecorated_zoomed_window_is_still_fullscreen() {
+        // Some apps go fullscreen by maximising a chrome-less window. Zoomed
+        // alone must not disqualify it, or the gate stops holding for them.
+        assert!(!maximised_decorated(true, 0x9000_0000));
+    }
+
+    #[test]
+    fn ordinary_unmaximised_window_is_not_disqualified_by_decoration() {
+        // A decorated window that is NOT zoomed falls through to the geometry
+        // test, which rejects it on size.
+        assert!(!maximised_decorated(false, 0x95CF_0000));
+    }
+
+    #[test]
+    fn caption_alone_and_frame_alone_both_disqualify() {
+        assert!(maximised_decorated(true, WS_CAPTION));
+        assert!(maximised_decorated(true, WS_THICKFRAME));
     }
 
     #[test]
