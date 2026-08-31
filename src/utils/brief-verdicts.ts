@@ -7,6 +7,13 @@
 // kept item is NEVER promoted by a verdict; deterministic security truth
 // (`is_critical_alert`, the OSV-version-checked class) is never suppressed
 // by narration.
+//
+// The exemption here is DELIBERATELY narrower than the one on the feed-demotion
+// path (`brief_rejections::apply_brief_rejection_demotions`), which also exempts
+// `strongly_grounded`. AD-035 considered that exemption for display binding and
+// rejected it: the audited items sat inside the grounded pool, so it would have
+// nullified the fix for the observed defect. Feed ORDER and PROMOTED placement
+// are different stakes. Do not align the two predicates without a new ADR.
 
 import type { BriefVerdicts } from '../store/types';
 import type { SourceRelevance } from '../types';
