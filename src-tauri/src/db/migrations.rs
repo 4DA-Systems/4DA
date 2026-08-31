@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 114;
+        const TARGET_VERSION: i64 = 115;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5225,6 +5225,45 @@ impl Database {
                 )?;
             }
 
+            // Phase 115: persisted scoring explanations (E5010 auditability gap).
+            //
+            // The scorer's per-item breakdown (which axes fired, which dep
+            // matches, which caps applied) lived only in the session's
+            // in-memory analysis results — "why did this item score 0.42" was
+            // unanswerable after a restart, which blocked precise attribution
+            // twice during the 2026-08-21/23 audits. One row per item, newest
+            // evaluation wins (source_item_id is the PRIMARY KEY; the writer
+            // upserts). `breakdown` is a bounded JSON envelope (see
+            // db/scoring_explanations.rs — hard-capped at 8 KB, truncation
+            // marked, never failing). Write-only additional data: scores are
+            // unchanged, so there is deliberately NO PIPELINE_VERSION bump.
+            // ON DELETE CASCADE (source_item_dependencies precedent) makes
+            // every prune path delete the explanation with the item.
+            if current_version < 115 {
+                Self::run_versioned_migration(
+                    &conn,
+                    114,
+                    115,
+                    "Phase 115: scoring_explanations table",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS scoring_explanations (
+                                source_item_id INTEGER PRIMARY KEY,
+                                pipeline_version INTEGER NOT NULL,
+                                breakdown TEXT NOT NULL,
+                                scored_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                FOREIGN KEY (source_item_id) REFERENCES source_items(id) ON DELETE CASCADE
+                            );",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 115: scoring_explanations created — per-item score breakdowns now persist (write-only lane; scores unchanged)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -6667,6 +6706,69 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM dependency_edges", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 3, "re-running the rebuild is a semantic no-op");
+    }
+
+    /// Phase 115 creates `scoring_explanations` — one bounded breakdown per
+    /// item (PRIMARY KEY = source_item_id, newest evaluation wins) with an
+    /// ON DELETE CASCADE back to source_items so pruned items leak nothing.
+    #[test]
+    fn test_phase_115_scoring_explanations_table() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
+            .unwrap();
+        assert!(version >= 115, "schema_version >= 115; got {version}");
+
+        // Exact column set the write/read lanes depend on.
+        let cols: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('scoring_explanations')
+                 WHERE name IN ('source_item_id', 'pipeline_version', 'breakdown', 'scored_at')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(cols, 4, "all four columns must exist");
+
+        // The retention mechanism IS the FK: verify it targets source_items
+        // with CASCADE, because every prune path relies on it.
+        let (fk_table, on_delete): (String, String) = conn
+            .query_row(
+                "SELECT \"table\", on_delete FROM pragma_foreign_key_list('scoring_explanations')",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(fk_table, "source_items");
+        assert_eq!(
+            on_delete, "CASCADE",
+            "pruned items must cascade-delete their explanation"
+        );
+
+        // Idempotency: winding back and re-running must not error, and rows
+        // written at v115 must survive the re-run (CREATE TABLE IF NOT EXISTS).
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding)
+                 VALUES ('hackernews', 'p115', 'phase 115 item', 'x', 'h115', x'00');
+             INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+                 VALUES (last_insert_rowid(), 1, '{\"score\":0.5,\"breakdown\":{}}');
+             UPDATE schema_version SET version = 114;",
+        )
+        .expect("seed a row and wind back to v114");
+        drop(conn);
+        db.migrate().expect("re-running phase 115");
+        let conn = db.conn.lock();
+        let survivors: i64 = conn
+            .query_row("SELECT COUNT(*) FROM scoring_explanations", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            survivors, 1,
+            "re-running the migration must not drop existing rows"
+        );
     }
 
     /// Phase 112 lifts TARGET_VERSION to 112 and adds `identity_ledger` — the

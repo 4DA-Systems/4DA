@@ -114,16 +114,31 @@ pub(crate) struct EvaluatedItem {
     /// Mirrors [`has_systemic_degradation`] at capture time, so the degraded
     /// guard applies to dropped items too without needing their full result.
     pub systemically_degraded: bool,
+    /// Bounded explanation envelope for the scoring_explanations lane
+    /// (schema 115), serialized at capture time from the full result's
+    /// `score_breakdown` — the persist boundary only sees this slim struct,
+    /// and the batch layer may have deleted the full result by then. `None`
+    /// for noise (evidence 0 never persists a score, so there is no durable
+    /// score to explain) or when the scorer produced no breakdown.
+    pub breakdown_json: Option<String>,
 }
 
 impl From<&SourceRelevance> for EvaluatedItem {
     fn from(r: &SourceRelevance) -> Self {
+        let breakdown_json = if r.evidence_score > 0.0 {
+            r.score_breakdown
+                .as_ref()
+                .and_then(|bd| crate::db::bounded_breakdown_json(r.evidence_score, bd))
+        } else {
+            None
+        };
         Self {
             id: r.id as i64,
             evidence_score: r.evidence_score,
             signal_type: r.signal_type.clone(),
             signal_priority: r.signal_priority.clone(),
             systemically_degraded: has_systemic_degradation(r),
+            breakdown_json,
         }
     }
 }
@@ -334,7 +349,7 @@ pub(crate) fn persist_cycle_results(
     // evidence is as current as any survivor's. Writing only survivors left the
     // rest carrying an older version stamp AND an older score, and the drain
     // re-selected them for ever.
-    let score_data: Vec<(i64, f32, Option<String>, Option<String>)> = evaluated
+    let score_data: Vec<crate::db::ScorePersistRow> = evaluated
         .iter()
         .filter(|e| e.evidence_score > 0.0 && persistable_id(e.id))
         .map(|e| {
@@ -343,6 +358,7 @@ pub(crate) fn persist_cycle_results(
                 e.evidence_score,
                 e.signal_type.clone(),
                 e.signal_priority.clone(),
+                e.breakdown_json.clone(),
             )
         })
         .collect();

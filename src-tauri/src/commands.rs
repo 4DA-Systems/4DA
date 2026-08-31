@@ -153,30 +153,25 @@ pub(crate) async fn mcp_score_autopsy(
         "Score autopsy requested"
     );
 
-    // Find the item in analysis results. These are typed Analysis errors
-    // (E5010: "try running the analysis again") — the previous bare-string
-    // errors fell through to the E9999 catch-all, whose remediation told the
-    // user to RESTART 4DA. Restarting is the one action guaranteed to not
-    // help: explanations live only in the current session's in-memory
-    // analysis (they are not persisted — see db/scoring_queries.rs), so a
-    // restart destroys exactly the state the autopsy needs.
+    // Prefer the live in-memory analysis (full session context: similar
+    // items, current ACE matching). When the session misses — a restart, or
+    // an item only a background cycle scored — fall back to the explanation
+    // persisted WITH the score (`scoring_explanations`, schema 115). Before
+    // schema 115 a session miss was a hard error and restarting destroyed
+    // exactly the state the autopsy needed (E5010, 2026-08-21/23 audits);
+    // now the durable lane answers "why" post-hoc, provenance-labeled.
     let state = get_analysis_state();
     let guard = state.lock();
-    let results = guard.results.as_ref().ok_or_else(|| {
-        crate::error::FourDaError::Analysis(
-            "No analysis results in memory — score explanations exist only for the \
-             current session's analysis and are not persisted. Run an analysis to \
-             rebuild them."
-                .into(),
-        )
-    })?;
-
-    let item = results.iter().find(|r| r.id == item_id).ok_or_else(|| {
-        crate::error::FourDaError::Analysis(format!(
-            "Item {item_id} was not part of the current session's analysis — run an \
-             analysis that includes it to rebuild its explanation."
-        ))
-    })?;
+    let live = guard.results.as_ref().and_then(|results| {
+        results
+            .iter()
+            .find(|r| r.id == item_id)
+            .map(|item| (item, results))
+    });
+    let Some((item, results)) = live else {
+        drop(guard);
+        return persisted_autopsy(item_id);
+    };
 
     // Get item metadata from DB
     let db = get_database()?;
@@ -191,67 +186,11 @@ pub(crate) async fn mcp_score_autopsy(
         .map(|i| i.created_at.to_rfc3339())
         .unwrap_or_default();
 
-    // Build component breakdown from ScoreBreakdown. These are the MEASURED
-    // axis values from the live scoring run — honest measurements, honestly
-    // labeled. The previous shape invented additive arithmetic ("weight":
-    // 0.5, "contribution": raw * 0.5) that matched no pipeline the app has
-    // ever run: PASIFA combines axes multiplicatively with gates, floors and
-    // ceilings, so per-axis additive "contributions" cannot be derived from
-    // the persisted breakdown at all. `contribution` now IS the measured
-    // axis value (delta from neutral for multipliers) — the UI bar renders
-    // "what this axis measured", and the narrative says explicitly that the
-    // axes do not sum to the final score.
-    let mut components = Vec::new();
-    if let Some(ref bd) = item.score_breakdown {
-        components.push(serde_json::json!({
-            "name": "Context Match",
-            "raw_value": bd.context_score,
-            "contribution": bd.context_score,
-            "explanation": if bd.context_score > 0.2 {
-                format!("Strong match with your project files ({:.0}% similarity)", bd.context_score * 100.0)
-            } else if bd.context_score > 0.05 {
-                format!("Weak match with project context ({:.0}%)", bd.context_score * 100.0)
-            } else {
-                "No significant match with indexed project files".to_string()
-            }
-        }));
-
-        components.push(serde_json::json!({
-            "name": "Interest Match",
-            "raw_value": bd.interest_score,
-            "contribution": bd.interest_score,
-            "explanation": if bd.interest_score > 0.3 {
-                format!("Closely matches your declared interests ({:.0}%)", bd.interest_score * 100.0)
-            } else if bd.interest_score > 0.1 {
-                format!("Partial interest match ({:.0}%)", bd.interest_score * 100.0)
-            } else {
-                "Low alignment with declared interests".to_string()
-            }
-        }));
-
-        if bd.ace_boost > 0.01 {
-            components.push(serde_json::json!({
-                "name": "ACE Semantic Boost",
-                "raw_value": bd.ace_boost,
-                "contribution": bd.ace_boost,
-                "explanation": format!("Boosted by ACE context engine topics/tech (+{:.0}%)", bd.ace_boost * 100.0)
-            }));
-        }
-
-        if (bd.freshness_mult - 1.0).abs() > 0.01 {
-            let label = if bd.freshness_mult > 1.0 {
-                "Freshness bonus"
-            } else {
-                "Staleness decay"
-            };
-            components.push(serde_json::json!({
-                "name": "Temporal Freshness",
-                "raw_value": bd.freshness_mult,
-                "contribution": bd.freshness_mult - 1.0,
-                "explanation": format!("{}: item is {:.0}h old (x{:.2})", label, age_hours, bd.freshness_mult)
-            }));
-        }
-    }
+    let components = item
+        .score_breakdown
+        .as_ref()
+        .map(|bd| breakdown_components(bd, age_hours))
+        .unwrap_or_default();
 
     // Build matching context from ACE
     let ace_ctx = scoring::get_ace_context();
@@ -383,7 +322,191 @@ pub(crate) async fn mcp_score_autopsy(
         },
         "similar_items": similar_items,
         "recommendations": recommendations,
-        "narrative": narrative
+        "narrative": narrative,
+        "provenance": {
+            "kind": "live_session",
+            "label": "live from the current session's analysis"
+        }
+    }))
+}
+
+/// Measured-axis component rows shared by the live and persisted autopsy
+/// paths. These are the MEASURED axis values from the scoring run — honest
+/// measurements, honestly labeled. The pre-2026-08 shape invented additive
+/// arithmetic ("weight": 0.5, "contribution": raw * 0.5) that matched no
+/// pipeline the app has ever run: PASIFA combines axes multiplicatively with
+/// gates, floors and ceilings, so per-axis additive "contributions" cannot be
+/// derived from the breakdown at all. `contribution` IS the measured axis
+/// value (delta from neutral for multipliers) — the UI bar renders "what this
+/// axis measured", and the narrative says explicitly that the axes do not sum
+/// to the final score.
+fn breakdown_components(
+    bd: &crate::types::ScoreBreakdown,
+    age_hours: f64,
+) -> Vec<serde_json::Value> {
+    let mut components = Vec::new();
+    components.push(serde_json::json!({
+        "name": "Context Match",
+        "raw_value": bd.context_score,
+        "contribution": bd.context_score,
+        "explanation": if bd.context_score > 0.2 {
+            format!("Strong match with your project files ({:.0}% similarity)", bd.context_score * 100.0)
+        } else if bd.context_score > 0.05 {
+            format!("Weak match with project context ({:.0}%)", bd.context_score * 100.0)
+        } else {
+            "No significant match with indexed project files".to_string()
+        }
+    }));
+
+    components.push(serde_json::json!({
+        "name": "Interest Match",
+        "raw_value": bd.interest_score,
+        "contribution": bd.interest_score,
+        "explanation": if bd.interest_score > 0.3 {
+            format!("Closely matches your declared interests ({:.0}%)", bd.interest_score * 100.0)
+        } else if bd.interest_score > 0.1 {
+            format!("Partial interest match ({:.0}%)", bd.interest_score * 100.0)
+        } else {
+            "Low alignment with declared interests".to_string()
+        }
+    }));
+
+    if bd.ace_boost > 0.01 {
+        components.push(serde_json::json!({
+            "name": "ACE Semantic Boost",
+            "raw_value": bd.ace_boost,
+            "contribution": bd.ace_boost,
+            "explanation": format!("Boosted by ACE context engine topics/tech (+{:.0}%)", bd.ace_boost * 100.0)
+        }));
+    }
+
+    if (bd.freshness_mult - 1.0).abs() > 0.01 {
+        let label = if bd.freshness_mult > 1.0 {
+            "Freshness bonus"
+        } else {
+            "Staleness decay"
+        };
+        components.push(serde_json::json!({
+            "name": "Temporal Freshness",
+            "raw_value": bd.freshness_mult,
+            "contribution": bd.freshness_mult - 1.0,
+            "explanation": format!("{}: item is {:.0}h old (x{:.2})", label, age_hours, bd.freshness_mult)
+        }));
+    }
+    components
+}
+
+/// Autopsy from the durable explanation lane (schema 115): the breakdown the
+/// scorer persisted WITH the score, provenance-labeled so the reader knows it
+/// reflects the state of the world at scoring time, not the current session.
+/// The session-time extras (similar items, live ACE matching) are honestly
+/// absent rather than re-derived against today's context.
+fn persisted_autopsy(item_id: u64) -> Result<serde_json::Value> {
+    let db = get_database()?;
+    let expl = db
+        .get_scoring_explanation(item_id as i64)
+        .ok()
+        .flatten()
+        .ok_or_else(|| {
+            crate::error::FourDaError::Analysis(format!(
+                "Item {item_id} is not in the current session's analysis and has no \
+                 persisted explanation (explanations persist with every score write \
+                 since schema 115 — this item has not been scored since then, or was \
+                 pruned). Run an analysis that includes it to build one."
+            ))
+        })?;
+
+    let envelope: serde_json::Value = serde_json::from_str(&expl.breakdown_json).map_err(|e| {
+        crate::error::FourDaError::Analysis(format!(
+            "Persisted explanation for item {item_id} is unreadable: {e}"
+        ))
+    })?;
+    let final_score = envelope
+        .get("score")
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or(0.0);
+    // Typed parse of the persisted breakdown. The size bound truncates arrays
+    // homogeneously, so this normally succeeds; on failure the raw JSON is
+    // still returned below — degraded, never silent.
+    let bd: Option<crate::types::ScoreBreakdown> = envelope
+        .get("breakdown")
+        .cloned()
+        .and_then(|v| serde_json::from_value(v).ok());
+
+    let db_item = db.get_source_item_by_id(item_id as i64).ok().flatten();
+    let age_hours = db_item.as_ref().map_or(0.0, |i| {
+        (chrono::Utc::now() - i.created_at).num_minutes() as f64 / 60.0
+    });
+    let components = bd
+        .as_ref()
+        .map(|b| breakdown_components(b, age_hours))
+        .unwrap_or_default();
+
+    let mut recommendations = Vec::new();
+    if let Some(b) = bd.as_ref() {
+        if b.context_score < 0.1 {
+            recommendations.push(
+                "Index more project files to improve context matching. Add directories in \
+                 Settings > Context."
+                    .to_string(),
+            );
+        }
+        if b.interest_score < 0.1 {
+            recommendations.push(
+                "Add more interests in Settings > Interests to improve matching for this \
+                 topic area."
+                    .to_string(),
+            );
+        }
+    }
+
+    let provenance_label = format!(
+        "persisted at scoring time ({} UTC, pipeline v{})",
+        expl.scored_at, expl.pipeline_version
+    );
+    let narrative = format!(
+        "This item scored {:.0}% when the scoring pipeline last evaluated it \
+         ({provenance_label}). The breakdown below is the durable record written with \
+         that score — it reflects your context, interests and dependencies as of that \
+         run, not the current session. The components shown are the measured scoring \
+         axes; the final score combines them multiplicatively with gates and ceilings, \
+         so they do not add up to the total.",
+        final_score * 100.0
+    );
+
+    Ok(serde_json::json!({
+        "item": {
+            "id": item_id,
+            "title": db_item.as_ref().map(|i| i.title.clone()).unwrap_or_default(),
+            "url": db_item.as_ref().and_then(|i| i.url.clone()),
+            "source_type": db_item.as_ref().map(|i| i.source_type.clone()).unwrap_or_default(),
+            "created_at": db_item.as_ref().map(|i| i.created_at.to_rfc3339()).unwrap_or_default(),
+            "age_hours": age_hours
+        },
+        "final_score": final_score,
+        "components": components,
+        "matching_context": {
+            // Session-time ACE matching is not replayed here: the durable
+            // lane records what the SCORER measured; re-matching against
+            // today's context would mislabel its provenance.
+            "interests": [],
+            "tech_stack": [],
+            "active_topics": [],
+            "matched_deps": bd.as_ref().map(|b| b.matched_deps.clone()).unwrap_or_default(),
+            "confirmed_signals": bd.as_ref().map(|b| b.confirmed_signals.clone()).unwrap_or_default(),
+            "exclusions_hit": []
+        },
+        "similar_items": [],
+        "recommendations": recommendations,
+        "narrative": narrative,
+        "provenance": {
+            "kind": "persisted",
+            "label": provenance_label,
+            "pipeline_version": expl.pipeline_version,
+            "scored_at": expl.scored_at,
+            "truncated": envelope.get("truncated").cloned().unwrap_or(serde_json::Value::Null)
+        },
+        "raw_breakdown": envelope.get("breakdown").cloned().unwrap_or(serde_json::Value::Null)
     }))
 }
 
