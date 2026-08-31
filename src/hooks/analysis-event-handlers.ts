@@ -6,6 +6,7 @@ import type { SourceRelevance, AnalysisProgress } from '../types';
 import { getSourceLabel } from '../config/sources';
 import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
+import { normalizeUrlForDedup } from '../utils/normalize-url';
 import { extractNearMisses, scrollToAndHighlightItem } from './analysis-utils';
 import type { NarrationEvent } from './analysis-utils';
 
@@ -191,7 +192,21 @@ export function createBackgroundResultsHandler(
     const relevantNew = newItems.filter((r) => r.relevant).length;
     useAppStore.getState().setAppStateFull((s) => {
       const existingIds = new Set(newItems.map((n) => n.id));
-      const kept = s.relevanceResults.filter((r) => !existingIds.has(r.id));
+      // Cross-cycle URL dedup (live audit 2026-08-31): the same story
+      // re-fetched under a different source_items id (HN + Lobsters, or a
+      // second HN row) merged past the id check and stacked up as duplicate
+      // rows across background cycles. A fresher scoring of the same URL
+      // replaces the stale row instead of sitting beside it.
+      const incomingUrls = new Set<string>();
+      for (const n of newItems) {
+        const key = normalizeUrlForDedup(n.url);
+        if (key) incomingUrls.add(key);
+      }
+      const kept = s.relevanceResults.filter((r) => {
+        if (existingIds.has(r.id)) return false;
+        const key = normalizeUrlForDedup(r.url);
+        return !(key && incomingUrls.has(key));
+      });
       const merged = [...kept, ...newItems].sort((a, b) => b.top_score - a.top_score);
       return {
         ...s,
@@ -307,7 +322,20 @@ export function handlePartialResults(event: Event<SourceRelevance[]>): void {
   const state = useAppStore.getState();
   if (state.appState.analysisComplete) return;
   const existingIds = new Set(state.appState.relevanceResults.map(r => r.id));
-  const newItems = event.payload.filter(r => !existingIds.has(r.id));
+  // URL guard mirrors createBackgroundResultsHandler: a same-URL row under a
+  // different item id must not sit beside the copy already on screen. Here
+  // the existing row wins — the partial set is transient and the completion
+  // event replaces the whole corpus anyway.
+  const existingUrls = new Set<string>();
+  for (const r of state.appState.relevanceResults) {
+    const key = normalizeUrlForDedup(r.url);
+    if (key) existingUrls.add(key);
+  }
+  const newItems = event.payload.filter(r => {
+    if (existingIds.has(r.id)) return false;
+    const key = normalizeUrlForDedup(r.url);
+    return !(key && existingUrls.has(key));
+  });
   if (newItems.length === 0) return;
   const merged = [...state.appState.relevanceResults, ...newItems]
     .sort((a, b) => b.top_score - a.top_score);

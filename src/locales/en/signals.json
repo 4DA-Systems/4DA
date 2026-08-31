@@ -14,6 +14,7 @@
   "action.breakingMigration": "Check migration path - {{tech}} breaking change",
   "action.breakingReview": "Review breaking change: {{title}}",
   "action.toolEvaluateGrounded": "New tool in your orbit — connects to your {{tech}} stack",
+  "action.toolEvaluateGroundedNoName": "New tool in your orbit — connects to your stack",
   "action.toolEvaluateUngrounded": "New tool spotted — no confirmed link to your stack",
   "action.trendStack": "Emerging trend: {{tech}} gaining traction — {{title}}",
   "action.trendGeneral": "Emerging trend: {{title}}",
