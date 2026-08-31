@@ -29,7 +29,7 @@
     {
       "command": "calculate_electricity_cost",
       "retired_on": "2026-08-31",
-      "pr": "PENDING",
+      "pr": "#567",
       "how": "deleted"
     },
     {
@@ -47,37 +47,37 @@
     {
       "command": "format_currency",
       "retired_on": "2026-08-31",
-      "pr": "PENDING",
+      "pr": "#567",
       "how": "deleted"
     },
     {
       "command": "generate_sovereign_stack_document",
       "retired_on": "2026-08-31",
-      "pr": "PENDING",
+      "pr": "#567",
       "how": "deleted"
     },
     {
       "command": "get_execution_log",
       "retired_on": "2026-08-31",
-      "pr": "PENDING",
+      "pr": "#567",
       "how": "deleted"
     },
     {
       "command": "get_regional_data",
       "retired_on": "2026-08-31",
-      "pr": "PENDING",
+      "pr": "#567",
       "how": "deleted"
     },
     {
       "command": "get_sovereign_profile",
       "retired_on": "2026-08-31",
-      "pr": "PENDING",
+      "pr": "#567",
       "how": "deleted"
     },
     {
       "command": "get_sovereign_profile_completeness",
       "retired_on": "2026-08-31",
-      "pr": "PENDING",
+      "pr": "#567",
       "how": "deleted"
     },
     {
@@ -101,7 +101,7 @@
     {
       "command": "save_sovereign_fact",
       "retired_on": "2026-08-31",
-      "pr": "PENDING",
+      "pr": "#567",
       "how": "deleted"
     }
   ],
