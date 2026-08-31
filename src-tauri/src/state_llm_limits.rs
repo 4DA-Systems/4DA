@@ -133,6 +133,35 @@ pub(crate) fn seed_llm_daily_usage(tokens: u64, cost_millicents: u64) {
     );
 }
 
+/// Preflight cost wall (2026-08-31 audit): `true` when spending
+/// `estimated_millicents` MORE would cross the daily cost cap.
+///
+/// [`is_llm_limit_reached`] only answers "are we already over?" — so the call
+/// that crossed the line always went through, and the live `sun_alerts` table
+/// recorded crossings up to **106% of the daily limit**. The cap has to be a
+/// wall, not a tripwire behind the door: callers estimate the next call from
+/// its input size and per-model rates BEFORE sending, and skip when the
+/// estimate would cross 100%.
+///
+/// `estimated_millicents == 0` (unknown model, or a zero-rate local model)
+/// never blocks — an estimate the registry cannot price is exactly the
+/// pre-existing behavior, and refusing calls on fabricated numbers would
+/// violate accurate-first. Limit `0` means unlimited, as everywhere else.
+pub(crate) fn would_exceed_llm_cost_limit(estimated_millicents: u64) -> bool {
+    if estimated_millicents == 0 {
+        return false;
+    }
+    maybe_reset_daily_counter();
+    let limit_millicents = get_llm_daily_cost_limit().saturating_mul(1000);
+    if limit_millicents == 0 {
+        return false;
+    }
+    LLM_DAILY_COST_MILLICENTS
+        .load(Ordering::Relaxed)
+        .saturating_add(estimated_millicents)
+        > limit_millicents
+}
+
 /// Check if either the daily token limit or cost limit has been reached (pre-call gate).
 /// Returns `true` if we are over any limit.
 pub(crate) fn is_llm_limit_reached() -> bool {
@@ -373,5 +402,35 @@ mod tests {
         // (depends on settings default being > 0, which it is: 500_000)
         assert!(!is_llm_limit_reached());
         LLM_DAILY_TOKENS.store(0, Ordering::Relaxed);
+    }
+
+    /// The preflight wall stops the call that WOULD cross the cap — the exact
+    /// call the post-hoc ledger let through at 106% in the 2026-08-31 audit.
+    #[test]
+    fn test_preflight_wall_blocks_the_crossing_call() {
+        let _guard = LLM_TEST_LOCK.lock().unwrap();
+        *LLM_DAILY_RESET_DATE.lock() = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let limit_millicents = get_llm_daily_cost_limit().saturating_mul(1000);
+        assert!(
+            limit_millicents > 0,
+            "test assumes the default settings carry a nonzero cost cap"
+        );
+
+        // 1 millicent of headroom left: a 2-millicent call must be refused,
+        // a 1-millicent call must pass (it lands exactly ON the cap).
+        LLM_DAILY_COST_MILLICENTS.store(limit_millicents - 1, Ordering::Relaxed);
+        assert!(would_exceed_llm_cost_limit(2));
+        assert!(!would_exceed_llm_cost_limit(1));
+
+        // Plenty of headroom: nothing blocks.
+        LLM_DAILY_COST_MILLICENTS.store(0, Ordering::Relaxed);
+        assert!(!would_exceed_llm_cost_limit(limit_millicents));
+        assert!(would_exceed_llm_cost_limit(limit_millicents + 1));
+
+        // Unknown-model estimate (0) never blocks, even with the budget gone.
+        LLM_DAILY_COST_MILLICENTS.store(limit_millicents, Ordering::Relaxed);
+        assert!(!would_exceed_llm_cost_limit(0));
+
+        LLM_DAILY_COST_MILLICENTS.store(0, Ordering::Relaxed);
     }
 }

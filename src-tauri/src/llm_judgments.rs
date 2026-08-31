@@ -115,7 +115,9 @@ struct JudgmentResponse {
 /// v1; this brings the ingest judge to the same standard. A non-numeric
 /// string or any other type is `None` (treated as omitted), never an error —
 /// one malformed field must not discard the other nine items in the batch.
-fn de_f64_lenient<'de, D>(d: D) -> std::result::Result<Option<f64>, D::Error>
+/// `pub(crate)`: the pending-verdict drain (`llm_judge::drain`) judges on the
+/// same cheap sibling model, so its parser shares these instead of forking.
+pub(crate) fn de_f64_lenient<'de, D>(d: D) -> std::result::Result<Option<f64>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -130,7 +132,7 @@ where
 /// Accept a JSON integer OR a numeric string for an id field. Same live
 /// failure as [`de_f64_lenient`]; ids that parse to nothing are `None` and
 /// the element is dropped by the caller (nothing to attach the judgment to).
-fn de_i64_lenient<'de, D>(d: D) -> std::result::Result<Option<i64>, D::Error>
+pub(crate) fn de_i64_lenient<'de, D>(d: D) -> std::result::Result<Option<i64>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -140,6 +142,19 @@ where
         Some(serde_json::Value::String(s)) => s.trim().parse::<i64>().ok(),
         _ => None,
     })
+}
+
+/// How many selection slots the fresh judge lane cedes to the pending-verdict
+/// drain this cycle: the backlog size, capped at the drain's own slice
+/// (`llm_judge::drain::DRAIN_SLICE` = 20% of the 40-item selection). Pure so
+/// the carve-out is unit-testable.
+pub(crate) fn drain_reserve(pending_backlog: i64) -> usize {
+    if pending_backlog <= 0 {
+        return 0;
+    }
+    usize::try_from(pending_backlog)
+        .unwrap_or(usize::MAX)
+        .min(crate::llm_judge::drain::DRAIN_SLICE)
 }
 
 /// Evaluate a batch of source items and store judgments.
@@ -258,8 +273,14 @@ async fn evaluate_with_provider(db: &Database, provider: LLMProvider) -> Result<
         analyses_stored: 0,
     };
 
+    // Reserve the drain's slice (2026-08-31 audit): when aged deferred flips
+    // are waiting in `feed_verdict_pending`, the fresh lane cedes up to
+    // `DRAIN_SLICE` (20%) of its selection so the post-cycle drain's
+    // re-judgments ride INSIDE the same per-cycle envelope instead of on top
+    // of it. No backlog → the fresh lane keeps its full selection.
+    let reserve = drain_reserve(db.count_pending_verdicts().unwrap_or(0));
     let unjudged = db
-        .get_unjudged_item_ids(INGESTION_THRESHOLD, BATCH_SIZE * 4)
+        .get_unjudged_item_ids(INGESTION_THRESHOLD, BATCH_SIZE * 4 - reserve)
         .map_err(|e| {
             crate::error::FourDaError::Internal(format!("Failed to get unjudged items: {e}"))
         })?;
