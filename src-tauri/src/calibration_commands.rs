@@ -107,8 +107,9 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
 
     let db = crate::get_database()?;
 
-    // Build the user's actual scoring context
-    let ctx = crate::scoring::build_scoring_context(db)
+    // Build the user's actual scoring context (deliberately unbounded — a
+    // calibration run tolerates a slow cold build; elapsed_ms is still logged)
+    let ctx = crate::scoring::build_scoring_context_tagged(db, "run_calibration")
         .await
         .context("Context build failed")?;
 
