@@ -8,8 +8,28 @@ import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFee
 import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceItem';
 import {
   type DepRow, type DepStatus, URGENCY_ORDER,
-  depFromItem, signalMatchesDep,
+  barePackageName, depFromItem, signalMatchesDep,
 } from '../components/blindspots/types';
+import { normalizeUrlForDedup } from '../utils/normalize-url';
+
+/**
+ * One story, one slot: collapse missed signals that point at the same URL.
+ * The backend dedups by title similarity, but the same story fetched via two
+ * sources (mastodon toot + HN submission of the same safedep.io post) carries
+ * different titles over one URL — live audit 2026-08-31, the arrayref story
+ * held 6 of 24 Emerging slots, the same URL twice among them. The list
+ * arrives backend-ranked, so the first (highest-ranked) copy survives.
+ */
+function dedupSignalsByUrl(signals: EvidenceItem[]): EvidenceItem[] {
+  const seen = new Set<string>();
+  return signals.filter(signal => {
+    const key = normalizeUrlForDedup(signal.evidence[0]?.url);
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 export interface BlindSpotsData {
   depRows: DepRow[];
@@ -29,7 +49,9 @@ export function useBlindSpotsData(
     const items = (report?.items ?? []).filter(it => !dismissed.has(it.id));
 
     const gaps = items.filter(it => it.id.startsWith('bs_uncov_') || it.id.startsWith('bs_stale_'));
-    const missed = items.filter(it => it.id.startsWith('bs_missed_') || it.id.startsWith('llm-bs-'));
+    const missed = dedupSignalsByUrl(
+      items.filter(it => it.id.startsWith('bs_missed_') || it.id.startsWith('llm-bs-')),
+    );
     const recs = items.filter(it => it.id.startsWith('bs_rec_'));
 
     const depMap = new Map<string, DepRow>();
@@ -62,14 +84,31 @@ export function useBlindSpotsData(
       if (matchedSignalIds.has(signal.id)) continue;
       const dep = depFromItem(signal);
       if (!dep) continue;
-      const key = dep.toLowerCase();
-      if (!depMap.has(key)) {
-        depMap.set(key, {
+      // Key by BARE package name so a signal carrying "react" lands on the
+      // existing "react (npm)" row instead of minting a second, bare row
+      // beside it (live audit 2026-08-31: "react" with "3 signals", no
+      // ecosystem, no project, rendered next to "react (npm)"). The
+      // signalMatchesDep pass above already absorbs most of these; this keeps
+      // the row-creation lane from resurrecting the shadow for any that slip
+      // through (e.g. a dep name that never appears in the signal title).
+      const key = barePackageName(dep).toLowerCase();
+      let row = depMap.get(key) ?? null;
+      if (!row) {
+        for (const existing of depMap.values()) {
+          if (barePackageName(existing.name).toLowerCase() === key) {
+            row = existing;
+            break;
+          }
+        }
+      }
+      if (!row) {
+        row = {
           name: dep, status: 'falling_behind', urgency: signal.urgency,
           gap: null, signals: [], projects: [],
-        });
+        };
+        depMap.set(key, row);
       }
-      depMap.get(key)!.signals.push(signal);
+      row.signals.push(signal);
       matchedSignalIds.add(signal.id);
     }
 
