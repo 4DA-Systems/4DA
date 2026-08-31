@@ -2,6 +2,7 @@
 import { useMemo, useCallback, useEffect } from 'react';
 import { useAppStore } from '../store';
 import { isProfileEmpty } from '../utils/profile-empty';
+import { normalizeUrlForDedup } from '../utils/normalize-url';
 import type { SourceRelevance } from '../types';
 
 /** Run promise-returning tasks with bounded concurrency (prevents IPC queue saturation) */
@@ -23,22 +24,6 @@ async function pLimit<T>(tasks: (() => Promise<T>)[], concurrency: number): Prom
   const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => runNext());
   await Promise.all(workers);
   return results;
-}
-
-/** Normalize URL for dedup: strip protocol, www, trailing slash, query params */
-function normalizeUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    let u = url.toLowerCase().trim();
-    u = u.replace(/^https?:\/\//, '').replace(/^www\./, '');
-    // Remove query params and fragment
-    u = u.split('?')[0]!.split('#')[0]!;
-    // Remove trailing slash
-    u = u.replace(/\/+$/, '');
-    return u;
-  } catch {
-    return url;
-  }
 }
 
 /** Cap on sibling titles carried by an advisory stack's representative. */
@@ -157,12 +142,16 @@ export const useResultFilters = () => {
       return true;
     });
 
-    // Step 2: Cross-source deduplication by normalized URL
+    // Step 2: Cross-source deduplication by normalized URL. Uses the shared
+    // canonical identity (normalizeUrlForDedup, #557): the older local
+    // normalizer here stripped ALL query params, so two distinct YouTube
+    // videos (`?v=` IS the page identity) collapsed to one feed row — the
+    // same defect class the backend fixed in `normalize_result_url`.
     const urlGroups = new Map<string, typeof filtered>();
     const noUrl: typeof filtered = [];
 
     for (const item of filtered) {
-      const normalized = normalizeUrl(item.url);
+      const normalized = normalizeUrlForDedup(item.url);
       if (normalized) {
         const group = urlGroups.get(normalized);
         if (group) {

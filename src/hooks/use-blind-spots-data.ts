@@ -113,7 +113,15 @@ export function useBlindSpotsData(
     }
 
     for (const row of depMap.values()) {
-      if (row.gap && (row.gap.urgency === 'critical' || row.gap.urgency === 'high')) {
+      // Zero-coverage first (2026-08-31 audit): a gap the backend classified
+      // as "zero available signals" has NO unreviewed activity — it must not
+      // inflate the "Drifting / unreviewed activity" tier (20+ of its rows
+      // literally said "Sources were checked but found no results"). If the
+      // frontend lane DID match visible missed signals to it, there is
+      // activity after all, so the normal tiers apply.
+      if (row.gap?.lens_hints.no_coverage === true && row.signals.length === 0) {
+        row.status = 'no_coverage';
+      } else if (row.gap && (row.gap.urgency === 'critical' || row.gap.urgency === 'high')) {
         row.status = 'blind_spot';
       } else if (row.gap || row.signals.length >= 3) {
         row.status = row.signals.length > 0 ? 'blind_spot' : 'falling_behind';
@@ -125,7 +133,7 @@ export function useBlindSpotsData(
       row.signals.sort((a, b) => URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]);
     }
 
-    const statusOrder: Record<DepStatus, number> = { blind_spot: 0, falling_behind: 1, well_covered: 2 };
+    const statusOrder: Record<DepStatus, number> = { blind_spot: 0, falling_behind: 1, no_coverage: 2, well_covered: 3 };
     const rows = Array.from(depMap.values()).sort((a, b) =>
       statusOrder[a.status] - statusOrder[b.status]
       || URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]

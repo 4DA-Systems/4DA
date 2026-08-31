@@ -518,4 +518,124 @@ mod tests {
         );
         assert_eq!(items.len(), 2);
     }
+
+    // ========================================================================
+    // Differential merge dedup (2026-08-31 live audit / #557 follow-up)
+    //
+    // The differential merge used to run NO dedup — merge by ID only — so the
+    // same story re-fetched under a new source_items id (HN + Lobsters, or a
+    // second HN row of one URL) stacked up across cycles: one URL rendered as
+    // THREE consecutive Key Signals rows. `merge_differential_results` now
+    // runs the canonical `scoring::dedup_results` (URL identity via
+    // `normalize_result_url` + exact-title identity) at the merge point.
+    // ========================================================================
+
+    /// SourceRelevance fixture with a URL — serde defaults fill the rest.
+    fn make_with_url(
+        id: u64,
+        title: &str,
+        url: Option<&str>,
+        top_score: f32,
+    ) -> crate::types::SourceRelevance {
+        serde_json::from_value(serde_json::json!({
+            "id": id,
+            "title": title,
+            "url": url,
+            "top_score": top_score,
+            "matches": [],
+            "relevant": true,
+            "evidence_score": top_score,
+        }))
+        .expect("construct SourceRelevance")
+    }
+
+    #[test]
+    fn differential_merge_collapses_same_url_across_prev_and_new() {
+        // The live-audit shape: the previous cycle carried the story once
+        // (HN id 1); this cycle scored the SAME URL again under two brand-new
+        // ids (a Lobsters copy and a second HN row) with tracking-param and
+        // www/protocol variance that the old ID-only merge could never see.
+        let url = "https://blog.wybxc.cc/blog/rust-gui-survey-2026/";
+        let prev = vec![
+            make_with_url(1, "Rust GUI survey 2026", Some(url), 0.80),
+            make_with_url(
+                2,
+                "Unrelated story",
+                Some("https://example.com/other"),
+                0.60,
+            ),
+        ];
+        let new_results = vec![
+            make_with_url(
+                3,
+                "Rust GUI survey 2026 (Lobsters)",
+                Some("http://www.blog.wybxc.cc/blog/rust-gui-survey-2026?utm_source=lobsters"),
+                0.75,
+            ),
+            make_with_url(
+                4,
+                "The 2026 Rust GUI survey",
+                Some("https://blog.wybxc.cc/blog/rust-gui-survey-2026/#results"),
+                0.70,
+            ),
+        ];
+        let scored_ids: std::collections::HashSet<u64> = new_results.iter().map(|r| r.id).collect();
+
+        let (full_display, merged) =
+            crate::analysis::merge_differential_results(Some(prev), new_results, &scored_ids);
+
+        assert!(full_display, "a merge base was present");
+        let survivors_for_url: Vec<u64> = merged
+            .iter()
+            .filter(|r| r.url.as_deref().is_some_and(|u| u.contains("wybxc")))
+            .map(|r| r.id)
+            .collect();
+        assert_eq!(
+            survivors_for_url.len(),
+            1,
+            "one story, one row — got ids {survivors_for_url:?}"
+        );
+        // Equal grounding (none) everywhere → the highest score survives.
+        assert_eq!(survivors_for_url[0], 1, "highest-scoring copy survives");
+        assert!(
+            merged.iter().any(|r| r.id == 2),
+            "the distinct-URL story is untouched"
+        );
+    }
+
+    #[test]
+    fn differential_merge_still_replaces_rescored_ids() {
+        // Pin the pre-existing contract: a row this run re-scored replaces the
+        // stale copy by ID (never duplicates it), and no merge base means the
+        // set is flagged partial.
+        let prev = vec![make_with_url(
+            7,
+            "Story",
+            Some("https://example.com/a"),
+            0.30,
+        )];
+        let new_results = vec![make_with_url(
+            7,
+            "Story",
+            Some("https://example.com/a"),
+            0.90,
+        )];
+        let scored_ids: std::collections::HashSet<u64> = [7].into();
+
+        let (_, merged) = crate::analysis::merge_differential_results(
+            Some(prev),
+            new_results.clone(),
+            &scored_ids,
+        );
+        assert_eq!(merged.len(), 1);
+        assert!(
+            (merged[0].top_score - 0.90).abs() < 1e-6,
+            "the fresh scoring wins over the stale carried copy"
+        );
+
+        let (full_display, cold) =
+            crate::analysis::merge_differential_results(None, new_results, &scored_ids);
+        assert!(!full_display, "no merge base → partial set");
+        assert_eq!(cold.len(), 1);
+    }
 }

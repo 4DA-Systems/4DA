@@ -225,6 +225,52 @@ describe('useResultFilters', () => {
       const { result } = renderHook(() => useResultFilters());
       expect(result.current.filteredResults).toHaveLength(2);
     });
+
+    // ── Shared canonical normalizer (#557 follow-up) ──────────────────────
+    // The old local normalizer stripped ALL query params, so two DISTINCT
+    // YouTube videos (`?v=` IS the identity of the page) collapsed into one
+    // feed row. The shared normalizeUrlForDedup preserves content-bearing
+    // params and strips only tracking params.
+
+    it('never collapses two distinct YouTube videos (content params preserved)', () => {
+      setMockStoreState({
+        appState: {
+          relevanceResults: [
+            makeItem(1, { url: 'https://www.youtube.com/watch?v=aaaaaaaaaaa', top_score: 0.8 }),
+            makeItem(2, { url: 'https://www.youtube.com/watch?v=bbbbbbbbbbb', top_score: 0.6 }),
+          ],
+        },
+      });
+      const { result } = renderHook(() => useResultFilters());
+      expect(result.current.filteredResults).toHaveLength(2);
+    });
+
+    it('still collapses the same URL differing only by tracking params and fragment', () => {
+      setMockStoreState({
+        appState: {
+          relevanceResults: [
+            makeItem(1, { url: 'https://example.com/post?utm_source=hn&ref=feed#comments', top_score: 0.6, source_type: 'hackernews' }),
+            makeItem(2, { url: 'http://www.example.com/post/', top_score: 0.8, source_type: 'reddit' }),
+          ],
+        },
+      });
+      const { result } = renderHook(() => useResultFilters());
+      expect(result.current.filteredResults).toHaveLength(1);
+      expect(result.current.filteredResults[0]!.top_score).toBe(0.8);
+    });
+
+    it('collapses the same video regardless of query-param order', () => {
+      setMockStoreState({
+        appState: {
+          relevanceResults: [
+            makeItem(1, { url: 'https://youtube.com/watch?v=aaaaaaaaaaa&t=10', top_score: 0.8 }),
+            makeItem(2, { url: 'https://youtube.com/watch?t=10&v=aaaaaaaaaaa&si=share123', top_score: 0.6 }),
+          ],
+        },
+      });
+      const { result } = renderHook(() => useResultFilters());
+      expect(result.current.filteredResults).toHaveLength(1);
+    });
   });
 
   describe('sorting', () => {

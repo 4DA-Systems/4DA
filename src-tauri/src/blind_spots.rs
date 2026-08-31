@@ -2151,19 +2151,37 @@ fn build_negative_stack_from_deps(
     ))
 }
 
-/// Remove near-duplicate missed signals using Jaccard word overlap.
+/// Remove near-duplicate missed signals by URL identity and Jaccard word overlap.
 ///
-/// Normalizes each title (lowercase, strip punctuation, split words) and
-/// skips any signal whose normalized title has >65% word overlap with
-/// an already-accepted signal. This catches cross-posts and rephrased
-/// duplicates (e.g. "CVE-2025-1234 in OpenSSL" vs "OpenSSL CVE-2025-1234").
+/// Pass 1 (URL identity): the same story fetched via two sources (a mastodon
+/// toot + an HN submission of the same safedep.io post) carries different
+/// titles over ONE URL, which title similarity can never catch — live audit
+/// 2026-08-31, the arrayref story held 6 of 24 Emerging slots. Uses the
+/// canonical `scoring::normalize_result_url` identity (tracking params
+/// stripped, content-bearing query params preserved), same as the feed dedup.
+///
+/// Pass 2 (title Jaccard): normalizes each title (lowercase, strip
+/// punctuation, split words) and skips any signal whose normalized title has
+/// >65% word overlap with an already-accepted signal. This catches
+/// cross-posts and rephrased duplicates (e.g. "CVE-2025-1234 in OpenSSL" vs
+/// "OpenSSL CVE-2025-1234").
 fn dedup_missed_signals(signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
     use std::collections::HashSet;
 
+    let mut seen_urls: HashSet<String> = HashSet::new();
     let mut seen_titles: Vec<HashSet<String>> = Vec::new();
     let mut deduped = Vec::new();
 
     for signal in signals {
+        // URL-identity pass: the list arrives ranked, so the first
+        // (highest-ranked) copy of a URL survives.
+        if let Some(url) = signal.url.as_deref() {
+            let normalized_url = crate::scoring::normalize_result_url(url);
+            if !normalized_url.is_empty() && !seen_urls.insert(normalized_url) {
+                continue;
+            }
+        }
+
         let normalized: HashSet<String> = signal
             .title
             .to_lowercase()
@@ -2946,6 +2964,11 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
             // Watch above; this drives the grouping. `platform_active` defaults
             // true, so this is `false` for normal deps.
             other_build_target: !d.platform_active,
+            // 2026-08-31 live audit: zero available signals is NOT "unreviewed
+            // activity" — carry the classification (already computed for the
+            // title/explanation split above) so the lens can group these under
+            // an honest "no signal coverage" section instead of "Drifting".
+            no_coverage: d.available_signal_count == 0,
             ..LensHints::blind_spots_only()
         },
         created_at: now_millis(),
@@ -3920,6 +3943,65 @@ mod tests {
             was_shown: false,
             content_type: content_type.map(str::to_string),
         }
+    }
+
+    // ─── dedup_missed_signals: URL identity (2026-08-31 / #557 follow-up) ───
+    // Title Jaccard alone can never catch the same story via two sources with
+    // different titles over ONE URL (mastodon toot + HN submission of the same
+    // safedep.io post — the arrayref story held 6 of 24 Emerging slots).
+
+    #[test]
+    fn dedup_missed_signals_collapses_same_url_with_different_titles() {
+        let signals = vec![
+            MissedSignal {
+                url: Some("https://safedep.io/arrayref-supply-chain/".into()),
+                ..missed_signal(
+                    1,
+                    None,
+                    None,
+                    "Malicious arrayref clone hits crates.io",
+                    0.9,
+                )
+            },
+            // Same story, different title (Jaccard well below 0.65), URL with
+            // www/tracking-param variance the normalizer must fold away.
+            MissedSignal {
+                url: Some(
+                    "http://www.safedep.io/arrayref-supply-chain?utm_source=hn#comments".into(),
+                ),
+                ..missed_signal(2, None, None, "Supply chain attack analysis for Rust", 0.8)
+            },
+            // Distinct URL: survives.
+            MissedSignal {
+                url: Some("https://example.com/other-story".into()),
+                ..missed_signal(3, None, None, "A completely different story", 0.7)
+            },
+        ];
+
+        let deduped = dedup_missed_signals(signals);
+        let ids: Vec<i64> = deduped.iter().map(|s| s.item_id).collect();
+        assert_eq!(
+            ids,
+            vec![1, 3],
+            "first (highest-ranked) copy of the URL survives; distinct URL untouched"
+        );
+    }
+
+    #[test]
+    fn dedup_missed_signals_keeps_urlless_signals_and_title_pass() {
+        let signals = vec![
+            // No URLs at all: the title-Jaccard pass still governs.
+            missed_signal(1, None, None, "CVE-2025-1234 in OpenSSL", 0.9),
+            missed_signal(2, None, None, "OpenSSL CVE-2025-1234", 0.8),
+            missed_signal(3, None, None, "Unrelated tokio scheduler deep dive", 0.7),
+        ];
+        let deduped = dedup_missed_signals(signals);
+        let ids: Vec<i64> = deduped.iter().map(|s| s.item_id).collect();
+        assert_eq!(
+            ids,
+            vec![1, 3],
+            "rephrased duplicate collapses by title; distinct titles survive"
+        );
     }
 
     #[test]
@@ -5413,6 +5495,57 @@ mod tests {
             item.explanation.contains("no confirmed source coverage"),
             "None coverage_reason should use generic fallback: {}",
             item.explanation
+        );
+    }
+
+    // ─── no_coverage lens hint (2026-08-31 live audit) ──────────────────
+    // Zero available signals is NOT "unreviewed activity". The hint lets the
+    // lens split "sources found no results" out of the Drifting tier into an
+    // honest "no signal coverage" group.
+
+    #[test]
+    fn zero_signal_dep_carries_no_coverage_hint() {
+        let dep = UncoveredDep {
+            name: "quiet-pkg (npm)".into(),
+            dep_type: "npm".into(),
+            projects_using: vec!["/proj".into()],
+            days_since_last_signal: 999,
+            available_signal_count: 0,
+            risk_level: "medium".into(),
+            match_type: "none".into(),
+            coverage_reason: Some("checked_no_results".into()),
+            adapters_searched: Vec::new(),
+            platform_active: true,
+        };
+        let item = uncovered_dep_to_evidence_item(&dep);
+        assert!(
+            item.lens_hints.no_coverage,
+            "a dep whose sources found no results is a no-coverage gap, not unreviewed activity"
+        );
+        assert!(
+            item.lens_hints.blind_spots,
+            "still a blind-spots item — grouped honestly, never hidden"
+        );
+    }
+
+    #[test]
+    fn dep_with_unreviewed_signals_does_not_carry_no_coverage_hint() {
+        let dep = UncoveredDep {
+            name: "busy-pkg (npm)".into(),
+            dep_type: "npm".into(),
+            projects_using: vec!["/proj".into()],
+            days_since_last_signal: 3,
+            available_signal_count: 7,
+            risk_level: "medium".into(),
+            match_type: "exact_registry".into(),
+            coverage_reason: None,
+            adapters_searched: Vec::new(),
+            platform_active: true,
+        };
+        let item = uncovered_dep_to_evidence_item(&dep);
+        assert!(
+            !item.lens_hints.no_coverage,
+            "a dep with real unreviewed signals stays in the activity tiers"
         );
     }
 
