@@ -295,10 +295,21 @@ pub(crate) fn record_rejections(
 ///
 /// Sets `excluded = true` + `excluded_by = "brief:{reason}"` so the canonical
 /// `sort_results` pushes them to the bottom of the feed. Scores are NOT
-/// modified and nothing is removed. Dep-grounded items are immune: an item
-/// with a verified dependency edge into the user's actual stack
-/// (`ScoreBreakdown.strongly_grounded`) must never be suppressed by a
-/// narration verdict.
+/// modified and nothing is removed. Dep-grounded items are immune **on this
+/// path**: an item with a verified dependency edge into the user's actual
+/// stack (`ScoreBreakdown.strongly_grounded`) keeps its FEED ORDER regardless
+/// of a narration verdict.
+///
+/// That immunity is deliberately NARROWER on the display path, and the
+/// difference is a decision, not drift. AD-035 considered exempting
+/// `strongly_grounded` from display binding and REJECTED it: the items in the
+/// live audit that motivated the fix sat inside the grounded pool, so the
+/// exemption would have nullified the fix for the exact observed defect.
+/// `src/utils/brief-verdicts.ts` therefore exempts only `is_critical_alert`
+/// (OSV version-checked security truth). Net effect, by design: a dep-grounded
+/// non-security item the briefing filtered keeps its ordinary feed position
+/// but loses PROMOTED placement. Feed ORDER and PROMOTED placement are
+/// different stakes — do not "reconcile" the two predicates without a new ADR.
 ///
 /// Conversely, an entry still carrying a `brief:*` exclusion whose item is
 /// NOT in the current recent-rejections window is CLEARED — a week-old
