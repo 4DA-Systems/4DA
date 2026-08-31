@@ -2364,6 +2364,7 @@
   "blindspots.noCoverage.show_one": "{{count}} निर्भरता में कोई सिग्नल कवरेज नहीं",
   "blindspots.noCoverage.show_other": "{{count}} निर्भरताओं में कोई सिग्नल कवरेज नहीं",
   "signals.affectsYouCount": "🎯 {{count}} affecting you",
+  "signals.briefFiltered": "{{count}} filtered by today's briefing",
   "signals.groundedIn": "Matches your dependencies",
   "signals.poolAffectsYou": "Affects You",
   "signals.poolAffectsYouSub": "Grounded in your dependencies",

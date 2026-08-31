@@ -374,6 +374,7 @@ interface CommandMap {
   // -- Briefing --
   get_latest_briefing: { params: Record<string, never>; result: { content: string; model: string | null; item_count: number; created_at: string } | null };
   generate_ai_briefing: { params: Record<string, never>; result: { success: boolean; briefing: string | null; error?: string; model?: string; item_count?: number; latency_ms?: number } };
+  get_brief_display_verdicts: { params: Record<string, never>; result: { filtered: Array<{ id: number; reason: string }>; expires_in_seconds: number } };
   generate_free_briefing: { params: Record<string, never>; result: { content: string; item_count: number; created_at: string } };
   get_source_health_status: { params: Record<string, never>; result: SourceHealthStatus[] };
   get_source_quality: { params: Record<string, never>; result: SourceQualityReport[] };

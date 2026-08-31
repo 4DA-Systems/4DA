@@ -2,7 +2,10 @@
 import { useMemo } from 'react';
 import type { SourceRelevance, SourceHealthStatus } from '../types';
 import { parseBriefingContent } from '../utils/briefing-parser';
+import { isBriefSuppressed } from '../utils/brief-verdicts';
 import type { BriefingState } from '../store';
+
+const NO_FILTERED_IDS: ReadonlySet<number> = new Set<number>();
 
 interface LowQualitySource {
   source: string;
@@ -26,6 +29,12 @@ export function useBriefingDerived(
   sourceHealth: SourceHealthStatus[],
   briefing: BriefingState,
   lastBackgroundResultsAt: Date | null,
+  /**
+   * AD-035: item ids the LATEST briefing filtered (empty when no fresh
+   * verdicts bind). Demote-only — these ids lose their attention-card slot
+   * but stay in the ordinary feed; `is_critical_alert` items are exempt.
+   */
+  briefFilteredIds: ReadonlySet<number> = NO_FILTERED_IDS,
 ) {
   // Intelligence gaps — non-healthy sources
   const gaps = useMemo(
@@ -80,13 +89,27 @@ export function useBriefingDerived(
   // intentionally excluded from this card strip so the same item doesn't
   // appear twice (banner AND card) with conflicting score framings.
   const signalItems = useMemo(() => {
-    return results
+    const picked = results
       .filter(r =>
         (r.signal_priority === 'critical' || r.signal_priority === 'alert')
-        && !(r.is_critical_alert === true),
+        && !(r.is_critical_alert === true)
+        && !isBriefSuppressed(r, briefFilteredIds),
       )
       .slice(0, 3);
-  }, [results]);
+    // AD-035 observability: every suppression leaves a trace.
+    const suppressed = results.filter(r =>
+      (r.signal_priority === 'critical' || r.signal_priority === 'alert')
+      && !(r.is_critical_alert === true)
+      && isBriefSuppressed(r, briefFilteredIds),
+    );
+    if (suppressed.length > 0) {
+      console.info(
+        `[brief-verdicts] ${suppressed.length} attention card(s) demoted by the latest briefing's verdicts`,
+        suppressed.map(r => r.id),
+      );
+    }
+    return picked;
+  }, [results, briefFilteredIds]);
 
   // Top picks — sorted by actionability (necessity × relevance) so security
   // CVEs with matched deps always outrank generic awareness items.
@@ -97,7 +120,8 @@ export function useBriefingDerived(
         r.relevant
         && r.top_score >= 0.5
         && !signalIds.has(r.id)
-        && !(r.is_critical_alert === true),
+        && !(r.is_critical_alert === true)
+        && !isBriefSuppressed(r, briefFilteredIds),
       )
       .sort((a, b) => {
         const aN = a.score_breakdown?.necessity_score ?? 0;
@@ -107,7 +131,7 @@ export function useBriefingDerived(
         return bScore - aScore;
       })
       .slice(0, 8);
-  }, [results, signalItems]);
+  }, [results, signalItems, briefFilteredIds]);
 
   return { gaps, lowQualitySources, healthSummary, sections, isStale, signalItems, topItems };
 }

@@ -243,4 +243,54 @@ describe('useBriefingDerived', () => {
       expect(result.current.topItems.length).toBeLessThanOrEqual(8);
     });
   });
+
+  // AD-035: one item, one verdict — the latest briefing's filter verdicts
+  // demote items out of the attention cards while the briefing is fresh.
+  describe('briefing verdict binding (AD-035)', () => {
+    it('excludes briefing-filtered ids from signalItems and topItems', () => {
+      const results = [
+        makeResult({ id: 1, signal_priority: 'alert' }),
+        makeResult({ id: 2, signal_priority: 'alert' }),
+        makeResult({ id: 3, top_score: 0.8, relevant: true }),
+        makeResult({ id: 4, top_score: 0.7, relevant: true }),
+      ];
+      const { result } = renderHook(() =>
+        useBriefingDerived(results, [], makeBriefingState(), null, new Set([1, 3])),
+      );
+      expect(result.current.signalItems.map(r => r.id)).toEqual([2]);
+      expect(result.current.topItems.map(r => r.id)).toEqual([4]);
+    });
+
+    it('ignores verdicts when the set is empty (stale/expired briefing binds nothing)', () => {
+      const results = [
+        makeResult({ id: 1, signal_priority: 'alert' }),
+        makeResult({ id: 3, top_score: 0.8, relevant: true }),
+      ];
+      const { result } = renderHook(() =>
+        useBriefingDerived(results, [], makeBriefingState(), null, new Set()),
+      );
+      expect(result.current.signalItems.map(r => r.id)).toEqual([1]);
+      expect(result.current.topItems.map(r => r.id)).toEqual([3]);
+    });
+
+    it('defaults to no suppression when the parameter is omitted', () => {
+      const results = [makeResult({ id: 1, signal_priority: 'critical' })];
+      const { result } = renderHook(() =>
+        useBriefingDerived(results, [], makeBriefingState(), null),
+      );
+      expect(result.current.signalItems).toHaveLength(1);
+    });
+
+    it('a verdict frees an attention-card slot for the next item, never leaves a hole', () => {
+      const results = Array.from({ length: 4 }, (_, i) =>
+        makeResult({ id: i + 1, signal_priority: 'alert' }),
+      );
+      const { result } = renderHook(() =>
+        useBriefingDerived(results, [], makeBriefingState(), null, new Set([1])),
+      );
+      // Still 3 cards — suppression demotes the filtered item, it does not
+      // shrink the surface.
+      expect(result.current.signalItems.map(r => r.id)).toEqual([2, 3, 4]);
+    });
+  });
 });

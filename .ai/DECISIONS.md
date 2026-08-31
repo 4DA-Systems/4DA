@@ -450,6 +450,22 @@
 - **Date:** 2026-08-27
 - **Status:** Final
 
+### AD-035: Briefing Verdicts Are Structured and Bind Brief/Signal Display
+
+- **Decision:** The narrated Brief's per-item filter verdicts — the ```` ```rejects ```` machine trailer the briefing prompt already requires, parsed fail-open and stored per-briefing in `brief_rejections` — bind the promoted display surfaces: the Brief tab's attention cards (`signalItems`/`topItems`), the Signal tab's Key Signals pools, and the "What You Would Have Missed" hero pick. Binding holds only while the verdicting briefing is the LATEST briefing AND younger than the briefing reuse window (4h, `BRIEFING_REUSE_WINDOW_HOURS`, #565) — a stale briefing binds nothing, and a newer briefing with no verdicts (e.g. the deterministic floor) unbinds everything. Binding is **demote-only**: a filtered item loses promoted placement but remains in the ordinary feed and in the briefing's own "Filtered Out" explanation; a kept item is NEVER promoted by the verdict. One deterministic exemption: items carrying backend-confirmed security truth (`is_critical_alert`, the OSV version-checked class) are never suppressed by a narration verdict.
+- **Rationale:** Live audit 2026-08-31, founder instance, all on ONE screen: the AI briefing's prose said it FILTERED OUT the "DocSend alternative" article and the "Typebase" Show HN as noise/self-promotion, while the Brief hero cards and the Signal tab's "Affects You — Grounded in your dependencies" pool promoted the SAME two items as top ALERTs. Opposite verdicts, same screen. The structured verdict channel already existed (#214: trailer → `brief_rejections` → `apply_brief_rejection_demotions`) but bound only scored-feed ORDERING at analysis time: the promoted surfaces select client-side from `relevanceResults` and never read `excluded`, and a verdict recorded after the last scoring pass reaches nothing until the next full analysis — precisely the one-screen contradiction window. "One item, one verdict" requires the briefing's judgment to bind at display-selection time.
+- **Considered:**
+  - *Request a `{"kept": [...], "filtered": [...]}` block instead of the `rejects` trailer:* Rejected — the shipped trailer already carries the only half with a consumer. A kept-list would spend prompt and output tokens on data the demote-only contract deliberately never reads (verdicts never promote), and changing the trailer shape would obsolete a hardened, regression-tested parser for no consumer.
+  - *Rely on the existing analyzer feed demotion alone:* Rejected — it runs only when scoring runs, so it structurally cannot bind the screen the briefing was just generated on, and the surfaces in question never read its output.
+  - *Suppress by mutating stored results/scores in the backend:* Rejected — a display concern must not write score state (AD-034 blast-radius discipline), and an hours-lived verdict must not need a drain to expire.
+  - *Exempt `strongly_grounded` items, as the feed demotion does:* Rejected for display binding — the audited items sat IN the grounded pool, so that exemption would nullify the fix for the exact observed defect. Only the narrower deterministic-security exemption (`is_critical_alert`) is kept: narration never outranks an OSV-version-checked vulnerability.
+- **Fail-open guarantees:** a missing, malformed, out-of-range, or empty-reason trailer records NOTHING and the briefing renders exactly as today (#559's lesson: parsing must never kill the pipeline); a failed verdict fetch suppresses nothing; negative briefing age (clock skew) binds nothing; expiry is enforced backend-side (window check) and frontend-side (timer).
+- **Scoring inertness:** display selection only — scores, `relevance_score`, and the feed's demote/expire path are untouched; NO `PIPELINE_VERSION` bump (AD-034).
+- **Observability:** the backend logs the served verdict set (count + briefing age); the frontend logs each suppression with item ids; Key Signals shows a muted "{n} filtered by today's briefing" count when suppression is active.
+- **Date:** 2026-08-31
+- **Status:** Final
+- **Code:** `src-tauri/src/brief_verdict_display.rs`, `src-tauri/src/db/brief_rejections.rs::get_latest_brief_verdicts`, `src-tauri/src/digest_commands.rs` (+ `briefing_prompt.rs` extraction), `src/hooks/use-brief-verdicts.ts`, `src/hooks/use-briefing-derived.ts`, `src/components/SignalsPanel.tsx`, `src/components/WhatYouWouldHaveMissed.tsx`, `src/store/briefing-slice.ts`.
+
 ---
 
 ## Decision Template

@@ -2322,6 +2322,7 @@
   "blindspots.noCoverage.show_one": "{{count}} bağımlılığın sinyal kapsaması yok",
   "blindspots.noCoverage.show_other": "{{count}} bağımlılığın sinyal kapsaması yok",
   "signals.affectsYouCount": "🎯 {{count}} affecting you",
+  "signals.briefFiltered": "{{count}} filtered by today's briefing",
   "signals.groundedIn": "Matches your dependencies",
   "signals.poolAffectsYou": "Affects You",
   "signals.poolAffectsYouSub": "Grounded in your dependencies",

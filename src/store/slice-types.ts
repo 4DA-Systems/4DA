@@ -288,6 +288,21 @@ export interface SynthesisCluster {
   confidence: number;
 }
 
+/**
+ * The LATEST briefing's structured filter verdicts (AD-035), fetched from
+ * `get_brief_display_verdicts`. While unexpired, the promoted display
+ * surfaces (Brief attention cards, Key Signals, the "missed" hero) demote
+ * the filtered item ids — one item, one verdict. Demote-only: verdicts
+ * never promote, and deterministic security truth (`is_critical_alert`)
+ * is never suppressed.
+ */
+export interface BriefVerdicts {
+  /** Filtered item id → the briefing's short reason slug. */
+  filtered: Record<number, string>;
+  /** Epoch ms when the verdicting briefing leaves its freshness window. */
+  expiresAtMs: number;
+}
+
 export interface BriefingSlice {
   aiBriefing: BriefingState;
   autoBriefingEnabled: boolean;
@@ -310,10 +325,15 @@ export interface BriefingSlice {
   setAutoBriefingEnabled: (enabled: boolean) => void;
   setLastBackgroundResultsAt: (date: Date) => void;
   setInstantSnapshot: (snapshot: InstantBriefingSnapshot | null) => void;
+  /** AD-035: the latest briefing's display-binding verdicts, or null when
+   *  nothing binds (no briefing, stale briefing, fetch failed — fail-open). */
+  briefVerdicts: BriefVerdicts | null;
   generateBriefing: () => Promise<void>;
   generateFreeBriefing: () => Promise<void>;
   loadPersistedBriefing: () => Promise<void>;
   loadSourceHealth: () => Promise<void>;
+  /** Refresh briefVerdicts from the backend; clears them at expiry. */
+  loadBriefVerdicts: () => Promise<void>;
 }
 
 export interface ContextDiscoverySlice {

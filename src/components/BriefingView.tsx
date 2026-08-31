@@ -12,6 +12,7 @@ import { PersonalizeNudge } from './briefing/PersonalizeNudge';
 import { BriefingLoadingState, BriefingReadyState } from './BriefingEmptyStates';
 import { BriefingWarmupState } from './BriefingWarmupState';
 import { useLicense } from '../hooks/use-license';
+import { useActiveBriefFilteredIds } from '../hooks/use-brief-verdicts';
 import { useBriefingDerived } from '../hooks/use-briefing-derived';
 import { isVictauriDogfoodMode } from '../lib/startup-runtime';
 import { safeListen } from '../lib/tauri-events';
@@ -140,8 +141,11 @@ export const BriefingView = memo(function BriefingView() {
     };
   }, [instantSnapshot, results.length, analysisComplete, isLoading, isFirstRun]);
 
+  // AD-035: the latest briefing's filter verdicts demote items from the
+  // attention cards while the briefing is fresh — one item, one verdict.
+  const briefFilteredIds = useActiveBriefFilteredIds();
   const { signalItems, topItems } =
-    useBriefingDerived(results, sourceHealth, briefing, lastBackgroundResultsAt);
+    useBriefingDerived(results, sourceHealth, briefing, lastBackgroundResultsAt, briefFilteredIds);
 
   // Loading skeleton
   if (briefing.loading) {

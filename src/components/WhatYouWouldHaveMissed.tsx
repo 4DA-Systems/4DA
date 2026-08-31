@@ -9,6 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { SourceRelevance } from '../types/analysis';
 import { getRelevancePresentation } from '../utils/score';
 import { useLicense } from '../hooks/use-license';
+import { isBriefSuppressed, useActiveBriefFilteredIds } from '../hooks/use-brief-verdicts';
 import { SignalUpgradeCTA } from './SignalUpgradeCTA';
 
 /**
@@ -121,6 +122,12 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
 
   const { isPro } = useLicense();
 
+  // AD-035: the hero pick honors the latest briefing's filter verdicts —
+  // an item the briefing called noise must not be today's "critical save".
+  // Stats (scanned/rejected counts) stay truthful over the FULL result set;
+  // only the hero selection is bound. is_critical_alert items are exempt.
+  const briefFilteredIds = useActiveBriefFilteredIds();
+
   const insight = useMemo(() => {
     if (!analysisComplete || results.length === 0) return null;
 
@@ -128,10 +135,16 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
     const totalScanned = results.length;
     const rejected = totalScanned - relevant.length;
     const rejectionRate = totalScanned > 0 ? ((rejected / totalScanned) * 100).toFixed(1) : '0';
-    const criticalSave = findMostCriticalSave(relevant);
+    const heroPool = relevant.filter(r => !isBriefSuppressed(r, briefFilteredIds));
+    if (heroPool.length < relevant.length) {
+      console.info(
+        `[brief-verdicts] ${relevant.length - heroPool.length} hero candidate(s) demoted by the latest briefing's verdicts`,
+      );
+    }
+    const criticalSave = findMostCriticalSave(heroPool);
 
     return { relevant, totalScanned, rejected, rejectionRate, criticalSave };
-  }, [results, analysisComplete]);
+  }, [results, analysisComplete, briefFilteredIds]);
 
   if (!insight || insight.totalScanned < 5) return null;
 
