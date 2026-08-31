@@ -17,6 +17,19 @@ export default defineConfig({
     // default stays 5s for fast feedback.
     testTimeout: process.env.CI ? 30_000 : 5_000,
     hookTimeout: process.env.CI ? 30_000 : 10_000,
+    // Explicit, because this value is load-bearing in two places and the
+    // undeclared 10s default hid that. Vitest feeds `teardownTimeout` to
+    // tinypool as `terminateTimeout` (the per-worker termination deadline)
+    // AND uses it to arm the force-`process.exit()` watchdog in
+    // `Vitest.exit()`. On the starved self-hosted runner 10s is tight enough
+    // that a legitimately slow teardown reports "Failed to terminate worker";
+    // 30s matches the testTimeout rationale above.
+    //
+    // It is NOT a hang bound. That watchdog is armed inside `exit()`, i.e.
+    // only once the run has already finished, so a wedge DURING the run never
+    // reaches it. The real bound is external — see the Frontend job's
+    // `scripts/run-with-timeout.cjs` wrapper in .github/workflows/validate.yml.
+    teardownTimeout: process.env.CI ? 30_000 : 10_000,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'dist', 'src-tauri'],
@@ -24,7 +37,16 @@ export default defineConfig({
     poolOptions: {
       forks: {
         maxForks: 1,
-        memoryLimit: '512MB',
+        // NO `memoryLimit` here. It was set to '512MB' and read as a safety
+        // net during the 2026-08-31 runner-wedge investigation; it never was
+        // one. Verified against the pinned vitest 3.2.6 in node_modules:
+        // `createForksPool` builds its Tinypool options from maxForks,
+        // minForks, isolate, execArgv and teardownTimeout only, and
+        // `getWorkerMemoryLimit` reads `poolOptions.vmForks` /
+        // `poolOptions.vmThreads` — never `poolOptions.forks`. The key was
+        // accepted and silently ignored. Re-adding it buys nothing; if a
+        // worker memory ceiling is genuinely wanted, the pool has to change
+        // to `vmForks` and that is an ADR, not a one-line config edit.
       },
     },
     coverage: {
