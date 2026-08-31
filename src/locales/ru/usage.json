@@ -1,0 +1,25 @@
+{
+  "today": "Расходы сегодня",
+  "todayOfCap": "Расходы сегодня (лимит ${{cap}})",
+  "tokensToday": "Токены сегодня",
+  "thisMonth": "В этом месяце",
+  "byFeature": "В этом месяце по функциям",
+  "calls_one": "{{count}} вызов",
+  "calls_few": "{{count}} вызова",
+  "calls_many": "{{count}} вызовов",
+  "calls_other": "{{count}} вызова",
+  "feature": {
+    "rerank_judge": "Оценка релевантности — переранжирование ленты",
+    "ingest_judge": "Оценка релевантности — новые элементы",
+    "blind_spots": "Анализ слепых зон",
+    "digest": "Дайджест",
+    "search_synthesis": "Синтез поиска",
+    "adversarial": "Адверсариальное обсуждение",
+    "channel_render": "Рендеринг канала",
+    "content_analysis": "Анализ контента",
+    "translation": "Перевод",
+    "completion": "Без тега (брифинги и прочее)",
+    "structured_completion": "Без тега (структурированное)",
+    "streaming": "Без тега (стриминг)"
+  }
+}
