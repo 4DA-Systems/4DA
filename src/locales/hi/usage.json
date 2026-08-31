@@ -1,0 +1,23 @@
+{
+  "today": "आज की लागत",
+  "todayOfCap": "आज की लागत (सीमा ${{cap}})",
+  "tokensToday": "आज के टोकन",
+  "thisMonth": "इस महीने",
+  "byFeature": "इस महीने सुविधा के अनुसार",
+  "calls_one": "{{count}} कॉल",
+  "calls_other": "{{count}} कॉल",
+  "feature": {
+    "rerank_judge": "प्रासंगिकता आकलन — फ़ीड पुनर्क्रमण",
+    "ingest_judge": "प्रासंगिकता आकलन — नई सामग्री",
+    "blind_spots": "ब्लाइंड स्पॉट विश्लेषण",
+    "digest": "डाइजेस्ट",
+    "search_synthesis": "खोज संश्लेषण",
+    "adversarial": "प्रतिकूल विचार-विमर्श",
+    "channel_render": "चैनल रेंडरिंग",
+    "content_analysis": "सामग्री विश्लेषण",
+    "translation": "अनुवाद",
+    "completion": "बिना टैग (ब्रीफ़िंग आदि)",
+    "structured_completion": "बिना टैग (संरचित)",
+    "streaming": "बिना टैग (स्ट्रीमिंग)"
+  }
+}
