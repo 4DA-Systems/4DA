@@ -63,7 +63,7 @@ void i18n
     lng: savedLang || systemLang || 'en',
     fallbackLng: 'en',
     defaultNS: 'ui',
-    ns: ['ui', 'errors', 'signals'],
+    ns: ['ui', 'errors', 'signals', 'usage'],
     interpolation: {
       escapeValue: false, // React already escapes
     },
