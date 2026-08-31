@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd, type InterruptionConfig, type PresenceStatus } from '../../lib/commands';
+import { reportError } from '../../lib/error-reporter';
 
 /** How often the live status line re-polls while the settings panel is open. */
 const STATUS_POLL_MS = 5000;
@@ -22,7 +23,8 @@ function Toggle({
   return (
     <button
       onClick={onClick}
-      aria-pressed={enabled}
+      role="switch"
+      aria-checked={enabled}
       aria-label={label}
       className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${
         enabled ? 'bg-green-500/40' : 'bg-gray-600'
@@ -45,15 +47,20 @@ export function InterruptionsSection() {
   const refreshStatus = useCallback(() => {
     cmd('get_presence_status')
       .then(setStatus)
-      .catch(() => {
-        /* status is advisory — a failed poll must not break the panel */
+      .catch((error: unknown) => {
+        // Advisory: a failed poll must never break the panel, but a repeatedly
+        // failing status read means the IPC bridge is down and is worth a log.
+        reportError('InterruptionsSection.get_presence_status', error);
       });
   }, []);
 
   useEffect(() => {
     cmd('get_interruption_config')
       .then(setConfig)
-      .catch(() => setConfig(null));
+      .catch((error: unknown) => {
+        reportError('InterruptionsSection.get_interruption_config', error);
+        setConfig(null);
+      });
     refreshStatus();
     const timer = setInterval(refreshStatus, STATUS_POLL_MS);
     return () => clearInterval(timer);
@@ -66,7 +73,8 @@ export function InterruptionsSection() {
     try {
       await cmd('set_respect_focus', { enabled: next });
       refreshStatus();
-    } catch {
+    } catch (error) {
+      reportError('InterruptionsSection.set_respect_focus', error);
       setConfig({ ...config, respect_focus: !next });
     }
   };
@@ -80,7 +88,8 @@ export function InterruptionsSection() {
       setStatus(next);
       const fresh = await cmd('get_interruption_config');
       setConfig(fresh);
-    } catch {
+    } catch (error) {
+      reportError('InterruptionsSection.set_do_not_disturb', error);
       setConfig(previous);
     }
   };
@@ -92,7 +101,11 @@ export function InterruptionsSection() {
     try {
       await cmd('set_quiet_hours', { start, end });
       refreshStatus();
-    } catch {
+    } catch (error) {
+      // Rejected by the backend validator (a malformed HH:MM) or an IPC
+      // failure — either way the panel reverts rather than showing a window
+      // the gate is not actually honouring.
+      reportError('InterruptionsSection.set_quiet_hours', error);
       setConfig(previous);
     }
   };
@@ -101,8 +114,8 @@ export function InterruptionsSection() {
     try {
       await cmd('flush_held_notifications');
       refreshStatus();
-    } catch {
-      /* non-fatal */
+    } catch (error) {
+      reportError('InterruptionsSection.flush_held_notifications', error);
     }
   };
 
@@ -110,8 +123,8 @@ export function InterruptionsSection() {
     try {
       await cmd('discard_held_notifications');
       refreshStatus();
-    } catch {
-      /* non-fatal */
+    } catch (error) {
+      reportError('InterruptionsSection.discard_held_notifications', error);
     }
   };
 
