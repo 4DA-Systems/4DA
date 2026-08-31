@@ -168,6 +168,12 @@ ammonia = "4"
 [target.'cfg(not(windows))'.dependencies]
 libc = "0.2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# EWMH fullscreen detection for the interruption gate (src/presence/platform_linux.rs).
+# Already present transitively in the lockfile, so this adds no new supply-chain
+# surface — it only makes the existing crate a direct dependency.
+x11rb = "0.13"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Memory", "Win32_UI_Shell", "Win32_System_Power", "Win32_System_SystemInformation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse"] }
 winreg = "0.55"

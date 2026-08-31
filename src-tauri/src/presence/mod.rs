@@ -48,7 +48,15 @@ pub mod watcher;
 #[path = "platform_windows.rs"]
 mod platform;
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+#[path = "platform_macos.rs"]
+mod platform;
+
+#[cfg(target_os = "linux")]
+#[path = "platform_linux.rs"]
+mod platform;
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 #[path = "platform_stub.rs"]
 mod platform;
 
@@ -290,6 +298,39 @@ fn parse_rfc3339_local(value: &str) -> Option<chrono::DateTime<Local>> {
 }
 
 // ============================================================================
+// Shared platform helpers
+// ============================================================================
+//
+// These live here, not in the per-OS modules, deliberately: a `#[cfg]`-gated
+// module's tests only run on that OS, and this project's CI compiles macOS
+// only at release time. Keeping the parsing here means the logic is exercised
+// by every `cargo test` run on any platform, and the unverifiable surface on
+// macOS shrinks to three `extern "C"` declarations.
+
+/// Is a macOS Focus mode (the modern Do Not Disturb) currently asserted?
+///
+/// Parses `~/Library/DoNotDisturb/DB/Assertions.json`, whose shape on Ventura
+/// and later is:
+///
+/// ```json
+/// { "storeAssertionRecords": [ { "assertionDetails": { … } } ] }
+/// ```
+///
+/// A non-empty `storeAssertionRecords` array means some Focus mode is on. An
+/// absent key, an empty array, or anything unparseable means "not asserted" —
+/// the same fail-open direction every other detector takes, because wrongly
+/// muting 4DA forever is worse than one mistimed popup.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn focus_active_from_assertions(json: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(json)
+        .ok()
+        .as_ref()
+        .and_then(|v| v.get("storeAssertionRecords"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|records| !records.is_empty())
+}
+
+// ============================================================================
 // Do Not Disturb control
 // ============================================================================
 
@@ -501,6 +542,62 @@ mod tests {
                 reason.as_str()
             );
         }
+    }
+
+    // -- macOS Focus-mode parsing -----------------------------------------
+    //
+    // Lives here rather than in platform_macos.rs so it runs on every platform.
+    // macOS is not compiled by PR CI (the 10x runner tier is deliberately
+    // avoided), so this is the only place the logic gets verified at all.
+
+    #[test]
+    fn focus_asserted_when_a_record_is_present() {
+        let json = r#"{"storeAssertionRecords":[
+            {"assertionDetails":{"assertionDetailsModeIdentifier":"com.apple.donotdisturb.mode.default"}}
+        ]}"#;
+        assert!(focus_active_from_assertions(json));
+    }
+
+    #[test]
+    fn focus_not_asserted_when_the_array_is_empty() {
+        // The common case: the user has used Focus before, so the file exists,
+        // but nothing is on right now. Must NOT read as busy.
+        assert!(!focus_active_from_assertions(
+            r#"{"storeAssertionRecords":[]}"#
+        ));
+    }
+
+    #[test]
+    fn focus_not_asserted_when_the_key_is_absent() {
+        assert!(!focus_active_from_assertions(r#"{"somethingElse":true}"#));
+        assert!(!focus_active_from_assertions("{}"));
+    }
+
+    #[test]
+    fn malformed_assertions_fail_open() {
+        // Truncated, empty, wrong type, or not JSON at all — every one of these
+        // must mean "available". A parse failure that read as busy would mute
+        // 4DA on macOS permanently, with no error the user could see.
+        for bad in [
+            "",
+            "not json",
+            "{",
+            r#"{"storeAssertionRecords":"yes"}"#,
+            r#"{"storeAssertionRecords":null}"#,
+            r#"{"storeAssertionRecords":{}}"#,
+            "[]",
+        ] {
+            assert!(
+                !focus_active_from_assertions(bad),
+                "must fail open for {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn focus_asserted_with_multiple_records() {
+        let json = r#"{"storeAssertionRecords":[{"a":1},{"b":2}]}"#;
+        assert!(focus_active_from_assertions(json));
     }
 
     #[test]
