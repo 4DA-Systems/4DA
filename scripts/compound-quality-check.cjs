@@ -126,6 +126,7 @@ function analyzeDiff(commitRange) {
   // Parse line-level additions and removals per file
   const fileChanges = {};
   let currentFile = null;
+
   // Line number in the POST-change file of the next line we read. Tracked so an
   // added line can be located in the file on disk, which is what lets the
   // unwrap rule tell production code from an inline `#[cfg(test)]` module.
@@ -133,8 +134,7 @@ function analyzeDiff(commitRange) {
 
   for (const line of diff.split('\n')) {
     if (line.startsWith('diff --git')) {
-      const match = line.match(/b\/(.+)$/);
-      currentFile = match ? match[1] : null;
+      currentFile = parseDiffGitPath(line);
       if (currentFile && !fileChanges[currentFile]) {
         fileChanges[currentFile] = { added: 0, removed: 0, addedContent: [], addedLines: [] };
       }
@@ -295,6 +295,26 @@ function checkTestCoverage(changedFiles, fileChanges) {
       fail(RULE, `  - ${f}`);
     }
   }
+}
+
+/**
+ * Extract the post-change path from a `diff --git a/<path> b/<path>` header.
+ *
+ * The previous form was `line.match(/b\/(.+)$/)`, which finds the FIRST `b/`
+ * anywhere in the line — and `src-tauri/src/db/migrations.rs` contains one, in
+ * `d[b/]migrations.rs`. That yielded the path
+ * `migrations.rs b/src-tauri/src/db/migrations.rs`, which does not exist on
+ * disk, so every rule that reads the file (including the `#[cfg(test)]`
+ * exclusion) silently fell back to its strictest branch. Real effect: all 13
+ * unwraps in `db/migrations.rs` were reported as production code when every one
+ * of them is inside a `#[cfg(test)] mod tests`.
+ *
+ * Anchoring the match and requiring the SPACE before ` b/` fixes it: a path may
+ * contain `b/`, but the separator is the last ` b/` on the line.
+ */
+function parseDiffGitPath(line) {
+  const match = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+  return match ? match[2] : null;
 }
 
 // --- Rule 2: Error Handling Direction ---
@@ -685,7 +705,12 @@ function main() {
   }
 }
 
-module.exports = { cfgTestRanges, inTestRange, isProductionUnwrap };
+module.exports = {
+  cfgTestRanges,
+  inTestRange,
+  isProductionUnwrap,
+  parseDiffGitPath,
+};
 
 if (require.main === module) {
   main();

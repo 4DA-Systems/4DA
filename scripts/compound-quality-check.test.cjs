@@ -19,6 +19,7 @@ const {
   cfgTestRanges,
   inTestRange,
   isProductionUnwrap,
+  parseDiffGitPath,
 } = require('./compound-quality-check.cjs');
 
 // ---------------------------------------------------------------------------
@@ -143,6 +144,49 @@ test('CATCHES: unwrap_or is NOT excused by the comment heuristic', () => {
   // so they must not be reported at all.
   assert.ok(!isProductionUnwrap('    let v = thing().unwrap_or(0);'));
   assert.ok(!isProductionUnwrap('    let v = thing().unwrap_or_else(|_| 0);'));
+});
+
+// ---------------------------------------------------------------------------
+// parseDiffGitPath — the header parse the whole rule depends on
+// ---------------------------------------------------------------------------
+
+test('parses an ordinary diff header', () => {
+  assert.equal(
+    parseDiffGitPath('diff --git a/src/lib.rs b/src/lib.rs'),
+    'src/lib.rs',
+  );
+});
+
+test('REGRESSION: a path containing "b/" is not truncated', () => {
+  // `src-tauri/src/db/migrations.rs` contains `b/` inside `db/`. The old
+  // `/b\/(.+)$/` matched there and produced a path that does not exist on
+  // disk, so the #[cfg(test)] exclusion could never load the file and all 13
+  // of that file's test-module unwraps were reported as production code.
+  assert.equal(
+    parseDiffGitPath(
+      'diff --git a/src-tauri/src/db/migrations.rs b/src-tauri/src/db/migrations.rs',
+    ),
+    'src-tauri/src/db/migrations.rs',
+  );
+});
+
+test('handles other b/-containing directory names', () => {
+  for (const p of ['a/b/c.rs', 'src/lib/b/x.ts', 'web/b/deep/nested/file.tsx']) {
+    assert.equal(parseDiffGitPath(`diff --git a/${p} b/${p}`), p);
+  }
+});
+
+test('returns null for a line that is not a diff header', () => {
+  assert.equal(parseDiffGitPath('+++ b/src/lib.rs'), null);
+  assert.equal(parseDiffGitPath('index 1234567..89abcde 100644'), null);
+  assert.equal(parseDiffGitPath(''), null);
+});
+
+test('a rename header yields the NEW path', () => {
+  assert.equal(
+    parseDiffGitPath('diff --git a/src/old/name.rs b/src/new/name.rs'),
+    'src/new/name.rs',
+  );
 });
 
 // ---------------------------------------------------------------------------
