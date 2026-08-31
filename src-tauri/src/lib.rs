@@ -382,9 +382,7 @@ pub(crate) mod i18n;
 mod playbook_commands;
 mod sovereign_developer_profile;
 mod sovereign_facts;
-mod sovereign_profile;
 mod streets_engine;
-mod streets_localization;
 mod toolkit;
 mod toolkit_export;
 #[cfg(feature = "experimental")]
@@ -1064,16 +1062,6 @@ pub fn run() {
             // Sovereign Developer Profile (unified view)
             sovereign_developer_profile::export_sovereign_profile_markdown,
             sovereign_developer_profile::export_sovereign_profile_json,
-            // Sovereign Profile
-            sovereign_profile::get_sovereign_profile,
-            sovereign_profile::get_sovereign_profile_completeness,
-            sovereign_profile::generate_sovereign_stack_document,
-            sovereign_profile::save_sovereign_fact,
-            sovereign_profile::get_execution_log,
-            // STREETS Localization
-            streets_localization::get_regional_data,
-            streets_localization::format_currency,
-            streets_localization::calculate_electricity_cost,
             // Toolkit Intelligence
             toolkit_intelligence::toolkit_test_feed,
             toolkit_intelligence::toolkit_score_sandbox,

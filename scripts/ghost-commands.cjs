@@ -264,9 +264,9 @@ function loadBacklog(backlogPath = BACKLOG_JSON) {
     for (const entry of raw.backlog || []) {
       map.set(entry.command, entry);
     }
-    return map;
+    return { backlog: map, retired: raw.retired || [] };
   } catch {
-    return new Map();
+    return { backlog: new Map(), retired: [] };
   }
 }
 
@@ -278,7 +278,7 @@ function analyze({ root = ROOT, backlogPath = BACKLOG_JSON } = {}) {
   const p = repoPaths(root);
   const rustCommands = extractRustCommands(p.rustSrc, root);
   const registeredCommands = extractRegisteredCommands(p.libRs);
-  const backlog = loadBacklog(backlogPath);
+  const { backlog, retired } = loadBacklog(backlogPath);
 
   // Deduplicate Rust commands by name (stubs and real implementations coexist —
   // only one is compiled via cfg, but we treat the name as covered if ANY
@@ -340,6 +340,20 @@ function analyze({ root = ROOT, backlogPath = BACKLOG_JSON } = {}) {
     }
   }
 
+  // The retired ledger must ALSO describe reality: an entry claiming "deleted"
+  // while the command still exists in Rust is a fake retirement. Deliberately
+  // NOT fed into the live/ghost classification — a resurrected command with no
+  // caller still blocks as a NEW ghost, so the ledger can never be used to
+  // smuggle a command past the gate.
+  const staleRetired = retired
+    .filter((e) => e.how === 'deleted' && uniqueByName.has(e.command))
+    .map((e) => ({
+      name: e.command,
+      retired_on: e.retired_on,
+      why: 'listed as deleted in the retired ledger but still exists in Rust',
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   const byName = (a, b) => a.name.localeCompare(b.name);
   liveDirect.sort(byName);
   liveIndirect.sort(byName);
@@ -361,6 +375,8 @@ function analyze({ root = ROOT, backlogPath = BACKLOG_JSON } = {}) {
     backlogged,
     unregistered,
     staleBacklog,
+    retired,
+    staleRetired,
     typeKeys,
     frontendRefs: new Set([...direct.keys(), ...indirect.keys()]).size,
     registrations: registeredCommands.size,
@@ -431,6 +447,16 @@ function main() {
     }
   }
 
+  if (r.staleRetired.length > 0) {
+    console.log(
+      `\n${YELLOW}${BOLD}STALE RETIRED LEDGER${RESET} ${YELLOW}(${r.staleRetired.length} — fix these in ` +
+        `scripts/ghost-command-backlog.json)${RESET}`,
+    );
+    for (const s of r.staleRetired) {
+      console.log(`  ${YELLOW}!${RESET} ${s.name} ${DIM}${s.why}${RESET}`);
+    }
+  }
+
   // Unregistered
   if (r.unregistered.length > 0) {
     console.log(
@@ -451,6 +477,9 @@ function main() {
   console.log(`  ${RED}Ghost (new):${RESET}          ${r.ghosts.length}`);
   console.log(`  ${YELLOW}Ghost (backlog):${RESET}      ${r.backlogged.length}`);
   console.log(`  ${YELLOW}Unregistered:${RESET}         ${r.unregistered.length}`);
+  console.log(
+    `  ${BOLD}Burn-down:${RESET}             ${r.backlogged.length} backlogged, ${r.retired.length} retired`,
+  );
   console.log(`  Frontend refs:         ${r.frontendRefs}`);
   console.log(`  Handler registrations: ${r.registrations}`);
   console.log(`  ${BOLD}IPC health:            ${r.ipcHealthPct}%${RESET}  ${DIM}(live / total — commands the app can actually reach)${RESET}`);
@@ -484,7 +513,9 @@ function main() {
       live_indirect: r.liveIndirect.length,
       ghost: r.ghosts.length,
       ghost_backlog: r.backlogged.length,
+      ghost_retired: r.retired.length,
       backlog_stale: r.staleBacklog.length,
+      retired_stale: r.staleRetired.length,
       unregistered: r.unregistered.length,
       frontend_refs: r.frontendRefs,
       handler_registrations: r.registrations,
@@ -498,6 +529,8 @@ function main() {
     ghost: r.ghosts.map(strip),
     ghost_backlog: r.backlogged.map((c) => ({ ...strip(c), since: c.since, reason: c.reason })),
     backlog_stale: r.staleBacklog,
+    retired: r.retired,
+    retired_stale: r.staleRetired,
     unregistered: r.unregistered.map((c) => ({ ...strip(c), frontend_expects: c.inFrontend })),
   };
 

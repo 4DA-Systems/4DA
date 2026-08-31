@@ -3441,7 +3441,6 @@ async fn ipc_commands_never_panic() {
         "get_autophagy_status",
         "get_data_health",
         "get_intelligence_pulse",
-        "get_sovereign_profile",
         "get_intelligence_growth",
         "get_decision_windows",
         "get_indexed_stats",
@@ -4073,24 +4072,6 @@ async fn achievements_list_returns_data() {
     assert!(
         achievements.is_object() || achievements.is_array(),
         "achievements must return structured data, got: {achievements}"
-    );
-}
-
-#[tokio::test]
-async fn sovereign_profile_returns_data() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = connect_victauri().await.unwrap();
-    let profile = client
-        .invoke_command("get_sovereign_profile", None)
-        .await
-        .unwrap();
-
-    assert!(
-        profile.is_object(),
-        "sovereign profile must return an object, got: {profile}"
     );
 }
 
@@ -5229,7 +5210,6 @@ async fn expanded_panic_guard_30_plus_commands() {
         ("list_standing_queries", None),
         ("get_learned_preferences", None),
         ("get_ai_usage_summary", None),
-        ("get_sovereign_profile", None),
         ("get_knowledge_gaps", None),
         ("get_intelligence_pulse", None),
         ("get_accuracy_report", None),
