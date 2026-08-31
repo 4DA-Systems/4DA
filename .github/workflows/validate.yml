@@ -873,6 +873,57 @@ jobs:
       # default leg only (one leg is enough: the calibrated fixtures are
       # platform-independent committed .bin files, and the fastembed model is
       # deterministic ONNX inference).
+      # The cache key must contain the exact identity of BOTH artifacts, or a
+      # warm cache silently pins the gate to yesterday's model:
+      #   * hashFiles() over the two fetcher scripts covers ORT_VERSION, the
+      #     model repo id and the file list — anything that changes WHAT is
+      #     fetched changes the key.
+      #   * `main` is a moving ref, so the model's commit SHA is resolved live
+      #     (below) and folded in — the one input hashFiles cannot see.
+      # There are deliberately NO `restore-keys`: a prefix fallback is exactly
+      # how a stale model gets served. Any change to either input is a clean
+      # miss, and the fetch step below re-downloads for real.
+      - name: Resolve embedding-model revision (cache key input)
+        id: model-rev
+        if: matrix.label == 'default' && github.event_name == 'pull_request'
+        working-directory: .
+        run: |
+          api=https://huggingface.co/api/models/Snowflake/snowflake-arctic-embed-m/revision/main
+          sha=$(curl -fsSL --retry 3 --retry-delay 2 --max-time 30 "$api" | jq -er .sha) || sha=''
+          if [ -z "$sha" ]; then
+            # Degrade to a guaranteed cache MISS rather than a red gate: the
+            # fetch step calls the same API and carries its own 4x retry, so
+            # a blip here must not be the thing that fails the merge queue.
+            sha="unresolved-${{ github.run_id }}-${{ github.run_attempt }}"
+            echo "::warning::Could not resolve the embedding-model revision; using a run-unique cache key (guaranteed miss, full download)."
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      # PR events only, deliberately. A cache is readable from the ref that
+      # created it or from the DEFAULT branch — and this workflow has no
+      # `push: main` trigger, so nothing here ever writes a main-scoped entry.
+      # Measured 2026-09-01 on the live repo: all 26 cache entries sit on
+      # `refs/pull/N/merge`, `refs/heads/gh-readonly-queue/...` or a dependabot
+      # branch, NONE on `refs/heads/main`, and the relay job's single key had
+      # been re-saved on 25 different ephemeral refs — i.e. missed and re-uploaded
+      # every time. A merge_group run gets a brand-new queue ref, so it could
+      # only ever MISS and then pay ~15s uploading 127 MB it will never read
+      # back: a net loss on the exact critical path this PR is shortening.
+      # On a PR ref the entry survives across pushes to the same PR, which is
+      # where it actually pays. Widen this `if:` the day validate.yml gains a
+      # main-scoped run, and not before.
+      - name: Cache embedding model + ORT runtime
+        if: matrix.label == 'default' && github.event_name == 'pull_request'
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          # Exactly the two destination dirs the fetchers write. NOT all of
+          # src-tauri/models/ — fetch-ocr-models.cjs owns a sibling dir there
+          # and runs on every leg with its own SHA-256 pin.
+          path: |
+            src-tauri/models/ort
+            src-tauri/models/embeddings
+          key: fourda-models-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/download-ort.cjs', 'scripts/download-embedding-model.cjs') }}-${{ steps.model-rev.outputs.sha }}
+
       - name: Fetch embedding model + ORT runtime (real-embedding gate)
         # Same artifacts `pnpm run bundle:resources` fetches (download-ort +
         # download-embedding-model), invoked directly so this job doesn't need
@@ -881,6 +932,10 @@ jobs:
         # model without any network fallback. Without this fetch the
         # real-embedding tests would try a HuggingFace download mid-test —
         # the exact truncated-archive flake class hermetic.yml documented.
+        #
+        # Unchanged on a cache MISS: both scripts still download and verify.
+        # On a HIT they see the files already on disk and no-op, which is the
+        # documented `--force`-less behaviour of each.
         if: matrix.label == 'default'
         working-directory: .
         run: |

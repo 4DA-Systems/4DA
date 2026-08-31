@@ -31,6 +31,14 @@ const FILES = [
 
 const DEST_ROOT = path.resolve(__dirname, '..', 'src-tauri', 'models', 'embeddings');
 
+// A \r-redrawn progress bar is meaningful on a terminal and is pure noise
+// anywhere else. On a pipe every redraw becomes its OWN log line: the 105 MB
+// model emitted ~7,300 of them, and GitHub Actions then parked the step for a
+// dead-flat 240.00s (measured across 6 merge-group runs, +/-0.01s) draining
+// that burst — against ~5s of actual download. Print a single summary line per
+// file when stdout is not a terminal.
+const SHOW_PROGRESS = process.stdout.isTTY === true && !process.env.CI;
+
 function downloadBuffer(url) {
   return new Promise((resolve, reject) => {
     const follow = (u, redirects = 0) => {
@@ -54,7 +62,7 @@ function downloadBuffer(url) {
         res.on('data', (chunk) => {
           chunks.push(chunk);
           downloaded += chunk.length;
-          if (total > 0) {
+          if (total > 0 && SHOW_PROGRESS) {
             const pct = ((downloaded / total) * 100).toFixed(1);
             const mb = (downloaded / 1048576).toFixed(1);
             const totalMb = (total / 1048576).toFixed(1);
@@ -62,7 +70,7 @@ function downloadBuffer(url) {
           }
         });
         res.on('end', () => {
-          if (total > 0) process.stdout.write('\n');
+          if (total > 0 && SHOW_PROGRESS) process.stdout.write('\n');
           resolve(Buffer.concat(chunks));
         });
         res.on('error', reject);

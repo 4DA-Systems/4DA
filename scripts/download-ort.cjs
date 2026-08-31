@@ -26,6 +26,11 @@ const { execSync } = require('child_process');
 const ORT_VERSION = '1.24.2';
 const DEST_DIR = path.resolve(__dirname, '..', 'src-tauri', 'models', 'ort');
 
+// See download-embedding-model.cjs for the measurement. Same failure here at
+// smaller scale: ~500 redraw lines for the 7.7 MB archive bought a dead-flat
+// 29.7s stall on top of 0.5s of real download, every run.
+const SHOW_PROGRESS = process.stdout.isTTY === true && !process.env.CI;
+
 const PLATFORMS = {
   'win32-x64': {
     url: `https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-win-x64-${ORT_VERSION}.zip`,
@@ -85,7 +90,7 @@ function download(url) {
         res.on('data', (chunk) => {
           chunks.push(chunk);
           downloaded += chunk.length;
-          if (total > 0) {
+          if (total > 0 && SHOW_PROGRESS) {
             const pct = ((downloaded / total) * 100).toFixed(1);
             const mb = (downloaded / 1048576).toFixed(1);
             const totalMb = (total / 1048576).toFixed(1);
@@ -93,7 +98,7 @@ function download(url) {
           }
         });
         res.on('end', () => {
-          if (total > 0) process.stdout.write('\n');
+          if (total > 0 && SHOW_PROGRESS) process.stdout.write('\n');
           resolve(Buffer.concat(chunks));
         });
         res.on('error', reject);
