@@ -340,9 +340,14 @@ pub(crate) async fn apply_llm_reranking(
         return RerankOutcome::Skipped(RerankSkip::NoCandidates);
     }
 
+    // Judge work runs on the cheap sibling of the configured model (same
+    // provider, same key) — see `llm_judge::judge_provider`. The override is
+    // applied BEFORE the tier gate and core construction so the advisor
+    // identity, provenance rows, and calibration samples all record the model
+    // that actually judged.
     let llm_settings = {
         let settings = get_settings_manager().lock();
-        settings.get().llm.clone()
+        crate::llm_judge::judge_provider(&settings.get().llm)
     };
 
     // Gate: skip reranking for Basic-tier models (small local models that

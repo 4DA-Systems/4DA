@@ -618,7 +618,8 @@ async fn analyze_cached_content_inner_impl(
 
         // Score only new items (shared timeout on context build — see
         // scoring::context::BUILD_TIMEOUT_SECS for why it is not 10s anymore).
-        let scoring_ctx = scoring::build_scoring_context_with_timeout(db).await?;
+        let scoring_ctx =
+            scoring::build_scoring_context_with_timeout(db, "differential_scoring").await?;
         let trend_topics = crate::detect_trend_topics(
             new_items
                 .iter()

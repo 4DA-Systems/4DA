@@ -6,6 +6,8 @@
 mod alerts;
 #[cfg(test)]
 mod builtin_purge_tests;
+#[cfg(test)]
+mod edge_dedupe_tests;
 mod hygiene;
 #[cfg(test)]
 mod inclusion_tests;

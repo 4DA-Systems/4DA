@@ -23,36 +23,138 @@ const SCORING_CONTEXT_TTL_SECS: u64 = 300;
 /// hang protection the timeout exists for while surviving startup contention.
 pub(crate) const BUILD_TIMEOUT_SECS: u64 = 45;
 
-/// [`build_scoring_context`] under the standard timeout, with the standard
-/// error strings. The one entry point for every analysis path, so the budget
-/// and its failure message can never drift apart across call sites again.
+/// Soft observability ceiling for builds running WITHOUT a budget: an
+/// unbounded build that crosses this line gets a `warn!` naming its caller —
+/// never an abort. Exists so the open 2026-08-23 audit question ("any budget
+/// is a guess — build_scoring_context has no elapsed_ms instrumentation")
+/// can be answered from live log data before anyone decides to put the
+/// deliberately-unbounded call sites under a timeout.
+const SLOW_BUILD_WARN_SECS: u64 = 30;
+
+/// [`build_scoring_context_tagged`] under the standard timeout, with the
+/// standard error strings. The one entry point for every bounded analysis
+/// path, so the budget and its failure message can never drift apart across
+/// call sites again. `caller` names the call site in every log line and in
+/// the timeout error itself — the 2026-08-23 audit could not tell WHICH of
+/// the divergent call sites was losing its cold build.
 pub(crate) async fn build_scoring_context_with_timeout(
     db: &Database,
+    caller: &'static str,
 ) -> std::result::Result<ScoringContext, String> {
-    tokio::time::timeout(
-        std::time::Duration::from_secs(BUILD_TIMEOUT_SECS),
-        build_scoring_context(db),
+    // Box::pin: run_context_build keeps the build future alive in two arms
+    // (inside tokio::time::timeout and as the unbounded await), and the
+    // context build is a large future — inlining it here doubled the caller's
+    // future past clippy's large_futures ceiling. One heap allocation per
+    // analysis cycle is noise; a 20KB+ future on every scheduler stack is not.
+    run_context_build(
+        caller,
+        Some(std::time::Duration::from_secs(BUILD_TIMEOUT_SECS)),
+        Box::pin(build_scoring_context_tagged(db, caller)),
     )
     .await
-    .map_err(|_| format!("Scoring context build timed out after {BUILD_TIMEOUT_SECS}s"))?
-    .map_err(|e| format!("Failed to build scoring context: {e}"))
 }
 
-/// Build a ScoringContext by loading all needed state. Call once per analysis run.
-/// Results are cached with a 5-minute TTL to avoid redundant DB queries.
-pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContext> {
-    // Check cache first (block scope ensures MutexGuard is dropped before any .await)
-    {
-        let cache = SCORING_CONTEXT_CACHE.lock().unwrap_or_else(|e| {
-            tracing::warn!("SCORING_CONTEXT_CACHE mutex poisoned, recovering");
-            e.into_inner()
-        });
-        if let Some((ref ctx, ref instant)) = *cache {
-            if instant.elapsed().as_secs() < SCORING_CONTEXT_TTL_SECS {
-                return Ok(ctx.clone());
+/// Run one scoring-context build under an optional wall-clock budget.
+///
+/// Owns the timeout and both log-searchable error strings ("Scoring context
+/// build timed out", "Failed to build scoring context"). Generic over the
+/// build future so the budget/error contract is unit-testable without a live
+/// database. `budget: None` never aborts — the slow-build warn for unbounded
+/// callers lives in [`build_scoring_context_tagged`], which also logs
+/// elapsed_ms for every completed build.
+async fn run_context_build<T, F>(
+    caller: &'static str,
+    budget: Option<std::time::Duration>,
+    build: F,
+) -> std::result::Result<T, String>
+where
+    F: std::future::Future<Output = Result<T>>,
+{
+    let built = match budget {
+        Some(limit) => match tokio::time::timeout(limit, build).await {
+            Ok(built) => built,
+            Err(_) => {
+                // The build future was cancelled mid-flight, so the
+                // elapsed_ms log inside it never fired — this line is the
+                // only trace a timed-out build leaves. Keep it caller-tagged.
+                tracing::warn!(target: "4da::scoring",
+                    caller,
+                    budget_secs = limit.as_secs(),
+                    "Scoring context build timed out"
+                );
+                return Err(format!(
+                    "Scoring context build timed out after {}s (caller: {caller})",
+                    limit.as_secs()
+                ));
             }
-        }
+        },
+        None => build.await,
+    };
+    built.map_err(|e| format!("Failed to build scoring context: {e}"))
+}
+
+/// Serve the cached context if one exists and is within TTL.
+/// (Free function so the MutexGuard can never cross an await point.)
+fn cached_scoring_context() -> Option<ScoringContext> {
+    let cache = SCORING_CONTEXT_CACHE.lock().unwrap_or_else(|e| {
+        tracing::warn!("SCORING_CONTEXT_CACHE mutex poisoned, recovering");
+        e.into_inner()
+    });
+    cache.as_ref().and_then(|(ctx, built_at)| {
+        (built_at.elapsed().as_secs() < SCORING_CONTEXT_TTL_SECS).then(|| ctx.clone())
+    })
+}
+
+/// Caller-tagged scoring-context build: the same 5-minute-TTL cached build as
+/// always, plus the elapsed_ms + cache hit/miss instrumentation the headless
+/// timeout diagnosis was blocked on. Only a cold process pays the full build
+/// (which is why the ~daily timeout failures are 100% headless) — so the
+/// `cache = "miss"` lines with their elapsed_ms are the exact dataset the
+/// audit asked for. Unbounded: callers that want the standard budget go
+/// through [`build_scoring_context_with_timeout`]; callers that deliberately
+/// run without one get a warn past [`SLOW_BUILD_WARN_SECS`], never an abort.
+pub(crate) async fn build_scoring_context_tagged(
+    db: &Database,
+    caller: &'static str,
+) -> Result<ScoringContext> {
+    if let Some(ctx) = cached_scoring_context() {
+        tracing::debug!(target: "4da::scoring", caller, cache = "hit",
+            "Scoring context served from cache"
+        );
+        return Ok(ctx);
     }
+    let started = Instant::now();
+    let result = build_scoring_context_cold(db).await;
+    let elapsed_ms = started.elapsed().as_millis() as u64;
+    match &result {
+        Ok(_) => tracing::info!(target: "4da::scoring", caller, elapsed_ms, cache = "miss",
+            "Scoring context built"
+        ),
+        Err(e) => tracing::warn!(target: "4da::scoring", caller, elapsed_ms, cache = "miss",
+            error = %e, "Scoring context build failed"
+        ),
+    }
+    if elapsed_ms >= SLOW_BUILD_WARN_SECS * 1000 {
+        tracing::warn!(target: "4da::scoring", caller, elapsed_ms,
+            "Scoring context build exceeded the {SLOW_BUILD_WARN_SECS}s soft ceiling (observability only — not aborted)"
+        );
+    }
+    result
+}
+
+/// Untagged [`build_scoring_context_tagged`]. Kept only for call sites owned
+/// by other active lanes (monitoring.rs, 2026-08-31) that this change must
+/// not edit — they still get the elapsed_ms + cache hit/miss instrumentation,
+/// just under an anonymous caller tag. New call sites pass a real caller name
+/// via the tagged variants.
+pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContext> {
+    build_scoring_context_tagged(db, "untagged").await
+}
+
+/// Build a ScoringContext by loading all needed state — the cold path behind
+/// the 5-minute-TTL cache and the instrumentation in
+/// [`build_scoring_context_tagged`]. Call once per analysis run.
+async fn build_scoring_context_cold(db: &Database) -> Result<ScoringContext> {
     let cached_context_count = db.context_count()?;
     // Read ONCE per run, not per item: every scored item checks its cached
     // grounding match against this number, and a probe per item would put a
@@ -1950,6 +2052,82 @@ mod tests {
             5,
             "original 3 + 2 synthesized = 5 total interests; got {}",
             interests.len()
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Group 8: Context-build budget helper (run_context_build)
+    // The timeout / error-string / caller-tag contract behind
+    // build_scoring_context_with_timeout — exercised with stub futures so no
+    // live database is needed.
+    // ══════════════════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_budget_timeout_names_caller_and_keeps_searchable_phrase() {
+        // u8 stub payload: the helper is generic precisely so the contract is
+        // testable without a live DB (or a Debug impl on ScoringContext).
+        let err = run_context_build::<u8, _>(
+            "test_timeout_caller",
+            Some(std::time::Duration::from_millis(20)),
+            std::future::pending(),
+        )
+        .await
+        .expect_err("a build that never completes must time out");
+        assert!(
+            err.contains("Scoring context build timed out"),
+            "timeout error must keep the log-searchable phrase; got {err:?}"
+        );
+        assert!(
+            err.contains("test_timeout_caller"),
+            "timeout error must name the caller so the failing site is \
+             identifiable from the error alone; got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_no_budget_never_aborts_a_slow_build() {
+        let result = run_context_build("test_unbounded_caller", None, async {
+            // Longer than the 20ms budget the timeout test uses — proves
+            // budget: None means "never abort", not "tiny default budget".
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            Ok(42u8)
+        })
+        .await;
+        assert_eq!(
+            result,
+            Ok(42),
+            "budget: None must let a slow build run to completion"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fast_build_passes_within_budget() {
+        let result = run_context_build(
+            "test_ok_caller",
+            Some(std::time::Duration::from_secs(5)),
+            async { Ok(7u8) },
+        )
+        .await;
+        assert_eq!(result, Ok(7), "a fast build must pass through untouched");
+    }
+
+    #[tokio::test]
+    async fn test_build_failure_keeps_standard_error_string() {
+        let err = run_context_build::<u8, _>(
+            "test_fail_caller",
+            Some(std::time::Duration::from_secs(5)),
+            async { Err(crate::error::FourDaError::from("boom".to_string())) },
+        )
+        .await
+        .expect_err("a failed build must map to the standard error string");
+        assert!(
+            err.starts_with("Failed to build scoring context:"),
+            "build failure must keep the standard, log-searchable error \
+             prefix; got {err:?}"
+        );
+        assert!(
+            err.contains("boom"),
+            "the underlying build error must survive the mapping; got {err:?}"
         );
     }
 }

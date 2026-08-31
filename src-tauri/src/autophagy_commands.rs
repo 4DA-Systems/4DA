@@ -176,6 +176,35 @@ pub struct DataHealth {
     pub retention_days: u32,
     pub db_size_mb: f64,
     pub health_status: String, // "healthy", "growing", "needs_attention"
+    /// One concrete action, populated only when `health_status` is
+    /// "needs_attention". A status that says "needs attention" without saying
+    /// what to do is an alarm with no handle.
+    pub recommendation: Option<String>,
+}
+
+/// Classify database health and, when it needs attention, say exactly what to
+/// do about it. Pure function so the tiers and wording are unit-testable
+/// without a database.
+fn classify_data_health(
+    db_size_mb: f64,
+    source_items: i64,
+    retention_days: u32,
+) -> (String, Option<String>) {
+    if db_size_mb > 500.0 || source_items > 100_000 {
+        let reason = if db_size_mb > 500.0 {
+            format!("Database is {db_size_mb:.0} MB (threshold 500)")
+        } else {
+            format!("Database holds {source_items} items (threshold 100,000)")
+        };
+        let recommendation = format!(
+            "{reason}. Retention is {retention_days} days — lower it in Settings or run Deep Clean to reclaim space."
+        );
+        ("needs_attention".to_string(), Some(recommendation))
+    } else if db_size_mb > 200.0 || source_items > 50_000 {
+        ("growing".to_string(), None)
+    } else {
+        ("healthy".to_string(), None)
+    }
 }
 
 /// Get data health overview.
@@ -191,19 +220,15 @@ pub async fn get_data_health() -> Result<DataHealth> {
 
     let db_size_mb = stats.db_size_bytes as f64 / (1024.0 * 1024.0);
 
-    let health_status = if db_size_mb > 500.0 || stats.source_items > 100_000 {
-        "needs_attention".to_string()
-    } else if db_size_mb > 200.0 || stats.source_items > 50_000 {
-        "growing".to_string()
-    } else {
-        "healthy".to_string()
-    };
+    let (health_status, recommendation) =
+        classify_data_health(db_size_mb, stats.source_items, retention_days);
 
     Ok(DataHealth {
         stats,
         retention_days,
         db_size_mb: (db_size_mb * 10.0).round() / 10.0,
         health_status,
+        recommendation,
     })
 }
 
@@ -373,6 +398,57 @@ mod tests {
                 .expect("has cycle")
                 .items_analyzed,
             100
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // classify_data_health — the tiers and, critically, the recommendation
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_classify_healthy_and_growing_have_no_recommendation() {
+        let (status, rec) = classify_data_health(50.0, 1_000, 30);
+        assert_eq!(status, "healthy");
+        assert_eq!(rec, None);
+
+        let (status, rec) = classify_data_health(250.0, 1_000, 30);
+        assert_eq!(status, "growing");
+        assert_eq!(rec, None);
+
+        let (status, rec) = classify_data_health(50.0, 60_000, 30);
+        assert_eq!(status, "growing");
+        assert_eq!(rec, None);
+    }
+
+    #[test]
+    fn test_classify_needs_attention_by_size_names_the_action() {
+        let (status, rec) = classify_data_health(612.3, 20_000, 45);
+        assert_eq!(status, "needs_attention");
+        let rec = rec.expect("needs_attention must carry a recommendation");
+        assert!(rec.contains("612 MB"), "names the measured size: {rec}");
+        assert!(rec.contains("threshold 500"), "names the threshold: {rec}");
+        assert!(rec.contains("45 days"), "names current retention: {rec}");
+        assert!(
+            rec.contains("Settings"),
+            "points at the retention control: {rec}"
+        );
+        assert!(
+            rec.contains("Deep Clean"),
+            "points at the reclaim action: {rec}"
+        );
+    }
+
+    #[test]
+    fn test_classify_needs_attention_by_item_count_names_the_action() {
+        // Item-count trigger with size under threshold: the reason must not
+        // claim a size problem that does not exist.
+        let (status, rec) = classify_data_health(120.0, 150_000, 30);
+        assert_eq!(status, "needs_attention");
+        let rec = rec.expect("needs_attention must carry a recommendation");
+        assert!(rec.contains("150000 items"), "names the item count: {rec}");
+        assert!(
+            !rec.contains("120 MB"),
+            "must not misattribute to size: {rec}"
         );
     }
 

@@ -3542,7 +3542,7 @@ pub async fn assess_blind_spots_with_ai() -> std::result::Result<BlindSpotAssess
     );
 
     // 5. Single LLM call — the only await; no guards held across it.
-    let client = crate::llm::LLMClient::new(provider);
+    let client = crate::llm::LLMClient::with_purpose(provider, "blind_spots");
     let response = client
         .complete(
             BS_ASSESS_SYSTEM_PROMPT,

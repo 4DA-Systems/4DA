@@ -8,7 +8,7 @@
 
 use crate::error::{Result, ResultExt};
 use crate::settings::LLMProvider;
-use crate::state::{is_llm_limit_reached, record_llm_cost, record_llm_tokens};
+use crate::state::{is_llm_limit_reached, record_llm_cost_millicents, record_llm_tokens};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -129,6 +129,53 @@ fn record_ai_usage(provider: &str, model: &str, task_type: &str, tokens_in: u64,
     }
 }
 
+/// Seed today's in-memory daily LLM usage counters from the persisted
+/// `ai_usage` table. Called once at startup by both `fourda` and
+/// `fourda-engine`: the daily-limit counters are process-local atomics, so
+/// without this every restart granted a fresh daily budget (and the app and
+/// the headless engine each had their own) — a dev day with several restarts
+/// could spend a multiple of the configured cap.
+///
+/// The ledger resets on the LOCAL date (`maybe_reset_daily_counter`) while
+/// `ai_usage.created_at` is UTC, so the window is [local midnight → now] in
+/// UTC. Best-effort: any failure leaves the counters unseeded, which is the
+/// pre-existing behavior.
+pub(crate) fn seed_daily_usage_from_db() {
+    let Ok(conn) = crate::open_db_connection() else {
+        return;
+    };
+
+    let Some(local_midnight) = chrono::Local::now()
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .and_then(|naive| naive.and_local_timezone(chrono::Local).earliest())
+    else {
+        return;
+    };
+    let since_utc = local_midnight
+        .with_timezone(&chrono::Utc)
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+
+    let row = conn.query_row(
+        "SELECT COALESCE(SUM(tokens_in + tokens_out), 0), COALESCE(SUM(estimated_cost_usd), 0.0)
+         FROM ai_usage WHERE created_at >= ?1",
+        rusqlite::params![since_utc],
+        |row| {
+            let tokens: i64 = row.get(0)?;
+            let cost_usd: f64 = row.get(1)?;
+            Ok((tokens, cost_usd))
+        },
+    );
+
+    if let Ok((tokens, cost_usd)) = row {
+        if tokens > 0 || cost_usd > 0.0 {
+            let millicents = (cost_usd * 100_000.0).max(0.0).round() as u64;
+            crate::state::seed_llm_daily_usage(tokens.max(0) as u64, millicents);
+        }
+    }
+}
+
 // ============================================================================
 // LLM Client
 // ============================================================================
@@ -136,10 +183,27 @@ fn record_ai_usage(provider: &str, model: &str, task_type: &str, tokens_in: u64,
 pub struct LLMClient {
     provider: LLMProvider,
     client: reqwest::Client,
+    /// What feature this client serves ("rerank_judge", "briefing", …).
+    /// Recorded as `ai_usage.task_type` so cost investigations can answer
+    /// "which subsystem is burning tokens" with one GROUP BY — before this
+    /// existed every row said "completion" and the question was unanswerable
+    /// (2026-08-31 cost audit). `None` falls back to the generic call-shape
+    /// labels ("completion" / "structured_completion" / "streaming").
+    purpose: Option<&'static str>,
 }
 
 impl LLMClient {
     pub fn new(provider: LLMProvider) -> Self {
+        Self::build(provider, None)
+    }
+
+    /// Construct a client tagged with the feature it serves, for per-feature
+    /// cost attribution in `ai_usage`.
+    pub fn with_purpose(provider: LLMProvider, purpose: &'static str) -> Self {
+        Self::build(provider, Some(purpose))
+    }
+
+    fn build(provider: LLMProvider, purpose: Option<&'static str>) -> Self {
         let timeout_secs: u64 = 120;
         Self {
             provider,
@@ -155,7 +219,14 @@ impl LLMClient {
                     warn!("Failed to build HTTP client: {e}, using default");
                     reqwest::Client::new()
                 }),
+            purpose,
         }
+    }
+
+    /// The `ai_usage.task_type` label for this client: the tagged purpose when
+    /// set, else the generic call-shape label.
+    fn task_label(&self, call_shape: &'static str) -> &'static str {
+        self.purpose.unwrap_or(call_shape)
     }
 
     /// Check if the client is configured.
@@ -220,14 +291,14 @@ impl LLMClient {
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
             let tokens_ok = record_llm_tokens(total_tokens);
-            let cost_cents =
-                self.estimate_cost_cents(response.input_tokens, response.output_tokens);
-            let cost_ok = record_llm_cost(cost_cents);
+            let cost_millicents =
+                self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
+            let cost_ok = record_llm_cost_millicents(cost_millicents);
             if !tokens_ok || !cost_ok {
                 debug!(
                     target: "4da::llm",
                     tokens = total_tokens,
-                    cost_cents = cost_cents,
+                    cost_millicents = cost_millicents,
                     "Limit exceeded after this call — future calls will be blocked"
                 );
             }
@@ -236,7 +307,7 @@ impl LLMClient {
             record_ai_usage(
                 &self.provider.provider,
                 &self.provider.model,
-                "completion",
+                self.task_label("completion"),
                 response.input_tokens,
                 response.output_tokens,
             );
@@ -305,20 +376,20 @@ impl LLMClient {
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
             let tokens_ok = record_llm_tokens(total_tokens);
-            let cost_cents =
-                self.estimate_cost_cents(response.input_tokens, response.output_tokens);
-            let cost_ok = record_llm_cost(cost_cents);
+            let cost_millicents =
+                self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
+            let cost_ok = record_llm_cost_millicents(cost_millicents);
             if !tokens_ok || !cost_ok {
                 debug!(
                     target: "4da::llm",
-                    tokens = total_tokens, cost_cents,
+                    tokens = total_tokens, cost_millicents,
                     "Limit exceeded after this call — future calls will be blocked"
                 );
             }
             record_ai_usage(
                 &self.provider.provider,
                 &self.provider.model,
-                "structured_completion",
+                self.task_label("structured_completion"),
                 response.input_tokens,
                 response.output_tokens,
             );
@@ -367,9 +438,9 @@ impl LLMClient {
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
             let _ = record_llm_tokens(total_tokens);
-            let cost_cents =
-                self.estimate_cost_cents(response.input_tokens, response.output_tokens);
-            let _ = record_llm_cost(cost_cents);
+            let cost_millicents =
+                self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
+            let _ = record_llm_cost_millicents(cost_millicents);
             record_ai_usage(
                 &self.provider.provider,
                 &self.provider.model,
@@ -930,14 +1001,14 @@ impl LLMClient {
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
             let tokens_ok = record_llm_tokens(total_tokens);
-            let cost_cents =
-                self.estimate_cost_cents(response.input_tokens, response.output_tokens);
-            let cost_ok = record_llm_cost(cost_cents);
+            let cost_millicents =
+                self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
+            let cost_ok = record_llm_cost_millicents(cost_millicents);
             if !tokens_ok || !cost_ok {
                 debug!(
                     target: "4da::llm",
                     tokens = total_tokens,
-                    cost_cents = cost_cents,
+                    cost_millicents = cost_millicents,
                     "Limit exceeded after streaming call — future calls will be blocked"
                 );
             }
@@ -946,7 +1017,7 @@ impl LLMClient {
             record_ai_usage(
                 &self.provider.provider,
                 &self.provider.model,
-                "streaming",
+                self.task_label("streaming"),
                 response.input_tokens,
                 response.output_tokens,
             );
@@ -992,6 +1063,18 @@ impl LLMClient {
     /// Returns 0 for unknown models (backward compat).
     pub fn estimate_cost_cents(&self, input_tokens: u64, output_tokens: u64) -> u64 {
         crate::model_registry::estimate_cost_or_zero(
+            &self.provider.provider,
+            &self.provider.model,
+            input_tokens,
+            output_tokens,
+        )
+    }
+
+    /// Estimate cost in millicents (1/1000 of a cent) based on provider and
+    /// tokens. Millicent granularity keeps sub-cent calls visible to the
+    /// daily budget ledger. Returns 0 for unknown models (backward compat).
+    pub fn estimate_cost_millicents(&self, input_tokens: u64, output_tokens: u64) -> u64 {
+        crate::model_registry::estimate_cost_millicents_or_zero(
             &self.provider.provider,
             &self.provider.model,
             input_tokens,

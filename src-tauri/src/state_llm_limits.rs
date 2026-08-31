@@ -22,8 +22,11 @@ use super::get_settings_manager;
 /// Tracks total LLM tokens consumed today (all providers, all callers).
 static LLM_DAILY_TOKENS: AtomicU64 = AtomicU64::new(0);
 
-/// Tracks estimated LLM cost in USD cents consumed today.
-static LLM_DAILY_COST_CENTS: AtomicU64 = AtomicU64::new(0);
+/// Tracks estimated LLM cost in MILLICENTS (1/1000 of a USD cent) consumed
+/// today. Millicent granularity because the ledger sums per-call estimates:
+/// a cheap judge call costs ~0.4c, which a cents-granular ledger records as 0
+/// — the daily cost cap would never see those calls at all.
+static LLM_DAILY_COST_MILLICENTS: AtomicU64 = AtomicU64::new(0);
 
 /// Stores the date string (YYYY-MM-DD local time) for daily reset detection.
 static LLM_DAILY_RESET_DATE: Lazy<Mutex<String>> =
@@ -70,42 +73,64 @@ pub(crate) fn record_llm_tokens(count: u64) -> bool {
 }
 
 /// Record LLM cost usage and check if still under the daily cost limit.
-/// `cost_cents` is the estimated cost of the call in USD cents.
-/// Returns `true` if usage is within the limit, `false` if exceeded.
-pub(crate) fn record_llm_cost(cost_cents: u64) -> bool {
-    if cost_cents == 0 {
+/// `cost_millicents` is the estimated cost of the call in millicents
+/// (1/1000 of a USD cent). Returns `true` if usage is within the limit,
+/// `false` if exceeded.
+pub(crate) fn record_llm_cost_millicents(cost_millicents: u64) -> bool {
+    if cost_millicents == 0 {
         return true;
     }
     maybe_reset_daily_counter();
-    let new_total = LLM_DAILY_COST_CENTS.fetch_add(cost_cents, Ordering::Relaxed) + cost_cents;
-    let limit = get_llm_daily_cost_limit();
+    let new_total =
+        LLM_DAILY_COST_MILLICENTS.fetch_add(cost_millicents, Ordering::Relaxed) + cost_millicents;
+    let limit_millicents = get_llm_daily_cost_limit().saturating_mul(1000);
 
-    if limit > 0 {
+    if limit_millicents > 0 {
         // Emit warning at 80% usage (once per day)
-        let threshold_80 = limit * 4 / 5;
+        let threshold_80 = limit_millicents / 5 * 4;
         if new_total >= threshold_80 && !LLM_COST_WARNING_EMITTED.swap(true, Ordering::Relaxed) {
             warn!(
                 target: "4da::llm",
-                used_cents = new_total,
-                limit_cents = limit,
-                percent = (new_total as f64 / limit as f64 * 100.0) as u32,
+                used_cents = new_total / 1000,
+                limit_cents = limit_millicents / 1000,
+                percent = (new_total as f64 / limit_millicents as f64 * 100.0) as u32,
                 "LLM daily cost at 80%+ — approaching limit (${:.2} / ${:.2})",
-                new_total as f64 / 100.0,
-                limit as f64 / 100.0,
+                new_total as f64 / 100_000.0,
+                limit_millicents as f64 / 100_000.0,
             );
         }
 
-        if new_total > limit {
+        if new_total > limit_millicents {
             warn!(
                 target: "4da::llm",
-                used_cents = new_total,
-                limit_cents = limit,
+                used_cents = new_total / 1000,
+                limit_cents = limit_millicents / 1000,
                 "Daily LLM cost limit exceeded"
             );
             return false;
         }
     }
     true
+}
+
+/// Seed today's usage counters from persisted per-call records (the
+/// `ai_usage` table), so a process restart does not silently reset the daily
+/// budget. Both `fourda` and `fourda-engine` call this at startup: without
+/// it, every restart handed the process a fresh daily allowance — a dev day
+/// with five restarts could spend 5x the configured cap.
+///
+/// Uses `fetch_max`, never `store`: if calls were already recorded in this
+/// process before seeding ran, the larger value wins and nothing is lost.
+pub(crate) fn seed_llm_daily_usage(tokens: u64, cost_millicents: u64) {
+    maybe_reset_daily_counter();
+    LLM_DAILY_TOKENS.fetch_max(tokens, Ordering::Relaxed);
+    LLM_DAILY_COST_MILLICENTS.fetch_max(cost_millicents, Ordering::Relaxed);
+    info!(
+        target: "4da::llm",
+        seeded_tokens = tokens,
+        seeded_cost_cents = cost_millicents / 1000,
+        "Seeded daily LLM usage counters from persisted usage records"
+    );
 }
 
 /// Check if either the daily token limit or cost limit has been reached (pre-call gate).
@@ -119,7 +144,9 @@ pub(crate) fn is_llm_limit_reached() -> bool {
     }
 
     let cost_limit = get_llm_daily_cost_limit();
-    if cost_limit > 0 && LLM_DAILY_COST_CENTS.load(Ordering::Relaxed) >= cost_limit {
+    if cost_limit > 0
+        && LLM_DAILY_COST_MILLICENTS.load(Ordering::Relaxed) >= cost_limit.saturating_mul(1000)
+    {
         return true;
     }
 
@@ -139,7 +166,7 @@ pub(crate) fn get_llm_token_usage() -> (u64, u64) {
 /// Returns `(used_cents, limit_cents)` where limit=0 means unlimited.
 pub(crate) fn get_llm_cost_usage() -> (u64, u64) {
     maybe_reset_daily_counter();
-    let used = LLM_DAILY_COST_CENTS.load(Ordering::Relaxed);
+    let used = LLM_DAILY_COST_MILLICENTS.load(Ordering::Relaxed) / 1000;
     let limit = get_llm_daily_cost_limit();
     (used, limit)
 }
@@ -150,7 +177,7 @@ fn maybe_reset_daily_counter() {
     let mut date = LLM_DAILY_RESET_DATE.lock();
     if *date != today {
         LLM_DAILY_TOKENS.store(0, Ordering::Relaxed);
-        LLM_DAILY_COST_CENTS.store(0, Ordering::Relaxed);
+        LLM_DAILY_COST_MILLICENTS.store(0, Ordering::Relaxed);
         LLM_TOKEN_WARNING_EMITTED.store(false, Ordering::Relaxed);
         LLM_COST_WARNING_EMITTED.store(false, Ordering::Relaxed);
         info!(target: "4da::llm", old_date = %*date, new_date = %today, "Daily LLM usage counters reset");
