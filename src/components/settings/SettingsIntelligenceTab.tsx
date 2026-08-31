@@ -5,6 +5,7 @@ import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { AIProviderSection } from './AIProviderSection';
 import { BlindSpotsAssessSection } from './BlindSpotsAssessSection';
 import { YourStackSection } from './YourStackSection';
+import { StandingQueriesSection } from './StandingQueriesSection';
 import { LicenseSection } from './LicenseSection';
 
 import type { Settings } from '../../types';
@@ -125,6 +126,11 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
 
         {/* Your Stack — user-controlled project allowlist for grounding */}
         <YourStackSection />
+
+        {/* Standing Queries — persistent monitoring searches (Signal) */}
+        <PanelErrorBoundary name="Standing Queries">
+          <StandingQueriesSection />
+        </PanelErrorBoundary>
 
         {/* Inline status feedback — always visible near the buttons */}
         {inlineStatus && (
