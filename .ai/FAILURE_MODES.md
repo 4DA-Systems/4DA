@@ -363,3 +363,35 @@ Spots ranks items judged by two pipeline versions against each other.
 **The generalisable rule:** when you add a loop that is supposed to shrink
 something, log the SIZE OF THE THING, before and after. Never log the size of the
 attempt.
+
+---
+
+## FM: A migration that rebuilds a table silently cascades its children away
+*(observed 2026-08-31 by immune scan; latent — no migration has triggered it yet)*
+
+`run_versioned_migration` (`src-tauri/src/db/migrations.rs`) opens its transaction
+**before** calling `migration_fn`, and **`PRAGMA foreign_keys` is a no-op inside an
+open transaction**. A migration therefore has no escape hatch: it cannot turn FK
+enforcement off for the duration of a table rebuild.
+
+Schema 114 (#558) made the SQLite table-rebuild pattern — `CREATE` new, `INSERT
+SELECT`, `DROP TABLE <old>`, `RENAME` — house style. That is the correct pattern
+in general. But applied to `source_items` it becomes a data-loss event: every
+child row with `ON DELETE CASCADE` is deleted by the `DROP`, **with no error and
+no log line**. Today that means all of `scoring_explanations` (schema 115) and
+`source_item_dependencies`. The 81%-missing-explanations hole that #591 just
+closed would reopen in a single statement.
+
+**Before writing any migration that rebuilds `source_items` (or any parent table):**
+1. Enumerate its children — `PRAGMA foreign_key_list` on every table, not just the
+   ones you remember.
+2. Prefer `ALTER TABLE ... ADD COLUMN` / a targeted `UPDATE` over a rebuild.
+3. If a rebuild is genuinely required, snapshot the child tables inside the same
+   transaction and restore them after the `RENAME`, and assert the row counts match.
+4. Add a migration test that seeds child rows, runs the migration, and asserts the
+   children survive. A migration test that only checks the parent's shape will pass
+   while the cascade quietly empties everything downstream.
+
+**The generalisable rule:** a `DROP TABLE` is not a local edit — it is a delete
+statement for every table that references it. Enumerate the children before you
+drop the parent, and let a test prove they survived.

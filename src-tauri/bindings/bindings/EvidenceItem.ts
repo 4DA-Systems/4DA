@@ -47,7 +47,7 @@ reversibility?: number | null,
  */
 evidence: Array<EvidenceCitation>, 
 /**
- * Transport metadata (AD-035, list responses only): the number of
+ * Transport metadata (AD-036, list responses only): the number of
  * citations backing this item BEFORE list-payload trimming. `None`
  * means `evidence` is complete (detail responses, stored snapshots,
  * every non-list surface). When `Some(n)` and `n > evidence.len()`,

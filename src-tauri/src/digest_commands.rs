@@ -7,7 +7,7 @@
 use tracing::{error, info, warn};
 
 use crate::error::Result;
-use crate::prompt_safety::{sanitize_untrusted, wrap_briefing_items, BriefingItem};
+use crate::prompt_safety::{sanitize_untrusted, wrap_unindexed_items, BriefingItem, BriefingSlate};
 use crate::scoring::get_ace_context;
 use crate::{get_analysis_state, get_database, get_settings_manager};
 
@@ -271,32 +271,16 @@ pub(crate) async fn generate_briefing_internal(
     // Wrap every item in <source_item> framing with sanitized title/URL/etc.
     // so that article titles from HN/Reddit/RSS cannot inject instructions
     // into the prompt. See `prompt_safety` module for defense semantics.
-    // `item.id` is an i64 — materialize a string per-item so we can hand a
-    // &str to the BriefingItem builder (which expects &str for uniformity
-    // across numeric and non-numeric IDs in other callers).
-    // Same honesty gate as the batched drain above: a titleless row is
-    // pipeline metadata, not a signal — it must not occupy a prompt slot.
-    let items_take: Vec<_> = items
-        .iter()
-        .filter(|item| !item.title.trim().is_empty())
-        .take(20)
-        .collect();
-    let id_strings: Vec<String> = items_take.iter().map(|item| item.id.to_string()).collect();
-    let briefing_items = items_take.iter().enumerate().map(|(idx, item)| {
-        let why = explanations
-            .get(&item.id)
-            .map(std::string::String::as_str)
-            .unwrap_or("No context match");
-        BriefingItem {
-            id: id_strings[idx].as_str(),
-            title: &item.title,
-            url: item.url.as_deref(),
-            source_type: Some(&item.source_type),
-            score_percent: Some((item.relevance_score.unwrap_or(0.0) * 100.0) as u32),
-            why_matched: Some(why),
-        }
-    });
-    let items_text: String = wrap_briefing_items(briefing_items);
+    //
+    // `items_text` (what the model reads) and `slate_ids` (what a verdict
+    // index maps back to) are produced by ONE pass inside `build_prompt_slate`,
+    // which also owns the filter/take cut. Do NOT recompute either here: a
+    // second chain that drifts from the prompt is the #560/#580 defect that
+    // silently bound verdicts to unrelated items.
+    let BriefingSlate {
+        text: items_text,
+        ids: slate_ids,
+    } = briefing_prompt::build_prompt_slate(&items, &explanations);
 
     let tech_summary = if ace_ctx.detected_tech.is_empty() {
         "Not detected".to_string()
@@ -322,7 +306,8 @@ pub(crate) async fn generate_briefing_internal(
     };
 
     // Analyst persona + grounding rules + the MACHINE TRAILER verdict
-    // contract (AD-035) — extracted to briefing_prompt.rs, byte-identical.
+    // contract (AD-035). Lives in briefing_prompt.rs next to the slate builder
+    // that renders the `index` attributes the trailer addresses.
     let system_prompt = briefing_system_prompt();
 
     let batched_section = if batched.is_empty() {
@@ -331,7 +316,14 @@ pub(crate) async fn generate_briefing_internal(
         // Batched notifications also carry untrusted titles — wrap them the
         // same way as primary items so injection attempts cannot slip through
         // this alternate entry point.
-        let batched_wrapped: String = wrap_briefing_items(batched.iter().map(|b| BriefingItem {
+        //
+        // UNINDEXED on purpose. These entries have no `source_items.id` (the
+        // id below is the literal "batched"), so there is nothing a verdict
+        // could be recorded against. Numbering them would open a second index
+        // namespace that also starts at 1, and a verdict aimed here would
+        // resolve — fully in range — to an unrelated item of the primary
+        // slate. No index attribute, nothing to address.
+        let batched_wrapped: String = wrap_unindexed_items(batched.iter().map(|b| BriefingItem {
             id: "batched",
             title: &b.title,
             url: None,
@@ -493,9 +485,10 @@ pub(crate) async fn generate_briefing_internal(
                 ) {
                     Ok(briefing_id) => {
                         // Join trailer indices back to the narrated slate's real
-                        // item ids (same take(20) cut the prompt used). Malformed
-                        // or out-of-range trailers record nothing.
-                        let slate_ids: Vec<i64> = items.iter().take(20).map(|i| i.id).collect();
+                        // item ids. `slate_ids` came out of the same pass that
+                        // rendered the prompt, so index n addresses exactly the
+                        // item shown at index n. Malformed or out-of-range
+                        // trailers record nothing.
                         crate::brief_rejections::record_rejections(
                             &db,
                             briefing_id,
@@ -628,8 +621,6 @@ pub async fn generate_ai_briefing(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // ========================================================================
     // Briefing JSON response structure tests
     // ========================================================================

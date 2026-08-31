@@ -20,7 +20,7 @@ url?: string | null,
 freshness_days: number, 
 /**
  * Why this was selected as evidence. ≤ 200 chars. May be blanked in
- * LIST transport (the Preemption list never renders it — AD-035); the
+ * LIST transport (the Preemption list never renders it — AD-036); the
  * detail path always carries the full note.
  */
 relevance_note?: string, };

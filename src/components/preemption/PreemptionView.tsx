@@ -118,7 +118,8 @@ const PreemptionView = memo(function PreemptionView() {
   return (
     <div className="space-y-5" role="tabpanel" id="view-panel-preemption" aria-labelledby="tab-preemption">
       <header>
-        <h1 className="text-xl font-semibold text-text-primary tracking-tight">{t('preemption.title')}</h1>
+        {/* h2, not h1: App.tsx owns the document h1; tier sections below are h3. */}
+        <h2 className="text-xl font-semibold text-text-primary tracking-tight">{t('preemption.title')}</h2>
         <p className="text-sm text-text-muted mt-1">{t('preemption.subtitle')}</p>
       </header>
 
