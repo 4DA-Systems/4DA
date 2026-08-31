@@ -32,7 +32,7 @@ function makeEvidenceItem(overrides: Partial<EvidenceItem> & { id: string }): Ev
     refutation_condition: null,
     lens_hints: {
       briefing: false, preemption: false, blind_spots: true, evidence: false,
-      other_build_target: false, upgrade_plan: false,
+      other_build_target: false, upgrade_plan: false, no_coverage: false,
     },
     created_at: BigInt(0),
     expires_at: null,
@@ -125,5 +125,56 @@ describe('useBlindSpotsData', () => {
     ]);
     const { result } = renderHook(() => useBlindSpotsData(feed, new Set()));
     expect(result.current.unmatchedSignals).toHaveLength(2);
+  });
+
+  // ── No-coverage split (2026-08-31 live audit) ────────────────────────────
+  // A gap the backend classified as zero-available-signals must not land in
+  // 'falling_behind' ("Drifting — N dependencies with unreviewed activity"):
+  // 20+ of that section's rows literally said "Sources were checked but found
+  // no results". The lens_hints.no_coverage hint routes them to their own
+  // honestly-labeled status.
+
+  function noCoverageGap(id: string, dep: string, urgency: 'critical' | 'high' | 'medium' | 'watch' = 'medium') {
+    return makeEvidenceItem({
+      id, kind: 'gap', title: `${dep} — unmonitored`, urgency,
+      affected_deps: [dep],
+      lens_hints: {
+        briefing: false, preemption: false, blind_spots: true, evidence: false,
+        other_build_target: false, upgrade_plan: false, no_coverage: true,
+      },
+    });
+  }
+
+  it('routes zero-coverage gaps to no_coverage, not falling_behind', () => {
+    const feed = makeFeed([
+      noCoverageGap('bs_uncov_npm_quiet-pkg (npm)', 'quiet-pkg (npm)'),
+      // A gap WITH unreviewed activity keeps the normal tiers.
+      makeEvidenceItem({
+        id: 'bs_uncov_npm_busy-pkg (npm)', kind: 'gap',
+        title: 'busy-pkg (npm) — 3 updates to review', affected_deps: ['busy-pkg (npm)'],
+      }),
+    ]);
+    const { result } = renderHook(() => useBlindSpotsData(feed, new Set()));
+
+    const byName = new Map(result.current.depRows.map(r => [r.name, r.status]));
+    expect(byName.get('quiet-pkg (npm)')).toBe('no_coverage');
+    expect(byName.get('busy-pkg (npm)')).toBe('falling_behind');
+  });
+
+  it('no_coverage takes precedence over gap urgency (zero signals is not activity)', () => {
+    const feed = makeFeed([noCoverageGap('bs_uncov_npm_risky (npm)', 'risky (npm)', 'high')]);
+    const { result } = renderHook(() => useBlindSpotsData(feed, new Set()));
+    expect(result.current.depRows[0]!.status).toBe('no_coverage');
+  });
+
+  it('a no-coverage gap that DID attract visible missed signals shows as activity again', () => {
+    const feed = makeFeed([
+      noCoverageGap('bs_uncov_npm_react (npm)', 'react (npm)', 'high'),
+      makeEvidenceItem({ id: 'bs_missed_50', title: 'A hooks deep dive', affected_deps: ['react'] }),
+    ]);
+    const { result } = renderHook(() => useBlindSpotsData(feed, new Set()));
+    // Visible signals matched to the row = real activity — the honest label
+    // is the activity tier (high-urgency gap → blind_spot), not no_coverage.
+    expect(result.current.depRows[0]!.status).toBe('blind_spot');
   });
 });

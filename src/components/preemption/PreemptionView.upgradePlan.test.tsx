@@ -49,7 +49,7 @@ function baseItem(id: string, overrides: Record<string, unknown> = {}) {
     suggested_actions: [],
     precedents: [],
     refutation_condition: null,
-    lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: false, upgrade_plan: false },
+    lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: false, upgrade_plan: false, no_coverage: false },
     created_at: 0,
     expires_at: null,
     ...overrides,
@@ -62,7 +62,7 @@ function planStep(pkg: string, urgency = 'high') {
     confidence: { value: 0.9, provenance: 'heuristic', sample_size: null },
     urgency,
     affected_deps: [pkg],
-    lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: false, upgrade_plan: true },
+    lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: false, upgrade_plan: true, no_coverage: false },
   });
 }
 
@@ -140,7 +140,7 @@ describe('PreemptionView — Upgrade Plan group (Phase 1 dependency intelligence
     setFeed([
       planStep('winapi'),
       osvAlert('winapi', {
-        lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: true, upgrade_plan: false },
+        lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: true, upgrade_plan: false, no_coverage: false },
       }),
     ]);
     render(<PreemptionView />);

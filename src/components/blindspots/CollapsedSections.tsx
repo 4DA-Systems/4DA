@@ -121,6 +121,58 @@ export const OtherBuildTargetsSection = memo(function OtherBuildTargetsSection({
 });
 
 /**
+ * 2026-08-31 live audit: dependencies with ZERO available signals. These used
+ * to sit inside the "Unreviewed Signals … unreviewed activity — Drifting"
+ * tier while their own explanations read "Sources were checked but found no
+ * results" — zero coverage inflating the drifting count. Now an honest,
+ * separately-counted group: collapsed by default (there is no activity to
+ * review), expandable to the full rows with their coverage diagnostics and
+ * the Watch/Investigate actions. Modeled on `OtherBuildTargetsSection`.
+ */
+export const NoCoverageSection = memo(function NoCoverageSection({
+  depRows, onDismissSignal, onAddWatch,
+}: {
+  depRows: DepRow[];
+  onDismissSignal: (id: string) => void;
+  onAddWatch?: (packageName: string, ecosystem: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [show, setShow] = useState(false);
+
+  if (depRows.length === 0) return null;
+
+  return (
+    <section aria-label={t('blindspots.status.noCoverage')}>
+      <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+        <button
+          onClick={() => setShow(prev => !prev)}
+          aria-expanded={show}
+          className="w-full px-4 py-3 flex items-center gap-2 hover:bg-bg-tertiary/30 transition-colors"
+        >
+          <div className="w-2 h-2 rounded-full bg-[#8A8A8A]" />
+          <h3 className="text-sm font-medium text-text-secondary flex-1 text-left">
+            {t('blindspots.noCoverage.show', { count: depRows.length })}
+          </h3>
+          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0 text-text-muted">
+            {t('blindspots.status.noCoverage')}
+          </span>
+          <span className="text-[10px] text-text-muted">
+            {show ? t('blindspots.otherTargets.hide') : t('blindspots.otherTargets.expand')}
+          </span>
+        </button>
+        {show && (
+          <div className="border-t border-border">
+            {depRows.map(dep => (
+              <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} onAddWatch={onAddWatch} />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+});
+
+/**
  * Phase B: the "probably fine" bucket after an AI triage — dependencies the
  * model judged not worth the developer's attention right now. Collapsed to a
  * chip list (these are noise by definition); expandable for the full rows +

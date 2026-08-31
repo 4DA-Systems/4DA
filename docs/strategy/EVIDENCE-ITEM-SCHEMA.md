@@ -267,6 +267,22 @@ pub struct LensHints {
     /// upstream), never hidden. `false` for all normal items.
     #[serde(default)]
     pub other_build_target: bool,
+
+    /// Rendering hint (Phase 1 dependency-upgrade plan): the item is a ranked
+    /// upgrade-plan step, so the Preemption lens groups it under the "Upgrade
+    /// Plan" section instead of the flat advisory list. Set by
+    /// `upgrade_plan::build_upgrade_plan`. `false` for all normal items.
+    #[serde(default)]
+    pub upgrade_plan: bool,
+
+    /// Rendering hint (2026-08-31 live audit): the coverage-gap dependency has
+    /// ZERO available signals — there is no "unreviewed activity" to speak of.
+    /// The Blind Spots lens groups such gaps under an honest "no signal
+    /// coverage" section instead of the "Drifting / unreviewed activity" tier.
+    /// Set by `uncovered_dep_to_evidence_item` when `available_signal_count == 0`.
+    /// `false` for all normal items.
+    #[serde(default)]
+    pub no_coverage: bool,
 }
 ```
 
@@ -281,6 +297,18 @@ pub struct LensHints {
 > project/target. Specific per-OS labels ("Linux build") are a future additive
 > enrichment; v1 is the boolean group/badge. Full design + rationale:
 > `.claude/plans/platform-aware-dep-intelligence-2026-06-17.md`.
+
+> **ADR — 2026-08-31: zero-signal coverage is a `LensHints` rendering hint,
+> not a new struct or status enum.** The live audit found the Blind Spots
+> "Unreviewed Signals … with unreviewed activity — Drifting" tier stuffed with
+> rows whose own explanation reads "Sources were checked but found no results"
+> — zero coverage presented as unreviewed activity. The classification already
+> existed in the materializer (`UncoveredDep::available_signal_count == 0`
+> drives the "unmonitored" title/explanation split); this hint carries it
+> through the canonical type so the lens can render an honest "no signal
+> coverage" group with its own count. Same shape as the Phase 2c precedent:
+> a rendering dimension riding on `LensHints` with a `#[serde(default)]`
+> back-compat default — no new intelligence type, no validator change.
 
 ---
 

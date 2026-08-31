@@ -21,6 +21,7 @@ vi.mock('./ScoreBar', () => ({ default: () => <div /> }));
 vi.mock('./StackCoverageMap', () => ({ TierSection: () => null, EmergingSignals: () => null }));
 vi.mock('./CollapsedSections', () => ({
   CoveredSection: () => null,
+  NoCoverageSection: () => null,
   OtherBuildTargetsSection: () => null,
   ProbablyFineSection: () => null,
 }));

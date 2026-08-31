@@ -27,6 +27,7 @@ vi.mock('./StackCoverageMap', () => ({
 }));
 vi.mock('./CollapsedSections', () => ({
   CoveredSection: () => null,
+  NoCoverageSection: () => null,
   OtherBuildTargetsSection: () => null,
   ProbablyFineSection: ({ depRows }: { depRows: DepRow[] }) => (
     <div data-testid="probably-fine">{depRows.map(d => <span key={d.name} data-testid="fine-dep">{d.name}</span>)}</div>

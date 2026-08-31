@@ -16,7 +16,7 @@ import { BlindSpotsPaywall } from './BlindSpotsPaywall';
 import { loadPersistedDismissals, persistDismissal, removeDismissal } from './dismissal-utils';
 import ScoreBar from './ScoreBar';
 import { TierSection, EmergingSignals } from './StackCoverageMap';
-import { CoveredSection, OtherBuildTargetsSection, ProbablyFineSection } from './CollapsedSections';
+import { CoveredSection, NoCoverageSection, OtherBuildTargetsSection, ProbablyFineSection } from './CollapsedSections';
 import type { DepAssessment } from '../../../src-tauri/bindings/bindings/DepAssessment';
 import type { BlindSpotAssessment } from '../../../src-tauri/bindings/bindings/BlindSpotAssessment';
 
@@ -160,7 +160,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     if (autoAssess === false || !hasLlmKey || paywalled) return;
     const gapNames = depRows
       .filter((d) => d.gap?.lens_hints.other_build_target !== true)
-      .filter((d) => d.status === 'blind_spot' || d.status === 'falling_behind')
+      .filter((d) => d.status === 'blind_spot' || d.status === 'falling_behind' || d.status === 'no_coverage')
       .map((d) => d.name)
       .sort();
     if (gapNames.length === 0) return;
@@ -238,9 +238,12 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const normalDeps = depRows.filter(d => !isOtherTarget(d));
   const stackDeps = normalDeps.filter(d => d.status === 'blind_spot');
   const ecosystemDeps = normalDeps.filter(d => d.status === 'falling_behind');
+  // 2026-08-31 audit: zero-signal deps get their own honest group — they no
+  // longer inflate the "Drifting / unreviewed activity" tier or its count.
+  const noCoverageDeps = normalDeps.filter(d => d.status === 'no_coverage');
   const coveredDeps = normalDeps.filter(d => d.status === 'well_covered');
 
-  const hasProblems = stackDeps.length > 0 || ecosystemDeps.length > 0;
+  const hasProblems = stackDeps.length > 0 || ecosystemDeps.length > 0 || noCoverageDeps.length > 0;
   const hasContent = hasProblems || unmatchedSignals.length > 0;
   const dataFreshness = report.data_freshness;
 
@@ -250,7 +253,9 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   // judged. Recommendations are keyed by display name for the rows to show.
   const aiMap = ai?.map ?? null;
   const aiActive = aiMap !== null;
-  const gapDeps = [...stackDeps, ...ecosystemDeps];
+  // Zero-coverage deps stay in the AI triage pool (the backend's rubric covers
+  // them); in the non-AI view they render in their own NoCoverageSection.
+  const gapDeps = [...stackDeps, ...ecosystemDeps, ...noCoverageDeps];
   const worthReviewing = aiActive ? gapDeps.filter(d => aiMap.get(d.name)?.worth_reviewing !== false) : [];
   const probablyFine = aiActive ? gapDeps.filter(d => aiMap.get(d.name)?.worth_reviewing === false) : [];
   const aiRecs = aiActive
@@ -278,6 +283,12 @@ const BlindSpotsView = memo(function BlindSpotsView() {
                 <span className="inline-flex items-center gap-1.5 text-yellow-400 font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
                   {ecosystemDeps.length} {t('blindspots.tier.drifting').toLowerCase()}
+                </span>
+              )}
+              {noCoverageDeps.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-text-muted font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#8A8A8A]" />
+                  {noCoverageDeps.length} {t('blindspots.status.noCoverage').toLowerCase()}
                 </span>
               )}
               {unmatchedSignals.length > 0 && (
@@ -443,6 +454,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
                   emptyText={t('blindspots.tier.ecosystemEmpty')}
                 />
               )}
+              <NoCoverageSection depRows={noCoverageDeps} onDismissSignal={handleDismiss} onAddWatch={handleAddWatch} />
             </>
           )}
           <EmergingSignals items={unmatchedSignals} onDismiss={handleDismiss} />

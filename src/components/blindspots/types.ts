@@ -2,7 +2,7 @@
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
 
-export type DepStatus = 'blind_spot' | 'falling_behind' | 'well_covered';
+export type DepStatus = 'blind_spot' | 'falling_behind' | 'no_coverage' | 'well_covered';
 
 export interface DepRow {
   name: string;
@@ -16,6 +16,8 @@ export interface DepRow {
 export const STATUS_CONFIG: Record<DepStatus, { labelKey: string; color: string; dot: string }> = {
   blind_spot: { labelKey: 'blindspots.status.blindSpot', color: 'text-red-400', dot: 'bg-red-400' },
   falling_behind: { labelKey: 'blindspots.status.drifting', color: 'text-yellow-400', dot: 'bg-yellow-400' },
+  // Zero available signals: honest gray, not activity-yellow (2026-08-31 audit).
+  no_coverage: { labelKey: 'blindspots.status.noCoverage', color: 'text-text-muted', dot: 'bg-[#8A8A8A]' },
   well_covered: { labelKey: 'blindspots.status.covered', color: 'text-green-400', dot: 'bg-green-400' },
 };
 
