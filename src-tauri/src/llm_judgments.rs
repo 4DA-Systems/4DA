@@ -30,10 +30,20 @@ use tracing::{debug, info, warn};
 /// v2 → v3 with the 2026-08-31 cost optimization: verbosity caps on the
 /// output fields and analysis fields omitted for items judged clearly
 /// irrelevant — the output-token distribution changed, so post-hoc analysis
-/// must be able to filter by cohort. Older judgments remain valid
+/// must be able to filter by cohort. Bumped v3 → v4 later the same day to fix
+/// the confidence-semantics inversion that kept the demotion gate dead: the
+/// judge expressed rejection AS low confidence (measured twice — 2026-08-27
+/// on Sonnet: axios advisories at relevance 0.22-0.35 carried confidence
+/// 0.45-0.60; 2026-08-31 on Haiku: 77/90 items rejected at avg confidence
+/// 0.527, ZERO at the gate's 0.7 bar), so `confidence >= 0.7 AND relevance <
+/// 0.30` could never both hold. v4 instructs that confidence measures trust
+/// in the ASSESSMENT whatever its direction — a clear rejection carries HIGH
+/// confidence. The version bump quarantines mixed-semantics history: only
+/// current-version judgments drive demotions, so the gate reads a clean v4
+/// cohort from day one. Older judgments remain valid for everything else
 /// (`get_unjudged_item_ids` joins on ANY judgment, so nothing is re-judged
-/// and re-billed on upgrade); only current-version judgments drive demotions.
-const PROMPT_VERSION: &str = "v3";
+/// and re-billed on upgrade).
+const PROMPT_VERSION: &str = "v4";
 const INGESTION_THRESHOLD: f64 = 0.25;
 /// 10 items per call: the system prompt + user-context block (~800 tokens) is
 /// resent on every call, so batch size directly divides that fixed overhead.
@@ -59,6 +69,13 @@ const BATCH_SIZE: usize = 10;
 /// Tauri/Rust developer. This is one notch, measured, not a recalibration.
 pub(crate) const DEMOTION_RELEVANCE_BELOW: f64 = 0.30;
 /// …with judge confidence at or above this…
+///
+/// The VALUE is unchanged by the v4 prompt fix on purpose: the 0.7 bar was
+/// never the defect — the judge's confidence SEMANTICS were (rejection
+/// expressed as low confidence, see the PROMPT_VERSION doc). v4 fixes the
+/// measurement; the bar keeps meaning "the judge is sure". If the probe
+/// below still reports a dead gate against v4's distribution, THEN retune —
+/// from measured v4 data, not by guessing here.
 pub(crate) const DEMOTION_CONFIDENCE_MIN: f64 = 0.7;
 /// …capped per pass, so a systematically mis-calibrated judge cannot gut the
 /// curated feed in a single run (10 ≈ 2% of the measured 532-member live feed).
@@ -622,35 +639,7 @@ async fn evaluate_batch(
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    let system_prompt = format!(
-        "You are an intelligence relevance evaluator for a developer tool. \
-         Evaluate each item's relevance to this specific user.\n\n\
-         {user_context}\n\n\
-         For each item, respond with a JSON array where each element has:\n\
-         - \"id\": the item id\n\
-         - \"relevance\": 0.0-1.0 (how relevant to THIS user specifically)\n\
-         - \"explanation\": one sentence, MAX 20 words, explaining WHY this matters to this user \
-           (must reference a specific fact from the item AND the user's context)\n\
-         - \"actions\": array of AT MOST 2 suggested actions (e.g. [\"review_security\", \"investigate\"])\n\
-         - \"confidence\": 0.0-1.0 (how confident you are in your relevance assessment)\n\
-         - \"technical_depth\": integer 1-5 (1 = announcement/listicle-level, \
-           5 = deep implementation detail)\n\
-         - \"novelty\": integer 1-5 (1 = rehash of well-known material, \
-           5 = genuinely new technique or result)\n\
-         - \"audience_level\": one of \"Beginner\", \"Intermediate\", \"Advanced\", \"Expert\"\n\
-         - \"key_insight\": one-sentence key technical insight from the content (max 15 words), or null\n\n\
-         Rules:\n\
-         - Explanation MUST reference something specific from the item (a package name, CVE, etc.) \
-           AND something from the user's context\n\
-         - Generic explanations like \"relevant to your interests\" score 0 confidence\n\
-         - If the item has no clear connection to the user's stack/topics, relevance should be < 0.3\n\
-         - A package only affects the user if it is actually in their stack/dependencies. Do NOT claim cross-ecosystem impact (e.g. a JavaScript/npm package affecting a Rust backend, or vice-versa). If you cannot confirm it is in their stack, relevance < 0.3\n\
-         - If relevance < 0.4, OMIT actions, technical_depth, novelty, audience_level, and \
-           key_insight entirely — a short explanation is all a rejected item needs\n\
-         - Judge technical_depth/novelty/audience_level ONLY from the provided text; if the \
-           content preview is too thin to judge them, OMIT those fields entirely rather than guessing\n\
-         - Return ONLY a valid JSON array, no other text"
-    );
+    let system_prompt = judge_system_prompt(user_context);
 
     let user_msg = format!("Evaluate these items:\n\n{items_block}");
 
@@ -661,6 +650,47 @@ async fn evaluate_batch(
 
     let response = client.complete(&system_prompt, messages).await?;
     parse_batch_response(&response.content)
+}
+
+/// The ingest judge's system prompt. Extracted so the load-bearing lines are
+/// pin-testable — in particular the v4 confidence-semantics instruction: the
+/// demotion gate reads `confidence >= 0.7` as "the judge is sure", and both
+/// prior prompt versions let the model express rejection AS low confidence,
+/// which kept the gate at zero demotions forever (see PROMPT_VERSION doc).
+fn judge_system_prompt(user_context: &str) -> String {
+    format!(
+        "You are an intelligence relevance evaluator for a developer tool. \
+         Evaluate each item's relevance to this specific user.\n\n\
+         {user_context}\n\n\
+         For each item, respond with a JSON array where each element has:\n\
+         - \"id\": the item id\n\
+         - \"relevance\": 0.0-1.0 (how relevant to THIS user specifically)\n\
+         - \"explanation\": one sentence, MAX 20 words, explaining WHY this matters to this user \
+           (must reference a specific fact from the item AND the user's context)\n\
+         - \"actions\": array of AT MOST 2 suggested actions (e.g. [\"review_security\", \"investigate\"])\n\
+         - \"confidence\": 0.0-1.0 — how sure you are of your ASSESSMENT, whatever its \
+           direction. A clear rejection carries HIGH confidence (e.g. relevance 0.1 with \
+           confidence 0.9 for an item plainly outside the user's stack). Low confidence \
+           means you are UNSURE, never that the item is irrelevant\n\
+         - \"technical_depth\": integer 1-5 (1 = announcement/listicle-level, \
+           5 = deep implementation detail)\n\
+         - \"novelty\": integer 1-5 (1 = rehash of well-known material, \
+           5 = genuinely new technique or result)\n\
+         - \"audience_level\": one of \"Beginner\", \"Intermediate\", \"Advanced\", \"Expert\"\n\
+         - \"key_insight\": one-sentence key technical insight from the content (max 15 words), or null\n\n\
+         Rules:\n\
+         - Explanation MUST reference something specific from the item (a package name, CVE, etc.) \
+           AND something from the user's context\n\
+         - Generic explanations like \"relevant to your interests\" score 0 confidence\n\
+         - If the item has no clear connection to the user's stack/topics, relevance should be \
+           < 0.3 — and when that disconnect is obvious, say so with HIGH confidence\n\
+         - A package only affects the user if it is actually in their stack/dependencies. Do NOT claim cross-ecosystem impact (e.g. a JavaScript/npm package affecting a Rust backend, or vice-versa). If you cannot confirm it is in their stack, relevance < 0.3\n\
+         - If relevance < 0.4, OMIT actions, technical_depth, novelty, audience_level, and \
+           key_insight entirely — a short explanation is all a rejected item needs\n\
+         - Judge technical_depth/novelty/audience_level ONLY from the provided text; if the \
+           content preview is too thin to judge them, OMIT those fields entirely rather than guessing\n\
+         - Return ONLY a valid JSON array, no other text"
+    )
 }
 
 /// Parse the model's batched JSON reply into per-item judgments.
