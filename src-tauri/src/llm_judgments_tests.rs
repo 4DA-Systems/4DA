@@ -134,13 +134,15 @@ fn parse_treats_garbage_numeric_fields_as_omitted_not_fatal() {
 }
 
 #[test]
-fn v4_prompt_pins_confidence_semantics() {
+fn prompt_pins_confidence_semantics_and_mandatory_field() {
     // The demotion gate reads `confidence >= 0.7` as "the judge is sure".
-    // v1-v3 let the model express rejection AS low confidence, which held the
-    // gate at zero demotions on every measured corpus (2026-08-27 Sonnet,
-    // 2026-08-31 Haiku: 77/90 rejected at avg 0.527, none >= 0.7). These
-    // lines are what make the gate's premise true — losing them in a prompt
-    // edit silently kills demotions again.
+    // Two distinct ways that premise has already been broken in production:
+    //   1. semantics — rejection expressed AS low confidence (the v4 fix), and
+    //   2. ABSENCE — the model omitting the field altogether, which the store
+    //      layer used to paper over with a fabricated 0.5 (the v5 fix; 93% of
+    //      the v3 cohort sat at exactly 0.5).
+    // Both instructions are load-bearing: losing either silently kills
+    // demotions again, which is invisible without this test.
     let prompt = judge_system_prompt("CTX");
     assert!(
         prompt.contains("A clear rejection carries HIGH confidence"),
@@ -150,10 +152,63 @@ fn v4_prompt_pins_confidence_semantics() {
         prompt.contains("never that the item is irrelevant"),
         "low-confidence-means-unsure clarification missing from the judge prompt"
     );
+    assert!(
+        prompt.contains("REQUIRED on every element, never omitted"),
+        "confidence must be marked mandatory — an omitted field disables the gate"
+    );
+    assert!(
+        prompt.contains("omission rule NEVER applies to id, relevance, explanation, or confidence"),
+        "the low-relevance omission rule must exempt confidence explicitly"
+    );
     assert!(prompt.contains("CTX"), "user context must be embedded");
     assert_eq!(
-        PROMPT_VERSION, "v4",
-        "semantics fix must ride the v4 cohort"
+        PROMPT_VERSION, "v5",
+        "the no-fabrication fix must ride its own cohort"
+    );
+}
+
+#[test]
+fn omitted_confidence_is_stored_as_unknown_never_fabricated() {
+    // Regression pin for the 2026-08-31 dead-gate root cause. `unwrap_or(0.5)`
+    // turned an ABSENT confidence into "moderately sure" — a reading the judge
+    // never gave — and 0.5 sits just below DEMOTION_CONFIDENCE_MIN, so every
+    // such judgment silently became undemotable. Unknown must land at 0.0:
+    // it cannot satisfy `>= threshold` in the demotion gate or in
+    // judge_agreement_live, which is the honest outcome when nothing was said.
+    let db = test_db();
+    let id = insert_test_item(&db, "hackernews", "j-omit", "No confidence given", "body");
+    let items = load_items_for_judgment(&db, &[id]).unwrap();
+
+    let results = vec![(
+        id,
+        JudgmentResponse {
+            relevance: Some(0.05),
+            explanation: Some("plainly outside the user's stack".into()),
+            actions: None,
+            confidence: None, // the live Haiku failure shape
+            technical_depth: None,
+            novelty: None,
+            audience_level: None,
+            key_insight: None,
+        },
+    )];
+
+    let (judged, _) = store_batch_results(&db, &items, results, "m");
+    assert_eq!(judged, 1);
+
+    let j = db.get_llm_judgment(id).unwrap().unwrap();
+    assert!(
+        j.confidence.abs() < 1e-6,
+        "an omitted confidence must store as 0.0 (unknown), got {}",
+        j.confidence
+    );
+    assert!(
+        (j.confidence - 0.5).abs() > 1e-6,
+        "0.5 is the fabricated value that disabled the gate — it must never be invented"
+    );
+    assert!(
+        j.confidence < DEMOTION_CONFIDENCE_MIN,
+        "unknown confidence must never satisfy the demotion gate"
     );
 }
 
