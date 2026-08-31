@@ -47,7 +47,8 @@ export const BlindSpotsPaywall = memo(function BlindSpotsPaywall() {
   return (
     <div className="space-y-4" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
       <header className="mb-2">
-        <h1 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h1>
+        {/* h2, not h1: App.tsx owns the document's only h1 ("4DA", sr-only). */}
+        <h2 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h2>
         <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
       </header>
       <div className="flex flex-col items-center justify-center py-20 text-center gap-3">

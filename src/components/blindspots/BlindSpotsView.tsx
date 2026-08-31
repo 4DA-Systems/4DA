@@ -189,7 +189,8 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     return (
       <div className="space-y-4" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
         <header className="mb-2">
-          <h1 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h1>
+          {/* h2, not h1: App.tsx owns the document h1; sections below are h3. */}
+          <h2 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h2>
           <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
         </header>
         <div className="bg-bg-secondary rounded-lg border border-red-500/20 px-5 py-5">
@@ -265,7 +266,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   return (
     <div className="space-y-4 pb-8" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
       <header className="mb-2">
-        <h1 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h1>
+        <h2 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h2>
         <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
       </header>
       <ScoreBar score={score} />
