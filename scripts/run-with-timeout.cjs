@@ -206,9 +206,22 @@ function main() {
   const { minutes, command } = parsed;
   const started = Date.now();
 
-  // `shell: true` so Windows resolves `pnpm`/`npx` .cmd shims. The shell
-  // becomes the tree root; killTree walks down from it.
-  const child = spawn(command[0], command.slice(1), { stdio: 'inherit', shell: true });
+  // `shell: true` on WINDOWS ONLY, so `pnpm`/`npx` .cmd shims resolve; there
+  // the shell becomes the tree root and killTree walks down from it.
+  //
+  // Deliberately NOT on POSIX. With `shell: true` Node runs `/bin/sh -c` on a
+  // string it builds by joining argv with SPACES and no quoting, so sh re-parses
+  // every argument: `-- node -e 'process.exit(0)'` died with
+  //   /bin/sh: 1: Syntax error: "(" unexpected
+  // and the watchdog exited 2 having run nothing. Any argument carrying `(`,
+  // `;`, `&`, `|`, `*` or a space was silently at risk. POSIX resolves
+  // executables from PATH without a shell, so drop it and hand argv through
+  // verbatim; killTree walks descendants of the child either way. Caught the
+  // day this script's own tests were finally wired into CI.
+  const child = spawn(command[0], command.slice(1), {
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  });
 
   let timedOut = false;
   const timer = setTimeout(() => {
