@@ -1,0 +1,27 @@
+{
+  "today": "تكلفة اليوم",
+  "todayOfCap": "تكلفة اليوم (الحد ${{cap}})",
+  "tokensToday": "رموز اليوم",
+  "thisMonth": "هذا الشهر",
+  "byFeature": "هذا الشهر حسب الميزة",
+  "calls_zero": "{{count}} استدعاء",
+  "calls_one": "استدعاء واحد",
+  "calls_two": "استدعاءان",
+  "calls_few": "{{count}} استدعاءات",
+  "calls_many": "{{count}} استدعاءً",
+  "calls_other": "{{count}} استدعاء",
+  "feature": {
+    "rerank_judge": "تقييم الصلة — إعادة ترتيب الخلاصة",
+    "ingest_judge": "تقييم الصلة — عناصر جديدة",
+    "blind_spots": "تحليل النقاط العمياء",
+    "digest": "الملخص",
+    "search_synthesis": "تجميع البحث",
+    "adversarial": "مداولة تنافسية",
+    "channel_render": "عرض القناة",
+    "content_analysis": "تحليل المحتوى",
+    "translation": "الترجمة",
+    "completion": "بدون وسم (الإحاطات وغيرها)",
+    "structured_completion": "بدون وسم (منظّم)",
+    "streaming": "بدون وسم (بث)"
+  }
+}

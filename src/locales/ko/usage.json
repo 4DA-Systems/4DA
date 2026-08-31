@@ -1,0 +1,22 @@
+{
+  "today": "오늘 비용",
+  "todayOfCap": "오늘 비용 (한도 ${{cap}})",
+  "tokensToday": "오늘 토큰",
+  "thisMonth": "이번 달",
+  "byFeature": "이번 달 기능별",
+  "calls_other": "호출 {{count}}회",
+  "feature": {
+    "rerank_judge": "관련성 판정 — 피드 재정렬",
+    "ingest_judge": "관련성 판정 — 신규 항목",
+    "blind_spots": "블라인드 스팟 분석",
+    "digest": "다이제스트",
+    "search_synthesis": "검색 합성",
+    "adversarial": "적대적 심의",
+    "channel_render": "채널 렌더링",
+    "content_analysis": "콘텐츠 분석",
+    "translation": "번역",
+    "completion": "태그 없음 (브리핑 등)",
+    "structured_completion": "태그 없음 (구조화)",
+    "streaming": "태그 없음 (스트리밍)"
+  }
+}

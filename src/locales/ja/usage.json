@@ -1,0 +1,22 @@
+{
+  "today": "本日のコスト",
+  "todayOfCap": "本日のコスト（上限 ${{cap}}）",
+  "tokensToday": "本日のトークン",
+  "thisMonth": "今月",
+  "byFeature": "今月の機能別内訳",
+  "calls_other": "{{count}} 回の呼び出し",
+  "feature": {
+    "rerank_judge": "関連性判定 — フィード再ランク",
+    "ingest_judge": "関連性判定 — 新着アイテム",
+    "blind_spots": "ブラインドスポット分析",
+    "digest": "ダイジェスト",
+    "search_synthesis": "検索合成",
+    "adversarial": "アドバーサリアル審議",
+    "channel_render": "チャンネル描画",
+    "content_analysis": "コンテンツ分析",
+    "translation": "翻訳",
+    "completion": "タグなし（ブリーフィング等）",
+    "structured_completion": "タグなし（構造化）",
+    "streaming": "タグなし（ストリーミング）"
+  }
+}
