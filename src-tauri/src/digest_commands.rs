@@ -4,7 +4,7 @@
 //! Extracted from lib.rs to reduce file size. Contains AI briefing synthesis.
 //! Digest configuration, briefing cache, and decision context are in digest_config.rs.
 
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::error::{Result, ResultExt};
 use crate::prompt_safety::{
@@ -152,78 +152,12 @@ pub async fn get_latest_briefing() -> Result<serde_json::Value> {
     }
 }
 
-/// Build a deterministic, dependency-scoped security section from the OSV-verified
-/// Preemption feed. This is the AUTHORITATIVE security input for the briefing: every
-/// entry is matched against the user's actually-installed dependency versions and
-/// already carries its exact project scope, so the LLM can no longer weld a global
-/// CVE onto the wrong project or ecosystem (e.g. attributing an axios/npm advisory to
-/// a Rust/Axum backend). Always returns a section (Preemption is in EVERY brief): the
-/// confirmed dep-scoped advisories, or an explicit "none" all-clear when there are no
-/// confirmed issues — in which case the briefing must NOT manufacture a security
-/// emergency. See the brief-grounding fix (PENDING-DECISION 2026-06-06, lever 2).
-fn build_grounded_security_section() -> String {
-    let feed = match crate::preemption::get_preemption_feed() {
-        Ok(f) => f,
-        Err(e) => {
-            info!(target: "4da::briefing", error = %e, "preemption feed unavailable for briefing grounding");
-            return String::new();
-        }
-    };
-
-    // Only deterministic (OSV) or source-classified alerts are trustworthy enough to
-    // anchor "Action Required". Heuristic signal-chain predictions are excluded.
-    let mut lines: Vec<String> = Vec::new();
-    for a in feed
-        .alerts
-        .iter()
-        .filter(|a| a.osv_verified || a.source_classified)
-        .take(8)
-    {
-        let sev = match a.urgency {
-            crate::preemption::AlertUrgency::Critical => "CRITICAL",
-            crate::preemption::AlertUrgency::High => "HIGH",
-            crate::preemption::AlertUrgency::Medium => "MEDIUM",
-            crate::preemption::AlertUrgency::Watch => "WATCH",
-        };
-        let version = match (&a.installed_version, &a.fixed_version) {
-            (Some(i), Some(f)) => format!(" ({i} -> update to >= {f})"),
-            (Some(i), None) => format!(" (installed {i})"),
-            _ => String::new(),
-        };
-        let scope = if a.affected_projects.is_empty() {
-            String::new()
-        } else {
-            format!(" -- affects: {}", a.affected_projects.join(", "))
-        };
-        let dep = a
-            .affected_dependencies
-            .first()
-            .map(String::as_str)
-            .unwrap_or("");
-        lines.push(format!(
-            "  - [{sev}] {dep}{version}: {}{scope}",
-            a.title.trim()
-        ));
-    }
-
-    if lines.is_empty() {
-        // Preemption appears in EVERY brief: an explicit all-clear (not silence) confirms
-        // the check actually ran and forecloses the LLM inventing a vulnerability from
-        // un-scoped CVE news in the day's items.
-        return "\n\nCONFIRMED SECURITY: none — no OSV-verified advisory affects the user's \
-                actually-installed dependencies. There are NO confirmed vulnerabilities for \
-                them today; do NOT report a security action item or infer one from CVE news."
-            .to_string();
-    }
-
-    format!(
-        "\n\nCONFIRMED SECURITY (OSV-verified, matched to your ACTUAL installed dependency \
-         versions -- the ONLY authoritative source of security impact for this briefing; each line \
-         already names the exact affected project(s), so never reassign an advisory to a different \
-         project or ecosystem):\n{}",
-        lines.join("\n")
-    )
-}
+// Deterministic security grounding for the briefing prompt — split into its
+// own module for the file-size gate. See `grounding.rs` for the CONFIRMED
+// SECURITY contract (PENDING-DECISION 2026-06-06, lever 2) and the dormancy
+// labelling added by the 2026-08-31 live audit.
+mod grounding;
+use grounding::build_grounded_security_section;
 
 /// Internal briefing generation -- called by both the Tauri command and auto-trigger.
 /// `auto_triggered`: when true, adjusts logging to indicate automatic trigger.
@@ -238,10 +172,25 @@ pub(crate) async fn generate_briefing_internal(
     info!(target: "4da::briefing", trigger = trigger, "Generating AI briefing");
 
     // Drain batched notifications
-    let batched = {
+    let mut batched = {
         let state = crate::get_monitoring_state();
         crate::monitoring::drain_batched_notifications(state)
     };
+    // Briefing-input honesty (2026-08-31 live audit): the LLM itself reported
+    // that "silently queued" batched items were pipeline metadata with no
+    // content polluting its input. Nothing with a blank title reaches the
+    // prompt — there is nothing for the model to read, so it narrates the
+    // emptiness instead.
+    let before_empty_filter = batched.len();
+    batched.retain(|b| !b.title.trim().is_empty());
+    let dropped_empty = before_empty_filter - batched.len();
+    if dropped_empty > 0 {
+        warn!(
+            target: "4da::briefing",
+            dropped = dropped_empty,
+            "Dropped batched notifications with empty titles from briefing input"
+        );
+    }
     if !batched.is_empty() {
         info!(target: "4da::briefing", count = batched.len(), "Including batched notifications");
     }
@@ -380,7 +329,13 @@ pub(crate) async fn generate_briefing_internal(
     // `item.id` is an i64 — materialize a string per-item so we can hand a
     // &str to the BriefingItem builder (which expects &str for uniformity
     // across numeric and non-numeric IDs in other callers).
-    let items_take: Vec<_> = items.iter().take(20).collect();
+    // Same honesty gate as the batched drain above: a titleless row is
+    // pipeline metadata, not a signal — it must not occupy a prompt slot.
+    let items_take: Vec<_> = items
+        .iter()
+        .filter(|item| !item.title.trim().is_empty())
+        .take(20)
+        .collect();
     let id_strings: Vec<String> = items_take.iter().map(|item| item.id.to_string()).collect();
     let briefing_items = items_take.iter().enumerate().map(|(idx, item)| {
         let why = explanations
