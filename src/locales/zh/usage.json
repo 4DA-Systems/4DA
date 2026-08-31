@@ -1,0 +1,22 @@
+{
+  "today": "今日费用",
+  "todayOfCap": "今日费用（上限 ${{cap}}）",
+  "tokensToday": "今日 Token",
+  "thisMonth": "本月",
+  "byFeature": "本月按功能",
+  "calls_other": "{{count}} 次调用",
+  "feature": {
+    "rerank_judge": "相关性评判 — 信息流重排",
+    "ingest_judge": "相关性评判 — 新条目",
+    "blind_spots": "盲点分析",
+    "digest": "摘要",
+    "search_synthesis": "搜索合成",
+    "adversarial": "对抗式评议",
+    "channel_render": "频道渲染",
+    "content_analysis": "内容分析",
+    "translation": "翻译",
+    "completion": "未标记（简报等）",
+    "structured_completion": "未标记（结构化）",
+    "streaming": "未标记（流式）"
+  }
+}

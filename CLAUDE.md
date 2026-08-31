@@ -122,7 +122,13 @@ Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
   - `pnpm postinstall` hook auto-clears `node_modules/.vite/deps` on every install
   - `pnpm run validate:vite-smoke` does a cold-start and verifies 13 critical routes
   - `pnpm run validate` includes the smoke test
-  **If it happens:** `taskkill /F /IM fourda.exe && pnpm install --frozen-lockfile`
+  **If it happens:** `pwsh scripts/stop-fourda.ps1 && pnpm install --frozen-lockfile`
+- **Never `taskkill /F /IM fourda.exe`** — image-name kills hit EVERY fourda on
+  the machine: other worktrees' dev apps and the scheduled background-refresh
+  engine mid-cycle (two engine runs were killed as peer collateral on
+  2026-08-31 alone). Use `pwsh scripts/stop-fourda.ps1` — it kills only
+  instances launched from YOUR tree's `src-tauri/target/` and lists what it
+  deliberately left running.
 - **Worktree base goes stale — and it reads as YOUR regression.** `main` moves fast
   (6 merges landed during one agent session). A worktree cut hours earlier still has
   the old `scripts/ghost-command-backlog.json`, `check-file-sizes.cjs` exceptions and
