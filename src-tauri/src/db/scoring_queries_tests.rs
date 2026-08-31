@@ -41,9 +41,9 @@ fn hysteresis_keeps_score_but_stamps_version() {
 
     db.persist_analysis_scores(
         &[
-            (wobble, 0.52, None, None), // |Δ| = 0.02 < 0.05 → damped
-            (mover, 0.60, None, None),  // |Δ| = 0.10 ≥ 0.05 → written
-            (fresh, 0.03, None, None),  // old NULL → always written
+            (wobble, 0.52, None, None, None), // |Δ| = 0.02 < 0.05 → damped
+            (mover, 0.60, None, None, None),  // |Δ| = 0.10 ≥ 0.05 → written
+            (fresh, 0.03, None, None, None),  // old NULL → always written
         ],
         "analysis",
     )
@@ -106,7 +106,7 @@ fn scored_at_stamps_on_suppressed_and_zero_evidence_evaluations() {
         )
         .unwrap();
     }
-    db.persist_analysis_scores(&[(wobble, 0.52, None, None)], "analysis")
+    db.persist_analysis_scores(&[(wobble, 0.52, None, None, None)], "analysis")
         .unwrap();
     let (score, _) = score_and_version(&db, wobble);
     assert_eq!(score, Some(0.50), "sub-hysteresis move keeps the old score");
@@ -134,18 +134,18 @@ fn churn_row_carries_offender_list_and_suppressed_count() {
     let c = insert_test_item(&db, "hackernews", "off_c", "damped", "x");
     db.persist_analysis_scores(
         &[
-            (a, 0.90, None, None),
-            (b, 0.40, None, None),
-            (c, 0.50, None, None),
+            (a, 0.90, None, None, None),
+            (b, 0.40, None, None, None),
+            (c, 0.50, None, None, None),
         ],
         "analysis",
     )
     .unwrap();
     db.persist_analysis_scores(
         &[
-            (a, 0.50, None, None), // Δ = −0.40 → offender #1
-            (b, 0.48, None, None), // Δ = +0.08 → offender #2 (written)
-            (c, 0.52, None, None), // Δ = +0.02 → damped, below offender floor? 0.02 ≥ 0.01 → listed
+            (a, 0.50, None, None, None), // Δ = −0.40 → offender #1
+            (b, 0.48, None, None, None), // Δ = +0.08 → offender #2 (written)
+            (c, 0.52, None, None, None), // Δ = +0.02 → damped, below offender floor? 0.02 ≥ 0.01 → listed
         ],
         "analysis",
     )
@@ -226,8 +226,11 @@ fn rank_persist_and_evidence_persist_touch_disjoint_columns() {
     let item = insert_test_item(&db, "hackernews", "rk1", "Ranked item", "x");
 
     // Seed durable evidence at an old version.
-    db.persist_analysis_scores(&[(item, 0.60, Some("release".into()), None)], "analysis")
-        .unwrap();
+    db.persist_analysis_scores(
+        &[(item, 0.60, Some("release".into()), None, None)],
+        "analysis",
+    )
+    .unwrap();
     let churn_rows_before: i64 = {
         let conn = db.conn.lock();
         conn.query_row("SELECT COUNT(*) FROM scoring_churn", [], |r| r.get(0))
@@ -292,7 +295,7 @@ fn rank_persist_and_evidence_persist_touch_disjoint_columns() {
 
     // Evidence write (the backfill path calls this directly) leaves the
     // rank columns exactly as the rank write left them.
-    db.persist_analysis_scores(&[(item, 0.75, None, None)], "backfill")
+    db.persist_analysis_scores(&[(item, 0.75, None, None, None)], "backfill")
         .unwrap();
     let conn = db.conn.lock();
     let (rank2, factors2): (Option<f64>, Option<String>) = conn
@@ -324,9 +327,9 @@ fn ranked_order_expr_coalesces_rank_over_evidence() {
     let low = insert_test_item(&db, "hackernews", "ro3", "low evidence", "x");
     db.persist_analysis_scores(
         &[
-            (evidence_high, 0.80, None, None),
-            (ranked_top, 0.60, None, None),
-            (low, 0.50, None, None),
+            (evidence_high, 0.80, None, None, None),
+            (ranked_top, 0.60, None, None, None),
+            (low, 0.50, None, None, None),
         ],
         "analysis",
     )
