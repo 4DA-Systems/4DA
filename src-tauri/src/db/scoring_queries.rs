@@ -45,6 +45,16 @@ pub fn ranked_order_expr(alias: &str) -> String {
     format!("COALESCE({alias}.rank_score, {alias}.relevance_score) DESC")
 }
 
+/// One durable score row for [`Database::persist_analysis_scores`]:
+/// `(item_id, score, signal_type, signal_priority, breakdown_json)`.
+///
+/// `breakdown_json` is the bounded explanation envelope from
+/// [`crate::db::bounded_breakdown_json`] — `None` means "no breakdown to
+/// persist" (the scorer produced none, or serialization failed), never an
+/// error. It rides the score write into `scoring_explanations` (schema 115)
+/// in the same transaction.
+pub type ScorePersistRow = (i64, f32, Option<String>, Option<String>, Option<String>);
+
 /// Row for the relevance-triage recall audit (Phase 0 of the scoring funnel).
 /// Carries exactly what the cheap gate reads plus the stored relevance_score.
 #[derive(Debug, Clone)]
@@ -297,9 +307,18 @@ impl Database {
     /// freshness refresh ([`Database::get_freshness_refresh_batch`]) rotates
     /// on this stamp: skipping it on suppressed writes would re-pick the same
     /// stable items every refresh cycle.
+    ///
+    /// **Explanations (schema 115):** each row's `breakdown_json` (when
+    /// `Some`) upserts into `scoring_explanations` in the SAME transaction —
+    /// one prepared statement, newest evaluation wins. Deliberately SKIPPED
+    /// for hysteresis-suppressed writes: the durable score kept its old
+    /// value, so the explanation that produced that value stands (replacing
+    /// it would attach a breakdown whose score doesn't match the durable
+    /// column). Also skipped when the score UPDATE matched no row, so a
+    /// stale id can never violate the explanation table's FK.
     pub fn persist_analysis_scores(
         &self,
-        scores: &[(i64, f32, Option<String>, Option<String>)],
+        scores: &[ScorePersistRow],
         path: &str,
     ) -> SqliteResult<usize> {
         /// A move this large is churn worth counting (matches the forensic
@@ -329,12 +348,18 @@ impl Database {
             let mut stmt = tx.prepare_cached(
                 "UPDATE source_items SET relevance_score = ?1, scored_pipeline_version = ?2, signal_type = ?3, signal_priority = ?4, scored_at = datetime('now') WHERE id = ?5",
             )?;
-            for (id, score, signal_type, signal_priority) in scores {
+            let mut expl_stmt = tx.prepare_cached(
+                "INSERT OR REPLACE INTO scoring_explanations
+                     (source_item_id, pipeline_version, breakdown, scored_at)
+                 VALUES (?1, ?2, ?3, datetime('now'))",
+            )?;
+            for (id, score, signal_type, signal_priority, breakdown_json) in scores {
                 // Old score first (same txn): NULL = first-ever score, not churn.
                 let old: Option<f64> = read_stmt
                     .query_row(params![id], |r| r.get::<_, Option<f64>>(0))
                     .unwrap_or(None);
                 let mut write_score = f64::from(*score);
+                let mut suppressed_this = false;
                 if let Some(old) = old {
                     let delta = write_score - old;
                     rescored += 1;
@@ -353,9 +378,10 @@ impl Database {
                         // Keep the durable score; the stamp below still writes.
                         suppressed += 1;
                         write_score = old;
+                        suppressed_this = true;
                     }
                 }
-                stmt.execute(params![
+                let updated = stmt.execute(params![
                     write_score,
                     crate::scoring::PIPELINE_VERSION,
                     signal_type,
@@ -363,6 +389,19 @@ impl Database {
                     id
                 ])?;
                 count += 1;
+                // Explanation lane (schema 115): the durable score changed (or
+                // was written first-ever), so the breakdown that produced it
+                // becomes the item's persisted "why". Suppressed writes keep
+                // the old explanation; 0-row updates never touch the FK table.
+                if updated > 0 && !suppressed_this {
+                    if let Some(bd_json) = breakdown_json {
+                        expl_stmt.execute(params![
+                            id,
+                            crate::scoring::PIPELINE_VERSION,
+                            bd_json
+                        ])?;
+                    }
+                }
             }
         }
         if count > 0 {
