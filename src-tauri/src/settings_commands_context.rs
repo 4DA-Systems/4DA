@@ -601,11 +601,22 @@ pub async fn get_context_stats() -> Result<serde_json::Value> {
         .get_static_identity()
         .map_err(|e| format!("Failed to get identity: {e}"))?;
 
+    // Context-root liveness (2026-08-31 audit): configured dirs that do not
+    // exist on this machine — deleted projects, unplugged drives, paths from
+    // another OS left in settings.json — surfaced here so dead roots are
+    // visible instead of silently shaping every intelligence surface.
+    // `configured_context_dirs` is the as-stored list; `get_context_dirs`
+    // would already have filtered the dead ones out.
+    let context_dirs = crate::state::configured_context_dirs();
+    let missing_context_dirs = crate::state::missing_context_dirs();
+
     Ok(serde_json::json!({
         "interests": interest_count,
         "exclusions": exclusion_count,
         "tech_stack": identity.tech_stack.len(),
         "domains": identity.domains.len(),
-        "has_role": identity.role.is_some()
+        "has_role": identity.role.is_some(),
+        "context_dirs_configured": context_dirs.len(),
+        "context_dirs_missing": missing_context_dirs
     }))
 }

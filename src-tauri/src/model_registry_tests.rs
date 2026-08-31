@@ -44,18 +44,57 @@ fn test_estimate_cost_matches_expectations() {
         *registry = bundled_registry();
     }
 
-    // Haiku: $0.80/1M input, $4.00/1M output
-    // 10k input = $0.008, 1k output = $0.004 = $0.012 = ~1.2 cents
+    // Haiku 4.5: $1.00/1M input, $5.00/1M output
+    // 10k input = $0.010, 1k output = $0.005 = $0.015 = 1.5 cents
     let cost = estimate_cost("anthropic", "claude-haiku-4-5-20251001", 10_000, 1_000);
     assert!(cost.is_some());
     let cents = cost.unwrap();
-    assert!(cents < 2, "Haiku cost should be < 2 cents, got {cents}");
+    assert!(cents <= 2, "Haiku cost should be <= 2 cents, got {cents}");
 
     // GPT-4o-mini: $0.15/1M input, $0.60/1M output
     // 10k input + 1k output should be < 1 cent
     let cost = estimate_cost("openai", "gpt-4o-mini", 10_000, 1_000);
     assert!(cost.is_some());
     assert!(cost.unwrap() < 1);
+}
+
+#[test]
+fn test_undated_haiku_id_is_priced() {
+    {
+        let mut registry = REGISTRY.write();
+        *registry = bundled_registry();
+    }
+
+    // The undated id is what settings and the judge routing actually use.
+    // If it ever estimates to None/0, every judge call becomes invisible to
+    // the daily cost cap.
+    let cost = estimate_cost_millicents("anthropic", "claude-haiku-4-5", 10_000, 1_000);
+    assert_eq!(
+        cost,
+        Some(1_500),
+        "10k in + 1k out on Haiku 4.5 = 1.5 cents"
+    );
+}
+
+#[test]
+fn test_millicents_keeps_sub_cent_calls_visible() {
+    {
+        let mut registry = REGISTRY.write();
+        *registry = bundled_registry();
+    }
+
+    // A typical cheap judge call: ~2.5k in, ~800 out on Haiku = ~0.65 cents.
+    // The cents-granular estimate rounds this to 1; what must never happen is
+    // the millicent estimate reading 0 — that is how the daily cap goes blind.
+    let mc = estimate_cost_millicents("anthropic", "claude-haiku-4-5", 2_500, 800).unwrap();
+    assert!(
+        mc > 0,
+        "sub-cent call must be non-zero in millicents, got {mc}"
+    );
+    assert_eq!(
+        mc, 650,
+        "2.5k in (250mc) + 800 out (400mc) = 650 millicents"
+    );
 }
 
 #[test]

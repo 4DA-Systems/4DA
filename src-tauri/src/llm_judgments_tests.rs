@@ -99,6 +99,41 @@ fn parse_drops_elements_without_id_and_rejects_non_json() {
 }
 
 #[test]
+fn parse_accepts_string_ids_and_quoted_numbers() {
+    // Live regression 2026-08-31, first Haiku cycle after #553: the cheap
+    // judge model quoted the id ("60146") and the strict i64 field failed
+    // the ENTIRE batch — budget spent, judged=0, nothing stored. Both id and
+    // numeric judgment fields must accept number-or-numeric-string.
+    let json = r#"[
+      {"id": "60146", "relevance": "0.3", "explanation": "e", "confidence": "0.8"},
+      {"id": 60147, "relevance": 0.9, "explanation": "e2", "confidence": 0.7, "technical_depth": "4"}
+    ]"#;
+    let parsed = parse_batch_response(json).unwrap();
+    assert_eq!(parsed.len(), 2);
+    assert_eq!(parsed[0].0, 60146);
+    assert_eq!(parsed[0].1.relevance, Some(0.3));
+    assert_eq!(parsed[0].1.confidence, Some(0.8));
+    assert_eq!(parsed[1].0, 60147);
+    assert_eq!(parsed[1].1.technical_depth, Some(4.0));
+}
+
+#[test]
+fn parse_treats_garbage_numeric_fields_as_omitted_not_fatal() {
+    // One malformed field must not discard the rest of the batch.
+    let json = r#"[
+      {"id": "not-a-number", "relevance": 0.9},
+      {"id": 8, "relevance": "high", "confidence": 0.6, "explanation": "ok"}
+    ]"#;
+    let parsed = parse_batch_response(json).unwrap();
+    // Element with an unparseable id is dropped (nothing to attach to);
+    // the unparseable relevance string becomes None, the element survives.
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0].0, 8);
+    assert_eq!(parsed[0].1.relevance, None);
+    assert_eq!(parsed[0].1.confidence, Some(0.6));
+}
+
+#[test]
 fn to_scale_clamps_and_rejects_nonfinite() {
     assert_eq!(to_scale_1_5(Some(7.0)), Some(5));
     assert_eq!(to_scale_1_5(Some(0.4)), Some(1));

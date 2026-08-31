@@ -121,7 +121,9 @@ pub(crate) async fn run_multi_source_analysis_impl(
         0,
         all_items.len(),
     );
-    let scoring_ctx = scoring::build_scoring_context(db)
+    // Deliberately unbounded (deep scans tolerate a slow cold build); the
+    // tagged builder still logs elapsed_ms and warns past its soft ceiling.
+    let scoring_ctx = scoring::build_scoring_context_tagged(db, "deep_scan")
         .await
         .map_err(|e| format!("Failed to build scoring context: {e}"))?;
     let trend_topics = crate::detect_trend_topics(

@@ -110,7 +110,7 @@ pub(crate) async fn deliberate(
     let system_prompt = build_system_prompt();
     let user_message = build_user_message(item, user_context);
 
-    let client = LLMClient::new(provider);
+    let client = LLMClient::with_purpose(provider, "adversarial");
     let messages = vec![Message {
         role: "user".to_string(),
         content: user_message,

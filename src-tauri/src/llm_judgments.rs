@@ -26,12 +26,19 @@ use serde::Deserialize;
 use tracing::{debug, info, warn};
 
 /// Bumped v1 → v2 when the batch schema gained the content-analysis fields
-/// (`technical_depth`/`novelty`/`audience_level`/`key_insight`). v1 judgments
-/// remain valid (`get_unjudged_item_ids` joins on ANY judgment, so nothing is
-/// re-judged and re-billed on upgrade); only v2 judgments drive demotions.
-const PROMPT_VERSION: &str = "v2";
+/// (`technical_depth`/`novelty`/`audience_level`/`key_insight`). Bumped
+/// v2 → v3 with the 2026-08-31 cost optimization: verbosity caps on the
+/// output fields and analysis fields omitted for items judged clearly
+/// irrelevant — the output-token distribution changed, so post-hoc analysis
+/// must be able to filter by cohort. Older judgments remain valid
+/// (`get_unjudged_item_ids` joins on ANY judgment, so nothing is re-judged
+/// and re-billed on upgrade); only current-version judgments drive demotions.
+const PROMPT_VERSION: &str = "v3";
 const INGESTION_THRESHOLD: f64 = 0.25;
-const BATCH_SIZE: usize = 5;
+/// 10 items per call: the system prompt + user-context block (~800 tokens) is
+/// resent on every call, so batch size directly divides that fixed overhead.
+/// Was 5 — measured 2026-08-31, the fixed overhead was ~40% of input spend.
+const BATCH_SIZE: usize = 10;
 
 /// Demote-only verdict feedback: judged relevance strictly below this…
 ///
@@ -82,17 +89,57 @@ const DEMOTION_PROBE_CONFIDENCE_MIN: f64 = 0.6;
 
 #[derive(Debug, Deserialize)]
 struct JudgmentResponse {
+    #[serde(default, deserialize_with = "de_f64_lenient")]
     relevance: Option<f64>,
     explanation: Option<String>,
     actions: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "de_f64_lenient")]
     confidence: Option<f64>,
     /// Content-analysis fields (prompt v2). All optional: the model is
     /// instructed to OMIT them when the content preview is too thin to judge,
     /// and parsing must never fail because a field is missing.
+    #[serde(default, deserialize_with = "de_f64_lenient")]
     technical_depth: Option<f64>,
+    #[serde(default, deserialize_with = "de_f64_lenient")]
     novelty: Option<f64>,
     audience_level: Option<String>,
     key_insight: Option<String>,
+}
+
+/// Accept a JSON number OR a numeric string for a numeric field.
+///
+/// Cheap judge models quote numbers where premium models emit them bare —
+/// observed live 2026-08-31, first Haiku cycle after #553: the model returned
+/// `"id": "60146"` and serde failed the WHOLE batch (`judged=0`, budget spent,
+/// nothing stored). The rerank judge's parser has tolerated both forms since
+/// v1; this brings the ingest judge to the same standard. A non-numeric
+/// string or any other type is `None` (treated as omitted), never an error —
+/// one malformed field must not discard the other nine items in the batch.
+fn de_f64_lenient<'de, D>(d: D) -> std::result::Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: Option<serde_json::Value> = serde::Deserialize::deserialize(d)?;
+    Ok(match v {
+        Some(serde_json::Value::Number(n)) => n.as_f64(),
+        Some(serde_json::Value::String(s)) => s.trim().parse::<f64>().ok(),
+        _ => None,
+    })
+}
+
+/// Accept a JSON integer OR a numeric string for an id field. Same live
+/// failure as [`de_f64_lenient`]; ids that parse to nothing are `None` and
+/// the element is dropped by the caller (nothing to attach the judgment to).
+fn de_i64_lenient<'de, D>(d: D) -> std::result::Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: Option<serde_json::Value> = serde::Deserialize::deserialize(d)?;
+    Ok(match v {
+        Some(serde_json::Value::Number(n)) => n.as_i64(),
+        Some(serde_json::Value::String(s)) => s.trim().parse::<i64>().ok(),
+        _ => None,
+    })
 }
 
 /// Evaluate a batch of source items and store judgments.
@@ -221,7 +268,7 @@ async fn evaluate_with_provider(db: &Database, provider: LLMProvider) -> Result<
     }
 
     let model_name = provider.model.clone();
-    let client = LLMClient::new(provider);
+    let client = LLMClient::with_purpose(provider, "ingest_judge");
     let user_context = crate::adversarial::build_user_context_summary();
 
     for chunk in unjudged.chunks(BATCH_SIZE) {
@@ -475,7 +522,10 @@ fn get_llm_settings() -> Option<LLMProvider> {
     let mgr = crate::get_settings_manager();
     let mut guard = mgr.lock();
     guard.ensure_keys_hydrated();
-    let provider = guard.get().llm.clone();
+    // Bulk judging runs on the cheap sibling of the configured model — same
+    // provider and key, so the BYOK/configured gates below are unaffected.
+    // See `llm_judge::judge_provider`.
+    let provider = crate::llm_judge::judge_provider(&guard.get().llm);
 
     if provider.provider != "ollama" && provider.api_key.is_empty() {
         return None;
@@ -558,22 +608,24 @@ async fn evaluate_batch(
          For each item, respond with a JSON array where each element has:\n\
          - \"id\": the item id\n\
          - \"relevance\": 0.0-1.0 (how relevant to THIS user specifically)\n\
-         - \"explanation\": one sentence explaining WHY this matters to this user \
+         - \"explanation\": one sentence, MAX 20 words, explaining WHY this matters to this user \
            (must reference a specific fact from the item AND the user's context)\n\
-         - \"actions\": array of suggested actions (e.g. [\"review_security\", \"investigate\"])\n\
+         - \"actions\": array of AT MOST 2 suggested actions (e.g. [\"review_security\", \"investigate\"])\n\
          - \"confidence\": 0.0-1.0 (how confident you are in your relevance assessment)\n\
          - \"technical_depth\": integer 1-5 (1 = announcement/listicle-level, \
            5 = deep implementation detail)\n\
          - \"novelty\": integer 1-5 (1 = rehash of well-known material, \
            5 = genuinely new technique or result)\n\
          - \"audience_level\": one of \"Beginner\", \"Intermediate\", \"Advanced\", \"Expert\"\n\
-         - \"key_insight\": one-sentence key technical insight from the content, or null\n\n\
+         - \"key_insight\": one-sentence key technical insight from the content (max 15 words), or null\n\n\
          Rules:\n\
          - Explanation MUST reference something specific from the item (a package name, CVE, etc.) \
            AND something from the user's context\n\
          - Generic explanations like \"relevant to your interests\" score 0 confidence\n\
          - If the item has no clear connection to the user's stack/topics, relevance should be < 0.3\n\
          - A package only affects the user if it is actually in their stack/dependencies. Do NOT claim cross-ecosystem impact (e.g. a JavaScript/npm package affecting a Rust backend, or vice-versa). If you cannot confirm it is in their stack, relevance < 0.3\n\
+         - If relevance < 0.4, OMIT actions, technical_depth, novelty, audience_level, and \
+           key_insight entirely — a short explanation is all a rejected item needs\n\
          - Judge technical_depth/novelty/audience_level ONLY from the provided text; if the \
            content preview is too thin to judge them, OMIT those fields entirely rather than guessing\n\
          - Return ONLY a valid JSON array, no other text"
@@ -612,6 +664,7 @@ fn parse_batch_response(text: &str) -> Result<Vec<(i64, JudgmentResponse)>> {
 
     #[derive(Deserialize)]
     struct BatchItem {
+        #[serde(default, deserialize_with = "de_i64_lenient")]
         id: Option<i64>,
         #[serde(flatten)]
         judgment: JudgmentResponse,

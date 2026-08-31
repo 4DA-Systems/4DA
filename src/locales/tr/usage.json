@@ -1,0 +1,23 @@
+{
+  "today": "Bugünkü maliyet",
+  "todayOfCap": "Bugünkü maliyet (limit ${{cap}})",
+  "tokensToday": "Bugünkü token",
+  "thisMonth": "Bu ay",
+  "byFeature": "Bu ay özellik bazında",
+  "calls_one": "{{count}} çağrı",
+  "calls_other": "{{count}} çağrı",
+  "feature": {
+    "rerank_judge": "İlgililik değerlendirmesi — akış yeniden sıralama",
+    "ingest_judge": "İlgililik değerlendirmesi — yeni öğeler",
+    "blind_spots": "Kör nokta analizi",
+    "digest": "Özet",
+    "search_synthesis": "Arama sentezi",
+    "adversarial": "Çekişmeli değerlendirme",
+    "channel_render": "Kanal işleme",
+    "content_analysis": "İçerik analizi",
+    "translation": "Çeviri",
+    "completion": "Etiketsiz (brifingler vb.)",
+    "structured_completion": "Etiketsiz (yapılandırılmış)",
+    "streaming": "Etiketsiz (akış)"
+  }
+}

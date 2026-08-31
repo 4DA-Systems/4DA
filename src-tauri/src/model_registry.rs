@@ -69,11 +69,20 @@ pub fn bundled_registry() -> ModelRegistry {
 
     // --- Anthropic ---
     let anthropic_models = [
+        // Undated alias first: this is the id the API and settings actually use.
+        (
+            "claude-haiku-4-5",
+            "Claude Haiku 4.5",
+            1.00,
+            5.00,
+            200_000,
+            8_192,
+        ),
         (
             "claude-haiku-4-5-20251001",
             "Claude Haiku 4.5",
-            0.80,
-            4.00,
+            1.00,
+            5.00,
             200_000,
             8_192,
         ),
@@ -271,8 +280,14 @@ pub fn get_provider_models(provider: &str) -> Vec<String> {
     models
 }
 
-/// Estimate cost in cents. Returns None for unknown models/providers.
-pub fn estimate_cost(
+/// Estimate cost in millicents (1/1000 of a USD cent). Returns None for
+/// unknown models/providers.
+///
+/// Millicents exist because the daily budget ledger sums PER-CALL estimates:
+/// a cheap judge call costs ~0.4c, which a cent-granular estimate rounds to 0
+/// — every such call would be invisible to the daily cost cap. At millicent
+/// granularity the rounding error is at most 0.0005c per call.
+pub fn estimate_cost_millicents(
     provider: &str,
     model: &str,
     input_tokens: u64,
@@ -283,7 +298,10 @@ pub fn estimate_cost(
         return Some(0);
     }
 
-    // openai-compatible has unknown pricing
+    // openai-compatible has unknown pricing. Deliberately NOT estimated with a
+    // fallback price: this provider string is how local OpenAI-compatible
+    // endpoints (llama-server, LM Studio, vLLM) are configured, and charging
+    // phantom cents against the daily cap would block free local inference.
     if provider == "openai-compatible" {
         return None;
     }
@@ -298,11 +316,22 @@ pub fn estimate_cost(
     let input_cost_per_token = info.input_cost_per_token?;
     let output_cost_per_token = info.output_cost_per_token?;
 
-    // Convert USD to cents, clamp to non-negative
-    let input_cost = input_tokens as f64 * input_cost_per_token * 100.0;
-    let output_cost = output_tokens as f64 * output_cost_per_token * 100.0;
+    // Convert USD to millicents (USD * 100 cents * 1000), clamp to non-negative
+    let input_cost = input_tokens as f64 * input_cost_per_token * 100_000.0;
+    let output_cost = output_tokens as f64 * output_cost_per_token * 100_000.0;
 
     Some((input_cost + output_cost).max(0.0).round() as u64)
+}
+
+/// Estimate cost in cents. Returns None for unknown models/providers.
+pub fn estimate_cost(
+    provider: &str,
+    model: &str,
+    input_tokens: u64,
+    output_tokens: u64,
+) -> Option<u64> {
+    estimate_cost_millicents(provider, model, input_tokens, output_tokens)
+        .map(|mc| ((mc as f64) / 1000.0).round() as u64)
 }
 
 /// Estimate cost in cents, returning 0 for unknown (backward compat).
@@ -313,6 +342,16 @@ pub fn estimate_cost_or_zero(
     output_tokens: u64,
 ) -> u64 {
     estimate_cost(provider, model, input_tokens, output_tokens).unwrap_or(0)
+}
+
+/// Estimate cost in millicents, returning 0 for unknown (backward compat).
+pub fn estimate_cost_millicents_or_zero(
+    provider: &str,
+    model: &str,
+    input_tokens: u64,
+    output_tokens: u64,
+) -> u64 {
+    estimate_cost_millicents(provider, model, input_tokens, output_tokens).unwrap_or(0)
 }
 
 /// Get the full registry snapshot (for frontend consumption).

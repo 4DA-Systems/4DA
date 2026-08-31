@@ -51,6 +51,19 @@ export function depFromItem(item: EvidenceItem): string | null {
   return item.affected_deps.length > 0 ? item.affected_deps[0]! : null;
 }
 
+/**
+ * Recover the bare package name from an ecosystem-qualified display name
+ * ("react (npm)" -> "react"). Mirrors the backend's `bare_package_name`
+ * (src-tauri/src/blind_spots.rs): gap rows carry display names while
+ * missed-signal rows carry bare dep names, so any comparison between the two
+ * lanes must strip the qualifier first. A name with no qualifier passes
+ * through unchanged.
+ */
+export function barePackageName(displayName: string): string {
+  const idx = displayName.lastIndexOf(' (');
+  return idx >= 0 && displayName.endsWith(')') ? displayName.slice(0, idx) : displayName;
+}
+
 const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   npm_registry: { label: 'release', color: 'text-green-400/70' },
   crates_io: { label: 'release', color: 'text-green-400/70' },
@@ -71,7 +84,12 @@ export function sourceTypeLabel(source: string): { label: string; color: string 
 }
 
 export function signalMatchesDep(signal: EvidenceItem, depName: string): boolean {
-  const lower = depName.toLowerCase();
-  return signal.affected_deps.some(d => d.toLowerCase() === lower)
+  // Compare on the BARE package name: dep rows are named with the backend's
+  // display name ("react (npm)") while a missed signal's affected_deps carry
+  // bare names ("react"). Comparing the qualified name verbatim never matched,
+  // so every react signal spawned a second bare "react" row next to
+  // "react (npm)" (live audit 2026-08-31, Uncovered Dependencies).
+  const lower = barePackageName(depName).toLowerCase();
+  return signal.affected_deps.some(d => barePackageName(d).toLowerCase() === lower)
     || signal.title.toLowerCase().includes(lower);
 }

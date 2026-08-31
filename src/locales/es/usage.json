@@ -1,0 +1,23 @@
+{
+  "today": "Costo hoy",
+  "todayOfCap": "Costo hoy (límite ${{cap}})",
+  "tokensToday": "Tokens hoy",
+  "thisMonth": "Este mes",
+  "byFeature": "Este mes por función",
+  "calls_one": "{{count}} llamada",
+  "calls_other": "{{count}} llamadas",
+  "feature": {
+    "rerank_judge": "Juicio de relevancia — reordenar feed",
+    "ingest_judge": "Juicio de relevancia — nuevos elementos",
+    "blind_spots": "Análisis de puntos ciegos",
+    "digest": "Resumen",
+    "search_synthesis": "Síntesis de búsqueda",
+    "adversarial": "Deliberación adversarial",
+    "channel_render": "Renderizado de canal",
+    "content_analysis": "Análisis de contenido",
+    "translation": "Traducción",
+    "completion": "Sin etiqueta (informes y otros)",
+    "structured_completion": "Sin etiqueta (estructurado)",
+    "streaming": "Sin etiqueta (streaming)"
+  }
+}

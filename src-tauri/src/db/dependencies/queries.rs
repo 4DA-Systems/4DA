@@ -443,10 +443,18 @@ impl Database {
             .collect())
     }
 
-    /// Bulk-insert parent->child dependency edges for a project (Step 1:
+    /// Bulk-upsert parent->child dependency edges for a project (Step 1:
     /// reachability foundation). Runs in a single transaction. Skips ephemeral
     /// worktree/temp paths (same exclusion as the auditable-dependency queries).
-    /// Returns the number of edges inserted (0 for excluded/empty input).
+    ///
+    /// Idempotent since schema 114: one row per logical edge
+    /// `(project_path, ecosystem, parent@version, child@version)` — a rescan
+    /// refreshes `scope` / `detected_at` in place instead of appending the
+    /// whole graph again (the pre-114 behavior that grew the table to ~642k
+    /// rows for ~12k distinct edges). The ON CONFLICT target must match
+    /// `idx_dep_edges_unique` exactly, COALESCE expressions included, because
+    /// SQLite resolves the conflict against that specific unique index.
+    /// Returns the number of edges written (0 for excluded/empty input).
     pub(crate) fn store_dependency_edges(
         &self,
         project_path: &str,
@@ -465,7 +473,13 @@ impl Database {
                 "INSERT INTO dependency_edges
                      (project_path, ecosystem, parent_package, parent_version,
                       child_package, child_version, scope, detected_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))
+                 ON CONFLICT (project_path, ecosystem, parent_package,
+                              COALESCE(parent_version, ''), child_package,
+                              COALESCE(child_version, ''))
+                 DO UPDATE SET
+                     scope = excluded.scope,
+                     detected_at = excluded.detected_at",
             )?;
             for edge in edges {
                 stmt.execute(params![

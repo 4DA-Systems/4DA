@@ -60,14 +60,27 @@ const PARALLEL_SCORE_MIN_ITEMS: usize = 64;
 /// path would have persisted unbounded. Funnelling every persisted tuple
 /// through this one function makes the boundary impossible to skip by
 /// construction: `score_chunk` has no other way to build the tuple.
-fn persistable(
-    item_id: i64,
-    mut r: crate::SourceRelevance,
-) -> Option<(i64, f32, Option<String>, Option<String>)> {
+fn persistable(item_id: i64, mut r: crate::SourceRelevance) -> Option<crate::db::ScorePersistRow> {
     scoring::finalize_scores(std::slice::from_mut(&mut r));
     // persist_analysis_scores only writes top_score > 0; the caller returns the
     // id unconditionally so mark_items_scored_version stamps even re-scored noise.
-    (r.top_score > 0.0).then_some((item_id, r.top_score, r.signal_type, r.signal_priority))
+    (r.top_score > 0.0).then(|| {
+        // Explanation lane (schema 115): serialize AFTER finalize_scores so
+        // the envelope's score is exactly what persists as relevance_score
+        // on this path (no batch layer runs here — top_score IS the durable
+        // evidence value).
+        let breakdown_json = r
+            .score_breakdown
+            .as_ref()
+            .and_then(|bd| crate::db::bounded_breakdown_json(r.top_score, bd));
+        (
+            item_id,
+            r.top_score,
+            r.signal_type,
+            r.signal_priority,
+            breakdown_json,
+        )
+    })
 }
 
 /// Score a batch of items through the cheap PASIFA pipeline, in parallel across
@@ -96,8 +109,8 @@ fn score_chunk(
     db: &crate::db::Database,
     options: &ScoringOptions,
     classifier: Option<&crate::signals::SignalClassifier>,
-) -> (Vec<(i64, f32, Option<String>, Option<String>)>, Vec<i64>) {
-    type Scored = (Option<(i64, f32, Option<String>, Option<String>)>, i64);
+) -> (Vec<crate::db::ScorePersistRow>, Vec<i64>) {
+    type Scored = (Option<crate::db::ScorePersistRow>, i64);
     let score_one = |item: &crate::db::StoredSourceItem| -> Scored {
         // Path parity: the analyzer path parses topic tags into source_tags;
         // this path used to pass &[] — one of the "two score families" the
@@ -184,7 +197,7 @@ pub(crate) async fn backfill_unscored_cycle(chunk_size: usize) -> Result<Backfil
     }
 
     // Same scoring context + options as the real pipeline (minus LLM rerank).
-    let ctx = scoring::build_scoring_context_with_timeout(db).await?;
+    let ctx = scoring::build_scoring_context_with_timeout(db, "backfill_unscored").await?;
     let trend_topics = crate::detect_trend_topics(
         items
             .iter()
@@ -276,7 +289,7 @@ mod tests {
     /// persisted verbatim.
     #[test]
     fn persistable_reasserts_the_categorical_score_ceiling() {
-        let (id, score, _, _) =
+        let (id, score, _, _, _) =
             persistable(7, relevance(0.99, Some(0.60))).expect("positive score is persistable");
         assert_eq!(id, 7);
         assert!(
@@ -289,7 +302,7 @@ mod tests {
     /// `final_ceiling.absolute_max` in `scoring/pipeline.scoring`.
     #[test]
     fn persistable_holds_the_absolute_max_boundary() {
-        let (_, score, _, _) =
+        let (_, score, _, _, _) =
             persistable(7, relevance(0.99, None)).expect("positive score is persistable");
         assert!(
             score < 0.99,
@@ -380,7 +393,7 @@ mod tests {
         );
         // Every persisted score corresponds to a real item id.
         let id_set: std::collections::HashSet<i64> = items.iter().map(|i| i.id).collect();
-        for (id, score, _, _) in &score_data {
+        for (id, score, _, _, _) in &score_data {
             assert!(id_set.contains(id), "score for a phantom id");
             assert!(*score > 0.0, "persisted scores are strictly positive");
         }
@@ -441,7 +454,7 @@ pub(crate) async fn drain_stale_scores_cycle(chunk_size: usize) -> Result<Backfi
         });
     }
 
-    let ctx = scoring::build_scoring_context_with_timeout(db).await?;
+    let ctx = scoring::build_scoring_context_with_timeout(db, "drain_stale_scores").await?;
     let trend_topics = crate::detect_trend_topics(
         items
             .iter()

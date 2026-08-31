@@ -4,4 +4,10 @@ import type { DbStats } from "./DbStats";
 /**
  * Data health overview: DB stats + retention settings.
  */
-export type DataHealth = { stats: DbStats, retention_days: number, db_size_mb: number, health_status: string, };
+export type DataHealth = { stats: DbStats, retention_days: number, db_size_mb: number, health_status: string, 
+/**
+ * One concrete action, populated only when `health_status` is
+ * "needs_attention". A status that says "needs attention" without saying
+ * what to do is an alarm with no handle.
+ */
+recommendation: string | null, };

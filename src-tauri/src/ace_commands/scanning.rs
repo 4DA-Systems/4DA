@@ -135,7 +135,11 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         .into_iter()
         .filter(|path| {
             if !path.exists() {
-                debug!(target: "ace", path = %path.display(), "Skipping non-existent path");
+                // warn!, not debug! (2026-08-31 audit): dead configured roots
+                // — deleted projects, paths from another OS in settings.json —
+                // were skipped invisibly while still occupying context_dirs.
+                // Each skip names its path so the rot is diagnosable from logs.
+                warn!(target: "ace", path = %path.display(), "Skipping non-existent scan path");
                 return false;
             }
             let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.clone());

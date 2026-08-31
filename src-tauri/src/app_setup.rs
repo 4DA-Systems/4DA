@@ -410,6 +410,11 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
             let item_count = db.total_item_count().unwrap_or(0);
             info!(target: "4da::startup", context_chunks = ctx_count, source_items = item_count, "Database ready");
 
+            // Seed the daily LLM budget counters from today's persisted usage.
+            // The counters are process-local atomics: without this, every
+            // restart (GUI or headless engine) granted a fresh daily budget.
+            crate::llm::seed_daily_usage_from_db();
+
             match db.purge_adapter_level_feed_health() {
                 Ok(0) => {}
                 Ok(n) => {

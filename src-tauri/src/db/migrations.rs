@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 113;
+        const TARGET_VERSION: i64 = 115;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5127,6 +5127,143 @@ impl Database {
                 )?;
             }
 
+            // Phase 114: idempotent dependency edges + dep-epoch relocation.
+            //
+            // (a) `store_dependency_edges` re-APPENDED the full dependency graph
+            //     on every ACE scan since Phase 84 — measured live 2026-08-31 at
+            //     ~642k rows for ~12k distinct logical edges (52.7x duplication,
+            //     ~168 MB with indexes). The rebuild keeps the NEWEST row per
+            //     logical edge — (project_path, ecosystem, parent@version,
+            //     child@version), newest = MAX(id) since the writer is
+            //     append-only and `detected_at` ties within a scan batch — and
+            //     adds the UNIQUE index that makes the new upsert writer
+            //     physically unable to re-duplicate. Versions are nullable and
+            //     SQLite treats NULLs as DISTINCT in unique indexes, so the key
+            //     COALESCEs them to ''; the writer's ON CONFLICT target must
+            //     match these expressions exactly. `scope` is an attribute the
+            //     upsert refreshes, not part of edge identity.
+            //     Deliberately NO VACUUM here: migrations run at startup with
+            //     the user waiting, and the weekly scheduled VACUUM (or Deep
+            //     Clean) reclaims the freed pages.
+            //
+            // (b) The `dep_epoch_hash` scheduler_state row stored a 63-bit HASH
+            //     in the `last_run_unix` timestamp column (live value
+            //     4748353192844586074), poisoning every consumer that does time
+            //     math on that column — `boot_context::last_scheduler_run`
+            //     takes MAX(last_run_unix), so process-recency detection always
+            //     saw a run "just now". The hash moves to kv_store (it is a
+            //     value, not a schedule) and the poisoned row is deleted, so
+            //     scheduler_state holds only real jobs.
+            if current_version < 114 {
+                Self::run_versioned_migration(
+                    &conn,
+                    113,
+                    114,
+                    "Phase 114: dedupe dependency_edges + relocate dep epoch hash",
+                    |c| {
+                        let before: i64 =
+                            c.query_row("SELECT COUNT(*) FROM dependency_edges", [], |r| r.get(0))?;
+                        c.execute_batch(
+                            "DROP TABLE IF EXISTS dependency_edges_new;
+                             CREATE TABLE dependency_edges_new (
+                                 id INTEGER PRIMARY KEY,
+                                 project_path TEXT NOT NULL,
+                                 ecosystem TEXT NOT NULL,
+                                 parent_package TEXT NOT NULL,
+                                 parent_version TEXT,
+                                 child_package TEXT NOT NULL,
+                                 child_version TEXT,
+                                 scope TEXT NOT NULL DEFAULT 'unknown',
+                                 detected_at TEXT NOT NULL DEFAULT (datetime('now'))
+                             );
+                             INSERT INTO dependency_edges_new
+                                 (id, project_path, ecosystem, parent_package, parent_version,
+                                  child_package, child_version, scope, detected_at)
+                             SELECT id, project_path, ecosystem, parent_package, parent_version,
+                                    child_package, child_version, scope, detected_at
+                             FROM dependency_edges
+                             WHERE id IN (
+                                 SELECT MAX(id) FROM dependency_edges
+                                 GROUP BY project_path, ecosystem, parent_package,
+                                          COALESCE(parent_version, ''), child_package,
+                                          COALESCE(child_version, '')
+                             );
+                             DROP TABLE dependency_edges;
+                             ALTER TABLE dependency_edges_new RENAME TO dependency_edges;
+                             CREATE INDEX IF NOT EXISTS idx_dep_edges_parent
+                                 ON dependency_edges (project_path, parent_package);
+                             CREATE INDEX IF NOT EXISTS idx_dep_edges_child
+                                 ON dependency_edges (project_path, child_package);
+                             CREATE UNIQUE INDEX IF NOT EXISTS idx_dep_edges_unique
+                                 ON dependency_edges (project_path, ecosystem, parent_package,
+                                                      COALESCE(parent_version, ''), child_package,
+                                                      COALESCE(child_version, ''));",
+                        )?;
+                        let after: i64 =
+                            c.query_row("SELECT COUNT(*) FROM dependency_edges", [], |r| r.get(0))?;
+
+                        // Relocate the epoch hash, then delete the poisoned row.
+                        // `<> 0` rather than `> 0`: the hash is 63-bit masked so it
+                        // is never negative in practice, but a defensive copy beats
+                        // silently dropping a value that costs nothing to keep.
+                        c.execute_batch(
+                            "INSERT OR REPLACE INTO kv_store (key, value, updated_at)
+                             SELECT 'dep_epoch_hash', CAST(last_run_unix AS TEXT), datetime('now')
+                             FROM scheduler_state
+                             WHERE job_name = 'dep_epoch_hash' AND last_run_unix <> 0;
+                             DELETE FROM scheduler_state WHERE job_name = 'dep_epoch_hash';",
+                        )?;
+
+                        info!(
+                            target: "4da::db",
+                            edges_before = before,
+                            edges_after = after,
+                            "Phase 114: dependency_edges deduplicated (one row per logical edge); dep epoch hash relocated to kv_store"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 115: persisted scoring explanations (E5010 auditability gap).
+            //
+            // The scorer's per-item breakdown (which axes fired, which dep
+            // matches, which caps applied) lived only in the session's
+            // in-memory analysis results — "why did this item score 0.42" was
+            // unanswerable after a restart, which blocked precise attribution
+            // twice during the 2026-08-21/23 audits. One row per item, newest
+            // evaluation wins (source_item_id is the PRIMARY KEY; the writer
+            // upserts). `breakdown` is a bounded JSON envelope (see
+            // db/scoring_explanations.rs — hard-capped at 8 KB, truncation
+            // marked, never failing). Write-only additional data: scores are
+            // unchanged, so there is deliberately NO PIPELINE_VERSION bump.
+            // ON DELETE CASCADE (source_item_dependencies precedent) makes
+            // every prune path delete the explanation with the item.
+            if current_version < 115 {
+                Self::run_versioned_migration(
+                    &conn,
+                    114,
+                    115,
+                    "Phase 115: scoring_explanations table",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS scoring_explanations (
+                                source_item_id INTEGER PRIMARY KEY,
+                                pipeline_version INTEGER NOT NULL,
+                                breakdown TEXT NOT NULL,
+                                scored_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                FOREIGN KEY (source_item_id) REFERENCES source_items(id) ON DELETE CASCADE
+                            );",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 115: scoring_explanations created — per-item score breakdowns now persist (write-only lane; scores unchanged)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -6450,6 +6587,187 @@ mod tests {
         assert_eq!(
             rebuilt, 1,
             "the vector index is rebuilt from context_chunks, so nothing is lost"
+        );
+    }
+
+    /// Phase 114: the dependency_edges rebuild keeps exactly one row per
+    /// logical edge (the NEWEST one), NULL versions dedupe like any other
+    /// value, the UNIQUE index exists afterwards, and the dep-epoch hash is
+    /// relocated from scheduler_state.last_run_unix (where it poisoned
+    /// MAX(last_run_unix) staleness math) into kv_store.
+    #[test]
+    fn test_phase_114_dependency_edges_dedupe_and_epoch_relocation() {
+        let db = test_db();
+        {
+            let conn = db.conn.lock();
+
+            // Recreate the pre-114 state: no unique index, duplicated rows, and
+            // the hash-in-timestamp scheduler row from the 2026-08-31 live audit.
+            conn.execute_batch(
+                "DROP INDEX IF EXISTS idx_dep_edges_unique;
+                 -- Three appends of the same logical edge across three 'scans'.
+                 INSERT INTO dependency_edges
+                     (project_path, ecosystem, parent_package, parent_version,
+                      child_package, child_version, scope, detected_at)
+                 VALUES
+                     ('/p/app', 'rust', 'app', '0.1.0', 'serde', '1.0.190', 'runtime', '2026-08-01 00:00:00'),
+                     ('/p/app', 'rust', 'app', '0.1.0', 'serde', '1.0.190', 'runtime', '2026-08-15 00:00:00'),
+                     ('/p/app', 'rust', 'app', '0.1.0', 'serde', '1.0.190', 'dev',     '2026-08-30 00:00:00'),
+                 -- NULL-versioned edge duplicated twice: NULLs must dedupe too.
+                     ('/p/app', 'javascript', '__root__', NULL, 'left-pad', NULL, 'runtime', '2026-08-01 00:00:00'),
+                     ('/p/app', 'javascript', '__root__', NULL, 'left-pad', NULL, 'runtime', '2026-08-30 00:00:00'),
+                 -- A distinct edge (different child version) survives on its own.
+                     ('/p/app', 'rust', 'app', '0.1.0', 'serde', '1.0.200', 'runtime', '2026-08-30 00:00:00');
+                 INSERT OR REPLACE INTO scheduler_state (job_name, last_run_unix)
+                     VALUES ('dep_epoch_hash', 4748353192844586074);
+                 UPDATE schema_version SET version = 113;",
+            )
+            .expect("seed pre-114 state");
+        }
+
+        db.migrate().expect("re-running migrations from v113");
+
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
+            .unwrap();
+        assert!(version >= 114, "schema_version >= 114; got {version}");
+
+        // 6 rows collapsed to 3 logical edges.
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM dependency_edges", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 3, "one row per logical edge after the rebuild");
+
+        // The survivor of the triplicated edge is the NEWEST row (its last
+        // scan said the scope is 'dev' — that is the current truth).
+        let (scope, detected_at): (String, String) = conn
+            .query_row(
+                "SELECT scope, detected_at FROM dependency_edges
+                 WHERE ecosystem = 'rust' AND child_version = '1.0.190'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(scope, "dev", "newest row per tuple must win");
+        assert_eq!(detected_at, "2026-08-30 00:00:00");
+
+        // The NULL-versioned pair collapsed to one row.
+        let null_edges: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM dependency_edges WHERE child_package = 'left-pad'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(null_edges, 1, "NULL versions must deduplicate via COALESCE");
+
+        // The unique index (the recurrence guard) exists.
+        let unique_idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type='index' AND name='idx_dep_edges_unique'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(unique_idx, 1, "idx_dep_edges_unique must exist");
+
+        // The epoch hash moved to kv_store, value intact...
+        let epoch: String = conn
+            .query_row(
+                "SELECT CAST(value AS TEXT) FROM kv_store WHERE key = 'dep_epoch_hash'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(epoch, "4748353192844586074");
+
+        // ...and the poisoned scheduler row is gone, so MAX(last_run_unix)
+        // staleness math is sane again.
+        let (rows, max_ts): (i64, i64) = conn
+            .query_row(
+                "SELECT COUNT(*), COALESCE(MAX(last_run_unix), 0) FROM scheduler_state
+                 WHERE job_name = 'dep_epoch_hash'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(rows, 0, "hash-in-timestamp row must be deleted");
+        assert_eq!(max_ts, 0);
+
+        // Idempotency: winding back and re-running must not error or lose rows.
+        conn.execute_batch("UPDATE schema_version SET version = 113;")
+            .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running phase 114");
+        let conn = db.conn.lock();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM dependency_edges", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 3, "re-running the rebuild is a semantic no-op");
+    }
+
+    /// Phase 115 creates `scoring_explanations` — one bounded breakdown per
+    /// item (PRIMARY KEY = source_item_id, newest evaluation wins) with an
+    /// ON DELETE CASCADE back to source_items so pruned items leak nothing.
+    #[test]
+    fn test_phase_115_scoring_explanations_table() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
+            .unwrap();
+        assert!(version >= 115, "schema_version >= 115; got {version}");
+
+        // Exact column set the write/read lanes depend on.
+        let cols: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('scoring_explanations')
+                 WHERE name IN ('source_item_id', 'pipeline_version', 'breakdown', 'scored_at')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(cols, 4, "all four columns must exist");
+
+        // The retention mechanism IS the FK: verify it targets source_items
+        // with CASCADE, because every prune path relies on it.
+        let (fk_table, on_delete): (String, String) = conn
+            .query_row(
+                "SELECT \"table\", on_delete FROM pragma_foreign_key_list('scoring_explanations')",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(fk_table, "source_items");
+        assert_eq!(
+            on_delete, "CASCADE",
+            "pruned items must cascade-delete their explanation"
+        );
+
+        // Idempotency: winding back and re-running must not error, and rows
+        // written at v115 must survive the re-run (CREATE TABLE IF NOT EXISTS).
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding)
+                 VALUES ('hackernews', 'p115', 'phase 115 item', 'x', 'h115', x'00');
+             INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+                 VALUES (last_insert_rowid(), 1, '{\"score\":0.5,\"breakdown\":{}}');
+             UPDATE schema_version SET version = 114;",
+        )
+        .expect("seed a row and wind back to v114");
+        drop(conn);
+        db.migrate().expect("re-running phase 115");
+        let conn = db.conn.lock();
+        let survivors: i64 = conn
+            .query_row("SELECT COUNT(*) FROM scoring_explanations", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            survivors, 1,
+            "re-running the migration must not drop existing rows"
         );
     }
 
