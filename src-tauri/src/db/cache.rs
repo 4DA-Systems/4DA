@@ -793,9 +793,9 @@ mod tests {
         // Batch 1: all three items scored for the FIRST time — zero churn.
         db.persist_analysis_scores(
             &[
-                (a, 0.90, None, None),
-                (b, 0.40, None, None),
-                (c, 0.50, None, None),
+                (a, 0.90, None, None, None),
+                (b, 0.40, None, None, None),
+                (c, 0.50, None, None, None),
             ],
             "analysis",
         )
@@ -804,9 +804,9 @@ mod tests {
         // Batch 2: a collapses (−0.40), b climbs (+0.35), c wiggles (+0.05).
         db.persist_analysis_scores(
             &[
-                (a, 0.50, None, None),
-                (b, 0.75, None, None),
-                (c, 0.55, None, None),
+                (a, 0.50, None, None, None),
+                (b, 0.75, None, None, None),
+                (c, 0.55, None, None, None),
             ],
             "backfill",
         )
