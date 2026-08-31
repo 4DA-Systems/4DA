@@ -6,19 +6,19 @@
 // versioned GitHub asset URL.
 const ORG = "4DA-Systems";
 const REPO = "4DA";
-const VERSION = "1.0.0";
-const TAG = "v1.0.0";
+const VERSION = "1.0.2";
+const TAG = "v1.0.2";
 const base = `https://github.com/${ORG}/${REPO}/releases/download/${TAG}`;
 
-// Exact asset names verified against the v1.0.0 release
-// (gh release view v1.0.0 --repo 4DA-Systems/4DA --json assets).
+// Exact asset names verified against the v1.0.2 release
+// (gh release view v1.0.2 --repo 4DA-Systems/4DA --json assets).
 const files = {
-  win:           { slug: "win",       os: "Windows",               url: `${base}/4DA.Home_${VERSION}_x64-setup.exe`, ext: ".exe",      size: "~30 MB" },
-  macArm:        { slug: "mac-arm",   os: "macOS (Apple Silicon)", url: `${base}/4DA.Home_${VERSION}_aarch64.dmg`,   ext: ".dmg",      size: "~31 MB" },
-  macIntel:      { slug: "mac-intel", os: "macOS (Intel)",         url: `${base}/4DA.Home_${VERSION}_x64.dmg`,       ext: ".dmg",      size: "~33 MB" },
-  linuxAppImage: { slug: "linux",     os: "Linux (AppImage)",      url: `${base}/4DA.Home_${VERSION}_amd64.AppImage`, ext: ".AppImage", size: "~112 MB" },
-  linuxDeb:      { slug: "linux-deb", os: "Linux (.deb)",          url: `${base}/4DA.Home_${VERSION}_amd64.deb`,     ext: ".deb",      size: "~34 MB" },
-  linuxRpm:      { slug: "linux-rpm", os: "Linux (.rpm)",          url: `${base}/4DA.Home-${VERSION}-1.x86_64.rpm`,  ext: ".rpm",      size: "~34 MB" },
+  win:           { slug: "win",       os: "Windows",               url: `${base}/4DA_1.0.2_x64-setup.exe`, ext: ".exe",      size: "~120 MB" },
+  macArm:        { slug: "mac-arm",   os: "macOS (Apple Silicon)", url: `${base}/4DA_1.0.2_aarch64.dmg`,   ext: ".dmg",      size: "~130 MB" },
+  macIntel:      { slug: "mac-intel", os: "macOS (Intel)",         url: `${base}/4DA_1.0.2_x64.dmg`,       ext: ".dmg",      size: "~133 MB" },
+  linuxAppImage: { slug: "linux",     os: "Linux (AppImage)",      url: `${base}/4DA_1.0.2_amd64.AppImage`, ext: ".AppImage", size: "~201 MB" },
+  linuxDeb:      { slug: "linux-deb", os: "Linux (.deb)",          url: `${base}/4DA_1.0.2_amd64.deb`,     ext: ".deb",      size: "~133 MB" },
+  linuxRpm:      { slug: "linux-rpm", os: "Linux (.rpm)",          url: `${base}/4DA-1.0.2-1.x86_64.rpm`,  ext: ".rpm",      size: "~133 MB" },
 };
 
 export default {
