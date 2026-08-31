@@ -14,19 +14,98 @@
     "",
     "TO CLEAR AN ENTRY: either wire the command up in the frontend, or delete it",
     "from Rust + generate_handler![] + the CommandMap in src/lib/commands.ts. Then",
+    "",
+    "CLEARED ENTRIES move to the top-level \"retired\" array — {command, retired_on,",
+    "pr, how: \"deleted\"|\"wired\"} — so burn-down progress is measurable instead of",
+    "silent. The gate prints \"N backlogged, M retired\" and flags any retired entry",
+    "whose command still exists in the Rust tree (a retirement must be real).",
     "DELETE its object below. The gate reports entries here that have gone stale.",
     "",
     "DO NOT add entries without a specific reason and a review — a new ghost is a",
     "regression, not a backlog item."
   ],
   "seeded": "2026-08-14",
-  "backlog": [
+  "retired": [
     {
       "command": "calculate_electricity_cost",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/streets_localization.rs:208",
-      "reason": "pre-existing backlog — registered but no frontend call site"
+      "retired_on": "2026-08-31",
+      "pr": "PENDING",
+      "how": "deleted"
     },
+    {
+      "command": "create_standing_query",
+      "retired_on": "2026-08-31",
+      "pr": "#556",
+      "how": "wired"
+    },
+    {
+      "command": "delete_standing_query",
+      "retired_on": "2026-08-31",
+      "pr": "#556",
+      "how": "wired"
+    },
+    {
+      "command": "format_currency",
+      "retired_on": "2026-08-31",
+      "pr": "PENDING",
+      "how": "deleted"
+    },
+    {
+      "command": "generate_sovereign_stack_document",
+      "retired_on": "2026-08-31",
+      "pr": "PENDING",
+      "how": "deleted"
+    },
+    {
+      "command": "get_execution_log",
+      "retired_on": "2026-08-31",
+      "pr": "PENDING",
+      "how": "deleted"
+    },
+    {
+      "command": "get_regional_data",
+      "retired_on": "2026-08-31",
+      "pr": "PENDING",
+      "how": "deleted"
+    },
+    {
+      "command": "get_sovereign_profile",
+      "retired_on": "2026-08-31",
+      "pr": "PENDING",
+      "how": "deleted"
+    },
+    {
+      "command": "get_sovereign_profile_completeness",
+      "retired_on": "2026-08-31",
+      "pr": "PENDING",
+      "how": "deleted"
+    },
+    {
+      "command": "get_standing_query_matches",
+      "retired_on": "2026-08-31",
+      "pr": "#556",
+      "how": "wired"
+    },
+    {
+      "command": "get_standing_query_suggestions",
+      "retired_on": "2026-08-31",
+      "pr": "#556",
+      "how": "wired"
+    },
+    {
+      "command": "list_standing_queries",
+      "retired_on": "2026-08-31",
+      "pr": "#556",
+      "how": "wired"
+    },
+    {
+      "command": "save_sovereign_fact",
+      "retired_on": "2026-08-31",
+      "pr": "PENDING",
+      "how": "deleted"
+    }
+  ],
+  "backlog": [
     {
       "command": "check_daily_streak",
       "since": "2026-08-14",
@@ -50,18 +129,6 @@
       "since": "2026-08-14",
       "rust": "src-tauri/src/telemetry.rs:258",
       "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "create_standing_query",
-      "since": "2026-08-15",
-      "rust": "src-tauri/src/standing_queries.rs:117",
-      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
-    },
-    {
-      "command": "delete_standing_query",
-      "since": "2026-08-15",
-      "rust": "src-tauri/src/standing_queries.rs:233",
-      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
     },
     {
       "command": "delete_translation_override",
@@ -88,21 +155,9 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
-      "command": "format_currency",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/streets_localization.rs:187",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
       "command": "generate_agent_brief",
       "since": "2026-08-14",
       "rust": "src-tauri/src/agent_brief.rs:418",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "generate_sovereign_stack_document",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/sovereign_profile.rs:163",
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
@@ -256,12 +311,6 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
-      "command": "get_execution_log",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/sovereign_profile.rs:251",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
       "command": "get_false_positive_analysis",
       "since": "2026-08-14",
       "rust": "src-tauri/src/trust_ledger.rs:665",
@@ -358,12 +407,6 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
-      "command": "get_regional_data",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/streets_localization.rs:164",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
       "command": "get_scoring_coverage",
       "since": "2026-08-14",
       "rust": "src-tauri/src/triage_audit_commands.rs:108",
@@ -394,34 +437,10 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
-      "command": "get_sovereign_profile",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/sovereign_profile.rs:63",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "get_sovereign_profile_completeness",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/sovereign_profile.rs:118",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
       "command": "get_stack_health",
       "since": "2026-08-14",
       "rust": "src-tauri/src/stack_health.rs:389",
       "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "get_standing_query_matches",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/standing_queries.rs:256",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "get_standing_query_suggestions",
-      "since": "2026-08-15",
-      "rust": "src-tauri/src/standing_queries.rs:332",
-      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
     },
     {
       "command": "get_tech_convergence",
@@ -470,12 +489,6 @@
       "since": "2026-08-14",
       "rust": "src-tauri/src/settings_commands_llm/mod.rs:84",
       "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "list_standing_queries",
-      "since": "2026-08-15",
-      "rust": "src-tauri/src/standing_queries.rs:164",
-      "reason": "orphaned when its only caller — a component nothing mounted — was deleted in #421. NOT a #421 regression: the host tab was already gone, so the feature was unreachable before that PR too. Missed by the 08-14 seed, which predates the post-#421 tree. SIGNAL-TIER: several of these back features /signal still markets (Standing Queries, Cross-Project Intelligence) — they need UI built or the marketing pulled, not just allowlisting."
     },
     {
       "command": "measure_noise_prune",
@@ -571,12 +584,6 @@
       "command": "run_noise_prune",
       "since": "2026-08-14",
       "rust": "src-tauri/src/autophagy_commands.rs:314",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "save_sovereign_fact",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/sovereign_profile.rs:225",
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {

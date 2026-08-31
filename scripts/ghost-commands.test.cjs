@@ -49,6 +49,7 @@ const write = (file, contents) => {
  * @param {string} [opts.publicJs]     contents of public/briefing.js
  * @param {string} [opts.e2e]          contents of e2e/smoke.spec.ts
  * @param {object[]} [opts.backlog]    ghost-command-backlog.json entries
+ * @param {object[]} [opts.retired]    ghost-command-backlog.json retired ledger
  * @returns {{ root: string, backlogPath: string }}
  */
 function fixture(opts) {
@@ -65,7 +66,11 @@ function fixture(opts) {
     write(path.join(root, 'src', 'components', 'Thing.tsx'), opts.component);
   }
   const backlogPath = path.join(root, 'ghost-command-backlog.json');
-  fs.writeFileSync(backlogPath, JSON.stringify({ backlog: opts.backlog || [] }), 'utf8');
+  fs.writeFileSync(
+    backlogPath,
+    JSON.stringify({ backlog: opts.backlog || [], retired: opts.retired || [] }),
+    'utf8',
+  );
   return { root, backlogPath };
 }
 
@@ -321,6 +326,82 @@ test('BACKLOG: a stale entry (command deleted from Rust) is reported', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Retired ledger — burn-down progress stays measurable AND honest
+// ---------------------------------------------------------------------------
+
+test('RETIRED: cleared entries are reported so progress is measurable', () => {
+  const r = run({
+    rust: `#[tauri::command]\npub async fn called_cmd() -> Result<String> { Ok(String::new()) }\n`,
+    handler: '      mod_a::called_cmd,',
+    commandsTs: `export interface CommandMap {\n  called_cmd: { params: never; result: string };\n}\n`,
+    component: `cmd('called_cmd');\n`,
+    retired: [
+      { command: 'deleted_cmd', retired_on: '2026-08-31', pr: '#999', how: 'deleted' },
+      { command: 'wired_cmd', retired_on: '2026-08-31', pr: '#999', how: 'wired' },
+    ],
+  });
+  assert.equal(r.retired.length, 2, 'the retired ledger must surface in the analysis');
+  assert.equal(r.staleRetired.length, 0, 'a genuinely deleted command is not stale');
+  assert.equal(r.ghosts.length, 0);
+});
+
+test('RETIRED: an entry claiming "deleted" while the command still exists is flagged stale', () => {
+  const r = run({
+    rust: TWO_COMMANDS,
+    handler: TWO_REGISTERED,
+    commandsTs: COMMAND_MAP,
+    component: `cmd('called_cmd');\n`,
+    retired: [
+      { command: 'typed_but_uncalled', retired_on: '2026-08-31', pr: '#999', how: 'deleted' },
+    ],
+  });
+  assert.equal(r.staleRetired.length, 1, 'a fake retirement must be reported');
+  assert.equal(r.staleRetired[0].name, 'typed_but_uncalled');
+  assert.match(r.staleRetired[0].why, /still exists/);
+});
+
+test('RETIRED: the ledger NEVER rescues a ghost — a resurrected command still blocks', () => {
+  // Moving a backlog entry to `retired` without deleting the command must not
+  // sneak it past the gate: with no backlog entry, it is a NEW ghost again.
+  const r = run({
+    rust: TWO_COMMANDS,
+    handler: TWO_REGISTERED,
+    commandsTs: COMMAND_MAP,
+    component: `cmd('called_cmd');\n`,
+    retired: [
+      { command: 'typed_but_uncalled', retired_on: '2026-08-31', pr: '#999', how: 'deleted' },
+    ],
+  });
+  assert.deepEqual(names(r.ghosts), ['typed_but_uncalled'],
+    'retired is a ledger, not an allowlist');
+});
+
+test('RETIRED: a "wired" entry whose command still exists (now called) is NOT stale', () => {
+  const r = run({
+    rust: TWO_COMMANDS,
+    handler: TWO_REGISTERED,
+    commandsTs: COMMAND_MAP,
+    component: `cmd('called_cmd');\ncmd('typed_but_uncalled');\n`,
+    retired: [
+      { command: 'typed_but_uncalled', retired_on: '2026-08-31', pr: '#999', how: 'wired' },
+    ],
+  });
+  assert.equal(r.staleRetired.length, 0, 'wired commands are supposed to still exist');
+  assert.equal(r.ghosts.length, 0);
+});
+
+test('RETIRED: a backlog file without a retired array still parses (empty ledger)', () => {
+  const r = run({
+    rust: TWO_COMMANDS,
+    handler: TWO_REGISTERED,
+    commandsTs: COMMAND_MAP,
+    component: `cmd('called_cmd');\ncmd('typed_but_uncalled');\n`,
+  });
+  assert.deepEqual(r.retired, []);
+  assert.deepEqual(r.staleRetired, []);
+});
+
+// ---------------------------------------------------------------------------
 // The shipped allowlist is honest about the real tree
 // ---------------------------------------------------------------------------
 
@@ -336,4 +417,16 @@ test('the shipped backlog file parses and every entry is dated', () => {
   }
   const unique = new Set(raw.backlog.map((e) => e.command));
   assert.equal(unique.size, raw.backlog.length, 'no duplicate backlog entries');
+
+  // The retired ledger keeps the same hygiene bar as the backlog.
+  assert.ok(Array.isArray(raw.retired), 'retired ledger must exist');
+  for (const entry of raw.retired) {
+    assert.match(entry.command, /^[a-z_][a-z0-9_]*$/);
+    assert.match(entry.retired_on, /^\d{4}-\d{2}-\d{2}$/, `${entry.command} needs a retired_on date`);
+    assert.ok(entry.pr && entry.pr.length > 0, `${entry.command} needs a pr reference`);
+    assert.ok(['deleted', 'wired'].includes(entry.how), `${entry.command} how must be deleted|wired`);
+    assert.ok(!unique.has(entry.command), `${entry.command} cannot be both backlogged and retired`);
+  }
+  const uniqueRetired = new Set(raw.retired.map((e) => e.command));
+  assert.equal(uniqueRetired.size, raw.retired.length, 'no duplicate retired entries');
 });
