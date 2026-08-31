@@ -60,8 +60,49 @@ function safeExec(cmd, opts = {}) {
       ok: false,
       output: (err.stdout || "") + (err.stderr || ""),
       code: err.status,
+      // A killed process (timeout → SIGTERM) or a spawn failure (ENOENT) is
+      // NOT a compilation failure — callers must be able to tell "the tool
+      // reported errors" apart from "the tool never finished". 2026-08-31
+      // incident: a cold tsc exceeded the 60s timeout, produced zero
+      // "error TS" lines, and the scan reported "TypeScript compilation
+      // failed (0 errors)" as critical — a detector matching text, not
+      // meaning.
+      timedOut: err.signal != null || err.code === "ETIMEDOUT",
+      errCode: err.code,
     };
   }
+}
+
+/// Classify a tsc run into a signal. Pure — exported for negative tests.
+/// The load-bearing rule: "critical" requires at least one actual
+/// "error TS" line. A non-zero exit with none (timeout, spawn failure,
+/// npx noise) is an INCONCLUSIVE warning that names its real cause,
+/// never a compilation failure.
+function classifyTscResult(result) {
+  if (result.ok) {
+    return { severity: "ok", message: "TypeScript compilation clean", detail: "" };
+  }
+  const output = result.output || "";
+  const errorLines = output
+    .split("\n")
+    .filter((l) => /error TS\d+/.test(l))
+    .slice(0, 5);
+
+  if (errorLines.length > 0) {
+    return {
+      severity: "critical",
+      message: `TypeScript compilation failed (${errorLines.length} error${errorLines.length !== 1 ? "s" : ""})`,
+      detail: errorLines.join("\n"),
+    };
+  }
+  const cause = result.timedOut
+    ? "tsc did not finish within the timeout"
+    : `tsc exited ${result.code ?? result.errCode ?? "abnormally"} with no TS errors reported`;
+  return {
+    severity: "warning",
+    message: `TypeScript check inconclusive — ${cause}`,
+    detail: output.split("\n").slice(0, 3).join("\n"),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -232,15 +273,19 @@ function checkCompilation() {
         errors.join("\n")
       );
     } else if (domainExperts.size === 0 && errors.length === 0) {
-      // Non-zero exit but no actual errors (e.g. warnings only) — not a failure
-      addSignal(
-        "compilation",
-        "warning",
-        "Rust Systems",
-        "",
-        "Rust compilation exited with warnings (0 errors)",
-        result.output.split("\n").filter((l) => /^warning/.test(l)).slice(0, 3).join("\n")
-      );
+      // Non-zero exit but no actual error lines. Three distinct cases —
+      // name the real one instead of blaming warnings for all of them
+      // (same text-vs-meaning class as the tsc fix above).
+      const warningLines = result.output
+        .split("\n")
+        .filter((l) => /^warning/.test(l))
+        .slice(0, 3);
+      const message = result.timedOut
+        ? "Rust check inconclusive — cargo check did not finish within the timeout"
+        : warningLines.length > 0
+          ? "Rust compilation exited with warnings (0 errors)"
+          : `Rust check inconclusive — cargo exited ${result.code ?? result.errCode ?? "abnormally"} with no errors or warnings reported`;
+      addSignal("compilation", "warning", "Rust Systems", "", message, warningLines.join("\n"));
     }
   } else {
     addSignal("compilation", "ok", "Rust Systems", "", "Rust compilation clean");
@@ -255,27 +300,18 @@ function checkTypeScript() {
   if (QUICK_MODE) return;
 
   const result = safeExec("npx tsc --noEmit --incremental 2>&1", {
-    timeout: 60000,
+    timeout: 120000,
   });
 
-  if (!result.ok) {
-    const output = result.output || "";
-    const errorLines = output
-      .split("\n")
-      .filter((l) => /error TS\d+/.test(l))
-      .slice(0, 5);
-
-    addSignal(
-      "typescript",
-      "critical",
-      "React UI",
-      "4da-react-expert",
-      `TypeScript compilation failed (${errorLines.length} error${errorLines.length !== 1 ? "s" : ""})`,
-      errorLines.join("\n")
-    );
-  } else {
-    addSignal("typescript", "ok", "React UI", "", "TypeScript compilation clean");
-  }
+  const outcome = classifyTscResult(result);
+  addSignal(
+    "typescript",
+    outcome.severity,
+    "React UI",
+    outcome.severity === "critical" ? "4da-react-expert" : "",
+    outcome.message,
+    outcome.detail
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -783,4 +819,11 @@ function main() {
   return critical.length > 0 ? 1 : 0;
 }
 
-process.exit(main());
+if (require.main === module) {
+  process.exit(main());
+} else {
+  // Exported for negative tests (scripts/sentinel-scan.test.cjs) — a
+  // detector fix without a negative test is how the last five detector
+  // bugs shipped (recipe-gate-precision-negative-test).
+  module.exports = { classifyTscResult, safeExec };
+}
