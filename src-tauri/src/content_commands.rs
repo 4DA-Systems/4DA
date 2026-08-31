@@ -116,7 +116,7 @@ pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
 
     debug!(target: "4da::content", item_id = item_id, "Generating AI summary");
 
-    let client = LLMClient::new(llm_config);
+    let client = LLMClient::with_purpose(llm_config, "content_analysis");
     let system_prompt = "You are a concise technical summarizer. Given an article title and content, produce a 2-3 sentence summary that captures the key technical insight. Focus on what a developer needs to know. Do not use markdown formatting.";
 
     let user_message = format!("Title: {title}\n\nContent:\n{content_snippet}");

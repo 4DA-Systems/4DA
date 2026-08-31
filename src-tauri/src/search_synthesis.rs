@@ -378,7 +378,7 @@ pub async fn synthesize_search(
     }
 
     // Call LLM with streaming (tokens emitted progressively via Tauri events)
-    let client = LLMClient::new(provider);
+    let client = LLMClient::with_purpose(provider, "search_synthesis");
     let app_for_stream = app.clone();
     let response = client
         .stream_complete(

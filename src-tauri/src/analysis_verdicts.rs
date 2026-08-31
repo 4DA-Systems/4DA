@@ -151,7 +151,7 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
         });
     }
 
-    let ctx = scoring::build_scoring_context_with_timeout(db).await?;
+    let ctx = scoring::build_scoring_context_with_timeout(db, "reconcile_verdicts").await?;
     let trend_topics = crate::detect_trend_topics(
         items
             .iter()
