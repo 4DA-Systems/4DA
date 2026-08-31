@@ -89,17 +89,57 @@ const DEMOTION_PROBE_CONFIDENCE_MIN: f64 = 0.6;
 
 #[derive(Debug, Deserialize)]
 struct JudgmentResponse {
+    #[serde(default, deserialize_with = "de_f64_lenient")]
     relevance: Option<f64>,
     explanation: Option<String>,
     actions: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "de_f64_lenient")]
     confidence: Option<f64>,
     /// Content-analysis fields (prompt v2). All optional: the model is
     /// instructed to OMIT them when the content preview is too thin to judge,
     /// and parsing must never fail because a field is missing.
+    #[serde(default, deserialize_with = "de_f64_lenient")]
     technical_depth: Option<f64>,
+    #[serde(default, deserialize_with = "de_f64_lenient")]
     novelty: Option<f64>,
     audience_level: Option<String>,
     key_insight: Option<String>,
+}
+
+/// Accept a JSON number OR a numeric string for a numeric field.
+///
+/// Cheap judge models quote numbers where premium models emit them bare —
+/// observed live 2026-08-31, first Haiku cycle after #553: the model returned
+/// `"id": "60146"` and serde failed the WHOLE batch (`judged=0`, budget spent,
+/// nothing stored). The rerank judge's parser has tolerated both forms since
+/// v1; this brings the ingest judge to the same standard. A non-numeric
+/// string or any other type is `None` (treated as omitted), never an error —
+/// one malformed field must not discard the other nine items in the batch.
+fn de_f64_lenient<'de, D>(d: D) -> std::result::Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: Option<serde_json::Value> = serde::Deserialize::deserialize(d)?;
+    Ok(match v {
+        Some(serde_json::Value::Number(n)) => n.as_f64(),
+        Some(serde_json::Value::String(s)) => s.trim().parse::<f64>().ok(),
+        _ => None,
+    })
+}
+
+/// Accept a JSON integer OR a numeric string for an id field. Same live
+/// failure as [`de_f64_lenient`]; ids that parse to nothing are `None` and
+/// the element is dropped by the caller (nothing to attach the judgment to).
+fn de_i64_lenient<'de, D>(d: D) -> std::result::Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: Option<serde_json::Value> = serde::Deserialize::deserialize(d)?;
+    Ok(match v {
+        Some(serde_json::Value::Number(n)) => n.as_i64(),
+        Some(serde_json::Value::String(s)) => s.trim().parse::<i64>().ok(),
+        _ => None,
+    })
 }
 
 /// Evaluate a batch of source items and store judgments.
@@ -624,6 +664,7 @@ fn parse_batch_response(text: &str) -> Result<Vec<(i64, JudgmentResponse)>> {
 
     #[derive(Deserialize)]
     struct BatchItem {
+        #[serde(default, deserialize_with = "de_i64_lenient")]
         id: Option<i64>,
         #[serde(flatten)]
         judgment: JudgmentResponse,
