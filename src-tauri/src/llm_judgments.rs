@@ -39,11 +39,27 @@ use tracing::{debug, info, warn};
 /// 0.30` could never both hold. v4 instructs that confidence measures trust
 /// in the ASSESSMENT whatever its direction — a clear rejection carries HIGH
 /// confidence. The version bump quarantines mixed-semantics history: only
-/// current-version judgments drive demotions, so the gate reads a clean v4
+/// current-version judgments drive demotions, so the gate reads a clean
 /// cohort from day one. Older judgments remain valid for everything else
 /// (`get_unjudged_item_ids` joins on ANY judgment, so nothing is re-judged
 /// and re-billed on upgrade).
-const PROMPT_VERSION: &str = "v4";
+///
+/// Bumped v4 → v5 once v4's own live output disproved v4's diagnosis. The
+/// judge was not expressing rejection as low confidence — it was **omitting
+/// the `confidence` field entirely**, and `unwrap_or(0.5)` fabricated the
+/// number that then sat just under the gate. Measured on the live corpus:
+/// 93% of v3 judgments (340 of 366) held EXACTLY 0.5, against 7% of the
+/// Sonnet-era v2 cohort, whose real confidences spread across 0.6-0.95; the
+/// first v4 batch still returned 0.5 on five obvious rejections ("flood
+/// disasters in Tibet has no connection to TypeScript"), which no model
+/// deliberating would emit. v5 therefore makes the field explicitly
+/// REQUIRED and states that the low-relevance omission rule — added in v3
+/// for cost, and the likeliest reason the model began dropping it — never
+/// applies to id/relevance/explanation/confidence. `store_batch_results` no
+/// longer invents a value for an absent field: unknown is 0.0 (which cannot
+/// satisfy any `>= threshold` consumer) and is counted into a WARN, so a
+/// judge that stops answering can never again disable the gate in silence.
+const PROMPT_VERSION: &str = "v5";
 const INGESTION_THRESHOLD: f64 = 0.25;
 /// 10 items per call: the system prompt + user-context block (~800 tokens) is
 /// resent on every call, so batch size directly divides that fixed overhead.
@@ -352,11 +368,27 @@ fn store_batch_results(
 ) -> (usize, usize) {
     let mut judged = 0;
     let mut analyses = 0;
+    let mut confidence_omitted = 0usize;
+    let batch_size = results.len();
 
     for (item_id, response) in results {
         let relevance = response.relevance.unwrap_or(0.0).clamp(0.0, 1.0);
         let explanation = response.explanation.clone().unwrap_or_default();
-        let confidence = response.confidence.unwrap_or(0.5).clamp(0.0, 1.0);
+        // An ABSENT confidence is unknown, not middling. It used to default to
+        // 0.5, which reads as "the judge was moderately sure" — a number the
+        // judge never said. Measured live 2026-08-31: Haiku omitted the field
+        // on 93% of judgments (340/366 rows sat at EXACTLY 0.5, versus 7% for
+        // Sonnet, whose confidences spread across 0.6-0.95), and because 0.5
+        // sits just under `DEMOTION_CONFIDENCE_MIN`, the fabricated value
+        // silently disabled the demotion gate on every single one of them.
+        // The `>= threshold` consumers (the demotion gate here and
+        // `judge_agreement_live`) must EXCLUDE a judgment whose confidence was
+        // never stated, so unknown maps to 0.0 and is counted + logged below
+        // rather than dressed up as a moderate reading.
+        if response.confidence.is_none() {
+            confidence_omitted += 1;
+        }
+        let confidence = response.confidence.unwrap_or(0.0).clamp(0.0, 1.0);
         let actions_json = response
             .actions
             .as_ref()
@@ -384,6 +416,23 @@ fn store_batch_results(
                 }
             }
         }
+    }
+
+    // Make the silence audible. A judge that stops emitting `confidence`
+    // disables the demotion gate completely and, before this line existed,
+    // did so without a single log entry — the gate simply matched nothing
+    // forever while every surface reported success. Same doctrine as the
+    // demotion probe and DEP_SCOPE_DEGRADED: a mechanism that quietly does
+    // nothing must be distinguishable from one that correctly found nothing.
+    if confidence_omitted > 0 {
+        warn!(
+            target: "4da::llm_judgments",
+            omitted = confidence_omitted,
+            of = batch_size,
+            model = model_name,
+            prompt_version = PROMPT_VERSION,
+            "Judge omitted `confidence` — those judgments are stored as unknown (0.0) and can never satisfy the demotion gate. If this is most of a batch, the prompt is not getting the field out of this model."
+        );
     }
 
     (judged, analyses)
@@ -668,8 +717,9 @@ fn judge_system_prompt(user_context: &str) -> String {
          - \"explanation\": one sentence, MAX 20 words, explaining WHY this matters to this user \
            (must reference a specific fact from the item AND the user's context)\n\
          - \"actions\": array of AT MOST 2 suggested actions (e.g. [\"review_security\", \"investigate\"])\n\
-         - \"confidence\": 0.0-1.0 — how sure you are of your ASSESSMENT, whatever its \
-           direction. A clear rejection carries HIGH confidence (e.g. relevance 0.1 with \
+         - \"confidence\": 0.0-1.0 — REQUIRED on every element, never omitted. How sure you \
+           are of your ASSESSMENT, whatever its direction. A clear rejection carries HIGH \
+           confidence (e.g. relevance 0.1 with \
            confidence 0.9 for an item plainly outside the user's stack). Low confidence \
            means you are UNSURE, never that the item is irrelevant\n\
          - \"technical_depth\": integer 1-5 (1 = announcement/listicle-level, \
@@ -686,7 +736,9 @@ fn judge_system_prompt(user_context: &str) -> String {
            < 0.3 — and when that disconnect is obvious, say so with HIGH confidence\n\
          - A package only affects the user if it is actually in their stack/dependencies. Do NOT claim cross-ecosystem impact (e.g. a JavaScript/npm package affecting a Rust backend, or vice-versa). If you cannot confirm it is in their stack, relevance < 0.3\n\
          - If relevance < 0.4, OMIT actions, technical_depth, novelty, audience_level, and \
-           key_insight entirely — a short explanation is all a rejected item needs\n\
+           key_insight entirely — a short explanation is all a rejected item needs. This \
+           omission rule NEVER applies to id, relevance, explanation, or confidence: those \
+           four are mandatory on every element, rejections included\n\
          - Judge technical_depth/novelty/audience_level ONLY from the provided text; if the \
            content preview is too thin to judge them, OMIT those fields entirely rather than guessing\n\
          - Return ONLY a valid JSON array, no other text"
