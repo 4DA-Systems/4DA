@@ -692,6 +692,9 @@ fn test_store_and_retrieve_dependency_edges() {
         .any(|r| r.child_package == "jest" && r.scope == "dev"));
 }
 
+// NOTE: the schema-114 idempotency regression tests for store_dependency_edges
+// live in `edge_dedupe_tests.rs` — this file sits at the size gate's limit.
+
 #[test]
 fn test_store_dependency_edges_skips_worktree_and_empty() {
     let db = test_db();
