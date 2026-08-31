@@ -15,9 +15,9 @@ build edges, all target platforms). npm packages are the production
 dependency closure reported by `pnpm licenses list --prod`. Dev-only
 dependencies are omitted because they are not distributed.
 
-Totals: 832 Rust crates, 42 npm packages.
+Totals: 833 Rust crates, 42 npm packages.
 
-Rust Crates (832)
+Rust Crates (833)
 -----------------
 
 adler2 2.0.1 - 0BSD OR MIT OR Apache-2.0 - https://github.com/oyvindln/adler2
@@ -62,6 +62,7 @@ axum-core 0.5.6 - MIT - https://github.com/tokio-rs/axum
 base64 0.13.1 - MIT/Apache-2.0 - https://github.com/marshallpierce/rust-base64
 base64 0.21.7 - MIT OR Apache-2.0 - https://github.com/marshallpierce/rust-base64
 base64 0.22.1 - MIT OR Apache-2.0 - https://github.com/marshallpierce/rust-base64
+base64 0.23.1 - MIT OR Apache-2.0 - https://github.com/marshallpierce/rust-base64
 base64ct 1.8.3 - Apache-2.0 OR MIT - https://github.com/RustCrypto/formats
 bit_field 0.10.3 - Apache-2.0/MIT - https://github.com/phil-opp/rust-bit-field
 bit-set 0.8.0 - Apache-2.0 OR MIT - https://github.com/contain-rs/bit-set
@@ -346,7 +347,7 @@ kqueue 1.1.1 - MIT - https://gitlab.com/rust-kqueue/rust-kqueue
 kqueue-sys 1.1.2 - MIT - https://gitlab.com/rust-kqueue/rust-kqueue-sys
 lazy_static 1.5.0 - MIT OR Apache-2.0 - https://github.com/rust-lang-nursery/lazy-static.rs
 lebe 0.5.3 - BSD-3-Clause - https://github.com/johannesvollmer/lebe
-lettre 0.11.22 - MIT - https://github.com/lettre/lettre
+lettre 0.11.23 - MIT - https://github.com/lettre/lettre
 libappindicator 0.9.0 - Apache-2.0 OR MIT - https://crates.io/crates/libappindicator
 libappindicator-sys 0.9.0 - Apache-2.0 OR MIT - https://crates.io/crates/libappindicator-sys
 libc 0.2.186 - MIT OR Apache-2.0 - https://github.com/rust-lang/libc
