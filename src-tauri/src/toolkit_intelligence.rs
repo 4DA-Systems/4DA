@@ -152,7 +152,7 @@ pub async fn toolkit_score_sandbox(
     info!(target: "4da::toolkit", title = %title, "Scoring sandbox request");
 
     let db = crate::get_database()?;
-    let ctx = crate::scoring::build_scoring_context(db).await?;
+    let ctx = crate::scoring::build_scoring_context_tagged(db, "toolkit_score_sandbox").await?;
 
     let content_str = content.unwrap_or_default();
     let src_type = source_type.unwrap_or_else(|| "sandbox".to_string());
