@@ -486,14 +486,23 @@ pub(crate) fn is_low_quality_topic(topic: &str) -> bool {
 
 /// Cap on dependency-synthesized interests. The cap exists to bound per-item
 /// scoring cost (every interest is one more keyword/embedding candidate in the
-/// hot loop) and to keep low-weight dep names from crowding explanations — NOT
-/// to pick "the best" deps (there is no usage-frequency signal here yet). The
+/// hot loop) and to keep low-weight dep names from crowding explanations. The
 /// old cap of 15 covered ~8% of a real 184-direct-dep project and, combined
 /// with HashMap iteration order, selected a different random 15 every process.
-/// 40 widens coverage to a stable, deterministic head (runtime-first, then
-/// alphabetical) while keeping the interest list bounded.
+/// 40 widens coverage while keeping the interest list bounded; WHICH 40 is
+/// decided by the head + rotation policy below (`select_dep_interests`).
 // TODO(orchestrator): candidate for promotion to pipeline.scoring as a tunable.
 const DEP_INTEREST_CAP: usize = 40;
+
+/// Slots of [`DEP_INTEREST_CAP`] pinned to the top of the importance order
+/// (see [`select_dep_interests`]): the user's most important deps never flap
+/// between rotation windows, so scoring for the core stack stays stable. The
+/// remaining `CAP - HEAD` slots are the rotation bandwidth that cycles the
+/// rest of the direct-dep pool through the cap. Half/half balances stability
+/// against time-to-coverage (live: ~180-dep ring / 20 slots = full coverage
+/// every 9 windows).
+// TODO(orchestrator): candidate for promotion to pipeline.scoring as a tunable.
+const DEP_INTEREST_STABLE_HEAD: usize = 20;
 
 /// Weight for runtime direct-dependency interests: modest, so a dep-name
 /// keyword match alone can never rival an explicit interest (score ≤ 0.3).
@@ -506,6 +515,94 @@ const RUNTIME_DEP_INTEREST_WEIGHT: f32 = 0.3;
 /// weaker identity signal than shipped dependencies.
 // TODO(orchestrator): candidate for promotion to pipeline.scoring as a tunable.
 const DEV_DEP_INTEREST_WEIGHT: f32 = 0.2;
+
+/// The dep-interest rotation window: the UTC day number. Every scoring run
+/// within one UTC day selects the same interest set (the 2026-08-23 lottery
+/// fix demands run-over-run determinism — scheduled runs are fresh
+/// processes); the window advancing across days is what rotates the over-cap
+/// remainder through the cap. A pre-epoch clock degrades to window 0 —
+/// deterministic, never a panic.
+fn dep_rotation_window() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() / 86_400)
+        .unwrap_or(0)
+}
+
+/// Select which direct dependencies become synthesized interests.
+///
+/// ## Policy (2026-08-31 — the alphabetical starvation fix)
+///
+/// The 2026-08-23 determinism fix replaced the per-process HashMap lottery
+/// with `runtime-first, then alphabetical` — deterministic, but with ~184
+/// direct runtime deps against a cap of 40 it starved the SAME alphabetical
+/// tail on every run, forever: zustand 0.095, vitest 0.105, vite 0.303,
+/// fastembed 0.118 measured live 2026-08-31, all surfacing as "Uncovered"
+/// blind spots. Deterministic-but-fixed is starvation with a stable victim
+/// list. The audit-sanctioned direction is per-project priority or
+/// cover-all-runtime; covering all ~184 runtime deps outright would multiply
+/// the hot-loop interest count ~4.6x, so the cap stays and fairness comes
+/// from selection:
+///
+/// 1. **Importance order** (stable): runtime before dev (shipped product
+///    beats tooling), then `project_relevance` descending (deps of the
+///    user's ACTIVE projects first — relevance is path-score x git-recency,
+///    and every dep of the same project carries the same exact value), then
+///    projects-using-count descending (breadth across the user's repos),
+///    then name — a tie-break LAST, never a selector. `DepInfo` carries no
+///    per-dep last-seen signal; `project_relevance` is the recency proxy.
+/// 2. **Stable head**: when candidates exceed the cap, the top
+///    [`DEP_INTEREST_STABLE_HEAD`] by importance are always selected, so the
+///    core stack never flaps between windows.
+/// 3. **Rotation band**: the remaining slots take a contiguous circular
+///    slice of the leftover pool (in importance order), whose offset
+///    advances by the band width each window. Offsets sweep `[0, periods x
+///    band)` which is a superset of the whole ring, so EVERY direct dep —
+///    z-tail runtime deps and dev deps alike — is selected at least once
+///    every `ceil(ring / band)` windows. No fixed starvation class remains.
+///
+/// Within one window the selection is a pure function of the candidate set
+/// (input order never matters — the sort is total). Across windows the
+/// interest set for ring deps oscillates BY DESIGN; that is the sanctioned
+/// rotation, and window advancement is not a code change — it never bumps
+/// `PIPELINE_VERSION` (v28 covers the policy itself).
+fn select_dep_interests<'a>(
+    mut candidates: Vec<(&'a String, &'a super::dependencies::DepInfo)>,
+    cap: usize,
+    stable_head: usize,
+    window: u64,
+) -> Vec<(&'a String, &'a super::dependencies::DepInfo)> {
+    candidates.sort_by(|(a_name, a), (b_name, b)| {
+        a.is_dev
+            .cmp(&b.is_dev)
+            .then_with(|| b.project_relevance.total_cmp(&a.project_relevance))
+            .then_with(|| b.project_paths.len().cmp(&a.project_paths.len()))
+            .then_with(|| a_name.cmp(b_name))
+    });
+    if candidates.len() <= cap {
+        return candidates;
+    }
+
+    let head_len = stable_head.min(cap);
+    let ring = candidates.split_off(head_len);
+    let mut selected = candidates; // the stable head
+    let band = cap - head_len;
+    if band == 0 {
+        // Degenerate configuration (head consumes the whole cap): pure
+        // importance order, no rotation. Unreachable with the current
+        // constants; kept total so no tuning can panic here.
+        return selected;
+    }
+
+    // ring.len() > band here (candidates > cap and head_len <= cap), so
+    // periods >= 2 and every modular index below is in range.
+    let periods = ring.len().div_ceil(band) as u64;
+    let offset = usize::try_from(window % periods).unwrap_or(0) * band;
+    for i in 0..band {
+        selected.push(ring[(offset + i) % ring.len()]);
+    }
+    selected
+}
 
 /// Synthesize ACE-discovered context into keyword interests.
 ///
@@ -587,37 +684,37 @@ pub(crate) fn synthesize_ace_interests(
     //
     // Determinism (2026-08-23 adversarial audit, churn mechanism #2):
     // `dependency_info` is a HashMap whose iteration order is reseeded per
-    // process. Taking "the first N" of it meant every 30-min scheduled run
-    // (a fresh process) synthesized interests from a DIFFERENT random subset
-    // of the direct deps — live differential: react ace_boost 0.225 vs
-    // zustand 0.0 against the same corpus. Candidates are now sorted on a
-    // stable importance key BEFORE the cap: runtime deps first (they define
-    // the shipped product), then dev deps, each alphabetical — the same
-    // dependency_info always yields the same interest set.
-    let mut dep_candidates: Vec<(&String, &super::dependencies::DepInfo)> = ace_ctx
+    // process — taking "the first N" of it was a per-process lottery (live
+    // differential: react ace_boost 0.225 vs zustand 0.0 against the same
+    // corpus). Selection is now `select_dep_interests` — importance-ordered
+    // stable head + rotating band — which is a pure function of the
+    // candidate set and the rotation window: every run in the same window
+    // yields the same interest set, and no dep can be starved forever (the
+    // full policy lives on that function). Ineligible names are filtered
+    // BEFORE selection so a skipped dep never wastes a cap slot.
+    let dep_candidates: Vec<(&String, &super::dependencies::DepInfo)> = ace_ctx
         .dependency_info
         .iter()
-        .filter(|(_, info)| info.is_direct)
+        .filter(|(name, info)| {
+            info.is_direct && name.len() >= 3 && !existing.contains(&name.to_lowercase())
+        })
         .collect();
-    dep_candidates.sort_by(|(a_name, a), (b_name, b)| {
-        a.is_dev.cmp(&b.is_dev).then_with(|| a_name.cmp(b_name))
-    });
+    let selected = select_dep_interests(
+        dep_candidates,
+        DEP_INTEREST_CAP,
+        DEP_INTEREST_STABLE_HEAD,
+        dep_rotation_window(),
+    );
 
     let mut dep_synth = 0usize;
-    for (dep_name, dep_info) in dep_candidates {
-        if dep_synth >= DEP_INTEREST_CAP {
-            break;
-        }
-        let lower = dep_name.to_lowercase();
-        if existing.contains(&lower) || lower.len() < 3 {
-            continue;
-        }
+    for (dep_name, dep_info) in selected {
         // Dev-dep blindness fix (audit item 16): direct devDependencies
         // (vite, vitest, typescript, …) previously got NO interest synthesis,
         // so releases of the user's own build tools scored 0.03–0.40. They
-        // now synthesize at a discount below runtime deps — tooling is real
+        // synthesize at a discount below runtime deps — tooling is real
         // context but a weaker identity signal than shipped dependencies —
-        // and sort after runtime deps so the cap prefers runtime.
+        // and rank after runtime deps in the importance order, reaching the
+        // cap through the rotation band when runtime deps alone exceed it.
         let weight = if dep_info.is_dev {
             DEV_DEP_INTEREST_WEIGHT
         } else {
@@ -630,7 +727,7 @@ pub(crate) fn synthesize_ace_interests(
             embedding: topic_embeddings.get(dep_name).cloned(),
             source: crate::context_engine::InterestSource::Inferred,
         });
-        existing.insert(lower);
+        existing.insert(dep_name.to_lowercase());
         dep_synth += 1;
     }
     if dep_synth > 0 {
@@ -932,11 +1029,13 @@ mod tests {
             "should cap at {DEP_INTEREST_CAP} dep interests, got {}",
             interests.len()
         );
-        // With the deterministic alphabetical order, the cap keeps exactly
-        // the first DEP_INTEREST_CAP names — never a random subset.
-        for (idx, interest) in interests.iter().enumerate() {
-            assert_eq!(interest.topic, format!("package-{idx:03}"));
-        }
+        // Whatever the current rotation window is, the same call in the same
+        // process must reproduce the same set — never a random subset.
+        let mut again = vec![];
+        synthesize_ace_interests(&mut again, &ace, &HashMap::new());
+        let topics: Vec<&str> = interests.iter().map(|i| i.topic.as_str()).collect();
+        let topics_again: Vec<&str> = again.iter().map(|i| i.topic.as_str()).collect();
+        assert_eq!(topics, topics_again, "same window => same selection");
     }
 
     #[test]
@@ -1012,26 +1111,151 @@ mod tests {
         assert!((interests[2].weight - DEV_DEP_INTEREST_WEIGHT).abs() < 0.001);
     }
 
+    // ── Selection policy: stable head + rotation (starvation fix) ──
+
+    /// Build an over-cap candidate pool as owned storage; tests borrow from it.
+    fn make_pool(names: &[String], dev_from: usize) -> Vec<(String, DepInfo)> {
+        names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.clone(), make_dep(n, true, i >= dev_from)))
+            .collect()
+    }
+
+    fn select_names(pool: &[(String, DepInfo)], window: u64) -> Vec<String> {
+        let candidates: Vec<(&String, &DepInfo)> = pool.iter().map(|(n, d)| (n, d)).collect();
+        select_dep_interests(
+            candidates,
+            DEP_INTEREST_CAP,
+            DEP_INTEREST_STABLE_HEAD,
+            window,
+        )
+        .into_iter()
+        .map(|(n, _)| n.clone())
+        .collect()
+    }
+
     #[test]
-    fn test_cap_slots_go_to_runtime_deps_over_dev_deps() {
-        // With more runtime deps than cap slots, dev deps get NOTHING.
-        let mut interests = vec![];
-        let mut ace = ACEContext::default();
-        for i in 0..DEP_INTEREST_CAP {
-            let name = format!("runtime-{i:03}");
-            ace.dependency_info
-                .insert(name.clone(), make_dep(&name, true, false));
+    fn test_stable_head_always_runtime_and_importance_ranked() {
+        // Over-cap pool: 50 tie-class runtime deps, one runtime dep of an
+        // ACTIVE project (high project_relevance) with a z-name, one dev dep
+        // with an a-name. The head must hold the high-relevance dep in EVERY
+        // window (importance selects, name only tie-breaks) and never a dev
+        // dep while runtime deps exist.
+        let names: Vec<String> = (0..50).map(|i| format!("crate-{i:03}")).collect();
+        let mut pool = make_pool(&names, 50);
+        let mut active = make_dep("zzz-active-core", true, false);
+        active.project_relevance = 1.0;
+        active.project_paths = vec!["d:/4da".into(), "d:/other".into()];
+        for (_, d) in pool.iter_mut() {
+            d.project_relevance = 0.3; // dormant tie class
         }
-        ace.dependency_info
-            .insert("a-dev-tool".into(), make_dep("a-dev-tool", true, true));
+        pool.push(("zzz-active-core".into(), active));
+        pool.push(("aaa-dev-tool".into(), make_dep("aaa-dev-tool", true, true)));
 
-        synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
+        for window in 0..6 {
+            let selected = select_names(&pool, window);
+            assert_eq!(selected.len(), DEP_INTEREST_CAP);
+            assert!(
+                selected[..DEP_INTEREST_STABLE_HEAD].contains(&"zzz-active-core".to_string()),
+                "window {window}: the active-project dep must sit in the stable head \
+                 despite its z-name"
+            );
+            assert!(
+                !selected[..DEP_INTEREST_STABLE_HEAD].contains(&"aaa-dev-tool".to_string()),
+                "window {window}: a dev dep must never occupy a head slot while \
+                 runtime deps exist"
+            );
+        }
+    }
 
-        assert_eq!(interests.len(), DEP_INTEREST_CAP);
-        assert!(
-            interests.iter().all(|i| i.topic.starts_with("runtime-")),
-            "every cap slot must go to a runtime dep before any dev dep"
-        );
+    #[test]
+    fn test_no_fixed_starvation_class_across_windows() {
+        // THE regression this policy exists for (2026-08-23/31 audit): with
+        // ~184 runtime deps against a cap of 40, the alphabetical policy
+        // starved the same z-tail (zustand, vitest, vite, fastembed) on every
+        // run. Union coverage across one rotation period must include EVERY
+        // candidate — tail-alphabet runtime deps and dev deps alike.
+        let mut names: Vec<String> = (0..180).map(|i| format!("dep-{i:03}")).collect();
+        names.push("zustand".into());
+        names.push("fastembed".into());
+        // Last two are dev deps (vite/vitest class).
+        names.push("vite".into());
+        names.push("vitest".into());
+        let dev_from = names.len() - 2;
+        let pool = make_pool(&names, dev_from);
+
+        let ring_len = pool.len() - DEP_INTEREST_STABLE_HEAD;
+        let band = DEP_INTEREST_CAP - DEP_INTEREST_STABLE_HEAD;
+        let periods = ring_len.div_ceil(band) as u64;
+
+        let mut covered: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for window in 0..periods {
+            covered.extend(select_names(&pool, window));
+        }
+        for name in &names {
+            assert!(
+                covered.contains(name),
+                "{name} must be selected in at least one of {periods} windows — \
+                 a fixed starvation class is banned"
+            );
+        }
+    }
+
+    #[test]
+    fn test_selection_cap_and_uniqueness_every_window() {
+        let names: Vec<String> = (0..123).map(|i| format!("pkg-{i:03}")).collect();
+        let pool = make_pool(&names, 100);
+        for window in 0..20 {
+            let selected = select_names(&pool, window);
+            assert_eq!(
+                selected.len(),
+                DEP_INTEREST_CAP,
+                "window {window}: cap must be exactly filled when candidates exceed it"
+            );
+            let unique: std::collections::HashSet<&String> = selected.iter().collect();
+            assert_eq!(
+                unique.len(),
+                selected.len(),
+                "window {window}: no dep may be selected twice"
+            );
+        }
+    }
+
+    #[test]
+    fn test_selection_deterministic_within_window_regardless_of_input_order() {
+        let names: Vec<String> = (0..90).map(|i| format!("lib-{i:02}")).collect();
+        let pool = make_pool(&names, 80);
+        let mut reversed = pool.clone();
+        reversed.reverse();
+        for window in [0, 1, 7, 12_345] {
+            assert_eq!(
+                select_names(&pool, window),
+                select_names(&reversed, window),
+                "window {window}: selection is a pure function of the candidate SET"
+            );
+        }
+    }
+
+    #[test]
+    fn test_under_cap_pool_is_fully_selected_in_every_window() {
+        // Rotation only engages past the cap: an under-cap pool (every
+        // benchmark persona, most real users) selects everything, identically
+        // in every window — the gate fixtures cannot flap on the day of the
+        // run.
+        let names: Vec<String> = (0..DEP_INTEREST_CAP - 5)
+            .map(|i| format!("d-{i:02}"))
+            .collect();
+        let pool = make_pool(&names, 30);
+        let w0 = select_names(&pool, 0);
+        assert_eq!(w0.len(), names.len(), "under-cap pool: nothing is dropped");
+        for window in 1..5 {
+            assert_eq!(
+                select_names(&pool, window),
+                w0,
+                "under-cap selection must be window-independent"
+            );
+        }
     }
 
     // ── Cross-phase deduplication ──

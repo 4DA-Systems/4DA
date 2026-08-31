@@ -427,7 +427,28 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // columns — the module contract's when-unsure-do-not-register rule. The whole
 // corpus drains, which after this arc is a one-off cache warm plus a few
 // minutes rather than 22 days.
-pub(crate) const PIPELINE_VERSION: i32 = 27;
+// v28 (2026-08-31): dependency-interest selection covers runtime deps fairly —
+// the alphabetical starvation class is gone. ONE scoring-semantics change:
+// the v22 determinism fix ordered dep-interest candidates runtime-first then
+// BY NAME under a hard cap of 40, so a ~184-runtime-dep project starved the
+// SAME alphabetical tail on every run forever (measured live 2026-08-31:
+// zustand 0.095, vitest 0.105, vite 0.303, fastembed 0.118 — all surfacing
+// as "Uncovered" blind spots). Selection (context.rs::select_dep_interests)
+// is now an importance-ordered STABLE HEAD (runtime before dev, then
+// project_relevance — the active-project signal — then projects-using
+// breadth; name demoted to pure tie-break) plus a ROTATION BAND whose offset
+// advances per UTC day, guaranteeing every direct dep is synthesized at
+// least once every ceil(ring/band) windows (~9 days live). Determinism
+// within a window is preserved (the 30-min scheduled runs still agree);
+// window advancement across days is the sanctioned rotation, NOT a code
+// change — it never bumps the version.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS, same basis as v22/v25/
+// v26: synthesized dep interests feed the keyword/interest axes and the
+// confirmation gate for ANY item — the SELECTED SET itself changes, so no
+// row predicate can provably bound the reach. The whole corpus drains
+// (measured cost since the v27 arc: ~4 minutes at 59k items).
+pub(crate) const PIPELINE_VERSION: i32 = 28;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///
