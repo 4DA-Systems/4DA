@@ -53,7 +53,8 @@ use rusqlite::{params, OptionalExtension, Result as SqliteResult};
 use super::{blob_to_embedding, parse_datetime, Database, StoredSourceItem};
 
 /// Parse the direction of a `feed_verdict_pending` marker (`"1@<rfc3339>"` /
-/// `"0@<rfc3339>"`, Phase 109). `None` for NULL/garbled markers — a corrupt
+/// `"0@<rfc3339>"`, Phase 109; the drain lane appends `@<attempts>` — the
+/// direction field is unaffected). `None` for NULL/garbled markers — a corrupt
 /// marker is treated as "no flip pending" and rewritten, never trusted.
 fn pending_flip_direction(marker: Option<&str>) -> Option<bool> {
     match marker?.split_once('@')?.0 {
@@ -61,6 +62,71 @@ fn pending_flip_direction(marker: Option<&str>) -> Option<bool> {
         "0" => Some(false),
         _ => None,
     }
+}
+
+/// A parsed `feed_verdict_pending` marker.
+///
+/// Wire format: `direction@first_seen[@attempts]`. The first two fields are
+/// Phase 109's deferred-flip record; the pending-verdict drain (2026-08-31
+/// live audit) added the third — how many drain visits have looked at this
+/// flip without resolving it. Attempts absent = 1: every marker the persist
+/// boundary writes is by definition on its first attempt, so every pre-drain
+/// marker parses without rewrite.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PendingMarker {
+    /// The deferred flip's target value for `feed_relevant`.
+    pub direction: bool,
+    /// When the flip was first deferred.
+    pub first_seen: chrono::DateTime<chrono::Utc>,
+    /// Drain visits that ended unresolved (>= 1).
+    pub attempts: u32,
+}
+
+impl PendingMarker {
+    /// Parse a stored marker. `None` = corrupt; per the Phase-109 doctrine a
+    /// corrupt marker is never trusted — callers clear it.
+    pub fn parse(marker: &str) -> Option<Self> {
+        let (dir_str, rest) = marker.split_once('@')?;
+        let direction = match dir_str {
+            "1" => true,
+            "0" => false,
+            _ => return None,
+        };
+        let (ts_str, attempts) = match rest.rsplit_once('@') {
+            Some((ts, att)) => (ts, att.parse::<u32>().ok()?.max(1)),
+            None => (rest, 1),
+        };
+        let first_seen = chrono::DateTime::parse_from_rfc3339(ts_str)
+            .ok()?
+            .with_timezone(&chrono::Utc);
+        Some(Self {
+            direction,
+            first_seen,
+            attempts,
+        })
+    }
+
+    /// Stored form. `attempts == 1` writes the legacy two-field shape so a
+    /// marker that has never been drained is byte-identical to what the
+    /// persist boundary writes.
+    pub fn to_marker_string(self) -> String {
+        let dir = i64::from(self.direction);
+        let ts = self.first_seen.to_rfc3339();
+        if self.attempts <= 1 {
+            format!("{dir}@{ts}")
+        } else {
+            format!("{dir}@{ts}@{}", self.attempts)
+        }
+    }
+}
+
+/// One row of the pending-flip backlog, oldest items first.
+#[derive(Debug)]
+pub struct PendingVerdictRow {
+    pub id: i64,
+    /// `None` = the stored marker is corrupt (cleared by the drain, never
+    /// trusted).
+    pub marker: Option<PendingMarker>,
 }
 
 /// Provenance of a persisted `feed_relevant` verdict.
@@ -95,6 +161,13 @@ pub enum VerdictSource {
     /// squatting in the curated set forever (measured live 2026-08-11:
     /// immune-forever picks had accumulated to 17.6% of the curated feed).
     Serendipity,
+    /// The pending-verdict drain resolved a starved deferred flip terminally
+    /// after every retry lane was exhausted (2026-08-31 live audit: 175
+    /// markers pending, the oldest since 08-12, none ever revisited). Always
+    /// paired with `feed_relevant = 0` — a terminal resolution NEVER promotes
+    /// without a real verdict; it only records that no real verdict could be
+    /// obtained and stops the item from squatting in the retry queue forever.
+    FallbackExhausted,
 }
 
 impl VerdictSource {
@@ -104,6 +177,7 @@ impl VerdictSource {
         match self {
             Self::Score => "score",
             Self::Serendipity => "serendipity",
+            Self::FallbackExhausted => "fallback_exhausted",
         }
     }
 
@@ -142,6 +216,10 @@ pub enum VerdictReason {
     /// The LLM judge pass (Tier 2) rated a curated item clearly irrelevant
     /// with high confidence — demote-only, like every repair reason.
     LlmReject,
+    /// The pending-verdict drain gave the deferred flip its full retry budget
+    /// (attempts + age gates, see `llm_judge::drain`) and no real verdict ever
+    /// resolved it. Recorded alongside `VerdictSource::FallbackExhausted`.
+    PendingRetriesExhausted,
 }
 
 impl VerdictReason {
@@ -152,6 +230,7 @@ impl VerdictReason {
             Self::ScoreSunkInVersion => "score_sunk_in_version",
             Self::StaleVersion => "stale_version",
             Self::LlmReject => "llm_reject",
+            Self::PendingRetriesExhausted => "pending_retries_exhausted",
         }
     }
 }
@@ -521,6 +600,113 @@ impl Database {
             f64::from(demote_below),
             VerdictReason::ScoreSunkInVersion.as_str()
         ])
+    }
+
+    // ========================================================================
+    // Pending-verdict drain (2026-08-31 live audit)
+    // ========================================================================
+    //
+    // The persist boundary defers unreasoned flips into `feed_verdict_pending`
+    // and waits for a SECOND judging run to confirm or dispute them. But only
+    // items the analysis cycle re-selects ever reach the boundary again, and
+    // the cycle's working set is recency-bounded — so a marker on an item that
+    // ages out of the window starves forever. Measured live 2026-08-31 on the
+    // founder's 59k-item instance: 175 pending markers, 135 pending >2 days,
+    // the oldest deferred 2026-08-12 and never revisited once.
+
+    /// The pending-flip backlog, OLDEST items first (`created_at ASC` — the
+    /// starvation is precisely that fresh items always won, so the drain's
+    /// contract is the reverse order). Corrupt markers come back with
+    /// `marker: None` for the caller to clear — never trusted, never parsed
+    /// leniently.
+    pub fn get_pending_verdict_backlog(
+        &self,
+        limit: usize,
+    ) -> SqliteResult<Vec<PendingVerdictRow>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT id, feed_verdict_pending FROM source_items
+             WHERE feed_verdict_pending IS NOT NULL
+             ORDER BY created_at ASC, id ASC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            let id: i64 = row.get(0)?;
+            let raw: String = row.get(1)?;
+            Ok(PendingVerdictRow {
+                id,
+                marker: PendingMarker::parse(&raw),
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Record one more unresolved drain visit on each marker: attempts + 1,
+    /// direction and first-seen preserved. A row whose marker is corrupt (or
+    /// was cleared by a concurrent judging run) is left alone — escalation
+    /// only ever rewrites a marker it could fully parse.
+    pub fn escalate_pending_attempts(&self, ids: &[i64]) -> SqliteResult<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
+        let mut escalated = 0;
+        {
+            let mut read_stmt =
+                tx.prepare_cached("SELECT feed_verdict_pending FROM source_items WHERE id = ?1")?;
+            let mut write_stmt = tx.prepare_cached(
+                "UPDATE source_items SET feed_verdict_pending = ?1 WHERE id = ?2",
+            )?;
+            for id in ids {
+                let raw: Option<String> = read_stmt
+                    .query_row(params![id], |r| r.get(0))
+                    .optional()?
+                    .flatten();
+                let Some(mut marker) = raw.as_deref().and_then(PendingMarker::parse) else {
+                    continue;
+                };
+                marker.attempts = marker.attempts.saturating_add(1);
+                escalated += write_stmt.execute(params![marker.to_marker_string(), id])?;
+            }
+        }
+        tx.commit()?;
+        Ok(escalated)
+    }
+
+    /// Clear pending markers without touching the standing verdict — used when
+    /// a drain judgment DISPUTES the deferred flip (the standing verdict is
+    /// re-affirmed, so the flip is dead), and for corrupt markers (Phase-109
+    /// doctrine: rewritten, never trusted).
+    pub fn clear_pending_markers(&self, ids: &[i64]) -> SqliteResult<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
+        let mut cleared = 0;
+        {
+            let mut stmt = tx.prepare_cached(
+                "UPDATE source_items SET feed_verdict_pending = NULL
+                 WHERE id = ?1 AND feed_verdict_pending IS NOT NULL",
+            )?;
+            for id in ids {
+                cleared += stmt.execute(params![id])?;
+            }
+        }
+        tx.commit()?;
+        Ok(cleared)
+    }
+
+    /// How many deferred flips are waiting. Logged by the drain so a backlog
+    /// that stops shrinking is visible in the run log, cycle over cycle.
+    pub fn count_pending_verdicts(&self) -> SqliteResult<i64> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT COUNT(*) FROM source_items WHERE feed_verdict_pending IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )
     }
 }
 

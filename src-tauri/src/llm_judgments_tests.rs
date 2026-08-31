@@ -493,3 +493,22 @@ async fn post_cycle_runs_demotions_without_llm_calls() {
     assert_eq!(summary.demoted, 1);
     assert_eq!(feed_relevant_of(&db, id), 0);
 }
+
+// ============================================================================
+// Drain carve-out (2026-08-31 audit: the fresh lane cedes the drain's slice)
+// ============================================================================
+
+/// The fresh judge lane's selection shrinks by exactly the drain's slice —
+/// bounded by the real backlog, never more than DRAIN_SLICE, and zero when
+/// nothing is pending (a healthy instance keeps its full selection).
+#[test]
+fn drain_reserve_is_backlog_bounded_and_capped() {
+    assert_eq!(drain_reserve(0), 0, "no backlog, no carve-out");
+    assert_eq!(drain_reserve(-1), 0, "defensive: negative counts");
+    assert_eq!(drain_reserve(3), 3, "small backlog reserves only itself");
+    assert_eq!(
+        drain_reserve(175),
+        crate::llm_judge::drain::DRAIN_SLICE,
+        "the live-audit backlog caps at the 20% slice"
+    );
+}
