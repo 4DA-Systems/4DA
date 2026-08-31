@@ -23,10 +23,13 @@
 //! 2. **Re-judge slice** — up to [`DRAIN_SLICE`] of the oldest still-pending
 //!    items (20% of the fresh judge lane's 40-item selection) get one cheap
 //!    LLM read on the judge sibling model ([`crate::llm_judge::judge_provider`]).
-//!    A confident REJECT resolves the flip as a real `llm_reject` demotion; a
-//!    confident RELEVANT read that disputes a pending demote clears the marker
-//!    (the standing curated verdict is re-affirmed); anything ambiguous
-//!    escalates the marker's attempt count and waits for the next cycle.
+//!    A clear REJECT (relevance below the main lane's measured 0.30 line)
+//!    resolves the flip as a real `llm_reject` demotion; a clearly RELEVANT
+//!    read that disputes a pending demote clears the marker (the standing
+//!    curated verdict is re-affirmed); the mid-band shrug escalates the
+//!    marker's attempt count and waits for the next cycle. Relevance-keyed
+//!    on purpose — see [`resolve_action`] for the live measurement that
+//!    rules out a confidence gate.
 //!
 //! Deliberately untouched: the serendipity paths
 //! (`scoring::dedup::compute_serendipity_candidates`, the deep-scan 0.45
@@ -260,7 +263,7 @@ async fn run_drain_with(
             warn!(target: "4da::verdict_drain", error = %e, item_id = row.id, "Failed to store drain judgment");
         }
         let direction = row.marker.map(|m| m.direction);
-        match resolve_action(direction, relevance, confidence) {
+        match resolve_action(direction, relevance) {
             DrainAction::Demote => demote.push((
                 row.id,
                 false,
@@ -289,22 +292,32 @@ async fn run_drain_with(
     summary
 }
 
-/// One decision table, pure so the safety boundary is unit-testable:
+/// One decision table, pure so the safety boundary is unit-testable.
 ///
-/// - Confident reject (shares the main lane's `DEMOTION_*` bars) → a real
-///   demote verdict, whichever direction was pending.
-/// - Confident relevant AND the pending flip was a DEMOTE → the flip is
-///   disputed; the standing curated verdict survives and the marker dies.
-///   A pending PROMOTE never resolves upward here — promotion needs a full
-///   run's dedup/diversity/rerank context — so a confident-relevant read on
-///   one merely escalates.
-/// - Anything else → escalate.
-fn resolve_action(pending_direction: Option<bool>, relevance: f64, confidence: f64) -> DrainAction {
-    let confident = confidence >= crate::llm_judgments::DEMOTION_CONFIDENCE_MIN;
-    if confident && relevance < crate::llm_judgments::DEMOTION_RELEVANCE_BELOW {
+/// **Deliberately relevance-keyed, with NO confidence gate.** Measured on the
+/// live DB 2026-08-31: the v3 judge rejected 77 of 90 items with an average
+/// confidence of 0.527 and ZERO rows at confidence >= 0.6 — the model
+/// expresses rejection AS low confidence, so any `confidence >= 0.7` bar on
+/// rejects matches nothing, ever (the silent-gate class `llm_judgments`' own
+/// probe exists to catch). Rejection strength here is `1 - relevance` against
+/// the measured 0.30 line the main lane calibrated; confidence is still
+/// stored on the judgment row for provenance, it just never gates. The
+/// prompt-semantics fix (making the judge report confidence in its
+/// ASSESSMENT, not in the item) is a judge-lane follow-up, not this lane's.
+///
+/// - `relevance < DEMOTION_RELEVANCE_BELOW` → a real demote verdict,
+///   whichever direction was pending.
+/// - `relevance >= CONFIRM_RELEVANCE_MIN` AND the pending flip was a DEMOTE →
+///   the flip is disputed; the standing curated verdict survives and the
+///   marker dies. A pending PROMOTE never resolves upward here — promotion
+///   needs a full run's dedup/diversity/rerank context — so a relevant read
+///   on one merely escalates (and the attempt/age budget resolves it).
+/// - The mid-band shrug → escalate.
+fn resolve_action(pending_direction: Option<bool>, relevance: f64) -> DrainAction {
+    if relevance < crate::llm_judgments::DEMOTION_RELEVANCE_BELOW {
         return DrainAction::Demote;
     }
-    if confident && relevance >= CONFIRM_RELEVANCE_MIN && pending_direction == Some(false) {
+    if relevance >= CONFIRM_RELEVANCE_MIN && pending_direction == Some(false) {
         return DrainAction::ClearPending;
     }
     DrainAction::Escalate

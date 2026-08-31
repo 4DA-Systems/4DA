@@ -60,53 +60,44 @@ fn pending_of(db: &Database, id: i64) -> Option<String> {
 // resolve_action — the per-judgment decision table
 // ---------------------------------------------------------------------------
 
-/// A confident reject is a real verdict in either pending direction.
+/// A clear reject is a real verdict in either pending direction.
 #[test]
-fn confident_reject_demotes_regardless_of_direction() {
-    assert_eq!(resolve_action(Some(false), 0.1, 0.9), DrainAction::Demote);
-    assert_eq!(resolve_action(Some(true), 0.1, 0.9), DrainAction::Demote);
-    assert_eq!(resolve_action(None, 0.1, 0.9), DrainAction::Demote);
+fn clear_reject_demotes_regardless_of_direction() {
+    assert_eq!(resolve_action(Some(false), 0.1), DrainAction::Demote);
+    assert_eq!(resolve_action(Some(true), 0.1), DrainAction::Demote);
+    assert_eq!(resolve_action(None, 0.1), DrainAction::Demote);
 }
 
-/// A confident RELEVANT read kills a pending DEMOTE (standing curated verdict
+/// A clearly RELEVANT read kills a pending DEMOTE (standing curated verdict
 /// re-affirmed) but must never resolve a pending PROMOTE — promotion needs a
 /// full run's context, so that read only escalates.
 #[test]
-fn confident_relevant_clears_only_pending_demotes() {
-    assert_eq!(
-        resolve_action(Some(false), 0.8, 0.9),
-        DrainAction::ClearPending
-    );
-    assert_eq!(resolve_action(Some(true), 0.8, 0.9), DrainAction::Escalate);
-    assert_eq!(resolve_action(None, 0.8, 0.9), DrainAction::Escalate);
+fn relevant_read_clears_only_pending_demotes() {
+    assert_eq!(resolve_action(Some(false), 0.8), DrainAction::ClearPending);
+    assert_eq!(resolve_action(Some(true), 0.8), DrainAction::Escalate);
+    assert_eq!(resolve_action(None, 0.8), DrainAction::Escalate);
 }
 
-/// Low confidence or mid-band relevance is not evidence — it escalates.
+/// The mid-band shrug (>= reject line, < confirm line) is not evidence — it
+/// escalates and the attempt/age budget eventually resolves it.
 #[test]
-fn ambiguity_escalates() {
-    // Confident but mid-band (>= reject line, < confirm line): a shrug.
-    assert_eq!(resolve_action(Some(false), 0.4, 0.9), DrainAction::Escalate);
-    // Would-be reject without the confidence bar.
-    assert_eq!(resolve_action(Some(false), 0.1, 0.5), DrainAction::Escalate);
-    // Would-be confirm without the confidence bar.
-    assert_eq!(resolve_action(Some(false), 0.8, 0.5), DrainAction::Escalate);
+fn mid_band_escalates() {
+    assert_eq!(resolve_action(Some(false), 0.4), DrainAction::Escalate);
+    assert_eq!(resolve_action(Some(true), 0.35), DrainAction::Escalate);
 }
 
-/// The decision table shares the main lane's demotion bars — if those move,
-/// the drain moves with them, never past them.
+/// The reject line IS the main lane's measured demotion bar — if it moves,
+/// the drain moves with it, never past it. And the table takes no confidence
+/// input at all: measured live 2026-08-31, the judge rejected 77/90 items at
+/// avg confidence 0.527 with ZERO rows >= 0.6 (it expresses rejection AS low
+/// confidence), so any confidence gate on rejects would match nothing — the
+/// signature not having the parameter is the regression-proof form.
 #[test]
-fn drain_reuses_the_main_lane_demotion_bars() {
+fn drain_reuses_the_main_lane_relevance_bar() {
     let just_below = crate::llm_judgments::DEMOTION_RELEVANCE_BELOW - 0.01;
     let at_line = crate::llm_judgments::DEMOTION_RELEVANCE_BELOW;
-    let conf = crate::llm_judgments::DEMOTION_CONFIDENCE_MIN;
-    assert_eq!(
-        resolve_action(Some(true), just_below, conf),
-        DrainAction::Demote
-    );
-    assert_eq!(
-        resolve_action(Some(true), at_line, conf),
-        DrainAction::Escalate
-    );
+    assert_eq!(resolve_action(Some(true), just_below), DrainAction::Demote);
+    assert_eq!(resolve_action(Some(true), at_line), DrainAction::Escalate);
 }
 
 // ---------------------------------------------------------------------------

@@ -141,39 +141,51 @@ fn record_ai_usage(provider: &str, model: &str, task_type: &str, tokens_in: u64,
 /// UTC. Best-effort: any failure leaves the counters unseeded, which is the
 /// pre-existing behavior.
 pub(crate) fn seed_daily_usage_from_db() {
-    let Ok(conn) = crate::open_db_connection() else {
-        return;
-    };
+    if let Some((tokens, millicents)) = todays_persisted_usage() {
+        if tokens > 0 || millicents > 0 {
+            crate::state::seed_llm_daily_usage(tokens, millicents);
+        }
+    }
+}
 
-    let Some(local_midnight) = chrono::Local::now()
+/// Today's `(total_tokens, cost_millicents)` from the persisted `ai_usage`
+/// table — [local midnight → now], matching the daily ledger's reset window.
+///
+/// This is the only cross-process view of the day's spend: the in-memory
+/// counters are per-process, so the GUI's counters don't see what
+/// `fourda-engine` spent since the last seed (and vice versa). Consumers:
+/// the startup seeding above and the `api_cost_monitor` sun — which, until
+/// 2026-08-31, read the settings-manager usage ledger that only rerank and
+/// cloud-embedding calls feed, so its hourly "96% of daily limit" alerts
+/// were rerank-spend measured against the rerank limit while the actual
+/// global bill went unwatched. `None` = unreadable, never fabricated zeros.
+pub(crate) fn todays_persisted_usage() -> Option<(u64, u64)> {
+    let conn = crate::open_db_connection().ok()?;
+
+    let local_midnight = chrono::Local::now()
         .date_naive()
         .and_hms_opt(0, 0, 0)
-        .and_then(|naive| naive.and_local_timezone(chrono::Local).earliest())
-    else {
-        return;
-    };
+        .and_then(|naive| naive.and_local_timezone(chrono::Local).earliest())?;
     let since_utc = local_midnight
         .with_timezone(&chrono::Utc)
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
 
-    let row = conn.query_row(
-        "SELECT COALESCE(SUM(tokens_in + tokens_out), 0), COALESCE(SUM(estimated_cost_usd), 0.0)
-         FROM ai_usage WHERE created_at >= ?1",
-        rusqlite::params![since_utc],
-        |row| {
-            let tokens: i64 = row.get(0)?;
-            let cost_usd: f64 = row.get(1)?;
-            Ok((tokens, cost_usd))
-        },
-    );
+    let (tokens, cost_usd) = conn
+        .query_row(
+            "SELECT COALESCE(SUM(tokens_in + tokens_out), 0), COALESCE(SUM(estimated_cost_usd), 0.0)
+             FROM ai_usage WHERE created_at >= ?1",
+            rusqlite::params![since_utc],
+            |row| {
+                let tokens: i64 = row.get(0)?;
+                let cost_usd: f64 = row.get(1)?;
+                Ok((tokens, cost_usd))
+            },
+        )
+        .ok()?;
 
-    if let Ok((tokens, cost_usd)) = row {
-        if tokens > 0 || cost_usd > 0.0 {
-            let millicents = (cost_usd * 100_000.0).max(0.0).round() as u64;
-            crate::state::seed_llm_daily_usage(tokens.max(0) as u64, millicents);
-        }
-    }
+    let millicents = (cost_usd * 100_000.0).max(0.0).round() as u64;
+    Some((tokens.max(0) as u64, millicents))
 }
 
 // ============================================================================
