@@ -410,9 +410,11 @@ fn persisted_autopsy(item_id: u64) -> Result<serde_json::Value> {
         .ok_or_else(|| {
             crate::error::FourDaError::Analysis(format!(
                 "Item {item_id} is not in the current session's analysis and has no \
-                 persisted explanation (explanations persist with every score write \
-                 since schema 115 — this item has not been scored since then, or was \
-                 pruned). Run an analysis that includes it to build one."
+                 persisted explanation. Explanations are written with the score, so \
+                 an item last scored before schema 115 has none until its next score \
+                 write — which happens when the rolling freshness refresh revisits it \
+                 (recently-seen items) or a pipeline-version change re-scores the \
+                 corpus. Pruned items never regain one."
             ))
         })?;
 

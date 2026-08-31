@@ -308,13 +308,31 @@ impl Database {
     /// on this stamp: skipping it on suppressed writes would re-pick the same
     /// stable items every refresh cycle.
     ///
-    /// **Explanations (schema 115):** each row's `breakdown_json` (when
-    /// `Some`) upserts into `scoring_explanations` in the SAME transaction —
-    /// one prepared statement, newest evaluation wins. Deliberately SKIPPED
-    /// for hysteresis-suppressed writes: the durable score kept its old
-    /// value, so the explanation that produced that value stands (replacing
-    /// it would attach a breakdown whose score doesn't match the durable
-    /// column). Also skipped when the score UPDATE matched no row, so a
+    /// **Explanations (schema 115; seeding repaired 2026-09-01):** the
+    /// invariant is *a scored item always has an explanation, and a
+    /// suppressed re-score never replaces a better one*. Each row's
+    /// `breakdown_json` (when `Some`) is written to `scoring_explanations` in
+    /// the SAME transaction as the score, by one of two statements:
+    ///
+    /// - **score-changing or first-ever write** → `INSERT OR REPLACE`. The
+    ///   newest evaluation explains the new durable score.
+    /// - **hysteresis-suppressed write** → `ON CONFLICT DO NOTHING`. SEEDS a
+    ///   missing row, never overwrites an existing one — preserving the
+    ///   original intent (the kept explanation is the one that produced the
+    ///   kept durable score) while closing the lockout below.
+    ///
+    /// The suppressed path originally skipped the write entirely, which
+    /// locked out every item that already carried a score when schema 115
+    /// landed: a *stable* score is exactly the condition that suppresses the
+    /// write, so the next re-score suppressed too, forever. Measured on the
+    /// live corpus 2026-08-31: 50,788 of 62,822 scored items (81%) could
+    /// never acquire a row, and 620 of the 1,221 user-visible items
+    /// (`relevance_score >= 0.35`, 51%) were among them. A seeded breakdown
+    /// is faithful by construction — suppression means it is within
+    /// [`SCORE_WRITE_HYSTERESIS`] of the durable score, the same tolerance
+    /// the durable column already carries.
+    ///
+    /// Both statements are skipped when the score UPDATE matched no row, so a
     /// stale id can never violate the explanation table's FK.
     pub fn persist_analysis_scores(
         &self,
@@ -348,10 +366,21 @@ impl Database {
             let mut stmt = tx.prepare_cached(
                 "UPDATE source_items SET relevance_score = ?1, scored_pipeline_version = ?2, signal_type = ?3, signal_priority = ?4, scored_at = datetime('now') WHERE id = ?5",
             )?;
+            // A score-changing write REPLACES: the newest evaluation explains
+            // the new durable score.
             let mut expl_stmt = tx.prepare_cached(
                 "INSERT OR REPLACE INTO scoring_explanations
                      (source_item_id, pipeline_version, breakdown, scored_at)
                  VALUES (?1, ?2, ?3, datetime('now'))",
+            )?;
+            // A hysteresis-suppressed write only SEEDS: it fills a missing row
+            // (the 81% lockout) and leaves an existing one alone (the durable
+            // score kept its value, so its explanation stands).
+            let mut expl_seed_stmt = tx.prepare_cached(
+                "INSERT INTO scoring_explanations
+                     (source_item_id, pipeline_version, breakdown, scored_at)
+                 VALUES (?1, ?2, ?3, datetime('now'))
+                 ON CONFLICT(source_item_id) DO NOTHING",
             )?;
             for (id, score, signal_type, signal_priority, breakdown_json) in scores {
                 // Old score first (same txn): NULL = first-ever score, not churn.
@@ -389,17 +418,26 @@ impl Database {
                     id
                 ])?;
                 count += 1;
-                // Explanation lane (schema 115): the durable score changed (or
-                // was written first-ever), so the breakdown that produced it
-                // becomes the item's persisted "why". Suppressed writes keep
-                // the old explanation; 0-row updates never touch the FK table.
-                if updated > 0 && !suppressed_this {
+                // Explanation lane (schema 115): every persisted score gets a
+                // durable "why". A score-changing write replaces the row; a
+                // suppressed one only seeds a missing row, so the explanation
+                // of the kept durable score is never overwritten by the wobble
+                // the damper discarded. 0-row updates never touch the FK table.
+                if updated > 0 {
                     if let Some(bd_json) = breakdown_json {
-                        expl_stmt.execute(params![
-                            id,
-                            crate::scoring::PIPELINE_VERSION,
-                            bd_json
-                        ])?;
+                        if suppressed_this {
+                            expl_seed_stmt.execute(params![
+                                id,
+                                crate::scoring::PIPELINE_VERSION,
+                                bd_json
+                            ])?;
+                        } else {
+                            expl_stmt.execute(params![
+                                id,
+                                crate::scoring::PIPELINE_VERSION,
+                                bd_json
+                            ])?;
+                        }
                     }
                 }
             }
