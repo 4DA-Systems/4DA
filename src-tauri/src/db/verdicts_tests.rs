@@ -758,3 +758,241 @@ fn phase_108_reason_column_added_idempotently() {
         "re-migration must not duplicate feed_verdict_reason"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Pending-verdict drain (2026-08-31 live audit: 175 starved markers)
+// ---------------------------------------------------------------------------
+
+/// Backdate an item's `created_at` so backlog-ordering tests have distinct ages.
+fn backdate_item(db: &Database, id: i64, days_ago: i64) {
+    let conn = db.conn.lock();
+    conn.execute(
+        "UPDATE source_items SET created_at = datetime('now', ?1 || ' days') WHERE id = ?2",
+        rusqlite::params![-days_ago, id],
+    )
+    .unwrap();
+}
+
+/// Write a raw pending marker directly (the drain must cope with whatever the
+/// column actually holds, including live-audit-era two-field markers and junk).
+fn set_raw_marker(db: &Database, id: i64, marker: &str) {
+    let conn = db.conn.lock();
+    conn.execute(
+        "UPDATE source_items SET feed_verdict_pending = ?1 WHERE id = ?2",
+        rusqlite::params![marker, id],
+    )
+    .unwrap();
+}
+
+/// The live-audit marker shape ("1@2026-08-30T15:05:15…", no attempts field)
+/// parses as attempt 1, and the three-field shape round-trips. This is the
+/// compatibility contract that lets the drain escalate markers the Phase-109
+/// boundary wrote before the drain existed.
+#[test]
+fn pending_marker_parses_legacy_and_round_trips() {
+    let legacy = PendingMarker::parse("1@2026-08-12T05:00:00+00:00").expect("legacy parses");
+    assert!(legacy.direction);
+    assert_eq!(legacy.attempts, 1, "no attempts field means attempt 1");
+
+    let escalated = PendingMarker {
+        direction: false,
+        first_seen: legacy.first_seen,
+        attempts: 5,
+    };
+    let reparsed = PendingMarker::parse(&escalated.to_marker_string()).unwrap();
+    assert_eq!(reparsed, escalated, "three-field shape round-trips");
+
+    // attempts == 1 serializes back to the legacy two-field shape.
+    let first = PendingMarker {
+        attempts: 1,
+        ..escalated
+    };
+    assert!(!first.to_marker_string().contains("@1@"));
+    assert_eq!(
+        first.to_marker_string().matches('@').count(),
+        1,
+        "first-attempt markers keep the boundary's own byte shape"
+    );
+
+    // Corrupt shapes are None — never guessed at.
+    for junk in [
+        "",
+        "2@2026-08-12T05:00:00+00:00",
+        "1@yesterday",
+        "1@2026-08-12T05:00:00+00:00@x",
+    ] {
+        assert!(
+            PendingMarker::parse(junk).is_none(),
+            "junk marker {junk:?} must not parse"
+        );
+    }
+}
+
+/// The backlog reads OLDEST first — the exact inversion of the freshness
+/// preference that starved these items — and surfaces corrupt markers as
+/// `None` instead of skipping them silently.
+#[test]
+fn pending_backlog_is_oldest_first_and_flags_corrupt_markers() {
+    let db = test_db();
+    let newer = insert_test_item(&db, "hackernews", "pb1", "Newer pending", "body");
+    let oldest = insert_test_item(&db, "hackernews", "pb2", "Oldest pending", "body");
+    let corrupt = insert_test_item(&db, "hackernews", "pb3", "Corrupt marker", "body");
+    let clean = insert_test_item(&db, "hackernews", "pb4", "No marker", "body");
+    backdate_item(&db, newer, 2);
+    backdate_item(&db, oldest, 19);
+    backdate_item(&db, corrupt, 10);
+    set_raw_marker(&db, newer, "0@2026-08-29T00:00:00+00:00");
+    set_raw_marker(&db, oldest, "1@2026-08-12T05:00:00+00:00");
+    set_raw_marker(&db, corrupt, "garbled");
+    let _ = clean;
+
+    let backlog = db.get_pending_verdict_backlog(10).unwrap();
+    let ids: Vec<i64> = backlog.iter().map(|r| r.id).collect();
+    assert_eq!(ids, vec![oldest, corrupt, newer], "created_at ASC");
+    assert!(backlog[0].marker.is_some());
+    assert!(
+        backlog[1].marker.is_none(),
+        "corrupt marker must surface as None, not vanish"
+    );
+    assert_eq!(db.count_pending_verdicts().unwrap(), 3);
+}
+
+/// Escalation bumps ONLY the attempt count — direction and first-seen are the
+/// starvation evidence and must survive every visit. Corrupt markers are not
+/// escalated (never trusted), and ids without a marker are untouched.
+#[test]
+fn escalate_bumps_attempts_and_preserves_the_rest() {
+    let db = test_db();
+    let item = insert_test_item(&db, "hackernews", "es1", "Escalating", "body");
+    let corrupt = insert_test_item(&db, "hackernews", "es2", "Corrupt", "body");
+    set_raw_marker(&db, item, "1@2026-08-12T05:00:00+00:00");
+    set_raw_marker(&db, corrupt, "junk");
+
+    assert_eq!(db.escalate_pending_attempts(&[item, corrupt]).unwrap(), 1);
+    let marker = PendingMarker::parse(&pending_of(&db, item).unwrap()).unwrap();
+    assert!(marker.direction);
+    assert_eq!(marker.attempts, 2);
+    assert_eq!(
+        marker.first_seen.to_rfc3339(),
+        "2026-08-12T05:00:00+00:00",
+        "first-seen must never be refreshed by a visit"
+    );
+    assert_eq!(
+        pending_of(&db, corrupt),
+        Some("junk".into()),
+        "corrupt markers are cleared by the drain, never escalated here"
+    );
+
+    // A second escalation keeps counting.
+    db.escalate_pending_attempts(&[item]).unwrap();
+    let marker = PendingMarker::parse(&pending_of(&db, item).unwrap()).unwrap();
+    assert_eq!(marker.attempts, 3);
+}
+
+/// An escalated (three-field) marker still drives the Phase-109 boundary: a
+/// second judging run wanting the deferred direction applies the flip. The
+/// drain's extra field must never break the damper it rides on.
+#[test]
+fn escalated_marker_still_confirms_at_the_persist_boundary() {
+    let db = test_db();
+    let item = insert_test_item(&db, "hackernews", "es3", "Damped then confirmed", "body");
+    db.persist_feed_verdicts(&[(item, true, VerdictSource::Score)], 18)
+        .unwrap();
+    db.persist_feed_verdicts(&[(item, false, VerdictSource::Score)], 18)
+        .unwrap();
+    db.escalate_pending_attempts(&[item]).unwrap();
+    assert_eq!(pending_of(&db, item).unwrap().matches('@').count(), 2);
+
+    db.persist_feed_verdicts(&[(item, false, VerdictSource::Score)], 18)
+        .unwrap();
+    assert_eq!(
+        verdict_of(&db, item).0,
+        Some(0),
+        "agreeing run still applies"
+    );
+    assert_eq!(pending_of(&db, item), None);
+}
+
+/// Clearing markers leaves the standing verdict alone — it is the "the drain
+/// judge DISPUTED the deferred flip" outcome, not a demotion.
+#[test]
+fn clear_pending_markers_touches_only_the_marker() {
+    let db = test_db();
+    let item = insert_test_item(&db, "hackernews", "cl1", "Disputed flip", "body");
+    db.persist_feed_verdicts(&[(item, true, VerdictSource::Score)], 18)
+        .unwrap();
+    db.persist_feed_verdicts(&[(item, false, VerdictSource::Score)], 18)
+        .unwrap();
+    assert!(pending_of(&db, item).is_some());
+
+    assert_eq!(db.clear_pending_markers(&[item]).unwrap(), 1);
+    assert_eq!(pending_of(&db, item), None);
+    assert_eq!(
+        verdict_of(&db, item),
+        (Some(1), Some(18), Some("score".into())),
+        "standing verdict and stamps untouched"
+    );
+    // Idempotent: already-clear ids count 0.
+    assert_eq!(db.clear_pending_markers(&[item]).unwrap(), 0);
+}
+
+/// Terminal resolution is demote-only and leaves every working set: the row
+/// records `fallback_exhausted` provenance + reason, clears the marker, and
+/// never re-enters the stale-verdict or sunk-verdict sweeps.
+#[test]
+fn fallback_exhausted_resolution_is_terminal_and_demote_only() {
+    let db = test_db();
+    // Pending demote on a curated item (direction 0)…
+    let curated = insert_test_item(&db, "hackernews", "fx1", "Curated starved", "body");
+    db.persist_feed_verdicts(&[(curated, true, VerdictSource::Score)], 17)
+        .unwrap();
+    db.persist_feed_verdicts(&[(curated, false, VerdictSource::Score)], 17)
+        .unwrap();
+    // …and a pending promote on a rejected item (direction 1). Terminal
+    // resolution must keep it at 0 — NEVER promote without a real verdict.
+    let rejected = insert_test_item(&db, "hackernews", "fx2", "Rejected starved", "body");
+    db.persist_feed_verdicts(&[(rejected, false, VerdictSource::Score)], 17)
+        .unwrap();
+    db.persist_feed_verdicts(&[(rejected, true, VerdictSource::Score)], 17)
+        .unwrap();
+    assert!(pending_of(&db, rejected).unwrap().starts_with("1@"));
+
+    for id in [curated, rejected] {
+        db.persist_feed_verdicts_with_reasons(
+            &[(
+                id,
+                false,
+                VerdictSource::FallbackExhausted,
+                Some(VerdictReason::PendingRetriesExhausted),
+            )],
+            18,
+        )
+        .unwrap();
+        assert_eq!(
+            verdict_of(&db, id),
+            (Some(0), Some(18), Some("fallback_exhausted".into()))
+        );
+        assert_eq!(reason_of(&db, id), Some("pending_retries_exhausted".into()));
+        assert_eq!(pending_of(&db, id), None);
+    }
+
+    assert_eq!(
+        db.count_stale_verdicts(19).unwrap(),
+        0,
+        "terminal rows are feed_relevant = 0 — outside every repair working set"
+    );
+    assert_eq!(db.count_pending_verdicts().unwrap(), 0);
+}
+
+/// The new persisted strings are schema contract, same as the existing ones.
+#[test]
+fn drain_codes_are_stable_strings() {
+    assert_eq!(
+        VerdictSource::FallbackExhausted.as_str(),
+        "fallback_exhausted"
+    );
+    assert_eq!(
+        VerdictReason::PendingRetriesExhausted.as_str(),
+        "pending_retries_exhausted"
+    );
+}

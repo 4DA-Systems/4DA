@@ -134,6 +134,30 @@ fn parse_treats_garbage_numeric_fields_as_omitted_not_fatal() {
 }
 
 #[test]
+fn v4_prompt_pins_confidence_semantics() {
+    // The demotion gate reads `confidence >= 0.7` as "the judge is sure".
+    // v1-v3 let the model express rejection AS low confidence, which held the
+    // gate at zero demotions on every measured corpus (2026-08-27 Sonnet,
+    // 2026-08-31 Haiku: 77/90 rejected at avg 0.527, none >= 0.7). These
+    // lines are what make the gate's premise true — losing them in a prompt
+    // edit silently kills demotions again.
+    let prompt = judge_system_prompt("CTX");
+    assert!(
+        prompt.contains("A clear rejection carries HIGH confidence"),
+        "confidence-semantics instruction missing from the judge prompt"
+    );
+    assert!(
+        prompt.contains("never that the item is irrelevant"),
+        "low-confidence-means-unsure clarification missing from the judge prompt"
+    );
+    assert!(prompt.contains("CTX"), "user context must be embedded");
+    assert_eq!(
+        PROMPT_VERSION, "v4",
+        "semantics fix must ride the v4 cohort"
+    );
+}
+
+#[test]
 fn to_scale_clamps_and_rejects_nonfinite() {
     assert_eq!(to_scale_1_5(Some(7.0)), Some(5));
     assert_eq!(to_scale_1_5(Some(0.4)), Some(1));
@@ -492,4 +516,23 @@ async fn post_cycle_runs_demotions_without_llm_calls() {
     assert_eq!(summary.judged, 0);
     assert_eq!(summary.demoted, 1);
     assert_eq!(feed_relevant_of(&db, id), 0);
+}
+
+// ============================================================================
+// Drain carve-out (2026-08-31 audit: the fresh lane cedes the drain's slice)
+// ============================================================================
+
+/// The fresh judge lane's selection shrinks by exactly the drain's slice —
+/// bounded by the real backlog, never more than DRAIN_SLICE, and zero when
+/// nothing is pending (a healthy instance keeps its full selection).
+#[test]
+fn drain_reserve_is_backlog_bounded_and_capped() {
+    assert_eq!(drain_reserve(0), 0, "no backlog, no carve-out");
+    assert_eq!(drain_reserve(-1), 0, "defensive: negative counts");
+    assert_eq!(drain_reserve(3), 3, "small backlog reserves only itself");
+    assert_eq!(
+        drain_reserve(175),
+        crate::llm_judge::drain::DRAIN_SLICE,
+        "the live-audit backlog caps at the 20% slice"
+    );
 }

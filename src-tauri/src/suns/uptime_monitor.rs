@@ -11,7 +11,7 @@ pub fn execute() -> SunResult {
 
     // Store uptime fact in sovereign profile
     if uptime_secs > 0 {
-        crate::sovereign_profile::store_facts_from_execution(
+        crate::sovereign_facts::store_facts_from_execution(
             "uptime",
             &format!(
                 "{} seconds ({} days, {} hours)",

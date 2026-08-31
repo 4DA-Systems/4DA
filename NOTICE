@@ -15,15 +15,16 @@ build edges, all target platforms). npm packages are the production
 dependency closure reported by `pnpm licenses list --prod`. Dev-only
 dependencies are omitted because they are not distributed.
 
-Totals: 832 Rust crates, 42 npm packages.
+Totals: 829 Rust crates, 42 npm packages.
 
-Rust Crates (832)
+Rust Crates (829)
 -----------------
 
 adler2 2.0.1 - 0BSD OR MIT OR Apache-2.0 - https://github.com/oyvindln/adler2
 adobe-cmap-parser 0.4.1 - MIT - https://github.com/jrmuizel/adobe-cmap-parser
 aead 0.6.1 - MIT OR Apache-2.0 - https://github.com/RustCrypto/traits
 aes 0.8.4 - MIT OR Apache-2.0 - https://github.com/RustCrypto/block-ciphers
+aes 0.9.3 - MIT OR Apache-2.0 - https://github.com/RustCrypto/block-ciphers
 ahash 0.8.12 - MIT OR Apache-2.0 - https://github.com/tkaitchuck/ahash
 aho-corasick 1.1.4 - Unlicense OR MIT - https://github.com/BurntSushi/aho-corasick
 aligned 0.4.3 - MIT OR Apache-2.0 - https://github.com/rust-embedded-community/aligned
@@ -62,7 +63,6 @@ axum-core 0.5.6 - MIT - https://github.com/tokio-rs/axum
 base64 0.13.1 - MIT/Apache-2.0 - https://github.com/marshallpierce/rust-base64
 base64 0.21.7 - MIT OR Apache-2.0 - https://github.com/marshallpierce/rust-base64
 base64 0.22.1 - MIT OR Apache-2.0 - https://github.com/marshallpierce/rust-base64
-base64ct 1.8.3 - Apache-2.0 OR MIT - https://github.com/RustCrypto/formats
 bit_field 0.10.3 - Apache-2.0/MIT - https://github.com/phil-opp/rust-bit-field
 bit-set 0.8.0 - Apache-2.0 OR MIT - https://github.com/contain-rs/bit-set
 bit-vec 0.8.0 - Apache-2.0 OR MIT - https://github.com/contain-rs/bit-vec
@@ -83,8 +83,7 @@ bytemuck 1.25.0 - Zlib OR Apache-2.0 OR MIT - https://github.com/Lokathor/bytemu
 byteorder 1.5.0 - Unlicense OR MIT - https://github.com/BurntSushi/byteorder
 byteorder-lite 0.1.0 - Unlicense OR MIT - https://github.com/image-rs/byteorder-lite
 bytes 1.11.1 - MIT - https://github.com/tokio-rs/bytes
-bzip2 0.4.4 - MIT/Apache-2.0 - https://github.com/alexcrichton/bzip2-rs
-bzip2-sys 0.1.13+1.0.8 - MIT/Apache-2.0 - https://github.com/alexcrichton/bzip2-rs
+bzip2 0.6.1 - MIT OR Apache-2.0 - https://github.com/trifectatechfoundation/bzip2-rs
 cairo-rs 0.18.5 - MIT - https://github.com/gtk-rs/gtk-rs-core
 cairo-sys-rs 0.18.2 - MIT - https://github.com/gtk-rs/gtk-rs-core
 calamine 0.36.1 - MIT - https://github.com/tafia/calamine
@@ -113,11 +112,10 @@ combine 4.6.7 - MIT - https://github.com/Marwes/combine
 compact_str 0.9.0 - MIT - https://github.com/ParkMyCar/compact_str
 concurrent-queue 2.5.0 - Apache-2.0 OR MIT - https://github.com/smol-rs/concurrent-queue
 console 0.16.3 - MIT - https://github.com/console-rs/console
-const-oid 0.9.6 - Apache-2.0 OR MIT - https://github.com/RustCrypto/formats/tree/master/const-oid
 const-oid 0.10.2 - Apache-2.0 OR MIT - https://github.com/RustCrypto/formats
 const-random 0.1.18 - MIT OR Apache-2.0 - https://github.com/tkaitchuck/constrandom
 const-random-macro 0.1.16 - MIT OR Apache-2.0 - https://github.com/tkaitchuck/constrandom
-constant_time_eq 0.1.5 - CC0-1.0 - https://github.com/cesarb/constant_time_eq
+constant_time_eq 0.4.2 - CC0-1.0 OR MIT-0 OR Apache-2.0 - https://github.com/cesarb/constant_time_eq
 cookie 0.18.1 - MIT OR Apache-2.0 - https://github.com/SergioBenitez/cookie-rs
 cookie_store 0.22.1 - MIT OR Apache-2.0 - https://github.com/pfernie/cookie_store
 core-foundation 0.9.4 - MIT OR Apache-2.0 - https://github.com/servo/core-foundation-rs
@@ -125,6 +123,7 @@ core-foundation 0.10.1 - MIT OR Apache-2.0 - https://github.com/servo/core-found
 core-foundation-sys 0.8.7 - MIT OR Apache-2.0 - https://github.com/servo/core-foundation-rs
 core-graphics 0.25.0 - MIT OR Apache-2.0 - https://github.com/servo/core-foundation-rs
 core-graphics-types 0.2.0 - MIT OR Apache-2.0 - https://github.com/servo/core-foundation-rs
+cpubits 0.1.1 - MIT OR Apache-2.0 - https://github.com/RustCrypto/utils
 cpufeatures 0.2.17 - MIT OR Apache-2.0 - https://github.com/RustCrypto/utils
 cpufeatures 0.3.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/utils
 crc32fast 1.5.0 - MIT OR Apache-2.0 - https://github.com/srijs/rust-crc32fast
@@ -142,7 +141,7 @@ cssparser-macros 0.7.0 - MPL-2.0 - https://github.com/servo/rust-cssparser
 ctor 0.8.0 - Apache-2.0 OR MIT - https://github.com/mmastrac/rust-ctor
 ctor-proc-macro 0.0.7 - Apache-2.0 OR MIT - https://github.com/mmastrac/rust-ctor
 ctutils 0.4.2 - Apache-2.0 OR MIT - https://github.com/RustCrypto/utils
-curve25519-dalek 4.1.3 - BSD-3-Clause - https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek
+curve25519-dalek 5.0.0 - BSD-3-Clause - https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek
 curve25519-dalek-derive 0.1.1 - MIT/Apache-2.0 - https://github.com/dalek-cryptography/curve25519-dalek
 darling 0.20.11 - MIT - https://github.com/TedDriggs/darling
 darling 0.23.0 - MIT - https://github.com/TedDriggs/darling
@@ -154,10 +153,10 @@ dary_heap 0.3.9 - MIT OR Apache-2.0 - https://github.com/hanmertens/dary_heap
 dbus 0.9.11 - Apache-2.0/MIT - https://github.com/diwic/dbus-rs
 dbus-secret-service 4.1.0 - MIT OR Apache-2.0 - https://github.com/brotskydotcom/dbus-secret-service.git
 debug_unsafe 0.1.4 - MIT OR Apache-2.0 - https://github.com/RoDmitry/debug_unsafe
+deflate64 0.1.12 - MIT - https://github.com/anatawa12/deflate64-rs
 defmt 1.1.0 - MIT OR Apache-2.0 - https://github.com/knurling-rs/defmt
 defmt-macros 1.1.0 - MIT OR Apache-2.0 - https://github.com/knurling-rs/defmt
 defmt-parser 1.0.0 - MIT OR Apache-2.0 - https://github.com/knurling-rs/defmt
-der 0.7.10 - Apache-2.0 OR MIT - https://github.com/RustCrypto/formats/tree/master/der
 deranged 0.5.8 - MIT OR Apache-2.0 - https://github.com/jhpratt/deranged
 derive_arbitrary 1.4.2 - MIT OR Apache-2.0 - https://github.com/rust-fuzz/arbitrary
 derive_builder 0.20.2 - MIT OR Apache-2.0 - https://github.com/colin-kiegel/rust-derive-builder
@@ -189,8 +188,8 @@ dtor-proc-macro 0.0.6 - Apache-2.0 OR MIT - https://github.com/mmastrac/rust-cto
 dunce 1.0.5 - CC0-1.0 OR MIT-0 OR Apache-2.0 - https://gitlab.com/kornelski/dunce
 dyn-clone 1.0.20 - MIT OR Apache-2.0 - https://github.com/dtolnay/dyn-clone
 ecb 0.1.2 - MIT - https://github.com/magic-akari/ecb
-ed25519 2.2.3 - Apache-2.0 OR MIT - https://github.com/RustCrypto/signatures/tree/master/ed25519
-ed25519-dalek 2.2.0 - BSD-3-Clause - https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek
+ed25519 3.0.0 - Apache-2.0 OR MIT - https://github.com/RustCrypto/signatures
+ed25519-dalek 3.0.0 - BSD-3-Clause - https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek
 ego-tree 0.11.0 - ISC - https://github.com/rust-scraper/ego-tree
 either 1.16.0 - MIT OR Apache-2.0 - https://github.com/rayon-rs/either
 email_address 0.2.9 - MIT - https://github.com/johnstonskj/rust-email_address.git
@@ -219,7 +218,7 @@ fastembed 5.13.4 - Apache-2.0 - https://github.com/Anush008/fastembed-rs
 fastrand 2.4.1 - Apache-2.0 OR MIT - https://github.com/smol-rs/fastrand
 fax 0.2.7 - MIT - https://github.com/pdf-rs/fax
 fdeflate 0.3.7 - MIT OR Apache-2.0 - https://github.com/image-rs/fdeflate
-fiat-crypto 0.2.9 - MIT OR Apache-2.0 OR BSD-1-Clause - https://github.com/mit-plv/fiat-crypto
+fiat-crypto 0.3.0 - MIT OR Apache-2.0 OR BSD-1-Clause - https://github.com/mit-plv/fiat-crypto
 field-offset 0.3.6 - MIT OR Apache-2.0 - https://github.com/Diggsey/rust-field-offset
 filetime 0.2.29 - MIT/Apache-2.0 - https://github.com/alexcrichton/filetime
 find-msvc-tools 0.1.9 - MIT OR Apache-2.0 - https://github.com/rust-lang/cc-rs
@@ -279,7 +278,6 @@ hermit-abi 0.5.2 - MIT OR Apache-2.0 - https://github.com/hermit-os/hermit-rs
 hex 0.4.3 - MIT OR Apache-2.0 - https://github.com/KokaKiwi/rust-hex
 hf-hub 0.5.0 - Apache-2.0 - https://github.com/huggingface/hf-hub
 hkdf 0.13.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/KDFs/
-hmac 0.12.1 - MIT OR Apache-2.0 - https://github.com/RustCrypto/MACs
 hmac 0.13.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/MACs
 hostname 0.4.2 - MIT - https://github.com/djc/hostname
 html5ever 0.38.0 - MIT OR Apache-2.0 - https://github.com/servo/html5ever
@@ -349,6 +347,7 @@ lebe 0.5.3 - BSD-3-Clause - https://github.com/johannesvollmer/lebe
 lettre 0.11.22 - MIT - https://github.com/lettre/lettre
 libappindicator 0.9.0 - Apache-2.0 OR MIT - https://crates.io/crates/libappindicator
 libappindicator-sys 0.9.0 - Apache-2.0 OR MIT - https://crates.io/crates/libappindicator-sys
+libbz2-rs-sys 0.2.5 - bzip2-1.0.6 - https://github.com/trifectatechfoundation/libbzip2-rs
 libc 0.2.186 - MIT OR Apache-2.0 - https://github.com/rust-lang/libc
 libdbus-sys 0.2.7 - Apache-2.0/MIT - https://github.com/diwic/dbus-rs
 libfuzzer-sys 0.4.12 - (MIT OR Apache-2.0) AND NCSA - https://github.com/rust-fuzz/libfuzzer
@@ -365,6 +364,7 @@ log 0.4.30 - MIT OR Apache-2.0 - https://github.com/rust-lang/log
 loop9 0.1.5 - MIT - https://gitlab.com/kornelski/loop9.git
 lopdf 0.42.0 - MIT - https://github.com/J-F-Liu/lopdf.git
 lru-slab 0.1.2 - MIT OR Apache-2.0 OR Zlib - https://github.com/Ralith/lru-slab
+lzma-rust2 0.16.5 - Apache-2.0 - https://github.com/hasenbanck/lzma-rust2/
 mac-notification-sys 0.6.12 - MIT/Apache-2.0 - https://github.com/h4llow3En/mac-notification-sys
 macro_rules_attribute 0.2.2 - Apache-2.0 OR MIT OR Zlib - https://github.com/danielhenrymantilla/macro_rules_attribute-rs
 macro_rules_attribute-proc_macro 0.2.2 - Apache-2.0 OR MIT OR Zlib - https://github.com/danielhenrymantilla/macro_rules_attribute-rs
@@ -444,12 +444,11 @@ pango-sys 0.18.0 - MIT - https://github.com/gtk-rs/gtk-rs-core
 parking 2.2.1 - Apache-2.0 OR MIT - https://github.com/smol-rs/parking
 parking_lot 0.12.5 - MIT OR Apache-2.0 - https://github.com/Amanieu/parking_lot
 parking_lot_core 0.9.12 - MIT OR Apache-2.0 - https://github.com/Amanieu/parking_lot
-password-hash 0.4.2 - MIT OR Apache-2.0 - https://github.com/RustCrypto/traits/tree/master/password-hash
 paste 1.0.15 - MIT OR Apache-2.0 - https://github.com/dtolnay/paste
 pastey 0.1.1 - MIT OR Apache-2.0 - https://github.com/as1100k/pastey
 pastey 0.2.3 - MIT OR Apache-2.0 - https://github.com/as1100k/pastey
 pathdiff 0.2.3 - MIT/Apache-2.0 - https://github.com/Manishearth/pathdiff
-pbkdf2 0.11.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/password-hashes/tree/master/pbkdf2
+pbkdf2 0.13.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/password-hashes
 pdf-extract 0.12.0 - MIT - https://github.com/jrmuizel/pdf-extract
 percent-encoding 2.3.2 - MIT OR Apache-2.0 - https://github.com/servo/rust-url/
 phf 0.13.1 - MIT - https://github.com/rust-phf/rust-phf
@@ -459,7 +458,6 @@ phf_macros 0.13.1 - MIT - https://github.com/rust-phf/rust-phf
 phf_shared 0.13.1 - MIT - https://github.com/rust-phf/rust-phf
 pin-project-lite 0.2.17 - Apache-2.0 OR MIT - https://github.com/taiki-e/pin-project-lite
 piper 0.2.5 - MIT OR Apache-2.0 - https://github.com/smol-rs/piper
-pkcs8 0.10.2 - Apache-2.0 OR MIT - https://github.com/RustCrypto/formats/tree/master/pkcs8
 pkg-config 0.3.33 - MIT OR Apache-2.0 - https://github.com/rust-lang/pkg-config-rs
 plist 1.10.0 - MIT - https://github.com/ebarnard/rust-plist/
 png 0.17.16 - MIT OR Apache-2.0 - https://github.com/image-rs/image-png
@@ -472,6 +470,7 @@ portable-atomic-util 0.2.7 - Apache-2.0 OR MIT - https://github.com/taiki-e/port
 postscript 0.14.1 - Apache-2.0/MIT - https://github.com/bodoni/postscript
 potential_utf 0.1.5 - Unicode-3.0 - https://github.com/unicode-org/icu4x
 powerfmt 0.2.0 - MIT OR Apache-2.0 - https://github.com/jhpratt/powerfmt
+ppmd-rust 1.4.0 - CC0-1.0 OR MIT-0 - https://github.com/hasenbanck/ppmd-rust
 ppv-lite86 0.2.21 - MIT OR Apache-2.0 - https://github.com/cryptocorrosion/cryptocorrosion
 precomputed-hash 0.1.1 - MIT - https://github.com/emilio/precomputed-hash
 proc-macro-crate 1.3.1 - MIT OR Apache-2.0 - https://github.com/bkchr/proc-macro-crate
@@ -570,13 +569,13 @@ serde-untagged 0.1.9 - MIT OR Apache-2.0 - https://github.com/dtolnay/serde-unta
 serialize-to-javascript 0.1.2 - MIT OR Apache-2.0 - https://github.com/chippers/serialize-to-javascript
 serialize-to-javascript-impl 0.1.2 - MIT OR Apache-2.0 - https://github.com/chippers/serialize-to-javascript
 servo_arc 0.4.3 - MIT OR Apache-2.0 - https://github.com/servo/stylo
-sha1 0.10.6 - MIT OR Apache-2.0 - https://github.com/RustCrypto/hashes
+sha1 0.11.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/hashes
 sha2 0.10.9 - MIT OR Apache-2.0 - https://github.com/RustCrypto/hashes
 sha2 0.11.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/hashes
 sharded-slab 0.1.7 - MIT - https://github.com/hawkw/sharded-slab
 shlex 1.3.0 - MIT OR Apache-2.0 - https://github.com/comex/rust-shlex
 signal-hook-registry 1.4.8 - MIT OR Apache-2.0 - https://github.com/vorner/signal-hook
-signature 2.2.0 - Apache-2.0 OR MIT - https://github.com/RustCrypto/traits/tree/master/signature
+signature 3.0.0 - Apache-2.0 OR MIT - https://github.com/RustCrypto/traits
 simd_cesu8 1.1.1 - Apache-2.0 OR MIT - https://github.com/seancroach/simd_cesu8
 simd_helpers 0.1.0 - MIT - https://github.com/lu-zero/simd_helpers
 simd-adler32 0.3.9 - MIT - https://github.com/mcountryman/simd-adler32
@@ -589,7 +588,6 @@ socks 0.3.4 - MIT/Apache-2.0 - https://github.com/sfackler/rust-socks
 softbuffer 0.4.8 - MIT OR Apache-2.0 - https://github.com/rust-windowing/softbuffer
 soup3 0.5.0 - MIT - https://gitlab.gnome.org/World/Rust/soup3-rs
 soup3-sys 0.5.0 - MIT - https://gitlab.gnome.org/World/Rust/soup3-rs
-spki 0.7.3 - Apache-2.0 OR MIT - https://github.com/RustCrypto/formats/tree/master/spki
 spm_precompiled 0.1.4 - Apache-2.0 - https://github.com/huggingface/spm_precompiled
 sqlite-vec 0.1.9 - MIT/Apache-2.0 - https://github.com/asg017/sqlite-vec
 sse-stream 0.2.3 - MIT/Apache-2.0 - https://github.com/4t145/sse-stream/
@@ -820,7 +818,7 @@ x11 2.21.0 - MIT - https://github.com/AltF02/x11-rs.git
 x11-dl 2.21.0 - MIT - https://github.com/AltF02/x11-rs.git
 x11rb 0.13.2 - MIT OR Apache-2.0 - https://github.com/psychon/x11rb
 x11rb-protocol 0.13.2 - MIT OR Apache-2.0 - https://github.com/psychon/x11rb
-x25519-dalek 2.0.1 - BSD-3-Clause - https://github.com/dalek-cryptography/curve25519-dalek/tree/main/x25519-dalek
+x25519-dalek 3.0.0 - BSD-3-Clause - https://github.com/dalek-cryptography/curve25519-dalek/tree/main/x25519-dalek
 xattr 1.6.1 - MIT OR Apache-2.0 - https://github.com/Stebalien/xattr
 y4m 0.8.0 - MIT - https://github.com/image-rs/y4m.git
 yoke 0.8.2 - Unicode-3.0 - https://github.com/unicode-org/icu4x
@@ -837,14 +835,13 @@ zeroize_derive 1.5.0 - Apache-2.0 OR MIT - https://github.com/RustCrypto/utils
 zerotrie 0.2.4 - Unicode-3.0 - https://github.com/unicode-org/icu4x
 zerovec 0.11.6 - Unicode-3.0 - https://github.com/unicode-org/icu4x
 zerovec-derive 0.11.3 - Unicode-3.0 - https://github.com/unicode-org/icu4x
-zip 0.6.6 - MIT - https://github.com/zip-rs/zip.git
 zip 4.6.1 - MIT - https://github.com/zip-rs/zip2.git
 zip 8.6.0 - MIT - https://github.com/zip-rs/zip2
 zlib-rs 0.6.7 - Zlib - https://github.com/trifectatechfoundation/zlib-rs
 zmij 1.0.21 - MIT - https://github.com/dtolnay/zmij
 zopfli 0.8.3 - Apache-2.0 - https://github.com/zopfli-rs/zopfli
-zstd 0.11.2+zstd.1.5.2 - MIT - https://github.com/gyscos/zstd-rs
-zstd-safe 5.0.2+zstd.1.5.2 - MIT/Apache-2.0 - https://github.com/gyscos/zstd-rs
+zstd 0.13.3 - MIT - https://github.com/gyscos/zstd-rs
+zstd-safe 7.2.4 - MIT OR Apache-2.0 - https://github.com/gyscos/zstd-rs
 zstd-sys 2.0.16+zstd.1.5.7 - MIT/Apache-2.0 - https://github.com/gyscos/zstd-rs
 zune-core 0.5.1 - MIT OR Apache-2.0 OR Zlib - https://github.com/etemesi254/zune-image
 zune-inflate 0.2.54 - MIT OR Apache-2.0 OR Zlib - https://github.com/etemesi254/zune-image/tree/main/zune-inflate

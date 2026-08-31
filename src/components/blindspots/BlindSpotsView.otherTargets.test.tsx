@@ -30,6 +30,9 @@ vi.mock('./CollapsedSections', () => ({
   CoveredSection: ({ depRows }: { depRows: DepRow[] }) => (
     <div>{depRows.map(d => <span key={d.name} data-testid="covered-dep">{d.name}</span>)}</div>
   ),
+  NoCoverageSection: ({ depRows }: { depRows: DepRow[] }) => (
+    <div data-testid="nocov-section">{depRows.map(d => <span key={d.name} data-testid="nocov-dep">{d.name}</span>)}</div>
+  ),
   OtherBuildTargetsSection: ({ depRows }: { depRows: DepRow[] }) => (
     <div data-testid="other-section">{depRows.map(d => <span key={d.name} data-testid="other-dep">{d.name}</span>)}</div>
   ),
@@ -53,7 +56,7 @@ function gap(id: string, otherBuildTarget: boolean) {
     urgency: 'high', reversibility: null, evidence: [],
     affected_projects: [], affected_deps: [id], suggested_actions: [],
     precedents: [], refutation_condition: null,
-    lens_hints: { briefing: false, preemption: false, blind_spots: true, evidence: false, other_build_target: otherBuildTarget, upgrade_plan: false },
+    lens_hints: { briefing: false, preemption: false, blind_spots: true, evidence: false, other_build_target: otherBuildTarget, upgrade_plan: false, no_coverage: false },
     created_at: 0, expires_at: null,
   } as unknown as DepRow['gap'];
 }

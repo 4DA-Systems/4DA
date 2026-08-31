@@ -327,6 +327,17 @@ pub struct LensHints {
     /// `false` for all normal items; defaults `false` for back-compat.
     #[serde(default)]
     pub upgrade_plan: bool,
+
+    /// Rendering hint (2026-08-31 live audit): the coverage-gap dependency has
+    /// ZERO available signals — sources were checked (or haven't run) and found
+    /// nothing, so there is no "unreviewed activity" to speak of. The Blind
+    /// Spots lens groups such gaps under an honest "no signal coverage" section
+    /// instead of inflating the "Drifting / unreviewed activity" tier with rows
+    /// that literally say "found no results". Set by
+    /// `uncovered_dep_to_evidence_item` when `available_signal_count == 0`.
+    /// `false` for all normal items; defaults `false` for back-compat.
+    #[serde(default)]
+    pub no_coverage: bool,
 }
 
 impl LensHints {

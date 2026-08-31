@@ -459,13 +459,6 @@ interface CommandMap {
   get_trial_status: { params: Record<string, never>; result: { active: boolean; days_remaining: number; started_at: string | null } };
   start_trial: { params: Record<string, never>; result: { success: boolean; days_remaining?: number } };
 
-  // -- Sovereign Profile --
-  get_sovereign_profile: { params: Record<string, never>; result: SovereignProfileData };
-  get_sovereign_profile_completeness: { params: Record<string, never>; result: ProfileCompleteness };
-  save_sovereign_fact: { params: { category: string; key: string; value: string }; result: void };
-  generate_sovereign_stack_document: { params: Record<string, never>; result: string };
-  get_execution_log: { params: { moduleId: string; lessonIdx?: number }; result: ExecutionLogEntry[] };
-
   // -- Sovereign Developer Profile (Unified) --
   export_sovereign_profile_markdown: { params: Record<string, never>; result: string };
   export_sovereign_profile_json: { params: Record<string, never>; result: string };
@@ -589,7 +582,6 @@ interface CommandMap {
   get_locale: { params: Record<string, never>; result: { country: string; language: string; currency: string } };
   set_locale: { params: { country: string; language: string; currency: string }; result: void };
   set_language: { params: { language: string }; result: void };
-  format_currency: { params: { amount: number }; result: string };
   get_translation_status: { params: { lang: string }; result: TranslationStatus };
   get_all_translations: { params: { lang: string }; result: Record<string, TranslationEntry> };
   save_translation_override: { params: { lang: string; namespace: string; key: string; value: string }; result: void };
@@ -618,10 +610,6 @@ interface CommandMap {
   // 'no_llm' (no usable LLM) | 'model_too_weak' (Haiku/*-mini/consumer-local) | 'capable'
   // (Sonnet-class+). Rust shape: BriefCapability in src-tauri/bindings/bindings/.
   get_brief_capability: { params: Record<string, never>; result: { brief_capable: boolean; reason: 'no_llm' | 'model_too_weak' | 'capable'; provider: string; model: string } };
-
-  // -- STREETS Localization --
-  get_regional_data: { params: Record<string, never>; result: RegionalData };
-  calculate_electricity_cost: { params: { watts: number; hoursPerDay: number }; result: ElectricityCostResult };
 
   // -- Digest --
   get_digest_config: { params: Record<string, never>; result: DigestConfig };
@@ -875,21 +863,6 @@ interface PersonalizationContextSummary {
   context_hash: string;
 }
 
-/** Execution log entry (mirrors Rust row_to_json in sovereign_profile.rs) */
-interface ExecutionLogEntry {
-  id: number;
-  module_id: string;
-  lesson_idx: number;
-  command_id: string;
-  command_text: string;
-  success: boolean;
-  exit_code: number | null;
-  stdout: string | null;
-  stderr: string | null;
-  duration_ms: number | null;
-  executed_at: string | null;
-}
-
 /** Registered source info (mirrors Rust get_sources JSON) */
 interface SourceInfo {
   type: string;
@@ -901,16 +874,6 @@ interface SourceInfo {
   label: string;
   color_hint: string;
   default_content_type: string;
-}
-
-/** Electricity cost calculation result (mirrors Rust calculate_electricity_cost JSON) */
-interface ElectricityCostResult {
-  kwh_per_day: string;
-  daily_cost: string;
-  monthly_cost: string;
-  yearly_cost: string;
-  rate_per_kwh: string;
-  currency: string;
 }
 
 /** Context engine statistics (mirrors Rust get_context_stats JSON) */
@@ -1309,17 +1272,6 @@ interface StreetHealthScore {
   top_action: string;
 }
 
-interface SovereignProfileData {
-  facts: Record<string, Record<string, string>>;
-  completeness: number;
-}
-
-interface ProfileCompleteness {
-  overall: number;
-  by_category: Record<string, number>;
-  missing_keys: string[];
-}
-
 /** One matched item from `natural_language_query` (mirrors Rust `QueryResultItem`). */
 interface NlqQueryItem {
   id: number;
@@ -1609,20 +1561,6 @@ interface SemanticShift {
   representative_items: number[];
   period: string;
   detected_at: string;
-}
-
-interface RegionalData {
-  country: string;
-  currency: string;
-  currency_symbol: string;
-  electricity_kwh: number;
-  internet_typical_monthly: number;
-  business_registration_cost: number;
-  business_entity_type: string;
-  tax_note: string;
-  payment_processors: string[];
-  bank_recommendation: string;
-  isp_note: string;
 }
 
 interface ChannelSummary {
@@ -1985,8 +1923,6 @@ export type {
   AgentSessionBrief,
   DelegationScoreResult,
   StreetHealthScore,
-  SovereignProfileData,
-  ProfileCompleteness,
   NLQResult,
   ScoreAutopsyResult,
   EngagementData,
@@ -2014,7 +1950,6 @@ export type {
   ComposedStackSummary,
   IntelligencePulseData,
   SemanticShift,
-  RegionalData,
   ChannelSummary,
   Channel,
   ChannelRender,
@@ -2076,9 +2011,7 @@ export type {
   AiCostRecommendation,
   // IPC type safety additions
   PersonalizationContextSummary,
-  ExecutionLogEntry,
   SourceInfo,
-  ElectricityCostResult,
   ContextStats,
   ActivitySnapshot,
   AchievementUnlocked,

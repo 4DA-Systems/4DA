@@ -16,6 +16,7 @@ use tracing::info;
 pub mod api_cost_monitor;
 pub mod automation_auditor;
 pub mod edge_detector;
+pub mod engine_watchdog;
 pub mod execution_tracker;
 pub mod hardware_monitor;
 pub mod market_tracker;
@@ -138,6 +139,13 @@ impl SunRegistry {
             3600,
             api_cost_monitor::execute,
         ); // 1h
+        registry.register(
+            "engine_watchdog",
+            "Engine Watchdog",
+            "S",
+            900,
+            engine_watchdog::execute,
+        ); // 15 min — a quiet engine must name itself within one refresh-multiple
            // T = Technical Moats module
         registry.register(
             "tech_moat_scanner",
@@ -397,6 +405,50 @@ fn store_sun_run(sun_id: &str, module_id: &str, result: &SunResult, duration_ms:
 
 pub(crate) fn store_sun_alert(sun_id: &str, alert_type: &str, message: &str) {
     if let Ok(conn) = crate::open_db_connection() {
+        store_sun_alert_with(&conn, sun_id, alert_type, message);
+    }
+}
+
+/// Insert-or-refresh a sun alert with a 24-hour dedup window.
+///
+/// Measured live 2026-08-31: `api_cost_monitor` had INSERTed a near-identical
+/// `cost_warning` row every hour — dozens of unacknowledged duplicates saying
+/// "API cost at 96% of daily limit". A standing condition is ONE alert whose
+/// message and timestamp stay current, not a new row per observation.
+///
+/// Rules:
+/// - Same `(sun_id, alert_type)` with an UNACKNOWLEDGED row newer than 24h →
+///   that newest row's `message` + `created_at` are refreshed in place.
+/// - No such row (different type, everything older than 24h, or the standing
+///   row was acknowledged) → a fresh row. Acknowledged rows are deliberately
+///   never refreshed: the user has dismissed that occurrence, so a recurrence
+///   deserves a new, visible alert instead of silently mutating a dismissed
+///   one.
+///
+/// Split from [`store_sun_alert`] so the dedup contract is testable against
+/// an in-memory connection.
+pub(crate) fn store_sun_alert_with(
+    conn: &rusqlite::Connection,
+    sun_id: &str,
+    alert_type: &str,
+    message: &str,
+) {
+    let refreshed = conn
+        .execute(
+            "UPDATE sun_alerts
+             SET message = ?3, created_at = datetime('now')
+             WHERE id = (
+                 SELECT id FROM sun_alerts
+                 WHERE sun_id = ?1 AND alert_type = ?2
+                   AND acknowledged = 0
+                   AND created_at >= datetime('now', '-24 hours')
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT 1
+             )",
+            params![sun_id, alert_type, message],
+        )
+        .unwrap_or(0);
+    if refreshed == 0 {
         let _ = conn.execute(
             "INSERT INTO sun_alerts (sun_id, alert_type, message) VALUES (?1, ?2, ?3)",
             params![sun_id, alert_type, message],
@@ -423,6 +475,7 @@ mod tests {
     }
 
     sun_smoke_test!(smoke_uptime, uptime_monitor);
+    sun_smoke_test!(smoke_engine_watchdog, engine_watchdog);
     sun_smoke_test!(smoke_hardware, hardware_monitor);
     sun_smoke_test!(smoke_price_tracker, price_tracker);
     sun_smoke_test!(smoke_market_tracker, market_tracker);
@@ -435,10 +488,10 @@ mod tests {
 
     // Test registry construction and behavior
     #[test]
-    fn test_registry_has_10_suns() {
+    fn test_registry_has_11_suns() {
         let registry = SunRegistry::new();
         let statuses = registry.get_statuses();
-        assert_eq!(statuses.len(), 10, "Expected 10 registered suns");
+        assert_eq!(statuses.len(), 11, "Expected 11 registered suns");
     }
 
     #[test]
@@ -490,11 +543,11 @@ mod tests {
         let mut registry = SunRegistry::new();
         // First tick: all suns are due (never run before)
         let results = registry.tick();
-        // All 10 enabled suns should run
+        // All 11 enabled suns should run
         assert_eq!(
             results.len(),
-            10,
-            "All 10 suns should execute on first tick"
+            11,
+            "All 11 suns should execute on first tick"
         );
         for (id, result) in &results {
             assert!(
@@ -513,8 +566,8 @@ mod tests {
         // uptime_monitor should NOT be in results
         let uptime_ran = results.iter().any(|(id, _)| id == "uptime_monitor");
         assert!(!uptime_ran, "Disabled sun should not execute on tick");
-        // Should have 9 results (10 - 1 disabled)
-        assert_eq!(results.len(), 9, "Should execute 9 of 10 suns");
+        // Should have 10 results (11 - 1 disabled)
+        assert_eq!(results.len(), 10, "Should execute 10 of 11 suns");
     }
 
     #[test]
@@ -537,5 +590,116 @@ mod tests {
         let mut registry = SunRegistry::new();
         let result = registry.execute_one("nonexistent_sun");
         assert!(result.is_none(), "Unknown sun ID should return None");
+    }
+
+    // ------------------------------------------------------------------
+    // store_sun_alert dedup (2026-08-31 audit: hourly cost_warning spam)
+    // ------------------------------------------------------------------
+
+    fn alerts_conn() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        // Mirrors the Phase-15 migration DDL for sun_alerts.
+        conn.execute_batch(
+            "CREATE TABLE sun_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sun_id TEXT NOT NULL,
+                alert_type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                acknowledged INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn alert_rows(conn: &rusqlite::Connection) -> Vec<(String, String, String, i64)> {
+        let mut stmt = conn
+            .prepare("SELECT sun_id, alert_type, message, acknowledged FROM sun_alerts ORDER BY id")
+            .unwrap();
+        let rows = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap();
+        rows.map(Result::unwrap).collect()
+    }
+
+    /// The live-audit failure shape: the same standing condition reported on
+    /// every hourly tick must stay ONE row whose message and timestamp track
+    /// the latest observation.
+    #[test]
+    fn repeated_alert_refreshes_one_row_instead_of_inserting() {
+        let conn = alerts_conn();
+        store_sun_alert_with(
+            &conn,
+            "api_cost_monitor",
+            "cost_warning",
+            "API cost at 96% (48c / 50c)",
+        );
+        store_sun_alert_with(
+            &conn,
+            "api_cost_monitor",
+            "cost_warning",
+            "API cost at 98% (49c / 50c)",
+        );
+        store_sun_alert_with(
+            &conn,
+            "api_cost_monitor",
+            "cost_warning",
+            "API cost at 106% (53c / 50c)",
+        );
+
+        let rows = alert_rows(&conn);
+        assert_eq!(rows.len(), 1, "a standing condition is ONE alert");
+        assert_eq!(
+            rows[0].2, "API cost at 106% (53c / 50c)",
+            "message tracks the latest observation"
+        );
+    }
+
+    /// A different alert_type (or sun) is a different condition — fresh row.
+    #[test]
+    fn different_type_or_sun_inserts_fresh_rows() {
+        let conn = alerts_conn();
+        store_sun_alert_with(&conn, "api_cost_monitor", "cost_warning", "96%");
+        store_sun_alert_with(&conn, "api_cost_monitor", "failure", "boom");
+        store_sun_alert_with(&conn, "engine_watchdog", "cost_warning", "unrelated");
+        assert_eq!(alert_rows(&conn).len(), 3);
+    }
+
+    /// Outside the 24h window the same condition is news again.
+    #[test]
+    fn stale_alert_row_gets_a_fresh_insert() {
+        let conn = alerts_conn();
+        conn.execute(
+            "INSERT INTO sun_alerts (sun_id, alert_type, message, created_at)
+             VALUES ('api_cost_monitor', 'cost_warning', 'old', datetime('now', '-25 hours'))",
+            [],
+        )
+        .unwrap();
+        store_sun_alert_with(&conn, "api_cost_monitor", "cost_warning", "new");
+        let rows = alert_rows(&conn);
+        assert_eq!(rows.len(), 2, "a >24h-old row is not refreshed");
+        assert_eq!(rows[0].2, "old", "the stale row is left as history");
+        assert_eq!(rows[1].2, "new");
+    }
+
+    /// An acknowledged alert is a dismissed occurrence: a recurrence must
+    /// produce a NEW visible row, never silently mutate the dismissed one.
+    #[test]
+    fn acknowledged_rows_are_never_refreshed() {
+        let conn = alerts_conn();
+        store_sun_alert_with(&conn, "api_cost_monitor", "cost_warning", "first");
+        conn.execute("UPDATE sun_alerts SET acknowledged = 1", [])
+            .unwrap();
+        store_sun_alert_with(&conn, "api_cost_monitor", "cost_warning", "again");
+
+        let rows = alert_rows(&conn);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            (rows[0].2.as_str(), rows[0].3),
+            ("first", 1),
+            "dismissed row untouched"
+        );
+        assert_eq!((rows[1].2.as_str(), rows[1].3), ("again", 0));
     }
 }

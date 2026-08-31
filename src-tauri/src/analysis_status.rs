@@ -719,19 +719,18 @@ async fn analyze_cached_content_inner_impl(
         // stays partial — flagged via `full_display` so it can never REPLACE
         // the shared feed, only merge into it frontend-side.
         let scored_ids: std::collections::HashSet<u64> = new_results.iter().map(|r| r.id).collect();
-        // The differential path runs NO dedup or clustering stage, so every
-        // item it scored is still in `new_results` — the evaluated set and the
-        // survivor set are the same here. Captured before the merge because
-        // `prev` below swallows `new_results`.
+        // Captured BEFORE the merge because it swallows `new_results` — and
+        // before the merge's dedup, deliberately: `evaluated` is what the
+        // scorer judged this run, while the merged set below is the display
+        // survivors, which the URL/title dedup can shrink (a duplicate the
+        // dedup drops still persists its evidence + version stamp via this
+        // set — see `persist_cycle_results` and the 2026-08-27 drain fix).
         let evaluated: Vec<crate::analysis::analysis_cycle::EvaluatedItem> = new_results
             .iter()
             .map(crate::analysis::analysis_cycle::EvaluatedItem::from)
             .collect();
-        let full_display = previous_results.is_some();
-        let mut prev = previous_results.unwrap_or_default();
-        prev.retain(|r| !scored_ids.contains(&r.id));
-        prev.extend(new_results);
-        scoring::sort_results(&mut prev);
+        let (full_display, prev) =
+            merge_differential_results(previous_results, new_results, &scored_ids);
 
         let relevant_count = prev.iter().filter(|r| r.relevant && !r.excluded).count();
         let excluded_count = prev.iter().filter(|r| r.excluded).count();
@@ -823,6 +822,33 @@ async fn analyze_cached_content_inner_impl(
         "Cache-first analysis finished"
     );
     Ok(CycleResults::full_from_batch(batch))
+}
+
+/// Merge the carried-over previous results (display state) with this run's
+/// newly scored rows, then run the canonical post-scoring dedup
+/// (`scoring::dedup_results`: grounded-first sort + URL identity via
+/// `normalize_result_url` + exact-title identity).
+///
+/// The differential path historically ran NO dedup here (by design comment),
+/// so the same story re-fetched under a new `source_items` id — HN + Lobsters,
+/// or a second HN row for the same URL — stacked up across cycles: the
+/// 2026-08-31 live audit found one URL rendered as THREE consecutive Key
+/// Signals rows. The full pass has always deduped its survivor set; this
+/// makes the differential merge behave identically. A newly scored row that
+/// loses its URL/title identity to a kept copy still persists its evidence
+/// and pipeline-version stamp via the `evaluated` set (captured pre-merge);
+/// only rank/verdict are batch-relative, exactly as on the full pass.
+pub(crate) fn merge_differential_results(
+    previous_results: Option<Vec<SourceRelevance>>,
+    new_results: Vec<SourceRelevance>,
+    scored_ids: &std::collections::HashSet<u64>,
+) -> (bool, Vec<SourceRelevance>) {
+    let full_display = previous_results.is_some();
+    let mut merged = previous_results.unwrap_or_default();
+    merged.retain(|r| !scored_ids.contains(&r.id));
+    merged.extend(new_results);
+    scoring::dedup_results(&mut merged);
+    (full_display, merged)
 }
 
 /// Cancel a running analysis

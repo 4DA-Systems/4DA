@@ -5,6 +5,9 @@
 mod analysis_dedup;
 pub(crate) use analysis_dedup::*;
 
+#[path = "advisor_memo.rs"]
+mod advisor_memo;
+
 use tracing::{debug, info, warn};
 
 use crate::{emit_progress, get_database, get_settings_manager, scoring, SourceRelevance};
@@ -421,9 +424,54 @@ pub(crate) async fn apply_llm_reranking(
     let advisor_prompt_version = core.prompt_version();
     let advisor_calibration_id = core.calibration_id();
 
+    // ── Judgment memo: replay before re-billing ─────────────────────────
+    // A fresh-enough stored judgment from the SAME model identity + prompt
+    // version replays through the reconciler below instead of costing an
+    // API call. Measured before this existed: 42% of rerank judgments were
+    // re-judgments of an unchanged top band. See `advisor_memo`.
+    let candidate_ids: Vec<i64> = candidates
+        .iter()
+        .filter_map(|(id, _, _)| id.parse::<i64>().ok())
+        .collect();
+    let memoized: std::collections::HashMap<i64, advisor_memo::MemoizedJudgment> = {
+        let conn = db.conn.lock();
+        advisor_memo::load_fresh(
+            &conn,
+            &candidate_ids,
+            &identity_hash,
+            advisor_prompt_version,
+        )
+    };
+
+    let (to_judge, replayable): (Vec<_>, Vec<_>) =
+        candidates
+            .into_iter()
+            .partition(|(id, _, _)| match id.parse::<i64>() {
+                Ok(n) => !memoized.contains_key(&n),
+                // An unparseable id can't be memo-keyed — always judge it fresh.
+                Err(_) => true,
+            });
+
+    let replayed_judgments: Vec<crate::llm::RelevanceJudgment> = replayable
+        .iter()
+        .filter_map(|(id, _, _)| {
+            let m = memoized.get(&id.parse::<i64>().ok()?)?;
+            Some(crate::llm::RelevanceJudgment {
+                item_id: id.clone(),
+                // Mirrors the judge's own score→relevant mapping
+                // (score >= 3 of 5 ⇔ confidence >= 0.6).
+                relevant: m.confidence >= 0.6,
+                confidence: m.confidence,
+                raw_confidence: Some(m.raw_score),
+                reasoning: m.reasoning.clone(),
+                key_connections: vec![],
+            })
+        })
+        .collect();
+
     // Split into batches of 8 for better LLM accuracy
     const LLM_BATCH_SIZE: usize = 8;
-    let batches: Vec<Vec<(String, String, String)>> = candidates
+    let batches: Vec<Vec<(String, String, String)>> = to_judge
         .chunks(LLM_BATCH_SIZE)
         .map(
             <[(
@@ -436,7 +484,7 @@ pub(crate) async fn apply_llm_reranking(
 
     let total_batches = batches.len();
     let total_candidates = batches.iter().map(std::vec::Vec::len).sum::<usize>();
-    let mut all_judgments = Vec::new();
+    let mut fresh_judgments = Vec::new();
     let mut total_input: u64 = 0;
     let mut total_output: u64 = 0;
 
@@ -451,7 +499,7 @@ pub(crate) async fn apply_llm_reranking(
                 total_batches,
                 batch.len()
             ),
-            all_judgments.len(),
+            fresh_judgments.len(),
             total_candidates,
         );
 
@@ -463,7 +511,7 @@ pub(crate) async fn apply_llm_reranking(
             Ok(validated) => {
                 total_input += validated.value.input_tokens;
                 total_output += validated.value.output_tokens;
-                all_judgments.extend(validated.value.judgments);
+                fresh_judgments.extend(validated.value.judgments);
             }
             Err(e) => {
                 warn!(target: "4da::rerank", batch = batch_idx, error = %e, "LLM batch failed, continuing");
@@ -471,7 +519,7 @@ pub(crate) async fn apply_llm_reranking(
         }
     }
 
-    if all_judgments.is_empty() {
+    if fresh_judgments.is_empty() && replayed_judgments.is_empty() {
         return RerankOutcome::Skipped(RerankSkip::NoJudgments);
     }
 
@@ -481,15 +529,43 @@ pub(crate) async fn apply_llm_reranking(
     // flattened it. Applying ±0.15 adjustments from a non-discriminating
     // advisor moves the whole feed uniformly, and persisting its samples
     // poisons the next curve fit. Discard the pass entirely.
-    if rerank_pass_is_uniform(&all_judgments) {
+    //
+    // The breaker inspects FRESH judgments only: its job is catching an
+    // advisor that is broken NOW, and replayed judgments already passed the
+    // breaker in the pass that produced them.
+    if rerank_pass_is_uniform(&fresh_judgments) {
         warn!(
             target: "4da::rerank",
-            judged = all_judgments.len(),
-            uniform_confidence = all_judgments[0].confidence,
+            judged = fresh_judgments.len(),
+            uniform_confidence = fresh_judgments[0].confidence,
             "LLM judge returned one identical score for every item — discarding rerank pass (non-discriminating advisor)"
         );
         return RerankOutcome::Skipped(RerankSkip::NonDiscriminating);
     }
+
+    // Memoize the surviving fresh judgments (never a discarded pass), then
+    // merge with the replays for one uniform downstream loop.
+    if !fresh_judgments.is_empty() {
+        let memo_rows: Vec<(i64, f32, f32, &str)> = fresh_judgments
+            .iter()
+            .filter_map(|j| {
+                Some((
+                    j.item_id.parse::<i64>().ok()?,
+                    j.raw_confidence.unwrap_or(j.confidence),
+                    j.confidence,
+                    j.reasoning.as_str(),
+                ))
+            })
+            .collect();
+        let conn = db.conn.lock();
+        let stored = advisor_memo::store(&conn, &identity_hash, advisor_prompt_version, &memo_rows);
+        debug!(target: "4da::rerank", stored, "Memoized fresh rerank judgments");
+    }
+
+    let fresh_ids: std::collections::HashSet<String> =
+        fresh_judgments.iter().map(|j| j.item_id.clone()).collect();
+    let mut all_judgments = fresh_judgments;
+    all_judgments.extend(replayed_judgments);
 
     // Legacy-path counters (reconciler_enabled=false): judgment.relevant
     // hard-accepts/hard-rejects. Zero in the reconciler path.
@@ -564,25 +640,32 @@ pub(crate) async fn apply_llm_reranking(
                 breakdown.advisor_signals.push(advisor_signal.clone());
             }
 
-            // Queue a persisted provenance row for this judgment.
-            provenance_rows.push(
-                crate::provenance::Provenance::new(
-                    crate::provenance::ArtifactKind::Rerank,
-                    judgment.item_id.clone(),
-                    &advisor_identity,
-                    "judge",
-                )
-                .with_prompt_version(advisor_prompt_version),
-            );
+            // Provenance + calibration samples are stamped for FRESH
+            // judgments only. A replayed judgment was stamped by the pass
+            // that produced it — re-stamping would double-count the sample
+            // and feed the calibration fitter its own output (2026-08-11
+            // incident class).
+            if fresh_ids.contains(&judgment.item_id) {
+                // Queue a persisted provenance row for this judgment.
+                provenance_rows.push(
+                    crate::provenance::Provenance::new(
+                        crate::provenance::ArtifactKind::Rerank,
+                        judgment.item_id.clone(),
+                        &advisor_identity,
+                        "judge",
+                    )
+                    .with_prompt_version(advisor_prompt_version),
+                );
 
-            // Phase 5b.2: queue a calibration sample. Provenance records
-            // WHICH model judged the item; this table records WHAT score
-            // it gave — the fitter needs the score to produce a curve.
-            // We use `result.id` (the source_items row id) rather than
-            // `judgment.item_id` (the string form) so the fitter can
-            // join directly to `interactions.source_item_id` without
-            // parsing.
-            calibration_samples_batch.push((result.id as i64, advisor_signal.clone()));
+                // Phase 5b.2: queue a calibration sample. Provenance records
+                // WHICH model judged the item; this table records WHAT score
+                // it gave — the fitter needs the score to produce a curve.
+                // We use `result.id` (the source_items row id) rather than
+                // `judgment.item_id` (the string form) so the fitter can
+                // join directly to `interactions.source_item_id` without
+                // parsing.
+                calibration_samples_batch.push((result.id as i64, advisor_signal.clone()));
+            }
 
             if rerank_config.reconciler_enabled {
                 // ── Phase 2 path: bounded reconciler ──────────────────
@@ -757,6 +840,8 @@ pub(crate) async fn apply_llm_reranking(
     // zero in the path that doesn't apply — one line covers both cases.
     info!(target: "4da::rerank",
         judged = all_judgments.len(),
+        fresh = fresh_ids.len(),
+        replayed = all_judgments.len() - fresh_ids.len(),
         reconciler_enabled = rerank_config.reconciler_enabled,
         // Reconciler-path buckets
         agreed = reconciled_agreed,

@@ -469,8 +469,8 @@ mod tests {
 
         let file = File::create(&zip_path).unwrap();
         let mut zip = zip::ZipWriter::new(file);
-        let options =
-            zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
 
         zip.start_file("readme.txt", options).unwrap();
         zip.write_all(b"This is a test README file.").unwrap();
@@ -542,7 +542,7 @@ mod tests {
         {
             let file = File::create(&zip_path).unwrap();
             let mut zip = zip::ZipWriter::new(file);
-            let options = zip::write::FileOptions::default()
+            let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated)
                 .compression_level(Some(1));
 

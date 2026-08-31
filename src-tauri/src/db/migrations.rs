@@ -1324,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 115;
+        const TARGET_VERSION: i64 = 116;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5219,6 +5219,49 @@ impl Database {
                             edges_before = before,
                             edges_after = after,
                             "Phase 114: dependency_edges deduplicated (one row per logical edge); dep epoch hash relocated to kv_store"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 116: advisor judgment memo — the rerank judge's working
+            // memory. Measured 2026-08-31 on the live corpus: 42% of rerank
+            // judgments over 48h (808 rows / 466 distinct items / 17 passes)
+            // re-judged items an earlier pass had already judged with the
+            // SAME model and prompt — identical inputs, identical verdicts,
+            // real API spend. One row per (item, model identity, prompt
+            // version), newest judgment wins; `analysis_rerank` replays a
+            // fresh-enough row through the reconciler instead of re-billing
+            // it, and the freed budget rotates to items never judged before.
+            // Replays deliberately do NOT re-stamp provenance or calibration
+            // samples (2026-08-11 doctrine: never feed a signal its own
+            // output). ON DELETE CASCADE follows the Phase 115 precedent.
+            if current_version < 116 {
+                Self::run_versioned_migration(
+                    &conn,
+                    115,
+                    116,
+                    "Phase 116: advisor_judgments memo table",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS advisor_judgments (
+                                source_item_id INTEGER NOT NULL,
+                                identity_hash TEXT NOT NULL,
+                                prompt_version TEXT NOT NULL,
+                                raw_score REAL NOT NULL,
+                                confidence REAL NOT NULL,
+                                reasoning TEXT NOT NULL DEFAULT '',
+                                judged_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                PRIMARY KEY (source_item_id, identity_hash, prompt_version),
+                                FOREIGN KEY (source_item_id) REFERENCES source_items(id) ON DELETE CASCADE
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_advisor_judgments_judged_at
+                                ON advisor_judgments(judged_at);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 116: advisor_judgments created — rerank judgments persist and replay instead of re-billing"
                         );
                         Ok(())
                     },

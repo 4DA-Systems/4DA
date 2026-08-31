@@ -11,14 +11,16 @@
 //! - The team key is encrypted per-member using X25519 for distribution
 
 use anyhow::{bail, Context, Result};
-// NOTE on the two RNG generations in this file. `chacha20poly1305` 0.11 sits on
-// `aead` 0.6 / `crypto-common` 0.2, which dropped the `aead::OsRng` re-export
-// and `AeadCore::generate_nonce` in favour of the `Generate` trait (backed by
-// the system CSPRNG via getrandom, which `chacha20poly1305`'s default features
-// enable). `x25519-dalek` 2.x still pins `rand_core` 0.6, so its
-// `random_from_rng` needs `rand` 0.8's `OsRng` — the two are NOT
-// interchangeable. Both paths are system CSPRNGs; this is an API migration,
-// not a change in randomness source or strength.
+// NOTE on RNG sourcing in this file. `chacha20poly1305` 0.11 sits on `aead`
+// 0.6 / `crypto-common` 0.2, which dropped the `aead::OsRng` re-export and
+// `AeadCore::generate_nonce` in favour of the `Generate` trait (backed by the
+// system CSPRNG via getrandom, which `chacha20poly1305`'s default features
+// enable). `x25519-dalek` 3.x left the old `rand_core` 0.6 generation behind
+// too: keypair generation now uses `StaticSecret::random()` (the crate's
+// `getrandom` feature), which draws from the same system CSPRNG directly.
+// `generate_team_key` still fills from `rand` 0.8's `OsRng` — also the system
+// CSPRNG. All paths are OS-entropy; these are API migrations, not a change in
+// randomness source or strength.
 use chacha20poly1305::{
     aead::{Aead, Generate, KeyInit},
     XChaCha20Poly1305, XNonce,
@@ -78,8 +80,9 @@ pub struct StorableKeypair {
 impl TeamCrypto {
     /// Generate a new X25519 keypair for this team member.
     pub fn generate() -> Self {
-        // `rand` 0.8's OsRng: x25519-dalek 2.x is on rand_core 0.6.
-        let secret = StaticSecret::random_from_rng(rand::rngs::OsRng);
+        // x25519-dalek 3.x: `random()` (getrandom feature) replaces
+        // `random_from_rng(rand 0.8 OsRng)` — same system CSPRNG.
+        let secret = StaticSecret::random();
         let public = PublicKey::from(&secret);
 
         info!(target: "4da::team_crypto", "Generated new X25519 keypair");

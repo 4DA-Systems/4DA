@@ -39,6 +39,13 @@ use crate::prompt_safety::wrap_untrusted_item;
 use crate::settings::LLMProvider;
 use tracing::debug;
 
+/// Pending-verdict drain (2026-08-31 live audit) — declared here rather than
+/// in `lib.rs` because the drain is judge infrastructure: it re-judges the
+/// starved deferred-flip backlog on the same cheap sibling model
+/// [`judge_provider`] routes bulk judge work to.
+#[path = "llm_judge_drain.rs"]
+pub(crate) mod drain;
+
 /// Stable version identifier for the judge's prompt. Bump whenever the
 /// rubric, delimiting rules, or output schema change in a way that would
 /// invalidate a prior model's calibration curve. Stored on every

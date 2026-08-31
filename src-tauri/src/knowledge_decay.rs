@@ -1274,6 +1274,9 @@ impl KnowledgeGap {
                 other_build_target: false,
                 // Not an upgrade-plan step (Phase 1 dep plan).
                 upgrade_plan: false,
+                // Decay gaps track ENGAGEMENT drift, not signal availability —
+                // the zero-signal-coverage classification never applies here.
+                no_coverage: false,
             },
             created_at: chrono::Utc::now().timestamp_millis(),
             expires_at: None,

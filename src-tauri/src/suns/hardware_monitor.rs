@@ -18,18 +18,14 @@ pub fn execute() -> SunResult {
         let cpu_output = run_cmd("powershell -NoProfile -Command \"Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name\"")
             .or_else(|_| run_cmd("wmic cpu get name,numberofcores /format:list"));
         if let Ok(output) = cpu_output {
-            crate::sovereign_profile::store_facts_from_execution(
-                "cpu info",
-                &output,
-                "sun:hardware",
-            );
+            crate::sovereign_facts::store_facts_from_execution("cpu info", &output, "sun:hardware");
             facts_found += 1;
         }
 
         let mem_output = run_cmd("powershell -NoProfile -Command \"(Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum\"")
             .or_else(|_| run_cmd("wmic memorychip get capacity /format:list"));
         if let Ok(output) = mem_output {
-            crate::sovereign_profile::store_facts_from_execution(
+            crate::sovereign_facts::store_facts_from_execution(
                 "memory info",
                 &output,
                 "sun:hardware",
@@ -40,7 +36,7 @@ pub fn execute() -> SunResult {
         let disk_output = run_cmd("powershell -NoProfile -Command \"Get-CimInstance Win32_DiskDrive | Select-Object -Property Size,Model | Format-List\"")
             .or_else(|_| run_cmd("wmic diskdrive get size,model /format:list"));
         if let Ok(output) = disk_output {
-            crate::sovereign_profile::store_facts_from_execution(
+            crate::sovereign_facts::store_facts_from_execution(
                 "disk info",
                 &output,
                 "sun:hardware",
@@ -55,17 +51,13 @@ pub fn execute() -> SunResult {
         let cpu_output = run_cmd("lscpu | grep 'Model name'")
             .or_else(|_| run_cmd("nproc").map(|n| format!("CPU cores: {}", n.trim())));
         if let Ok(output) = cpu_output {
-            crate::sovereign_profile::store_facts_from_execution(
-                "cpu info",
-                &output,
-                "sun:hardware",
-            );
+            crate::sovereign_facts::store_facts_from_execution("cpu info", &output, "sun:hardware");
             facts_found += 1;
         }
 
         // Memory info
         if let Ok(output) = run_cmd("free -h") {
-            crate::sovereign_profile::store_facts_from_execution(
+            crate::sovereign_facts::store_facts_from_execution(
                 "memory info",
                 &output,
                 "sun:hardware",
@@ -75,7 +67,7 @@ pub fn execute() -> SunResult {
 
         // Disk info (physical drives with size and model)
         if let Ok(output) = run_cmd("lsblk -d -o NAME,SIZE,MODEL --noheadings") {
-            crate::sovereign_profile::store_facts_from_execution(
+            crate::sovereign_facts::store_facts_from_execution(
                 "disk info",
                 &output,
                 "sun:hardware",
@@ -85,11 +77,7 @@ pub fn execute() -> SunResult {
 
         // GPU info (VGA/3D/display controllers)
         if let Ok(output) = run_cmd("lspci | grep -iE 'vga|3d|display'") {
-            crate::sovereign_profile::store_facts_from_execution(
-                "gpu info",
-                &output,
-                "sun:hardware",
-            );
+            crate::sovereign_facts::store_facts_from_execution("gpu info", &output, "sun:hardware");
             facts_found += 1;
         }
     }
@@ -97,7 +85,7 @@ pub fn execute() -> SunResult {
     #[cfg(target_os = "macos")]
     {
         if let Ok(output) = run_cmd("sysctl -n hw.ncpu") {
-            crate::sovereign_profile::store_facts_from_execution(
+            crate::sovereign_facts::store_facts_from_execution(
                 "sysctl -n hw.ncpu",
                 &output,
                 "sun:hardware",
@@ -105,7 +93,7 @@ pub fn execute() -> SunResult {
             facts_found += 1;
         }
         if let Ok(output) = run_cmd("sysctl -n hw.memsize") {
-            crate::sovereign_profile::store_facts_from_execution(
+            crate::sovereign_facts::store_facts_from_execution(
                 "sysctl -n hw.memsize",
                 &output,
                 "sun:hardware",

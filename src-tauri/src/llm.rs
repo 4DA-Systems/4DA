@@ -141,39 +141,51 @@ fn record_ai_usage(provider: &str, model: &str, task_type: &str, tokens_in: u64,
 /// UTC. Best-effort: any failure leaves the counters unseeded, which is the
 /// pre-existing behavior.
 pub(crate) fn seed_daily_usage_from_db() {
-    let Ok(conn) = crate::open_db_connection() else {
-        return;
-    };
+    if let Some((tokens, millicents)) = todays_persisted_usage() {
+        if tokens > 0 || millicents > 0 {
+            crate::state::seed_llm_daily_usage(tokens, millicents);
+        }
+    }
+}
 
-    let Some(local_midnight) = chrono::Local::now()
+/// Today's `(total_tokens, cost_millicents)` from the persisted `ai_usage`
+/// table — [local midnight → now], matching the daily ledger's reset window.
+///
+/// This is the only cross-process view of the day's spend: the in-memory
+/// counters are per-process, so the GUI's counters don't see what
+/// `fourda-engine` spent since the last seed (and vice versa). Consumers:
+/// the startup seeding above and the `api_cost_monitor` sun — which, until
+/// 2026-08-31, read the settings-manager usage ledger that only rerank and
+/// cloud-embedding calls feed, so its hourly "96% of daily limit" alerts
+/// were rerank-spend measured against the rerank limit while the actual
+/// global bill went unwatched. `None` = unreadable, never fabricated zeros.
+pub(crate) fn todays_persisted_usage() -> Option<(u64, u64)> {
+    let conn = crate::open_db_connection().ok()?;
+
+    let local_midnight = chrono::Local::now()
         .date_naive()
         .and_hms_opt(0, 0, 0)
-        .and_then(|naive| naive.and_local_timezone(chrono::Local).earliest())
-    else {
-        return;
-    };
+        .and_then(|naive| naive.and_local_timezone(chrono::Local).earliest())?;
     let since_utc = local_midnight
         .with_timezone(&chrono::Utc)
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
 
-    let row = conn.query_row(
-        "SELECT COALESCE(SUM(tokens_in + tokens_out), 0), COALESCE(SUM(estimated_cost_usd), 0.0)
-         FROM ai_usage WHERE created_at >= ?1",
-        rusqlite::params![since_utc],
-        |row| {
-            let tokens: i64 = row.get(0)?;
-            let cost_usd: f64 = row.get(1)?;
-            Ok((tokens, cost_usd))
-        },
-    );
+    let (tokens, cost_usd) = conn
+        .query_row(
+            "SELECT COALESCE(SUM(tokens_in + tokens_out), 0), COALESCE(SUM(estimated_cost_usd), 0.0)
+             FROM ai_usage WHERE created_at >= ?1",
+            rusqlite::params![since_utc],
+            |row| {
+                let tokens: i64 = row.get(0)?;
+                let cost_usd: f64 = row.get(1)?;
+                Ok((tokens, cost_usd))
+            },
+        )
+        .ok()?;
 
-    if let Ok((tokens, cost_usd)) = row {
-        if tokens > 0 || cost_usd > 0.0 {
-            let millicents = (cost_usd * 100_000.0).max(0.0).round() as u64;
-            crate::state::seed_llm_daily_usage(tokens.max(0) as u64, millicents);
-        }
-    }
+    let millicents = (cost_usd * 100_000.0).max(0.0).round() as u64;
+    Some((tokens.max(0) as u64, millicents))
 }
 
 // ============================================================================
@@ -261,6 +273,9 @@ impl LLMClient {
                 Self::format_limit_error(tokens_used, tokens_limit, cost_used, cost_limit).into(),
             );
         }
+        // Preflight wall: the check above only catches a budget ALREADY gone;
+        // this refuses the call that would take it there.
+        self.preflight_cost_wall(system, &messages)?;
 
         // Cloud-LLM consent is recorded at configuration time (see
         // SettingsManager::set_llm_provider), where the UI shows the disclosure of
@@ -341,6 +356,7 @@ impl LLMClient {
                 Self::format_limit_error(tokens_used, tokens_limit, cost_used, cost_limit).into(),
             );
         }
+        self.preflight_cost_wall(system, &messages)?;
 
         // Consent is recorded at configuration time, not here — see the note in
         // complete() above.
@@ -957,6 +973,7 @@ impl LLMClient {
                 Self::format_limit_error(tokens_used, tokens_limit, cost_used, cost_limit).into(),
             );
         }
+        self.preflight_cost_wall(system, &messages)?;
 
         let result = match self.provider.provider.as_str() {
             "anthropic" => {
@@ -1057,6 +1074,56 @@ impl LLMClient {
         let lang = crate::i18n::get_user_language();
         parts.push(crate::i18n::t("errors:errorMsg.limitAdjust", &lang, &[]));
         parts.join(". ")
+    }
+
+    /// Estimate what THIS request will cost before it is sent, in millicents,
+    /// from its input size and the ledger's own per-model rates.
+    ///
+    /// Input tokens: the standard ~4-chars-per-token heuristic (the same one
+    /// `llm_stream` uses when a provider omits usage counts), plus a small
+    /// per-message envelope. Output tokens: a third of the input estimate —
+    /// the measured shape of this app's calls (2026-08-31 cost audit: output
+    /// was 62% of a bill priced 5:1 output:input, i.e. ~1 output token per 3
+    /// input) — clamped between 256 and the request's own `max_tokens` cap
+    /// (4096). Returns 0 for unknown models, which the preflight wall treats
+    /// as unpriceable (never blocks) — identical to the recording ledger's
+    /// behavior for those models.
+    fn preflight_estimate_millicents(&self, system: &str, messages: &[Message]) -> u64 {
+        let chars = system.len() + messages.iter().map(|m| m.content.len() + 16).sum::<usize>();
+        let est_input = (chars / 4) as u64;
+        let est_output = (est_input / 3).clamp(256, 4096);
+        self.estimate_cost_millicents(est_input, est_output)
+    }
+
+    /// The preflight cost wall (2026-08-31 audit): refuse a budgeted call
+    /// whose estimated cost would CROSS the daily cap, before any money is
+    /// spent. The post-call ledger kept recording crossings ("106% of daily
+    /// limit") because by the time it ran, the crossing call had already been
+    /// paid for. Translation keeps its documented exemption
+    /// (`complete_for_translation` — infrastructure, never budget-blocked).
+    fn preflight_cost_wall(&self, system: &str, messages: &[Message]) -> Result<()> {
+        let estimated_millicents = self.preflight_estimate_millicents(system, messages);
+        if crate::state::would_exceed_llm_cost_limit(estimated_millicents) {
+            let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
+            warn!(
+                target: "4da::llm",
+                estimated_millicents,
+                cost_used_cents = cost_used,
+                cost_limit_cents = cost_limit,
+                model = %self.provider.model,
+                purpose = self.purpose.unwrap_or("unspecified"),
+                "LLM call skipped — estimated cost would cross the daily cap"
+            );
+            return Err(format!(
+                "Daily AI cost limit would be exceeded: this call is estimated at ~{:.1}c \
+                 with {cost_used}c of {cost_limit}c already spent today. The call was \
+                 skipped before spending anything. Raise the daily cost limit in Settings \
+                 or wait for the daily reset.",
+                estimated_millicents as f64 / 1000.0
+            )
+            .into());
+        }
+        Ok(())
     }
 
     /// Estimate cost in cents based on provider and tokens.
@@ -1177,6 +1244,79 @@ mod tests {
 
         let cost = client.estimate_cost_cents(100_000, 10_000);
         assert_eq!(cost, 0);
+    }
+
+    // ========================================================================
+    // Preflight cost wall (2026-08-31 audit) — request-size estimation
+    // ========================================================================
+
+    fn wall_test_client(provider: &str, model: &str) -> LLMClient {
+        LLMClient::new(LLMProvider {
+            provider: provider.to_string(),
+            api_key: "test".to_string(),
+            model: model.to_string(),
+            base_url: None,
+            openai_api_key: String::new(),
+            embedding_model: String::new(),
+            allow_cloud_embeddings: false,
+        })
+    }
+
+    fn wall_test_messages(content: &str) -> Vec<Message> {
+        vec![Message {
+            role: "user".to_string(),
+            content: content.to_string(),
+        }]
+    }
+
+    /// The preflight estimate is nonzero for a priced cloud model, grows with
+    /// the request, and never dips below the minimum output allowance — an
+    /// estimate of 0 for a priced model would make the wall silently inert.
+    #[test]
+    fn test_preflight_estimate_scales_with_input_and_is_never_zero_for_priced_models() {
+        let client = wall_test_client("anthropic", "claude-haiku-4-5-20251001");
+
+        let small = client.preflight_estimate_millicents("sys", &wall_test_messages("short"));
+        assert!(small > 0, "a priced model must never estimate to zero");
+
+        let big_body = "x".repeat(400_000); // ~100k tokens of input
+        let big = client.preflight_estimate_millicents("sys", &wall_test_messages(&big_body));
+        assert!(
+            big > small * 10,
+            "estimate must scale with request size (small={small}, big={big})"
+        );
+        // ~100k input tokens on Haiku ($1/MTok) is ~10c = 10_000 millicents,
+        // plus a capped output allowance — sanity band, not exact pricing.
+        assert!(
+            (5_000..200_000).contains(&big),
+            "100k-token Haiku estimate out of sane range: {big}"
+        );
+    }
+
+    /// Unknown models and free local models estimate to 0, which the wall
+    /// treats as unpriceable — the documented pre-existing behavior.
+    #[test]
+    fn test_preflight_estimate_is_zero_for_unpriced_models() {
+        let ollama = wall_test_client("ollama", "llama3");
+        assert_eq!(
+            ollama.preflight_estimate_millicents("sys", &wall_test_messages("hello")),
+            0
+        );
+        let unknown = wall_test_client("anthropic", "totally-unknown-model-xyz");
+        assert_eq!(
+            unknown.preflight_estimate_millicents("sys", &wall_test_messages("hello")),
+            0
+        );
+    }
+
+    /// The wall passes an unpriceable call through instead of erroring — the
+    /// gate must fail open for models the registry cannot price.
+    #[test]
+    fn test_preflight_wall_fails_open_for_unpriced_models() {
+        let client = wall_test_client("ollama", "llama3");
+        assert!(client
+            .preflight_cost_wall("sys", &wall_test_messages("hello"))
+            .is_ok());
     }
 
     // ========================================================================

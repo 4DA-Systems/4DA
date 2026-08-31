@@ -534,6 +534,23 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
             skipped = summary.skipped.unwrap_or("none"),
             "Tier-2 LLM pass complete"
         );
+
+        // Step 3b-iii — pending-verdict drain (2026-08-31 audit): the aged
+        // deferred-flip backlog gets its reserved retry slice each cycle —
+        // oldest first, terminal resolution after the retry budget, never a
+        // promotion. Same inline-await reasoning as 3b-ii; bounded (<=1 LLM
+        // call) and budget/BYOK-gated inside.
+        let drain = crate::llm_judge::drain::run_pending_verdict_drain(&db).await;
+        info!(
+            target: "4da::headless",
+            judged = drain.judged,
+            demoted = drain.demoted,
+            confirmed = drain.confirmed,
+            escalated = drain.escalated,
+            exhausted = drain.exhausted,
+            skipped = drain.skipped.unwrap_or("none"),
+            "Pending-verdict drain complete"
+        );
     }
 
     // Step 3c — DB maintenance. Every other caller of `run_scheduled_maintenance` lives in

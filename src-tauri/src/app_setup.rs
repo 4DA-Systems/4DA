@@ -2347,10 +2347,15 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
 
             // Tier-2 LLM passes (judge + content analysis + LlmReject
             // demotions) — non-blocking, budget- and BYOK-gated inside.
+            // Followed by the pending-verdict drain (2026-08-31 audit): the
+            // aged deferred-flip backlog gets its reserved retry slice each
+            // cycle, sequenced after the judge pass so the two never compete
+            // for the same budget headroom in one cycle.
             if let Ok(db) = crate::get_database() {
                 let db = db.clone();
                 tauri::async_runtime::spawn(async move {
                     let _ = crate::llm_judgments::run_post_cycle_llm_passes(&db).await;
+                    let _ = crate::llm_judge::drain::run_pending_verdict_drain(&db).await;
                 });
             }
 
