@@ -284,7 +284,7 @@ pub fn count_matches(db: &Database) -> Result<usize> {
 /// Returns (is_affected, is_confirmed).
 /// - is_affected: true if the version falls within affected ranges (or conservative fallback)
 /// - is_confirmed: true only if we could definitively verify via semver
-fn check_version_affected(
+pub(crate) fn check_version_affected(
     user_version: Option<&str>,
     affected_ranges_json: &Option<String>,
 ) -> (bool, bool) {

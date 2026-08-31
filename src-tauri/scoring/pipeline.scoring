@@ -321,6 +321,59 @@ commodity_ceiling {
     registry_release_ungrounded: 0.35    # [0.20, 0.37]
 }
 
+# Stale published-content discount — evidence from the item's PUBLISHED date.
+# ScoringInput.created_at carries source_items.published_at when the source
+# provides one (analysis paths pass published_at.unwrap_or(created_at)), so a
+# 2023 article fetched in 2026 is measured from 2023. The freshness tiers
+# bottom out at 0.80 for anything older than 30 days, which is why
+# "TypeScript 5.1 Beta is OUT!" (published 2023-04) scored 0.882 into the
+# feed top-25 (2026-08-23 audit). Ramp: 1.0 at <= fresh_months, linear down
+# to stale_floor at >= stale_months. Security advisories are exempt (an old
+# unpatched CVE can still matter); strongly dep-grounded items are softened
+# to grounded_floor instead of the full discount (a 2-year-old deep-dive on
+# YOUR exact stack can still be gold).
+stale_content {
+    fresh_months: 12.0      # [6.0, 24.0]
+    stale_months: 36.0      # [24.0, 60.0]
+    stale_floor: 0.55       # [0.30, 0.80]
+    grounded_floor: 0.80    # [0.60, 0.95]
+    # Superseded release announcements. A release note is time-indexed news:
+    # "TypeScript 5.1 Beta is OUT!" is superseded by definition three years
+    # later, even when typescript IS your dependency — the registry signal is
+    # CURRENT releases of your deps. So the grounded softening (0.80) does NOT
+    # apply to ReleaseNotes past the ramp, and the floor deepens instead.
+    # Live evidence 2026-08-25: that exact item held 0.882 and sat feed-relevant
+    # because dev-dep grounding (v22) lifted its base while grounded_floor kept
+    # the staleness discount shallow.
+    # 0.22 is MEASURED, not guessed: at 0.30 the canonical grounded-stale
+    # release (hc_stale_grounded_release_superseded) landed at 0.381 — under
+    # the 0.40 line, but by 0.019, i.e. INSIDE the 0.03 verdict-reconciliation
+    # epsilon, so it would jitter across the boundary. At 0.22 the same
+    # scenario measures 0.349 (margin 0.051, outside the epsilon) and its
+    # fresh control is untouched at 0.761. The ramp keeps early ages nearly
+    # untouched (13 months ≈ ×0.97), so only genuinely superseded
+    # announcements are crushed.
+    release_floor: 0.22     # [0.15, 0.37]
+    # Age past which a release announcement is CATEGORICALLY superseded and
+    # takes a hard ceiling instead of merely a multiplier. Measured 2026-08-25,
+    # one day after release_floor shipped: the multiplier alone did NOT evict
+    # the class. It cuts the structural term, but a strongly dep-grounded item
+    # has enough dep/interest signal left to stay above the 0.40 line — live,
+    # 18 stale-published items remained feed-relevant with ZERO below the line
+    # ("What's new in axum 0.5" from 2022 still at 0.562 for an axum-0.8 user).
+    # This is the v18/v19 lesson restated: caps applied as CEILINGS hold,
+    # multipliers get out-voted. 24 months = two major-version cycles; it
+    # captures the 2022-2023 offenders while leaving the current major and the
+    # one behind it (axum 0.8 at 20mo, 0.7 at 21mo) to the graduated ramp.
+    superseded_months: 24.0     # [18.0, 48.0]
+    # Ceiling for a superseded release. Mirrors registry_release_ungrounded
+    # (0.35) — and for the same arithmetic reason: score-offset adds ~+0.02 and
+    # the topic-attention boost up to +0.05, so 0.35 + 0.07 = 0.42 would land
+    # ABOVE the 0.40 threshold. That is exactly the v18 incident, which is why
+    # the VERDICT is gated categorically too, not just the score.
+    superseded_ceiling: 0.35    # [0.20, 0.37]
+}
+
 # Community quality signal thresholds - extracted from source metadata
 # (SO score, HN points, Reddit upvotes). Applied as multiplier in Phase 5.
 community_signal {
@@ -336,6 +389,20 @@ community_signal {
 domain_diversity {
     decay: 0.55           # [0.30, 0.80]
     floor: 0.15           # [0.05, 0.30]
+}
+
+# Source-share diversity — no single SOURCE may dominate the feed.
+# domain_diversity keys on URL domain and source_topic_diversity keys on
+# (source, topic), so a federated source posting about many different things
+# escaped both: measured 2026-08-27, mastodon was 243 of 520 curated items
+# (46.7%) and carried the largest absolute error count against the LLM judge
+# (122 disputed vs 43 agreed). Items beyond the cap, weakest first, decay
+# toward the floor rather than being cut, so a genuinely strong item from a
+# dominant source still survives.
+source_share {
+    max_share: 0.30       # [0.15, 0.60]
+    decay: 0.75           # [0.40, 0.95]
+    floor: 0.20           # [0.05, 0.40]
 }
 
 # Score offset normalization — ensures all final scores are positive.

@@ -315,11 +315,7 @@ pub(crate) async fn reembed_all_items() {
 
     // Re-calibrate sigmoid parameters for the new embedding model's distribution.
     if success_count > 0 {
-        if let Ok(db_handle) = crate::state::get_database() {
-            let conn = db_handle.conn.lock();
-            let model = get_embedding_model();
-            crate::embedding_calibration::initialize_calibration(&conn, &model);
-        }
+        crate::embedding_calibration::initialize_calibration(&get_embedding_model());
     }
 }
 

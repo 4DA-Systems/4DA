@@ -209,10 +209,23 @@ jobs:
         # Catches the Vite dep-reshuffle class of failures (see CLAUDE.md
         # "Vite dep updates + running fourda.exe" gotcha). Cheap and
         # identifies module-resolution regressions before they reach prod.
-        # Kill fourda.exe first — self-hosted runner may have it holding port 4444.
-        run: |
-          taskkill /F /IM fourda.exe 2>$null; $true
-          pnpm run validate:vite-smoke
+        #
+        # NEVER add a `taskkill /F /IM fourda.exe` (or any image-name kill)
+        # here. This job runs on the self-hosted dev box: a blanket kill
+        # murders the operator's live app and every agent-launched instance
+        # with exit code exactly 1, silently — no RunEvent::Exit, no panic,
+        # no Event Log record — which is precisely the issue #501 "silent
+        # exit(1)" signature, and it poisoned that investigation for days
+        # (every frontend-touching CI run assassinated whatever fourda.exe
+        # was alive on the box). The kill also bought nothing: fourda.exe is
+        # the vite dev server's CLIENT, never the listener on 4444 (node
+        # holds the port), and this workspace has its own node_modules, so
+        # neither the port nor the .vite/deps cache is shared with the dev
+        # tree. Instead, CI runs the smoke on a dedicated port so the
+        # cold-start never contends with a live dev server at all.
+        env:
+          VITE_SMOKE_PORT: '4445'
+        run: pnpm run validate:vite-smoke
 
       - name: Run tests and verify count floor
         run: |
@@ -360,7 +373,7 @@ jobs:
       # and audited the root only. site/, paddle-webhook/ and mcp-4da-server/
       # each have their own pnpm-lock.yaml and were audited ONLY by the
       # nightly, which cannot block anything. So an advisory in the Cloudflare
-      # payment path (site/functions/api/streets/activate.js) could never fail a
+      # payment path (site/functions/api/license/activate.js) could never fail a
       # PR. When this was written those three lockfiles carried 12, 20 and 4
       # advisories respectively while `Validate Success` stayed green.
       #
@@ -423,6 +436,36 @@ jobs:
       - name: Release channel integrity
         run: node scripts/check-release-channel.cjs
 
+      # AD-030's own gate, which until now ran nowhere. `.ai/RULES.md` and
+      # AGENTS.md both told every agent it was "enforced by
+      # scripts/check-retired-claims.cjs" while nothing invoked it in CI, so the
+      # claim of enforcement was itself unenforced — and it duly broke on main in
+      # #478 without anyone noticing. Node builtins only, no install needed.
+      - name: Retired promise language (AD-030)
+        run: node scripts/check-retired-claims.cjs
+
+      # The check above scans `git ls-files`. A GitHub release body is not a
+      # tracked file, so it sat outside every gate — and the v1.0.0 notes, which
+      # 4da.ai/download links every visitor to, still carried two retired claims
+      # four months after AD-030. The repo was clean; the shopfront was not.
+      - name: Retired promise language on published releases (AD-030)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-release-notes-claims.cjs
+
+      # pnpm 11 does not read the `pnpm` field in package.json — it warns and
+      # carries on. 69 security overrides live there. Bumping the pin would
+      # resolve every held package back to its vulnerable version and green-pass.
+      - name: pnpm security overrides are still honoured by the pinned pnpm
+        run: node scripts/check-pnpm-overrides.cjs
+
+      # NETWORK.md promises git history and file contents never leave the
+      # machine. On 2026-08-28 the reranker was sending the five most recent
+      # commit messages to the configured cloud LLM, on by default. Nothing
+      # tested the promise, which was the real defect.
+      - name: Raw local content stays local (NETWORK.md)
+        run: node scripts/check-privacy-egress.cjs
+
       - name: Guard self-tests (scripts/*.test.cjs)
         # The guards above have their OWN unit tests, and until now those ran in
         # no hook and no workflow — nothing verified the guards still detect
@@ -473,12 +516,14 @@ jobs:
     # the local pre-push gate. cargo-audit/deny use prebuilt binaries (taiki-e) to skip
     # a ~3-min source compile each.
     runs-on: ubuntu-latest
-    # 45, not 30: this job now compiles the integration test targets too (see
-    # the compile-gate step). Swatinem's cache is only saved from main, so until
-    # this change lands there, PR runs restore a cache with no integration-test
-    # artifacts in it and pay the full cold link for 5 extra binaries. 30 was
-    # too tight for that first window and a timeout here is a red required gate.
-    timeout-minutes: 45
+    # 60, not 30: this job now compiles the integration test targets too (see
+    # the compile-gate step), and the default leg additionally builds the lib
+    # once more under `--features calibrated-sim` for the real-embedding gate
+    # (feature unification forces a fourda-crate recompile; the dep graph stays
+    # cached). Swatinem's cache is only saved from main, so PR runs right after
+    # a scope change pay the full cold link. A timeout here is a red required
+    # gate, so the cap holds headroom for the cold-cache window.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -518,6 +563,18 @@ jobs:
       - name: Install Linux system dependencies (tauri / webkit)
         working-directory: .
         run: |
+          # The GitHub-hosted runner images ship third-party apt sources that
+          # 4DA does not use — Azure CLI and microsoft-prod among them — and
+          # `apt-get update` fails WHOLESALE when any single one is unreachable.
+          # On 2026-08-28 packages.microsoft.com returned 403 for the `noble`
+          # azure-cli repo and killed the Rust job at 14 seconds, before a line
+          # of 4DA compiled. The identical step passed on ubuntu-22.04 in the
+          # same run, which is what localised it to the image's extra sources.
+          # gtk/webkit come from Ubuntu's own repos, so drop the rest first.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
 
@@ -624,6 +681,53 @@ jobs:
           fi
           rm -f test-output.txt
 
+      # ── Real-embedding mode (2026-08-23 adversarial audit, items 21/22) ──
+      # Everything above runs the SYNTHETIC embedding suite. That suite was
+      # 699/699 green while real-embedding mode failed 4 persona recall guards
+      # — CI was structurally blind to real-mode regressions because nothing
+      # here ever exercised them. These two steps close that hole on the
+      # default leg only (one leg is enough: the calibrated fixtures are
+      # platform-independent committed .bin files, and the fastembed model is
+      # deterministic ONNX inference).
+      - name: Fetch embedding model + ORT runtime (real-embedding gate)
+        # Same artifacts `pnpm run bundle:resources` fetches (download-ort +
+        # download-embedding-model), invoked directly so this job doesn't need
+        # pnpm. In debug builds the crate resolves src-tauri/models/ as the
+        # bundled dir (runtime_paths::bundled_models_dir), so tests find the
+        # model without any network fallback. Without this fetch the
+        # real-embedding tests would try a HuggingFace download mid-test —
+        # the exact truncated-archive flake class hermetic.yml documented.
+        if: matrix.label == 'default'
+        working-directory: .
+        run: |
+          node scripts/download-ort.cjs
+          node scripts/download-embedding-model.cjs
+
+      - name: Real-embedding calibration + persona sim (CI must SEE real mode)
+        # `--features calibrated-sim` swaps the simulation corpus/interest
+        # embeddings for REAL fastembed fixtures (committed .bin files — see
+        # scoring/simulation/mod.rs), so the 9 persona reality guards assert
+        # against production-grade embedding behavior. The `scoring::` filter
+        # also picks up benchmark_calibration::full_calibration_with_real_
+        # embeddings — the live-model benchmark whose quality-gate ratchet
+        # (benchmark_calibration/quality_gate.rs) pins score-range floors.
+        #
+        # FOURDA_REQUIRE_REAL_EMBEDDINGS=1 is the audit's item-22 guard: with
+        # it set, an unavailable embedding model PANICS instead of printing
+        # "SKIP" and green-passing having measured nothing, and the benchmark
+        # quality-gate ratchet hard-fails instead of soft-warning. This step
+        # can therefore never pass vacuously.
+        if: matrix.label == 'default'
+        env:
+          FOURDA_REQUIRE_REAL_EMBEDDINGS: '1'
+          FOURDA_DATA_DIR: ${{ runner.temp }}/4da-validate-data
+          FOURDA_DB_PATH: ${{ runner.temp }}/4da-validate-data/4da.db
+        # Block scalar on purpose: the trailing `scoring::` ends in a colon,
+        # which is a YAML mapping indicator in a plain scalar and breaks the
+        # whole workflow file if written inline.
+        run: |
+          cargo test --lib --features calibrated-sim scoring::
+
   # ─────────────────────────────────────────────────────────────────────
   # Aggregate gate: a SINGLE status check to require in branch protection.
   # Listing each matrix leg (Rust default / experimental, Frontend, MCP) as a
@@ -649,17 +753,36 @@ jobs:
       - name: Verify all required jobs succeeded
         shell: bash
         run: |
+          # ALLOWLIST, not a denylist. This job is the sole required status check,
+          # so anything it does not recognise must block the merge rather than sail
+          # through. The previous form only caught `failure` and `cancelled`, which
+          # meant every other result passed -- and GitHub emits more values than the
+          # documented four. Observed live on 2026-08-17: a Relay job reported
+          # `abandoned`, the case statement fell through to the success branch, and
+          # this check went GREEN while a required job had not succeeded. The run's
+          # own conclusion was `failure` at the time, and the PR read MERGEABLE.
+          #
+          # `skipped` is the one non-success value that legitimately passes: the
+          # path-filtered legs skip when a change does not touch them.
           results='${{ join(needs.*.result, ',') }}'
           echo "dependency results: $results"
-          case ",$results," in
-            *,failure,* | *,cancelled,*)
-              echo "::error::a required Validate job failed or was cancelled ($results)"
-              exit 1
-              ;;
-            *)
-              echo "all required Validate jobs succeeded (or were skipped as not-applicable)"
-              ;;
-          esac
+          bad=''
+          IFS=',' read -ra parsed <<< "$results"
+          for r in "${parsed[@]}"; do
+            case "$r" in
+              success|skipped) ;;
+              *) bad="$bad $r" ;;
+            esac
+          done
+          if [ -z "$results" ]; then
+            echo "::error::no dependency results were reported — refusing to pass a gate that measured nothing"
+            exit 1
+          fi
+          if [ -n "$bad" ]; then
+            echo "::error::a required Validate job did not succeed ($results) — offending results:$bad"
+            exit 1
+          fi
+          echo "all required Validate jobs succeeded (or were skipped as not-applicable)"
 
   # ── Cross-platform validation ──
   # Moved to .github/workflows/hermetic.yml (the "Hermetic Fresh-Clone" gate).

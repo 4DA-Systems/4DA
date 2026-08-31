@@ -15,8 +15,6 @@ pub(super) fn bootstrap_enrichment() -> PersonaEnrichment {
     // MINIMAL enrichment — tests bootstrap path fidelity
     PersonaEnrichment {
         topic_confidence: confidence_map(&[("typescript", 0.60)]),
-        anti_topics: vec![],
-        anti_topic_confidence: HashMap::new(),
         topic_embeddings: topic_embedding_map(&["typescript"]),
         source_quality: HashMap::new(),
         work_topics: vec![],
@@ -46,8 +44,6 @@ pub(super) fn power_user_enrichment() -> PersonaEnrichment {
             ("wasm", 0.70),
             ("databases", 0.80),
         ]),
-        anti_topics: string_vec(&["crypto", "nft", "web3"]),
-        anti_topic_confidence: confidence_map(&[("crypto", 0.7), ("nft", 0.8), ("web3", 0.6)]),
         topic_embeddings: topic_embedding_map(&[
             "rust",
             "python",
@@ -136,8 +132,6 @@ pub(super) fn context_switcher_enrichment() -> PersonaEnrichment {
             ("microservices", 0.75),
             ("grpc", 0.70),
         ]),
-        anti_topics: string_vec(&["frontend", "css"]),
-        anti_topic_confidence: confidence_map(&[("frontend", 0.5), ("css", 0.5)]),
         topic_embeddings: topic_embedding_map(&["rust", "go", "backend", "microservices", "grpc"]),
         source_quality: source_quality_map(&[
             ("hackernews", 0.8),
@@ -192,12 +186,6 @@ pub(super) fn niche_specialist_enrichment() -> PersonaEnrichment {
             ("type theory", 0.90),
             ("category theory", 0.80),
             ("nix", 0.85),
-        ]),
-        anti_topics: string_vec(&["javascript", "python", "java"]),
-        anti_topic_confidence: confidence_map(&[
-            ("javascript", 0.7),
-            ("python", 0.6),
-            ("java", 0.7),
         ]),
         topic_embeddings: topic_embedding_map(&[
             "haskell",

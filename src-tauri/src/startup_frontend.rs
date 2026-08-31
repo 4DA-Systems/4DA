@@ -7,8 +7,14 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::Serialize;
-use tauri::{Listener, Manager};
-use tracing::{debug, info, warn};
+#[cfg(debug_assertions)]
+use tauri::Listener;
+use tauri::Manager;
+#[cfg(debug_assertions)]
+use tracing::debug;
+use tracing::info;
+#[cfg(debug_assertions)]
+use tracing::warn;
 
 static FRONTEND_READY: AtomicBool = AtomicBool::new(false);
 static MAIN_WINDOW_SHOWN: AtomicBool = AtomicBool::new(false);
@@ -115,6 +121,7 @@ fn show_main_window_once(app_handle: &tauri::AppHandle, source: &'static str) {
     crate::startup_watchdog::mark_phase0_complete();
 }
 
+#[cfg(debug_assertions)]
 fn show_main_window_fallback(app_handle: &tauri::AppHandle) {
     if MAIN_WINDOW_SHOWN.swap(true, Ordering::SeqCst) {
         return;

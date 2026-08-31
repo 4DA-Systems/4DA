@@ -19,7 +19,7 @@ export const getContextTool = {
 Returns information about:
 - Static Identity: User-declared role, tech stack, domains, interests, and exclusions
 - ACE Context (optional): Auto-detected technologies and active topics from recent activity
-- Learned Preferences (optional): Topic affinities learned from user behavior
+- Learned Preferences (optional): retained compatibility field; implicit preference learning no longer contributes to scoring
 
 Use this to understand what the user is working on and interested in.`,
   inputSchema: {
@@ -34,7 +34,7 @@ Use this to understand what the user is working on and interested in.`,
       include_learned: {
         type: "boolean",
         description:
-          "Include learned preferences (topic affinities, anti-topics). Default: true",
+          "Include the retained learned-preferences compatibility field. Default: true",
         default: true,
       },
     },

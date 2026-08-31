@@ -121,10 +121,13 @@ pub async fn set_llm_provider(
         if !url.is_empty() && !url.starts_with("http://") && !url.starts_with("https://") {
             return Err("Base URL must use http:// or https:// scheme".into());
         }
-        // SSRF prevention: block private/internal IPs for non-Ollama providers.
-        // Ollama is expected to run on localhost, so skip this check for it.
-        if !url.is_empty() && provider.as_str() != "ollama" {
-            crate::url_validation::validate_not_internal(url)?;
+        // SSRF prevention, keyed on the HOST rather than the provider name.
+        // Any loopback endpoint is allowed — Ollama, LM Studio, llama.cpp, Jan
+        // are all equally the user's own machine (this is the INV-032 false
+        // negative) — and everything else is validated, including a base_url
+        // smuggled in under `provider: "ollama"`.
+        if !url.is_empty() {
+            crate::url_validation::validate_llm_endpoint(url)?;
         }
     }
     if let Some(ref key) = openai_api_key {

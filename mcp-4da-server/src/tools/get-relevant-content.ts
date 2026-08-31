@@ -15,12 +15,11 @@ export const getRelevantContentTool = {
   name: "get_relevant_content",
   description: `Get filtered relevant content from 4DA's personalized feed.
 
-Returns content items that match the user's interests, tech stack, and learned preferences.
+Returns content items that match the user's explicit interests, tech stack, and ACE-detected context.
 Items are scored based on:
 - Explicit interests declared by the user
 - Tech stack and domains
 - ACE-detected context (recent files, projects, git activity)
-- Learned preferences from past interactions
 
 Each item includes necessity fields (necessity_score, necessity_reason, necessity_category, necessity_urgency) indicating how critical the item is — e.g., security vulnerabilities affecting your deps, breaking changes in your stack, or deprecation notices. These are populated from the full PASIFA analysis pipeline when available.
 

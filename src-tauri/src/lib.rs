@@ -159,6 +159,7 @@ mod analysis;
 mod analysis_backfill;
 mod analysis_narration;
 mod analysis_rerank;
+mod analysis_verdicts;
 mod anomaly;
 mod app_setup;
 mod attention;
@@ -260,9 +261,11 @@ pub(crate) mod context_admission;
 /// that every intelligence surface emits after Phases 3-5. Read
 /// `docs/strategy/INTELLIGENCE-RECONCILIATION.md` before touching intelligence.
 mod engagement_telemetry;
+mod engine_block;
 mod engine_runs;
 mod engine_scheduler;
 mod evidence;
+mod exit_guard;
 mod external;
 pub mod extractors;
 mod free_briefing;
@@ -882,6 +885,7 @@ pub fn run() {
             settings_commands::start_trial,
             settings_commands::validate_license,
             settings_commands::recover_license_by_email,
+            settings_commands::take_pending_deep_link,
             settings_commands::get_locale,
             settings_commands::set_locale,
             settings_commands::set_language,
@@ -937,8 +941,6 @@ pub fn run() {
             ace_commands::ace_auto_discover,
             ace_commands::ace_get_scan_summary,
             ace_commands::ace_record_interaction,
-            ace_commands::ace_get_topic_affinities,
-            ace_commands::ace_get_anti_topics,
             ace_commands::ace_find_similar_topics,
             ace_commands::ace_embedding_status,
             ace_commands::ace_save_watcher_state,

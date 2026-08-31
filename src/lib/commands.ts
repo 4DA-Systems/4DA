@@ -336,8 +336,6 @@ interface CommandMap {
   record_item_feedback: { params: { itemId: number; relevant: boolean }; result: void };
   triage_alert: { params: { itemId: number; action: string; advisoryId: string | null; reason: string | null; expiresAt: string | null }; result: void };
   get_triage_states: { params: { itemIds: number[] }; result: Array<{ item_id: number; advisory_id: string | null; action: string; reason: string | null; resolved_at: string; expires_at: string | null }> };
-  ace_get_topic_affinities: { params: Record<string, never>; result: { affinities: Array<{ topic: string; positive_signals: number; negative_signals: number; affinity_score: number }>; count: number } };
-  ace_get_anti_topics: { params: { minRejections: number }; result: { anti_topics: Array<{ topic: string; rejection_count: number; last_rejected: string }>; count: number } };
   ace_get_suggested_interests: { params: Record<string, never>; result: SuggestedInterest[] };
   ace_get_detected_tech: { params: Record<string, never>; result: { detected_tech: Array<{ name: string; category: string; confidence: number }> } };
   ace_get_active_topics: { params: Record<string, never>; result: { topics: Array<{ topic: string; weight: number }> } };
@@ -415,9 +413,10 @@ interface CommandMap {
 
   // -- License & Trial --
   get_license_tier: { params: Record<string, never>; result: { tier: string; has_key: boolean; activated_at: string | null; expires_at: string | null; days_remaining: number; expired: boolean } };
-  activate_license: { params: { licenseKey: string }; result: { success: boolean; tier: string; expires_at?: string } };
+  activate_license: { params: { licenseKey: string; fromDeepLink?: boolean }; result: { success: boolean; tier: string; expires_at?: string } };
   validate_license: { params: Record<string, never>; result: { validated: boolean; tier: string; cached?: boolean; detail: string } };
   recover_license_by_email: { params: { email: string }; result: { success: boolean; license_key?: string; tier?: string; expires_at?: string; status?: string; reason?: string; detail?: string } };
+  take_pending_deep_link: { params: Record<string, never>; result: string | null };
   get_trial_status: { params: Record<string, never>; result: { active: boolean; days_remaining: number; started_at: string | null } };
   start_trial: { params: Record<string, never>; result: { success: boolean; days_remaining?: number } };
 

@@ -1,7 +1,7 @@
 // Shared entitlement-lifecycle helpers for the Stripe-backed licence system.
 //
 // Imported by BOTH the webhook that WRITES entitlement state
-// (functions/api/streets/activate.js) and the lease endpoint that READS it
+// (functions/api/license/activate.js) and the lease endpoint that READS it
 // (functions/api/license/refresh.js). The sharing is the whole point. Before
 // this module existed, refresh.js gated lifetime access on
 // `streets_status !== 'refunded'` while NOTHING anywhere in the repo ever wrote
@@ -21,6 +21,37 @@
  */
 export const TERMINAL_STATUSES = ['cancelled', 'refunded', 'chargeback'];
 
+// ---------------------------------------------------------------------------
+// Metadata namespace
+//
+// These keys were written `streets_*` because the Signal tier was originally
+// built on the STREETS scaffolding. STREETS was retired in June 2026 and the
+// name has been actively misleading ever since — it reads as a dead feature, so
+// the live licensing path looks dead too. (It cost a real wrong call: the
+// endpoint was believed retired precisely because of this prefix.)
+//
+// Writes now use `signal_*`. Reads accept EITHER, preferring the current one,
+// so any pre-existing customer record keeps working without a migration.
+//
+// The `streets_` fallback is deletable once no Stripe customer carries the old
+// keys. Do not delete it on the assumption that none do — check first.
+// ---------------------------------------------------------------------------
+
+const META_PREFIX = 'signal_';
+const LEGACY_META_PREFIX = 'streets_';
+
+/** The metadata key to WRITE for a field, e.g. `metaKey('status')`. */
+export function metaKey(field) {
+  return META_PREFIX + field;
+}
+
+/** Read a namespaced entitlement field, preferring the current prefix. */
+export function meta(metadata, field) {
+  const md = metadata || {};
+  const current = md[META_PREFIX + field];
+  return current === undefined ? md[LEGACY_META_PREFIX + field] : current;
+}
+
 /**
  * Severity ranking. Webhook deliveries are NOT ordered — Stripe can deliver
  * `customer.subscription.deleted` after `charge.dispute.created` for the same
@@ -31,13 +62,50 @@ const SEVERITY = { active: 0, cancelled: 1, refunded: 2, chargeback: 3 };
 
 /** Where each terminal status records WHEN it was first observed. */
 const STAMP_KEY = {
-  cancelled: 'streets_cancelled_at',
-  refunded: 'streets_refunded_at',
-  chargeback: 'streets_chargeback_at',
+  cancelled: metaKey('cancelled_at'),
+  refunded: metaKey('refunded_at'),
+  chargeback: metaKey('chargeback_at'),
 };
+
+/** Read a terminal-status stamp, tolerating the legacy prefix. */
+function readStamp(metadata, status) {
+  const field = { cancelled: 'cancelled_at', refunded: 'refunded_at', chargeback: 'chargeback_at' }[status];
+  return field ? meta(metadata, field) : undefined;
+}
 
 export function severityOf(status) {
   return SEVERITY[status] ?? 0;
+}
+
+/**
+ * Does a retrieved Checkout Session PROVE a completed purchase?
+ *
+ * A session id is minted at CREATION, before payment, and its
+ * `customer_details.email` is buyer-typed. The session-lookup endpoint returns a
+ * licence key, so trusting an incomplete session let anyone start a checkout with
+ * a victim's email, abandon it, and read that victim's offline-verifiable key.
+ * Only a completed session is proof: `status === 'complete'` (payment captured or
+ * subscription created), with `payment_status` covering the $0 edge.
+ */
+export function sessionProvesPurchase(session) {
+  return (
+    session?.status === 'complete' ||
+    session?.payment_status === 'paid' ||
+    session?.payment_status === 'no_payment_required'
+  );
+}
+
+/**
+ * Is a completed session still inside the bearer-credential window? The session
+ * id sits in the success-page URL and retrieves the key, so an old one that later
+ * surfaces in history or a shared link must stop working (email recovery covers
+ * anyone past the window). Unknown `created` (should not happen) does not block.
+ *
+ * @param {number} nowSeconds  current time in UNIX seconds
+ */
+export function sessionWithinWindow(session, maxAgeSeconds, nowSeconds) {
+  if (typeof session?.created !== 'number') return true;
+  return nowSeconds - session.created <= maxAgeSeconds;
 }
 
 /**
@@ -50,13 +118,28 @@ export function severityOf(status) {
  * @param {Record<string,string>|null|undefined} metadata Stripe customer metadata
  */
 export function isLifetimeEntitled(metadata) {
-  const md = metadata || {};
-  return md.streets_billing_period === 'lifetime' && !TERMINAL_STATUSES.includes(md.streets_status);
+  return (
+    meta(metadata, 'billing_period') === 'lifetime' &&
+    !TERMINAL_STATUSES.includes(meta(metadata, 'status'))
+  );
 }
 
 /** Is this customer already in a terminal state? */
 export function isTerminal(metadata) {
-  return TERMINAL_STATUSES.includes((metadata || {}).streets_status);
+  return TERMINAL_STATUSES.includes(meta(metadata, 'status'));
+}
+
+/**
+ * Has the money actually gone back (refund) or been clawed back (chargeback)?
+ *
+ * Deliberately STRICTER than isTerminal: a CANCELLED subscriber paid for their
+ * current period and keeps key retrieval until the key's own expiry — that tail
+ * is the product policy being sold, not a leak. A refunded or charged-back
+ * customer no longer holds a standing payment, so re-delivering their key
+ * (recovery mail, session lookup) would undermine the refund itself.
+ */
+export function isRevoked(metadata) {
+  return severityOf(meta(metadata, 'status')) >= SEVERITY.refunded;
 }
 
 /**
@@ -83,24 +166,47 @@ export function isTerminal(metadata) {
  * Fails CLOSED on an API error — if we cannot establish that another payment
  * survives, we do not revoke. Wrongly keeping a refunded customer's access is
  * a support ticket; wrongly revoking a paying customer's is a refund request
- * and a lost customer.
+ * and a lost customer. The page cap below takes the same exit: a history too
+ * deep to scan is "unknowable", and unknowable is not revocable.
  *
  * @param {{charges:{list:Function}}} stripe
  * @param {string} customerId
  * @param {string|null} excludeChargeId the charge being refunded/disputed
  * @returns {Promise<boolean>}
  */
+const CHARGE_PAGE_SIZE = 100;
+const CHARGE_MAX_PAGES = 5;
+
+function isStandingCharge(c, excludeChargeId) {
+  return (
+    c.id !== excludeChargeId &&
+    c.paid === true &&
+    c.status === 'succeeded' &&
+    c.refunded !== true &&
+    c.disputed !== true
+  );
+}
+
 export async function hasOtherStandingCharge(stripe, customerId, excludeChargeId) {
   try {
-    const charges = await stripe.charges.list({ customer: customerId, limit: 100 });
-    return (charges.data || []).some(
-      (c) =>
-        c.id !== excludeChargeId &&
-        c.paid === true &&
-        c.status === 'succeeded' &&
-        c.refunded !== true &&
-        c.disputed !== true,
+    let startingAfter;
+    for (let page = 0; page < CHARGE_MAX_PAGES; page++) {
+      // First page stays byte-identical to the historical single call — no
+      // starting_after key at all (the hand-rolled test mocks deep-equal the args).
+      const params = { customer: customerId, limit: CHARGE_PAGE_SIZE };
+      if (startingAfter) params.starting_after = startingAfter;
+
+      const charges = await stripe.charges.list(params);
+      const data = charges?.data || [];
+      if (data.some((c) => isStandingCharge(c, excludeChargeId))) return true;
+      if (!charges?.has_more || data.length === 0) return false;
+      startingAfter = data[data.length - 1].id;
+    }
+    console.error(
+      `charge history exceeds ${CHARGE_MAX_PAGES * CHARGE_PAGE_SIZE} charges; not revoking`,
+      customerId,
     );
+    return true;
   } catch (err) {
     console.error('charge lookup failed; not revoking', customerId, err?.message);
     return true;
@@ -112,7 +218,7 @@ export async function hasOtherStandingCharge(stripe, customerId, excludeChargeId
  *
  * IDEMPOTENT BY CONSTRUCTION — this is the property that stands in for the
  * event-id dedup store the Pages project has no binding for (see the dispatch
- * comment in functions/api/streets/activate.js):
+ * comment in functions/api/license/activate.js):
  *
  *   - re-delivering the SAME event produces a byte-identical patch, because the
  *     first-seen timestamp is preserved rather than refreshed;
@@ -133,14 +239,14 @@ export function terminalStatusPatch(metadata, status, nowIso) {
   const stampKey = STAMP_KEY[status];
   if (!stampKey) throw new Error(`not a terminal status: ${status}`);
 
-  const md = metadata || {};
   // "Same episode" = the customer is already at or beyond this severity, so
   // this delivery is a repeat or a trailing weaker event, not a new event.
-  const sameEpisode = severityOf(md.streets_status) >= severityOf(status);
+  const sameEpisode = severityOf(meta(metadata, 'status')) >= severityOf(status);
+  const existingStamp = readStamp(metadata, status);
 
   const patch = {};
-  patch[stampKey] = sameEpisode && md[stampKey] ? md[stampKey] : nowIso;
-  if (!sameEpisode) patch.streets_status = status;
+  patch[stampKey] = sameEpisode && existingStamp ? existingStamp : nowIso;
+  if (!sameEpisode) patch[metaKey('status')] = status;
   return patch;
 }
 

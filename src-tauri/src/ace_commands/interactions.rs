@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! ACE interaction commands: feedback recording, topic affinities, engagement summary.
+//! ACE interaction commands: feedback recording and engagement summary.
 
 use tracing::warn;
 
@@ -51,7 +51,9 @@ pub async fn record_item_feedback(item_id: i64, relevant: bool) -> Result<()> {
     Ok(())
 }
 
-/// Record a user interaction for behavior learning
+/// Record an explicit user interaction (save/dismiss/rate). Since v19
+/// (AD-029) interactions feed the Learned Preferences lifecycle and
+/// feedback-count gate graduation — not scoring authority.
 #[tauri::command]
 pub async fn ace_record_interaction(
     item_id: i64,
@@ -111,13 +113,7 @@ pub async fn ace_record_interaction(
         "share" => ace::BehaviorAction::Share,
         "dismiss" => ace::BehaviorAction::Dismiss,
         "mark_irrelevant" => ace::BehaviorAction::MarkIrrelevant,
-        "scroll" => {
-            let visible_seconds = action_data
-                .and_then(|d| d.get("visible_seconds").and_then(serde_json::Value::as_f64))
-                .unwrap_or(0.0) as f32;
-            ace::BehaviorAction::Scroll { visible_seconds }
-        }
-        "ignore" => ace::BehaviorAction::Ignore,
+        "snooze" => ace::BehaviorAction::Snooze,
         "briefing_click" => ace::BehaviorAction::BriefingClick,
         "briefing_dismiss" => ace::BehaviorAction::BriefingDismiss,
         "engagement_complete" => {
@@ -152,12 +148,7 @@ pub async fn ace_record_interaction(
         _ => return Err(format!("Unknown action type: {action_type}").into()),
     };
 
-    ace.record_interaction(
-        item_id,
-        action.clone(),
-        item_topics.clone(),
-        item_source.clone(),
-    )?;
+    ace.record_interaction(item_id, action, item_topics.clone(), item_source.clone())?;
 
     // Feed stability detector with engagement evidence
     if let Ok(conn) = crate::open_db_connection() {
@@ -216,14 +207,6 @@ pub async fn ace_record_interaction(
                 conf * 0.5, // halved confidence for source-level signal
             );
         }
-
-        // Implicit skip: item was visible but user scrolled past without
-        // engaging. Weak negative signal for topic affinity learning.
-        if action_type == "scroll" {
-            if let ace::BehaviorAction::Scroll { visible_seconds } = &action {
-                crate::engagement_telemetry::on_implicit_skip(&conn, item_id, *visible_seconds);
-            }
-        }
     }
 
     Ok(serde_json::json!({
@@ -234,32 +217,6 @@ pub async fn ace_record_interaction(
             "topics": item_topics,
             "source": item_source
         }
-    }))
-}
-
-/// Get learned topic affinities
-#[tauri::command]
-pub async fn ace_get_topic_affinities() -> Result<serde_json::Value> {
-    let ace = get_ace_engine()?;
-    let affinities = ace.get_topic_affinities()?;
-
-    Ok(serde_json::json!({
-        "affinities": affinities,
-        "count": affinities.len()
-    }))
-}
-
-/// Get detected anti-topics
-#[tauri::command]
-pub async fn ace_get_anti_topics(min_rejections: Option<u32>) -> Result<serde_json::Value> {
-    let ace = get_ace_engine()?;
-    let threshold = min_rejections.unwrap_or(5);
-    let anti_topics = ace.get_anti_topics(threshold)?;
-
-    Ok(serde_json::json!({
-        "anti_topics": anti_topics,
-        "count": anti_topics.len(),
-        "threshold": threshold
     }))
 }
 

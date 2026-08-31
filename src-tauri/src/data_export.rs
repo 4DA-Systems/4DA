@@ -39,7 +39,6 @@ const ALL_SECTIONS: &[&str] = &[
     "sources",
     "briefings",
     "feedback",
-    "learned_behavior",
 ];
 
 // ============================================================================
@@ -150,14 +149,10 @@ const ALLOWED_EXPORT_TABLES: &[&str] = &[
     "team_signals",
     "decision_windows",
     "sources",
-    "source_preferences",
     "briefings",
     "feedback",
     "interactions",
     "accuracy_metrics",
-    "topic_affinities",
-    "anti_topics",
-    "activity_patterns",
 ];
 
 /// Safely query all rows from a table, returning them as a JSON array.
@@ -416,13 +411,6 @@ fn export_sources(conn: &rusqlite::Connection) -> Result<(JsonValue, u32)> {
         total += count;
     }
 
-    // Source preferences (learned behavior, no secrets)
-    if table_exists(conn, "source_preferences") {
-        let (rows, count) = safe_query_all(conn, "source_preferences", "score DESC")?;
-        data.insert("source_preferences".to_string(), rows);
-        total += count;
-    }
-
     Ok((JsonValue::Object(data), total))
 }
 
@@ -457,32 +445,6 @@ fn export_feedback(conn: &rusqlite::Connection) -> Result<(JsonValue, u32)> {
     Ok((JsonValue::Object(data), total))
 }
 
-/// Export learned behavior: topic affinities and anti-topics.
-fn export_learned_behavior(conn: &rusqlite::Connection) -> Result<(JsonValue, u32)> {
-    let mut data = serde_json::Map::new();
-    let mut total = 0u32;
-
-    if table_exists(conn, "topic_affinities") {
-        let (rows, count) = safe_query_all(conn, "topic_affinities", "affinity_score DESC")?;
-        data.insert("topic_affinities".to_string(), rows);
-        total += count;
-    }
-
-    if table_exists(conn, "anti_topics") {
-        let (rows, count) = safe_query_all(conn, "anti_topics", "confidence DESC")?;
-        data.insert("anti_topics".to_string(), rows);
-        total += count;
-    }
-
-    if table_exists(conn, "activity_patterns") {
-        let (rows, count) = safe_query_all(conn, "activity_patterns", "pattern_type")?;
-        data.insert("activity_patterns".to_string(), rows);
-        total += count;
-    }
-
-    Ok((JsonValue::Object(data), total))
-}
-
 /// Route a section name to its exporter function.
 fn export_section_data(conn: &rusqlite::Connection, section: &str) -> Result<(JsonValue, u32)> {
     match section {
@@ -492,7 +454,6 @@ fn export_section_data(conn: &rusqlite::Connection, section: &str) -> Result<(Js
         "sources" => export_sources(conn),
         "briefings" => export_briefings(conn),
         "feedback" => export_feedback(conn),
-        "learned_behavior" => export_learned_behavior(conn),
         _ => Err(format!("Unknown export section: {section}").into()),
     }
 }
@@ -906,32 +867,6 @@ mod tests {
                 relevant INTEGER NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
-            CREATE TABLE IF NOT EXISTS topic_affinities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                topic TEXT NOT NULL UNIQUE,
-                embedding BLOB,
-                positive_signals INTEGER DEFAULT 0,
-                negative_signals INTEGER DEFAULT 0,
-                total_exposures INTEGER DEFAULT 0,
-                affinity_score REAL DEFAULT 0.0,
-                confidence REAL DEFAULT 0.0,
-                last_interaction TEXT DEFAULT (datetime('now')),
-                decay_applied INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now'))
-            );
-            CREATE TABLE IF NOT EXISTS anti_topics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                topic TEXT NOT NULL UNIQUE,
-                rejection_count INTEGER DEFAULT 0,
-                confidence REAL DEFAULT 0.0,
-                auto_detected INTEGER DEFAULT 1,
-                user_confirmed INTEGER DEFAULT 0,
-                first_rejection TEXT DEFAULT (datetime('now')),
-                last_rejection TEXT DEFAULT (datetime('now')),
-                created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now'))
-            );
             CREATE TABLE IF NOT EXISTS sources (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_type TEXT NOT NULL UNIQUE,
@@ -1078,28 +1013,6 @@ mod tests {
         assert_eq!(count, 1);
         let feedback = data["feedback"].as_array().unwrap();
         assert_eq!(feedback[0]["source_item_id"], 42);
-    }
-
-    #[test]
-    fn test_export_learned_behavior() {
-        let conn = setup_db();
-        conn.execute(
-            "INSERT INTO topic_affinities (topic, affinity_score, confidence) VALUES (?1, ?2, ?3)",
-            params!["rust", 0.9, 0.85],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO anti_topics (topic, rejection_count, confidence) VALUES (?1, ?2, ?3)",
-            params!["crypto", 5, 0.7],
-        )
-        .unwrap();
-
-        let (data, count) = export_learned_behavior(&conn).unwrap();
-        assert_eq!(count, 2);
-        let affinities = data["topic_affinities"].as_array().unwrap();
-        assert_eq!(affinities[0]["topic"], "rust");
-        let anti = data["anti_topics"].as_array().unwrap();
-        assert_eq!(anti[0]["topic"], "crypto");
     }
 
     #[test]

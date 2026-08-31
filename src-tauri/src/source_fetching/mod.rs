@@ -60,16 +60,58 @@ pub(crate) fn extract_feed_origin(item: &crate::sources::SourceItem) -> Option<S
     })
 }
 
-/// Extract structured tags from source item metadata and serialize as JSON.
+/// Engagement keys lifted from adapter metadata into the `tags` column, in
+/// the exact names `extract_community_signal` consumes (pipeline_v2). The
+/// audit (2026-08-23) found the column NULL across the entire corpus — no
+/// ingest path ever carried engagement to the community-signal reader, so
+/// the "earn it back with engagement" escape hatch was structurally dead.
+const ENGAGEMENT_TAG_KEYS: &[&str] = &[
+    "score",
+    "upvotes",
+    "favourites",
+    "reblogs",
+    "likes",
+    "comments",
+];
+
+/// Extract structured tags + engagement metadata and serialize as JSON.
 ///
-/// Returns `None` if no tags found, or a JSON array string like `["rust","async"]`.
+/// Historical format was a bare JSON array of topic strings; the community
+/// signal reader (`extract_community_signal`) expects an OBJECT with
+/// engagement keys, so the two could never meet. Canonical format is now an
+/// object: `{"topics":["rust","async"],"score":42,...}` — topics under
+/// `"topics"`, engagement keys at the top level. Readers accept both shapes
+/// (`scoring::parse_tags_topics` for topics; the community reader's key
+/// lookups return None on the legacy array, exactly as before).
+///
+/// Returns `None` when there are neither topics nor engagement keys.
 pub(crate) fn extract_source_tags(item: &crate::sources::SourceItem) -> Option<String> {
-    let tags = item.extract_structured_tags();
-    if tags.is_empty() {
-        None
-    } else {
-        serde_json::to_string(&tags).ok()
+    let topics = item.extract_structured_tags();
+    let mut obj = serde_json::Map::new();
+
+    if let Some(meta) = &item.metadata {
+        for key in ENGAGEMENT_TAG_KEYS {
+            if let Some(n) = meta.get(*key).and_then(serde_json::Value::as_i64) {
+                obj.insert((*key).to_string(), serde_json::Value::from(n));
+            }
+        }
     }
+
+    if topics.is_empty() && obj.is_empty() {
+        return None;
+    }
+    if !topics.is_empty() {
+        obj.insert(
+            "topics".to_string(),
+            serde_json::Value::from(
+                topics
+                    .into_iter()
+                    .map(serde_json::Value::from)
+                    .collect::<Vec<_>>(),
+            ),
+        );
+    }
+    serde_json::to_string(&serde_json::Value::Object(obj)).ok()
 }
 
 /// Extract the item's PUBLICATION date from adapter metadata, normalized to
@@ -561,6 +603,30 @@ fn strict_manifest_packages_for(conn: &rusqlite::Connection, ecosystem: &str) ->
     out
 }
 
+/// ACE manifest types whose dependencies belong to `ecosystem`. Accepts ANY
+/// alias [`crate::ecosystem::Ecosystem::parse`] recognizes — registry keys
+/// ("npm", "crates.io"), ACE language names ("rust", "python"), and OSV wire
+/// names ("PyPI", "Go", "Maven"). The OSV adapter passes its mixed-case OSV
+/// ecosystem ids straight into the loaders below; before this normalization
+/// those matched nothing, so 7 of 9 ecosystems silently fell back to hardcoded
+/// default packages instead of the user's real deps (scoring audit 2026-08-23).
+/// Empty = ecosystem not tracked by ACE (Swift, C/C++, unknown).
+fn ace_manifest_types(ecosystem: &str) -> Vec<&'static str> {
+    use crate::ecosystem::Ecosystem;
+    match Ecosystem::parse(ecosystem) {
+        Some(Ecosystem::Npm) => vec!["PackageJson"],
+        Some(Ecosystem::Cargo) => vec!["CargoToml"],
+        Some(Ecosystem::PyPI) => vec!["PyprojectToml", "RequirementsTxt"],
+        Some(Ecosystem::Go) => vec!["GoMod"],
+        Some(Ecosystem::Maven) => vec!["PomXml", "BuildGradle"],
+        Some(Ecosystem::NuGet) => vec!["Csproj"],
+        Some(Ecosystem::RubyGems) => vec!["Gemfile"],
+        Some(Ecosystem::Packagist) => vec!["ComposerJson"],
+        Some(Ecosystem::Pub) => vec!["PubspecYaml"],
+        None => Vec::new(),
+    }
+}
+
 /// Load user's actual dependency names from ACE for a specific ecosystem.
 /// Returns package names extracted from project manifests (Cargo.toml, package.json, etc.).
 /// Falls back to empty vec if no deps are tracked yet.
@@ -570,18 +636,10 @@ pub(crate) fn load_ace_packages_for_ecosystem(ecosystem: &str) -> Vec<String> {
         Err(_) => return Vec::new(),
     };
 
-    let manifest_types: Vec<&str> = match ecosystem {
-        "npm" => vec!["PackageJson"],
-        "crates.io" | "rust" => vec!["CargoToml"],
-        "pypi" | "python" => vec!["PyprojectToml", "RequirementsTxt"],
-        "go" => vec!["GoMod"],
-        "maven" | "java" => vec!["PomXml", "BuildGradle"],
-        "nuget" | "csharp" => vec!["Csproj"],
-        "rubygems" | "ruby" => vec!["Gemfile"],
-        "packagist" | "php" => vec!["ComposerJson"],
-        "pub" | "dart" => vec!["PubspecYaml"],
-        _ => return Vec::new(),
-    };
+    let manifest_types: Vec<&str> = ace_manifest_types(ecosystem);
+    if manifest_types.is_empty() {
+        return Vec::new();
+    }
 
     let mut packages: Vec<String> = match crate::temporal::get_all_dependencies(&conn) {
         Ok(deps) => deps
@@ -619,18 +677,10 @@ pub(crate) fn load_ace_packages_with_versions(ecosystem: &str) -> Vec<(String, O
         Err(_) => return Vec::new(),
     };
 
-    let manifest_types: Vec<&str> = match ecosystem {
-        "npm" => vec!["PackageJson"],
-        "crates.io" | "rust" => vec!["CargoToml"],
-        "pypi" | "python" => vec!["PyprojectToml", "RequirementsTxt"],
-        "go" => vec!["GoMod"],
-        "maven" | "java" => vec!["PomXml", "BuildGradle"],
-        "nuget" | "csharp" => vec!["Csproj"],
-        "rubygems" | "ruby" => vec!["Gemfile"],
-        "packagist" | "php" => vec!["ComposerJson"],
-        "pub" | "dart" => vec!["PubspecYaml"],
-        _ => return Vec::new(),
-    };
+    let manifest_types: Vec<&str> = ace_manifest_types(ecosystem);
+    if manifest_types.is_empty() {
+        return Vec::new();
+    }
 
     match crate::temporal::get_all_dependencies(&conn) {
         Ok(deps) => {
@@ -692,6 +742,45 @@ mod strict_manifest_tests {
     fn ecosystem_token_is_case_and_whitespace_insensitive() {
         assert_eq!(ecosystem_token("  Rust "), Some("crates"));
         assert_eq!(ecosystem_token("PyPI"), Some("pypi"));
+    }
+
+    #[test]
+    fn ace_manifest_types_accepts_osv_wire_names() {
+        // The OSV adapter hands its mixed-case OSV ecosystem ids to the ACE dep
+        // loaders. Every one of the 9 OSV ecosystems MUST resolve to manifest
+        // types — before normalization only "npm" and "crates.io" matched, so
+        // 7 of 9 ecosystems queried hardcoded defaults instead of the user's
+        // real deps (scoring audit 2026-08-23).
+        assert_eq!(ace_manifest_types("npm"), vec!["PackageJson"]);
+        assert_eq!(ace_manifest_types("crates.io"), vec!["CargoToml"]);
+        assert_eq!(
+            ace_manifest_types("PyPI"),
+            vec!["PyprojectToml", "RequirementsTxt"]
+        );
+        assert_eq!(ace_manifest_types("Go"), vec!["GoMod"]);
+        assert_eq!(ace_manifest_types("Maven"), vec!["PomXml", "BuildGradle"]);
+        assert_eq!(ace_manifest_types("NuGet"), vec!["Csproj"]);
+        assert_eq!(ace_manifest_types("RubyGems"), vec!["Gemfile"]);
+        assert_eq!(ace_manifest_types("Packagist"), vec!["ComposerJson"]);
+        assert_eq!(ace_manifest_types("Pub"), vec!["PubspecYaml"]);
+    }
+
+    #[test]
+    fn ace_manifest_types_keeps_registry_and_language_aliases() {
+        // The registry/language keys the other source adapters pass must keep
+        // resolving exactly as the old hand-rolled match did.
+        assert_eq!(ace_manifest_types("rust"), ace_manifest_types("crates.io"));
+        assert_eq!(ace_manifest_types("pypi"), ace_manifest_types("python"));
+        assert_eq!(ace_manifest_types("java"), ace_manifest_types("maven"));
+        assert_eq!(ace_manifest_types("csharp"), ace_manifest_types("nuget"));
+        assert_eq!(ace_manifest_types("php"), ace_manifest_types("packagist"));
+        assert_eq!(ace_manifest_types("dart"), ace_manifest_types("pub"));
+        assert_eq!(ace_manifest_types("ruby"), ace_manifest_types("rubygems"));
+        assert_eq!(ace_manifest_types("go"), vec!["GoMod"]);
+        // Untracked ecosystems stay empty — callers keep their fallbacks.
+        assert!(ace_manifest_types("swift").is_empty());
+        assert!(ace_manifest_types("cpp").is_empty());
+        assert!(ace_manifest_types("made-up").is_empty());
     }
 
     #[test]

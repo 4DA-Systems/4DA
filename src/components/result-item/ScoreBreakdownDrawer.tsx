@@ -110,7 +110,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
               score: Math.round(finalScore * 100),
             })}
           </p>
-          <SignalUpgradeCTA compact />
+          <SignalUpgradeCTA compact source="score-breakdown" />
         </div>
       )}
 

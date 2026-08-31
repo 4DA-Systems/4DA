@@ -10,6 +10,7 @@ import type { CallToolResult } from "@modelcontextprotocol/server";
 
 import type { FourDADatabase } from "./db.js";
 import { assertToolPermission } from "./auth-context.js";
+import { checkBuildStaleness } from "./build-staleness.js";
 
 import {
   executeGetRelevantContent,
@@ -52,7 +53,7 @@ const DISPATCH_MAP: Record<string, ToolExecutor> = {
   get_context: executeGetContext,
   get_relevant_content: executeGetRelevantContent,
   get_actionable_signals: executeGetActionableSignals,
-  knowledge_gaps: executeKnowledgeGaps,
+  knowledge_gaps: (db, params) => executeKnowledgeGaps(db, params, getLiveIntelligence()),
   record_feedback: executeRecordFeedback,
 
   // Decisions
@@ -99,7 +100,25 @@ export async function dispatchTool(
 
   assertToolPermission(name);
 
-  const result = await executor(db, (args || {}) as Record<string, unknown>);
+  // BUSY/LOCKED retry at the single choke point every tool passes through.
+  // The desktop engine writes to the same database every 30 minutes; a read
+  // that collides with its transaction deserves one backoff retry rather than
+  // an immediate error JSON. (db.queryWithRetry existed for this but had no
+  // production caller — it is sync and the executors are async, so the retry
+  // lives here.)
+  const toolArgs = (args || {}) as Record<string, unknown>;
+  let result: unknown;
+  try {
+    result = await executor(db, toolArgs);
+  } catch (error: unknown) {
+    const code = (error as { code?: string }).code;
+    if (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED") {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      result = await executor(db, toolArgs);
+    } else {
+      throw error;
+    }
+  }
   const payload = FRESHNESS_TOOLS.has(name) ? attachFreshness(db, result) : result;
   return {
     content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
@@ -119,13 +138,27 @@ function attachFreshness(db: FourDADatabase, result: unknown): unknown {
   } catch {
     return result;
   }
+  // Repo checkouts only (null in the published package): when the running
+  // dist/ predates src/, every DB-backed answer reflects code the repo has
+  // already replaced. Saying so on the payload is what would have caught the
+  // 2026-08-30 two-day-stale server before its bugs were re-diagnosed.
+  let server_build: { stale: true; note: string } | undefined;
+  try {
+    const staleness = checkBuildStaleness();
+    if (staleness?.stale && staleness.note) {
+      server_build = { stale: true, note: staleness.note };
+    }
+  } catch {
+    // Never let the self-check break a tool response.
+  }
+  const extras = server_build ? { server_build } : {};
   if (Array.isArray(result)) {
-    return { data_freshness, item_count: result.length, items: result };
+    return { data_freshness, ...extras, item_count: result.length, items: result };
   }
   if (result && typeof result === "object") {
-    return { data_freshness, ...(result as Record<string, unknown>) };
+    return { data_freshness, ...extras, ...(result as Record<string, unknown>) };
   }
-  return { data_freshness, result };
+  return { data_freshness, ...extras, result };
 }
 
 /** Check if a tool exists in the dispatch map */

@@ -10,6 +10,29 @@ use tracing::info;
 
 use super::Database;
 
+/// Frozen copy of the affinity-recompute SQL used by the historical Phase 89/90
+/// profile-repair migrations. The live writer (`RECOMPUTE_AFFINITY_SQL` in
+/// `ace/behavior/tracking.rs`) was deleted in v20b (AD-031) with the
+/// implicit-capture layer; this copy exists ONLY so a pre-89 database migrating
+/// forward is treated exactly as it always was (Phase 105 then drops the
+/// `topic_affinities` table these phases repair).
+const PHASE89_RECOMPUTE_AFFINITY_SQL: &str = "UPDATE topic_affinities SET
+    affinity_score = CASE
+        WHEN explicit_negative_signals > 0 AND weighted_positive <= 0.0 THEN
+            -1.0 * MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
+        WHEN total_exposures >= 3 THEN
+            MAX(-1.0, MIN(1.0,
+                (weighted_positive - weighted_negative) / CAST(total_exposures AS REAL)
+            )) * MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
+        ELSE 0.0
+    END,
+    confidence = CASE
+        WHEN explicit_negative_signals > 0 AND weighted_positive <= 0.0 THEN
+            MAX(0.3, MIN(CAST(total_exposures AS REAL) / 10.0, 1.0))
+        ELSE MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
+    END
+ WHERE topic = ?1";
+
 // ============================================================================
 // Cold-Boot Recovery Notice — surfaced via startup_health
 // ============================================================================
@@ -1301,7 +1324,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 104;
+        const TARGET_VERSION: i64 = 114;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3079,12 +3102,14 @@ impl Database {
                 )?;
             }
 
+            // retired-ok: shipped migration — its name is frozen history
             // Phase 65: structured dismiss feedback for compound intelligence
             if current_version < 65 {
                 Self::run_versioned_migration(
                     &conn,
                     64,
                     65,
+                    // retired-ok: shipped migration — its name is frozen history
                     "Phase 65: structured dismiss feedback for compound intelligence",
                     |c| {
                         // The `interactions` table lives in the ACE database, not the
@@ -3117,6 +3142,7 @@ impl Database {
                             }
                             info!(
                                 target: "4da::db",
+                                // retired-ok: shipped migration log — frozen history
                                 "Added dismiss_reason + dismiss_category to interactions (compound intelligence loop)"
                             );
                         } else {
@@ -3897,8 +3923,8 @@ impl Database {
                         // Recompute all rows under the corrected formula (the
                         // exact SQL the live per-interaction path uses, minus
                         // the per-topic WHERE).
-                        let recompute_all = crate::ace::behavior::tracking::RECOMPUTE_AFFINITY_SQL
-                            .replace(" WHERE topic = ?1", "");
+                        let recompute_all =
+                            PHASE89_RECOMPUTE_AFFINITY_SQL.replace(" WHERE topic = ?1", "");
                         c.execute_batch(&recompute_all)?;
                         info!(
                             target: "4da::db",
@@ -3921,7 +3947,7 @@ impl Database {
                         // reads 0 for pre-2026-07-13 evidence — so one explicit
                         // dismissal of a junk item left `rust` at -1.0 despite
                         // backfilled positive weighted evidence. The arm (in
-                        // RECOMPUTE_AFFINITY_SQL) now keys on weighted_positive;
+                        // PHASE89_RECOMPUTE_AFFINITY_SQL) keys on weighted_positive;
                         // re-run the recompute so dormant rows heal too.
                         let has_table: bool = c
                             .query_row(
@@ -3933,8 +3959,8 @@ impl Database {
                         if !has_table {
                             return Ok(());
                         }
-                        let recompute_all = crate::ace::behavior::tracking::RECOMPUTE_AFFINITY_SQL
-                            .replace(" WHERE topic = ?1", "");
+                        let recompute_all =
+                            PHASE89_RECOMPUTE_AFFINITY_SQL.replace(" WHERE topic = ?1", "");
                         c.execute_batch(&recompute_all)?;
                         info!(
                             target: "4da::db",
@@ -4510,6 +4536,692 @@ impl Database {
                     104,
                     "Phase 104: FTS5 sync triggers + index rebuild (search index had diverged)",
                     Self::install_fts_sync_triggers_and_rebuild,
+                )?;
+            }
+
+            if current_version < 105 {
+                Self::run_versioned_migration(
+                    &conn,
+                    104,
+                    105,
+                    "Phase 105: drop the implicit-capture tables (v20b, AD-031)",
+                    |c| {
+                        // The implicit behavioral-capture layer is removed in
+                        // v20b: these tables lose their last writer AND reader.
+                        // `interactions` rows are deliberately KEPT — the
+                        // bootstrap-mode count in scoring/context.rs reads them,
+                        // and deleting rows would flip bootstrap state (scoring
+                        // must stay byte-identical).
+                        c.execute_batch(
+                            "DROP TABLE IF EXISTS topic_affinities;
+                             DROP TABLE IF EXISTS anti_topics;
+                             DROP TABLE IF EXISTS activity_patterns;
+                             DROP TABLE IF EXISTS source_preferences;
+                             DROP TABLE IF EXISTS persona_posterior;
+                             DROP TABLE IF EXISTS posterior_snapshots;",
+                        )?;
+                        // decision_outcome digests were write-only: the module
+                        // that produced them is deleted, and nothing ever read
+                        // this digest_type back out.
+                        let purged = c.execute(
+                            "DELETE FROM digested_intelligence WHERE digest_type = 'decision_outcome'",
+                            [],
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            purged,
+                            "Phase 105: implicit-capture tables dropped, decision_outcome digests purged (AD-031)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 106 {
+                Self::run_versioned_migration(
+                    &conn,
+                    105,
+                    106,
+                    "Phase 106: purge content-empty OSV husk items",
+                    |c| {
+                        // The OSV deep-fetch path converted `/v1/querybatch`
+                        // results — which carry ONLY {id, modified} — straight
+                        // into items, so every stored OSV row was a husk:
+                        // "[ID] Security advisory / Severity: Unknown /
+                        // Affected: Unknown". The adapter now hydrates each id
+                        // before conversion, but the ingest path skips ids that
+                        // already exist, so stored husks would never heal — and
+                        // their scored 0.08s drag the OSV lane's yield-throttle
+                        // budget down indefinitely. Delete them so the fixed
+                        // adapter re-ingests hydrated records. The husk shape is
+                        // exact (~57 chars); the length bound keeps any real
+                        // advisory that merely LOOKS sparse out of the blast
+                        // radius. source_vec has no cascade trigger, so its rows
+                        // go explicitly (FTS + feedback/necessity/analyses are
+                        // trigger-maintained on DELETE).
+                        const HUSK_PREDICATE: &str = "source_type = 'osv' \
+                             AND title LIKE '[%] Security advisory' \
+                             AND content LIKE '%Severity: Unknown%Affected: Unknown%' \
+                             AND length(content) <= 80";
+                        c.execute(
+                            &format!(
+                                "DELETE FROM source_vec WHERE rowid IN \
+                                 (SELECT id FROM source_items WHERE {HUSK_PREDICATE})"
+                            ),
+                            [],
+                        )?;
+                        let purged = c.execute(
+                            &format!("DELETE FROM source_items WHERE {HUSK_PREDICATE}"),
+                            [],
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            purged,
+                            "Phase 106: content-empty OSV husk items purged for hydrated re-ingest"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 107 {
+                Self::run_versioned_migration(
+                    &conn,
+                    106,
+                    107,
+                    "Phase 107: scoring_churn — run-level score-delta instrumentation",
+                    |c| {
+                        // Same-version re-scores can move an item materially
+                        // (2026-08-22 live: 0.94 → 0.50 with no pipeline bump;
+                        // GPT adversarial audit measured 579 rows changed and
+                        // 31 items moving >0.1 in ONE scheduled run) — but the
+                        // only way to see it was an ad-hoc DB snapshot diff.
+                        // This table makes churn a continuously measured
+                        // quantity: every persist batch writes one summary row
+                        // (per-path: analysis / backfill / drain). Ops table —
+                        // read by forensics and MCP query paths, no UI surface.
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS scoring_churn (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                path TEXT NOT NULL,
+                                pipeline_version INTEGER NOT NULL,
+                                items_written INTEGER NOT NULL,
+                                rescored INTEGER NOT NULL,
+                                moved_up_gt_010 INTEGER NOT NULL,
+                                moved_down_gt_010 INTEGER NOT NULL,
+                                max_up REAL NOT NULL,
+                                max_down REAL NOT NULL,
+                                mean_abs_delta REAL NOT NULL
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_scoring_churn_created
+                                ON scoring_churn(created_at);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 107: scoring_churn instrumentation table created"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 108 {
+                Self::run_versioned_migration(
+                    &conn,
+                    107,
+                    108,
+                    "Phase 108: feed_verdict_reason — why a persisted verdict flipped",
+                    |c| {
+                        // The 2026-08-23 adversarial scoring audit found 106 of
+                        // 532 feed members below 0.45 with a score-sourced
+                        // verdict: within a pipeline version a score-derived
+                        // verdict was immortal (the Phase-101 working set is
+                        // version-scoped only), so items whose live score sank
+                        // as low as 0.17 stayed curated. The in-version demote
+                        // sweep that closes this needs provenance for WHY a
+                        // verdict flipped — 'score_sunk_in_version' vs
+                        // 'stale_version' — or forensics cannot tell a churn
+                        // demotion from an epoch one. Nullable, NO backfill:
+                        // NULL means "no explanation needed" (a normal cycle
+                        // verdict), which is the truth for every existing row.
+                        //
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when absent.
+                        let has_column: bool = c
+                            .prepare("SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name = 'feed_verdict_reason'")?
+                            .query_row([], |r| r.get::<_, i64>(0))
+                            .map(|n| n > 0)?;
+                        if !has_column {
+                            c.execute(
+                                "ALTER TABLE source_items ADD COLUMN feed_verdict_reason TEXT",
+                                [],
+                            )?;
+                        }
+                        // No index: every reader of this column arrives via the
+                        // Phase-101 partial index on the curated set; the reason
+                        // is forensic payload, never a selection key.
+                        info!(
+                            target: "4da::db",
+                            "Phase 108: feed_verdict_reason column added"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 109 {
+                Self::run_versioned_migration(
+                    &conn,
+                    108,
+                    109,
+                    "Phase 109: stability columns — verdict-flip damping + churn top offenders",
+                    |c| {
+                        // The 2026-08-23 adversarial audit measured ~1,350 score
+                        // moves >0.1/day on a 532-item feed with single-run
+                        // swings of ±0.43, and daily membership churn driven by
+                        // unreasoned verdict flips. Two columns close the loop:
+                        //
+                        // - `source_items.feed_verdict_pending` — an unreasoned
+                        //   verdict FLIP (true→false or false→true against a
+                        //   standing verdict) is deferred until a second
+                        //   consecutive run agrees. The marker holds the pending
+                        //   direction + first-seen timestamp ("1@<rfc3339>");
+                        //   NULL means no flip is pending. Reasoned flips
+                        //   (score_sunk_in_version / stale_version / llm_reject
+                        //   / serendipity rotations) never use it.
+                        // - `scoring_churn.top_offenders` — the aggregate row
+                        //   said HOW MUCH moved but never WHICH items; every
+                        //   investigation started with an ad-hoc snapshot diff.
+                        //   JSON array of up to 10 {id, old, new} largest-|Δ|
+                        //   movers per persist batch.
+                        // - `scoring_churn.suppressed_writes` — how many writes
+                        //   the |Δ|<0.05 persist hysteresis kept at the old
+                        //   score (still version-stamped, so the drain
+                        //   converges). NULL on pre-109 rows: not measured.
+                        //
+                        // All nullable, NO backfill/default — NULL means "not
+                        // recorded", which is the truth for every existing row.
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when absent.
+                        let has_column =
+                            |c: &Connection, table: &str, name: &str| -> SqliteResult<bool> {
+                                c.prepare(&format!(
+                                "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"
+                            ))?
+                                .query_row([name], |r| r.get::<_, i64>(0))
+                                .map(|n| n > 0)
+                            };
+                        if !has_column(c, "source_items", "feed_verdict_pending")? {
+                            c.execute(
+                                "ALTER TABLE source_items ADD COLUMN feed_verdict_pending TEXT",
+                                [],
+                            )?;
+                        }
+                        if !has_column(c, "scoring_churn", "top_offenders")? {
+                            c.execute(
+                                "ALTER TABLE scoring_churn ADD COLUMN top_offenders TEXT",
+                                [],
+                            )?;
+                        }
+                        if !has_column(c, "scoring_churn", "suppressed_writes")? {
+                            c.execute(
+                                "ALTER TABLE scoring_churn ADD COLUMN suppressed_writes INTEGER",
+                                [],
+                            )?;
+                        }
+                        // No indexes: feed_verdict_pending is read row-at-a-time
+                        // inside the verdict persist loop (id-keyed); the churn
+                        // columns are forensic payload on an ops table.
+                        info!(
+                            target: "4da::db",
+                            "Phase 109: verdict-flip pending + churn observability columns added"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 110 {
+                Self::run_versioned_migration(
+                    &conn,
+                    109,
+                    110,
+                    "Phase 110: evidence/rank separation — batch-relative rank gets its own columns",
+                    |c| {
+                        // The 2026-08-23 adversarial audit (§3.5, items 12+26)
+                        // traced the ±0.43 durable-score oscillation to the
+                        // analyzer persisting BATCH-RELATIVE factors
+                        // (cross-encoder blend, dedup corroboration boosts,
+                        // diversity decay, per-source percentile, LLM advisor
+                        // delta) into `relevance_score`, while the backfill
+                        // path persisted pure `score_item` output — two score
+                        // families in one column, each write batch-dependent.
+                        //
+                        // From this phase `relevance_score` is the EVIDENCE
+                        // score (pure pipeline output, hysteresis-damped) and
+                        // the batch layer lands in its own columns:
+                        //
+                        // - `source_items.rank_score` — the run's final
+                        //   display/rank value (post batch layer, capped).
+                        // - `source_items.rank_factors` — compact JSON naming
+                        //   the batch factors that ACTUALLY fired, with deltas
+                        //   (e.g. {"ce":-0.12,"percentile":0.03}).
+                        // - `source_items.rank_scored_at` — when this rank was
+                        //   computed (UTC canonical format).
+                        //
+                        // Ranked read surfaces order by
+                        // COALESCE(rank_score, relevance_score) DESC
+                        // (`db::RANKED_ORDER_EXPR`); threshold/membership
+                        // filters and the eviction/prune ASC queries stay on
+                        // `relevance_score` — evidence decides membership and
+                        // retention, rank decides order.
+                        //
+                        // All nullable, NO backfill: NULL rank = "never
+                        // batch-ranked", and the COALESCE falls back to
+                        // evidence — the truth for every existing row.
+                        // No index: the COALESCE ordering expression cannot
+                        // use a single-column index, and every reader already
+                        // filters on indexed/id-keyed predicates first.
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when absent.
+                        let has_column =
+                            |c: &Connection, table: &str, name: &str| -> SqliteResult<bool> {
+                                c.prepare(&format!(
+                                "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"
+                            ))?
+                                .query_row([name], |r| r.get::<_, i64>(0))
+                                .map(|n| n > 0)
+                            };
+                        if !has_column(c, "source_items", "rank_score")? {
+                            c.execute("ALTER TABLE source_items ADD COLUMN rank_score REAL", [])?;
+                        }
+                        if !has_column(c, "source_items", "rank_factors")? {
+                            c.execute("ALTER TABLE source_items ADD COLUMN rank_factors TEXT", [])?;
+                        }
+                        if !has_column(c, "source_items", "rank_scored_at")? {
+                            c.execute(
+                                "ALTER TABLE source_items ADD COLUMN rank_scored_at TEXT",
+                                [],
+                            )?;
+                        }
+                        info!(
+                            target: "4da::db",
+                            "Phase 110: rank_score/rank_factors/rank_scored_at columns added"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 111 {
+                Self::run_versioned_migration(
+                    &conn,
+                    110,
+                    111,
+                    "Phase 111: differential honesty — content_updated_at + scored_at",
+                    |c| {
+                        // The 2026-08-25 live re-assessment (stability arc, day
+                        // 1) found the DB-watermark differential selecting on
+                        // `last_seen > watermark` — but every fetch cycle
+                        // touches all re-seen cached items, so the selection
+                        // re-picked ~500 (the cap) every cycle. The write
+                        // hysteresis suppressed 93-100% of the resulting
+                        // writes: churn was dead, compute wasn't. Touch is not
+                        // change; the differential needs a column that moves
+                        // only when the ITEM moves:
+                        //
+                        // - `source_items.content_updated_at` — when the
+                        //   item's content/engagement actually changed after
+                        //   ingest (batch-upsert content replacement, tags/
+                        //   engagement refresh, embedding upgrade, content
+                        //   enrichment). The bare `last_seen` touch never
+                        //   sets it.
+                        // - `source_items.scored_at` — when a scoring run
+                        //   last EVALUATED the item (hysteresis-suppressed
+                        //   writes included: a suppressed write still means
+                        //   "re-evaluated now"). The rolling freshness
+                        //   refresh rotates on it, stalest first.
+                        //
+                        // Both nullable, NO backfill: NULL content_updated_at
+                        // = "never changed since tracking began" (such rows
+                        // enter the differential only via `created_at`), and
+                        // NULL scored_at = "not scored since tracking began"
+                        // (sorts oldest, so legacy rows rotate through the
+                        // freshness refresh first) — the truth for every
+                        // existing row. NO index: both columns are written
+                        // hot (every fetch/persist cycle), and every reader
+                        // is a bounded ORDER BY over the ~7-day recent
+                        // window — measure before indexing.
+                        //
+                        // Idempotent under version-rewind (the migration test
+                        // harness re-runs phases): ALTER only when absent.
+                        let has_column =
+                            |c: &Connection, table: &str, name: &str| -> SqliteResult<bool> {
+                                c.prepare(&format!(
+                                "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"
+                            ))?
+                                .query_row([name], |r| r.get::<_, i64>(0))
+                                .map(|n| n > 0)
+                            };
+                        if !has_column(c, "source_items", "content_updated_at")? {
+                            c.execute(
+                                "ALTER TABLE source_items ADD COLUMN content_updated_at TEXT",
+                                [],
+                            )?;
+                        }
+                        if !has_column(c, "source_items", "scored_at")? {
+                            c.execute("ALTER TABLE source_items ADD COLUMN scored_at TEXT", [])?;
+                        }
+                        info!(
+                            target: "4da::db",
+                            "Phase 111: content_updated_at/scored_at columns added"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 112 {
+                Self::run_versioned_migration(
+                    &conn,
+                    111,
+                    112,
+                    "Phase 112: identity ledger — why the system thinks you care about a thing",
+                    |c| {
+                        // The 2026-08-26 audit could not account for the
+                        // lifecycle of an ACE topic. `docker`, `aws`, `azure`
+                        // and `redis` were provably minted into
+                        // `active_topics` (file_signals, 2026-08-19/20) and are
+                        // absent today, and row identity proves it was a
+                        // DELETE rather than an expiry: `grpc` still carries
+                        // id=1141 created 2026-08-14, while `kubernetes` —
+                        // minted by the same fixture on the same scans — has
+                        // id=3953 created 2026-08-25. Something removed them.
+                        //
+                        // It is not in the source. The only DELETEs against
+                        // that table are the two inside
+                        // `purge_generic_active_topics`, no migration touches
+                        // it, every insert is ON CONFLICT DO UPDATE (never
+                        // REPLACE), the genericness predicate has not changed
+                        // since #214/#215, and none of the missing topics is
+                        // generic under it.
+                        //
+                        // Append-only, so a future reader can answer the
+                        // question that had no answer: why does the system
+                        // think I care about this, and what took it away?
+                        // Deliberately NOT foreign-keyed to active_topics —
+                        // the whole point is to survive the row's deletion.
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS identity_ledger (
+                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                 entity_kind TEXT NOT NULL,
+                                 entity_key  TEXT NOT NULL,
+                                 change      TEXT NOT NULL,
+                                 reason      TEXT,
+                                 evidence    TEXT,
+                                 at          TEXT NOT NULL DEFAULT (datetime('now'))
+                             );
+                             CREATE INDEX IF NOT EXISTS idx_identity_ledger_entity
+                                 ON identity_ledger(entity_kind, entity_key, at);
+                             CREATE INDEX IF NOT EXISTS idx_identity_ledger_at
+                                 ON identity_ledger(at);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 112: identity_ledger created"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 113 {
+                Self::run_versioned_migration(
+                    &conn,
+                    112,
+                    113,
+                    "Phase 113: grounding-partitioned vector index + item context-match cache",
+                    |c| {
+                        // -- 1. Partition the context vector index -------------
+                        //
+                        // `find_similar_contexts` wants the top-3 GROUNDING-ELIGIBLE
+                        // chunks (code/config). vec0 selects k rows first and applies
+                        // join predicates afterwards, so the old query over-fetched
+                        // k=24 and filtered in Rust. That is wasteful (3,128 of 15,599
+                        // chunks are doc/test_code and can never be returned, yet were
+                        // scanned and materialised on every query) and, worse, INEXACT:
+                        // an item whose 24 nearest chunks are all prose got fewer than
+                        // three matches, or none, and then scored as though the user's
+                        // codebase contained nothing like it.
+                        //
+                        // sqlite-vec 0.1.9 supports partition keys (verified against the
+                        // linked build, not assumed from the 0.1.10 docs), so the filter
+                        // moves INSIDE the index: k=3 returns the exact top-3 eligible
+                        // rows and scans only the eligible partition. Exactness is also
+                        // load-bearing for the context-match cache below - a truncated
+                        // top-K cannot be maintained by merging a delta into it.
+                        //
+                        // The index is 100% derivable from context_chunks.embedding, so
+                        // dropping and rebuilding it loses nothing.
+                        c.execute_batch(
+                            "DROP TABLE IF EXISTS context_vec;
+                             CREATE VIRTUAL TABLE context_vec USING vec0(
+                                 id integer primary key,
+                                 grounds integer partition key,
+                                 embedding float[768]
+                             );",
+                        )?;
+                        // LENGTH guard: a malformed blob would abort the whole
+                        // migration inside vec0. Skipping it costs that one chunk its
+                        // grounding, which the next re-index repairs.
+                        let rebuilt = c.execute(
+                            "INSERT INTO context_vec (id, grounds, embedding)
+                             SELECT id,
+                                    CASE WHEN source_type IN ('code','config') THEN 1 ELSE 0 END,
+                                    embedding
+                             FROM context_chunks
+                             WHERE embedding IS NOT NULL AND LENGTH(embedding) = 3072",
+                            [],
+                        )?;
+
+                        // -- 2. Context-corpus change log ----------------------
+                        //
+                        // A monotonic generation counter over the grounding corpus.
+                        // Trigger-maintained so no write path can bypass it (same
+                        // reasoning as the schema-104 FTS triggers). AFTER UPDATE is
+                        // deliberately unqualified: over-invalidation is cheap and safe
+                        // here, under-invalidation is a silent wrong score.
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS context_change_log (
+                                 gen        INTEGER PRIMARY KEY AUTOINCREMENT,
+                                 context_id INTEGER NOT NULL,
+                                 deleted    INTEGER NOT NULL DEFAULT 0
+                             );
+                             DROP TRIGGER IF EXISTS context_chunks_change_ai;
+                             DROP TRIGGER IF EXISTS context_chunks_change_au;
+                             DROP TRIGGER IF EXISTS context_chunks_change_ad;
+                             CREATE TRIGGER context_chunks_change_ai
+                                 AFTER INSERT ON context_chunks BEGIN
+                                 INSERT INTO context_change_log(context_id, deleted)
+                                     VALUES (new.id, 0);
+                             END;
+                             CREATE TRIGGER context_chunks_change_au
+                                 AFTER UPDATE ON context_chunks BEGIN
+                                 INSERT INTO context_change_log(context_id, deleted)
+                                     VALUES (new.id, 0);
+                             END;
+                             CREATE TRIGGER context_chunks_change_ad
+                                 AFTER DELETE ON context_chunks BEGIN
+                                 INSERT INTO context_change_log(context_id, deleted)
+                                     VALUES (old.id, 1);
+                             END;",
+                        )?;
+
+                        // -- 3. Per-item materialised context match ------------
+                        //
+                        // The measured reason this exists: the context KNN is 52.0 ms
+                        // of the 54.7 ms it costs to score one item (95.8%), and it is
+                        // a pure function of (item embedding, context corpus). Neither
+                        // input changes when the SCORING pipeline changes - the v25+v26
+                        // arc touched 4,392 lines and none of them were in db/mod.rs,
+                        // context_admission.rs, embeddings.rs or context_engine/ - so a
+                        // 47,000-item drain spent 96% of its time recomputing a value
+                        // that provably could not have moved.
+                        //
+                        // Raw (context_id, distance) only: the boilerplate filter and
+                        // the 100-char truncation stay at the read site, so the cached
+                        // list is exactly what find_similar_contexts returns and the
+                        // incremental merge is exact.
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS item_context_cache (
+                                 item_id    INTEGER PRIMARY KEY,
+                                 generation INTEGER NOT NULL,
+                                 builder    INTEGER NOT NULL
+                             ) WITHOUT ROWID;
+                             CREATE INDEX IF NOT EXISTS idx_item_context_cache_gen
+                                 ON item_context_cache(generation);
+                             CREATE TABLE IF NOT EXISTS item_context_match (
+                                 item_id    INTEGER NOT NULL,
+                                 rank       INTEGER NOT NULL,
+                                 context_id INTEGER NOT NULL,
+                                 distance   REAL NOT NULL,
+                                 PRIMARY KEY (item_id, rank)
+                             ) WITHOUT ROWID;",
+                        )?;
+
+                        // The generation counter tracks the CONTEXT corpus. An
+                        // item's own embedding is the cache's other input, and it
+                        // does change: `repair_pending_embeddings` rewrites it
+                        // (db/sources.rs), and a dimension migration rewrites all
+                        // of them. Nothing about the context corpus notices, so
+                        // without this the cache would serve matches computed for
+                        // a vector the item no longer has. Trigger rather than a
+                        // call-site delete, for the same reason as the change log:
+                        // a write path cannot forget to do it.
+                        c.execute_batch(
+                            "DROP TRIGGER IF EXISTS item_context_cache_reembed;
+                             DROP TRIGGER IF EXISTS item_context_cache_gone;
+                             CREATE TRIGGER item_context_cache_reembed
+                                 AFTER UPDATE OF embedding ON source_items
+                                 WHEN old.embedding IS NOT new.embedding
+                             BEGIN
+                                 DELETE FROM item_context_cache WHERE item_id = new.id;
+                                 DELETE FROM item_context_match WHERE item_id = new.id;
+                             END;
+                             CREATE TRIGGER item_context_cache_gone
+                                 AFTER DELETE ON source_items
+                             BEGIN
+                                 DELETE FROM item_context_cache WHERE item_id = old.id;
+                                 DELETE FROM item_context_match WHERE item_id = old.id;
+                             END;",
+                        )?;
+
+                        info!(
+                            target: "4da::db",
+                            rebuilt,
+                            "Phase 113: context_vec repartitioned on grounding eligibility; change log + item context-match cache created"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 114: idempotent dependency edges + dep-epoch relocation.
+            //
+            // (a) `store_dependency_edges` re-APPENDED the full dependency graph
+            //     on every ACE scan since Phase 84 — measured live 2026-08-31 at
+            //     ~642k rows for ~12k distinct logical edges (52.7x duplication,
+            //     ~168 MB with indexes). The rebuild keeps the NEWEST row per
+            //     logical edge — (project_path, ecosystem, parent@version,
+            //     child@version), newest = MAX(id) since the writer is
+            //     append-only and `detected_at` ties within a scan batch — and
+            //     adds the UNIQUE index that makes the new upsert writer
+            //     physically unable to re-duplicate. Versions are nullable and
+            //     SQLite treats NULLs as DISTINCT in unique indexes, so the key
+            //     COALESCEs them to ''; the writer's ON CONFLICT target must
+            //     match these expressions exactly. `scope` is an attribute the
+            //     upsert refreshes, not part of edge identity.
+            //     Deliberately NO VACUUM here: migrations run at startup with
+            //     the user waiting, and the weekly scheduled VACUUM (or Deep
+            //     Clean) reclaims the freed pages.
+            //
+            // (b) The `dep_epoch_hash` scheduler_state row stored a 63-bit HASH
+            //     in the `last_run_unix` timestamp column (live value
+            //     4748353192844586074), poisoning every consumer that does time
+            //     math on that column — `boot_context::last_scheduler_run`
+            //     takes MAX(last_run_unix), so process-recency detection always
+            //     saw a run "just now". The hash moves to kv_store (it is a
+            //     value, not a schedule) and the poisoned row is deleted, so
+            //     scheduler_state holds only real jobs.
+            if current_version < 114 {
+                Self::run_versioned_migration(
+                    &conn,
+                    113,
+                    114,
+                    "Phase 114: dedupe dependency_edges + relocate dep epoch hash",
+                    |c| {
+                        let before: i64 =
+                            c.query_row("SELECT COUNT(*) FROM dependency_edges", [], |r| r.get(0))?;
+                        c.execute_batch(
+                            "DROP TABLE IF EXISTS dependency_edges_new;
+                             CREATE TABLE dependency_edges_new (
+                                 id INTEGER PRIMARY KEY,
+                                 project_path TEXT NOT NULL,
+                                 ecosystem TEXT NOT NULL,
+                                 parent_package TEXT NOT NULL,
+                                 parent_version TEXT,
+                                 child_package TEXT NOT NULL,
+                                 child_version TEXT,
+                                 scope TEXT NOT NULL DEFAULT 'unknown',
+                                 detected_at TEXT NOT NULL DEFAULT (datetime('now'))
+                             );
+                             INSERT INTO dependency_edges_new
+                                 (id, project_path, ecosystem, parent_package, parent_version,
+                                  child_package, child_version, scope, detected_at)
+                             SELECT id, project_path, ecosystem, parent_package, parent_version,
+                                    child_package, child_version, scope, detected_at
+                             FROM dependency_edges
+                             WHERE id IN (
+                                 SELECT MAX(id) FROM dependency_edges
+                                 GROUP BY project_path, ecosystem, parent_package,
+                                          COALESCE(parent_version, ''), child_package,
+                                          COALESCE(child_version, '')
+                             );
+                             DROP TABLE dependency_edges;
+                             ALTER TABLE dependency_edges_new RENAME TO dependency_edges;
+                             CREATE INDEX IF NOT EXISTS idx_dep_edges_parent
+                                 ON dependency_edges (project_path, parent_package);
+                             CREATE INDEX IF NOT EXISTS idx_dep_edges_child
+                                 ON dependency_edges (project_path, child_package);
+                             CREATE UNIQUE INDEX IF NOT EXISTS idx_dep_edges_unique
+                                 ON dependency_edges (project_path, ecosystem, parent_package,
+                                                      COALESCE(parent_version, ''), child_package,
+                                                      COALESCE(child_version, ''));",
+                        )?;
+                        let after: i64 =
+                            c.query_row("SELECT COUNT(*) FROM dependency_edges", [], |r| r.get(0))?;
+
+                        // Relocate the epoch hash, then delete the poisoned row.
+                        // `<> 0` rather than `> 0`: the hash is 63-bit masked so it
+                        // is never negative in practice, but a defensive copy beats
+                        // silently dropping a value that costs nothing to keep.
+                        c.execute_batch(
+                            "INSERT OR REPLACE INTO kv_store (key, value, updated_at)
+                             SELECT 'dep_epoch_hash', CAST(last_run_unix AS TEXT), datetime('now')
+                             FROM scheduler_state
+                             WHERE job_name = 'dep_epoch_hash' AND last_run_unix <> 0;
+                             DELETE FROM scheduler_state WHERE job_name = 'dep_epoch_hash';",
+                        )?;
+
+                        info!(
+                            target: "4da::db",
+                            edges_before = before,
+                            edges_after = after,
+                            "Phase 114: dependency_edges deduplicated (one row per logical edge); dep epoch hash relocated to kv_store"
+                        );
+                        Ok(())
+                    },
                 )?;
             }
 
@@ -5522,6 +6234,582 @@ mod tests {
             )
             .unwrap();
         assert_eq!(n, 2, "both versions retained");
+    }
+
+    /// Phase 105 (v20b, AD-031) drops the implicit-capture tables and purges
+    /// write-only decision_outcome digests, while KEEPING interactions rows
+    /// (ruling A5: the bootstrap-mode count must not move). Wind back to 104,
+    /// seed the legacy state, re-run, assert dropped/purged/kept.
+    #[test]
+    fn test_phase_105_drops_implicit_capture_tables() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 105,
+            "schema_version should be >= 105 after migration; got {version}"
+        );
+
+        // Seed the legacy implicit-capture state a pre-v20b database carries
+        // (on production these tables live in the shared 4da.db file via the
+        // old ACE bootstrap; the fresh test DB never creates them), then wind
+        // back so only Phase 105 re-executes.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS topic_affinities (topic TEXT PRIMARY KEY, affinity_score REAL);
+             CREATE TABLE IF NOT EXISTS anti_topics (topic TEXT PRIMARY KEY, confidence REAL);
+             CREATE TABLE IF NOT EXISTS activity_patterns (pattern_type TEXT, pattern_key TEXT);
+             CREATE TABLE IF NOT EXISTS source_preferences (source TEXT PRIMARY KEY, score REAL);
+             CREATE TABLE IF NOT EXISTS persona_posterior (id INTEGER PRIMARY KEY, weights TEXT);
+             CREATE TABLE IF NOT EXISTS interactions (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 item_id INTEGER,
+                 action_type TEXT,
+                 item_topics TEXT,
+                 item_source TEXT,
+                 signal_strength REAL
+             );
+             INSERT INTO digested_intelligence (digest_type, subject, data)
+                 VALUES ('decision_outcome', 'security_patch', '{}');
+             INSERT INTO digested_intelligence (digest_type, subject, data)
+                 VALUES ('calibration', 'rust', '{}');
+             INSERT INTO interactions (item_id, action_type, item_topics, item_source, signal_strength)
+                 VALUES (1, 'scroll', '[\"rust\"]', 'hackernews', 0.3);
+             UPDATE schema_version SET version = 104;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v104");
+
+        let conn = db.conn.lock();
+        for table in [
+            "topic_affinities",
+            "anti_topics",
+            "activity_patterns",
+            "source_preferences",
+            "persona_posterior",
+            "posterior_snapshots",
+        ] {
+            let exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(exists, 0, "table '{table}' should be dropped by Phase 105");
+        }
+        let outcome_digests: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM digested_intelligence WHERE digest_type = 'decision_outcome'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(outcome_digests, 0, "decision_outcome digests purged");
+        let kept_digests: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM digested_intelligence WHERE digest_type = 'calibration'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(kept_digests, 1, "other digest types must survive");
+        let interaction_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM interactions WHERE action_type = 'scroll'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            interaction_rows, 1,
+            "interactions rows (implicit ones included) must be KEPT"
+        );
+    }
+
+    /// Phase 106 purges the content-empty OSV husk items the unhydrated batch
+    /// path stored ("[ID] Security advisory / Severity: Unknown / Affected:
+    /// Unknown"), so the hydrating adapter can re-ingest them — the ingest path
+    /// skips existing ids, so without the purge they never heal. A hydrated OSV
+    /// advisory and non-OSV items must survive untouched.
+    #[test]
+    fn test_phase_106_purges_osv_husks() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 106,
+            "schema_version should be >= 106 after migration; got {version}"
+        );
+
+        // Seed one husk (the exact shape vuln_to_source_item produced for an
+        // id-only batch record), one hydrated OSV advisory, and one non-OSV
+        // item whose content merely RESEMBLES a husk; wind back so only
+        // Phase 106 re-executes.
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding) VALUES
+                 ('osv', 'PYSEC-2026-1', '[PYSEC-2026-1] Security advisory',
+                  'Security advisory' || char(10) || char(10) || 'Severity: Unknown' || char(10) || 'Affected: Unknown' || char(10) || char(10), 'hash-husk', x''),
+                 ('osv', 'GHSA-xx-1', '[GHSA-xx-1] lodash: Prototype pollution',
+                  'lodash (npm)' || char(10) || 'Prototype pollution' || char(10) || 'Severity: CVSS_V3: 7.5' || char(10) || 'Affected: lodash (npm)', 'hash-real', x''),
+                 ('rss', 'feed-1', '[weekly] Security advisory',
+                  'Severity: Unknown' || char(10) || 'Affected: Unknown', 'hash-rss', x'');
+             UPDATE schema_version SET version = 105;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v105");
+
+        let conn = db.conn.lock();
+        let husks: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM source_items WHERE source_id = 'PYSEC-2026-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(husks, 0, "the OSV husk must be purged");
+        let survivors: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM source_items WHERE source_id IN ('GHSA-xx-1', 'feed-1')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            survivors, 2,
+            "hydrated OSV advisories and non-OSV items must survive"
+        );
+    }
+
+    /// Phase 110 lifts TARGET_VERSION to 110 and adds the evidence/rank
+    /// separation columns (`rank_score`, `rank_factors`, `rank_scored_at`).
+    /// Verify the version, the columns, and idempotency under version-rewind
+    /// (the harness convention: wind back one phase, re-run, nothing breaks).
+    #[test]
+    fn test_phase_110_rank_columns_added_and_idempotent() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 110,
+            "schema_version should be >= 110 after migration; got {version}"
+        );
+        let count_cols = |name: &str| -> i64 {
+            conn.query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name = ?1",
+                [name],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        for col in ["rank_score", "rank_factors", "rank_scored_at"] {
+            assert_eq!(
+                count_cols(col),
+                1,
+                "source_items.{col} must exist exactly once"
+            );
+        }
+
+        // Wind back to 109 and re-run: the has_column guards make the ALTERs
+        // no-ops, existing rank data survives, and the version returns to 110.
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, url, content_hash,
+                                       embedding, rank_score, rank_factors)
+             VALUES ('hackernews', 'p110:test', 'ranked survivor', 'x', 'https://example.com/p110',
+                     'hash-p110', X'00', 0.91, '{\"ce\":0.2}');
+             UPDATE schema_version SET version = 109;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v109");
+
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 110,
+            "re-run must restore the version; got {version}"
+        );
+        let (rank, factors): (Option<f64>, Option<String>) = conn
+            .query_row(
+                "SELECT rank_score, rank_factors FROM source_items WHERE source_id = 'p110:test'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert!(
+            (rank.unwrap() - 0.91).abs() < 1e-6,
+            "rank data survives the re-run"
+        );
+        assert_eq!(factors.as_deref(), Some("{\"ce\":0.2}"));
+    }
+
+    /// Phase 111 lifts TARGET_VERSION to 111 and adds the differential-honesty
+    /// columns (`content_updated_at`, `scored_at`). Verify the version, the
+    /// columns, and idempotency under version-rewind (the harness convention:
+    /// wind back one phase, re-run, nothing breaks and data survives).
+    /// Phase 113 partitions the context vector index on grounding eligibility
+    /// and creates the per-item context-match cache with its change log.
+    ///
+    /// The partition is what makes `find_similar_contexts` return a true top-K
+    /// instead of whatever survived a k=24 over-fetch — which the incremental
+    /// merge in `scoring::context_cache` depends on for exactness, not just for
+    /// speed. The triggers are what make the generation counter unbypassable.
+    #[test]
+    fn test_phase_113_grounding_partition_and_context_cache() {
+        let db = test_db();
+
+        // Seed one grounding-eligible and one doc chunk through the REAL write
+        // path, so the partition key is exercised the way production sets it.
+        let code = crate::test_utils::seed_embedding("fn handler() { invoke(); }");
+        let prose = crate::test_utils::seed_embedding("welcome to the project readme");
+        db.upsert_context("src/main.rs", "fn handler() { invoke(); }", &code)
+            .expect("code chunk");
+        db.upsert_context("README.md", "welcome to the project readme", &prose)
+            .expect("doc chunk");
+
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
+            .unwrap();
+        assert!(version >= 113, "schema_version >= 113; got {version}");
+
+        // The vec table carries the partition key.
+        let ddl: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE name = 'context_vec'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            ddl.contains("partition key"),
+            "context_vec must be partitioned on grounding eligibility: {ddl}"
+        );
+
+        // Cache tables and the change log exist.
+        for table in [
+            "context_change_log",
+            "item_context_cache",
+            "item_context_match",
+        ] {
+            let n: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?1",
+                    rusqlite::params![table],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "{table} must exist");
+        }
+
+        // The triggers fired for both upserts — that is the generation counter.
+        let logged: i64 = conn
+            .query_row("SELECT COUNT(*) FROM context_change_log", [], |r| r.get(0))
+            .unwrap();
+        assert!(
+            logged >= 2,
+            "context_chunks writes must be logged; got {logged}"
+        );
+
+        // And the doc chunk landed OUTSIDE the grounding partition.
+        let (eligible, ineligible): (i64, i64) = conn
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM context_vec WHERE grounds = 1),
+                        (SELECT COUNT(*) FROM context_vec WHERE grounds = 0)",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(eligible, 1, "the code chunk grounds");
+        assert_eq!(ineligible, 1, "the README chunk does not");
+
+        // Re-running the phase is a no-op that preserves the corpus.
+        conn.execute_batch("UPDATE schema_version SET version = 112;")
+            .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v112");
+        let conn = db.conn.lock();
+        let rebuilt: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM context_vec WHERE grounds = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            rebuilt, 1,
+            "the vector index is rebuilt from context_chunks, so nothing is lost"
+        );
+    }
+
+    /// Phase 114: the dependency_edges rebuild keeps exactly one row per
+    /// logical edge (the NEWEST one), NULL versions dedupe like any other
+    /// value, the UNIQUE index exists afterwards, and the dep-epoch hash is
+    /// relocated from scheduler_state.last_run_unix (where it poisoned
+    /// MAX(last_run_unix) staleness math) into kv_store.
+    #[test]
+    fn test_phase_114_dependency_edges_dedupe_and_epoch_relocation() {
+        let db = test_db();
+        {
+            let conn = db.conn.lock();
+
+            // Recreate the pre-114 state: no unique index, duplicated rows, and
+            // the hash-in-timestamp scheduler row from the 2026-08-31 live audit.
+            conn.execute_batch(
+                "DROP INDEX IF EXISTS idx_dep_edges_unique;
+                 -- Three appends of the same logical edge across three 'scans'.
+                 INSERT INTO dependency_edges
+                     (project_path, ecosystem, parent_package, parent_version,
+                      child_package, child_version, scope, detected_at)
+                 VALUES
+                     ('/p/app', 'rust', 'app', '0.1.0', 'serde', '1.0.190', 'runtime', '2026-08-01 00:00:00'),
+                     ('/p/app', 'rust', 'app', '0.1.0', 'serde', '1.0.190', 'runtime', '2026-08-15 00:00:00'),
+                     ('/p/app', 'rust', 'app', '0.1.0', 'serde', '1.0.190', 'dev',     '2026-08-30 00:00:00'),
+                 -- NULL-versioned edge duplicated twice: NULLs must dedupe too.
+                     ('/p/app', 'javascript', '__root__', NULL, 'left-pad', NULL, 'runtime', '2026-08-01 00:00:00'),
+                     ('/p/app', 'javascript', '__root__', NULL, 'left-pad', NULL, 'runtime', '2026-08-30 00:00:00'),
+                 -- A distinct edge (different child version) survives on its own.
+                     ('/p/app', 'rust', 'app', '0.1.0', 'serde', '1.0.200', 'runtime', '2026-08-30 00:00:00');
+                 INSERT OR REPLACE INTO scheduler_state (job_name, last_run_unix)
+                     VALUES ('dep_epoch_hash', 4748353192844586074);
+                 UPDATE schema_version SET version = 113;",
+            )
+            .expect("seed pre-114 state");
+        }
+
+        db.migrate().expect("re-running migrations from v113");
+
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
+            .unwrap();
+        assert!(version >= 114, "schema_version >= 114; got {version}");
+
+        // 6 rows collapsed to 3 logical edges.
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM dependency_edges", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 3, "one row per logical edge after the rebuild");
+
+        // The survivor of the triplicated edge is the NEWEST row (its last
+        // scan said the scope is 'dev' — that is the current truth).
+        let (scope, detected_at): (String, String) = conn
+            .query_row(
+                "SELECT scope, detected_at FROM dependency_edges
+                 WHERE ecosystem = 'rust' AND child_version = '1.0.190'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(scope, "dev", "newest row per tuple must win");
+        assert_eq!(detected_at, "2026-08-30 00:00:00");
+
+        // The NULL-versioned pair collapsed to one row.
+        let null_edges: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM dependency_edges WHERE child_package = 'left-pad'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(null_edges, 1, "NULL versions must deduplicate via COALESCE");
+
+        // The unique index (the recurrence guard) exists.
+        let unique_idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type='index' AND name='idx_dep_edges_unique'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(unique_idx, 1, "idx_dep_edges_unique must exist");
+
+        // The epoch hash moved to kv_store, value intact...
+        let epoch: String = conn
+            .query_row(
+                "SELECT CAST(value AS TEXT) FROM kv_store WHERE key = 'dep_epoch_hash'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(epoch, "4748353192844586074");
+
+        // ...and the poisoned scheduler row is gone, so MAX(last_run_unix)
+        // staleness math is sane again.
+        let (rows, max_ts): (i64, i64) = conn
+            .query_row(
+                "SELECT COUNT(*), COALESCE(MAX(last_run_unix), 0) FROM scheduler_state
+                 WHERE job_name = 'dep_epoch_hash'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(rows, 0, "hash-in-timestamp row must be deleted");
+        assert_eq!(max_ts, 0);
+
+        // Idempotency: winding back and re-running must not error or lose rows.
+        conn.execute_batch("UPDATE schema_version SET version = 113;")
+            .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running phase 114");
+        let conn = db.conn.lock();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM dependency_edges", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 3, "re-running the rebuild is a semantic no-op");
+    }
+
+    /// Phase 112 lifts TARGET_VERSION to 112 and adds `identity_ledger` — the
+    /// append-only record of why the system believes what it believes about
+    /// the user. The 2026-08-26 audit could not account for topics that were
+    /// provably minted and are provably gone; nothing in the source deletes
+    /// them, and there was no trace to read.
+    #[test]
+    fn test_phase_112_identity_ledger_created_and_idempotent() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 112,
+            "schema_version should be >= 112 after migration; got {version}"
+        );
+
+        let table_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='identity_ledger'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_count, 1, "identity_ledger must exist exactly once");
+
+        // It must accept a row, and default its timestamp.
+        conn.execute(
+            "INSERT INTO identity_ledger (entity_kind, entity_key, change, reason, evidence)
+             VALUES ('topic','kubernetes','mint','file_content','benchmark_scenarios.json')",
+            [],
+        )
+        .unwrap();
+        let (key, at): (String, String) = conn
+            .query_row(
+                "SELECT entity_key, at FROM identity_ledger ORDER BY id DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(key, "kubernetes");
+        assert!(!at.is_empty(), "at must default to a timestamp");
+
+        // Wind back to 111 and re-run: CREATE TABLE IF NOT EXISTS makes the
+        // phase a no-op, the existing row SURVIVES (the ledger is append-only
+        // and must never be rebuilt), and the version returns to 112.
+        conn.execute_batch("UPDATE schema_version SET version = 111;")
+            .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v111");
+
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        // Re-running from 111 replays the whole remaining chain, so this lands on
+        // TARGET_VERSION rather than 112. Asserting the literal made this test a
+        // tripwire on every later phase; asserting ">= 112" keeps what it is
+        // actually about (phase 112 re-ran and was a no-op) without that.
+        assert!(
+            version >= 112,
+            "version returns to at least 112 after re-run; got {version}"
+        );
+        let survived: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM identity_ledger WHERE entity_key = 'kubernetes'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            survived, 1,
+            "an append-only ledger must survive re-migration"
+        );
+    }
+
+    #[test]
+    fn test_phase_111_change_tracking_columns_added_and_idempotent() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 111,
+            "schema_version should be >= 111 after migration; got {version}"
+        );
+        let count_cols = |name: &str| -> i64 {
+            conn.query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name = ?1",
+                [name],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        for col in ["content_updated_at", "scored_at"] {
+            assert_eq!(
+                count_cols(col),
+                1,
+                "source_items.{col} must exist exactly once"
+            );
+        }
+
+        // Wind back to 110 and re-run: the has_column guards make the ALTERs
+        // no-ops, existing stamps survive, and the version returns to 111.
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, url, content_hash,
+                                       embedding, content_updated_at, scored_at)
+             VALUES ('hackernews', 'p111:test', 'stamped survivor', 'x', 'https://example.com/p111',
+                     'hash-p111', X'00', '2026-08-25 01:02:03', '2026-08-25 04:05:06');
+             UPDATE schema_version SET version = 110;",
+        )
+        .unwrap();
+        drop(conn);
+        db.migrate().expect("re-running migrations from v110");
+
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 111,
+            "re-run must restore the version; got {version}"
+        );
+        let (changed_at, scored_at): (Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT content_updated_at, scored_at FROM source_items WHERE source_id = 'p111:test'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            changed_at.as_deref(),
+            Some("2026-08-25 01:02:03"),
+            "content_updated_at survives the re-run"
+        );
+        assert_eq!(
+            scored_at.as_deref(),
+            Some("2026-08-25 04:05:06"),
+            "scored_at survives the re-run"
+        );
     }
 
     /// Phase 92 lifts TARGET_VERSION to 92. Verify the test DB reached it.

@@ -18,7 +18,6 @@ use super::persona_data::PersonaEnrichment;
 /// its individual contribution to scoring quality.
 pub(super) struct EnrichmentConfig {
     pub enable_topic_confidence: bool,
-    pub enable_anti_topics: bool,
     pub enable_topic_embeddings: bool,
     pub enable_source_quality: bool,
     pub enable_work_topics: bool,
@@ -36,7 +35,6 @@ impl EnrichmentConfig {
     pub fn all() -> Self {
         Self {
             enable_topic_confidence: true,
-            enable_anti_topics: true,
             enable_topic_embeddings: true,
             enable_source_quality: true,
             enable_work_topics: true,
@@ -54,7 +52,6 @@ impl EnrichmentConfig {
     pub fn none() -> Self {
         Self {
             enable_topic_confidence: false,
-            enable_anti_topics: false,
             enable_topic_embeddings: false,
             enable_source_quality: false,
             enable_work_topics: false,
@@ -73,7 +70,6 @@ impl EnrichmentConfig {
         let mut cfg = Self::none();
         match field {
             EnrichmentField::TopicConfidence => cfg.enable_topic_confidence = true,
-            EnrichmentField::AntiTopics => cfg.enable_anti_topics = true,
             EnrichmentField::TopicEmbeddings => cfg.enable_topic_embeddings = true,
             EnrichmentField::SourceQuality => cfg.enable_source_quality = true,
             EnrichmentField::WorkTopics => cfg.enable_work_topics = true,
@@ -93,7 +89,6 @@ impl EnrichmentConfig {
 #[derive(Debug, Clone, Copy)]
 pub(super) enum EnrichmentField {
     TopicConfidence,
-    AntiTopics,
     TopicEmbeddings,
     SourceQuality,
     WorkTopics,
@@ -111,7 +106,6 @@ impl EnrichmentField {
     pub fn all_variants() -> &'static [EnrichmentField] {
         &[
             EnrichmentField::TopicConfidence,
-            EnrichmentField::AntiTopics,
             EnrichmentField::TopicEmbeddings,
             EnrichmentField::SourceQuality,
             EnrichmentField::WorkTopics,
@@ -128,7 +122,6 @@ impl EnrichmentField {
     pub fn name(&self) -> &'static str {
         match self {
             Self::TopicConfidence => "topic_confidence",
-            Self::AntiTopics => "anti_topics",
             Self::TopicEmbeddings => "topic_embeddings",
             Self::SourceQuality => "source_quality",
             Self::WorkTopics => "work_topics",
@@ -162,9 +155,6 @@ pub(super) fn enrich_persona(
         active_topics: base.ace_ctx.active_topics.clone(),
         topic_confidence: base.ace_ctx.topic_confidence.clone(),
         detected_tech: base.ace_ctx.detected_tech.clone(),
-        anti_topics: base.ace_ctx.anti_topics.clone(),
-        anti_topic_confidence: base.ace_ctx.anti_topic_confidence.clone(),
-        topic_affinities: base.ace_ctx.topic_affinities.clone(),
         dependency_names: base.ace_ctx.dependency_names.clone(),
         dependency_info: base.ace_ctx.dependency_info.clone(),
         peak_hours: base.ace_ctx.peak_hours.clone(),
@@ -183,19 +173,6 @@ pub(super) fn enrich_persona(
         }
     }
 
-    if config.enable_anti_topics {
-        for anti in &data.anti_topics {
-            if !ace.anti_topics.contains(anti) {
-                ace.anti_topics.push(anti.clone());
-            }
-        }
-        for (topic, &conf) in &data.anti_topic_confidence {
-            ace.anti_topic_confidence
-                .entry(topic.clone())
-                .or_insert(conf);
-        }
-    }
-
     if config.enable_dependency_info {
         for dep in &data.dependency_info {
             let name = dep.package_name.to_string();
@@ -207,6 +184,8 @@ pub(super) fn enrich_persona(
                     is_direct: dep.is_direct,
                     search_terms: dep.search_terms.iter().map(|s| s.to_string()).collect(),
                     ecosystem: dep.ecosystem.to_string(),
+                    project_paths: Vec::new(),
+                    project_relevance: 1.0,
                 }
             });
         }
@@ -374,14 +353,6 @@ mod tests {
                     "Persona {i}: topic_confidence not enriched"
                 );
             }
-
-            // Anti-topics should be set if data has them
-            if !data.anti_topics.is_empty() {
-                assert!(
-                    !enriched.ace_ctx.anti_topics.is_empty(),
-                    "Persona {i}: anti_topics not enriched"
-                );
-            }
         }
     }
 
@@ -392,14 +363,19 @@ mod tests {
         let config = EnrichmentConfig::none();
 
         // For a non-trivial persona (Rust), enriching with none() should leave
-        // top-level fields at their defaults (empty)
-        let enriched = enrich_persona(
-            bases.into_iter().next().expect("at least one persona"),
-            &enrichments[0],
-            &config,
-        );
-        assert!(
-            enriched.topic_embeddings.is_empty(),
+        // top-level fields at their BASE state. topic_embeddings is asserted
+        // relative to the base, not as empty: under `calibrated-sim` the base
+        // personas already carry the real fastembed topic map by design
+        // (personas::with_calibrated_topic_embeddings), so "empty" was a
+        // synthetic-mode-only premise (failed under calibrated-sim,
+        // 2026-08-24 measurement run). The invariant under test is unchanged:
+        // enrichment with none() ADDS nothing.
+        let base = bases.into_iter().next().expect("at least one persona");
+        let base_topic_embeddings = base.topic_embeddings.len();
+        let enriched = enrich_persona(base, &enrichments[0], &config);
+        assert_eq!(
+            enriched.topic_embeddings.len(),
+            base_topic_embeddings,
             "EnrichmentConfig::none() should not add topic_embeddings"
         );
         assert!(
@@ -422,19 +398,20 @@ mod tests {
         let enrichments = all_enrichments();
         let config = EnrichmentConfig::only(EnrichmentField::SourceQuality);
 
-        let enriched = enrich_persona(
-            bases.into_iter().next().expect("at least one persona"),
-            &enrichments[0],
-            &config,
-        );
+        // Base-relative for the same reason as enrichment_none_preserves_base:
+        // calibrated-sim bases legitimately carry topic embeddings already.
+        let base = bases.into_iter().next().expect("at least one persona");
+        let base_topic_embeddings = base.topic_embeddings.len();
+        let enriched = enrich_persona(base, &enrichments[0], &config);
         // Source quality should be set
         assert!(
             !enriched.source_quality.is_empty(),
             "only(SourceQuality) should set source_quality"
         );
-        // But topic_embeddings should still be empty
-        assert!(
-            enriched.topic_embeddings.is_empty(),
+        // But topic_embeddings should be untouched
+        assert_eq!(
+            enriched.topic_embeddings.len(),
+            base_topic_embeddings,
             "only(SourceQuality) should not set topic_embeddings"
         );
         // And exclusions should still be empty

@@ -8,6 +8,12 @@
 //   ENVIRONMENT        — "production" in prod; anything else enables localhost CORS
 
 import Stripe from 'stripe';
+import {
+  checkAndCount,
+  IP_WINDOW_TTL_SECONDS,
+  notifyWindowKey,
+  NOTIFY_REQUESTS_PER_IP_PER_HOUR,
+} from '../../lib/abuse-guards.js';
 
 const BASE_ORIGINS = ['https://4da.ai', 'https://www.4da.ai'];
 
@@ -52,6 +58,22 @@ export async function onRequest({ request, env }) {
 
   if (!env.STRIPE_SECRET_KEY) {
     return json({ error: 'Service not configured' }, 500, headers);
+  }
+
+  // Per-IP cap: this endpoint writes a Stripe customer on every call with no
+  // auth. Unmetered, that is an unbounded write into the customer namespace.
+  // Fails open (LICENSE_KV absent / erroring never blocks a real signup).
+  const callerIp = request.headers.get('cf-connecting-ip');
+  if (env.LICENSE_KV && callerIp) {
+    const allowed = await checkAndCount(
+      env.LICENSE_KV,
+      notifyWindowKey(callerIp),
+      NOTIFY_REQUESTS_PER_IP_PER_HOUR,
+      IP_WINDOW_TTL_SECONDS,
+    );
+    if (!allowed) {
+      return json({ error: 'Too many requests. Please try again later.' }, 429, headers);
+    }
   }
 
   try {

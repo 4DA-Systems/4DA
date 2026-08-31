@@ -107,16 +107,27 @@ if (lifetimePrice) {
 // Check webhook endpoints
 console.log('\nChecking webhook endpoints...');
 const webhooks = await stripe.webhookEndpoints.list({ limit: 20 });
+// Accept the canonical path and the pre-rename one — an existing destination
+// still on /api/streets/activate is the same endpoint (shimmed server-side).
 const signalWebhook = webhooks.data.find(w =>
-  w.url.includes('4da.ai') && w.url.includes('/api/streets/activate')
+  w.url.includes('4da.ai') &&
+  (w.url.includes('/api/license/activate') || w.url.includes('/api/streets/activate'))
 );
 
 if (signalWebhook) {
   console.log(`  Found webhook: ${signalWebhook.url}`);
   console.log(`  Events: ${signalWebhook.enabled_events.join(', ')}`);
 
-  // Ensure all needed events are registered
-  const needed = ['checkout.session.completed', 'invoice.paid', 'customer.subscription.deleted'];
+  // Ensure all needed events are registered — must match HANDLED_EVENTS in
+  // site/functions/api/license/activate.js
+  const needed = [
+    'checkout.session.completed',
+    'invoice.paid',
+    'customer.subscription.deleted',
+    'charge.refunded',
+    'charge.dispute.created',
+    'charge.dispute.closed',
+  ];
   const missing = needed.filter(e => !signalWebhook.enabled_events.includes(e) && !signalWebhook.enabled_events.includes('*'));
   if (missing.length > 0) {
     console.log(`  WARNING: Missing events: ${missing.join(', ')}`);
@@ -125,10 +136,11 @@ if (signalWebhook) {
     console.log('  All required events registered.');
   }
 } else {
-  console.log('  WARNING: No webhook endpoint found for 4da.ai/api/streets/activate');
+  console.log('  WARNING: No webhook endpoint found for 4da.ai/api/license/activate');
   console.log('  Create one in Stripe Dashboard:');
-  console.log('    URL: https://4da.ai/api/streets/activate');
-  console.log('    Events: checkout.session.completed, invoice.paid, customer.subscription.deleted');
+  console.log('    URL: https://4da.ai/api/license/activate');
+  console.log('    Events: checkout.session.completed, invoice.paid, customer.subscription.deleted,');
+  console.log('            charge.refunded, charge.dispute.created, charge.dispute.closed');
 }
 
 // Output

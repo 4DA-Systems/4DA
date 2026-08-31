@@ -242,6 +242,8 @@ mod tests {
             applicability: None,
             advisory_id: None,
             primary_topic: None,
+            evidence_score: 0.75,
+            rank_factors: None,
         }];
 
         // Serialize the results as the frontend would receive them

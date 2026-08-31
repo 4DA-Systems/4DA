@@ -9,6 +9,7 @@ mod cache;
 mod channels;
 #[cfg(test)]
 mod concurrency_tests;
+pub(crate) mod context_cache;
 #[cfg(test)]
 mod context_rebuild_tests;
 pub(crate) mod dep_snapshots;
@@ -164,10 +165,42 @@ pub struct Database {
     read_pool: Vec<Mutex<Connection>>,
 }
 
-/// Read-only pool size (WAL allows concurrent readers) — also the parallel-drain
-/// thread ceiling: each scoring thread borrows one reader for its per-item KNN
-/// (`analysis_backfill::score_chunk`), so more threads would serialize on the writer.
-pub(crate) const READ_POOL_SIZE: usize = 3;
+/// Upper bound on the read-only pool (WAL allows concurrent readers).
+///
+/// Measured on the live corpus 2026-08-27: per-item context-KNN throughput
+/// scales 1.00x / 1.74x / 2.46x / 3.06x / 3.78x / **3.97x** at 1 / 2 / 3 / 4 / 6
+/// / 8 threads and REGRESSES beyond it (3.69x at 12, 3.33x at 16) — the vec0
+/// scan is memory-bandwidth bound and 48 MB of context vectors does not fit in
+/// this class of L3. Eight is the measured knee, so the pool never needs to be
+/// larger than that no matter how many cores the host has.
+pub(crate) const READ_POOL_MAX: usize = 8;
+
+/// Lower bound — the fixed size the pool had before 2026-08-27, so a 2-core
+/// machine keeps exactly the old behaviour.
+pub(crate) const READ_POOL_MIN: usize = 3;
+
+/// Total page-cache budget shared across the pool, in KiB. Held CONSTANT as the
+/// pool grows (each reader gets `READ_POOL_CACHE_KIB / n`), so raising the
+/// thread ceiling costs cores, never memory. The KNN reads far more than any of
+/// these values and is served from the shared mmap, so the per-connection page
+/// cache is not on that hot path.
+const READ_POOL_CACHE_KIB: usize = 48_000;
+
+/// Readers to open on this host: one per core minus the foreground, clamped to
+/// `[READ_POOL_MIN, READ_POOL_MAX]`.
+///
+/// The pool is ALSO the parallel-scoring thread ceiling
+/// (`analysis_backfill::score_chunk`): each scoring thread borrows one reader for
+/// its per-item KNN, and a thread beyond the pool falls back to the writer lock
+/// and serialises. Sizing it from the host is what lifts a drain from 2.46x to
+/// 3.97x on an 8-core machine.
+pub(crate) fn read_pool_size() -> usize {
+    std::thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(READ_POOL_MIN)
+        .saturating_sub(1) // leave a core for the foreground app / OS
+        .clamp(READ_POOL_MIN, READ_POOL_MAX)
+}
 
 /// WAL size above which a checkpoint is escalated from PASSIVE to TRUNCATE.
 ///
@@ -237,9 +270,12 @@ impl Database {
         // WAL mode allows multiple concurrent readers alongside one writer.
         // Skip pool for in-memory databases (tests) — they can't share connections.
         let is_file_db = db_path.to_string_lossy() != ":memory:";
-        let mut read_pool = Vec::with_capacity(if is_file_db { READ_POOL_SIZE } else { 0 });
+        let pool_target = if is_file_db { read_pool_size() } else { 0 };
+        // Per-reader page cache, so the TOTAL budget is independent of pool size.
+        let reader_cache_kib = READ_POOL_CACHE_KIB / pool_target.max(1);
+        let mut read_pool = Vec::with_capacity(pool_target);
         if is_file_db {
-            for i in 0..READ_POOL_SIZE {
+            for i in 0..pool_target {
                 match Connection::open_with_flags(
                     db_path,
                     rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
@@ -254,12 +290,12 @@ impl Database {
                             tracing::warn!(target: "4da::db", pool = i, error = %e, "Failed to apply encryption key to reader");
                         }
                         reader
-                            .execute_batch(
+                            .execute_batch(&format!(
                                 "PRAGMA busy_timeout = 5000;
-                                 PRAGMA cache_size = -16000;
+                                 PRAGMA cache_size = -{reader_cache_kib};
                                  PRAGMA mmap_size = 134217728;
-                                 PRAGMA query_only = ON;",
-                            )
+                                 PRAGMA query_only = ON;"
+                            ))
                             .ok();
                         read_pool.push(Mutex::new(reader));
                     }
@@ -268,7 +304,13 @@ impl Database {
                     }
                 }
             }
-            tracing::info!(target: "4da::db", pool_size = read_pool.len(), "Read connection pool initialized");
+            tracing::info!(
+                target: "4da::db",
+                pool_size = read_pool.len(),
+                requested = pool_target,
+                cache_kib_each = reader_cache_kib,
+                "Read connection pool initialized"
+            );
         }
 
         let db = Self {
@@ -322,6 +364,17 @@ impl Database {
         }
         // All readers busy — fall back to writer (contention, but correct)
         self.conn.lock()
+    }
+
+    /// How many read-only connections this database actually opened.
+    ///
+    /// This is the honest parallel-scoring ceiling: a scoring thread beyond it
+    /// falls through [`Self::read_conn`] to the writer lock and serialises with
+    /// every other writer, so `analysis_backfill::score_chunk` sizes its thread
+    /// count from here rather than from a constant. Zero for in-memory test
+    /// databases, which have no pool — callers must treat 0 as "sequential".
+    pub(crate) fn read_pool_len(&self) -> usize {
+        self.read_pool.len()
     }
 
     /// Run lightweight scheduled maintenance (safe to call frequently).
@@ -483,9 +536,13 @@ impl Database {
                 "UPDATE context_chunks SET source_file = ?1, weight = ?2, source_type = ?3, updated_at = datetime('now') WHERE id = ?4",
                 params![source_file, effective_weight, source_type, id],
             )?;
+            // Delete + re-insert rather than UPDATE: `grounds` is a vec0
+            // PARTITION KEY, and a reclassified chunk (doc -> code) has to move
+            // between partitions, which an in-place UPDATE cannot express.
+            tx.execute("DELETE FROM context_vec WHERE id = ?1", params![id])?;
             tx.execute(
-                "UPDATE context_vec SET embedding = ?1 WHERE rowid = ?2",
-                params![embedding_blob, id],
+                "INSERT INTO context_vec (id, grounds, embedding) VALUES (?1, ?2, ?3)",
+                params![id, Self::grounds_partition(source_type), embedding_blob],
             )?;
             tx.commit()?;
             Ok(id)
@@ -497,8 +554,8 @@ impl Database {
             )?;
             let id = tx.last_insert_rowid();
             tx.execute(
-                "INSERT INTO context_vec (rowid, embedding) VALUES (?1, ?2)",
-                params![id, embedding_blob],
+                "INSERT INTO context_vec (id, grounds, embedding) VALUES (?1, ?2, ?3)",
+                params![id, Self::grounds_partition(source_type), embedding_blob],
             )?;
             tx.commit()?;
             Ok(id)
@@ -590,7 +647,7 @@ impl Database {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))",
             )?;
             let mut ins_vec =
-                tx.prepare("INSERT INTO context_vec (rowid, embedding) VALUES (?1, ?2)")?;
+                tx.prepare("INSERT INTO context_vec (id, grounds, embedding) VALUES (?1, ?2, ?3)")?;
             let mut seen_hashes: HashSet<String> = HashSet::new();
             let mut doc_counts: HashMap<&str, usize> = HashMap::new();
 
@@ -626,7 +683,11 @@ impl Database {
                     class.source_type(),
                 ])?;
                 let id = tx.last_insert_rowid();
-                ins_vec.execute(params![id, blob])?;
+                ins_vec.execute(params![
+                    id,
+                    Self::grounds_partition(class.source_type()),
+                    blob
+                ])?;
                 stats.admitted += 1;
             }
         }
@@ -843,14 +904,26 @@ impl Database {
         let tx = conn.unchecked_transaction()?;
         {
             let mut up = tx.prepare("UPDATE context_chunks SET source_type = ?1 WHERE id = ?2")?;
+            // Reclassification changes grounding eligibility, which IS the vec0
+            // partition — so the vector has to be moved, not just re-stamped.
+            // Missing this would leave a newly-eligible chunk invisible to
+            // grounding (and a newly-ineligible one still grounding the feed).
+            let mut mv_del = tx.prepare("DELETE FROM context_vec WHERE id = ?1")?;
+            let mut mv_ins = tx.prepare(
+                "INSERT INTO context_vec (id, grounds, embedding)
+                 SELECT id, ?2, embedding FROM context_chunks
+                 WHERE id = ?1 AND embedding IS NOT NULL AND LENGTH(embedding) > 0",
+            )?;
             for (id, st) in &reclass {
                 up.execute(params![st, id])?;
+                mv_del.execute(params![id])?;
+                mv_ins.execute(params![id, Self::grounds_partition(st)])?;
             }
         }
         stats.reclassified = reclass.len();
         {
             let mut del_c = tx.prepare("DELETE FROM context_chunks WHERE id = ?1")?;
-            let mut del_v = tx.prepare("DELETE FROM context_vec WHERE rowid = ?1")?;
+            let mut del_v = tx.prepare("DELETE FROM context_vec WHERE id = ?1")?;
             for id in &delete_ids {
                 del_v.execute(params![id])?;
                 del_c.execute(params![id])?;
@@ -858,62 +931,5 @@ impl Database {
         }
         tx.commit()?;
         Ok(stats)
-    }
-
-    /// KNN search for similar contexts using sqlite-vec (O(log n) instead of O(n)).
-    ///
-    /// Grounding is CODE-ONLY: results are restricted to grounding-eligible
-    /// provenance (`code`/`config` — see [`crate::context_admission`]). Prose /
-    /// doc embeddings are semantic wildcards that once surfaced a Spanish
-    /// business course as "Similar to your code" on a Docker tool; they must
-    /// never ground the feed nor move the context score. Both scoring pipelines
-    /// read from here, so this one filter fixes evidence AND score at once.
-    ///
-    /// The filter is applied by OVER-FETCHING from the KNN index and then
-    /// keeping only grounding-eligible rows — not as a `WHERE` on the vec
-    /// `MATCH`, because sqlite-vec selects `k` rows FIRST and applies join
-    /// predicates after, which would silently under-fill the result.
-    pub fn find_similar_contexts(
-        &self,
-        query_embedding: &[f32],
-        limit: usize,
-    ) -> SqliteResult<Vec<SimilarityResult>> {
-        let conn = self.read_conn();
-        let embedding_blob = embedding_to_blob(query_embedding);
-        let overfetch = limit.saturating_mul(6).max(24) as i64;
-
-        let mut stmt = conn.prepare(
-            "SELECT v.rowid, v.distance, c.source_file, c.text, c.source_type
-             FROM context_vec v
-             JOIN context_chunks c ON c.id = v.rowid
-             WHERE v.embedding MATCH ?1 AND k = ?2
-             ORDER BY v.distance",
-        )?;
-
-        let rows = stmt.query_map(params![embedding_blob, overfetch], |row| {
-            Ok((
-                SimilarityResult {
-                    context_id: row.get(0)?,
-                    distance: row.get(1)?,
-                    source_file: row.get(2)?,
-                    text: row.get(3)?,
-                },
-                row.get::<_, Option<String>>(4)?.unwrap_or_default(),
-            ))
-        })?;
-
-        let mut out = Vec::with_capacity(limit);
-        for row in rows {
-            let (res, source_type) = row?;
-            let grounds = crate::context_admission::ContextClass::from_source_type(&source_type)
-                .is_some_and(crate::context_admission::ContextClass::grounding_eligible);
-            if grounds {
-                out.push(res);
-                if out.len() >= limit {
-                    break;
-                }
-            }
-        }
-        Ok(out)
     }
 }

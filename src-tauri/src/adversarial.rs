@@ -11,6 +11,10 @@
 //! - Graceful degradation: returns `Ok(None)` when LLM is unavailable or limits
 //!   reached, allowing the item to pass through unmodified.
 //! - Critical/High urgency items bypass deliberation entirely.
+//! - Escalation gate: Critical/High is only honored when corroborated (real
+//!   advisory linkage or non-empty affected deps; signal chains: OSV-verified
+//!   provenance or non-empty affected deps only). Uncorroborated escalations
+//!   are capped at Medium before the safety floor is computed.
 
 use crate::error::Result;
 use crate::evidence::{Confidence, EvidenceItem, Urgency};
@@ -106,7 +110,7 @@ pub(crate) async fn deliberate(
     let system_prompt = build_system_prompt();
     let user_message = build_user_message(item, user_context);
 
-    let client = LLMClient::new(provider);
+    let client = LLMClient::with_purpose(provider, "adversarial");
     let messages = vec![Message {
         role: "user".to_string(),
         content: user_message,
@@ -162,11 +166,165 @@ pub(crate) async fn deliberate(
 // Batch filter
 // ============================================================================
 
+/// How a deliberation verdict is applied to an item. Extracted as data so the
+/// decision is testable without an LLM (`filter_batch` itself needs one).
+#[derive(Debug, PartialEq, Eq)]
+enum VerdictApplication {
+    /// Verdict agrees the item should surface — adopt the grounded explanation
+    /// and adjusted confidence.
+    SurfaceUpdated,
+    /// Safety floor: the verdict argued AGAINST surfacing, but Critical/High
+    /// urgency mandates surfacing anyway. The item surfaces UNCHANGED — its
+    /// original explanation and confidence stand. Adopting the verdict here
+    /// ships an alert that argues against itself (observed live 2026-08-22:
+    /// a Critical chain-alert whose own explanation read "incorrectly
+    /// escalated" at 92% displayed confidence).
+    SurfaceUnchanged,
+    /// Verdict says don't surface and no safety floor applies — drop the item.
+    Filter,
+}
+
+/// The one decision table for applying a verdict. `must_surface` is the
+/// Critical/High safety floor; `should_surface` is the LLM's judgment.
+fn apply_verdict(must_surface: bool, should_surface: bool) -> VerdictApplication {
+    match (should_surface, must_surface) {
+        (true, _) => VerdictApplication::SurfaceUpdated,
+        (false, true) => VerdictApplication::SurfaceUnchanged,
+        (false, false) => VerdictApplication::Filter,
+    }
+}
+
+// ============================================================================
+// Escalation corroboration
+// ============================================================================
+
+/// Advisory-id families that count as real advisory linkage. Every family
+/// except GHSA is followed by a numeric segment ("CVE-2026-1234",
+/// "RUSTSEC-2026-0001", "GO-2026-5781"); GHSA ids use base32 segments, so
+/// GHSA is matched on the boundary-checked prefix alone.
+const ADVISORY_ID_PREFIXES: &[&str] =
+    &["CVE-", "GHSA-", "RUSTSEC-", "OSV-", "PYSEC-", "MAL-", "GO-"];
+
+/// Urgency cap applied to an escalated item whose escalation is
+/// uncorroborated. Medium ("act within the month") keeps the item visible
+/// and deliberation-eligible without granting it the Critical/High safety
+/// floor; Watch stays reserved for chains that preemption itself already
+/// classifies as ungrounded ecosystem awareness.
+const UNCORROBORATED_ESCALATION_CAP: Urgency = Urgency::Medium;
+
+/// True when `text` contains a token that looks like a real advisory id.
+///
+/// A prefix only counts when it starts at a token boundary (start of string
+/// or after a non-alphanumeric byte), so prose like "normal-2026" never
+/// matches "MAL-". Numeric families additionally require a digit right after
+/// the prefix, so "go-to-definition" never matches "GO-". ASCII-only case
+/// folding keeps byte offsets stable (all prefixes are pure ASCII).
+///
+/// `pub(crate)`: preemption's `chain_to_alert` uses this pure check to keep
+/// its explanation copy honest ("Includes a published advisory." vs "No
+/// advisory issued.") — display copy only, never an escalation input there.
+pub(crate) fn contains_advisory_id(text: &str) -> bool {
+    let upper = text.to_ascii_uppercase();
+    let bytes = upper.as_bytes();
+    ADVISORY_ID_PREFIXES.iter().any(|prefix| {
+        let p = prefix.as_bytes();
+        bytes
+            .windows(p.len())
+            .enumerate()
+            .filter(|(_, window)| *window == p)
+            .any(|(pos, _)| {
+                let at_boundary = pos == 0 || !bytes[pos - 1].is_ascii_alphanumeric();
+                let next = bytes.get(pos + p.len());
+                let follow_ok = if *prefix == "GHSA-" {
+                    next.is_some_and(|b| b.is_ascii_alphanumeric())
+                } else {
+                    next.is_some_and(|b| b.is_ascii_digit())
+                };
+                at_boundary && follow_ok
+            })
+    })
+}
+
+/// Does this item carry real advisory linkage? Machine-verified OSV
+/// provenance, or an advisory id in its title or structured evidence
+/// citations. Deliberately never inspects `explanation` — a previous fix
+/// round (R3) rewrote explanation copy, and the escalation decision must
+/// rest on structured evidence, not prose.
+///
+/// SIGNAL CHAINS (`chain-*` ids): the ONLY advisory linkage a chain can earn
+/// here is machine-verified OSV provenance — advisory ids in a chain's title
+/// or citations never count. This is the single place the chain rule lives.
+///
+/// Why neither text arm works for chains: a chain AGGREGATES co-tokened
+/// items, so its evidence list routinely includes advisory-titled neighbors
+/// that merely share the chain's token — live post-activation proof
+/// (2026-08-24): all three phantom single-token chains
+/// ("table"/"sandbox"/"next") survived the gate through the citation arm, the
+/// "table" chain citing an unrelated XWiki "Live Table" CVE. And a chain
+/// alert's TITLE is just its first link's title (`chain_to_alert`), i.e. the
+/// same aggregated-neighbor text — measured live 2026-08-25: two critical
+/// chains with empty affected deps rode their own "[CVE-...]" first-link
+/// titles through the former own-title arm. An off-stack advisory in a
+/// chain's text is ecosystem awareness, not the user's exposure. A chain
+/// whose topic IS a verified installed dep carries that dep in
+/// `affected_deps` (`chain_to_alert` propagates `SignalChain::verified_dep`)
+/// and passes the escalation gate through its deps arm instead.
+fn has_advisory_linkage(item: &EvidenceItem) -> bool {
+    if item.confidence.provenance == crate::evidence::ConfidenceProvenance::OsvVerified {
+        return true;
+    }
+    if item.id.starts_with("chain-") {
+        return false;
+    }
+    contains_advisory_id(&item.title)
+        || item.evidence.iter().any(|citation| {
+            contains_advisory_id(&citation.title)
+                || citation.url.as_deref().is_some_and(contains_advisory_id)
+        })
+}
+
+/// The escalation gate at the deliberation boundary. A Critical/High item
+/// keeps its urgency — and thereby earns the must-surface safety floor —
+/// only when the escalation is corroborated: real advisory linkage, or
+/// non-empty affected deps confirmed by an upstream materializer.
+///
+/// For `chain-*` items, corroboration means OSV-verified provenance or
+/// non-empty affected deps ONLY (see [`has_advisory_linkage`] for the chain
+/// rule and its live evidence). This should be a pure safety net:
+/// `chain_policy` only mints an escalation-capable priority for dep-grounded
+/// chains, and `chain_to_alert` propagates `SignalChain::verified_dep` into
+/// affected deps — so a legitimately escalated chain arrives carrying its
+/// dep. The gate catches drift (stale persisted chains predating
+/// `verified_dep`, future policy changes) and demotes any chain that arrives
+/// escalated with neither, instead of letting it bypass deliberation as a
+/// critical alert.
+///
+/// Returns `true` when the item was demoted (the caller logs the demotion).
+///
+/// `pub(crate)`: the preemption fast path (cache-miss feed, no LLM) applies
+/// this same deterministic gate so phantom critical chains cannot flash
+/// there while the deliberated recompute is still running.
+pub(crate) fn gate_escalation(item: &mut EvidenceItem) -> bool {
+    let escalated = item.urgency == Urgency::Critical || item.urgency == Urgency::High;
+    if !escalated {
+        return false;
+    }
+    if has_advisory_linkage(item) || !item.affected_deps.is_empty() {
+        return false;
+    }
+    item.urgency = UNCORROBORATED_ESCALATION_CAP;
+    true
+}
+
 /// Run adversarial deliberation on a batch of items, filtering out items that
 /// don't pass deliberation.
 ///
-/// - Critical and High urgency items pass through automatically (never filter
-///   safety-critical intelligence).
+/// - Critical and High urgency items always surface (never filter
+///   safety-critical intelligence) — but a dissenting verdict never rewrites
+///   them (see [`VerdictApplication::SurfaceUnchanged`]), and the floor is
+///   only granted to corroborated escalations (see [`gate_escalation`]):
+///   an escalated item with no advisory linkage and no affected deps is
+///   capped at Medium first and deliberated like any other Medium item.
 /// - Items that cannot be deliberated (LLM unavailable) pass through unchanged.
 /// - Items where the verdict says "don't surface" are dropped.
 /// - Items where the verdict says "surface" get their explanation and confidence
@@ -177,8 +335,38 @@ pub(crate) async fn filter_batch(
     items: Vec<EvidenceItem>,
     user_context: &str,
 ) -> Vec<EvidenceItem> {
+    // Escalation gate FIRST — deterministic, zero-cost, and it must run
+    // regardless of LLM availability: the Basic-tier early return below used
+    // to exit before the gate, so on a Basic-tier/no-LLM config phantom
+    // critical chains sailed through the deliberated path untouched (found
+    // live 2026-08-24 during post-activation verification). An uncorroborated
+    // Critical/High item (no advisory linkage, no affected deps) loses its
+    // escalation BEFORE the safety floor is computed. R3 fixed the
+    // explanation copy of phantom chain alerts ("No advisory issued"); this
+    // fixes the escalation itself.
+    let mut items = items;
+    let mut demoted_count: usize = 0;
+    for item in items.iter_mut() {
+        if item.confidence.provenance == crate::evidence::ConfidenceProvenance::OsvVerified {
+            continue;
+        }
+        let original_urgency = item.urgency;
+        if gate_escalation(item) {
+            demoted_count += 1;
+            warn!(
+                target: "4da::adversarial",
+                item_id = %item.id,
+                title = %item.title,
+                from = ?original_urgency,
+                to = ?item.urgency,
+                "Escalated item has no advisory linkage and no affected deps; demoted below the Critical/High floor"
+            );
+        }
+    }
+
     // Gate: skip adversarial deliberation for Basic-tier models. Small models
     // produce unreliable verdicts that would incorrectly filter good items.
+    // (The escalation gate above has already run — this skips only the LLM.)
     let llm_settings = {
         let mgr = crate::get_settings_manager();
         let guard = mgr.lock();
@@ -190,7 +378,8 @@ pub(crate) async fn filter_batch(
             target: "4da::adversarial",
             tier = %tier,
             count = items.len(),
-            "LLM model tier does not support adversarial deliberation, passing items through"
+            demoted = demoted_count,
+            "LLM model tier does not support adversarial deliberation, passing gated items through"
         );
         return items;
     }
@@ -218,14 +407,28 @@ pub(crate) async fn filter_batch(
         }
 
         match deliberate(&item, user_context).await {
-            Ok(Some(verdict)) => {
-                if verdict.should_surface || must_surface {
+            Ok(Some(verdict)) => match apply_verdict(must_surface, verdict.should_surface) {
+                VerdictApplication::SurfaceUpdated => {
                     let mut updated = item;
                     updated.explanation = verdict.grounded_explanation;
                     updated.confidence =
                         Confidence::llm_assessed(verdict.adjusted_confidence.clamp(0.0, 1.0));
                     passed.push(updated);
-                } else {
+                }
+                VerdictApplication::SurfaceUnchanged => {
+                    // Surfaced by the safety floor over LLM dissent. Keep the
+                    // item's own explanation/confidence — the dissent is an
+                    // input to filtering, not a rewrite of the evidence.
+                    warn!(
+                        target: "4da::adversarial",
+                        item_id = %item.id,
+                        title = %item.title,
+                        adjusted_confidence = verdict.adjusted_confidence,
+                        "Critical/High item surfaced despite dissenting verdict; original explanation kept"
+                    );
+                    passed.push(item);
+                }
+                VerdictApplication::Filter => {
                     filtered_count += 1;
                     debug!(
                         target: "4da::adversarial",
@@ -234,7 +437,7 @@ pub(crate) async fn filter_batch(
                         "Item filtered by adversarial deliberation"
                     );
                 }
-            }
+            },
             Ok(None) => {
                 // LLM unavailable -- pass through unchanged
                 passed.push(item);
@@ -256,6 +459,7 @@ pub(crate) async fn filter_batch(
         total,
         bypassed = bypass_count,
         deliberated = delib_count,
+        demoted = demoted_count,
         filtered = filtered_count,
         passed = passed.len(),
         "Adversarial filter batch complete"

@@ -198,7 +198,7 @@ const PreemptionView = memo(function PreemptionView() {
           <p className="text-sm font-medium text-text-primary">{t('preemption.locked.title')}</p>
           <p className="text-xs text-text-muted max-w-sm">{t('preemption.locked.subtitle')}</p>
           <div className="mt-1">
-            <SignalUpgradeCTA />
+            <SignalUpgradeCTA source="preemption-paywall" />
           </div>
         </div>
       )}

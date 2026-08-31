@@ -226,22 +226,11 @@ mod tests {
 
     #[test]
     fn entry_builder_score_all_ones() {
+        // 0.4 + 0.2 + 0.1 = 0.7 (the engagement term was removed in v20b)
         let mut eb = EntryBuilder::new(RadarRing::Adopt, 1.0);
-        eb.engagement = 1.0;
         eb.trend = 1.0;
         eb.decision_boost = 1.0;
-        assert!((eb.score() - 1.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn entry_builder_score_weights_sum_to_one() {
-        // 0.4 + 0.3 + 0.2 + 0.1 = 1.0
-        // If all inputs are 1.0, result should be exactly 1.0
-        let mut eb = EntryBuilder::new(RadarRing::Adopt, 1.0);
-        eb.engagement = 1.0;
-        eb.trend = 1.0;
-        eb.decision_boost = 1.0;
-        assert!((eb.score() - 1.0).abs() < 1e-10);
+        assert!((eb.score() - 0.7).abs() < 1e-6);
     }
 
     #[test]
@@ -254,7 +243,6 @@ mod tests {
     #[test]
     fn entry_builder_score_clamps_above_one() {
         let mut eb = EntryBuilder::new(RadarRing::Adopt, 3.0);
-        eb.engagement = 3.0;
         eb.trend = 3.0;
         eb.decision_boost = 3.0;
         assert!((eb.score() - 1.0).abs() < 1e-6);
@@ -267,7 +255,6 @@ mod tests {
         eb.movement = RadarMovement::Up;
         eb.signals = vec!["trending".to_string()];
         eb.decision_ref = Some(42);
-        eb.engagement = 0.5;
 
         let entry = eb.into_entry("rust".to_string());
         assert_eq!(entry.name, "rust");

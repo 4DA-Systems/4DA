@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Relevance accuracy tracking — measures how well PASIFA predictions match user behavior.
 //!
-//! Records weekly accuracy metrics so users can see their 4DA getting smarter over time.
+//! Records weekly accuracy metrics so users can audit relevance quality over time.
 //! Powers the "Your Intelligence This Month" card in the Briefing view.
 
 use serde::{Deserialize, Serialize};

@@ -154,6 +154,10 @@ export interface DataFreshness {
   is_stale: boolean;
   /** Human-readable summary with the remedy when stale. */
   note: string;
+  /** Set when `data/.engine-blocked` reports a schema-refused scheduled refresh. */
+  engine_blocked_at?: string;
+  /** The refusal error recorded by the blocked engine. */
+  engine_blocked_error?: string;
 }
 
 /** Minutes a feed may go without a fetch before DB-backed tools flag it stale. */
@@ -166,6 +170,61 @@ function minutesSince(ts: string | null): number | null {
   if (Number.isNaN(ms)) return null;
   return Math.max(0, Math.round((Date.now() - ms) / 60000));
 }
+
+/** Filler words ignored when comparing titles for near-duplicate collapsing. */
+const TITLE_STOPWORDS = new Set([
+  "the", "a", "an", "is", "are", "was", "out", "in", "on", "of", "for", "to",
+  "and", "announcing", "announced", "new", "blog", "via", "with",
+]);
+
+function titleTokens(title: string): Set<string> {
+  const tokens = title
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, " ")
+    .split(/\s+/)
+    .map((t) => t.replace(/^\.+|\.+$/g, ""))
+    .filter((t) => t.length > 0 && !TITLE_STOPWORDS.has(t));
+  return new Set(tokens);
+}
+
+/**
+ * Collapse near-duplicate stories (same news via reddit + rss + mastodon…) by
+ * token-set Jaccard similarity over normalized titles. Input is score-ordered,
+ * so the highest-scored copy of a story survives. Exported for tests.
+ */
+export function dedupeByTitle<T extends { title: string | null }>(items: T[], threshold = 0.6): T[] {
+  const kept: Array<{ item: T; tokens: Set<string> }> = [];
+  for (const item of items) {
+    const tokens = titleTokens(item.title ?? "");
+    if (tokens.size === 0) {
+      kept.push({ item, tokens });
+      continue;
+    }
+    let isDup = false;
+    for (const prev of kept) {
+      if (prev.tokens.size === 0) continue;
+      let overlap = 0;
+      for (const t of tokens) if (prev.tokens.has(t)) overlap++;
+      const union = tokens.size + prev.tokens.size - overlap;
+      if (union > 0 && overlap / union >= threshold) {
+        isDup = true;
+        break;
+      }
+    }
+    if (!isDup) kept.push({ item, tokens });
+  }
+  return kept.map((k) => k.item);
+}
+
+/**
+ * The dependency-group query the server runs at init against a pre-existing
+ * database (index.ts full-DB branch). Exported as a single source of truth so
+ * the schema-compatibility regression test exercises the EXACT production SQL —
+ * the `is_direct` standalone-schema gap slipped through precisely because the
+ * two modes were only ever tested separately.
+ */
+export const DEPENDENCY_GROUP_QUERY =
+  "SELECT DISTINCT package_name, language, project_path, is_dev, is_direct FROM project_dependencies";
 
 /**
  * 4DA Database accessor
@@ -205,6 +264,26 @@ export class FourDADatabase {
     if (isNew) {
       this.createMinimalSchema();
       this._isStandalone = true;
+    }
+
+    // Schema upgrade for standalone databases created before `is_direct` was
+    // added to the minimal schema: the full-DB init branch queries that column
+    // (DEPENDENCY_GROUP_QUERY), and without it session 2+ of a standalone
+    // install throws, gets caught, and silently disables vulnerability_scan /
+    // dependency_health / upgrade_planner. Scanner-inserted manifest deps are
+    // direct by definition, so DEFAULT 1 backfills correctly. The desktop
+    // app's database already has the column — no-op there.
+    try {
+      const hasDepsTable = this.db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_dependencies'")
+        .get();
+      if (hasDepsTable) {
+        this.ensureColumn("project_dependencies", "is_direct", "INTEGER DEFAULT 1");
+      }
+    } catch (err) {
+      console.error(
+        `[4da] project_dependencies is_direct upgrade failed (dependency tools may be degraded): ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -410,35 +489,10 @@ export class FourDADatabase {
       );
       CREATE INDEX IF NOT EXISTS idx_active_topics_topic ON active_topics(topic);
 
-      -- Topic affinities (learned) — queried by get_context, developer_dna, attention_report
-      CREATE TABLE IF NOT EXISTS topic_affinities (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        topic TEXT NOT NULL UNIQUE,
-        embedding BLOB,
-        positive_signals INTEGER DEFAULT 0,
-        negative_signals INTEGER DEFAULT 0,
-        total_exposures INTEGER DEFAULT 0,
-        affinity_score REAL DEFAULT 0.0,
-        confidence REAL DEFAULT 0.0,
-        last_interaction TEXT DEFAULT (datetime('now')),
-        decay_applied INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now'))
-      );
-
-      -- Anti-topics (learned exclusions) — queried by get_context
-      CREATE TABLE IF NOT EXISTS anti_topics (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        topic TEXT NOT NULL UNIQUE,
-        rejection_count INTEGER DEFAULT 0,
-        confidence REAL DEFAULT 0.0,
-        auto_detected INTEGER DEFAULT 1,
-        user_confirmed INTEGER DEFAULT 0,
-        first_rejection TEXT DEFAULT (datetime('now')),
-        last_rejection TEXT DEFAULT (datetime('now')),
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now'))
-      );
+      -- topic_affinities / anti_topics are deliberately NOT created: the
+      -- implicit-capture learning system was removed product-wide (AD-029 →
+      -- v20b) and desktop schema 105 dropped both tables. Baking them into
+      -- fresh standalone installs would recreate dead tables no code reads.
 
       -- Interactions — queried by record_feedback, developer_dna, knowledge_gaps
       CREATE TABLE IF NOT EXISTS interactions (
@@ -464,6 +518,7 @@ export class FourDADatabase {
         package_name TEXT NOT NULL,
         version TEXT,
         is_dev INTEGER DEFAULT 0,
+        is_direct INTEGER DEFAULT 1,
         language TEXT NOT NULL,
         last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
         UNIQUE(project_path, package_name)
@@ -820,12 +875,23 @@ export class FourDADatabase {
 
     const ageMinutes = minutesSince(lastFetchAt);
     const isStale = ageMinutes === null || ageMinutes > STALE_AFTER_MINUTES;
-    const note = isStale
+    let note = isStale
       ? `Feed data ${
           ageMinutes === null ? "has never been fetched" : `is ~${ageMinutes} min old`
         } and may be stale: the MCP server reads the database but does not fetch. Run ` +
         "`fourda-engine --once` (or open the 4DA app) to refresh."
       : `Feed data is ~${ageMinutes} min old (fresh).`;
+
+    // Engine-block marker: a scheduled refresh that can only REFUSE (binary
+    // older than the DB schema) cannot record its failure in the database, so
+    // the Rust engine leaves `data/.engine-blocked` beside it. That exact
+    // failure froze the feed for two days (2026-08-28→30) with ERROR-log-only
+    // symptoms; this reader is the one that caught it, so it now names the
+    // cause instead of just the staleness.
+    const engineBlock = this.readEngineBlockMarker();
+    if (engineBlock) {
+      note += ` ENGINE BLOCKED since ${engineBlock.at}: ${engineBlock.error} — a rebuilt/updated 4DA binary is required; a plain refresh will keep refusing.`;
+    }
 
     return {
       source_items_total: total,
@@ -837,7 +903,29 @@ export class FourDADatabase {
       age_minutes: ageMinutes,
       is_stale: isStale,
       note,
+      ...(engineBlock
+        ? { engine_blocked_at: engineBlock.at, engine_blocked_error: engineBlock.error }
+        : {}),
     };
+  }
+
+  /**
+   * Read `data/.engine-blocked` beside the database file, if present. Written
+   * by the Rust engine (`engine_block.rs`) when a scheduled refresh is refused
+   * by a newer database schema; cleared the moment a cycle opens the DB again.
+   */
+  private readEngineBlockMarker(): { at: string; error: string } | null {
+    try {
+      const markerPath = path.join(path.dirname(this.db.name), ".engine-blocked");
+      const raw = fs.readFileSync(markerPath, "utf-8");
+      const v = JSON.parse(raw) as { at?: unknown; error?: unknown };
+      if (typeof v.at === "string" && typeof v.error === "string") {
+        return { at: v.at, error: v.error };
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /** `MAX(sources.last_fetch)`, tolerant of a missing `sources` table (returns null). */
@@ -851,7 +939,7 @@ export class FourDADatabase {
     }
   }
 
-  private hasColumn(table: string, column: string): boolean {
+  hasColumn(table: string, column: string): boolean {
     try {
       const cols = this.db.pragma(`table_info(${table})`) as Array<{ name: string }>;
       return cols.some((c) => c.name === column);
@@ -933,6 +1021,17 @@ export class FourDADatabase {
     const curationGuard = this.hasColumn("source_items", "feed_relevant")
       ? ` AND (feed_relevant IS NULL OR feed_relevant = 1)`
       : ``;
+    // Historical-advisory guard: OSV/CVE backfills ingest decades-old advisories
+    // whose created_at (discovery time) is days old but whose published_at is
+    // ancient — and the scoring brain rates them 0.9 because they name the
+    // user's deps. Live 2026-08-30: half the top-20 was React XSS fixed in 0.14
+    // (2015) and tokio races fixed in 2021, on a react 19 / tokio 1.52 stack.
+    // A reading feed is about what is CURRENT; version-aware exposure checking
+    // is vulnerability_scan / knowledge_gaps territory. NULL published_at is
+    // kept — absence of a date is not evidence of age.
+    const advisoryFreshnessGuard = this.hasColumn("source_items", "published_at")
+      ? ` AND NOT (source_type IN ('osv', 'cve') AND published_at IS NOT NULL AND datetime(published_at) < datetime('now', '-90 days'))`
+      : ``;
     let query = `
       SELECT id, source_type, source_id, url, title, content, content_hash,
              created_at, last_seen, relevance_score, content_type,
@@ -940,7 +1039,7 @@ export class FourDADatabase {
              ${depCount} AS dep_match_count
       FROM source_items
       WHERE relevance_score >= ?
-        AND datetime(created_at) >= datetime(?)${versionGuard}${curationGuard}
+        AND datetime(created_at) >= datetime(?)${versionGuard}${curationGuard}${advisoryFreshnessGuard}
     `;
     const params: (string | number)[] = [minScore, sinceDate];
 
@@ -949,11 +1048,25 @@ export class FourDADatabase {
       params.push(sourceType);
     }
 
-    query += ` ORDER BY relevance_score DESC LIMIT ?`;
-    params.push(limit);
+    // Ranked read (desktop audit items 12+26, schema 110): order by the
+    // batch-relative rank when the analysis cycle has ranked the item, falling
+    // back to the evidence score. This mirrors the Rust source of truth —
+    // `RANKED_ORDER_EXPR` in `src-tauri/src/db/scoring_queries.rs` — and must
+    // stay textually in sync with it. The `relevance_score >= ?` membership
+    // filter above deliberately stays on evidence: evidence decides membership,
+    // rank decides order. Guarded on column existence for pre-110 DBs.
+    const rankedOrder = this.hasColumn("source_items", "rank_score")
+      ? `COALESCE(rank_score, relevance_score) DESC`
+      : `relevance_score DESC`;
+    query += ` ORDER BY ${rankedOrder} LIMIT ?`;
+    // Over-fetch so near-duplicate collapsing below can still fill `limit`
+    // (the same story arrives via reddit + rss + mastodon: live feeds showed
+    // three copies of "Rust 1.98.0" in one 20-item response).
+    params.push(limit * 2);
 
     const stmt = this.db.prepare(query);
-    const items = stmt.all(...params) as Array<SourceItem & { relevance_score: number; content_type: string | null; signal_type: string | null; signal_priority: string | null; dep_match_count: number }>;
+    const fetched = stmt.all(...params) as Array<SourceItem & { relevance_score: number; content_type: string | null; signal_type: string | null; signal_priority: string | null; dep_match_count: number }>;
+    const items = dedupeByTitle(fetched).slice(0, limit);
 
     const now = Date.now();
     return items.map((item) => {
@@ -1009,10 +1122,15 @@ export class FourDADatabase {
   ): RelevantItem[] {
     const context = this.getUserContext(true, true);
 
+    // Same historical-advisory guard as the Rust-score path: a backfilled
+    // 2015 advisory is not current reading, whatever its keyword score.
+    const advisoryFreshnessGuard = this.hasColumn("source_items", "published_at")
+      ? ` AND NOT (source_type IN ('osv', 'cve') AND published_at IS NOT NULL AND datetime(published_at) < datetime('now', '-90 days'))`
+      : ``;
     let query = `
       SELECT id, source_type, source_id, url, title, content, content_hash, created_at, last_seen
       FROM source_items
-      WHERE datetime(created_at) >= datetime(?)
+      WHERE datetime(created_at) >= datetime(?)${advisoryFreshnessGuard}
     `;
     const params: (string | number)[] = [sinceDate];
 
@@ -1187,42 +1305,17 @@ export class FourDADatabase {
       }
     }
 
-    // Learned preferences
+    // Learned preferences: permanently empty by design. The implicit-capture
+    // learning system was removed product-wide (AD-029 quarantine, then v20b
+    // #488 deleted it) and desktop schema 105 DROPPED topic_affinities /
+    // anti_topics. Even a pre-105 database's rows are quarantined data the
+    // product no longer honors, so they are not read — the fields remain in
+    // the shape for API stability.
     if (includeLearned) {
-      try {
-        const affinitiesStmt = this.db.prepare(`
-          SELECT topic, affinity_score, confidence, positive_signals, negative_signals, total_exposures
-          FROM topic_affinities
-          WHERE confidence > 0.1
-          ORDER BY affinity_score DESC
-          LIMIT 50
-        `);
-        const affinities = affinitiesStmt.all() as TopicAffinity[];
-
-        const antiTopicsStmt = this.db.prepare(`
-          SELECT topic, rejection_count, confidence, auto_detected, user_confirmed
-          FROM anti_topics
-          WHERE confidence > 0.3
-          ORDER BY confidence DESC
-          LIMIT 50
-        `);
-        const antiTopics = antiTopicsStmt.all() as AntiTopic[];
-
-        context.learned = {
-          topic_affinities: affinities,
-          anti_topics: antiTopics.map((at) => ({
-            ...at,
-            auto_detected: Boolean(at.auto_detected),
-            user_confirmed: Boolean(at.user_confirmed),
-          })),
-        };
-      } catch {
-        // Learned tables might not exist
-        context.learned = {
-          topic_affinities: [],
-          anti_topics: [],
-        };
-      }
+      context.learned = {
+        topic_affinities: [],
+        anti_topics: [],
+      };
     }
 
     return context;

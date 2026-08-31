@@ -22,6 +22,16 @@ export interface ResolvedDependency {
   target: string | null;
   /** False when `target` is not active on the host platform (advisory is not relevant). */
   platformActive: boolean;
+  /**
+   * Manifest directories this exact (ecosystem, name, version) resolved from.
+   *
+   * A scan root can span several independent workspaces — `src-tauri/`,
+   * `relay/`, `victauri-gauntlet/` all sit under one repo and pin their own
+   * versions. Without this, dedupe collapsed them and the report named a
+   * vulnerable version with no way to say WHICH workspace pinned it, so a
+   * patched primary crate looked vulnerable because a sibling lagged.
+   */
+  sourceDirs: string[];
 }
 
 /**
@@ -71,6 +81,12 @@ export interface VulnerabilityEntry {
   target: string | null;
   /** False when the affected dep is not active on the host platform. */
   platformActive: boolean;
+  /**
+   * Manifest directories that pin this vulnerable version. Answers the first
+   * question a reader asks — *which project do I go fix?* — which a flat
+   * package-name list cannot.
+   */
+  sourceDirs: string[];
 }
 
 export interface VulnerabilityScanResult {

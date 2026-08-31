@@ -29,11 +29,22 @@ dep_match_score: number,
 matched_deps: Array<string>, 
 /**
  * Canonical grounding verdict: true when at least one matched dependency is
- * a strong, non-dev, non-ambiguous edge (confidence >= the strong floor).
+ * a strong, non-ambiguous edge (confidence >= the strong floor).
  * This is the SINGLE source of truth the frontend evidence pool and the
  * Critical gate both read — do not re-derive grounding from `matched_deps`.
  */
 strongly_grounded: boolean, 
+/**
+ * Degraded-input markers for the scoring run that produced this breakdown
+ * (2026-08-23 audit, item 11). Non-empty means an input axis silently
+ * collapsed and the scores are NOT full-fidelity: "context_knn_failed"
+ * (DB error muted the context axis), "dep_intel_load_failed" (dependency
+ * intelligence load failed — dep axis empty-by-error), "embedding_missing"
+ * (zero/absent embedding — semantic axes defaulted). The pipeline only
+ * CARRIES the honest state; persistence policy (skip/re-score) is decided
+ * by the analysis-status layer.
+ */
+degraded_inputs: Array<string>, 
 /**
  * Categorical score ceiling that must survive every post-pipeline
  * score writer (cross-encoder rerank, dedup cluster boost, source-tier

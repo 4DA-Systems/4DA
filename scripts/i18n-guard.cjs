@@ -62,7 +62,11 @@ function findDefaultValueUsage(files) {
 // ============================================================================
 
 function findMissingKeys() {
-  const namespaces = ['ui', 'errors', 'coach', 'signals'];
+  // 'coach' was removed here on 2026-08-28: no locale directory has ever
+  // contained coach.json, so i18n:status printed "coach: undefined" and every
+  // tool silently iterated a namespace that does not exist. The real set is
+  // ui / errors / signals, verified against all 13 locale directories.
+  const namespaces = ['ui', 'errors', 'signals'];
   const languages = fs.readdirSync(LOCALES_DIR)
     .filter(d => {
       try { return fs.statSync(path.join(LOCALES_DIR, d)).isDirectory() && d !== 'en'; }

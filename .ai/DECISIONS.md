@@ -344,7 +344,7 @@
 - **Date:** 2026-07-26
 - **Status:** Final
 - **Amended:** 2026-08-12 (AD-030) — compounding rationale replaced; the $299 price and lifetime terms are unchanged.
-- **Code:** `site/src/signal.njk` (plan toggle), `site/functions/api/signal/checkout.js` (payment mode), `site/functions/api/license/refresh.js` (lifetime entitlement), `site/functions/api/streets/activate.js` (2099 expiry), `site/setup-signal.mjs` (price provisioning), TOS §4.1/§4.2/§5.3.
+- **Code:** `site/src/signal.njk` (plan toggle), `site/functions/api/signal/checkout.js` (payment mode), `site/functions/api/license/refresh.js` (lifetime entitlement), `site/functions/api/license/activate.js` (2099 expiry; at `api/streets/activate` until 2026-08-20), `site/setup-signal.mjs` (price provisioning), TOS §4.1/§4.2/§5.3.
 
 ### AD-029: Behavioral Learning Demoted from Scoring Authority
 - **Decision:** Engagement-derived signals no longer move relevance scores or verdicts. Removed from scoring (PIPELINE_VERSION 19): the engagement multiplier's user-history terms (affinity ×0.3–1.7, anti-topics, feedback boosts, taste embedding, learned source quality), the confirmation gate's learned axis, the topic-attention-gap boost (deleted outright), persona-posterior and stability-facet score injections, ACE anti-topic auto-exclusions, autophagy scoring corrections (calibration deltas, topic half-lives, source/feed autopsies, anti-patterns, archetypes), synthetic affinity seeding, both threshold auto-tuners (frozen at the 0.40 default; kv resurrection path removed), and the MCP fallback scorer's affinity/anti weights. KEPT: all context learning (ACE stack/dep/git grounding), item-side community signal, verdict epochs, capture pipeline + Learned Preferences panel (pin/forget/reset), engagement dashboards, Brief-rejection demotions, and user-authored exclusions.
@@ -355,6 +355,7 @@
 - **Re-enable criteria (ALL required):** (1) one unified capture strength scale across ACE/ContextEngine/MCP with no positive-valued negative gestures; (2) a calibration-harness (/calibrate) measured lift over the neutral baseline on labeled data; (3) degeneracy guards on every fitted artifact at save AND load, with raw (pre-transform) values persisted; (4) fitted state bound to the corpus it was fit on (no artifact outliving its data); (5) a user-visible off switch.
 - **Date:** 2026-08-11
 - **Status:** Final
+- **Amended:** 2026-08-17 (AD-031 / v20b) — the "Full removal" option this AD rejected was PARTIALLY adopted: the IMPLICIT half of the capture layer (scroll/ignore signals, the topic_affinities / anti_topics / source_preferences / activity_patterns tables, persona-posterior updates, the three affinity anomaly detectors) is now deleted, because the honest user-facing surfaces the rejection protected (Learned Preferences panel, its readers) were themselves removed in v20a — the "destroys honest surfaces" objection no longer applied. EXPLICIT capture (click/save/share/dismiss/mark_irrelevant/briefing/engagement_complete/save_with_context interactions, stability facets, record_item_feedback) and all context learning remain. Scoring is untouched (no PIPELINE_VERSION change); the re-enable criteria stand — a future re-enable now also requires rebuilding capture per criterion (1).
 - **Code:** `scoring/pipeline_v2.rs`, `scoring/gate.rs`, `scoring/context.rs`, `scoring/semantic/boost.rs`, `scoring/triage.rs`, `scoring/affinity.rs` (now display-only), `monitoring.rs` + `ace/mod.rs` + `commands.rs` + `ace_commands/scanning.rs` (tuner freeze), `analysis_status.rs` (seed removal), `calibration.rs`/`calibration_store.rs`/`analysis_rerank.rs` (mesh guards), `db/migrations.rs` Phase 103, `mcp-4da-server/src/db.ts`. Amends INV-023.
 
 ### AD-030: Retire the "Gets Sharper Every Day" Product Promise
@@ -371,6 +372,28 @@
 - **Enforcement:** `scripts/check-retired-claims.cjs` (wired into `test:scripts` + `validate`) fails the build on retired phrases outside allowlisted historical-record files.
 - **Date:** 2026-08-12
 - **Status:** Final — amends AD-017, AD-025, AD-026, AD-028.
+
+### AD-031: Remove the Implicit Behavioral-Capture Layer (v20b)
+- **Decision:** Delete implicit behavioral capture end-to-end: the scroll/ignore signal emitters (`use-view-tracking.ts`, the `Scroll`/`Ignore` BehaviorAction variants, `on_implicit_skip`), the derived-profile writers (topic_affinities, anti_topics, source_preferences, activity_patterns, persona-posterior updates), their remaining readers of the now-dropped tables (the three affinity anomaly detectors, the tech-radar affinity overlay, the learned_behavior export section; standing-query suggestions and Developer DNA engaged-topics re-sourced to explicit engagement instead), and the backing tables (migration Phase 105 drops topic_affinities, anti_topics, activity_patterns, source_preferences, persona_posterior, posterior_snapshots). Also removed in the same change, as a separate proof class (write-only, not implicit): the `decision_outcome` digest analyzer, whose output no reader ever consumed. KEPT: explicit engagement capture (`interactions` rows for click/save/share/dismiss/mark_irrelevant/briefing_click/briefing_dismiss/engagement_complete/save_with_context), stability_detector facets, `record_item_feedback`, skill-gap detection over the explicit six-type predicate, the engagement dashboard, and data export of feedback/interactions. `interactions` rows are NOT deleted — the bootstrap-mode count (`scoring/context.rs`) reads them, and deleting rows would flip bootstrap state.
+- **Rationale:** AD-029 removed implicit capture's scoring authority (v19); v20a removed its last honest UI surfaces. What remained was a write-only pipeline: signals captured, profiles built, nothing read them. A capture layer with no consumer is pure liability — privacy surface, storage growth, code weight, and resurrection risk (the exact class AD-029's four incidents came from). Explicit gestures stay because they have live, honest consumers.
+- **Considered:**
+  - Keep capture dormant for a future re-enable: Rejected — AD-029's re-enable criterion (1) requires a REBUILT capture layer with one unified strength scale; the existing layer is the thing that criterion disqualifies. Reflog and git history preserve everything.
+  - Also delete implicit `interactions` rows: Rejected — bootstrap-mode is currently held OFF by those rows (live probe 2026-08-17, post-#482: 713 interactions, 296 with |signal_strength| >= 0.3, all 296 implicit, effective_feedback_count = 98), and deleting them would flip bootstrap ON and change scoring. Open v20c question: should bootstrap-exit require EXPLICIT signal? That is a scoring change and needs a PIPELINE_VERSION bump.
+  - Also clean `mcp-4da-server`: Deferred to v20c — its reads degrade gracefully on missing tables; its `CREATE TABLE IF NOT EXISTS` in `db.ts` may resurrect empty topic_affinities/anti_topics tables in 4da.db (cosmetic, cleaned in v20c).
+- **Scoring inertness:** NO PIPELINE_VERSION bump. The bootstrap term is untouched and its input rows are kept; golden snapshots and simulation-asserted numbers are unchanged.
+- **Date:** 2026-08-17
+- **Status:** Final — amends AD-029 (partial adoption of its rejected "full removal" option); retires INV-071.
+- **Code:** `ace/behavior/` (tracking, types, decay; `queries.rs` deleted), `ace_commands/interactions.rs`, `engagement_telemetry.rs`, `scoring/ace_context.rs`, `anomaly.rs`, `taste_test/continuous.rs` (deleted), `autophagy/decision_outcomes.rs` (deleted), `data_export.rs`, `standing_queries_suggestions.rs`, `developer_dna.rs`, `tech_radar_compute.rs`, `db/migrations.rs` Phase 105, `src/hooks/use-view-tracking.ts` (deleted), `src/store/feedback-slice.ts`.
+
+### AD-032: MCP tools/list Serves Real Schemas for Required-Param Tools
+- **Decision:** In the MCP server's `tools/list` response, a tool whose JSON Schema declares `required` parameters serves its REAL `inputSchema`; tools whose parameters are all optional keep the slim `{"type":"object"}` with the full schema available as an MCP Resource (`4da://schema/{tool}`). The line is computed from the schema files at runtime (`schema-registry.ts::inputSchemaIfRequired`), never hand-maintained.
+- **Rationale:** The all-slim design (a ~4500→~500 token optimization) assumed clients lazy-load schemas via MCP Resources; in practice most MCP clients never read Resources, so the five required-param tools (`record_feedback`, `decision_memory`, `agent_memory`, `check_decision_alignment`, `what_should_i_know`) were effectively uncallable — a client cannot construct a valid call without knowing the required params (GPT adversarial audit 2026-08-23, finding 7). Serving real schemas for exactly those five costs ~800 tokens; `{}` is already a valid call for every all-optional tool, so slim remains honest there.
+- **Considered:**
+  - Serve full schemas for all 14 tools: Rejected — ~1700 extra tokens per listing for information the all-optional tools do not need to be callable.
+  - Keep all-slim and document the Resources path better: Rejected — documentation cannot fix clients that structurally never read Resources; the tools stay broken for them.
+- **Date:** 2026-08-23
+- **Status:** Final
+- **Code:** `mcp-4da-server/src/schema-registry.ts`, tests in `mcp-4da-server/src/__tests__/schema-registry.test.ts`.
 
 ---
 
@@ -398,6 +421,34 @@
 | ID | Topic | Options | Status |
 |----|-------|---------|--------|
 | — | (None currently) | — | — |
+
+### AD-033: The Scoring Drain Is a Vector-Search Problem, Not a Scoring Problem
+
+- **Decision:** Materialise the per-item context match (`item_context_cache`, schema 113) and maintain it INCREMENTALLY against a trigger-maintained context-corpus generation, rather than recomputing it on every re-score. Move the grounding filter into the vec0 partition key so that materialised value is a true top-K. Take the stale-version drain out of the analysis batch, stamp evidence for every item the scorer EVALUATED rather than every item that survived dedup, and trigger a drain-to-completion automatically when the backlog passes 5,000.
+- **Rationale:** Measured on the live 53,000-item corpus, 2026-08-27:
+  - Scoring one item costs 54.7 ms, of which **52.0 ms (95.8%) is a single sqlite-vec KNN**. All of PASIFA — topics, dependency matching across 143 packages, keywords, content DNA, the confirmation gate, every boost and ceiling — is the other 2.7 ms.
+  - That KNN is a pure function of the item's embedding and the context corpus. **145 of 15,599 context chunks changed in fifteen days**, and of 600 sampled items, **zero** had a top-3 touching a changed chunk.
+  - The v25+v26 arc was 17 commits and 4,392 lines; **none** were in `db/mod.rs`, `context_admission.rs`, `embeddings.rs` or `context_engine/`. The 96% term was provably invariant across that bump and was recomputed 47,000 times.
+  - The in-cycle drain converted **5 of every 500** stale items: the batch layer deleted 831 of 1,458 scored results before the version stamp was written, and the drain items lost that contest systematically. Net 88 items/hour, 22 days to converge, 1.1% of the compute doing useful work.
+  - `--engine-drain`, which converts 100%, cleared the same backlog in **22m07s** — but no code path could reach it; only a human typing a flag.
+  - Verified after the change: the cache is **index-exact** on 400 real items both cold and after a context-corpus change that moved 352 of 400 top-3 lists, and the incremental merge propagated that change across all 53,752 items in **10 seconds** versus **560 seconds** for a full recompute.
+- **Considered:**
+  - *A plain generation-counter cache* (as first proposed): Rejected — it would have invalidated 100% of entries on those 145 chunk writes. The measurement that motivates the cache is a PRECISE invalidation, so the implementation had to be an exact delta-merge, not a version equality check.
+  - *Lazy score-on-read:* Rejected previously and still rejected — threshold-before-rank surfaces (blind spots > 0.5, autophagy < 0.05, MCP) need scores for items that are never displayed.
+  - *Binary quantisation of the context index (recommendation 6 as published):* **Rejected on measurement.** On this corpus, 768-bit codes with exact-L2 rescoring recover only **20% / 45% / 69%** of exact top-3 lists at 4x / 10x / 32x oversampling, and even at 32x, **10% of items get a different top-1** — a different grounding axis, a different score. Code embeddings cluster too tightly for sign-only quantisation. Fast (0.25 ms/item) and wrong is not a trade this product makes.
+  - *An exact in-memory Rust f32 scan:* Measured **9.06 ms/item vs 29.78 ms** for sqlite-vec in a release build — exact, and 3.3x faster. NOT adopted: it is a second implementation of the most correctness-critical query in the product, and the cache already removes that scan from the steady state. Revisit only if the context corpus grows enough that a cold rebuild stops being a one-off (the current cold warm is ~9 minutes for 53,752 items).
+  - *Per-axis epochs for every signal axis:* Deferred with evidence. The context axis needed materialising because it is 96% of the cost, and it is now epoch-scoped independently of `PIPELINE_VERSION` (the cache is keyed on the CONTEXT generation, so a scoring bump does not invalidate it). The remaining axes are collectively 2.7 ms/item — materialising them would save ~18 seconds on a whole-corpus drain. Registering an unconsumed axis registry would be dead code, which doctrine forbids. Revisit if a future axis acquires its own expensive input.
+- **Date:** 2026-08-27
+- **Status:** Final
+
+### AD-034: A PIPELINE_VERSION Bump Declares a Blast Radius, Not a Release
+
+- **Decision:** A `PIPELINE_VERSION` bump must correspond to a change in what `score_item` writes to `relevance_score`. Batch-relative changes (cross-encoder, dedup corroboration, diversity, per-source percentile, LLM advisor, final rank cap) write `top_score`/`rank_score` only and must NOT bump it. Where several scoring changes ship together, prefer landing them under separate bumps that each register a scoped epoch over bundling them into one unregistered bump.
+- **Rationale:** v26 bundled five changes, one of which (`apply_source_share_diversity`) is a batch-relative ranking stage that provably cannot alter any stored `relevance_score`. Bundling forced the union of five blast radii onto the whole corpus and made the bump unregisterable, because no SQL predicate can bound the reach of the widest member. The version number should describe what was invalidated, not when it shipped.
+- **Considered:**
+  - *Keep bundling and rely on the drain being fast:* Rejected as the only mitigation — AD-033 makes a full drain affordable, but an affordable full drain is still strictly worse than a scoped one, and the discipline costs nothing at authoring time.
+- **Date:** 2026-08-27
+- **Status:** Final
 
 ---
 

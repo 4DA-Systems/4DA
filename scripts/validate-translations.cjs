@@ -16,7 +16,9 @@ const fs = require('fs');
 const path = require('path');
 
 const LOCALES_DIR = path.join(__dirname, '..', 'src', 'locales');
-const NAMESPACES = ['ui', 'errors', 'coach', 'signals'];
+// 'coach' removed 2026-08-28 — no locale directory has ever contained
+// coach.json, so this validator was checking a namespace that does not exist.
+const NAMESPACES = ['ui', 'errors', 'signals'];
 
 // Terms that are legitimately the same across languages
 const BRAND_TERMS = new Set([

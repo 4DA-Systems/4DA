@@ -346,6 +346,36 @@ impl FileWatcher {
                 continue;
             }
 
+            // Never mine the app's OWN data directory. When it sits inside a
+            // watched project (dev/dogfood layout, FOURDA_DATA_DIR overrides),
+            // the watcher fed 4DA's own outputs back into the profile:
+            // briefing_snapshot.json minted `azure`/`redis` as user topics and
+            // the RSS feed URLs inside settings.json minted `docker`/
+            // `kubernetes`/`aws` — which then boosted off-stack content into
+            // the top band and re-entered the briefing (self-scan
+            // contamination loop, 2026-08-21 audit). The app's exhaust is
+            // never the user's work.
+            if is_own_data_path(path) {
+                continue;
+            }
+
+            // Never mine a project's own FIXTURES either. The data-dir guard
+            // above closed the app's runtime exhaust; the 2026-08-26 audit
+            // found the identical loop running one directory over, in source
+            // control: `src-tauri/src/scoring/benchmark_scenarios.json` — the
+            // scoring pipeline's OWN benchmark corpus — contains "kubernetes"
+            // three times and "grpc" once, so every scan of it minted both as
+            // live user interests, which fed straight back into the scoring
+            // pipeline through `active_topics`. Measured live at e0381216:
+            // `kubernetes` was an active user topic (minted from that fixture
+            // at 2026-08-25 14:33:46) while `tokio` — a crate this app
+            // actually depends on — had expired out of the 7-day window.
+            // A keyword in a test corpus is DATA, not evidence of what the
+            // developer works on.
+            if is_own_fixture_path(path) {
+                continue;
+            }
+
             // Check file size for non-delete events
             if change_type != FileChangeType::Deleted {
                 if let Ok(metadata) = std::fs::metadata(path) {
@@ -424,6 +454,72 @@ impl Drop for FileWatcher {
 // ============================================================================
 
 /// Check if a file is sensitive and should never be indexed.
+/// True when `path` lies inside the app's OWN runtime data directory
+/// (`RuntimePaths::get().data_dir`). Resolved live, not cached in config, so a
+/// `FOURDA_DATA_DIR` override is honored and persisted watcher state can never
+/// go stale. See the call site in `process_event` for the contamination-loop
+/// incident this guards against.
+fn is_own_data_path(path: &Path) -> bool {
+    path_is_under(path, &crate::runtime_paths::RuntimePaths::get().data_dir)
+}
+
+/// True when `path` is a test fixture, snapshot, locale bundle or benchmark
+/// corpus — a file whose technology keywords are DATA, not evidence of what
+/// the developer works on.
+///
+/// Test-file conventions are delegated to
+/// [`crate::context_admission::is_test_path`] so this layer and the context
+/// admission chokepoint can never disagree about what "test" means. The extra
+/// segments here are the ones that carry keyword-dense payloads but are not
+/// test FILES: fixture and snapshot directories, i18n locale bundles (4DA
+/// ships 13 of them), and anything named `benchmark*`.
+fn is_own_fixture_path(path: &Path) -> bool {
+    let normalized = path.to_string_lossy().replace('\\', "/").to_lowercase();
+
+    if crate::context_admission::is_test_path(&normalized) {
+        return true;
+    }
+
+    if normalized.split('/').any(|seg| {
+        matches!(
+            seg,
+            "fixtures" | "fixture" | "__snapshots__" | "snapshots" | "locales" | "testdata"
+        )
+    }) {
+        return true;
+    }
+
+    // Any component, not just the filename: benchmark corpora live in
+    // directories as often as they live in single files
+    // (`benchmark_scenarios.json`, `benchmark_calibration/`).
+    normalized
+        .split('/')
+        .any(|seg| seg.starts_with("benchmark"))
+}
+
+/// Prefix containment over normalized path strings: separators unified to `/`
+/// and, on Windows, case-folded (the same file arrives as `D:\4DA\data\…` from
+/// the OS watcher and `d:/4da/data` from config).
+fn path_is_under(path: &Path, root: &Path) -> bool {
+    fn norm(p: &Path) -> String {
+        let s = p.to_string_lossy().replace('\\', "/");
+        if cfg!(windows) {
+            s.to_lowercase()
+        } else {
+            s
+        }
+    }
+    let p = norm(path);
+    let mut r = norm(root);
+    while r.ends_with('/') {
+        r.pop();
+    }
+    if r.is_empty() {
+        return false;
+    }
+    p == r || p.starts_with(&format!("{r}/"))
+}
+
 /// Catches credential files that have watched extensions (.json, .yaml, .toml).
 fn is_sensitive_file(path: &Path) -> bool {
     let file_name = match path.file_name().and_then(|f| f.to_str()) {
@@ -1027,6 +1123,104 @@ pub struct RateLimitStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression: the SECOND self-contamination loop (2026-08-26 audit, R3).
+    /// The 2026-08-21 fix closed the app's runtime data dir; the same loop was
+    /// still running one directory over, in source control. `benchmark_scenarios.json`
+    /// — the scoring pipeline's own benchmark corpus — contains "kubernetes"
+    /// x3 and "grpc" x1, and `.json` falls through `extract_topics_from_content`
+    /// to the generic keyword scan. Measured live: `kubernetes` was an active
+    /// user topic minted from that fixture while `tokio` had expired out of the
+    /// 7-day read window entirely.
+    #[test]
+    fn own_fixture_paths_are_excluded() {
+        for p in [
+            "D:/4DA/src-tauri/src/scoring/benchmark_scenarios.json",
+            "D:/4DA/src-tauri/src/scoring/benchmark_calibration/mod.rs",
+            "D:/4DA/src/locales/de/ui.json",
+            "D:/4DA/src/locales/zh/ui.json",
+            "/home/dev/proj/tests/fixtures/payload.json",
+            "/home/dev/proj/src/__snapshots__/App.test.tsx.snap",
+            "/home/dev/proj/testdata/corpus.yaml",
+            "D:\\4DA\\src-tauri\\src\\temporal_tests.rs",
+        ] {
+            assert!(
+                is_own_fixture_path(Path::new(p)),
+                "fixture/locale/benchmark path must never mint topics: {p}"
+            );
+        }
+    }
+
+    /// The control that matters more than the test above: over-blocking would
+    /// silently starve the profile of the user's REAL work. Ordinary source
+    /// must still be mined.
+    #[test]
+    fn real_source_files_are_still_mined() {
+        for p in [
+            "D:/4DA/src-tauri/src/scoring/dependencies.rs",
+            "D:/4DA/src-tauri/src/ace/watcher.rs",
+            "D:/4DA/src/components/ResultsView.tsx",
+            "D:/4DA/src-tauri/Cargo.toml",
+            "D:/4DA/package.json",
+            "/home/dev/proj/src/main.rs",
+            "/home/dev/proj/README.md",
+            // "latest" contains no fixture segment; "contested" contains
+            // "test" but not as a path segment — neither may be blocked.
+            "/home/dev/proj/src/latest_release.rs",
+            "/home/dev/proj/src/contested_merge.rs",
+        ] {
+            assert!(
+                !is_own_fixture_path(Path::new(p)),
+                "ordinary source must still be mined: {p}"
+            );
+        }
+    }
+
+    /// Regression: self-scan contamination loop (2026-08-21 audit). The
+    /// watcher mined the app's own data dir — briefing_snapshot.json minted
+    /// `azure`/`redis` as user topics, settings.json's RSS feed URLs minted
+    /// `docker`/`kubernetes`/`aws` — so files under the runtime data dir must
+    /// never pass the event filter.
+    #[test]
+    fn own_data_dir_paths_are_excluded() {
+        let data_dir = crate::runtime_paths::RuntimePaths::get().data_dir.clone();
+        assert!(is_own_data_path(&data_dir.join("settings.json")));
+        assert!(is_own_data_path(&data_dir.join("briefing_snapshot.json")));
+        assert!(is_own_data_path(
+            &data_dir.join("digests").join("mini_digest.md")
+        ));
+        // A sibling project file is NOT excluded.
+        if let Some(parent) = data_dir.parent() {
+            assert!(!is_own_data_path(&parent.join("src").join("main.rs")));
+        }
+    }
+
+    #[test]
+    fn path_is_under_normalizes_separators_and_case() {
+        use std::path::PathBuf;
+        let root = PathBuf::from(r"D:\4DA\data");
+        assert!(path_is_under(
+            &PathBuf::from("D:/4DA/data/settings.json"),
+            &root
+        ));
+        if cfg!(windows) {
+            assert!(path_is_under(
+                &PathBuf::from(r"d:\4da\DATA\usage.json"),
+                &root
+            ));
+        }
+        // Prefix must respect path boundaries: `data-backup` is not `data`.
+        assert!(!path_is_under(
+            &PathBuf::from(r"D:\4DA\data-backup\x.json"),
+            &root
+        ));
+        assert!(!path_is_under(&PathBuf::from(r"D:\4DA\src\lib.rs"), &root));
+        // Empty root never matches (a misconfigured data dir must not exclude everything).
+        assert!(!path_is_under(
+            &PathBuf::from("D:/4DA/data/x.json"),
+            &PathBuf::from("")
+        ));
+    }
 
     /// Regression: the module offset was `find(" from ") + 7`, one byte PAST
     /// the 6-byte pattern. That extra byte split the following char whenever

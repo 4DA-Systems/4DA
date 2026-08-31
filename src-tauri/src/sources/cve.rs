@@ -42,36 +42,125 @@ pub(crate) struct AffectedPackage {
 // GitHub Advisory Database fetcher
 // ============================================================================
 
-/// Fetch recent advisories from GitHub Advisory Database.
-/// This is preferred over NVD because it includes ecosystem-specific package data.
-pub(crate) async fn fetch_github_advisories(ecosystem: Option<&str>) -> Result<Vec<CveAdvisory>> {
-    let client = shared_client();
-    let mut url =
-        "https://api.github.com/advisories?per_page=30&sort=published&direction=desc".to_string();
+/// GitHub Global Security Advisories API page size — the API's `per_page` max.
+const GITHUB_ADVISORY_PAGE_SIZE: usize = 100;
+
+/// Pagination cap per fetch: pages x page size = 300 advisories max per call,
+/// so one fetch cycle stays bounded even on npm-malware-wave days. Pagination
+/// stops early on a short page, so quiet ecosystems cost a single request.
+const GITHUB_ADVISORY_MAX_PAGES: usize = 3;
+
+/// Only advisories published inside this window are fetched. Sorted newest-first
+/// WITH pagination, the window defines coverage — the previous single
+/// `per_page=30` request meant one burst day (e.g. an npm malware wave) evicted
+/// everything published before it (scoring audit 2026-08-23, plan item 17).
+const GITHUB_ADVISORY_WINDOW_DAYS: i64 = 30;
+
+/// Build the first-page URL for the GitHub Global Security Advisories API.
+/// `published_since` (YYYY-MM-DD) becomes a percent-encoded `published=>=DATE`
+/// range filter so the API only returns the current window.
+fn build_advisories_url(ecosystem: Option<&str>, published_since: &str) -> String {
+    let mut url = format!(
+        "https://api.github.com/advisories?per_page={GITHUB_ADVISORY_PAGE_SIZE}&sort=published&direction=desc&published=%3E%3D{published_since}"
+    );
     if let Some(eco) = ecosystem {
         url.push_str(&format!("&ecosystem={eco}"));
     }
+    url
+}
 
-    let response = client
-        .get(&url)
-        .header("Accept", "application/vnd.github+json")
-        .header("User-Agent", "4DA-Developer-OS/1.0")
-        .send()
-        .await?;
+/// Extract the `rel="next"` target from a GitHub `Link` header. The global
+/// advisories endpoint pages by cursor (`before`/`after`), so following the
+/// server-provided next link — which carries the cursor AND the original query
+/// filters — is the only correct way to page it.
+fn parse_link_next(link_header: &str) -> Option<String> {
+    link_header.split(',').find_map(|part| {
+        let (target, params) = part.split_once(';')?;
+        if !params.contains("rel=\"next\"") {
+            return None;
+        }
+        let target = target.trim().strip_prefix('<')?.strip_suffix('>')?;
+        Some(target.to_string())
+    })
+}
 
-    if !response.status().is_success() {
-        return Ok(vec![]);
-    }
+/// Fetch recent advisories from GitHub Advisory Database.
+/// This is preferred over NVD because it includes ecosystem-specific package data.
+///
+/// Windowed to the last [`GITHUB_ADVISORY_WINDOW_DAYS`] days and paginated up to
+/// [`GITHUB_ADVISORY_MAX_PAGES`] pages of [`GITHUB_ADVISORY_PAGE_SIZE`], newest
+/// first. Once a page has landed, later-page failures degrade to a partial
+/// result instead of discarding what was already fetched.
+pub(crate) async fn fetch_github_advisories(ecosystem: Option<&str>) -> Result<Vec<CveAdvisory>> {
+    let client = shared_client();
+    let published_since = (chrono::Utc::now()
+        - chrono::Duration::days(GITHUB_ADVISORY_WINDOW_DAYS))
+    .format("%Y-%m-%d")
+    .to_string();
+    let mut next_url = Some(build_advisories_url(ecosystem, &published_since));
 
-    let body: serde_json::Value = response.json().await?;
     let mut advisories = Vec::new();
+    let mut pages_fetched = 0usize;
 
-    if let Some(items) = body.as_array() {
-        for item in items {
-            if let Some(advisory) = parse_github_advisory(item) {
-                advisories.push(advisory);
+    while pages_fetched < GITHUB_ADVISORY_MAX_PAGES {
+        let Some(url) = next_url.take() else {
+            break;
+        };
+
+        let response = match client
+            .get(&url)
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "4DA-Developer-OS/1.0")
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) if pages_fetched == 0 => return Err(e.into()),
+            Err(e) => {
+                tracing::warn!(target: "4da::sources", page = pages_fetched, error = %e, "CVE: pagination request failed, keeping advisories fetched so far");
+                break;
+            }
+        };
+
+        if !response.status().is_success() {
+            // First page: preserve the empty-result contract; later pages: keep
+            // what already landed.
+            break;
+        }
+
+        // Cursor pagination: read the Link header BEFORE .json() consumes the
+        // response.
+        let link_next = response
+            .headers()
+            .get(reqwest::header::LINK)
+            .and_then(|v| v.to_str().ok())
+            .and_then(parse_link_next);
+
+        let body: serde_json::Value = match response.json().await {
+            Ok(b) => b,
+            Err(e) if pages_fetched == 0 => return Err(e.into()),
+            Err(e) => {
+                tracing::warn!(target: "4da::sources", page = pages_fetched, error = %e, "CVE: pagination parse failed, keeping advisories fetched so far");
+                break;
+            }
+        };
+
+        let page_len = body.as_array().map(|a| a.len()).unwrap_or(0);
+        if let Some(items) = body.as_array() {
+            for item in items {
+                if let Some(advisory) = parse_github_advisory(item) {
+                    advisories.push(advisory);
+                }
             }
         }
+
+        pages_fetched += 1;
+        // A short page means the window is exhausted — stop before spending
+        // another request (the API is unauthenticated: 60 req/hr budget).
+        if page_len < GITHUB_ADVISORY_PAGE_SIZE {
+            break;
+        }
+        next_url = link_next;
     }
 
     Ok(advisories)
@@ -189,23 +278,32 @@ pub(crate) fn advisories_to_source_items(advisories: &[CveAdvisory]) -> Vec<Sour
 // ACE-based ecosystem filtering
 // ============================================================================
 
+/// Maps (ACE lookup key, GitHub Advisory DB ecosystem name).
+/// ACE uses "rust", "pypi", etc.; GitHub uses "npm", "pip", "rust", "composer",
+/// "actions", etc. (the API's `ecosystem` parameter vocabulary).
+const GITHUB_ECOSYSTEM_MAP: &[(&str, &str)] = &[
+    ("npm", "npm"),
+    ("rust", "rust"),
+    ("pypi", "pip"),
+    ("go", "go"),
+    ("maven", "maven"),
+    ("nuget", "nuget"),
+    ("rubygems", "rubygems"),
+    ("packagist", "composer"),
+    ("pub", "pub"),
+    // ACE has no manifest scanner for Swift (Package.swift) or GitHub Actions
+    // workflows yet, so these two never pass the dep filter below today — they
+    // are mapped for the day it does, and the deep-scan fallback list already
+    // covers them now.
+    ("swift", "swift"),
+    ("github-actions", "actions"),
+];
+
 /// Get the GitHub Advisory DB ecosystem names for which the user has actual
 /// runtime dependencies tracked by ACE. Returns an empty vec when no ACE
 /// data is available (first run, no projects scanned).
 fn get_user_ecosystems() -> Vec<String> {
-    // Maps (ACE lookup key, GitHub Advisory DB ecosystem name).
-    // ACE uses "rust", "pypi", etc.; GitHub uses "npm", "pip", "rust", etc.
-    let ecosystem_map: &[(&str, &str)] = &[
-        ("npm", "npm"),
-        ("rust", "rust"),
-        ("pypi", "pip"),
-        ("go", "go"),
-        ("maven", "maven"),
-        ("nuget", "nuget"),
-        ("rubygems", "rubygems"),
-    ];
-
-    ecosystem_map
+    GITHUB_ECOSYSTEM_MAP
         .iter()
         .filter(|(ace_key, _)| {
             !crate::source_fetching::load_ace_packages_for_ecosystem(ace_key).is_empty()
@@ -330,10 +428,13 @@ impl Source for CveSource {
         let user_ecosystems = get_user_ecosystems();
         let ecosystems: Vec<String> = if user_ecosystems.is_empty() {
             // Fallback: no ACE data yet, use all default ecosystems
-            vec!["npm", "pip", "go", "rubygems", "maven", "nuget", "rust"]
-                .into_iter()
-                .map(String::from)
-                .collect()
+            vec![
+                "npm", "pip", "go", "rubygems", "maven", "nuget", "rust", "composer", "pub",
+                "swift", "actions",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect()
         } else {
             user_ecosystems
         };
@@ -431,5 +532,60 @@ mod tests {
         let a = advisory.unwrap();
         assert_eq!(a.cve_id, "GHSA-minimal");
         assert!(a.affected_packages.is_empty());
+    }
+
+    #[test]
+    fn test_build_advisories_url_windowed_and_paged() {
+        let url = build_advisories_url(Some("npm"), "2026-07-24");
+        // Full page size, newest-first, date-windowed, ecosystem-filtered.
+        assert!(url.contains("per_page=100"), "{url}");
+        assert!(url.contains("sort=published&direction=desc"), "{url}");
+        // `>=` percent-encoded — one burst day cannot evict the window.
+        assert!(url.contains("published=%3E%3D2026-07-24"), "{url}");
+        assert!(url.ends_with("&ecosystem=npm"), "{url}");
+
+        let unfiltered = build_advisories_url(None, "2026-07-24");
+        assert!(!unfiltered.contains("ecosystem="), "{unfiltered}");
+    }
+
+    #[test]
+    fn test_parse_link_next() {
+        // Typical GitHub cursor-pagination Link header.
+        let header = "<https://api.github.com/advisories?per_page=100&after=Y3Vyc29yOjEwMA%3D%3D>; rel=\"next\", <https://api.github.com/advisories?per_page=100&before=Zmlyc3Q%3D>; rel=\"prev\"";
+        assert_eq!(
+            parse_link_next(header).as_deref(),
+            Some("https://api.github.com/advisories?per_page=100&after=Y3Vyc29yOjEwMA%3D%3D")
+        );
+
+        // No next link (last page) -> pagination stops.
+        assert_eq!(
+            parse_link_next("<https://api.github.com/advisories?before=x>; rel=\"prev\""),
+            None
+        );
+        // Garbage never panics the fetcher.
+        assert_eq!(parse_link_next(""), None);
+        assert_eq!(parse_link_next("not a link header"), None);
+    }
+
+    #[test]
+    fn test_github_ecosystem_map_coverage() {
+        // The map speaks the GitHub Advisory API's `ecosystem` vocabulary.
+        let github_names: Vec<&str> = GITHUB_ECOSYSTEM_MAP.iter().map(|(_, g)| *g).collect();
+        for expected in [
+            "npm", "rust", "pip", "go", "maven", "nuget", "rubygems",
+            // Previously missing (scoring audit 2026-08-23, plan item 17):
+            "composer", "pub", "swift", "actions",
+        ] {
+            assert!(
+                github_names.contains(&expected),
+                "GitHub ecosystem map missing {expected}"
+            );
+        }
+        // The ACE side of each pair must be an ecosystem key the loaders accept
+        // (swift/github-actions are documented forward-mappings ACE cannot
+        // populate yet).
+        for (ace_key, _) in GITHUB_ECOSYSTEM_MAP {
+            assert!(!ace_key.is_empty());
+        }
     }
 }

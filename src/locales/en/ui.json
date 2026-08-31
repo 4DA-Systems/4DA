@@ -981,7 +981,6 @@
   "enterprise.export.section.sources": "Source Configuration",
   "enterprise.export.section.briefings": "Briefing History",
   "enterprise.export.section.feedback": "Feedback & Engagement",
-  "enterprise.export.section.learned": "Learned Behavior",
   "enterprise.diagnostics.title": "Configuration Diagnostics",
   "enterprise.diagnostics.description": "Validate your setup and troubleshoot issues without contacting support.",
   "enterprise.diagnostics.running": "Running...",
@@ -1538,7 +1537,7 @@
   "onboarding.stack.autoSelectedBanner": "Auto-selected based on your projects",
   "onboarding.projects.scanning": "Scanning your projects...",
   "onboarding.projects.detected": "Detected from your local projects:",
-  "onboarding.projects.noTech": "No specific technologies detected. 4DA will learn from your activity.",
+  "onboarding.projects.noTech": "No specific technologies detected. Add project directories in Settings so 4DA can scan your stack.",
   "onboarding.projects.manageHint": "Manage directories anytime in Settings.",
   "learnedPreferences.title": "Learned Preferences",
   "learnedPreferences.subtitle": "What you've told the Brief to show more and less of",
@@ -1640,6 +1639,8 @@
   "calibration.onboarding.summaryProjects": "{{count}} technologies detected",
   "calibration.action.working": "Working...",
   "health.issueCount": "{{count}} system issues detected",
+  "health.circuitReset": "{{source}} has been reset and will be retried",
+  "health.sourceMissed": "Items from {{source}} may have been missed while it was unavailable",
   "health.openSettings": "Open Settings",
   "missed.title": "What you would have missed",
   "missed.scanned": "{{count}} items scanned",
@@ -2202,5 +2203,6 @@
   "autopsy.close": "Close",
   "settings.context.addDirectory": "Add directory",
   "settings.personalization.addSuggestion": "Add {{name}} to your interests",
-  "settings.personalization.dismissSuggestion": "Dismiss {{name}}"
+  "settings.personalization.dismissSuggestion": "Dismiss {{name}}",
+  "feedback.notFullySaved": "Feedback not fully saved ({{commands}} failed)"
 }

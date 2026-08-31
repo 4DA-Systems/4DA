@@ -21,7 +21,16 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const PORT = 4444;
+// Port to bind. Local runs default to 4444 (matching vite.config.ts) so the
+// busy-port guard below detects a live dev server and skips instead of
+// disrupting it. CI sets VITE_SMOKE_PORT to a dedicated port (validate.yml:
+// 4445) so the cold-start NEVER contends with — and never needs to kill —
+// anything already running on the self-hosted dev box. Issue #501: the CI
+// flavor of this step used `taskkill /F /IM fourda.exe`, force-killing the
+// operator's live app (silent exit code 1) on every frontend-touching run,
+// while freeing nothing (fourda.exe is the dev server's client, not the
+// listener on 4444).
+const PORT = Number(process.env.VITE_SMOKE_PORT ?? 4444);
 const DEV_HOST = `http://127.0.0.1:${PORT}`;
 const STARTUP_TIMEOUT_MS = Number(process.env.VITE_SMOKE_STARTUP_TIMEOUT_MS ?? 90000);
 const REQUEST_TIMEOUT_MS = Number(process.env.VITE_SMOKE_REQUEST_TIMEOUT_MS ?? 60000);
@@ -144,7 +153,12 @@ async function main() {
   }
 
   const viteBin = path.join(__dirname, '..', 'node_modules', 'vite', 'bin', 'vite.js');
-  const child = spawn('node', [viteBin], {
+  // --port pins the resolved PORT (vite.config.ts says 4444; VITE_SMOKE_PORT
+  // may override). --strictPort makes vite FAIL at bind time instead of
+  // silently hopping to the next free port — without it, a port grabbed
+  // between the busy-guard above and this spawn would leave the probe loop
+  // polling a port vite never bound.
+  const child = spawn('node', [viteBin, '--port', String(PORT), '--strictPort'], {
     cwd: path.join(__dirname, '..'),
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, FORCE_COLOR: '0' },

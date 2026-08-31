@@ -239,6 +239,18 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
         .context("Failed to store file signal")?;
 
         for topic in &topics {
+            // Is this a NEW interest, or a refresh of one we already hold? The
+            // upsert below cannot tell us afterwards, and the difference is
+            // exactly what the ledger exists to record: a reinforce only moves
+            // last_seen, a MINT changes who the system thinks the user is.
+            let already_held = conn
+                .query_row(
+                    "SELECT 1 FROM active_topics WHERE topic = ?1",
+                    rusqlite::params![topic],
+                    |_| Ok(()),
+                )
+                .is_ok();
+
             conn.execute(
                 "INSERT INTO active_topics (topic, weight, confidence, source, last_seen)
                  VALUES (?1, 0.6, 0.7, 'file_content', datetime('now'))
@@ -248,6 +260,20 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
                 rusqlite::params![topic],
             )
             .context("Failed to update active topic")?;
+
+            // Mints only. A reinforce is already recorded by `last_seen`, and
+            // logging every one would bury the entries that matter under the
+            // steady churn of ordinary editing.
+            if !already_held {
+                super::db::record_identity_change(
+                    &conn,
+                    "topic",
+                    topic,
+                    "mint",
+                    "file_content",
+                    Some(&change.path.to_string_lossy()),
+                );
+            }
         }
 
         // Rich topic extraction — deeper semantic signals from file content

@@ -535,7 +535,42 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
         })
     })?;
 
-    let mut result: Vec<DepCoverage> = rows.filter_map(|r| r.ok()).collect();
+    let result_raw: Vec<DepCoverage> = rows.filter_map(|r| r.ok()).collect();
+
+    // Canonical-ecosystem merge: the SQL groups by (norm_name, language), but
+    // language labels for one ecosystem drift across writers ('javascript',
+    // 'typescript', and 'npm' in older rows). The same dep then splits into
+    // sibling rows — the Blind Spots list rendered "react (npm)" beside a bare
+    // "react" (2026-08-30 audit). Fold rows whose (normalized name, canonical
+    // ecosystem) agree, unioning their project lists and keeping the canonical
+    // display label.
+    let mut result: Vec<DepCoverage> = Vec::with_capacity(result_raw.len());
+    let mut merge_index: std::collections::HashMap<(String, String), usize> =
+        std::collections::HashMap::new();
+    for mut cov in result_raw {
+        let norm_name = cov.package_name.to_lowercase().replace('-', "_");
+        let eco_key = match crate::ecosystem::Ecosystem::parse(&cov.ecosystem) {
+            Some(e) => {
+                cov.ecosystem = e.display_label().to_string();
+                cov.ecosystem.clone()
+            }
+            None => cov.ecosystem.to_lowercase(),
+        };
+        match merge_index.entry((norm_name, eco_key)) {
+            std::collections::hash_map::Entry::Occupied(slot) => {
+                let existing = &mut result[*slot.get()];
+                for p in cov.projects {
+                    if !existing.projects.contains(&p) {
+                        existing.projects.push(p);
+                    }
+                }
+            }
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                slot.insert(result.len());
+                result.push(cov);
+            }
+        }
+    }
 
     // Canonical project-inclusion policy: the blind-spot universe must not
     // track deps that exist ONLY in agent infra / fixture scaffolding
@@ -1598,6 +1633,9 @@ fn find_missed_signals(
     // this ≤30-day window in the first chunks, so the gap is brief. Compile-time
     // constant — no injection risk.
     let current_version = crate::scoring::PIPELINE_VERSION;
+    // Ranked read (audit items 12+26): the `> 0.5` "you would have missed
+    // this" gate stays on relevance_score (evidence decides membership);
+    // ordering uses the shared rank-then-evidence expression.
     let sql = format!(
         "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score,
                 si.created_at, si.content_type
@@ -1617,10 +1655,11 @@ fn find_missed_signals(
                 OR si.content_type NOT IN ('show_and_tell','tutorial','question',
                                            'help_request','hiring','clickbait',
                                            'security_advisory','breaking_change'))
-         ORDER BY si.relevance_score DESC
+         ORDER BY {ranked}
          LIMIT 40",
         days = days,
-        feed_window = feed_window_days
+        feed_window = feed_window_days,
+        ranked = crate::db::ranked_order_expr("si")
     );
 
     let mut stmt = match conn.prepare(&sql) {
@@ -3503,7 +3542,7 @@ pub async fn assess_blind_spots_with_ai() -> std::result::Result<BlindSpotAssess
     );
 
     // 5. Single LLM call — the only await; no guards held across it.
-    let client = crate::llm::LLMClient::new(provider);
+    let client = crate::llm::LLMClient::with_purpose(provider, "blind_spots");
     let response = client
         .complete(
             BS_ASSESS_SYSTEM_PROMPT,
@@ -4161,7 +4200,11 @@ mod tests {
                 -- 0.5 missed-signal threshold). Defaults to a high sentinel so any
                 -- fixture that does not set it explicitly is treated as current-brain
                 -- scored; the stale-version regression test sets it below current.
-                scored_pipeline_version INTEGER DEFAULT 1000000
+                scored_pipeline_version INTEGER DEFAULT 1000000,
+                -- Mirrors the Phase-110 rank column: find_missed_signals orders by
+                -- the shared ranked-read expression COALESCE(rank_score,
+                -- relevance_score). NULL = never batch-ranked (evidence order).
+                rank_score REAL DEFAULT NULL
             );
 
             CREATE TABLE project_dependencies (
@@ -5759,8 +5802,9 @@ mod tests {
         );
 
         let deps = get_dependency_coverage(&conn).unwrap();
-        // The SQL groups by (normalized_name, language), so "jsonwebtoken" in
-        // javascript vs rust should produce two separate DepCoverage entries.
+        // Different ecosystems must stay separate DepCoverage entries — the
+        // canonical-ecosystem merge folds LABEL DRIFT within one ecosystem
+        // ('javascript'/'typescript'/'npm'), never npm into crates.io.
         let jwt_deps: Vec<_> = deps
             .iter()
             .filter(|d| d.package_name == "jsonwebtoken")
@@ -5772,10 +5816,11 @@ mod tests {
             jwt_deps.len()
         );
 
-        // Verify ecosystems are distinct
+        // Ecosystem labels are canonicalized for display ("react (npm)"), so
+        // the two entries carry the registry names, still distinct.
         let ecosystems: Vec<&str> = jwt_deps.iter().map(|d| d.ecosystem.as_str()).collect();
-        assert!(ecosystems.contains(&"javascript"));
-        assert!(ecosystems.contains(&"rust"));
+        assert!(ecosystems.contains(&"npm"), "got: {ecosystems:?}");
+        assert!(ecosystems.contains(&"crates.io"), "got: {ecosystems:?}");
     }
 
     #[test]

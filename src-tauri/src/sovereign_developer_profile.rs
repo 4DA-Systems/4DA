@@ -8,7 +8,7 @@
 //! 5 Dimensions:
 //! 1. Infrastructure — sovereign_profile (CPU/RAM/GPU/Storage/Network/OS/LLM/Legal/Budget)
 //! 2. Stack — tech_stack + detected_tech + project_dependencies + selected_stacks
-//! 3. Skills — topic_affinities + feedback + playbook_progress + behavior
+//! 3. Skills — explicit engagement + feedback + playbook_progress
 //! 4. Preferences — interests + exclusions + decisions + tech_radar
 //! 5. Context — active_topics + git_signals + file_signals + scan dirs
 
@@ -359,25 +359,13 @@ fn assemble_stack(
 }
 
 fn assemble_skills(conn: &Connection) -> SkillsDimension {
-    // Topic affinities (top 15)
-    let top_affinities = conn
-        .prepare("SELECT topic, affinity_score FROM topic_affinities ORDER BY affinity_score DESC LIMIT 15")
-        .and_then(|mut stmt| {
-            stmt.query_map([], |row| {
-                Ok(AffinityEntry {
-                    topic: row.get(0)?,
-                    score: row.get(1)?,
-                })
-            })
-            .map(|rows| rows.filter_map(|r| match r {
-    Ok(v) => Some(v),
-    Err(e) => {
-        tracing::warn!("Row processing failed in sovereign_developer_profile: {e}");
-        None
-    }
-}).collect::<Vec<_>>())
-        })
-        .unwrap_or_default();
+    // top_affinities is permanently EMPTY as of v20b (AD-031, ruling A2a):
+    // its source table `topic_affinities` was dropped with the implicit-capture
+    // layer. The field, `AffinityEntry`, and the INV-023 guard test
+    // `behavioral_affinities_do_not_exclude_gaps` are KEPT for
+    // serialized-shape stability — the same doctrine as the pinned
+    // ScoreBreakdown fields.
+    let top_affinities: Vec<AffinityEntry> = Vec::new();
 
     // Topics with EXPLICIT engagement — the only engaged-set that scoring
     // (skill-gap detection) is allowed to consume. Implicit signals (scroll,

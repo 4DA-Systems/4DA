@@ -8,7 +8,7 @@ permalink: "/download/"
 {% block head %}
   <link rel="canonical" href="https://4da.ai/download">
   <meta property="og:title" content="Download 4DA — free for Windows, macOS, Linux">
-  <meta property="og:description" content="Direct installers, auto-updates, no account. Or run the MCP server with one command.">
+  <meta property="og:description" content="Direct installers, no account, works offline. Or run the MCP server with one command.">
   <meta property="og:url" content="https://4da.ai/download">
   <meta property="og:image" content="https://4da.ai/og-image.png">
   <style>
@@ -96,7 +96,7 @@ permalink: "/download/"
 
   <div class="container">
     <header class="dl-hero">
-      <div class="eyebrow">Free forever &middot; No account &middot; Auto-updates &middot; v{{ release.version }}</div>
+      <div class="eyebrow">Free forever &middot; No account &middot; Works offline &middot; v{{ release.version }}</div>
       <h1>Download 4DA</h1>
       <p>One click gets you the installer for your platform. The local embedding model ships inside it, so 4DA works fully offline on first run.</p>
     </header>
@@ -105,14 +105,14 @@ permalink: "/download/"
       <div class="dl-card" data-os="win">
         <span class="dl-badge">Recommended for you</span>
         <div class="dl-os">Windows</div>
-        <div class="dl-meta">Windows 10 (1803+) or 11. <code>.exe</code> installer (NSIS), auto-updates.</div>
+        <div class="dl-meta">Windows 10 (1803+) or 11. <code>.exe</code> installer (NSIS).</div>
         <a class="dl-btn" data-dl="win" href="/download/{{ release.files.win.slug }}/">Download <span class="sz">{{ release.files.win.size }}</span></a>
         <div class="dl-note-inline">First launch shows SmartScreen &mdash; see below.</div>
       </div>
       <div class="dl-card" data-os="mac">
         <span class="dl-badge">Recommended for you</span>
         <div class="dl-os">macOS</div>
-        <div class="dl-meta">macOS 10.15+. Universal <code>.dmg</code>, auto-updates. Pick your chip:</div>
+        <div class="dl-meta">macOS 10.15+. Universal <code>.dmg</code>. Pick your chip:</div>
         <div class="dl-btn-row">
           <a class="dl-btn" data-dl="mac-arm" href="/download/{{ release.files.macArm.slug }}/">Apple Silicon</a>
           <a class="dl-btn" data-dl="mac-intel" href="/download/{{ release.files.macIntel.slug }}/">Intel</a>
@@ -143,7 +143,7 @@ permalink: "/download/"
     <div class="dl-notes">
       <div class="note">
         <h3>Windows SmartScreen</h3>
-        <p>On first launch, SmartScreen prompts because 4DA is a new app still building reputation &mdash; not a warning about the binary. Click <strong>More info &rarr; Run anyway</strong>.</p>
+        <p>This build is <strong>not code-signed</strong>, so SmartScreen will warn you and Windows cannot tell you who published it. That is a real gap, not a formality, and the only honest way to close it on your side is to check the hash below against the one in <code>SHASUMS256.txt</code> before you run it. Click <strong>More info &rarr; Run anyway</strong> once you have. Signed builds are in progress.</p>
       </div>
       <div class="note">
         <h3>Verify your download</h3>

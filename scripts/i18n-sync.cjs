@@ -34,7 +34,11 @@ const { execSync } = require('child_process');
 // ============================================================================
 
 const LOCALES_DIR = path.join(__dirname, '..', 'src', 'locales');
-const NAMESPACES = ['ui', 'errors', 'coach', 'signals'];
+// 'coach' was removed here on 2026-08-28: no locale directory has ever
+// contained coach.json, so i18n:status printed "coach: undefined" and every
+// tool silently iterated a namespace that does not exist. The real set is
+// ui / errors / signals, verified against all 13 locale directories.
+const NAMESPACES = ['ui', 'errors', 'signals'];
 const SUPPORTED_LANGS = ['ar', 'de', 'es', 'fr', 'hi', 'it', 'ja', 'ko', 'pt-BR', 'ru', 'tr', 'zh'];
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const MODEL = 'claude-haiku-4-5-20251001';

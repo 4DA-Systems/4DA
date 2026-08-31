@@ -19,6 +19,15 @@ function Log($msg) {
     try { Add-Content -Path $logFile -Value $line -ErrorAction SilentlyContinue } catch {}
 }
 
+# Explicit, tag-scoped waiver set by release.yml from the ALLOW_UNSIGNED_WINDOWS
+# repository variable. Checked BEFORE the credential test so the outcome is
+# "deliberately unsigned" rather than "credentials happened to be missing" —
+# those two look identical in a log and only one of them is a decision.
+if ($env:ALLOW_UNSIGNED_WINDOWS -eq 'true') {
+    Log "Skipping code signing -- ALLOW_UNSIGNED_WINDOWS authorises this tag. Artifact will be UNSIGNED."
+    exit 0
+}
+
 if (-not $env:SSL_COM_CREDENTIAL_ID) {
     Log "Skipping code signing -- SSL_COM_CREDENTIAL_ID not set"
     exit 0

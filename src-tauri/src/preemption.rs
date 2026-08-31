@@ -16,6 +16,7 @@
 // the `utils::text` helpers) or an `#[allow]` that states why it is safe.
 #![deny(clippy::string_slice)]
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use once_cell::sync::Lazy;
@@ -56,6 +57,7 @@ struct CachedPreemptionFeed {
 
 static PREEMPTION_FEED_CACHE: Lazy<Mutex<Option<CachedPreemptionFeed>>> =
     Lazy::new(|| Mutex::new(None));
+static PREEMPTION_REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
 /// How long a computed feed stays fresh before the next call recomputes.
 const PREEMPTION_CACHE_TTL: Duration = Duration::from_mins(10);
@@ -84,6 +86,43 @@ fn store_preemption_feed(feed: &EvidenceFeed) {
     *PREEMPTION_FEED_CACHE.lock() = Some(CachedPreemptionFeed {
         computed_at: Instant::now(),
         feed: feed.clone(),
+    });
+}
+
+fn refresh_preemption_cache_in_background(reason: &'static str) {
+    if PREEMPTION_REFRESH_IN_FLIGHT.swap(true, Ordering::SeqCst) {
+        debug!(
+            target: "4da::preemption",
+            reason,
+            "preemption refresh already in flight"
+        );
+        return;
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let result = if crate::settings::is_signal() {
+            compute_preemption_evidence_feed().await
+        } else {
+            compute_preemption_free_floor_feed()
+        };
+        match result {
+            Ok(feed) => {
+                let n = feed.items.len();
+                let scope = feed.tier_scope;
+                store_preemption_feed(&feed);
+                info!(
+                    target: "4da::preemption",
+                    reason, items = n, ?scope,
+                    "Preemption feed cache refreshed"
+                );
+            }
+            Err(e) => warn!(
+                target: "4da::preemption",
+                reason, error = %e,
+                "Preemption cache refresh failed"
+            ),
+        }
+        PREEMPTION_REFRESH_IN_FLIGHT.store(false, Ordering::SeqCst);
     });
 }
 
@@ -1090,15 +1129,34 @@ fn chain_to_alert(
                 }
                 _ => 1,
             };
+            // Honesty: this sentence used to be a hardcoded "No advisory
+            // issued." — a lie whenever a chain link's own title IS a
+            // published advisory (measured live 2026-08-25: two critical
+            // chains titled "[CVE-...] ...").
+            let advisory_sentence = if chain
+                .links
+                .iter()
+                .any(|link| crate::adversarial::contains_advisory_id(&link.title))
+            {
+                "Includes a published advisory."
+            } else {
+                "No advisory issued."
+            };
             format!(
-                "{source_count} sources discussing {} over {days_span} day{}. No advisory issued.",
+                "{source_count} sources discussing {} over {days_span} day{}. {advisory_sentence}",
                 chain.chain_name,
                 if days_span == 1 { "" } else { "s" }
             )
         },
         evidence,
         affected_projects: vec![],
-        affected_dependencies: vec![],
+        // `SignalChain::verified_dep` is the ONLY trustworthy affected
+        // dependency for a chain: it is set IFF the chain's topic exactly
+        // matches one of the user's installed dependencies, corroborated by
+        // >=2 grounded items across >=2 dates with dev-deps excluded (see the
+        // field doc in signal_chains.rs and `dependency_evidence`). Empty for
+        // ungrounded chains — never fabricated from the chain name.
+        affected_dependencies: chain.verified_dep.clone().into_iter().collect(),
         urgency,
         confidence: prediction.confidence as f32,
         predicted_window,
@@ -1567,7 +1625,9 @@ pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String
         // started this session) — fall through and compute the full feed.
     }
     let feed = if entitled {
-        compute_preemption_evidence_feed().await?
+        let feed = compute_preemption_fast_full_feed()?;
+        refresh_preemption_cache_in_background("entitled-cache-miss");
+        feed
     } else {
         compute_preemption_free_floor_feed()?
     };
@@ -1638,16 +1698,47 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
         );
     }
 
-    // Upgrade Plan (Phase 1 dependency intelligence): append the ranked
-    // per-package upgrade steps. Deliberately AFTER the adversarial filter —
-    // plan steps are deterministic aggregates of version-confirmed advisory
-    // matches; there is nothing for an LLM to second-guess (the same reasoning
-    // that exempts the free floor). Heuristic provenance keeps them out of
-    // `free_floor_view` (pinned by test) — the ranked plan is the Signal
-    // artifact; the underlying OSV-verified alerts remain the free security
-    // floor. The lens regroups: packages represented by a plan step render in
-    // the "Upgrade Plan" section instead of duplicating in the alert list.
     let mut items = items;
+    append_upgrade_plan_items(&mut items);
+
+    let mut feed = EvidenceFeed::from_items(items);
+    feed.tier_scope = Some(TierScope::Full);
+    Ok(feed)
+}
+
+fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, String> {
+    let mut items = validated_preemption_items()?;
+    // The fast path skips adversarial deliberation (a cache miss must not
+    // wait on an LLM), but the escalation-corroboration gate is
+    // deterministic — apply it here too, so an uncorroborated critical
+    // chain cannot flash in the fast feed and vanish when the deliberated
+    // recompute lands.
+    let mut demoted = 0usize;
+    for item in items.iter_mut() {
+        if crate::adversarial::gate_escalation(item) {
+            demoted += 1;
+        }
+    }
+    if demoted > 0 {
+        info!(
+            target: "4da::preemption",
+            demoted,
+            "fast-path escalation gate demoted uncorroborated critical/high items"
+        );
+    }
+    append_upgrade_plan_items(&mut items);
+    let mut feed = EvidenceFeed::from_items(items);
+    feed.tier_scope = Some(TierScope::Full);
+    Ok(feed)
+}
+
+// Upgrade Plan (Phase 1 dependency intelligence): append the ranked
+// per-package upgrade steps. Deliberately after adversarial filtering when the
+// full cache refresh runs — plan steps are deterministic aggregates of
+// version-confirmed advisory matches, so there is nothing for an LLM to
+// second-guess. The fast command path also appends the same deterministic plan
+// so a cache miss remains useful and bounded.
+fn append_upgrade_plan_items(items: &mut Vec<EvidenceItem>) {
     match crate::get_database() {
         Ok(db) => {
             let (plan, drops) = crate::evidence::build_upgrade_plan_with_drops(db);
@@ -1672,10 +1763,6 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
             "upgrade plan skipped — database unavailable"
         ),
     }
-
-    let mut feed = EvidenceFeed::from_items(items);
-    feed.tier_scope = Some(TierScope::Full);
-    Ok(feed)
 }
 
 /// Compute the free-tier security floor: Tier 1 (OSV-verified) items only.
@@ -1684,10 +1771,7 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
 /// there is nothing for an LLM to second-guess and free tier must not
 /// depend on an LLM being configured).
 fn compute_preemption_free_floor_feed() -> std::result::Result<EvidenceFeed, String> {
-    let items: Vec<EvidenceItem> = validated_preemption_items()?
-        .into_iter()
-        .filter(|i| i.confidence.provenance == ConfidenceProvenance::OsvVerified)
-        .collect();
+    let items = validated_osv_preemption_items();
     info!(
         target: "4da::preemption",
         tier1 = items.len(),
@@ -1696,6 +1780,25 @@ fn compute_preemption_free_floor_feed() -> std::result::Result<EvidenceFeed, Str
     let mut feed = EvidenceFeed::from_items(items);
     feed.tier_scope = Some(TierScope::FreeFloor);
     Ok(feed)
+}
+
+fn validated_osv_preemption_items() -> Vec<EvidenceItem> {
+    osv_matches_to_alerts()
+        .iter()
+        .map(PreemptionAlert::to_evidence_item)
+        .filter(|item| match crate::evidence::validate_item(item) {
+            Ok(()) => true,
+            Err(e) => {
+                warn!(
+                    target: "4da::evidence::validate",
+                    id = %item.id,
+                    error = %e,
+                    "dropped OSV preemption item failing schema validation"
+                );
+                false
+            }
+        })
+        .collect()
 }
 
 /// Shared materialization step: produce canonical `EvidenceItem`s from the
@@ -1902,6 +2005,118 @@ mod tests {
             chain_alert_urgency("critical", &ChainPhase::Nascent),
             AlertUrgency::Watch
         ));
+    }
+
+    // ─── chain_to_alert grounding propagation + explanation honesty ──
+    // The alert's affected deps come from `SignalChain::verified_dep` (the
+    // only trustworthy dep for a chain), and the explanation may only claim
+    // "No advisory issued." when no link title carries an advisory id.
+
+    fn chain_fixture(
+        verified_dep: Option<&str>,
+        link_titles: &[&str],
+    ) -> crate::signal_chains::SignalChain {
+        crate::signal_chains::SignalChain {
+            id: "chain_vm2_2026-08-20".to_string(),
+            chain_name: "vm2 signal chain (2 events)".to_string(),
+            links: link_titles
+                .iter()
+                .enumerate()
+                .map(|(i, title)| crate::signal_chains::ChainLink {
+                    signal_type: "security_alert".to_string(),
+                    source_item_id: i as i64 + 1,
+                    title: (*title).to_string(),
+                    timestamp: "2026-08-20T00:00:00Z".to_string(),
+                    description: String::new(),
+                })
+                .collect(),
+            overall_priority: "critical".to_string(),
+            resolution: ChainResolution::Open,
+            suggested_action: "Review the trend".to_string(),
+            confidence: 0.8,
+            created_at: "2026-08-20T00:00:00Z".to_string(),
+            updated_at: "2026-08-21T00:00:00Z".to_string(),
+            verified_dep: verified_dep.map(String::from),
+        }
+    }
+
+    fn chain_prediction_fixture() -> crate::signal_chains::ChainPrediction {
+        crate::signal_chains::ChainPrediction {
+            phase: crate::signal_chains::ChainPhase::Escalating,
+            intervals_hours: vec![24.0],
+            acceleration: -1.0,
+            predicted_next_hours: Some(24.0),
+            confidence: 0.7,
+            forecast: "test".to_string(),
+        }
+    }
+
+    #[test]
+    fn chain_to_alert_propagates_verified_dep() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        let chain = chain_fixture(
+            Some("vm2"),
+            &["vm2 maintenance status", "vm2 escape writeup"],
+        );
+        let alert = chain_to_alert(&chain, &chain_prediction_fixture(), &conn);
+        assert_eq!(
+            alert.affected_dependencies,
+            vec!["vm2".to_string()],
+            "the verified installed-dep topic must reach the alert's affected deps"
+        );
+    }
+
+    #[test]
+    fn chain_to_alert_ungrounded_chain_emits_no_affected_deps() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        let chain = chain_fixture(None, &["sandbox escape discussion"]);
+        let alert = chain_to_alert(&chain, &chain_prediction_fixture(), &conn);
+        assert!(
+            alert.affected_dependencies.is_empty(),
+            "no dep may be fabricated for an ungrounded chain"
+        );
+    }
+
+    #[test]
+    fn chain_to_alert_explanation_admits_published_advisory() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        // The live 2026-08-25 shape: the chain's representative link title IS
+        // a published advisory.
+        let chain = chain_fixture(
+            None,
+            &[
+                "[CVE-2026-47698] vm2: Sandbox Breakout via Custom inspect Function",
+                "vm2 sandbox discussion",
+            ],
+        );
+        let alert = chain_to_alert(&chain, &chain_prediction_fixture(), &conn);
+        assert!(
+            alert
+                .explanation
+                .ends_with("Includes a published advisory."),
+            "explanation must admit the advisory, got: {}",
+            alert.explanation
+        );
+        assert!(
+            !alert.explanation.contains("No advisory issued"),
+            "the hardcoded lie must be gone, got: {}",
+            alert.explanation
+        );
+    }
+
+    #[test]
+    fn chain_to_alert_explanation_no_advisory_when_links_carry_none() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        let chain = chain_fixture(
+            Some("tokio"),
+            &["tokio runtime deep dive", "tokio scheduler benchmarks"],
+        );
+        let alert = chain_to_alert(&chain, &chain_prediction_fixture(), &conn);
+        assert!(
+            alert.explanation.ends_with("No advisory issued."),
+            "advisory-free links keep the original sentence, got: {}",
+            alert.explanation
+        );
     }
 
     // ─── Compound-prefix detection ───────────────────────────────────

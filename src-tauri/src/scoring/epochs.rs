@@ -60,6 +60,39 @@
 //! invoke it unconditionally before drain work. Failure is fail-open to the
 //! SAFE side: any SQL error aborts promotion and the full drain proceeds —
 //! slower, never wrong.
+//!
+//! ## Bump per blast radius, not per release (AD-034)
+//!
+//! A `PIPELINE_VERSION` bump must correspond to a change in what `score_item`
+//! writes to `relevance_score`. The batch-relative layer — cross-encoder
+//! rerank, dedup corroboration boosts, domain/source diversity, per-source
+//! percentile, the LLM advisor delta, the final rank cap — writes `top_score`
+//! and `rank_score` only, and provably cannot move a stored evidence score.
+//! Changing it must NOT bump the version.
+//!
+//! v26 is the cautionary case: five changes under one bump, one of them
+//! (`apply_source_share_diversity`) a pure batch-layer cap that could not have
+//! altered a single stored score. Bundling forced the union of five blast radii
+//! onto the whole corpus AND made the bump unregisterable here, because no row
+//! predicate can bound the reach of the widest member. Land scoped changes under
+//! their own bumps and register each one.
+//!
+//! ## Why there is no per-AXIS registry (AD-033)
+//!
+//! The obvious generalisation of this module is to scope by signal axis rather
+//! than by row — "this bump touches the dependency axis, so reuse everything
+//! else" — since the row-predicate form cannot express a change to global gate
+//! machinery, which is why v22, v25, v26 and v27 are all unregistered.
+//!
+//! It was measured instead of assumed, and the answer is that the one axis worth
+//! materialising is already done. The context (KNN) axis was **95.8% of the cost
+//! of scoring an item**, and it now lives in `item_context_cache`, keyed on the
+//! CONTEXT-corpus generation and completely independent of `PIPELINE_VERSION` —
+//! so a scoring bump already does not invalidate it. Every remaining axis
+//! together is 2.7 ms/item; materialising them would save roughly eighteen
+//! seconds on a whole-corpus drain. A registry nothing consumes is dead code,
+//! which doctrine forbids. Revisit if some future axis acquires an input as
+//! expensive as a vector scan.
 
 use tracing::{info, warn};
 
@@ -84,11 +117,50 @@ use crate::db::Database;
 /// value computed at score time, so intersecting on it could under-cover — the
 /// one hazard the module contract names. Source type is assigned at ingest and
 /// never re-derived, so it is safe to key on.
-const SCOPED_EPOCHS: &[(i32, &str)] = &[(
-    18,
-    "source_type IN ('npm_registry','npm','crates_io','crates','pypi',\
+///
+/// **v22 — deliberately absent** (2026-08-24 audit fix queue): the bump
+/// changes global gate machinery (confirmation-gate evidence, keyword
+/// confirmation, community signal, staleness evidence) — the module
+/// contract's explicit do-not-register class. No predicate can provably
+/// bound its reach, so the whole corpus drains. The mechanism stays for
+/// future narrow bumps.
+///
+/// **v23 — superseded-release staleness floor.** The change deepens the
+/// `published_at` staleness discount for ReleaseNotes and withholds the
+/// grounded softening from them. `stale_published_multiplier` returns 1.0 for
+/// anything at or below `fresh_months` (12), so an item whose published age is
+/// under 12 months is arithmetically untouchable by this change — the
+/// predicate below (published_at present AND older than 12 months) is a
+/// provable SUPERSET of its reach. Deliberately NOT narrowed with
+/// `content_type IN ('release_notes')`: the stored column is a persisted
+/// classification while the multiplier uses the value computed at score time,
+/// so intersecting on it could UNDER-cover — the one hazard the module
+/// contract names. `published_at` is assigned at ingest and never re-derived,
+/// so it is safe to key on (same reasoning as v18's source_type). NULL
+/// published_at evaluates as not-matching → promoted, which is correct: those
+/// items age from first-seen and carry no publication date to discount.
+const SCOPED_EPOCHS: &[(i32, &str)] = &[
+    (
+        18,
+        "source_type IN ('npm_registry','npm','crates_io','crates','pypi',\
      'go_modules','go','maven','nuget','packagist','rubygems','cocoapods')",
-)];
+    ),
+    (
+        23,
+        "published_at IS NOT NULL AND published_at < datetime('now','-12 months')",
+    ),
+    // v24 — superseded-release ceiling. The flag requires an age at or beyond
+    // `superseded_months` (24), so nothing published inside 24 months can be
+    // affected: the predicate is a provable superset of the change's reach.
+    // Same reasoning as v23, one band deeper. `published_at` is assigned at
+    // ingest and never re-derived, and NULL evaluates as not-matching →
+    // promoted, which is correct (those items carry no publication date, so
+    // the ceiling can never fire for them).
+    (
+        24,
+        "published_at IS NOT NULL AND published_at < datetime('now','-24 months')",
+    ),
+];
 
 /// Promote stale items that the registered epoch predicates prove unaffected,
 /// re-stamping them at the version whose change cannot touch them. Returns

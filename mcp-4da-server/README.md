@@ -134,11 +134,11 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 |------|-------------|
 | `what_should_i_know` | Pre-task intelligence briefing: vulns, decisions, signals, ecosystem updates. |
 | `ecosystem_pulse` | Live ecosystem news from Hacker News, filtered by your detected tech stack. |
-| `get_context` | Your tech stack, resolved dependency versions, interests, affinities. |
+| `get_context` | Your tech stack, resolved dependency versions, interests, detected topics. |
 | `get_relevant_content`* | Scored content feed — articles, advisories, releases ranked by relevance. |
 | `get_actionable_signals`* | Classified alerts: security advisories, breaking changes, trending repos. |
 | `knowledge_gaps`* | Dependencies you use daily but never read about. Surfaces missed CVEs and updates. |
-| `record_feedback`* | Save or dismiss items to teach 4DA what matters. Sharpens future scoring. |
+| `record_feedback`* | Save or dismiss items so 4DA can record explicit interaction history. |
 
 ### Decisions & Memory
 
@@ -152,7 +152,7 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 
 | Tool | What it does |
 |------|-------------|
-| `developer_dna`* | Your tech identity: primary stack, engagement patterns, blind spots. |
+| `developer_dna`* | Your tech identity: primary stack, top dependencies, blind spots. |
 
 *\* Requires the [4DA desktop app](https://4da.ai) for full data.*
 

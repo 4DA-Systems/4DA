@@ -294,8 +294,15 @@ if let Some(exclusion) = check_exclusions(&topics, &ctx.exclusions) {
 let decay = 0.5_f32.powf(days_since / 30.0);
 ```
 
-### INV-071: Minimum Data for Learning (corrected 2026-08-16)
-There is no single threshold. Three different ones are live, and one path has none:
+### INV-071: Minimum Data for Learning — RETIRED (v20b, 2026-08-17, AD-031)
+Retired because the implicit topic-affinity learning this invariant governed was
+deleted outright in v20b — `RECOMPUTE_AFFINITY_SQL`, its three thresholds, and
+the `topic_affinities` table no longer exist, so there is no learning left to
+gate. (Note: the "display gate" bullet below was already stale before
+retirement — its cited counter at `ace_commands\interactions.rs:429` was removed
+in v20a.) The body is preserved as the historical record of what the gates were:
+
+There is no single threshold. Three different ones were live, and one path had none:
 
 - **Compute gate — 3.** `RECOMPUTE_AFFINITY_SQL` (`ace/behavior/tracking.rs:37`) only lets
   the positive/negative ratio drive `affinity_score` at `total_exposures >= 3`; below that

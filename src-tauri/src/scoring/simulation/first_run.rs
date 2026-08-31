@@ -83,9 +83,6 @@ fn bootstrap_mode_more_permissive_than_normal() {
         }];
         let mut ace = ACEContext::default();
         ace.active_topics.push("typescript".to_string());
-        // Normal user with anti-topic for most content
-        ace.anti_topics.push("python".to_string());
-        ace.anti_topics.push("rust".to_string());
         ScoringContext::builder()
             .interest_count(1)
             .interests(interests)

@@ -18,7 +18,6 @@ const EXPORT_SECTION_KEYS = [
   { key: 'sources', i18nKey: 'enterprise.export.section.sources', icon: '\u{1F517}' },
   { key: 'briefings', i18nKey: 'enterprise.export.section.briefings', icon: '\u{1F4C4}' },
   { key: 'feedback', i18nKey: 'enterprise.export.section.feedback', icon: '\u{1F44D}' },
-  { key: 'learned_behavior', i18nKey: 'enterprise.export.section.learned', icon: '\u{1F9E0}' },
 ];
 
 export function DataExportPanel() {

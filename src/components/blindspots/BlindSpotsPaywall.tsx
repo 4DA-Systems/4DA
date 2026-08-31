@@ -76,7 +76,7 @@ export const BlindSpotsPaywall = memo(function BlindSpotsPaywall() {
           </div>
         )}
         <div className="mt-1">
-          <SignalUpgradeCTA />
+          <SignalUpgradeCTA source="blindspots-paywall" />
         </div>
       </div>
     </div>

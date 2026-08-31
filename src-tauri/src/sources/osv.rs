@@ -16,6 +16,14 @@ use tracing::{info, warn};
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 
+/// Max queries per `/v1/querybatch` request — the OSV API's documented batch
+/// ceiling, and the same capacity the Preemption mirror lane batches at
+/// (`osv::sync::MAX_BATCH_SIZE`). The content lane covers the FULL monitored
+/// dep list per ecosystem up to this bound; the previous `.take(5)`/`.take(15)`
+/// caps starved it down to an alphabetically-first prefix of deps forever
+/// (scoring audit 2026-08-23).
+const OSV_QUERYBATCH_MAX: usize = 1000;
+
 // ============================================================================
 // OSV Source
 // ============================================================================
@@ -40,49 +48,24 @@ impl OsvSource {
         }
     }
 
-    /// Fetch vulnerabilities for popular packages in an ecosystem.
+    /// Fetch vulnerabilities for popular packages in an ecosystem, keeping the
+    /// package each advisory was queried FOR (the user's own dependency — the
+    /// grounding the scoring dep-matcher keys on).
     ///
     /// The OSV API requires a package name — cannot query by ecosystem alone.
     /// Uses well-known packages per ecosystem, augmented by ACE deps when available.
-    async fn fetch_ecosystem_vulns(&self, ecosystem: &str) -> SourceResult<Vec<OsvVulnerability>> {
-        // Get packages to check: ACE deps with versions when available
+    async fn fetch_ecosystem_vulns(
+        &self,
+        ecosystem: &str,
+    ) -> SourceResult<Vec<(OsvVulnerability, String)>> {
+        // Get packages to check: ACE deps with versions when available. Cover the
+        // FULL monitored dep list, bounded only by the batch endpoint's per-request
+        // capacity — the old `.take(15)` pinned this lane to an alphabetical prefix.
         let ace_packages = crate::source_fetching::load_ace_packages_with_versions(ecosystem);
         let packages: Vec<(String, Option<String>)> = if !ace_packages.is_empty() {
-            ace_packages.into_iter().take(15).collect()
+            ace_packages.into_iter().take(OSV_QUERYBATCH_MAX).collect()
         } else {
-            let default_packages: Vec<&str> = match ecosystem {
-                "npm" => vec!["express", "react", "next", "lodash", "axios", "webpack"],
-                "crates.io" => vec!["serde", "tokio", "reqwest", "axum", "clap", "anyhow"],
-                "PyPI" => vec![
-                    "django", "flask", "requests", "numpy", "fastapi", "pydantic",
-                ],
-                "Go" => vec![
-                    "golang.org/x/net",
-                    "golang.org/x/crypto",
-                    "github.com/gin-gonic/gin",
-                ],
-                "Maven" => vec![
-                    "org.apache.logging.log4j:log4j-core",
-                    "com.google.guava:guava",
-                ],
-                "NuGet" => vec![
-                    "Newtonsoft.Json",
-                    "System.Text.Json",
-                    "Microsoft.Data.SqlClient",
-                ],
-                "RubyGems" => vec!["rails", "nokogiri", "rack"],
-                "Packagist" => vec![
-                    "laravel/framework",
-                    "symfony/http-kernel",
-                    "guzzlehttp/guzzle",
-                ],
-                "Pub" => vec!["http", "dio", "shared_preferences"],
-                _ => vec![],
-            };
-            default_packages
-                .iter()
-                .map(|s| (s.to_string(), None))
-                .collect()
+            default_packages_for(ecosystem)
         };
 
         let mut all_vulns = Vec::new();
@@ -119,7 +102,13 @@ impl OsvSource {
             }
 
             if let Ok(result) = response.json::<OsvQueryResponse>().await {
-                all_vulns.extend(result.vulns.unwrap_or_default());
+                all_vulns.extend(
+                    result
+                        .vulns
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|v| (v, pkg_name.clone())),
+                );
             }
 
             // Rate limit between per-package queries
@@ -129,70 +118,142 @@ impl OsvSource {
         Ok(all_vulns)
     }
 
-    /// Fetch vulnerabilities across multiple ecosystems using the batch endpoint.
-    async fn fetch_batch_vulns(&self, ecosystems: &[&str]) -> SourceResult<Vec<OsvVulnerability>> {
-        // Build queries with actual package names + versions per ecosystem
-        let mut queries = Vec::new();
+    /// Discover advisory ids across multiple ecosystems using the batch endpoint.
+    ///
+    /// `/v1/querybatch` returns ONLY `{id, modified}` per vulnerability — it is a
+    /// DISCOVERY endpoint, not a data endpoint (live-verified 2026-08-20). The
+    /// previous implementation converted these id-only records straight into
+    /// SourceItems, which is how every stored OSV item became a content-empty
+    /// husk. Returns `(advisory_id, modified, queried_package)` triples for the
+    /// caller to hydrate via [`Self::hydrate_vuln`].
+    async fn fetch_batch_vuln_refs(
+        &self,
+        ecosystems: &[&str],
+    ) -> SourceResult<Vec<(String, Option<String>, String)>> {
+        // Build queries with actual package names + versions per ecosystem.
+        // The FULL monitored dep list goes in — the old `.take(5)` locked
+        // discovery to the same five alphabetically-first deps forever.
+        let mut query_pairs: Vec<(OsvQueryRequest, String)> = Vec::new();
         for eco in ecosystems {
             let ace_packages = crate::source_fetching::load_ace_packages_with_versions(eco);
             let pkgs: Vec<(String, Option<String>)> = if ace_packages.is_empty() {
-                match *eco {
-                    "npm" => vec!["express", "react", "lodash"]
-                        .into_iter()
-                        .map(|s| (String::from(s), None))
-                        .collect(),
-                    "crates.io" => vec!["serde", "tokio", "reqwest"]
-                        .into_iter()
-                        .map(|s| (String::from(s), None))
-                        .collect(),
-                    "PyPI" => vec!["django", "flask", "requests"]
-                        .into_iter()
-                        .map(|s| (String::from(s), None))
-                        .collect(),
-                    _ => continue,
-                }
+                default_packages_for(eco)
             } else {
-                ace_packages.into_iter().take(5).collect()
+                ace_packages
             };
             for (pkg, version) in pkgs {
-                queries.push(OsvQueryRequest {
+                let query = OsvQueryRequest {
                     package: Some(OsvPackage {
-                        name: pkg,
+                        name: pkg.clone(),
                         ecosystem: eco.to_string(),
                     }),
                     version,
-                });
+                };
+                query_pairs.push((query, pkg));
             }
         }
 
-        let body = OsvBatchRequest { queries };
+        // The response's `results` array is positional with `queries` — that
+        // ordering is the ONLY thing tying an advisory id back to the package
+        // it was found for, so the package list stays parallel to the request
+        // WITHIN each chunk. Chunk at the batch endpoint's capacity, mirroring
+        // the Preemption mirror lane's batching.
+        let mut refs = Vec::new();
+        let chunks = chunk_query_pairs(query_pairs, OSV_QUERYBATCH_MAX);
+        let chunk_count = chunks.len();
+        for (chunk_idx, (queries, query_packages)) in chunks.into_iter().enumerate() {
+            let body = OsvBatchRequest { queries };
 
-        let response = self
+            let chunk_result: SourceResult<OsvBatchResponse> = async {
+                let response = self
+                    .client
+                    .post("https://api.osv.dev/v1/querybatch")
+                    .json(&body)
+                    .header("User-Agent", "4DA-Developer-OS/1.0")
+                    .send()
+                    .await
+                    .map_err(|e| SourceError::Network(e.to_string()))?;
+
+                super::classify_http_status(response.status(), "OSV batch API")?;
+
+                response
+                    .json()
+                    .await
+                    .map_err(|e| SourceError::Parse(e.to_string()))
+            }
+            .await;
+
+            let result = match chunk_result {
+                Ok(r) => r,
+                // First chunk failed — nothing learned yet, so surface the error
+                // and let the caller run its sequential fallback.
+                Err(e) if chunk_idx == 0 => return Err(e),
+                Err(e) => {
+                    // Later chunk failed after earlier ones landed: keep the
+                    // partial discovery rather than discarding it — the caller's
+                    // sequential fallback would re-query everything from zero.
+                    warn!(
+                        target: "4da::sources",
+                        chunk = chunk_idx,
+                        error = ?e,
+                        "OSV batch: chunk failed, keeping refs discovered so far"
+                    );
+                    break;
+                }
+            };
+
+            if let Some(results) = result.results {
+                for (i, resp) in results.into_iter().enumerate() {
+                    let pkg = query_packages.get(i).cloned().unwrap_or_default();
+                    if let Some(vulns) = resp.vulns {
+                        for v in vulns {
+                            refs.push((v.id, v.modified, pkg.clone()));
+                        }
+                    }
+                }
+            }
+
+            // Brief pause between batches to be respectful (same cadence as the
+            // mirror lane's sync).
+            if chunk_idx + 1 < chunk_count {
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
+        }
+
+        Ok(refs)
+    }
+
+    /// Fetch the full advisory record for one id via `GET /v1/vulns/{id}`.
+    ///
+    /// This is the hydration step the batch endpoint requires. `None` on any
+    /// network/HTTP/parse failure — the caller skips the advisory rather than
+    /// storing an empty husk for it.
+    async fn hydrate_vuln(&self, id: &str) -> Option<OsvVulnerability> {
+        let url = format!("https://api.osv.dev/v1/vulns/{id}");
+        let response = match self
             .client
-            .post("https://api.osv.dev/v1/querybatch")
-            .json(&body)
+            .get(&url)
             .header("User-Agent", "4DA-Developer-OS/1.0")
             .send()
             .await
-            .map_err(|e| SourceError::Network(e.to_string()))?;
-
-        super::classify_http_status(response.status(), "OSV batch API")?;
-
-        let result: OsvBatchResponse = response
-            .json()
-            .await
-            .map_err(|e| SourceError::Parse(e.to_string()))?;
-
-        let mut all_vulns = Vec::new();
-        if let Some(results) = result.results {
-            for resp in results {
-                if let Some(vulns) = resp.vulns {
-                    all_vulns.extend(vulns);
-                }
+        {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(target: "4da::sources", advisory = %id, error = %e, "OSV: hydration network error");
+                return None;
+            }
+        };
+        if !response.status().is_success() {
+            warn!(target: "4da::sources", advisory = %id, status = %response.status(), "OSV: hydration HTTP error");
+            return None;
+        }
+        match response.json::<OsvVulnerability>().await {
+            Ok(v) => Some(v),
+            Err(e) => {
+                warn!(target: "4da::sources", advisory = %id, error = %e, "OSV: hydration parse error");
+                None
             }
         }
-
-        Ok(all_vulns)
     }
 }
 
@@ -200,6 +261,69 @@ impl Default for OsvSource {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// ============================================================================
+// Fallback packages + batch chunking
+// ============================================================================
+
+/// Well-known fallback packages per OSV ecosystem, used ONLY when ACE has no
+/// dependency data for it yet (first run, no projects scanned). One list feeds
+/// both the per-package query path and the batch discovery path — previously
+/// the batch path had its own 3-ecosystem subset and silently skipped the
+/// other six ecosystems entirely.
+fn default_packages_for(ecosystem: &str) -> Vec<(String, Option<String>)> {
+    let names: &[&str] = match ecosystem {
+        "npm" => &["express", "react", "next", "lodash", "axios", "webpack"],
+        "crates.io" => &["serde", "tokio", "reqwest", "axum", "clap", "anyhow"],
+        "PyPI" => &[
+            "django", "flask", "requests", "numpy", "fastapi", "pydantic",
+        ],
+        "Go" => &[
+            "golang.org/x/net",
+            "golang.org/x/crypto",
+            "github.com/gin-gonic/gin",
+        ],
+        "Maven" => &[
+            "org.apache.logging.log4j:log4j-core",
+            "com.google.guava:guava",
+        ],
+        "NuGet" => &[
+            "Newtonsoft.Json",
+            "System.Text.Json",
+            "Microsoft.Data.SqlClient",
+        ],
+        "RubyGems" => &["rails", "nokogiri", "rack"],
+        "Packagist" => &[
+            "laravel/framework",
+            "symfony/http-kernel",
+            "guzzlehttp/guzzle",
+        ],
+        "Pub" => &["http", "dio", "shared_preferences"],
+        _ => &[],
+    };
+    names.iter().map(|s| (s.to_string(), None)).collect()
+}
+
+/// Split (query, package) pairs into batch-endpoint-sized chunks, keeping the
+/// positional pairing intact per chunk. The pairing is what ties each response
+/// row back to the dep it was queried for — a chunk boundary must never shift
+/// it. Pure so the invariant is testable without a network.
+fn chunk_query_pairs(
+    pairs: Vec<(OsvQueryRequest, String)>,
+    chunk_size: usize,
+) -> Vec<(Vec<OsvQueryRequest>, Vec<String>)> {
+    // `chunk_size` comes from OSV_QUERYBATCH_MAX (non-zero const); max(1) keeps
+    // this total for any future caller rather than panicking in chunks().
+    let chunk_size = chunk_size.max(1);
+    let mut chunks = Vec::new();
+    let mut remaining = pairs;
+    while !remaining.is_empty() {
+        let tail = remaining.split_off(remaining.len().min(chunk_size));
+        chunks.push(remaining.into_iter().unzip());
+        remaining = tail;
+    }
+    chunks
 }
 
 // ============================================================================
@@ -381,9 +505,9 @@ impl Source for OsvSource {
             match self.fetch_ecosystem_vulns(eco).await {
                 Ok(vulns) => {
                     info!(ecosystem = eco, count = vulns.len(), "Fetched OSV vulns");
-                    for vuln in &vulns {
-                        if seen_ids.insert(vuln.id.clone()) {
-                            all_items.push(vuln_to_source_item(vuln));
+                    for (vuln, pkg) in &vulns {
+                        if vuln_is_informative(vuln) && seen_ids.insert(vuln.id.clone()) {
+                            all_items.push(vuln_to_source_item(vuln, Some(pkg)));
                         }
                     }
                 }
@@ -400,7 +524,7 @@ impl Source for OsvSource {
         Ok(all_items)
     }
 
-    async fn fetch_items_deep(&self, _items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
+    async fn fetch_items_deep(&self, items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
         }
@@ -422,32 +546,61 @@ impl Source for OsvSource {
 
         info!(ecosystems = ?ecosystems, "Deep fetching OSV.dev vulnerabilities");
 
-        // Use the batch endpoint to query ecosystems at once
-        let vulns = match self.fetch_batch_vulns(&ecosystems).await {
-            Ok(v) => v,
+        // Discovery via the batch endpoint (ids only), then hydrate each id via
+        // `GET /v1/vulns/{id}` before conversion. Skipping hydration is what
+        // filled the corpus with content-empty husks — see fetch_batch_vuln_refs.
+        let items: Vec<SourceItem> = match self.fetch_batch_vuln_refs(&ecosystems).await {
+            Ok(mut refs) => {
+                // Newest first, dedup by id (one advisory can hit several deps —
+                // the first/newest queried package wins the title slot; the full
+                // affected list still lands in content), then bound hydration:
+                // one GET per advisory, capped by the caller's fetch budget.
+                refs.sort_by(|a, b| b.1.cmp(&a.1));
+                let mut seen_ids = std::collections::HashSet::new();
+                refs.retain(|(id, _, _)| seen_ids.insert(id.clone()));
+                let cap = items_per_category.clamp(1, self.config.max_items);
+                refs.truncate(cap);
+
+                let mut hydrated = Vec::new();
+                for (id, _, pkg) in &refs {
+                    if let Some(vuln) = self.hydrate_vuln(id).await {
+                        if vuln_is_informative(&vuln) {
+                            hydrated.push(vuln_to_source_item(&vuln, Some(pkg)));
+                        }
+                    }
+                    // Rate limit between hydration requests
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+                info!(
+                    discovered = refs.len(),
+                    hydrated = hydrated.len(),
+                    "OSV deep fetch: hydrated batch-discovered advisories"
+                );
+                hydrated
+            }
             Err(e) => {
                 warn!(error = ?e, "Batch fetch failed, falling back to sequential");
-                // Fallback: query each ecosystem individually
-                let mut fallback_vulns = Vec::new();
+                // Fallback: the per-package query endpoint returns FULL records,
+                // so no hydration pass is needed here.
+                let mut seen_ids = std::collections::HashSet::new();
+                let mut fallback_items = Vec::new();
                 for eco in &ecosystems {
                     match self.fetch_ecosystem_vulns(eco).await {
-                        Ok(v) => fallback_vulns.extend(v),
+                        Ok(vulns) => {
+                            for (vuln, pkg) in &vulns {
+                                if vuln_is_informative(vuln) && seen_ids.insert(vuln.id.clone()) {
+                                    fallback_items.push(vuln_to_source_item(vuln, Some(pkg)));
+                                }
+                            }
+                        }
                         Err(e) => {
                             warn!(ecosystem = eco, error = ?e, "Failed to fetch OSV ecosystem");
                         }
                     }
                 }
-                fallback_vulns
+                fallback_items
             }
         };
-
-        // Dedup by vuln ID and convert
-        let mut seen_ids = std::collections::HashSet::new();
-        let items: Vec<SourceItem> = vulns
-            .iter()
-            .filter(|v| seen_ids.insert(v.id.clone()))
-            .map(vuln_to_source_item)
-            .collect();
 
         info!(total = items.len(), "Total deep OSV items after dedup");
         Ok(items)
@@ -479,7 +632,7 @@ impl Source for OsvSource {
             .await
             .map_err(|e| SourceError::Parse(e.to_string()))?;
 
-        let enriched = vuln_to_source_item(&vuln);
+        let enriched = vuln_to_source_item(&vuln, None);
         Ok(enriched.content)
     }
 }
@@ -489,338 +642,5 @@ impl Source for OsvSource {
 // ============================================================================
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_matched_advisory_title_is_grounding_compatible() {
-        // The ledger's grounding gate grounds a vulnerability on the LEADING title token
-        // after stripping a `[id]` prefix. This test pins that contract: title must be
-        // `[<advisory_id>] <package_name>: <summary>` and the item must carry source_type
-        // "osv" with source_id = advisory_id.
-        let m = crate::osv::types::MatchedAdvisory {
-            advisory_id: "GHSA-xxxx-yyyy-zzzz".to_string(),
-            summary: "SSRF via crafted URL".to_string(),
-            details: Some("Long details".to_string()),
-            package_name: "axios".to_string(),
-            ecosystem: "npm".to_string(),
-            installed_version: Some("1.6.0".to_string()),
-            fixed_version: Some("1.6.8".to_string()),
-            severity_type: Some("CVSS_V3".to_string()),
-            cvss_score: Some(7.5),
-            source_url: Some("https://github.com/advisories/GHSA-xxxx-yyyy-zzzz".to_string()),
-            is_version_confirmed: true,
-            project_paths: vec!["/stack".to_string()],
-            published_at: Some("2026-01-01T00:00:00Z".to_string()),
-            dependency_instances: vec![],
-        };
-
-        let item = matched_advisory_to_source_item(&m);
-        assert_eq!(item.source_type, "osv");
-        assert_eq!(item.source_id, "GHSA-xxxx-yyyy-zzzz");
-        assert_eq!(
-            item.title,
-            "[GHSA-xxxx-yyyy-zzzz] axios: SSRF via crafted URL"
-        );
-
-        // Replicate the ledger's grounding extraction (grounding.mjs isGrounded, vuln branch):
-        // strip the leading `[...]` id prefix, take the first token before whitespace/colon.
-        let body = item.title.trim_start_matches('[');
-        let after_id = body.splitn(2, ']').nth(1).unwrap().trim();
-        let leading = after_id.split([' ', ':']).next().unwrap();
-        assert_eq!(
-            leading, "axios",
-            "leading title token must be the pinned package"
-        );
-
-        // Content names the package+ecosystem and the fix, so the receipt is self-describing.
-        assert!(item.content.contains("axios (npm)"));
-        assert!(item.content.contains("Fixed in: 1.6.8"));
-    }
-
-    #[test]
-    fn test_osv_source_creation() {
-        let source = OsvSource::new();
-        assert_eq!(source.source_type(), "osv");
-        assert_eq!(source.name(), "OSV.dev");
-        assert!(source.config().enabled);
-        assert_eq!(source.config().max_items, 50);
-        assert_eq!(source.config().fetch_interval_secs, 3600);
-    }
-
-    #[test]
-    fn test_osv_source_default() {
-        let source = OsvSource::default();
-        assert_eq!(source.source_type(), "osv");
-    }
-
-    #[test]
-    fn test_vuln_to_source_item_full() {
-        let vuln = OsvVulnerability {
-            id: "GHSA-xxxx-yyyy-zzzz".to_string(),
-            summary: Some("XSS in React Router".to_string()),
-            details: Some("A cross-site scripting vulnerability exists in...".to_string()),
-            severity: Some(vec![OsvSeverity {
-                severity_type: "CVSS_V3".to_string(),
-                score: "7.5".to_string(),
-            }]),
-            affected: Some(vec![OsvAffected {
-                package: Some(OsvPackage {
-                    name: "react-router".to_string(),
-                    ecosystem: "npm".to_string(),
-                }),
-                ranges: Some(vec![OsvRange {
-                    range_type: "SEMVER".to_string(),
-                    events: Some(vec![
-                        serde_json::json!({"introduced": "0"}),
-                        serde_json::json!({"fixed": "6.4.5"}),
-                    ]),
-                }]),
-                versions: None,
-            }]),
-            references: Some(vec![
-                OsvReference {
-                    ref_type: "ADVISORY".to_string(),
-                    url: "https://github.com/advisories/GHSA-xxxx-yyyy-zzzz".to_string(),
-                },
-                OsvReference {
-                    ref_type: "WEB".to_string(),
-                    url: "https://example.com/blog".to_string(),
-                },
-            ]),
-            published: Some("2026-03-15T10:00:00Z".to_string()),
-            modified: Some("2026-03-20T12:00:00Z".to_string()),
-        };
-
-        let item = vuln_to_source_item(&vuln);
-
-        assert_eq!(item.source_type, "osv");
-        assert_eq!(item.source_id, "GHSA-xxxx-yyyy-zzzz");
-        assert_eq!(item.title, "[GHSA-xxxx-yyyy-zzzz] XSS in React Router");
-        assert_eq!(
-            item.url,
-            Some("https://github.com/advisories/GHSA-xxxx-yyyy-zzzz".to_string())
-        );
-        assert!(item.content.contains("XSS in React Router"));
-        assert!(item.content.contains("CVSS_V3: 7.5"));
-        assert!(item.content.contains("react-router (npm)"));
-        assert!(item.content.contains("Fixed in: 6.4.5"));
-
-        let metadata = item.metadata.unwrap();
-        assert_eq!(metadata["severity"], "CVSS_V3: 7.5");
-        assert_eq!(metadata["cvss_score"], 7.5);
-        assert_eq!(metadata["published"], "2026-03-15T10:00:00Z");
-        assert_eq!(metadata["modified"], "2026-03-20T12:00:00Z");
-        assert_eq!(metadata["fixed_versions"], serde_json::json!(["6.4.5"]));
-    }
-
-    #[test]
-    fn test_vuln_to_source_item_minimal() {
-        let vuln = OsvVulnerability {
-            id: "OSV-2026-1234".to_string(),
-            summary: None,
-            details: None,
-            severity: None,
-            affected: None,
-            references: None,
-            published: None,
-            modified: None,
-        };
-
-        let item = vuln_to_source_item(&vuln);
-
-        assert_eq!(item.source_id, "OSV-2026-1234");
-        assert_eq!(item.title, "[OSV-2026-1234] Security advisory");
-        assert_eq!(
-            item.url,
-            Some("https://osv.dev/vulnerability/OSV-2026-1234".to_string())
-        );
-        assert!(item.content.contains("Severity: Unknown"));
-        assert!(item.content.contains("Affected: Unknown"));
-    }
-
-    #[test]
-    fn test_vuln_to_source_item_prefers_advisory_url() {
-        let vuln = OsvVulnerability {
-            id: "TEST-001".to_string(),
-            summary: Some("Test".to_string()),
-            details: None,
-            severity: None,
-            affected: None,
-            references: Some(vec![
-                OsvReference {
-                    ref_type: "WEB".to_string(),
-                    url: "https://web.example.com".to_string(),
-                },
-                OsvReference {
-                    ref_type: "ADVISORY".to_string(),
-                    url: "https://advisory.example.com".to_string(),
-                },
-            ]),
-            published: None,
-            modified: None,
-        };
-
-        let item = vuln_to_source_item(&vuln);
-        assert_eq!(item.url, Some("https://advisory.example.com".to_string()));
-    }
-
-    #[test]
-    fn test_vuln_to_source_item_prefers_cvss_v3() {
-        let vuln = OsvVulnerability {
-            id: "TEST-002".to_string(),
-            summary: Some("Test".to_string()),
-            details: None,
-            severity: Some(vec![
-                OsvSeverity {
-                    severity_type: "CVSS_V2".to_string(),
-                    score: "5.0".to_string(),
-                },
-                OsvSeverity {
-                    severity_type: "CVSS_V3".to_string(),
-                    score: "8.1".to_string(),
-                },
-            ]),
-            affected: None,
-            references: None,
-            published: None,
-            modified: None,
-        };
-
-        let item = vuln_to_source_item(&vuln);
-        assert!(item.content.contains("CVSS_V3: 8.1"));
-    }
-
-    #[test]
-    fn test_osv_json_parsing() {
-        let json = r#"{
-            "vulns": [
-                {
-                    "id": "GHSA-test-0001",
-                    "summary": "SQL injection in ORM",
-                    "details": "A SQL injection vulnerability...",
-                    "severity": [
-                        { "type": "CVSS_V3", "score": "9.8" }
-                    ],
-                    "affected": [
-                        {
-                            "package": { "name": "some-orm", "ecosystem": "npm" },
-                            "ranges": [
-                                {
-                                    "type": "SEMVER",
-                                    "events": [
-                                        { "introduced": "0" },
-                                        { "fixed": "3.2.1" }
-                                    ]
-                                }
-                            ]
-                        }
-                    ],
-                    "references": [
-                        { "type": "ADVISORY", "url": "https://github.com/advisories/GHSA-test-0001" }
-                    ],
-                    "published": "2026-03-10T00:00:00Z",
-                    "modified": "2026-03-12T00:00:00Z"
-                }
-            ]
-        }"#;
-
-        let response: OsvQueryResponse = serde_json::from_str(json).unwrap();
-        let vulns = response.vulns.unwrap();
-        assert_eq!(vulns.len(), 1);
-        assert_eq!(vulns[0].id, "GHSA-test-0001");
-        assert_eq!(vulns[0].summary.as_deref(), Some("SQL injection in ORM"));
-
-        let severity = vulns[0].severity.as_ref().unwrap();
-        assert_eq!(severity[0].severity_type, "CVSS_V3");
-        assert_eq!(severity[0].score, "9.8");
-
-        let affected = vulns[0].affected.as_ref().unwrap();
-        assert_eq!(affected[0].package.as_ref().unwrap().ecosystem, "npm");
-    }
-
-    #[test]
-    fn test_osv_batch_response_parsing() {
-        let json = r#"{
-            "results": [
-                {
-                    "vulns": [
-                        { "id": "VULN-A", "summary": "Vuln A" }
-                    ]
-                },
-                {
-                    "vulns": [
-                        { "id": "VULN-B", "summary": "Vuln B" },
-                        { "id": "VULN-C", "summary": "Vuln C" }
-                    ]
-                },
-                {
-                    "vulns": null
-                }
-            ]
-        }"#;
-
-        let response: OsvBatchResponse = serde_json::from_str(json).unwrap();
-        let results = response.results.unwrap();
-        assert_eq!(results.len(), 3);
-        assert_eq!(results[0].vulns.as_ref().unwrap().len(), 1);
-        assert_eq!(results[1].vulns.as_ref().unwrap().len(), 2);
-        assert!(results[2].vulns.is_none());
-    }
-
-    #[test]
-    fn test_ecosystem_map_coverage() {
-        // Verify all expected manifest files are mapped
-        let manifests: Vec<&str> = ECOSYSTEM_MAP.iter().map(|(m, _)| *m).collect();
-        assert!(manifests.contains(&"Cargo.toml"));
-        assert!(manifests.contains(&"package.json"));
-        assert!(manifests.contains(&"pyproject.toml"));
-        assert!(manifests.contains(&"requirements.txt"));
-        assert!(manifests.contains(&"go.mod"));
-        assert!(manifests.contains(&"pom.xml"));
-        assert!(manifests.contains(&"build.gradle"));
-        assert!(manifests.contains(&"Gemfile"));
-        assert!(manifests.contains(&".csproj"));
-        assert!(manifests.contains(&"composer.json"));
-        assert!(manifests.contains(&"pubspec.yaml"));
-    }
-
-    #[test]
-    fn test_multiple_affected_packages() {
-        let vuln = OsvVulnerability {
-            id: "MULTI-001".to_string(),
-            summary: Some("Cross-ecosystem vuln".to_string()),
-            details: None,
-            severity: None,
-            affected: Some(vec![
-                OsvAffected {
-                    package: Some(OsvPackage {
-                        name: "pkg-a".to_string(),
-                        ecosystem: "npm".to_string(),
-                    }),
-                    ranges: None,
-                    versions: None,
-                },
-                OsvAffected {
-                    package: Some(OsvPackage {
-                        name: "pkg-b".to_string(),
-                        ecosystem: "PyPI".to_string(),
-                    }),
-                    ranges: None,
-                    versions: None,
-                },
-            ]),
-            references: None,
-            published: None,
-            modified: None,
-        };
-
-        let item = vuln_to_source_item(&vuln);
-        assert!(item.content.contains("pkg-a (npm)"));
-        assert!(item.content.contains("pkg-b (PyPI)"));
-
-        let metadata = item.metadata.unwrap();
-        let pkgs = metadata["affected_packages"].as_array().unwrap();
-        assert_eq!(pkgs.len(), 2);
-    }
-}
+#[path = "osv_tests.rs"]
+mod tests;

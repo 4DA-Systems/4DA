@@ -139,56 +139,6 @@ fn breakdown_multipliers_in_valid_range() {
     );
 }
 
-#[test]
-fn breakdown_anti_penalty_range() {
-    let db = sim_db();
-    let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
-
-    // Rust ctx with anti-topic for Python
-    let ctx = {
-        let e = vec![0.5_f32; crate::EMBEDDING_DIMS];
-        let interests = vec![crate::context_engine::Interest {
-            id: Some(1),
-            topic: "Rust".to_string(),
-            weight: 1.0,
-            embedding: Some(e),
-            source: crate::context_engine::InterestSource::Explicit,
-        }];
-        let mut ace = ACEContext::default();
-        ace.active_topics.push("rust".to_string());
-        ace.detected_tech.push("rust".to_string());
-        ace.anti_topics.push("python".to_string());
-        ScoringContext::builder()
-            .interest_count(1)
-            .interests(interests)
-            .ace_ctx(ace)
-            .feedback_interaction_count(20)
-            .build()
-    };
-
-    let python_input = sim_input(
-        1,
-        "Python machine learning with scikit-learn",
-        "Building ML pipelines with Python, scikit-learn, and pandas for data analysis.",
-        &emb,
-    );
-
-    let result = score_item(&python_input, &ctx, &db, &opts, None);
-
-    // Score should still be in valid range even with anti-penalty
-    assert!(
-        result.top_score >= 0.0,
-        "Score went negative with anti-penalty: {}",
-        result.top_score
-    );
-    assert!(
-        result.top_score <= 1.0,
-        "Score exceeded 1.0 despite anti-penalty: {}",
-        result.top_score
-    );
-}
-
 // ============================================================================
 // Monotonicity
 // ============================================================================
@@ -329,73 +279,9 @@ fn signal_count_monotone_with_context_richness() {
         "Richer context should not significantly decrease score: sparse={score_sparse:.3} rich={score_rich:.3}");
 }
 
-// ============================================================================
-// Penalty Asymmetry
-// ============================================================================
-
-#[test]
-fn penalties_asymmetrically_stronger_than_boosts() {
-    // Anti-topics should have a meaningful dampening effect
-    let db = sim_db();
-    let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
-
-    let python_input = sim_input(
-        1,
-        "Python machine learning frameworks comparison",
-        "Comparing Python ML frameworks: PyTorch, TensorFlow, and JAX for deep learning research.",
-        &emb,
-    );
-
-    let neutral_ctx = {
-        let e = vec![0.5_f32; crate::EMBEDDING_DIMS];
-        let interests = vec![crate::context_engine::Interest {
-            id: Some(1),
-            topic: "programming".to_string(),
-            weight: 0.5,
-            embedding: Some(e),
-            source: crate::context_engine::InterestSource::Explicit,
-        }];
-        ScoringContext::builder()
-            .interest_count(1)
-            .interests(interests)
-            .feedback_interaction_count(20)
-            .build()
-    };
-
-    let anti_ctx = {
-        let e = vec![0.5_f32; crate::EMBEDDING_DIMS];
-        let interests = vec![crate::context_engine::Interest {
-            id: Some(1),
-            topic: "programming".to_string(),
-            weight: 0.5,
-            embedding: Some(e),
-            source: crate::context_engine::InterestSource::Explicit,
-        }];
-        let mut ace = ACEContext::default();
-        ace.anti_topics.push("python".to_string());
-        ace.anti_topics.push("machine learning".to_string());
-        ScoringContext::builder()
-            .interest_count(1)
-            .interests(interests)
-            .ace_ctx(ace)
-            .feedback_interaction_count(20)
-            .build()
-    };
-
-    let neutral_score = score_item(&python_input, &neutral_ctx, &db, &opts, None).top_score;
-    let anti_score = score_item(&python_input, &anti_ctx, &db, &opts, None).top_score;
-
-    // Anti-topics should reduce score, but score must remain non-negative
-    assert!(
-        anti_score >= 0.0,
-        "Anti-penalty drove score negative: {anti_score:.3}"
-    );
-    assert!(
-        anti_score <= neutral_score + 0.05,
-        "Anti-topics had no dampening effect: neutral={neutral_score:.3} anti={anti_score:.3}"
-    );
-}
+// (The former "Penalty Asymmetry" test was removed in v20b: the ACE
+// anti-topic penalty it compared against was removed from scoring in v19
+// (AD-029), leaving its two contexts identical and the assertion vacuous.)
 
 // ============================================================================
 // Exclusion Invariants

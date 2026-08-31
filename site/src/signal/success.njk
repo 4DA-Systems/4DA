@@ -2,12 +2,23 @@
 title: "License Activated -- 4DA Signal"
 description: "Your 4DA Signal license is ready. Activate it in the app."
 permalink: "/signal/success.html"
+# noAnalytics is NOT cosmetic here. This page's URL carries ?session_id=cs_...,
+# and that session id is a BEARER CREDENTIAL: GET /api/license/activate?session_id=
+# returns the licence key to whoever holds it. With PostHog loaded, every
+# pageview shipped that credential to a third party inside $current_url — and the
+# page also renders the key itself in the DOM, which session replay would record.
+# Same reasoning as /activate (which carries the key in its fragment).
+noAnalytics: true
 ---
 {% extends "base.njk" %}
 
 {% block head %}
   <link rel="canonical" href="https://4da.ai/signal/success">
   <meta name="robots" content="noindex">
+  {# The URL carries ?session_id=, a bearer credential for the licence key.
+     Force no-referrer so it is never sent to any host in a Referer header
+     (matches /activate). #}
+  <meta name="referrer" content="no-referrer">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -107,7 +118,11 @@ permalink: "/signal/success.html"
       currentKey = data.license_key;
       document.getElementById('check-icon').textContent = '\u2713';
       document.getElementById('heading').textContent = 'Signal activated';
-      document.getElementById('subtitle').textContent = 'Your license key is ready. Click below to activate in 4DA.';
+      // Say that a copy was emailed. This page used to be the ONLY delivery, so
+      // a buyer had no reason to expect a durable copy and no reason not to treat
+      // closing the tab as losing the key.
+      document.getElementById('subtitle').textContent =
+        "Your license key is ready — we've also emailed a copy to you. Click below to activate in 4DA.";
 
       var el = document.getElementById('auto-result');
       el.className = 'result success';
@@ -139,7 +154,9 @@ permalink: "/signal/success.html"
 
     function openInApp() {
       if (!currentKey) return;
-      window.location.href = '4da://activate?key=' + encodeURIComponent(currentKey);
+      // `fourda://`, never `4da://`: a URL scheme must start with a letter, so
+      // browsers parse `4da://...` as a RELATIVE path (it 404'd on this site).
+      window.location.href = 'fourda://activate?key=' + encodeURIComponent(currentKey);
     }
 
     function copyKey() {
@@ -154,7 +171,7 @@ permalink: "/signal/success.html"
     }
 
     async function fetchLicense(query) {
-      var resp = await fetch('/api/streets/activate?' + query);
+      var resp = await fetch('/api/license/activate?' + query);
       var data = await resp.json();
       if (resp.ok && data.license_key) {
         showLicense(data);
@@ -184,7 +201,7 @@ permalink: "/signal/success.html"
       btn.textContent = 'Sending...';
 
       try {
-        var resp = await fetch('/api/streets/activate?email=' + encodeURIComponent(email));
+        var resp = await fetch('/api/license/activate?email=' + encodeURIComponent(email));
         var data = await resp.json();
         if (resp.status === 202) {
           showMessage('info', data.message || "If that address has a 4DA licence, we've emailed the key to it. Check your inbox and spam folder.");

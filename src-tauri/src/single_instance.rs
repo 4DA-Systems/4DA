@@ -49,6 +49,70 @@ use tracing::{debug, info, warn};
 /// Filename of the single-instance lock inside the data directory.
 const LOCK_FILENAME: &str = ".process.lock";
 
+/// Filename of the deep-link relay file inside the data directory.
+///
+/// WHY THIS EXISTS: this module's file lock exits a second instance BEFORE
+/// `tauri_plugin_single_instance` initializes — so the plugin's argv
+/// forwarding (which is how a `fourda://` deep link reaches a RUNNING app on
+/// Windows/Linux) is dead code whenever both processes resolve the same data
+/// dir, i.e. every production launch. Found live 2026-08-19: with the app
+/// running, "Open in 4DA" spawned a second instance that died at this lock and
+/// the licence key went nowhere. The relay is the lock-compatible handoff: the
+/// rejected instance writes the validated URL here and exits; the primary
+/// polls (see app_setup) and feeds it through the same validated emit path.
+const RELAY_FILENAME: &str = ".deeplink-relay";
+
+/// Relay entries older than this are ignored — a file left by a crashed
+/// primary must not replay a stale activation on some later boot.
+const RELAY_MAX_AGE_SECS: u64 = 60;
+
+/// Hand a deep-link URL to the running instance via the relay file.
+///
+/// Written by the SECOND process (the one rejected by the lock). Atomic via
+/// temp-file + rename so the primary's poll can never observe a torn write.
+/// The URL must already have passed `validate_deep_link_url`.
+pub fn write_deeplink_relay(data_dir: &Path, url: &str) -> std::io::Result<()> {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let tmp = data_dir.join(format!("{RELAY_FILENAME}.{}.tmp", std::process::id()));
+    std::fs::write(&tmp, format!("{ts}\n{url}\n"))?;
+    let dest = data_dir.join(RELAY_FILENAME);
+    std::fs::rename(&tmp, &dest)?;
+    info!(target: "4da::single_instance", path = ?dest, "Deep-link handed to running instance via relay");
+    Ok(())
+}
+
+/// Consume a relayed deep-link URL, if a fresh one is waiting.
+///
+/// Called by the PRIMARY's poll task. Removes the file before returning so a
+/// URL is delivered at most once. Stale entries (crashed writer long ago) are
+/// discarded rather than replayed.
+pub fn take_deeplink_relay(data_dir: &Path) -> Option<String> {
+    let path = data_dir.join(RELAY_FILENAME);
+    let contents = std::fs::read_to_string(&path).ok()?;
+    // Consume first: even a malformed/stale file must not be re-read forever.
+    let _ = std::fs::remove_file(&path);
+
+    let mut lines = contents.lines();
+    let ts: u64 = lines.next()?.trim().parse().ok()?;
+    let url = lines.next()?.trim();
+    if url.is_empty() {
+        return None;
+    }
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if now.saturating_sub(ts) > RELAY_MAX_AGE_SECS {
+        warn!(target: "4da::single_instance", age_secs = now.saturating_sub(ts),
+            "Discarding stale deep-link relay entry");
+        return None;
+    }
+    Some(url.to_string())
+}
+
 /// Errors that can occur while acquiring the instance lock.
 #[derive(Debug, Error)]
 pub enum InstanceError {
@@ -360,6 +424,49 @@ mod tests {
 
         let lock = acquire_instance_lock(dir.path()).expect("should recover from empty lock");
         assert!(lock.path().exists());
+    }
+
+    #[test]
+    fn deeplink_relay_roundtrips_and_consumes_once() {
+        let dir = TempDir::new().expect("tempdir");
+        let url = "fourda://activate?key=4DA-abc.def";
+        write_deeplink_relay(dir.path(), url).expect("write relay");
+
+        assert_eq!(take_deeplink_relay(dir.path()).as_deref(), Some(url));
+        assert_eq!(
+            take_deeplink_relay(dir.path()),
+            None,
+            "a relayed URL must be delivered at most once"
+        );
+    }
+
+    #[test]
+    fn deeplink_relay_discards_stale_entries() {
+        // A relay file left behind by a crashed primary must not replay an
+        // old activation on a later boot.
+        let dir = TempDir::new().expect("tempdir");
+        let path = dir.path().join(RELAY_FILENAME);
+        std::fs::write(&path, "1000\nfourda://activate?key=old\n").expect("seed stale relay");
+
+        assert_eq!(take_deeplink_relay(dir.path()), None);
+        assert!(!path.exists(), "stale relay must still be consumed");
+    }
+
+    #[test]
+    fn deeplink_relay_tolerates_garbage() {
+        let dir = TempDir::new().expect("tempdir");
+        let path = dir.path().join(RELAY_FILENAME);
+        std::fs::write(&path, "not-a-timestamp\n").expect("seed garbage");
+        assert_eq!(take_deeplink_relay(dir.path()), None);
+        assert!(
+            !path.exists(),
+            "garbage must be consumed, not re-read forever"
+        );
+        assert_eq!(
+            take_deeplink_relay(dir.path()),
+            None,
+            "missing file is None"
+        );
     }
 
     #[test]

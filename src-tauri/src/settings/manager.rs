@@ -116,7 +116,9 @@ impl SettingsManager {
                     _ => payload.tier.clone(),
                 };
                 let expired = chrono::DateTime::parse_from_rfc3339(&payload.expires_at)
-                    .map(|exp| exp.with_timezone(&chrono::Utc) < chrono::Utc::now())
+                    .map(|exp| {
+                        exp.with_timezone(&chrono::Utc) < crate::settings::license_effective_now()
+                    })
                     .unwrap_or(false);
                 if !expired && disk_settings.license.tier != expected_tier {
                     tracing::warn!(

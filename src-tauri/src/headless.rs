@@ -28,6 +28,13 @@ use crate::engine_runs::RunReceipt;
 const MIN_DAEMON_INTERVAL_MINUTES: u64 = 5;
 /// Fallback cadence when settings are readable but unset.
 const DEFAULT_DAEMON_INTERVAL_MINUTES: u64 = 30;
+/// Never-scored backfill: items per chunk in the engine cycle's Step 2b drain.
+/// Matches the analysis path's 500-per-run trickle scale.
+const ENGINE_BACKFILL_CHUNK: usize = 500;
+/// Never-scored backfill: chunk ceiling per cycle. Four chunks (2000 items)
+/// recover a full night of downtime in one cycle while bounding runtime; the
+/// loop exits as soon as the backlog reports drained.
+const ENGINE_BACKFILL_MAX_CHUNKS: usize = 4;
 
 /// How the headless engine should run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,6 +129,12 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
 
     let code = match mode {
         HeadlessMode::Once => {
+            if !force && scoring_epoch_is_behind() {
+                info!(
+                    target: "4da::headless",
+                    "Feed is fresh but the scoring epoch is behind — running the cycle to converge it"
+                );
+            }
             if !force && is_cycle_fresh() {
                 info!(
                     target: "4da::headless",
@@ -176,6 +189,23 @@ async fn run_drain_to_completion() -> i32 {
     /// Checkpoint every this many drain cycles so a long drain does not append its whole
     /// output to the WAL before anything moves it into the main database file.
     const MAINTENANCE_EVERY_N_CYCLES: usize = 10;
+
+    // Warm the context-match cache first. `score_item` reads it and never writes
+    // it, so a drain against a cold cache costs the full 52 ms/item — which is
+    // exactly what the 22-minute 2026-08-27 drain measured, before this existed.
+    if let Ok(db) = crate::get_database() {
+        let budget = std::time::Duration::from_mins(10);
+        let refreshed = crate::scoring::context_cache::refresh_context_cache(db, budget);
+        info!(
+            target: "4da::headless",
+            merged = refreshed.merged,
+            recomputed = refreshed.recomputed,
+            remaining = refreshed.remaining,
+            elapsed_ms = refreshed.elapsed_ms,
+            "Context-match cache warmed ahead of the drain"
+        );
+    }
+
     let mut total = 0usize;
     for cycle in 0..MAX_CYCLES {
         if cycle > 0 && cycle % MAINTENANCE_EVERY_N_CYCLES == 0 {
@@ -226,22 +256,40 @@ async fn run_drain_to_completion() -> i32 {
 /// a timestamp is a claim that maintenance ran, and it should only be written when it did.
 fn run_cycle_maintenance() {
     match crate::get_database() {
-        Ok(db) => match db.run_scheduled_maintenance() {
-            Ok(()) => {
-                // An unreadable clock skips the write rather than defaulting to 0 —
-                // a zero timestamp reads as "never ran", which is the same lie in the
-                // other direction. Losing one stamp is recoverable; a false one is not.
-                if let Ok(d) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-                    crate::scheduler_state::persist_run(
+        Ok(db) => {
+            let started = Instant::now();
+            match db.run_scheduled_maintenance() {
+                Ok(()) => {
+                    // An unreadable clock skips the write rather than defaulting to 0 —
+                    // a zero timestamp reads as "never ran", which is the same lie in the
+                    // other direction. Losing one stamp is recoverable; a false one is not.
+                    if let Ok(d) =
+                        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                    {
+                        crate::scheduler_state::persist_run(
+                            crate::scheduler_state::jobs::DB_MAINTENANCE,
+                            d.as_secs(),
+                        );
+                    }
+                    crate::scheduler_state::record_outcome(
                         crate::scheduler_state::jobs::DB_MAINTENANCE,
-                        d.as_secs(),
+                        None,
+                        started.elapsed().as_millis() as u64,
+                    );
+                }
+                Err(e) => {
+                    warn!(target: "4da::headless", error = %e, "Post-cycle DB maintenance failed");
+                    // Outcome is recorded WITHOUT a run stamp — the timestamp claims
+                    // the work happened; the outcome records that it was attempted
+                    // and how it failed.
+                    crate::scheduler_state::record_outcome(
+                        crate::scheduler_state::jobs::DB_MAINTENANCE,
+                        Some(&e.to_string()),
+                        started.elapsed().as_millis() as u64,
                     );
                 }
             }
-            Err(e) => {
-                warn!(target: "4da::headless", error = %e, "Post-cycle DB maintenance failed");
-            }
-        },
+        }
         Err(e) => {
             warn!(target: "4da::headless", error = %e, "Post-cycle DB maintenance could not access database");
         }
@@ -272,19 +320,28 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // engine scored 701 items with a zero context axis: relevant collapsed
     // 24 -> 3 and the daily briefing reported a false "thin day". The scores
     // self-correct on a later cycle, but the silence was the real failure.
-    if let Ok(db) = crate::get_database() {
-        match db.context_health() {
-            Ok(h) if h.collapsed => warn!(
-                target: "4da::headless",
-                total = h.total,
-                "Grounding corpus COLLAPSED (wipe signature) — this cycle's context scoring is degraded; reindex needed"
-            ),
-            Ok(h) if h.grounding_chunks == 0 => warn!(
-                target: "4da::headless",
-                total = h.total,
-                "Grounding corpus has ZERO code/config chunks — scoring runs UNGROUNDED this cycle"
-            ),
-            _ => {}
+    match crate::get_database() {
+        Ok(db) => {
+            // The database opens — any standing engine-block marker is over.
+            crate::engine_block::clear();
+            match db.context_health() {
+                Ok(h) if h.collapsed => warn!(
+                    target: "4da::headless",
+                    total = h.total,
+                    "Grounding corpus COLLAPSED (wipe signature) — this cycle's context scoring is degraded; reindex needed"
+                ),
+                Ok(h) if h.grounding_chunks == 0 => warn!(
+                    target: "4da::headless",
+                    total = h.total,
+                    "Grounding corpus has ZERO code/config chunks — scoring runs UNGROUNDED this cycle"
+                ),
+                _ => {}
+            }
+        }
+        Err(e) => {
+            // A schema-too-new refusal repeats silently forever (the 08-28→30
+            // two-day freeze); leave a marker the app and MCP server surface.
+            crate::engine_block::note_db_error(&e.to_string());
         }
     }
 
@@ -319,9 +376,14 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // Step 2 — score (embeds + PASIFA; writes relevance_score). Silent variant: no UI progress events.
     info!(target: "4da::headless", "Cycle step 2/3: scoring cached content...");
     match crate::analysis::analyze_cached_content_silent(handle).await {
-        Ok(results) => {
-            receipt.items_scored = results.len();
-            receipt.relevant_count = results.iter().filter(|r| r.relevant).count();
+        Ok(cycle) => {
+            // Honest receipt numbers (audit item 9): on a differential run the
+            // cycle scores only new/stale items; `items_scored` records that
+            // real work, not the size of a merged display set. This receipt is
+            // ALSO the next run's differential watermark (`ok=1 AND
+            // items_scored>0` — see engine_runs::last_scoring_watermark).
+            receipt.items_scored = cycle.scored_count();
+            receipt.relevant_count = cycle.scored_relevant();
 
             // Scores, pipeline-version stamps, feed verdicts, and the scoring-event
             // row are now persisted once at the shared analysis boundary
@@ -343,6 +405,44 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
             error!(target: "4da::headless", error = %e, "Scoring failed");
             receipt.ok = false;
             append_receipt_error(&mut receipt, e.to_string());
+        }
+    }
+
+    // Step 2b — drain the never-scored backlog. The Phase-2 backfill worker's
+    // only other caller is the GUI monitoring loop (monitoring.rs), so a
+    // deployment that runs engine-only — the recommended OS-scheduled setup —
+    // accumulated a version-0 backlog forever: measured live 2026-08-23, 463
+    // unscored items spanning 35 hours INCLUDING 5 CVE items, across ~30
+    // scheduled cycles that never touched them. The analysis path only scores
+    // a recent window, so arrivals that outpace it age out silently; security
+    // items sitting unscored is a recall hole in the flagship lane. The engine
+    // now drains a bounded slice every cycle (security-first order comes from
+    // get_unscored_backlog_chunk). Best-effort like the GUI path: a failed
+    // chunk logs and the next cycle retries — never fails the run.
+    for _ in 0..ENGINE_BACKFILL_MAX_CHUNKS {
+        match crate::analysis_backfill::backfill_unscored_cycle(ENGINE_BACKFILL_CHUNK).await {
+            Ok(p) => {
+                if p.scored_this_cycle > 0 {
+                    info!(
+                        target: "4da::headless",
+                        scored = p.scored_this_cycle,
+                        relevant = p.relevant_this_cycle,
+                        remaining = p.remaining_unscored,
+                        "Never-scored backfill chunk complete"
+                    );
+                }
+                if p.done {
+                    break;
+                }
+            }
+            Err(e) => {
+                warn!(
+                    target: "4da::headless",
+                    error = %e,
+                    "Never-scored backfill failed — next cycle retries"
+                );
+                break;
+            }
         }
     }
 
@@ -418,6 +518,22 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
         let steps = plan.len();
         crate::evidence::persist_upgrade_plan(&db, &plan, drops, run_id);
         info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed");
+    }
+
+    // Step 3b-ii — Tier-2 LLM passes (judge + content analysis + LlmReject
+    // demotions). Awaited INLINE, not spawned: a `--once` engine process exits
+    // when this function returns, so a detached task would be silently
+    // dropped. Bounded work (<=4 LLM calls per pass) and budget/BYOK-gated
+    // inside — a no-provider deployment is a silent no-op.
+    if let Ok(db) = crate::get_database() {
+        let summary = crate::llm_judgments::run_post_cycle_llm_passes(&db).await;
+        info!(
+            target: "4da::headless",
+            judged = summary.judged,
+            demoted = summary.demoted,
+            skipped = summary.skipped.unwrap_or("none"),
+            "Tier-2 LLM pass complete"
+        );
     }
 
     // Step 3c — DB maintenance. Every other caller of `run_scheduled_maintenance` lives in
@@ -739,8 +855,29 @@ fn is_osv_fresh() -> bool {
         .unwrap_or(false)
 }
 
+/// True when a scoring change has landed and the corpus has not caught up.
+///
+/// FEED freshness and SCORING-EPOCH freshness are different things, and the
+/// short-circuit above only knew about the first. Found by testing the
+/// drain-to-completion trigger on 2026-08-27: with 8,000 items stale but the feed
+/// recently fetched, `--engine-once` reported "already fresh — nothing to do" and
+/// exited in nine seconds without draining anything. A stale epoch means every
+/// surface except Blind Spots is ranking items judged by two pipeline versions
+/// against each other, which is its own reason to run a cycle regardless of how
+/// recently the sources were polled.
+///
+/// Deliberately reuses the same threshold as the drain policy: below it the
+/// budgeted per-cycle drain absorbs the remainder anyway, so waking the engine
+/// for a handful of rows would be churn.
+fn scoring_epoch_is_behind() -> bool {
+    crate::get_database().is_ok_and(|db| {
+        db.count_stale_scored_items(crate::scoring::PIPELINE_VERSION)
+            .is_ok_and(|n| n > crate::analysis_backfill::DRAIN_TO_COMPLETION_THRESHOLD)
+    })
+}
+
 fn is_cycle_fresh() -> bool {
-    is_data_fresh() && is_osv_fresh()
+    is_data_fresh() && is_osv_fresh() && !scoring_epoch_is_behind()
 }
 
 #[cfg(test)]

@@ -593,6 +593,53 @@ describe("4DA MCP Tool Handlers", () => {
       expect(ids).not.toContain(rejected);
     });
 
+    it("orders by rank_score when present, falling back to evidence (schema 110)", () => {
+      // Evidence/rank separation (desktop audit items 12+26): relevance_score
+      // is the batch-independent EVIDENCE score; rank_score is the analysis
+      // cycle's batch-relative display rank. Ranked reads order by
+      // COALESCE(rank_score, relevance_score) DESC — mirroring the Rust
+      // RANKED_ORDER_EXPR (src-tauri/src/db/scoring_queries.rs) — while the
+      // min_score membership filter stays on evidence.
+      seedUserContext(db);
+      const raw = db.getRawDb();
+      raw.exec("ALTER TABLE source_items ADD COLUMN relevance_score REAL");
+      raw.exec("ALTER TABLE source_items ADD COLUMN content_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_priority TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN rank_score REAL");
+
+      // Evidence order would be evidenceHigh > ranked > unranked; the batch
+      // layer ranked `ranked` to the top. Ranked order must win, and the
+      // never-ranked items must still appear, ordered by their evidence.
+      // Titles are deliberately dissimilar: the response path collapses
+      // near-duplicate titles, which must not eat these fixtures.
+      const evidenceHigh = insertSourceItem(db, { title: "Tokio scheduler internals deep dive", content: "rust" });
+      const ranked = insertSourceItem(db, { title: "SQLite WAL checkpoint tuning guide", content: "rust" });
+      const unranked = insertSourceItem(db, { title: "Kubernetes operator reconciliation patterns", content: "rust" });
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.80, rank_score = NULL WHERE id = ?")
+        .run(evidenceHigh);
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.60, rank_score = 0.92 WHERE id = ?")
+        .run(ranked);
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.50, rank_score = NULL WHERE id = ?")
+        .run(unranked);
+
+      const result = executeGetRelevantContent(db, { min_score: 0.35, since_hours: 24, limit: 50 });
+      const ids = result.map((r) => r.id);
+      expect(ids).toEqual([ranked, evidenceHigh, unranked]);
+
+      // Membership stays on EVIDENCE: a huge rank cannot buy membership for
+      // an item whose evidence is below the floor.
+      const noiseWithRank = insertSourceItem(db, { title: "noise with a stale rank", content: "rust" });
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.10, rank_score = 0.99 WHERE id = ?")
+        .run(noiseWithRank);
+      const second = executeGetRelevantContent(db, { min_score: 0.35, since_hours: 24, limit: 50 });
+      expect(second.map((r) => r.id)).not.toContain(noiseWithRank);
+    });
+
     it("deep-fallback actionable signals never trust stale-version stored signals", () => {
       // get_actionable_signals trusts persisted signal_type/signal_priority at
       // confidence 0.90 — on the deep fallback those columns MUST come from the
@@ -756,16 +803,16 @@ describe("4DA MCP Tool Handlers", () => {
       expect(result.ace).toBeUndefined();
     });
 
-    it("includes learned preferences when requested", () => {
+    it("learned preferences are permanently empty (implicit capture removed in v20b/schema 105)", () => {
       seedUserContext(db);
+      // Even seeded legacy rows are quarantined data the product no longer
+      // honors — the shape stays for API stability, the content stays empty.
       seedLearnedPreferences(db);
 
       const result = executeGetContext(db, { include_learned: true });
       expect(result.learned).toBeDefined();
-      expect(result.learned!.topic_affinities).toBeInstanceOf(Array);
-      expect(result.learned!.anti_topics).toBeInstanceOf(Array);
-      expect(result.learned!.topic_affinities.length).toBeGreaterThan(0);
-      expect(result.learned!.anti_topics.length).toBeGreaterThan(0);
+      expect(result.learned!.topic_affinities).toEqual([]);
+      expect(result.learned!.anti_topics).toEqual([]);
     });
 
     it("excludes learned preferences when not requested", () => {
@@ -994,7 +1041,9 @@ describe("4DA MCP Tool Handlers", () => {
         source_id: "hn-react-gap-1",
       });
 
-      const result = executeKnowledgeGaps(db, {});
+      // A single unread mention grades as "low" (honest quantity grading) —
+      // opt in to low to see it.
+      const result = executeKnowledgeGaps(db, { min_severity: "low" });
 
       expect(result.gaps_found).toBeGreaterThan(0);
       expect(result.gaps[0].dependency).toBe("react");
@@ -1036,15 +1085,108 @@ describe("4DA MCP Tool Handlers", () => {
         )
         .run("/home/user/project", "package.json", "express", "4.18.0", "javascript");
 
+      // critical requires an actual ADVISORY (cve/osv source or
+      // security_advisory content_type) whose TITLE names the dependency.
       insertSourceItem(db, {
         title: "CVE-2024-1234: Critical security vulnerability in express",
         content: "A critical security vulnerability found in express framework.",
-        source_id: "hn-express-cve",
+        source_id: "cve-express-1",
+        source_type: "cve",
       });
 
       const result = executeKnowledgeGaps(db, { min_severity: "critical" });
       expect(result.gaps_found).toBeGreaterThan(0);
       expect(result.gaps[0].gap_severity).toBe("critical");
+    });
+
+    // -------------------------------------------------------------------------
+    // Grounding regressions — each guards an observed false-positive class from
+    // the 2026-08-21 live audit (substring "invite"→vite, a Gwyneth Paltrow
+    // article filed under hono, a 2014 StackOverflow post as "missed intel",
+    // and blanket "critical" severity from co-mentioned advisories).
+    // -------------------------------------------------------------------------
+
+    it("does not match a package name inside another word (invite is not vite)", () => {
+      const rawDb = db.getRawDb();
+      rawDb
+        .prepare(
+          "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, language) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("/home/user/project", "package.json", "vite", "7.0.0", "javascript");
+
+      insertSourceItem(db, {
+        title: "Rocket Reversi multiplayer is live — invite a friend with a room link",
+        content: "Sign in, open Multiplayer, then invite a friend. Invited players join instantly.",
+        source_id: "hn-reversi-1",
+      });
+
+      const result = executeKnowledgeGaps(db, { min_severity: "low" });
+      expect(result.gaps_found).toBe(0);
+    });
+
+    it("an advisory that merely co-mentions the dep in its body is not critical", () => {
+      const rawDb = db.getRawDb();
+      rawDb
+        .prepare(
+          "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, language) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("/home/user/project", "package.json", "hono", "4.13.2", "javascript");
+
+      insertSourceItem(db, {
+        title: "CVE-2026-61663: django CMS missing authorization in render_object_structure",
+        content: "The affected stack also bundles hono in unrelated tooling examples.",
+        source_id: "cve-django-1",
+        source_type: "cve",
+      });
+
+      const result = executeKnowledgeGaps(db, { min_severity: "low" });
+      expect(result.gaps_found).toBe(1);
+      expect(result.gaps[0].gap_severity).toBe("low");
+    });
+
+    it("ignores mentions older than the 30-day window", () => {
+      const rawDb = db.getRawDb();
+      rawDb
+        .prepare(
+          "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, language) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("/home/user/project", "package.json", "react", "18.2.0", "javascript");
+
+      insertSourceItem(db, {
+        title: "How do I convert an image to Base64 in react?",
+        content: "Old react question.",
+        source_id: "so-old-react",
+        created_at: "2014-01-01 00:00:00",
+      });
+
+      const result = executeKnowledgeGaps(db, { min_severity: "low" });
+      expect(result.gaps_found).toBe(0);
+    });
+
+    it("applies the relevance floor when the scoring column exists", () => {
+      const rawDb = db.getRawDb();
+      rawDb.exec("ALTER TABLE source_items ADD COLUMN relevance_score REAL");
+      rawDb
+        .prepare(
+          "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, language) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("/home/user/project", "package.json", "react", "18.2.0", "javascript");
+
+      const noiseId = insertSourceItem(db, {
+        title: "react mentioned in passing in an off-topic listicle",
+        source_id: "hn-react-noise",
+      });
+      const signalId = insertSourceItem(db, {
+        title: "React 19 breaking changes and migration guide",
+        source_id: "hn-react-signal",
+      });
+      rawDb.prepare("UPDATE source_items SET relevance_score = 0.05 WHERE id = ?").run(noiseId);
+      rawDb.prepare("UPDATE source_items SET relevance_score = 0.5 WHERE id = ?").run(signalId);
+
+      const result = executeKnowledgeGaps(db, { min_severity: "low" });
+      expect(result.gaps_found).toBe(1);
+      expect(result.gaps[0].missed_count).toBe(1);
+      expect(result.gaps[0].missed_items[0].title).toContain("React 19");
     });
   });
 

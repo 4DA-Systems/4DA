@@ -397,6 +397,16 @@ pub fn resolve_patched_dependency_alerts(db: &Database) -> Result<usize> {
 
     let mut resolved = 0usize;
     for alert in &alerts {
+        // Audit-sourced alerts are owned by the tool that produced them and are
+        // retired by `Database::reconcile_audit_alerts` when that tool stops
+        // reporting them. Re-deriving a verdict here asks a different question
+        // from a stored range and answers it with less information than
+        // `cargo audit` had — which is precisely how a live memory-corruption
+        // advisory got closed (see `local_audit::derive_affected_range`).
+        if alert.alert_type == "audit" {
+            continue;
+        }
+
         // Need a concrete affected range to test against; without one we cannot
         // prove the install is safe, so keep the alert.
         let range = match alert.affected_versions.as_deref() {

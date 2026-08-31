@@ -76,10 +76,11 @@ pub(crate) async fn get_calibration_snapshot(threshold: Option<f32>) -> Result<C
         .map_err(|e| format!("Failed to compute calibration snapshot: {e}"))?;
     // The dep-scoped high-stakes recall needs the live dependency graph; build the
     // scoring context best-effort (None if it can't be built / no deps yet).
-    let high_stakes_recall = match crate::scoring::build_scoring_context(db).await {
-        Ok(ctx) => crate::scoring::compute_high_stakes_recall(db, &ctx, t).ok(),
-        Err(_) => None,
-    };
+    let high_stakes_recall =
+        match crate::scoring::build_scoring_context_tagged(db, "calibration_snapshot").await {
+            Ok(ctx) => crate::scoring::compute_high_stakes_recall(db, &ctx, t).ok(),
+            Err(_) => None,
+        };
     Ok(CalibrationReport {
         snapshot,
         high_stakes_recall,
@@ -102,6 +103,13 @@ pub(crate) struct ScoringCoverage {
     /// ~2.6% when the stale-drain was silently empty.
     pub current_version_coverage_pct: f32,
     pub version_histogram: Vec<(i32, i64)>,
+    /// Context-corpus generation the per-item grounding cache is keyed on.
+    pub context_generation: i64,
+    /// Items whose grounding match is materialised at that generation. When
+    /// this trails `total`, the next drain pays the full 52 ms/item KNN for
+    /// the shortfall instead of ~2.7 ms.
+    pub context_cache_current: i64,
+    pub context_cache_pct: f32,
 }
 
 #[tauri::command]
@@ -141,6 +149,17 @@ pub(crate) async fn get_scoring_coverage() -> Result<ScoringCoverage> {
     } else {
         0.0
     };
+    drop(conn);
+    // Health of the context-match cache, on the same surface as the epoch
+    // histogram because they answer the same question: is the corpus being
+    // judged by the current brain, and how expensive is it to make that true?
+    let generation = db.context_generation().unwrap_or(0);
+    let (context_cache_current, _) = db.context_cache_coverage(generation).unwrap_or((0, 0));
+    let context_cache_pct = if total > 0 {
+        context_cache_current as f32 / total as f32 * 100.0
+    } else {
+        0.0
+    };
     Ok(ScoringCoverage {
         total,
         scored,
@@ -150,6 +169,9 @@ pub(crate) async fn get_scoring_coverage() -> Result<ScoringCoverage> {
         current_pipeline_version: scoring::PIPELINE_VERSION,
         current_version_coverage_pct,
         version_histogram: histogram,
+        context_generation: generation,
+        context_cache_current,
+        context_cache_pct,
     })
 }
 
@@ -178,7 +200,7 @@ pub(crate) async fn measure_triage_recall(
 
     // Build the same scoring context the real pipeline uses, so topic/dep
     // signals are identical to production.
-    let ctx = scoring::build_scoring_context(db)
+    let ctx = scoring::build_scoring_context_tagged(db, "measure_triage_recall")
         .await
         .map_err(|e| format!("Failed to build scoring context: {e}"))?;
     let defaults = TriageThresholds::default();

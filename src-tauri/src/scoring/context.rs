@@ -13,22 +13,153 @@ static SCORING_CONTEXT_CACHE: LazyLock<Mutex<Option<(ScoringContext, Instant)>>>
     LazyLock::new(|| Mutex::new(None));
 const SCORING_CONTEXT_TTL_SECS: u64 = 300;
 
-/// Build a ScoringContext by loading all needed state. Call once per analysis run.
-/// Results are cached with a 5-minute TTL to avoid redundant DB queries.
-pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContext> {
-    // Check cache first (block scope ensures MutexGuard is dropped before any .await)
-    {
-        let cache = SCORING_CONTEXT_CACHE.lock().unwrap_or_else(|e| {
-            tracing::warn!("SCORING_CONTEXT_CACHE mutex poisoned, recovering");
-            e.into_inner()
-        });
-        if let Some((ref ctx, ref instant)) = *cache {
-            if instant.elapsed().as_secs() < SCORING_CONTEXT_TTL_SECS {
-                return Ok(ctx.clone());
+/// Hard ceiling for one scoring-context build.
+///
+/// This was 10s, duplicated at five call sites. Live 2026-08-30: the startup
+/// auto-analysis lost that race against a cold, write-contended DB (OSV zip
+/// sync + first touch of the phase-113 partitioned vector index) and the user's
+/// first screen was an "Analysis failed: Scoring context build timed out after
+/// 10s" toast; the manual retry succeeded almost immediately. 45s keeps the
+/// hang protection the timeout exists for while surviving startup contention.
+pub(crate) const BUILD_TIMEOUT_SECS: u64 = 45;
+
+/// Soft observability ceiling for builds running WITHOUT a budget: an
+/// unbounded build that crosses this line gets a `warn!` naming its caller —
+/// never an abort. Exists so the open 2026-08-23 audit question ("any budget
+/// is a guess — build_scoring_context has no elapsed_ms instrumentation")
+/// can be answered from live log data before anyone decides to put the
+/// deliberately-unbounded call sites under a timeout.
+const SLOW_BUILD_WARN_SECS: u64 = 30;
+
+/// [`build_scoring_context_tagged`] under the standard timeout, with the
+/// standard error strings. The one entry point for every bounded analysis
+/// path, so the budget and its failure message can never drift apart across
+/// call sites again. `caller` names the call site in every log line and in
+/// the timeout error itself — the 2026-08-23 audit could not tell WHICH of
+/// the divergent call sites was losing its cold build.
+pub(crate) async fn build_scoring_context_with_timeout(
+    db: &Database,
+    caller: &'static str,
+) -> std::result::Result<ScoringContext, String> {
+    // Box::pin: run_context_build keeps the build future alive in two arms
+    // (inside tokio::time::timeout and as the unbounded await), and the
+    // context build is a large future — inlining it here doubled the caller's
+    // future past clippy's large_futures ceiling. One heap allocation per
+    // analysis cycle is noise; a 20KB+ future on every scheduler stack is not.
+    run_context_build(
+        caller,
+        Some(std::time::Duration::from_secs(BUILD_TIMEOUT_SECS)),
+        Box::pin(build_scoring_context_tagged(db, caller)),
+    )
+    .await
+}
+
+/// Run one scoring-context build under an optional wall-clock budget.
+///
+/// Owns the timeout and both log-searchable error strings ("Scoring context
+/// build timed out", "Failed to build scoring context"). Generic over the
+/// build future so the budget/error contract is unit-testable without a live
+/// database. `budget: None` never aborts — the slow-build warn for unbounded
+/// callers lives in [`build_scoring_context_tagged`], which also logs
+/// elapsed_ms for every completed build.
+async fn run_context_build<T, F>(
+    caller: &'static str,
+    budget: Option<std::time::Duration>,
+    build: F,
+) -> std::result::Result<T, String>
+where
+    F: std::future::Future<Output = Result<T>>,
+{
+    let built = match budget {
+        Some(limit) => match tokio::time::timeout(limit, build).await {
+            Ok(built) => built,
+            Err(_) => {
+                // The build future was cancelled mid-flight, so the
+                // elapsed_ms log inside it never fired — this line is the
+                // only trace a timed-out build leaves. Keep it caller-tagged.
+                tracing::warn!(target: "4da::scoring",
+                    caller,
+                    budget_secs = limit.as_secs(),
+                    "Scoring context build timed out"
+                );
+                return Err(format!(
+                    "Scoring context build timed out after {}s (caller: {caller})",
+                    limit.as_secs()
+                ));
             }
-        }
+        },
+        None => build.await,
+    };
+    built.map_err(|e| format!("Failed to build scoring context: {e}"))
+}
+
+/// Serve the cached context if one exists and is within TTL.
+/// (Free function so the MutexGuard can never cross an await point.)
+fn cached_scoring_context() -> Option<ScoringContext> {
+    let cache = SCORING_CONTEXT_CACHE.lock().unwrap_or_else(|e| {
+        tracing::warn!("SCORING_CONTEXT_CACHE mutex poisoned, recovering");
+        e.into_inner()
+    });
+    cache.as_ref().and_then(|(ctx, built_at)| {
+        (built_at.elapsed().as_secs() < SCORING_CONTEXT_TTL_SECS).then(|| ctx.clone())
+    })
+}
+
+/// Caller-tagged scoring-context build: the same 5-minute-TTL cached build as
+/// always, plus the elapsed_ms + cache hit/miss instrumentation the headless
+/// timeout diagnosis was blocked on. Only a cold process pays the full build
+/// (which is why the ~daily timeout failures are 100% headless) — so the
+/// `cache = "miss"` lines with their elapsed_ms are the exact dataset the
+/// audit asked for. Unbounded: callers that want the standard budget go
+/// through [`build_scoring_context_with_timeout`]; callers that deliberately
+/// run without one get a warn past [`SLOW_BUILD_WARN_SECS`], never an abort.
+pub(crate) async fn build_scoring_context_tagged(
+    db: &Database,
+    caller: &'static str,
+) -> Result<ScoringContext> {
+    if let Some(ctx) = cached_scoring_context() {
+        tracing::debug!(target: "4da::scoring", caller, cache = "hit",
+            "Scoring context served from cache"
+        );
+        return Ok(ctx);
     }
+    let started = Instant::now();
+    let result = build_scoring_context_cold(db).await;
+    let elapsed_ms = started.elapsed().as_millis() as u64;
+    match &result {
+        Ok(_) => tracing::info!(target: "4da::scoring", caller, elapsed_ms, cache = "miss",
+            "Scoring context built"
+        ),
+        Err(e) => tracing::warn!(target: "4da::scoring", caller, elapsed_ms, cache = "miss",
+            error = %e, "Scoring context build failed"
+        ),
+    }
+    if elapsed_ms >= SLOW_BUILD_WARN_SECS * 1000 {
+        tracing::warn!(target: "4da::scoring", caller, elapsed_ms,
+            "Scoring context build exceeded the {SLOW_BUILD_WARN_SECS}s soft ceiling (observability only — not aborted)"
+        );
+    }
+    result
+}
+
+/// Untagged [`build_scoring_context_tagged`]. Kept only for call sites owned
+/// by other active lanes (monitoring.rs, 2026-08-31) that this change must
+/// not edit — they still get the elapsed_ms + cache hit/miss instrumentation,
+/// just under an anonymous caller tag. New call sites pass a real caller name
+/// via the tagged variants.
+pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContext> {
+    build_scoring_context_tagged(db, "untagged").await
+}
+
+/// Build a ScoringContext by loading all needed state — the cold path behind
+/// the 5-minute-TTL cache and the instrumentation in
+/// [`build_scoring_context_tagged`]. Call once per analysis run.
+async fn build_scoring_context_cold(db: &Database) -> Result<ScoringContext> {
     let cached_context_count = db.context_count()?;
+    // Read ONCE per run, not per item: every scored item checks its cached
+    // grounding match against this number, and a probe per item would put a
+    // query back on the hot path this cache exists to empty.
+    let context_generation = db.context_generation().unwrap_or(0);
     let feedback_interaction_count: i64 = db.query_feedback_count().unwrap_or(0);
 
     let context_engine = crate::get_context_engine()?;
@@ -241,7 +372,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     // injections (incl. the Veto hard −1.0) DEMOTED in v19 (AD-029). The
     // stability detector keeps its full lifecycle — it powers the Learned
     // Preferences panel (pin/forget/reset), which is the user-visible,
-    // user-controllable home of behavioral learning. Explicit topic
+    // user-controllable home of interaction-derived preferences. Explicit topic
     // suppression still works through `exclusions` (the suppress-topic
     // button), which is user-authored, not inferred.
 
@@ -256,6 +387,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
 
     let context = ScoringContext {
         cached_context_count,
+        context_generation,
         interest_count: interests.len(),
         interests,
         exclusions: static_identity.exclusions,
@@ -352,6 +484,29 @@ pub(crate) fn is_low_quality_topic(topic: &str) -> bool {
     false
 }
 
+/// Cap on dependency-synthesized interests. The cap exists to bound per-item
+/// scoring cost (every interest is one more keyword/embedding candidate in the
+/// hot loop) and to keep low-weight dep names from crowding explanations — NOT
+/// to pick "the best" deps (there is no usage-frequency signal here yet). The
+/// old cap of 15 covered ~8% of a real 184-direct-dep project and, combined
+/// with HashMap iteration order, selected a different random 15 every process.
+/// 40 widens coverage to a stable, deterministic head (runtime-first, then
+/// alphabetical) while keeping the interest list bounded.
+// TODO(orchestrator): candidate for promotion to pipeline.scoring as a tunable.
+const DEP_INTEREST_CAP: usize = 40;
+
+/// Weight for runtime direct-dependency interests: modest, so a dep-name
+/// keyword match alone can never rival an explicit interest (score ≤ 0.3).
+// TODO(orchestrator): candidate for promotion to pipeline.scoring as a tunable.
+const RUNTIME_DEP_INTEREST_WEIGHT: f32 = 0.3;
+
+/// Weight for direct DEV-dependency interests (vite, vitest, typescript, …).
+/// Included since the 2026-08-23 audit (item 16 — dev-dep blindness) at a
+/// discount below runtime deps: build/test tooling is real user context but a
+/// weaker identity signal than shipped dependencies.
+// TODO(orchestrator): candidate for promotion to pipeline.scoring as a tunable.
+const DEV_DEP_INTEREST_WEIGHT: f32 = 0.2;
+
 /// Synthesize ACE-discovered context into keyword interests.
 ///
 /// Bridges ACE intelligence into keyword scoring: detected tech, active topics,
@@ -429,22 +584,49 @@ pub(crate) fn synthesize_ace_interests(
     // No display-worthy filter here: if a dep is in the user's actual
     // package.json, content about it IS relevant. The Phase 1 filter
     // only blocks inferred/detected tech that isn't identity-defining.
+    //
+    // Determinism (2026-08-23 adversarial audit, churn mechanism #2):
+    // `dependency_info` is a HashMap whose iteration order is reseeded per
+    // process. Taking "the first N" of it meant every 30-min scheduled run
+    // (a fresh process) synthesized interests from a DIFFERENT random subset
+    // of the direct deps — live differential: react ace_boost 0.225 vs
+    // zustand 0.0 against the same corpus. Candidates are now sorted on a
+    // stable importance key BEFORE the cap: runtime deps first (they define
+    // the shipped product), then dev deps, each alphabetical — the same
+    // dependency_info always yields the same interest set.
+    let mut dep_candidates: Vec<(&String, &super::dependencies::DepInfo)> = ace_ctx
+        .dependency_info
+        .iter()
+        .filter(|(_, info)| info.is_direct)
+        .collect();
+    dep_candidates.sort_by(|(a_name, a), (b_name, b)| {
+        a.is_dev.cmp(&b.is_dev).then_with(|| a_name.cmp(b_name))
+    });
+
     let mut dep_synth = 0usize;
-    for (dep_name, dep_info) in &ace_ctx.dependency_info {
-        if dep_synth >= 15 {
+    for (dep_name, dep_info) in dep_candidates {
+        if dep_synth >= DEP_INTEREST_CAP {
             break;
-        }
-        if !dep_info.is_direct || dep_info.is_dev {
-            continue;
         }
         let lower = dep_name.to_lowercase();
         if existing.contains(&lower) || lower.len() < 3 {
             continue;
         }
+        // Dev-dep blindness fix (audit item 16): direct devDependencies
+        // (vite, vitest, typescript, …) previously got NO interest synthesis,
+        // so releases of the user's own build tools scored 0.03–0.40. They
+        // now synthesize at a discount below runtime deps — tooling is real
+        // context but a weaker identity signal than shipped dependencies —
+        // and sort after runtime deps so the cap prefers runtime.
+        let weight = if dep_info.is_dev {
+            DEV_DEP_INTEREST_WEIGHT
+        } else {
+            RUNTIME_DEP_INTEREST_WEIGHT
+        };
         interests.push(crate::context_engine::Interest {
             id: None,
             topic: dep_name.clone(),
-            weight: 0.3,
+            weight,
             embedding: topic_embeddings.get(dep_name).cloned(),
             source: crate::context_engine::InterestSource::Inferred,
         });
@@ -481,6 +663,8 @@ mod tests {
             is_direct: direct,
             search_terms: vec![],
             ecosystem: "rust".to_string(),
+            project_paths: Vec::new(),
+            project_relevance: 1.0,
         }
     }
 
@@ -662,7 +846,9 @@ mod tests {
     }
 
     #[test]
-    fn test_dev_deps_excluded() {
+    fn test_direct_dev_deps_synthesized_at_discount() {
+        // Audit item 16 (dev-dep blindness): direct dev deps DO synthesize,
+        // at DEV_DEP_INTEREST_WEIGHT — below the runtime-dep weight.
         let mut interests = vec![];
         let mut ace = ACEContext::default();
         ace.dependency_info
@@ -670,7 +856,30 @@ mod tests {
 
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
-        assert_eq!(interests.len(), 0, "dev deps should not be synthesized");
+        assert_eq!(interests.len(), 1, "direct dev deps must be synthesized");
+        assert!(
+            (interests[0].weight - DEV_DEP_INTEREST_WEIGHT).abs() < 0.001,
+            "dev dep weight should be {DEV_DEP_INTEREST_WEIGHT}, got {}",
+            interests[0].weight
+        );
+        assert_eq!(interests[0].source, InterestSource::Inferred);
+    }
+
+    #[test]
+    fn test_transitive_dev_deps_still_excluded() {
+        // The dev-dep inclusion is DIRECT-only: a transitive dev dep stays out.
+        let mut interests = vec![];
+        let mut ace = ACEContext::default();
+        ace.dependency_info
+            .insert("esbuild".into(), make_dep("esbuild", false, true));
+
+        synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
+
+        assert_eq!(
+            interests.len(),
+            0,
+            "transitive dev deps should not be synthesized"
+        );
     }
 
     #[test]
@@ -706,21 +915,122 @@ mod tests {
     }
 
     #[test]
-    fn test_dep_cap_at_15() {
+    fn test_dep_cap() {
         let mut interests = vec![];
         let mut ace = ACEContext::default();
-        for i in 0..20 {
-            let name = format!("package-{i:02}");
+        for i in 0..(DEP_INTEREST_CAP + 10) {
+            let name = format!("package-{i:03}");
             ace.dependency_info
                 .insert(name.clone(), make_dep(&name, true, false));
         }
 
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
-        assert!(
-            interests.len() <= 15,
-            "should cap at 15 dep interests, got {}",
+        assert_eq!(
+            interests.len(),
+            DEP_INTEREST_CAP,
+            "should cap at {DEP_INTEREST_CAP} dep interests, got {}",
             interests.len()
+        );
+        // With the deterministic alphabetical order, the cap keeps exactly
+        // the first DEP_INTEREST_CAP names — never a random subset.
+        for (idx, interest) in interests.iter().enumerate() {
+            assert_eq!(interest.topic, format!("package-{idx:03}"));
+        }
+    }
+
+    #[test]
+    fn test_dep_synthesis_deterministic_across_insertion_orders() {
+        // Audit item 3 (dep-interest lottery): the SAME dependency_info must
+        // synthesize the SAME interest set regardless of map insertion order
+        // (HashMap iteration order is reseeded per process — every scheduled
+        // run is a fresh process).
+        let names: Vec<String> = (0..30).map(|i| format!("crate-{i:02}")).collect();
+
+        let mut forward = ACEContext::default();
+        for name in &names {
+            forward
+                .dependency_info
+                .insert(name.clone(), make_dep(name, true, false));
+        }
+        let mut reversed = ACEContext::default();
+        for name in names.iter().rev() {
+            reversed
+                .dependency_info
+                .insert(name.clone(), make_dep(name, true, false));
+        }
+
+        let mut interests_forward = vec![];
+        let mut interests_reversed = vec![];
+        synthesize_ace_interests(&mut interests_forward, &forward, &HashMap::new());
+        synthesize_ace_interests(&mut interests_reversed, &reversed, &HashMap::new());
+
+        let seq_forward: Vec<(String, f32)> = interests_forward
+            .iter()
+            .map(|i| (i.topic.clone(), i.weight))
+            .collect();
+        let seq_reversed: Vec<(String, f32)> = interests_reversed
+            .iter()
+            .map(|i| (i.topic.clone(), i.weight))
+            .collect();
+        assert_eq!(
+            seq_forward, seq_reversed,
+            "synthesized interest sequence must not depend on insertion order"
+        );
+        // And the order itself is alphabetical (the stable importance key).
+        let mut sorted = seq_forward.clone();
+        sorted.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            seq_forward, sorted,
+            "runtime deps must come out alphabetical"
+        );
+    }
+
+    #[test]
+    fn test_runtime_deps_sort_before_dev_deps() {
+        // Runtime deps outrank dev deps in the deterministic ordering, so the
+        // cap always prefers runtime. Alphabetically "aaa-lint" would come
+        // first — but it is a dev dep, so it must come AFTER every runtime dep.
+        let mut interests = vec![];
+        let mut ace = ACEContext::default();
+        ace.dependency_info
+            .insert("aaa-lint".into(), make_dep("aaa-lint", true, true)); // dev
+        ace.dependency_info
+            .insert("zzz-http".into(), make_dep("zzz-http", true, false)); // runtime
+        ace.dependency_info
+            .insert("mmm-json".into(), make_dep("mmm-json", true, false)); // runtime
+
+        synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
+
+        let topics: Vec<&str> = interests.iter().map(|i| i.topic.as_str()).collect();
+        assert_eq!(
+            topics,
+            vec!["mmm-json", "zzz-http", "aaa-lint"],
+            "runtime deps (alphabetical) must precede dev deps"
+        );
+        assert!((interests[0].weight - RUNTIME_DEP_INTEREST_WEIGHT).abs() < 0.001);
+        assert!((interests[2].weight - DEV_DEP_INTEREST_WEIGHT).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cap_slots_go_to_runtime_deps_over_dev_deps() {
+        // With more runtime deps than cap slots, dev deps get NOTHING.
+        let mut interests = vec![];
+        let mut ace = ACEContext::default();
+        for i in 0..DEP_INTEREST_CAP {
+            let name = format!("runtime-{i:03}");
+            ace.dependency_info
+                .insert(name.clone(), make_dep(&name, true, false));
+        }
+        ace.dependency_info
+            .insert("a-dev-tool".into(), make_dep("a-dev-tool", true, true));
+
+        synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
+
+        assert_eq!(interests.len(), DEP_INTEREST_CAP);
+        assert!(
+            interests.iter().all(|i| i.topic.starts_with("runtime-")),
+            "every cap slot must go to a runtime dep before any dev dep"
         );
     }
 
@@ -1742,6 +2052,82 @@ mod tests {
             5,
             "original 3 + 2 synthesized = 5 total interests; got {}",
             interests.len()
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Group 8: Context-build budget helper (run_context_build)
+    // The timeout / error-string / caller-tag contract behind
+    // build_scoring_context_with_timeout — exercised with stub futures so no
+    // live database is needed.
+    // ══════════════════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_budget_timeout_names_caller_and_keeps_searchable_phrase() {
+        // u8 stub payload: the helper is generic precisely so the contract is
+        // testable without a live DB (or a Debug impl on ScoringContext).
+        let err = run_context_build::<u8, _>(
+            "test_timeout_caller",
+            Some(std::time::Duration::from_millis(20)),
+            std::future::pending(),
+        )
+        .await
+        .expect_err("a build that never completes must time out");
+        assert!(
+            err.contains("Scoring context build timed out"),
+            "timeout error must keep the log-searchable phrase; got {err:?}"
+        );
+        assert!(
+            err.contains("test_timeout_caller"),
+            "timeout error must name the caller so the failing site is \
+             identifiable from the error alone; got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_no_budget_never_aborts_a_slow_build() {
+        let result = run_context_build("test_unbounded_caller", None, async {
+            // Longer than the 20ms budget the timeout test uses — proves
+            // budget: None means "never abort", not "tiny default budget".
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            Ok(42u8)
+        })
+        .await;
+        assert_eq!(
+            result,
+            Ok(42),
+            "budget: None must let a slow build run to completion"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fast_build_passes_within_budget() {
+        let result = run_context_build(
+            "test_ok_caller",
+            Some(std::time::Duration::from_secs(5)),
+            async { Ok(7u8) },
+        )
+        .await;
+        assert_eq!(result, Ok(7), "a fast build must pass through untouched");
+    }
+
+    #[tokio::test]
+    async fn test_build_failure_keeps_standard_error_string() {
+        let err = run_context_build::<u8, _>(
+            "test_fail_caller",
+            Some(std::time::Duration::from_secs(5)),
+            async { Err(crate::error::FourDaError::from("boom".to_string())) },
+        )
+        .await
+        .expect_err("a failed build must map to the standard error string");
+        assert!(
+            err.starts_with("Failed to build scoring context:"),
+            "build failure must keep the standard, log-searchable error \
+             prefix; got {err:?}"
+        );
+        assert!(
+            err.contains("boom"),
+            "the underlying build error must survive the mapping; got {err:?}"
         );
     }
 }

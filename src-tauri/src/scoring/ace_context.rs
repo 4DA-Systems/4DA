@@ -15,13 +15,6 @@ pub(crate) struct ACEContext {
     pub topic_confidence: std::collections::HashMap<String, f32>,
     /// Detected tech stack (languages, frameworks)
     pub detected_tech: Vec<String>,
-    /// Anti-topics (topics user has consistently rejected)
-    pub anti_topics: Vec<String>,
-    /// Confidence scores for anti-topics (topic -> confidence 0.0-1.0)
-    pub anti_topic_confidence: std::collections::HashMap<String, f32>,
-    /// Topic affinities from behavior learning (topic -> (affinity_score, confidence))
-    /// PASIFA: Now includes BOTH positive AND negative affinities with confidence
-    pub topic_affinities: std::collections::HashMap<String, (f32, f32)>,
     /// Normalized dependency package names for O(1) lookup
     pub dependency_names: HashSet<String>,
     /// Dependency details: normalized_name -> info (version, language, search terms)
@@ -89,31 +82,83 @@ fn extract_project_name_from_evidence(evidence: &str) -> Option<String> {
     }
 }
 
-/// QUARANTINED (AD-029, v19) — always returns an EMPTY map.
+/// Per-evidence scoring weight for a detected technology, strongest path wins.
 ///
-/// Learned topic affinities were demoted after the 2026-08-11 poisoned-curve
-/// incident: the capture layer mixed three incompatible strength scales and
-/// self-poisoned (the 2026-07-13 doom loop drove the user's OWN stack to -1.0
-/// affinity while `compute_affinity_multiplier` held x[0.3, 1.7] authority over
-/// the score). The demotion was applied at the CALL SITES — `pipeline_v2.rs`
-/// pins `affinity_mult` to 1.0, `semantic/boost.rs` dropped its affinity
-/// scaling — but the LOADER kept populating this map, so any consumer that
-/// reached for it bypassed the quarantine. `channel_render.rs` did exactly
-/// that: it multiplied its match score by `compute_affinity_multiplier` and
-/// PERSISTED the result via `upsert_channel_source_match`. That function
-/// returns a neutral 1.0 only when the map is empty, and the loader guaranteed
-/// it was not.
+/// 0.85 primary project, 0.40 secondary, 0.10 support infrastructure (MCP
+/// servers, editor extensions, tooling and scripts — present because the app
+/// ships them, not because they are what the developer builds).
 ///
-/// Killing it here makes the quarantine hold BY CONSTRUCTION: no call site can
-/// opt back in, because the data never enters the scoring context. The capture
-/// pipeline keeps writing `topic_affinities` (the Learned Preferences panel and
-/// the engagement dashboard read the table directly), so nothing is lost that
-/// re-enabling could not restore. Re-enable criteria live in AD-029; doing so
-/// means deleting `ace_context_quarantines_topic_affinities`, not editing it.
-/// (v20a: `compute_affinity_multiplier` and the other structurally-dead readers
-/// of this map were deleted outright; this loader stays as the quarantine.)
-fn load_topic_affinities(_ace: &crate::ace::ACE) -> HashMap<String, (f32, f32)> {
-    HashMap::new()
+/// MAX across the evidence list, and the subproject test applies PER PATH. The
+/// original form ran two `any()` passes over the whole list with the
+/// subproject test first, so one support path anywhere pinned the language to
+/// 0.10 regardless of how much primary evidence sat beside it. Measured live
+/// at e0381216: `javascript` (47 evidence entries, 7 of them primary
+/// manifests) and `typescript` (26 entries, 6 primary) were both held at 0.10
+/// — below a secondary project's 0.40 — by four paths each under
+/// `editors/vscode` and `mcp-4da-server`, in an application that is roughly
+/// half TypeScript. A tech that lives ONLY in support infrastructure still
+/// scores 0.10, which is what the penalty was written for.
+fn tech_weight_from_evidence(evidence: &[String], primary_dirs: &[String]) -> f32 {
+    evidence
+        .iter()
+        .map(|ev| {
+            let ev_lower = ev.to_lowercase().replace('\\', "/");
+            let is_subproject = ev_lower.contains("/mcp-")
+                || ev_lower.contains("/editors/")
+                || ev_lower.contains("/tools/")
+                || ev_lower.contains("/scripts/");
+            if is_subproject {
+                0.10
+            } else if primary_dirs.iter().any(|d| ev_lower.contains(d.as_str())) {
+                0.85
+            } else {
+                0.40
+            }
+        })
+        .fold(0.0_f32, f32::max)
+}
+
+/// The user's own project roots, lowercased and slash-normalised for substring
+/// matching against ACE evidence paths.
+///
+/// Sourced from `context_dirs` — the directories the user actually nominated —
+/// NOT from the current working directory.
+///
+/// CWD was the wrong source in every deployment that matters. In an installed
+/// build it is the install directory, so no evidence path can contain it and
+/// every technology collapses to the 0.40 default, silently discarding the
+/// primary/secondary distinction this weight exists to draw. Worse, the
+/// background refresh is registered with `schtasks /Create` and no working
+/// directory (see `engine_scheduler.rs`), so Task Scheduler hands it
+/// `%windir%\system32` — verified on this machine: the task XML has no
+/// `<WorkingDirectory>` element. That unattended run is the one that produces
+/// the user's feed. Even in dev it was wrong: cwd is `src-tauri/` while the
+/// evidence lives at the repo root.
+///
+/// All configured roots count, not just the first — a user with three project
+/// directories is the author of all three.
+pub(crate) fn primary_project_dirs() -> Vec<String> {
+    #[allow(unused_mut)]
+    let mut dirs: Vec<String> = crate::get_context_dirs()
+        .iter()
+        .map(|p| p.to_string_lossy().to_lowercase().replace('\\', "/"))
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    // Dev convenience only, and only when nothing is configured: a debug run
+    // before onboarding has no context_dirs yet. Never in a release build,
+    // where cwd is the install directory.
+    #[cfg(debug_assertions)]
+    if dirs.is_empty() {
+        if let Ok(cwd) = std::env::current_dir() {
+            let s = cwd.to_string_lossy().to_lowercase().replace('\\', "/");
+            if !s.is_empty() {
+                dirs.push(s);
+            }
+        }
+    }
+
+    dirs
 }
 
 /// Fetch ACE-discovered context for relevance scoring
@@ -151,10 +196,8 @@ pub(crate) fn get_ace_context() -> ACEContext {
     // Exclude Platform (e.g. "windows", "macos", "linux") — developing ON a platform
     // doesn't mean the user is interested in content ABOUT that platform.
     if let Ok(tech) = ace.get_detected_tech() {
-        // Determine primary project directory (CWD or first context_dir)
-        let primary_dir = std::env::current_dir()
-            .map(|p| p.to_string_lossy().to_lowercase())
-            .unwrap_or_default();
+        // The user's nominated project roots. NOT cwd — see primary_project_dirs.
+        let primary_dirs = primary_project_dirs();
 
         let filtered: Vec<_> = tech
             .iter()
@@ -173,29 +216,24 @@ pub(crate) fn get_ace_context() -> ACEContext {
             let name_lower = t.name.to_lowercase();
             ctx.detected_tech.push(name_lower.clone());
 
-            // Compute per-tech weight from evidence path (primary vs secondary project)
-            let is_primary = t.evidence.iter().any(|ev| {
-                let ev_lower = ev.to_lowercase().replace('\\', "/");
-                let primary_normalized = primary_dir.replace('\\', "/");
-                ev_lower.contains(&primary_normalized)
-            });
-
-            // Subproject penalty: MCP servers, editors, tools are support infrastructure
-            let is_subproject = t.evidence.iter().any(|ev| {
-                let ev_lower = ev.to_lowercase().replace('\\', "/");
-                ev_lower.contains("/mcp-")
-                    || ev_lower.contains("/editors/")
-                    || ev_lower.contains("/tools/")
-                    || ev_lower.contains("/scripts/")
-            });
-
-            let weight: f32 = if is_subproject {
-                0.10
-            } else if is_primary {
-                0.85
-            } else {
-                0.40
-            };
+            // Weight is computed PER EVIDENCE PATH and the strongest wins.
+            //
+            // This used to be two `any()` passes over the whole evidence list
+            // with the subproject test evaluated FIRST, so a single support
+            // path anywhere in the list pinned the language to 0.10 no matter
+            // how much primary-project evidence sat beside it. Measured live at
+            // e0381216: `javascript` had 47 evidence entries — SEVEN of them
+            // primary-project manifests — and was pinned to 0.10 by four paths
+            // under `editors/vscode`; `typescript` had 26 entries, six of them
+            // primary, pinned by four under `mcp-4da-server`. Both are primary
+            // languages of this application, weighted below a secondary
+            // project's 0.40, in an app that is roughly half TypeScript.
+            //
+            // A language present in BOTH a primary manifest and a subproject
+            // keeps the primary weight; a language that lives ONLY in support
+            // infrastructure still scores 0.10, which is the behaviour the
+            // penalty was written for.
+            let weight = tech_weight_from_evidence(&t.evidence, &primary_dirs);
             let existing = ctx
                 .tech_weights
                 .get(&name_lower)
@@ -215,27 +253,6 @@ pub(crate) fn get_ace_context() -> ACEContext {
             }
         }
     }
-
-    // Get anti-topics WITH confidence scores
-    if let Ok(anti_topics) = ace.get_anti_topics(3) {
-        for a in anti_topics
-            .iter()
-            .filter(|a| a.user_confirmed || a.confidence >= 0.5)
-        {
-            let topic_lower = a.topic.to_lowercase();
-            ctx.anti_topics.push(topic_lower.clone());
-            let conf = if a.confidence.is_finite() && a.confidence >= 0.0 && a.confidence <= 1.0 {
-                a.confidence
-            } else {
-                warn!(target: "4da::scoring", topic = %a.topic, raw = a.confidence, "Invalid ACE anti-topic confidence — clamping to 0.5");
-                0.5
-            };
-            ctx.anti_topic_confidence.insert(topic_lower, conf);
-        }
-    }
-
-    // Learned topic affinities are QUARANTINED — see `load_topic_affinities`.
-    ctx.topic_affinities = load_topic_affinities(&ace);
 
     // Merge session-aware work topics with graduated confidence.
     // Uses gap-based session detection: current session gets highest confidence,
@@ -287,8 +304,90 @@ mod tests {
         let ctx = ACEContext::default();
         assert!(ctx.active_topics.is_empty());
         assert!(ctx.detected_tech.is_empty());
-        assert!(ctx.anti_topics.is_empty());
-        assert!(ctx.topic_affinities.is_empty());
+    }
+    /// The single configured project root these cases were written against.
+    fn roots() -> Vec<String> {
+        vec!["d:/4da".to_string()]
+    }
+
+    fn ev(paths: &[&str]) -> Vec<String> {
+        paths.iter().map(|p| (*p).to_string()).collect()
+    }
+
+    /// 2026-08-26 audit, A7. Four support paths out of 47 must not outvote
+    /// seven primary-project manifests.
+    #[test]
+    fn primary_evidence_survives_a_subproject_path() {
+        let evidence = ev(&[
+            "Found in D:/4DA/editors/vscode/4da/package.json",
+            "Found in D:/4DA/package.json",
+            "Found in D:/4DA/site/package.json",
+        ]);
+        assert_eq!(tech_weight_from_evidence(&evidence, &roots()), 0.85);
+    }
+
+    /// The penalty still does its job when support infrastructure is ALL there is.
+    #[test]
+    fn support_only_tech_keeps_the_subproject_penalty() {
+        let evidence = ev(&[
+            "Found in D:/4DA/mcp-4da-server/package.json",
+            "Found in D:/4DA/editors/vscode/4da/package.json",
+        ]);
+        assert_eq!(tech_weight_from_evidence(&evidence, &roots()), 0.10);
+    }
+
+    #[test]
+    fn tech_outside_the_primary_project_is_secondary() {
+        let evidence = ev(&["Found in C:/Users/x/Documents/other-app/package.json"]);
+        assert_eq!(tech_weight_from_evidence(&evidence, &roots()), 0.40);
+    }
+
+    #[test]
+    fn empty_evidence_scores_zero() {
+        assert_eq!(tech_weight_from_evidence(&[], &roots()), 0.0);
+    }
+
+    /// THE regression. With no configured roots — which is what an installed
+    /// build and the `schtasks` background refresh both produced, because the
+    /// old code read cwd and cwd is the install dir or `system32` — every
+    /// technology collapsed to the 0.40 default and the primary/secondary
+    /// distinction this weight exists to draw disappeared silently.
+    #[test]
+    fn no_configured_roots_cannot_promote_anything_to_primary() {
+        let evidence = ev(&["Found in D:/4DA/package.json"]);
+        assert_eq!(tech_weight_from_evidence(&evidence, &[]), 0.40);
+        // ...and the subproject penalty must still apply, so the absence of
+        // roots degrades one axis rather than flattening all of them.
+        let support = ev(&["Found in D:/4DA/mcp-4da-server/package.json"]);
+        assert_eq!(tech_weight_from_evidence(&support, &[]), 0.10);
+    }
+
+    /// A user with several project directories is the author of all of them.
+    /// The old signature took ONE root, so the second and third project's code
+    /// scored as somebody else's.
+    #[test]
+    fn every_configured_root_counts_as_primary() {
+        let many = vec![
+            "d:/4da".to_string(),
+            "d:/runyourempire/victauri".to_string(),
+            "c:/work/thing".to_string(),
+        ];
+        for path in [
+            "Found in D:/4DA/package.json",
+            "Found in D:/runyourempire/victauri/Cargo.toml",
+            "Found in C:/work/thing/go.mod",
+        ] {
+            assert_eq!(
+                tech_weight_from_evidence(&ev(&[path]), &many),
+                0.85,
+                "{path} should be primary"
+            );
+        }
+        // Something outside every configured root is still secondary.
+        assert_eq!(
+            tech_weight_from_evidence(&ev(&["Found in C:/elsewhere/app/package.json"]), &many),
+            0.40
+        );
     }
 
     #[test]
@@ -296,56 +395,5 @@ mod tests {
         let ctx = ACEContext::default();
         assert!(ctx.dependency_names.is_empty());
         assert!(ctx.dependency_info.is_empty());
-    }
-
-    #[test]
-    fn test_ace_context_anti_topic_confidence_default() {
-        let ctx = ACEContext::default();
-        assert!(ctx.anti_topic_confidence.is_empty());
-    }
-
-    /// AD-029 quarantine guard. An ACE carrying STRONG, well-evidenced learned
-    /// affinities must still hand the scoring context an EMPTY map — that is
-    /// what guarantees no scoring consumer can ever see a learned affinity
-    /// (the former reader, `compute_affinity_multiplier`, was deleted in v20a).
-    ///
-    /// This test fails the moment the loader starts populating the map again.
-    /// Re-enabling affinities means DELETING this test as a deliberate act (and
-    /// filing the ADR AD-029 asks for), not quietly editing around it.
-    #[test]
-    fn ace_context_quarantines_topic_affinities() {
-        use crate::ace::create_test_ace;
-        use crate::ace::BehaviorAction;
-
-        let ace = create_test_ace();
-        // 6 saves clears `get_topic_affinities`' min_exposures of 5 and pushes
-        // |affinity_score| well past the loader's old 0.1 admission floor, so a
-        // populating loader WOULD return a non-empty map here.
-        for item_id in 1..=6 {
-            ace.record_interaction(
-                item_id,
-                BehaviorAction::Save,
-                vec!["rust".to_string()],
-                "hackernews".to_string(),
-            )
-            .expect("record save");
-        }
-
-        // Precondition: the capture layer really did learn something — otherwise
-        // the assertion below would pass vacuously.
-        let learned = ace.get_topic_affinities().expect("read affinities");
-        let rust = learned
-            .iter()
-            .find(|a| a.topic == "rust")
-            .expect("capture layer learned a rust affinity");
-        assert!(
-            rust.affinity_score.abs() > 0.1 && rust.total_exposures >= 3,
-            "fixture must satisfy the old loader's admission test, got {rust:?}"
-        );
-
-        assert!(
-            load_topic_affinities(&ace).is_empty(),
-            "learned affinities are quarantined (AD-029) and must not reach scoring"
-        );
     }
 }

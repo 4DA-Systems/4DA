@@ -67,6 +67,37 @@ fn acquire_instance_and_detect_crash_loop() {
             info!(target: "4da::startup", "Single-instance lock acquired");
         }
         Err(crate::single_instance::InstanceError::AlreadyRunning(pid)) => {
+            // Deep-link launches land HERE when the app is already running:
+            // Windows starts a second process with the fourda:// URL in argv,
+            // and this lock rejects it before tauri_plugin_single_instance
+            // (whose argv forwarding runs much later) ever initializes. Hand
+            // the URL to the primary via the relay file so the click still
+            // works — the primary polls for it (see setup_app) and VALIDATES
+            // on receipt.
+            //
+            // Deliberately a cheap prefix check, NOT validate_deep_link_url:
+            // the validator's rejection path writes a security event via
+            // get_database(), and running it here made the REJECTED second
+            // instance initialize the shared database (observed live
+            // 2026-08-19, complete with a bogus "rejected deep-link" security
+            // event for argv[0], the exe path) — the exact WAL hazard this
+            // lock exists to prevent. skip(1) keeps argv[0] out entirely.
+            if let Some(url) = std::env::args()
+                .skip(1)
+                .find(|a| a.starts_with("fourda://"))
+            {
+                match crate::single_instance::write_deeplink_relay(&dir, &url) {
+                    Ok(()) => {
+                        info!(target: "4da::deeplink", running_pid = pid,
+                            "Deep-link relayed to running instance; exiting");
+                    }
+                    Err(e) => {
+                        error!(target: "4da::deeplink", error = %e,
+                            "Failed to relay deep-link to running instance");
+                    }
+                }
+                std::process::exit(0);
+            }
             error!(target: "4da::startup", running_pid = pid,
                 "Another 4DA instance is already running — this process will exit");
             eprintln!(
@@ -105,9 +136,26 @@ fn install_console_ctrl_handler() {
     unsafe extern "system" fn handler(ctrl_type: u32) -> i32 {
         const CTRL_C_EVENT: u32 = 0;
         const CTRL_CLOSE_EVENT: u32 = 2;
+        // Exit attribution (#501): this handler is the ONLY in-process code
+        // that runs when the attached console delivers Ctrl+C or closes —
+        // e.g. when the hidden cmd / bash job that launched a detached dev
+        // run is torn down. Log the event BEFORE the default handler
+        // terminates the process, then give the non-blocking log worker a
+        // beat to flush; without this line such deaths are indistinguishable
+        // from crashes (observed live 2026-08-24 12:19:20Z — only the
+        // mark_clean_shutdown fingerprint made it to disk).
+        warn!(
+            target: "4da::shutdown",
+            ctrl_type,
+            "Console control event received — external termination imminent (#501)"
+        );
         if ctrl_type == CTRL_C_EVENT || ctrl_type == CTRL_CLOSE_EVENT {
             crate::startup_watchdog::mark_clean_shutdown();
         }
+        // Bounded drain window for the tracing-appender worker thread. The
+        // system allows console handlers seconds before force-killing; 200ms
+        // costs nothing on a path that ends in process death either way.
+        std::thread::sleep(std::time::Duration::from_millis(200));
         0 // FALSE — let the default handler terminate the process
     }
     #[allow(unsafe_code)]
@@ -361,6 +409,11 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
             let ctx_count = db.context_count().unwrap_or(0);
             let item_count = db.total_item_count().unwrap_or(0);
             info!(target: "4da::startup", context_chunks = ctx_count, source_items = item_count, "Database ready");
+
+            // Seed the daily LLM budget counters from today's persisted usage.
+            // The counters are process-local atomics: without this, every
+            // restart (GUI or headless engine) granted a fresh daily budget.
+            crate::llm::seed_daily_usage_from_db();
 
             match db.purge_adapter_level_feed_health() {
                 Ok(0) => {}
@@ -632,9 +685,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 settings_model
             }
         };
+        crate::embedding_calibration::initialize_calibration(&model_name);
         let needs_reembed = {
             let conn = db.conn.lock();
-            crate::embedding_calibration::initialize_calibration(&conn, &model_name);
             crate::reembed::check_embedding_model_changed(&conn)
         };
         if needs_reembed {
@@ -731,7 +784,72 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         let _ = app_handle_analyze.emit("start-analysis-from-tray", ());
     });
 
-    // Handle deep-link URLs (4da://activate?key=...)
+    // Deliver a validated deep-link URL to the frontend, surviving a DESTROYED
+    // main window. Observed live 2026-08-19: the main window can die without
+    // any CloseRequested (no hide-to-tray log, no app-side destroy caller —
+    // suspected WebView2-level death; see the Destroyed forensic log in
+    // handle_run_event). An emit into a windowless app goes nowhere and the
+    // click "does nothing". So: window present → front it and emit; window
+    // absent → PARK the URL (the cold-start mechanism) and recreate the main
+    // window from its config — the fresh frontend collects the parked URL on
+    // mount via take_pending_deep_link.
+    fn deliver_deep_link(handle: &tauri::AppHandle, url: String) {
+        if let Some(window) = handle.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.set_focus();
+            let _ = handle.emit("deep-link-activate", url);
+        } else {
+            info!(target: "4da::deeplink", "Main window missing — parking deep-link and recreating window");
+            crate::settings_commands::set_pending_deep_link(url);
+            if ensure_main_window(handle).is_none() {
+                error!(target: "4da::deeplink", "Could not recreate main window for deep-link delivery");
+            }
+        }
+    }
+
+    // Re-register the fourda:// protocol handler on every launch (Windows/Linux
+    // write it to the user registry / .desktop entries at runtime; macOS is
+    // Info.plist-only and register_all is a no-op there). Without this, only an
+    // INSTALLED build ever registered the scheme — dev builds silently relied on
+    // whatever exe the installer last wrote, and the 4da→fourda rename would
+    // leave stale registrations pointing at the old scheme forever. Re-pointing
+    // at the current exe on launch is the Slack/Discord pattern: idempotent and
+    // self-healing.
+    {
+        use tauri_plugin_deep_link::DeepLinkExt;
+        if let Err(e) = app.deep_link().register_all() {
+            warn!(target: "4da::deeplink", error = %e, "Failed to register deep-link schemes");
+        }
+
+        // A deep link that LAUNCHED the app rides in argv and exists before any
+        // listener attaches, so the event below never fires for it. Park it for
+        // the frontend to collect via take_pending_deep_link once mounted.
+        match app.deep_link().get_current() {
+            Ok(Some(urls)) => {
+                for url in urls {
+                    let url = url.to_string();
+                    if crate::utils::validate_deep_link_url(&url) {
+                        info!(target: "4da::deeplink", url = %crate::utils::redact_deep_link(&url), "Launch deep-link parked for frontend");
+                        crate::settings_commands::set_pending_deep_link(url);
+                        break;
+                    } else {
+                        warn!(target: "4da::security", url = %crate::utils::redact_deep_link(&url), "Rejected invalid launch deep-link");
+                        if let Ok(db) = crate::get_database() {
+                            db.log_security_event(
+                                "deeplink_blocked",
+                                &crate::utils::redact_deep_link(&url),
+                                "warning",
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(None) => {}
+            Err(e) => warn!(target: "4da::deeplink", error = %e, "Could not read launch deep-link"),
+        }
+    }
+
+    // Handle deep-link URLs (fourda://activate?key=...)
     let deep_link_handle = app_handle.clone();
     app.listen("deep-link://new-url", move |event| {
         if let Some(urls) = event
@@ -743,18 +861,61 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             if let Ok(url_list) = serde_json::from_str::<Vec<String>>(&format!("[{urls}]")) {
                 for url in url_list {
                     if crate::utils::validate_deep_link_url(&url) {
-                        info!(target: "4da::deeplink", url = %url, "Deep-link received");
-                        let _ = deep_link_handle.emit("deep-link-activate", url);
+                        info!(target: "4da::deeplink", url = %crate::utils::redact_deep_link(&url), "Deep-link received");
+                        deliver_deep_link(&deep_link_handle, url);
                     } else {
-                        warn!(target: "4da::security", url = %url, "Rejected invalid deep-link URL");
+                        warn!(target: "4da::security", url = %crate::utils::redact_deep_link(&url), "Rejected invalid deep-link URL");
                         if let Ok(db) = crate::get_database() {
-                            db.log_security_event("deeplink_blocked", &url, "warning");
+                            db.log_security_event(
+                                "deeplink_blocked",
+                                &crate::utils::redact_deep_link(&url),
+                                "warning",
+                            );
                         }
                     }
                 }
             }
         }
     });
+
+    // Deep-link relay poll: a fourda:// launch while THIS instance runs spawns
+    // a second process that our pre-Tauri file lock rejects long before
+    // tauri_plugin_single_instance could forward its argv — so the rejected
+    // process parks the URL in the data dir instead (single_instance.rs) and
+    // this poll delivers it. One file-stat per second against a path that
+    // almost never exists; latency well under the click-to-app expectation.
+    {
+        let relay_handle = app_handle.clone();
+        let relay_dir = crate::state::get_db_path()
+            .parent()
+            .map(std::path::Path::to_path_buf);
+        if let Some(relay_dir) = relay_dir {
+            tauri::async_runtime::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+                loop {
+                    tick.tick().await;
+                    if let Some(url) = crate::single_instance::take_deeplink_relay(&relay_dir) {
+                        if crate::utils::validate_deep_link_url(&url) {
+                            info!(target: "4da::deeplink", url = %crate::utils::redact_deep_link(&url), "Deep-link received via relay");
+                            // The user clicked a button expecting the app to
+                            // answer — front the window (recreating it if it
+                            // was destroyed) and deliver.
+                            deliver_deep_link(&relay_handle, url);
+                        } else {
+                            warn!(target: "4da::security", url = %crate::utils::redact_deep_link(&url), "Rejected invalid relayed deep-link");
+                            if let Ok(db) = crate::get_database() {
+                                db.log_security_event(
+                                    "deeplink_blocked",
+                                    &crate::utils::redact_deep_link(&url),
+                                    "warning",
+                                );
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
 
     let _app_handle_toggle = app_handle.clone();
     app.listen("tray-toggle-monitoring", move |_| {
@@ -1812,8 +1973,94 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
+/// Return the main window, RECREATING it from config if it was destroyed.
+///
+/// The main window is built once from tauri.conf.json at startup and nothing
+/// in the app recreates it — so any destruction (observed live 2026-08-19,
+/// killer untraced: no CloseRequested fired, no app-side destroy caller)
+/// permanently stranded deep links and the tray's "Show 4DA" until an app
+/// restart. Recreating from the same config re-runs the normal frontend boot,
+/// so pending deep links are collected on mount exactly like a cold start.
+pub(crate) fn ensure_main_window<R: tauri::Runtime>(
+    handle: &tauri::AppHandle<R>,
+) -> Option<tauri::WebviewWindow<R>> {
+    if let Some(window) = handle.get_webview_window("main") {
+        return Some(window);
+    }
+    let config = handle
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "main")
+        .cloned()?;
+    match tauri::WebviewWindowBuilder::from_config(handle, &config).and_then(|b| b.build()) {
+        Ok(window) => {
+            warn!(target: "4da::window", "Main window was destroyed — recreated from config");
+            // The config may leave the window hidden until frontend-ready; a
+            // user-triggered recreation must be visible immediately.
+            let _ = window.show();
+            let _ = window.set_focus();
+            Some(window)
+        }
+        Err(e) => {
+            error!(target: "4da::window", error = %e, "Failed to recreate main window");
+            None
+        }
+    }
+}
+
 /// Handle the `.run()` event callback for hide-to-tray and shutdown cleanup.
 pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunEvent) {
+    // Forensics: the main window has died with no CloseRequested and no
+    // app-side destroy caller (2026-08-19). Log every window destruction so
+    // the next occurrence names its moment instead of vanishing silently.
+    // `remaining` counts the windows still alive AFTER this destruction
+    // (tauri's manager removes the destroyed window before this callback
+    // runs) — remaining=0 means the ExitRequested guard below is what now
+    // stands between the app and process death (#501).
+    if let tauri::RunEvent::WindowEvent {
+        label,
+        event: tauri::WindowEvent::Destroyed,
+        ..
+    } = &event
+    {
+        let remaining = app_handle.webview_windows().len();
+        warn!(target: "4da::window", label = %label, remaining, "Window destroyed");
+    }
+
+    // Exit guard (#501): tauri-runtime-wry fires ExitRequested with
+    // code=None when the LAST window is destroyed. Unanswered, tao's event
+    // loop terminates and `process::exit()`s — no further app code runs and
+    // the non-blocking log appender's buffered tail is lost, so the death is
+    // silent. The zero-window moment is reachable in normal operation: the
+    // notification/briefing "JS never loaded — recreating" recovery destroys
+    // its stale window BEFORE the replacement exists. A tray-resident app
+    // must survive window teardown; explicit exits (tray quit `app.exit(0)`,
+    // restart) carry Some(code) and proceed. `prevent_exit()` must be called
+    // synchronously here — the runtime reads the answer with `try_recv`
+    // immediately after this callback returns.
+    if let tauri::RunEvent::ExitRequested { code, api, .. } = &event {
+        let tray_alive = app_handle
+            .try_state::<parking_lot::Mutex<Option<tauri::tray::TrayIcon<tauri::Wry>>>>()
+            .map(|state| state.lock().is_some())
+            .unwrap_or(false);
+        if crate::exit_guard::should_prevent_exit(*code, tray_alive) {
+            api.prevent_exit();
+            warn!(
+                target: "4da::shutdown",
+                "Exit requested by window teardown (all windows destroyed) — PREVENTED; tray keeps the app alive (#501)"
+            );
+        } else {
+            info!(
+                target: "4da::shutdown",
+                code = ?code,
+                tray_alive,
+                "Exit requested — proceeding to shutdown"
+            );
+        }
+    }
+
     // Hide-to-tray: intercept window close when enabled
     if let tauri::RunEvent::WindowEvent {
         event: tauri::WindowEvent::CloseRequested { api, .. },
@@ -2069,18 +2316,37 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
     // update the feed without clearing a foreground manual analysis state.
     info!(target: "4da::monitor", "Step 2: Analyzing cached content (silent)...");
     match analysis::analyze_cached_content_silent(&handle).await {
-        Ok(results) => {
-            let relevant_count = results.iter().filter(|r| r.relevant).count();
+        Ok(cycle) => {
+            // "New this cycle" = the scored subset (audit item 9). On a
+            // differential run the returned set is a merged display corpus;
+            // receipts and notifications must count the real work, or every
+            // 30-minute cycle re-reports (and re-notifies) the whole feed.
+            let new_results: Vec<crate::SourceRelevance> =
+                cycle.scored_results().cloned().collect();
+            let results = cycle.results;
+            let relevant_count = new_results.iter().filter(|r| r.relevant).count();
 
             // Record this cycle's freshness receipt (engine_runs) so the MCP server and external
             // verifiers can distinguish fresh data from stale — see engine_runs.rs.
-            receipt.items_scored = results.len();
+            // This receipt is also the next run's differential watermark
+            // (`ok=1 AND items_scored>0`, engine_runs::last_scoring_watermark).
+            receipt.items_scored = new_results.len();
             receipt.relevant_count = relevant_count;
             receipt.duration_ms = started.elapsed().as_millis() as u64;
             crate::engine_runs::record(receipt);
 
-            // Build signal summary for notifications
-            let signal_summary = build_signal_summary(&results);
+            // Tier-2 LLM passes (judge + content analysis + LlmReject
+            // demotions) — non-blocking, budget- and BYOK-gated inside.
+            if let Ok(db) = crate::get_database() {
+                let db = db.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = crate::llm_judgments::run_post_cycle_llm_passes(&db).await;
+                });
+            }
+
+            // Build signal summary for notifications — over the NEWLY scored
+            // subset, so a standing critical no longer re-notifies every cycle.
+            let signal_summary = build_signal_summary(&new_results);
 
             // Extract notification info before moving signal_summary
             let notification_info = signal_summary

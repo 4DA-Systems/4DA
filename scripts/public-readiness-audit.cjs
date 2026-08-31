@@ -67,16 +67,9 @@ const MIXED_DIRS = ['.ai/', 'docs/strategy/'];
 // so this audit and scripts/check-doc-location.cjs cannot drift apart.
 const PII_EXCLUDE_PATHS = new Set(PII_EXCLUDE_PATH_LIST);
 
-const SECRET_PATTERNS = [
-  { label: 'OpenAI secret key',       regex: /sk-[a-zA-Z0-9]{32,}/ },
-  { label: 'Stripe live secret key',  regex: /sk_live_[a-zA-Z0-9]{20,}/ },
-  { label: 'Slack bot token',         regex: /xoxb-[a-zA-Z0-9-]{40,}/ },
-  { label: 'GitHub personal token',   regex: /ghp_[a-zA-Z0-9]{30,}/ },
-  { label: 'AWS access key',          regex: /\bAKIA[A-Z0-9]{16}\b/ },
-  { label: 'Google API key',          regex: /\bAIza[a-zA-Z0-9_-]{30,}\b/ },
-  { label: 'JWT',                     regex: /\beyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}\b/ },
-  { label: 'Private key block',       regex: /BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY/ },
-];
+// Credential shapes live in scripts/lib/secret-patterns.cjs so this audit and
+// its regression test cannot drift apart (same reason as pii-hashes.cjs).
+const { SECRET_PATTERNS, looksLikePlaceholder } = require("./lib/secret-patterns.cjs");
 
 const SUSPICIOUS_FILENAMES = [
   /\bsecret\b/i, /\bcredential(s)?\b/i, /\bpassword(s)?\b/i,
@@ -188,7 +181,9 @@ function check5_secrets(files, findings) {
     if (!content) continue;
     for (const { label, regex } of SECRET_PATTERNS) {
       const match = content.match(regex);
-      if (match) {
+      // Fixtures are filtered on the MATCHED TEXT, not the file path, so a real
+      // key dropped into a test file is still reported.
+      if (match && !looksLikePlaceholder(match[0])) {
         findings.push({ sev: 'block', rule: 'secret', file: f,
           msg: `${label}: ${match[0].slice(0, 20)}...` });
       }

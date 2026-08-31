@@ -109,6 +109,56 @@ function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
   if (!releaseYml.includes('includeUpdaterJson: true')) {
     fail('release.yml must set includeUpdaterJson: true so Tauri emits latest.json.');
   }
+
+  // The workflow asking for latest.json is not the same as Tauri PRODUCING it.
+  // `createUpdaterArtifacts` defaults to false, and with it unset the bundler
+  // emitted no .sig at all, so "Found artifacts:" held only the .exe, the
+  // required-asset check hard-failed, and the release stayed a draft. The gate
+  // above checked the request and never the capability — text, not meaning.
+  if (tauriConfig.bundle?.createUpdaterArtifacts !== true) {
+    fail(
+      'tauri.conf.json must set bundle.createUpdaterArtifacts: true — it defaults to false, ' +
+        'and without it Tauri emits no updater signature, so latest.json can never be produced.'
+    );
+  }
+
+  // A custom desktopTemplate opts out of Tauri's generated .desktop entry, so
+  // the deep-link scheme in it is hand-maintained and drifted: the file still
+  // registered `x-scheme-handler/4da` four months after #491 renamed the scheme
+  // to `fourda`. Nothing referenced the file, which is why nothing caught it.
+  const desktopTemplateRel = tauriConfig.bundle?.linux?.deb?.desktopTemplate;
+  if (desktopTemplateRel) {
+    const templatePath = path.join(root, 'src-tauri', desktopTemplateRel);
+    if (!fs.existsSync(templatePath)) {
+      fail(`tauri.conf.json references a desktopTemplate that does not exist: ${desktopTemplateRel}`);
+    } else {
+      const template = fs.readFileSync(templatePath, 'utf8');
+      const schemes = tauriConfig.plugins?.['deep-link']?.desktop?.schemes ?? [];
+      for (const scheme of schemes) {
+        if (!template.includes(`x-scheme-handler/${scheme}`)) {
+          fail(
+            `${desktopTemplateRel} must register x-scheme-handler/${scheme} — ` +
+              'the Linux packages are the only place this is hand-maintained.'
+          );
+        }
+      }
+      const stale = template.match(/x-scheme-handler\/([A-Za-z0-9+.-]+)/g) ?? [];
+      for (const hit of stale) {
+        const name = hit.split('/')[1];
+        if (!schemes.includes(name)) {
+          fail(
+            `${desktopTemplateRel} registers x-scheme-handler/${name}, which is not in ` +
+              'tauri.conf.json deep-link schemes. A retired scheme must not stay registered.'
+          );
+        }
+      }
+      // Without %U the handler launches with no argument, so the URL that
+      // triggered it is dropped and activation silently does nothing.
+      if (!/^Exec=.*%U/m.test(template)) {
+        fail(`${desktopTemplateRel} Exec= must pass %U, or deep links arrive with no URL.`);
+      }
+    }
+  }
   const requiredAssets = releaseYml.match(/REQUIRED=\(([\s\S]*?)\n\s*\)/)?.[1] ?? '';
   if (!requiredAssets.includes('"latest.json"')) {
     fail('release.yml must require latest.json before publishing a desktop release.');
@@ -124,6 +174,88 @@ function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
   }
   if (!releaseYml.includes('gh release upload "$POINTER_TAG" "$WORK_DIR/latest.json"')) {
     fail('release.yml must upload latest.json to the desktop-latest release.');
+  }
+
+  // A `v*` tag is not necessarily a release — the repo has eight `v0.0.N-test`
+  // dry-run tags. Both of the steps below used to be unconditional, so a dry run
+  // that SUCCEEDED would have clobbered latest.json on the pointer release every
+  // installed client polls, offering a test build to real users, and un-drafted
+  // the test release. It never fired only because all eight dry runs failed
+  // earlier in the matrix. The next release attempt is expected to open with
+  // exactly such a dry run.
+  const PRODUCTION_TAG_GUARD = "needs.create-release.outputs.production == 'true'";
+  if (!releaseYml.includes('id: tagkind')) {
+    fail('release.yml must classify the tag (id: tagkind) before publishing anything.');
+  }
+  if (!/\^v\[0-9\]\+\\.\[0-9\]\+\\.\[0-9\]\+\$/.test(releaseYml)) {
+    fail('release.yml tag classifier must match a bare vMAJOR.MINOR.PATCH tag exactly.');
+  }
+  // The Windows signing waiver (ALLOW_UNSIGNED_WINDOWS) is the one deliberate
+  // hole in a gate that exists because unsigned builds once shipped silently.
+  // Three properties keep it honest, and all three are asserted here.
+  //
+  // 1. TAG-SCOPED, NOT BOOLEAN. The variable's value must equal the tag being
+  //    built. A boolean left set to true authorises every future release; a tag
+  //    name cannot, because the next tag differs and the gate closes again.
+  if (releaseYml.includes('unsigned_windows_ok')) {
+    const waiverLine = releaseYml
+      .split(String.fromCharCode(10))
+      .find((l) => l.includes('ALLOW_UNSIGNED_WINDOWS') && l.includes('"$TAG"'));
+    if (!waiverLine) {
+      fail(
+        'release.yml must compare ALLOW_UNSIGNED_WINDOWS against the tag being built. ' +
+          'A boolean waiver silently authorises every subsequent release.'
+      );
+    }
+
+    // 2. WINDOWS ONLY. An un-notarized macOS .app is REFUSED by Gatekeeper, not
+    //    warned about, so a waiver there ships a build nobody can open.
+    const macCase = releaseYml.slice(releaseYml.indexOf('            macOS)'));
+    const macBlock = macCase.slice(0, macCase.indexOf(';;'));
+    if (/ALLOW_UNSIGNED|UNSIGNED_WINDOWS_OK/.test(macBlock)) {
+      fail('the signing waiver must never apply to macOS — Gatekeeper refuses an un-notarized app outright.');
+    }
+    if (!/require APPLE_CERTIFICATE/.test(macBlock) || !/require APPLE_TEAM_ID/.test(macBlock)) {
+      fail('release.yml must still require every Apple signing credential unconditionally.');
+    }
+
+    // 3. THE CHECK STILL RUNS. The waiver may change the verdict, never whether
+    //    the measurement happens — that distinction is what #437 was about.
+    const verifyIdx = releaseYml.indexOf('- name: Verify Windows Authenticode signature');
+    const verifyHead = releaseYml.slice(verifyIdx, verifyIdx + 900);
+    if (!verifyHead.includes("if: runner.os == \'Windows\'" + String.fromCharCode(10))) {
+      fail(
+        'the Windows signature check must stay unconditional on Windows. Skipping the ' +
+          'check under a waiver recreates the 2026-04 defect: unsigned artifacts under a green tick.'
+      );
+    }
+  }
+  // npm publishes are irreversible, and publish-mcp had no tag classification
+  // at all — a desktop dry-run tag would have attempted one. Gated at job level.
+  const mcpJob = releaseYml.slice(releaseYml.indexOf('  publish-mcp:'));
+  if (!releaseYml.includes('  publish-mcp:')) {
+    fail('release.yml must contain the publish-mcp job.');
+  } else if (!mcpJob.slice(0, 700).includes(PRODUCTION_TAG_GUARD)) {
+    fail(
+      'release.yml job "publish-mcp" must be gated on ' + PRODUCTION_TAG_GUARD +
+        ' — an npm publish cannot be undone, and a dry-run tag must not trigger one.'
+    );
+  }
+
+  for (const step of ['Publish desktop updater manifest', 'Publish release']) {
+    const idx = releaseYml.indexOf(`- name: ${step}`);
+    if (idx === -1) {
+      fail(`release.yml must contain the "${step}" step.`);
+      continue;
+    }
+    // The guard must be on the step itself: the next few lines, not anywhere.
+    const window = releaseYml.slice(idx, idx + 200);
+    if (!window.includes(PRODUCTION_TAG_GUARD)) {
+      fail(
+        `release.yml step "${step}" must be gated on ${PRODUCTION_TAG_GUARD} — ` +
+          'otherwise a dry-run tag publishes to real users.'
+      );
+    }
   }
   if (releaseYml.includes('PLACEHOLDER_SHA256') || releaseYml.includes('TODO: compute the SHA-256')) {
     fail('release.yml must not contain placeholder CodeSignTool checksum instructions.');

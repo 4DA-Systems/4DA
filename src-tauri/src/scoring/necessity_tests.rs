@@ -531,3 +531,200 @@ fn test_signal_priority_still_wins_over_cvss() {
         result.score
     );
 }
+
+// ============================================================================
+// persist_from_results (necessity persistence)
+// ============================================================================
+
+fn neutral_breakdown() -> crate::types::ScoreBreakdown {
+    crate::types::ScoreBreakdown {
+        context_score: 0.0,
+        interest_score: 0.0,
+        keyword_score: 0.0,
+        score_ceiling: None,
+        ace_boost: 0.0,
+        affinity_mult: 1.0,
+        anti_penalty: 0.0,
+        freshness_mult: 1.0,
+        feedback_boost: 0.0,
+        source_quality_boost: 0.0,
+        confidence_by_signal: std::collections::HashMap::new(),
+        signal_count: 0,
+        confirmed_signals: vec![],
+        confirmation_mult: 1.0,
+        dep_match_score: 0.0,
+        matched_deps: vec![],
+        strongly_grounded: false,
+        degraded_inputs: vec![],
+        domain_relevance: 1.0,
+        content_quality_mult: 1.0,
+        novelty_mult: 1.0,
+        intent_boost: 0.0,
+        content_type: None,
+        content_dna_mult: 1.0,
+        competing_mult: 1.0,
+        llm_score: None,
+        llm_reason: None,
+        stack_boost: 0.0,
+        ecosystem_shift_mult: 1.0,
+        stack_competing_mult: 1.0,
+        window_boost: 0.0,
+        matched_window_id: None,
+        skill_gap_boost: 0.0,
+        necessity_score: 0.0,
+        necessity_reason: None,
+        necessity_category: None,
+        necessity_urgency: None,
+        signal_strength_bonus: 0.0,
+        content_analysis_mult: 1.0,
+        advisor_signals: vec![],
+        disagreement: None,
+        advisory_source: None,
+        cvss_score: None,
+        cvss_severity: None,
+        affected_versions: None,
+        fixed_version: None,
+        installed_version: None,
+        is_version_affected: None,
+        dependency_path: None,
+        affected_project_count: None,
+        negative_stack_prior: 1.0,
+        explanation_factors: vec![],
+    }
+}
+
+/// Minimal SourceRelevance carrying only what persist_from_results reads.
+fn relevance_with_necessity(
+    id: u64,
+    necessity: f32,
+    reason: Option<&str>,
+    with_breakdown: bool,
+) -> crate::SourceRelevance {
+    let breakdown = with_breakdown.then(|| {
+        let mut b = neutral_breakdown();
+        b.necessity_score = necessity;
+        b.necessity_reason = reason.map(str::to_string);
+        b.necessity_category = (necessity > 0.0).then(|| "security_vulnerability".to_string());
+        b.necessity_urgency = (necessity > 0.0).then(|| "immediate".to_string());
+        b
+    });
+    crate::SourceRelevance {
+        id,
+        title: format!("item {id}"),
+        url: None,
+        top_score: 0.5,
+        matches: vec![],
+        relevant: true,
+        context_score: 0.0,
+        interest_score: 0.0,
+        excluded: false,
+        excluded_by: None,
+        source_type: "test".into(),
+        explanation: None,
+        confidence: None,
+        score_breakdown: breakdown,
+        signal_type: None,
+        signal_priority: None,
+        signal_action: None,
+        signal_triggers: None,
+        signal_horizon: None,
+        similar_count: 0,
+        similar_titles: vec![],
+        serendipity: false,
+        streets_engine: None,
+        decision_window_match: None,
+        decision_boost_applied: 0.0,
+        created_at: None,
+        detected_lang: String::new(),
+        is_critical_alert: false,
+        applicability: None,
+        advisory_id: None,
+        primary_topic: None,
+        evidence_score: 0.5,
+        rank_factors: None,
+    }
+}
+
+#[test]
+fn test_persist_from_results_writes_only_nonzero_necessity() {
+    let db = crate::test_utils::test_db();
+    let hot = crate::test_utils::insert_test_item(&db, "cve", "n1", "CVE hits axum", "body");
+    let cold = crate::test_utils::insert_test_item(&db, "hackernews", "n2", "Listicle", "body");
+    let bare = crate::test_utils::insert_test_item(&db, "hackernews", "n3", "No breakdown", "body");
+
+    let results = vec![
+        relevance_with_necessity(
+            hot as u64,
+            0.85,
+            Some("Security vulnerability affects axum"),
+            true,
+        ),
+        relevance_with_necessity(cold as u64, 0.0, None, true),
+        relevance_with_necessity(bare as u64, 0.9, Some("unreachable"), false),
+    ];
+
+    persist_from_results(&db, &results);
+
+    let conn = db.conn.lock();
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM item_necessity", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(
+        count, 1,
+        "only the non-zero-necessity item with a breakdown persists"
+    );
+
+    let (score, reason, category, urgency): (f64, Option<String>, Option<String>, Option<String>) =
+        conn.query_row(
+            "SELECT necessity_score, necessity_reason, necessity_category, necessity_urgency
+             FROM item_necessity WHERE source_item_id = ?1",
+            rusqlite::params![hot],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .unwrap();
+    assert!((score - 0.85).abs() < 0.001);
+    assert_eq!(
+        reason.as_deref(),
+        Some("Security vulnerability affects axum")
+    );
+    assert_eq!(category.as_deref(), Some("security_vulnerability"));
+    assert_eq!(urgency.as_deref(), Some("immediate"));
+}
+
+#[test]
+fn test_persist_from_results_upserts_on_rescore() {
+    let db = crate::test_utils::test_db();
+    let id = crate::test_utils::insert_test_item(&db, "cve", "n4", "CVE", "body");
+
+    persist_from_results(
+        &db,
+        &[relevance_with_necessity(
+            id as u64,
+            0.85,
+            Some("first"),
+            true,
+        )],
+    );
+    persist_from_results(
+        &db,
+        &[relevance_with_necessity(
+            id as u64,
+            0.40,
+            Some("decayed"),
+            true,
+        )],
+    );
+
+    let conn = db.conn.lock();
+    let (count, score, reason): (i64, f64, Option<String>) = conn
+        .query_row(
+            "SELECT COUNT(*), necessity_score, necessity_reason
+             FROM item_necessity WHERE source_item_id = ?1",
+            rusqlite::params![id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(count, 1, "upsert must not duplicate rows");
+    assert!((score - 0.40).abs() < 0.001, "re-score refreshes the row");
+    assert_eq!(reason.as_deref(), Some("decayed"));
+}

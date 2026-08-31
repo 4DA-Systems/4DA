@@ -11,17 +11,17 @@
 //
 // THE LIMIT OF THAT CLAIM: "the next refresh denies" only bounds access for a
 // client that actually refreshes. A LIFETIME licence key issued by
-// /api/streets/activate carries an embedded expiry of the year 2099 and verifies
+// /api/license/activate carries an embedded expiry of the year 2099 and verifies
 // offline against the app's built-in public key, so a refunded lifetime holder who
 // simply never calls this endpoint keeps working regardless of what Stripe says.
 // This endpoint is only load-bearing for revocation once every tier is issued a
-// short-dated key. See the terminal-status note in functions/api/streets/activate.js.
+// short-dated key. See the terminal-status note in functions/api/license/activate.js.
 //
 // Secrets: STRIPE_SECRET_KEY, LICENSE_PRIVATE_KEY_HEX.
 
 import Stripe from 'stripe';
 import { signLicenseToken } from '../../../lib/ed25519-license.js';
-import { isLifetimeEntitled } from '../../../lib/entitlement.js';
+import { isLifetimeEntitled, meta } from '../../../lib/entitlement.js';
 
 // Lease window. Aligned with the app's 30-day activation grace so an offline
 // user's token never expires *before* their grace does (avoids a confusing
@@ -108,7 +108,7 @@ export async function onRequest({ request, env }) {
     }
 
     const tier = normalizeTier(
-      activeSub?.metadata?.streets_tier || customer.metadata?.streets_tier || 'signal',
+      meta(activeSub?.metadata, 'tier') || meta(customer.metadata, 'tier') || 'signal',
     );
 
     const now = new Date();

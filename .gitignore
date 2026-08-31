@@ -84,6 +84,12 @@ data/settings.json
 # License validation cache (runtime state)
 data/license_cache.json
 
+# Atomic-save staging files. The final .json and .bak are ignored above, but the
+# .tmp they are written through was not — and settings.json.tmp holds the user
+# API key and licence key in plaintext for the width of a rename. A force-kill
+# in that window (routine in this project) orphans the file until the next save.
+data/*.tmp
+
 # Model registry cache (auto-refreshed from LiteLLM)
 data/model_registry.json
 

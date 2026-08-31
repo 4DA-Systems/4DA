@@ -67,12 +67,17 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
     }
   },
 
-  activateLicense: async (key: string): Promise<{ ok: boolean; reason?: string }> => {
+  activateLicense: async (
+    key: string,
+    fromDeepLink?: boolean,
+  ): Promise<{ ok: boolean; reason?: string }> => {
     set({ licenseLoading: true });
     try {
-      const result = await cmd('activate_license', {
-        licenseKey: key,
-      });
+      // Only send fromDeepLink when it is actually a deep-link activation, so the
+      // manual-paste path sends exactly { licenseKey } (unchanged contract).
+      const params: { licenseKey: string; fromDeepLink?: boolean } = { licenseKey: key };
+      if (fromDeepLink) params.fromDeepLink = true;
+      const result = await cmd('activate_license', params);
       if (result.success) {
         set({
           tier: result.tier as 'free' | 'pro' | 'signal' | 'team' | 'enterprise',

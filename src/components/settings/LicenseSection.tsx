@@ -178,7 +178,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
               : t('settings.license.expiredGeneric')}
           </p>
           <a
-            href="https://4da.ai/signal"
+            href="https://4da.ai/signal?utm_source=app&utm_medium=license&utm_content=settings-expired"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block mt-2 px-3 py-1.5 text-[10px] font-semibold text-bg-primary bg-accent-gold rounded hover:bg-accent-gold-hover transition-colors"
@@ -193,7 +193,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
         <div className="mb-3 p-2.5 rounded-lg bg-accent-gold/10 border border-accent-gold/30">
           <p className="text-[10px] text-accent-gold">
             {t('settings.license.expiresIn', { count: daysRemaining })}{' '}
-            <a href="https://4da.ai/signal" target="_blank" rel="noopener noreferrer" className="underline font-medium">
+            <a href="https://4da.ai/signal?utm_source=app&utm_medium=license&utm_content=settings-renew" target="_blank" rel="noopener noreferrer" className="underline font-medium">
               {t('settings.license.renewNow')}
             </a>
           </p>
@@ -305,7 +305,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
 
           {/* Upgrade link */}
           <a
-            href="https://4da.ai/signal"
+            href="https://4da.ai/signal?utm_source=app&utm_medium=upsell&utm_content=settings-license"
             target="_blank"
             rel="noopener noreferrer"
             className="block text-center text-xs text-accent-gold hover:underline"

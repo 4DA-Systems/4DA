@@ -81,6 +81,18 @@ pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String
 
             let ace_conn = get_ace_engine().ok().map(|ace| ace.get_conn().clone());
             for (topic, embedding) in batch.into_iter().zip(embeddings) {
+                // Zero/near-zero vectors are provider-outage fallbacks, not
+                // embeddings — keep them out of the session cache too (the DB
+                // store refuses them), so the next call retries the embed
+                // instead of serving a poisoned similarity of 0.0 all session.
+                if crate::vector_norm(&embedding) < f32::EPSILON {
+                    tracing::warn!(
+                        target: "4da::embeddings",
+                        topic = %topic,
+                        "Skipping zero-vector topic embedding (provider outage fallback)"
+                    );
+                    continue;
+                }
                 if let Some(ref conn) = ace_conn {
                     if let Err(e) = ace::store_topic_embedding(conn, &topic, &embedding) {
                         tracing::warn!("Failed to store topic embedding: {e}");

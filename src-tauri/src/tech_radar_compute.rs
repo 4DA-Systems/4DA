@@ -123,7 +123,6 @@ pub(crate) struct EntryBuilder {
     pub signals: Vec<String>,
     pub decision_ref: Option<i64>,
     pub stack_weight: f64,
-    pub engagement: f64,
     pub trend: f64,
     pub decision_boost: f64,
 }
@@ -137,17 +136,15 @@ impl EntryBuilder {
             signals: Vec::new(),
             decision_ref: None,
             stack_weight,
-            engagement: 0.0,
             trend: 0.0,
             decision_boost: 0.0,
         }
     }
 
     pub fn score(&self) -> f64 {
-        ((self.stack_weight * 0.4)
-            + (self.engagement * 0.3)
-            + (self.trend * 0.2)
-            + (self.decision_boost * 0.1))
+        // v20b: the engagement term (topic-affinity overlay) was removed with
+        // the implicit-capture layer; in production it was already always 0.
+        ((self.stack_weight * 0.4) + (self.trend * 0.2) + (self.decision_boost * 0.1))
             .clamp(0.0, 1.0)
     }
 
@@ -197,7 +194,6 @@ pub(crate) fn compute_radar(conn: &Connection) -> Result<TechRadar> {
 
     // Steps 2-5: Overlay data layers
     overlay_decisions(conn, &mut entries);
-    overlay_affinities(conn, &mut entries);
     overlay_signal_trends(conn, &mut entries);
     detect_movement(conn, &mut entries);
 
@@ -299,37 +295,6 @@ fn overlay_decisions(conn: &Connection, entries: &mut HashMap<String, EntryBuild
                 eb.ring = RadarRing::Hold;
                 eb.decision_boost = 0.0;
                 eb.signals.push("Superseded by newer decision".into());
-            }
-        }
-    }
-}
-
-/// Overlay topic affinity engagement data.
-fn overlay_affinities(conn: &Connection, entries: &mut HashMap<String, EntryBuilder>) {
-    let mut stmt = match conn
-        .prepare("SELECT topic, affinity_score FROM topic_affinities WHERE affinity_score > 0.3")
-    {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let rows = match stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
-    }) {
-        Ok(r) => r,
-        Err(_) => return,
-    };
-    for row in rows.flatten() {
-        let (topic, score) = row;
-        if let Some(eb) = entries.get_mut(&topic.to_lowercase()) {
-            eb.engagement = score.clamp(0.0, 1.0);
-            if score > 0.7 && matches!(eb.ring, RadarRing::Trial | RadarRing::Assess) {
-                eb.ring = RadarRing::Adopt;
-                eb.signals
-                    .push(format!("High engagement (affinity {score:.2})"));
-            } else if score < 0.4 && matches!(eb.ring, RadarRing::Adopt | RadarRing::Trial) {
-                eb.ring = RadarRing::Hold;
-                eb.signals
-                    .push(format!("Declining engagement (affinity {score:.2})"));
             }
         }
     }

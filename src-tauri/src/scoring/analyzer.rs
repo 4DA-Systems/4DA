@@ -64,7 +64,7 @@ pub(crate) async fn score_items_full(
     cached_items: &[crate::db::StoredSourceItem],
     silent: bool,
     llm_rerank: bool,
-) -> Result<Vec<SourceRelevance>> {
+) -> Result<crate::analysis::analysis_cycle::ScoredBatch> {
     use std::sync::atomic::Ordering;
 
     let scoring_started = Instant::now();
@@ -107,18 +107,9 @@ pub(crate) async fn score_items_full(
     );
 
     crate::diagnostics::log_rss("scoring:before_build_context");
-    let context_started = Instant::now();
-    let scoring_ctx = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        scoring::build_scoring_context(db),
-    )
-    .await
-    .map_err(|_| String::from("Scoring context build timed out after 10s"))??;
-    info!(
-        target: "4da::analysis",
-        elapsed_ms = context_started.elapsed().as_millis(),
-        "Scoring context build complete"
-    );
+    // elapsed_ms + cache hit/miss logging lives inside the helper now — one
+    // instrumentation point for all 10 call sites instead of ad-hoc timers.
+    let scoring_ctx = scoring::build_scoring_context_with_timeout(db, "score_items_full").await?;
     crate::diagnostics::log_rss("scoring:after_build_context");
     let trend_topics = crate::detect_trend_topics(keep_indices.iter().map(|&i| {
         (
@@ -178,11 +169,7 @@ pub(crate) async fn score_items_full(
             }
         }
 
-        let parsed_tags: Vec<String> = item
-            .tags
-            .as_deref()
-            .and_then(|s| serde_json::from_str(s).ok())
-            .unwrap_or_default();
+        let parsed_tags: Vec<String> = scoring::parse_tags_topics(item.tags.as_deref());
 
         results.push(scoring::score_item(
             &scoring::ScoringInput {
@@ -212,6 +199,22 @@ pub(crate) async fn score_items_full(
         elapsed_ms = scoring_loop_started.elapsed().as_millis(),
         "PASIFA scoring loop complete"
     );
+
+    // ── Evaluated snapshot — the persistence boundary's second input ──────
+    // Everything below this line is the batch-relative layer, and four of its
+    // stages DELETE entries from `results` (cross-source dedup, fuzzy title,
+    // topic, temporal clustering — 831 of 1,458 per cycle, measured on the live
+    // corpus 2026-08-27). `evidence_score` is fixed at construction by
+    // `score_item` and no batch stage touches it (`finalize_scores` shapes
+    // `top_score` only), so this snapshot carries the FINAL evidence for every
+    // item the scorer evaluated — including the ones about to be deleted.
+    //
+    // Without it, `persist_cycle_results` stamped only survivors and the drain
+    // re-selected the rest for ever: a 500-item drain batch converted 5.
+    let pre_batch: Vec<crate::analysis::analysis_cycle::EvaluatedItem> = results
+        .iter()
+        .map(crate::analysis::analysis_cycle::EvaluatedItem::from)
+        .collect();
 
     // Candidate-selection instrumentation for THIS pass.
     //
@@ -274,7 +277,14 @@ pub(crate) async fn score_items_full(
 
     crate::diagnostics::log_rss("scoring:loop_done_before_cross_encoder");
     let post_score_started = Instant::now();
+    // Everything below this line is the BATCH-RELATIVE layer: it may reorder
+    // and rewrite `top_score` (the rank value) but never `evidence_score`
+    // (the pure score_item output, set at construction), which is what
+    // persists as `relevance_score`. RankProvenance diffs `top_score` around
+    // each stage so the persisted rank carries honest provenance.
+    let mut rank_prov = crate::analysis::RankProvenance::begin(&results);
     crate::cross_encoder_rerank::apply_cross_encoder_reranking(&mut results, &scoring_ctx);
+    rank_prov.record(&results, "ce");
     crate::diagnostics::log_rss("scoring:after_cross_encoder");
 
     scoring::sort_results(&mut results);
@@ -288,12 +298,18 @@ pub(crate) async fn score_items_full(
     scoring::topic_dedup_results(&mut results);
     telemetry.topic_dedup_removed = pre_topic - results.len();
     scoring::temporal_cluster_results(&mut results);
+    // Dedup/cluster stages can BOOST a surviving representative
+    // (topic-corroboration) — a batch-relative move worth naming.
+    rank_prov.record(&results, "corroboration");
     telemetry.domain_diversity_adjusted = scoring::apply_domain_diversity(&mut results);
     scoring::apply_source_topic_diversity(&mut results);
+    scoring::apply_source_share_diversity(&mut results);
+    rank_prov.record(&results, "diversity");
 
     // Per-source score normalization: blend raw score with source-relative
     // percentile so high-volume sources don't crowd out niche sources
     crate::source_tiers::normalize_scores_by_source(&mut results);
+    rank_prov.record(&results, "percentile");
     scoring::sort_results(&mut results); // Re-sort after normalization
 
     // Serendipity Engine: inject anti-bubble items
@@ -301,14 +317,18 @@ pub(crate) async fn score_items_full(
         let settings = crate::get_settings_manager().lock();
         let serendipity_config = &settings.get().serendipity;
         if serendipity_config.enabled {
-            let candidates = scoring::compute_serendipity_candidates(
-                &results,
+            // In-place swap: the picks REPLACE the scorer-rejected originals
+            // they were cloned from. The previous `extend` left the originals
+            // behind, so every pick's id persisted twice (once relevant=false
+            // / "score", once relevant=true / "serendipity") with the stored
+            // verdict decided by write order — see the injector's doc.
+            let injected = scoring::dedup::inject_serendipity_candidates(
+                &mut results,
                 serendipity_config.budget_percent,
             );
-            if !candidates.is_empty() {
-                telemetry.serendipity_injected = candidates.len();
-                tracing::info!(target: "4da::analysis", count = candidates.len(), "Injecting serendipity items (cached)");
-                results.extend(candidates);
+            if injected > 0 {
+                telemetry.serendipity_injected = injected;
+                tracing::info!(target: "4da::analysis", count = injected, "Injecting serendipity items (cached)");
                 scoring::sort_results(&mut results);
             }
         }
@@ -357,6 +377,7 @@ pub(crate) async fn score_items_full(
     } else {
         info!(target: "4da::analysis", "LLM rerank skipped for this run");
     }
+    rank_prov.record(&results, "llm");
     crate::diagnostics::log_rss("scoring:after_llm_rerank");
 
     // Feed consumes the Brief's verdicts: items the narrated Brief rejected
@@ -372,13 +393,17 @@ pub(crate) async fn score_items_full(
         }
     }
 
-    // Final top-end de-saturation on the PERSISTED score. The cross-encoder
+    // Final top-end de-saturation on the RANK value. The cross-encoder
     // (and LLM reconciler) overwrite `top_score` AFTER score_item, so its
-    // soft-ceiling no longer governs the stored value — top matches land near
-    // ~0.99 and tie. Re-apply the canonical cap here, downstream of every score
-    // mutation, so relevance_score honors the 0.95 invariant and the top stays
-    // rankable. Re-sort since values shifted (stable order preserved).
+    // soft-ceiling no longer governs the batch-layer output — top matches land
+    // near ~0.99 and tie. Re-apply the canonical cap here, downstream of every
+    // score mutation, so rank_score honors the 0.95 invariant and the top stays
+    // rankable. (The persisted relevance_score is `evidence_score`, which
+    // already honors score_item's own ceilings.) Re-sort since values shifted
+    // (stable order preserved).
     scoring::finalize_scores(&mut results);
+    rank_prov.record(&results, "cap");
+    rank_prov.finish(&mut results);
     scoring::sort_results(&mut results);
 
     emit_progress(
@@ -423,7 +448,18 @@ pub(crate) async fn score_items_full(
         tracing::warn!(target: "4da::analysis", error = %e, "Failed to record scoring stats");
     }
 
-    Ok(results)
+    // Report the gap the batch layer opened, so a dedup stage that starts
+    // eating the whole batch is visible rather than silent.
+    let batch = crate::analysis::analysis_cycle::ScoredBatch::new(results, pre_batch);
+    info!(
+        target: "4da::analysis",
+        evaluated = batch.evaluated.len(),
+        survivors,
+        dropped_by_batch_layer = batch.evaluated.len().saturating_sub(survivors),
+        "Scoring pass complete — evidence + version stamped for every evaluated item"
+    );
+
+    Ok(batch)
 }
 
 // ============================================================================

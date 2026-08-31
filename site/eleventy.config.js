@@ -2,6 +2,9 @@ export default function(eleventyConfig) {
   // Pass through static assets from site root to output root
   eleventyConfig.addPassthroughCopy({ "hero-bg.mp4": "hero-bg.mp4" });
   eleventyConfig.addPassthroughCopy({ "hero-sun.jpg": "hero-sun.jpg" });
+  // The licence email's header mark (email-shell.js). Emails must reference it by
+  // absolute URL — Gmail strips data: URIs — so it has to be a hosted asset.
+  eleventyConfig.addPassthroughCopy({ "email-sun.jpg": "email-sun.jpg" });
   eleventyConfig.addPassthroughCopy({ "og-image.png": "og-image.png" });
   // robots.txt lives in src/ and .txt is not an Eleventy template format, so it
   // needs an explicit passthrough. (This previously pointed at a site-root

@@ -500,6 +500,48 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
 // (kept as a cross-module dependency — verify.rs owns the function)
 pub(crate) use super::verify::verify_license_key as verify_license_key_ed25519;
 
+/// Is `key` a USABLE licence key for the fast path of `has_license_key_available`?
+///
+/// - A self-signed `4DA-` key is usable only if it verifies (Ed25519 signature +
+///   embedded expiry — `verify_license_key` checks both). This is what makes an
+///   expired or tampered `4DA-` key fail the availability check and downgrade.
+/// - A Keygen-format key carries no local signature, so PRESENCE PROVES NOTHING.
+///   It is usable only if the validation cache vouches for THIS key: matching key
+///   hash, a paid tier, and still inside the freshness window.
+///
+/// The second rule closes a fail-open. This function used to `return true` for any
+/// non-empty string that did not start with `4DA-`, and because it is the FAST
+/// PATH it short-circuited before the validation cache (Layer 4) was ever reached.
+/// Writing `{"tier":"signal","license_key":"x"}` into settings.json therefore
+/// granted Signal permanently — no signature, no network call, no expiry. The
+/// comment on `has_license_key_available` asserted that the cache established
+/// validity for these keys; the cache was never consulted. Fixing it here fixes
+/// the keychain path too, which shares this helper.
+fn key_is_usable(key: &str) -> bool {
+    if key.is_empty() {
+        return false;
+    }
+    if key.starts_with("4DA-") {
+        return verify_license_key_ed25519(key).is_ok();
+    }
+    cache_vouches_for_key(load_validation_cache().as_ref(), key)
+}
+
+/// Does the validation cache prove that THIS key validated online as a paid tier,
+/// recently enough to still be trusted?
+///
+/// Split out from `key_is_usable` so it is testable without touching disk.
+/// `is_cache_valid` already enforces the key-hash match and the freshness window;
+/// the tier check is what stops a cache recording a `free` result from vouching
+/// for anything.
+pub(crate) fn cache_vouches_for_key(cache: Option<&KeygenValidationCache>, key: &str) -> bool {
+    use crate::settings::license::gating::is_paid_tier;
+    match cache {
+        Some(c) => is_paid_tier(&c.tier) && is_cache_valid(c, key),
+        None => false,
+    }
+}
+
 /// Helper to check if a license key is available — four-layer fallback chain.
 ///
 /// 1. **In-memory** (loaded from settings.json at startup)
@@ -512,19 +554,35 @@ pub(crate) fn has_license_key_available(license: &mut LicenseConfig) -> bool {
     use super::keystore;
     use crate::settings::license::gating::is_paid_tier;
 
-    // Fast path: in-memory key is present (loaded from settings.json at startup)
-    if !license.license_key.is_empty() {
+    // Fast path: in-memory key is present (loaded from settings.json at startup).
+    //
+    // "Present" is NOT "usable". A self-signed `4DA-` key must VERIFY — signature
+    // AND embedded expiry — before it counts, because this is the check the
+    // downgrade path in revalidation.rs gates on. Two holes this closes:
+    //   * settings.json tamper: pasting `tier: "signal"` + any non-empty string
+    //     used to grant Signal; a bare string now fails verification.
+    //   * expiry enforcement: an EXPIRED `4DA-` key used to keep granting Signal
+    //     forever, because the only automatic downgrade fires on an ABSENT key,
+    //     and `validate_license` (which does check expiry) is a command the
+    //     frontend never calls on its own. A cancelled monthly subscriber kept
+    //     the tier ~indefinitely past their key's ~35-day expiry.
+    // Keygen-format keys (no `4DA-` prefix) carry no local signature; their
+    // validity is established by the online validation cache (Layer 4 below), so
+    // for them "present and non-empty" remains the right fast-path answer.
+    if key_is_usable(&license.license_key) {
         return true;
     }
 
-    // Fallback: check keychain directly and re-hydrate if found.
-    // This covers the transition period for users who activated before the
-    // disk-persistence fix — their settings.json may still have an empty key.
+    // Fallback: check keychain directly and re-hydrate if found. Covers users
+    // who activated before the disk-persistence fix (settings.json key empty)
+    // AND the case above where the in-memory `4DA-` key was present but not
+    // usable — the keychain copy is checked on its own merits, never trusted for
+    // being merely non-empty.
     if let Ok(Some(key)) = keystore::get_secret("license_key") {
-        if !key.is_empty() {
+        if key_is_usable(&key) {
             info!(
                 target: "4da::license",
-                "Re-hydrated license key from keychain (was missing from in-memory settings)"
+                "Re-hydrated usable license key from keychain"
             );
             license.license_key = key;
             return true;
@@ -545,10 +603,14 @@ pub(crate) fn has_license_key_available(license: &mut LicenseConfig) -> bool {
                     license.activated_at = Some(backup.activated_at);
                     return true;
                 }
-            } else {
+            } else if cache_vouches_for_key(load_validation_cache().as_ref(), &backup.license_key) {
+                // A Keygen key recovered from the backup file gets the same
+                // treatment as one from settings.json: the cache must vouch for it.
+                // This file used to be trusted on presence alone, which made it a
+                // second write-a-file route to a permanent paid tier.
                 info!(
                     target: "4da::license",
-                    "Re-hydrated license key from backup file (Keygen format — trusted)"
+                    "Re-hydrated license key from backup file (Keygen format, cache-vouched)"
                 );
                 license.license_key = backup.license_key;
                 license.tier = backup.tier;
@@ -579,4 +641,78 @@ pub(crate) fn has_license_key_available(license: &mut LicenseConfig) -> bool {
     }
 
     false
+}
+
+#[cfg(test)]
+mod key_usable_tests {
+    use super::key_is_usable;
+
+    #[test]
+    fn empty_key_is_not_usable() {
+        assert!(!key_is_usable(""));
+    }
+
+    #[test]
+    fn a_hand_pasted_4da_string_is_rejected() {
+        // The settings.json tamper: `license_key: "4DA-anything"` used to pass the
+        // fast path on non-emptiness alone and grant Signal. It must now fail the
+        // Ed25519 verification and be treated as no usable key.
+        assert!(!key_is_usable("4DA-not-a-real-signed-key"));
+        assert!(!key_is_usable("4DA-eyJ0aWVyIjoic2lnbmFsIn0.bm90YXNpZw"));
+    }
+
+    #[test]
+    fn a_keygen_format_key_is_not_usable_on_presence_alone() {
+        // THE fail-open this file's own comment claimed was closed. A non-`4DA-`
+        // key carries no local signature, so presence proves nothing. With no
+        // validation cache vouching for it — the state of any test environment,
+        // and of any machine where someone hand-edited settings.json — it must
+        // not be usable.
+        assert!(!key_is_usable("BE3529-741BAF-DEADBEEF"));
+        assert!(!key_is_usable("x"));
+        assert!(!key_is_usable("totally-made-up"));
+    }
+
+    #[test]
+    fn cache_must_vouch_for_the_same_key_a_paid_tier_and_be_fresh() {
+        use super::{cache_vouches_for_key, hash_key, KeygenValidationCache};
+        let key = "BE3529-741BAF-DEADBEEF";
+        let now = chrono::Utc::now().to_rfc3339();
+        let mk = |tier: &str, hash: String, at: String| KeygenValidationCache {
+            validated_at: at,
+            tier: tier.to_string(),
+            key_hash: hash,
+        };
+
+        // Positive control — without this, the fix could be satisfied by
+        // always returning false, which would strand every real customer.
+        let good = mk("signal", hash_key(key), now.clone());
+        assert!(cache_vouches_for_key(Some(&good), key));
+
+        // No cache at all.
+        assert!(!cache_vouches_for_key(None, key));
+
+        // A cache for a DIFFERENT key must not vouch for this one.
+        let other = mk("signal", hash_key("BE3529-OTHER-KEY"), now.clone());
+        assert!(!cache_vouches_for_key(Some(&other), key));
+
+        // A cache recording a FREE result proves the key is not paid.
+        let free = mk("free", hash_key(key), now);
+        assert!(!cache_vouches_for_key(Some(&free), key));
+
+        // A stale cache must not vouch indefinitely.
+        let stale_at = (chrono::Utc::now() - chrono::Duration::days(3650)).to_rfc3339();
+        let stale = mk("signal", hash_key(key), stale_at);
+        assert!(!cache_vouches_for_key(Some(&stale), key));
+
+        // A malformed timestamp must fail closed, not parse to "now".
+        let bad_time = mk("signal", hash_key(key), "not-a-timestamp".to_string());
+        assert!(!cache_vouches_for_key(Some(&bad_time), key));
+    }
+
+    // The valid-signature-but-EXPIRED case (a cancelled monthly key past its ~35d
+    // expiry) is not unit-testable here: minting a key that verifies requires the
+    // server-side private seed, which the app deliberately does not hold. Expiry
+    // rejection is exercised by verify.rs's own expiry check, which key_is_usable
+    // routes every `4DA-` key through.
 }

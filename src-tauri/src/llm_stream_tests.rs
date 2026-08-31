@@ -8,8 +8,6 @@
 
 use super::*;
 
-use super::*;
-
 // --- Chunk reassembly (StreamLineBuffer) ---
 
 /// Drain every line the buffer currently holds.

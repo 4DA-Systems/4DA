@@ -320,6 +320,34 @@ else
   record_warn "Cadences: ops-state.json missing"
 fi
 
+# Calibration snapshot freshness — the scoring-accuracy record (.claude/
+# calibration-snapshot.json) must be regenerated per release, not per quarter:
+# it must match the current PIPELINE_VERSION and be recent, or the release is
+# shipping a scoring brain whose measured accuracy is unknown (the 2026-08-23
+# audit found the previous snapshot 75 days stale, hiding a real-embedding
+# recall regression the synthetic suite could not see).
+CALIB_SNAPSHOT="$REPO_ROOT/.claude/calibration-snapshot.json"
+if [ -f "$CALIB_SNAPSHOT" ]; then
+  SNAP_VERSION=$(read_json_field "$CALIB_SNAPSHOT" "pipeline_version")
+  CODE_VERSION=$(grep -oE 'PIPELINE_VERSION: i32 = [0-9]+' "$REPO_ROOT/src-tauri/src/scoring/mod.rs" | grep -oE '[0-9]+$')
+  SNAP_TS=$(read_json_field "$CALIB_SNAPSHOT" "timestamp")
+  SNAP_EPOCH=$(node -e "process.stdout.write(String(Math.floor(new Date('$SNAP_TS').getTime()/1000)))" 2>/dev/null || echo "0")
+  SNAP_AGE=$(( $(date +%s) - SNAP_EPOCH ))
+  if [ "$SNAP_VERSION" != "$CODE_VERSION" ]; then
+    warn "Calibration snapshot is for pipeline v${SNAP_VERSION}, code is v${CODE_VERSION} — regenerate: cargo test --features calibrated-sim (see .claude/calibration-snapshot.json)"
+    record_warn "Calibration snapshot: stale pipeline version (v${SNAP_VERSION} != v${CODE_VERSION})"
+  elif [ "$SNAP_AGE" -gt 2678400 ]; then # 31 days
+    warn "Calibration snapshot is $((SNAP_AGE / 86400)) days old — regenerate per release"
+    record_warn "Calibration snapshot: $((SNAP_AGE / 86400)) days old (> 31)"
+  else
+    pass "Calibration snapshot: v${SNAP_VERSION}, $((SNAP_AGE / 86400)) days old"
+    record_pass "Calibration snapshot: fresh (v${SNAP_VERSION})"
+  fi
+else
+  warn "Calibration snapshot not found — run the calibrated sim before releasing"
+  record_warn "Calibration snapshot: missing"
+fi
+
 step_elapsed
 
 # ─────────────────────────────────────────────────────────────────────────────

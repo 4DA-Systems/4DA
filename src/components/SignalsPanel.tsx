@@ -78,11 +78,14 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
     return { signals, sorted, filtered, typeCounts, priorityCounts, poolCounts, pools };
   }, [results, typeFilter, priorityFilter]);
 
-  if (signals.length === 0) return (
-    <div className="mb-6 bg-bg-secondary rounded-lg border border-border px-5 py-4">
-      <p className="text-text-muted text-sm text-center">{t('signals.noSignals')}</p>
-    </div>
-  );
+  // Hide-when-empty: a bordered card whose only content is "no signals" is dead
+  // chrome that reads as a broken panel. Same contract as WhatYouWouldHaveMissed —
+  // the surface appears only when it has something to say. Zero signals in a run
+  // is normal: classification requires >=2 trigger keywords (signals.rs) plus
+  // score >= 0.30, so a run of ordinary posts legitimately yields none. Guarded
+  // on `signals` (pre-filter), NOT `filtered` — the "no signals match your
+  // filters" message below stays for user-applied filters.
+  if (signals.length === 0) return null;
 
   const criticalCount = priorityCounts['critical'] || 0;
   const highCount = priorityCounts['alert'] || 0;
@@ -161,7 +164,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
             <p className="text-xs text-text-muted">
               {t('signals.freeSubtext')}
             </p>
-            <SignalUpgradeCTA compact />
+            <SignalUpgradeCTA compact source="signals-panel" />
           </div>
         </div>
       )}

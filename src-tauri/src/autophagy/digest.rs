@@ -103,20 +103,18 @@ pub(crate) fn run_autophagy_cycle_with_ace(
                 topic_decay_rates_updated: 0,
                 source_autopsies_produced: 0,
                 anti_patterns_detected: 0,
-                decision_outcomes_analyzed: 0,
                 duration_ms: start.elapsed().as_millis() as i64,
             });
         }
     }
 
-    // Run all 7 analyzers (each returns empty vec on failure, never panics)
+    // Run the analyzers (each returns empty vec on failure, never panics)
     let calibrations = super::calibration::analyze_calibration(conn, max_age_days);
     let topic_calibrations =
         super::calibration_analysis::analyze_topic_calibration(conn, max_age_days);
     let decay_profiles = super::topic_decay::analyze_topic_decay(conn);
     let source_autopsies = super::source_autopsy::analyze_sources(conn, max_age_days);
     let anti_patterns = super::anti_patterns::detect_anti_patterns(conn, 0.35);
-    let decision_outcomes = super::decision_outcomes::analyze_decision_window_outcomes(conn);
     let archetypes = super::archetype::detect_archetypes(conn, max_age_days);
 
     // Store source-level calibration results
@@ -175,17 +173,6 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         }
     }
 
-    // Store decision window outcomes
-    let decision_outcomes_analyzed = decision_outcomes.len() as i64;
-    if !decision_outcomes.is_empty() {
-        if let Err(e) = super::decision_outcomes::store_decision_outcomes(conn, &decision_outcomes)
-        {
-            warn!(target: "4da::autophagy", error = %e, "Failed to store decision outcomes");
-        } else {
-            info!(target: "4da::autophagy", count = decision_outcomes_analyzed, "Analyzed decision window outcomes");
-        }
-    }
-
     // Bridge ACE behavior data into calibration system (topic-level accuracy feedback).
     // This analyzes implicit user signals (save, click, dismiss) from the ACE database
     // and produces per-topic calibration deltas that the scoring pipeline uses.
@@ -223,13 +210,25 @@ pub(crate) fn run_autophagy_cycle_with_ace(
     let total_calibrations = calibrations_produced + ace_calibrations_bridged;
     let duration_ms = start.elapsed().as_millis() as i64;
 
+    // Measure DB size after the cycle's writes. This column recorded a
+    // hardcoded 0 for every cycle before 2026-08-31 — a metric that is never
+    // measured is not a metric. (Pruning happens later via cleanup_old_items,
+    // so before/after here brackets the intelligence-extraction writes.)
+    let db_size_after: i64 = conn
+        .query_row(
+            "SELECT page_count * page_size FROM pragma_page_count, pragma_page_size",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
     // Record the cycle in autophagy_cycles table
     if let Err(e) = conn.execute(
         "INSERT INTO autophagy_cycles
             (items_analyzed, items_pruned, calibrations_produced,
              topic_decay_rates_updated, source_autopsies_produced,
              anti_patterns_detected, db_size_before_bytes, db_size_after_bytes, duration_ms)
-         VALUES (?1, 0, ?2, ?3, ?4, ?5, ?6, 0, ?7)",
+         VALUES (?1, 0, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             items_analyzed,
             total_calibrations,
@@ -237,6 +236,7 @@ pub(crate) fn run_autophagy_cycle_with_ace(
             source_autopsies_produced,
             anti_patterns_detected,
             db_size_before,
+            db_size_after,
             duration_ms,
         ],
     ) {
@@ -252,7 +252,6 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         source_autopsies_produced,
         anti_patterns_detected,
         archetypes_detected,
-        decision_outcomes_analyzed,
         duration_ms,
         "Autophagy cycle complete"
     );
@@ -264,7 +263,6 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         topic_decay_rates_updated,
         source_autopsies_produced,
         anti_patterns_detected,
-        decision_outcomes_analyzed,
         duration_ms,
     })
 }
@@ -445,5 +443,29 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |r| r.get(0))
             .unwrap();
         assert_eq!(cycle_count, 2);
+    }
+
+    /// db_size_after_bytes must be a MEASURED value, not the hardcoded 0 it
+    /// recorded for every cycle before 2026-08-31.
+    #[test]
+    fn test_cycle_records_measured_db_size_after() {
+        let conn = setup_test_db();
+        let ace = setup_test_ace_db();
+        run_autophagy_cycle_with_ace(&conn, 30, Some(&ace)).expect("cycle");
+
+        let (before, after): (i64, i64) = conn
+            .query_row(
+                "SELECT db_size_before_bytes, db_size_after_bytes
+                 FROM autophagy_cycles ORDER BY id DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert!(before > 0, "before size is measured; got {before}");
+        assert!(after > 0, "after size is measured, never 0; got {after}");
+        assert!(
+            after >= before,
+            "the cycle only writes (pruning happens later), so after >= before; got {before} -> {after}"
+        );
     }
 }

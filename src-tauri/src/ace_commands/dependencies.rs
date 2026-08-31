@@ -115,6 +115,37 @@ pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf])
             lockfile_count += process_gemfile_lock(db, &scanner, &dir, &project_path);
             lockfile_count += process_composer_lock(db, &dir, &project_path);
 
+            // Go stdlib/toolchain synthetic deps carry their VERSION from the
+            // go.mod directives (`go 1.22.3` / `toolchain go1.22.5`), which the
+            // manifest persistence path drops (it stores version: None). OSV
+            // publishes standard-library and toolchain advisories against the
+            // package names "stdlib"/"toolchain" (ecosystem Go) with SEMVER
+            // ranges, so without the version the matcher can only produce
+            // unconfirmed matches that Preemption filters out. Done here, not
+            // in process_go_sum: a stdlib-only project has no go.sum.
+            if let Ok(content) = std::fs::read_to_string(dir.join("go.mod")) {
+                for (name, version) in
+                    crate::ace::scanner::ProjectScanner::parse_go_directives(&content)
+                {
+                    if let Err(e) = db.store_manifest_dependency(
+                        &project_path,
+                        &name,
+                        Some(&version),
+                        "go",
+                        false,
+                        true,
+                        "manifest",
+                    ) {
+                        tracing::warn!(
+                            target: "4da::ace",
+                            error = %e,
+                            package = %name,
+                            "Failed to store Go directive synthetic dependency"
+                        );
+                    }
+                }
+            }
+
             // Recurse into subdirectories (skip common non-project dirs)
             if let Ok(entries) = std::fs::read_dir(&dir) {
                 for entry in entries.flatten() {

@@ -12,7 +12,7 @@ import type { LiveCache } from "./cache.js";
 import type { RateLimiter } from "./rate-limiter.js";
 import { fetchJson, fetchWithTimeout } from "./http-utils.js";
 import type { RegistryPackageInfo, SemverDistance } from "./types.js";
-import { computeSemverDistance, isPreRelease } from "./semver-utils.js";
+import { computeSemverDistance, maxStableSemver } from "./semver-utils.js";
 
 const NPM_REGISTRY_URL = "https://registry.npmjs.org";
 const NPM_DOWNLOADS_URL = "https://api.npmjs.org/downloads/point/last-week";
@@ -156,13 +156,10 @@ export class NpmRegistry {
   }
 }
 
+// Semver-max, not last-published: maintenance releases of older lines are
+// published after newer lines (see maxStableSemver).
 function findLatestStable(versions: string[]): string | null {
-  for (let i = versions.length - 1; i >= 0; i--) {
-    if (!isPreRelease(versions[i])) {
-      return versions[i];
-    }
-  }
-  return null;
+  return maxStableSemver(versions);
 }
 
 function errorResult(

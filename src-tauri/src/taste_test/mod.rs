@@ -6,7 +6,6 @@
 //! same DB tables the scoring pipeline reads — zero pipeline changes needed.
 
 pub mod blending;
-pub mod continuous;
 pub mod db;
 pub mod inference;
 pub mod items;

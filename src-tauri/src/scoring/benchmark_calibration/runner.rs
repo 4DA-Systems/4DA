@@ -5,9 +5,9 @@ use std::collections::HashMap;
 
 use super::profile::build_profile_with_embeddings;
 use super::{
-    load_scenarios, no_freshness, score_item, BenchmarkFailure, BenchmarkReport, CategoryResult,
-    ScoringInput,
+    load_scenarios, score_item, BenchmarkFailure, BenchmarkReport, CategoryResult, ScoringInput,
 };
+use crate::scoring::benchmark_scenarios::{scenario_created_at, scenario_options};
 
 pub(super) fn run_benchmark_with_embeddings(
     db: &crate::db::Database,
@@ -16,7 +16,6 @@ pub(super) fn run_benchmark_with_embeddings(
     _model_name: &str,
 ) -> BenchmarkReport {
     let scenarios = load_scenarios();
-    let opts = no_freshness();
     let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let mut total = 0;
@@ -28,6 +27,12 @@ pub(super) fn run_benchmark_with_embeddings(
     for scenario in &scenarios {
         total += 1;
         let ctx = build_profile_with_embeddings(&scenario.profile, topic_emb);
+        // Item age + registry source_id + per-scenario freshness, identical to
+        // the synthetic runner — see run_benchmark (2026-08-23 audit, item 22a:
+        // created_at: None / source_id: None left the UGC caps, the <6h voted
+        // grace, the stale discount, and the v18 registry route unexercised).
+        let opts = scenario_options(scenario);
+        let created_at = scenario_created_at(scenario);
 
         let embedding = item_emb
             .get(&scenario.id)
@@ -49,12 +54,12 @@ pub(super) fn run_benchmark_with_embeddings(
             content: &scenario.item.content,
             source_type: &scenario.item.source_type,
             embedding,
-            created_at: None,
+            created_at: created_at.as_ref(),
             detected_lang: "en",
             source_tags: &tags,
             tags_json: tags_json_ref,
             feed_origin: None,
-            source_id: None,
+            source_id: scenario.item.source_id.as_deref(),
         };
 
         let result = score_item(&input, &ctx, db, &opts, None);

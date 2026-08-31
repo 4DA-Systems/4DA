@@ -207,6 +207,13 @@ pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData)
 
     // Recovery: if the window's JS never loaded (dev server race condition on
     // startup), destroy the stale window so it gets recreated with a fresh load.
+    //
+    // Exit safety (#501): this destroy is processed on the event loop BEFORE
+    // the replacement window exists. If this is the app's last live window,
+    // the zero-window moment fires `RunEvent::ExitRequested { code: None }`
+    // — answered by the exit guard in `app_setup::handle_run_event`, which
+    // prevents the exit while the tray is alive. Do not remove that guard:
+    // without it this destroy silently kills the whole process.
     if !WINDOW_READY.load(Ordering::Relaxed) {
         if let Some(w) = app.get_webview_window(WINDOW_LABEL) {
             info!(target: "4da::notify", "Notification window JS never loaded — recreating");

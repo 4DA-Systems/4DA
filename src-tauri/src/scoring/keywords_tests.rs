@@ -707,3 +707,180 @@ fn test_count_word_occurrences_unicode_boundary() {
     assert_eq!(count_word_occurrences("go", "go here, let us go"), 2);
     assert_eq!(count_word_occurrences("go", "argo"), 0);
 }
+
+// ============================================================================
+// Own-stack single-word keyword evidence (2026-08-23 audit item 14)
+// ============================================================================
+
+fn stack_set(items: &[&str]) -> std::collections::HashSet<String> {
+    items.iter().map(|s| s.to_string()).collect()
+}
+
+fn weighted_interest(topic: &str, weight: f32) -> context_engine::Interest {
+    context_engine::Interest {
+        id: Some(1),
+        topic: topic.to_string(),
+        weight,
+        source: context_engine::InterestSource::Explicit,
+        embedding: None,
+    }
+}
+
+#[test]
+fn test_own_stack_score_reaches_threshold_for_primary_stack_title_hit() {
+    // A Tauri developer with 3 interests: today "Tauri 2 ..." titles cap at
+    // 0.80 × 0.60 = 0.48 post-discount. The own-stack evidence channel must
+    // expose the RAW score (≥ 0.70) for the gate's confirmation route.
+    let primary = stack_set(&["rust", "tauri", "sqlite"]);
+    let all = primary.clone();
+    let profile = crate::scoring::calibration::SpecificityProfile {
+        user_role: None,
+        primary_stack: &primary,
+        all_tech: &all,
+    };
+    let interests = vec![
+        weighted_interest("Rust", 1.0),
+        weighted_interest("systems programming", 1.0),
+        weighted_interest("Tauri", 1.0),
+    ];
+    let score = own_stack_single_word_keyword_score(
+        "Tauri 2 right-click menu replacement on Windows",
+        "A practical guide to replacing the default context menu in Tauri 2 desktop apps.",
+        &interests,
+        Some(&profile),
+    );
+    assert!(
+        score >= 0.70,
+        "own-stack title hit must reach the keyword confirmation threshold, got {score:.3}"
+    );
+}
+
+#[test]
+fn test_own_stack_score_zero_for_off_stack_interest() {
+    // "React" is NOT in this user's primary stack — no own-stack evidence,
+    // even though the keyword clearly hits.
+    let primary = stack_set(&["rust", "tauri"]);
+    let all = primary.clone();
+    let profile = crate::scoring::calibration::SpecificityProfile {
+        user_role: None,
+        primary_stack: &primary,
+        all_tech: &all,
+    };
+    let interests = vec![weighted_interest("React", 1.0)];
+    let score = own_stack_single_word_keyword_score(
+        "React 19 released with the new compiler",
+        "The React team shipped React 19 today.",
+        &interests,
+        Some(&profile),
+    );
+    assert_eq!(
+        score, 0.0,
+        "off-stack single-word interests get no own-stack evidence"
+    );
+}
+
+#[test]
+fn test_own_stack_score_zero_without_profile() {
+    let interests = vec![weighted_interest("Rust", 1.0)];
+    let score = own_stack_single_word_keyword_score(
+        "Rust 1.80 released",
+        "The Rust team shipped a new release.",
+        &interests,
+        None,
+    );
+    assert_eq!(score, 0.0, "no profile → no own-stack evidence");
+}
+
+#[test]
+fn test_own_stack_score_ignores_multi_word_interests() {
+    // Multi-word interests already carry full specificity weight — they never
+    // need (or get) the own-stack channel.
+    let primary = stack_set(&["rust"]);
+    let all = primary.clone();
+    let profile = crate::scoring::calibration::SpecificityProfile {
+        user_role: None,
+        primary_stack: &primary,
+        all_tech: &all,
+    };
+    let interests = vec![weighted_interest("rust async patterns", 1.0)];
+    let score = own_stack_single_word_keyword_score(
+        "Rust async patterns in production",
+        "",
+        &interests,
+        Some(&profile),
+    );
+    assert_eq!(score, 0.0, "multi-word interests are out of scope");
+}
+
+#[test]
+fn test_own_stack_score_all_tech_membership_is_not_enough() {
+    // Narrow scope: primary_stack ONLY. Adjacent tech in all_tech does not
+    // qualify — "typescript" here is adjacent, not primary.
+    let primary = stack_set(&["rust", "tauri"]);
+    let all = stack_set(&["rust", "tauri", "typescript", "tokio"]);
+    let profile = crate::scoring::calibration::SpecificityProfile {
+        user_role: None,
+        primary_stack: &primary,
+        all_tech: &all,
+    };
+    let interests = vec![weighted_interest("TypeScript", 1.0)];
+    let score = own_stack_single_word_keyword_score(
+        "TypeScript 5.6 beta announced",
+        "The TypeScript team published the 5.6 beta.",
+        &interests,
+        Some(&profile),
+    );
+    assert_eq!(
+        score, 0.0,
+        "all_tech membership alone must not qualify as own-stack"
+    );
+}
+
+#[test]
+fn test_own_stack_score_low_weight_synthesized_interest_stays_below_threshold() {
+    // Interest weight multiplies through: a dep-synthesized interest at 0.3
+    // can never reach the 0.70 confirmation threshold via this channel.
+    let primary = stack_set(&["tokio"]);
+    let all = primary.clone();
+    let profile = crate::scoring::calibration::SpecificityProfile {
+        user_role: None,
+        primary_stack: &primary,
+        all_tech: &all,
+    };
+    let interests = vec![weighted_interest("tokio", 0.3)];
+    let score = own_stack_single_word_keyword_score(
+        "Tokio 2.0 runtime released",
+        "Tokio ships a major runtime overhaul.",
+        &interests,
+        Some(&profile),
+    );
+    assert!(
+        score > 0.0 && score < 0.70,
+        "synthesized-weight interests must stay below the confirmation bar, got {score:.3}"
+    );
+}
+
+#[test]
+fn test_own_stack_score_word_collision_still_scores_keyword_side() {
+    // "Rust Belt cities" DOES produce raw keyword evidence — TN protection
+    // lives at the gate (embedding corroboration), not here. This pins the
+    // division of responsibility.
+    let primary = stack_set(&["rust"]);
+    let all = primary.clone();
+    let profile = crate::scoring::calibration::SpecificityProfile {
+        user_role: None,
+        primary_stack: &primary,
+        all_tech: &all,
+    };
+    let interests = vec![weighted_interest("Rust", 1.0)];
+    let score = own_stack_single_word_keyword_score(
+        "How Rust Belt cities are reinventing themselves through urban farming",
+        "Former industrial cities across the American Rust Belt are finding new vitality.",
+        &interests,
+        Some(&profile),
+    );
+    assert!(
+        score >= 0.70,
+        "keyword side is provenance-blind by design (gate corroboration guards it), got {score:.3}"
+    );
+}

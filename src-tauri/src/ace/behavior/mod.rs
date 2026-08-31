@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! Behavior learning — user interaction tracking, topic affinities, anti-topics.
+//! Behavior tracking — explicit user interaction recording (v20b, AD-031:
+//! the implicit topic-affinity/anti-topic learning layer was removed).
 
 mod decay;
-mod queries;
 pub(crate) mod tracking;
 mod types;
 

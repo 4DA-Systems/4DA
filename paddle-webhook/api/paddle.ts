@@ -9,7 +9,7 @@
  *   2. Paddle fires subscription.created webhook → this endpoint
  *   3. This endpoint checks for existing license (idempotency), creates one if new
  *   4. This endpoint emails the license key + activation deep link to the customer
- *   5. Customer clicks "Activate in 4DA" → 4da://activate?key=... → Signal unlocked
+ *   5. Customer clicks "Activate in 4DA" → https://4da.ai/activate#key=... → fourda:// handoff → Signal unlocked
  *
  * Environment variables (set in Vercel dashboard):
  *   PADDLE_WEBHOOK_SECRET  — from Paddle dashboard → Notifications → Secret
@@ -295,7 +295,12 @@ async function fetchPaddleCustomerEmail(
 // ---------------------------------------------------------------------------
 
 function buildLicenseEmailHtml(licenseKey: string): string {
-  const activateUrl = `4da://activate?key=${encodeURIComponent(licenseKey)}`;
+  // https bridge, never a custom scheme: Gmail strips custom-scheme hrefs
+  // outright, and `4da://` was additionally an invalid scheme (digit-first)
+  // that browsers parsed as a relative path. The bridge page performs the
+  // fourda:// handoff from a real click. Key in the FRAGMENT — never sent to
+  // the server. Mirrors site/lib/recovery-email.js.
+  const activateUrl = `https://4da.ai/activate#key=${encodeURIComponent(licenseKey)}`;
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -343,9 +348,9 @@ function buildLicenseEmailText(licenseKey: string): string {
     licenseKey,
     "",
     "Activate in 4DA:",
-    `4da://activate?key=${encodeURIComponent(licenseKey)}`,
+    `https://4da.ai/activate#key=${encodeURIComponent(licenseKey)}`,
     "",
-    "If the deep link doesn't work, open 4DA, go to Settings → License,",
+    "If the link doesn't work, open 4DA, go to Settings → License,",
     "and paste your key.",
     "",
     "Need help? Reply to this email or visit https://4da.ai/support",

@@ -26,6 +26,67 @@ type FetchResult = std::result::Result<
     (String, super::RetryExhaustedError),
 >;
 
+/// A newly fetched item awaiting embed + persist:
+/// `(source_type, source_id, url, title, content, feed_origin, published_at, tags)`.
+/// `tags` is the serialized tags-column object (topics + engagement keys,
+/// `extract_source_tags`) — computed at fetch time while the adapter's
+/// metadata is still in hand.
+type RawNewItem = (
+    String,
+    String,
+    Option<String>,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+/// A prepared item (HTML entities decoded, language detected):
+/// `(source_type, source_id, url, title, content, detected_lang, feed_origin, published_at, tags)`.
+type PreparedItem = (
+    String,
+    String,
+    Option<String>,
+    String,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+/// Row shape for [`Database::batch_upsert_source_items`].
+type InsertRow = (
+    String,
+    String,
+    Option<String>,
+    String,
+    String,
+    Vec<f32>,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+/// Row shape for [`Database::batch_upsert_pending_source_items`]:
+/// `(source_type, source_id, url, title, content, embed_text)`.
+type PendingRow = (String, String, Option<String>, String, String, String);
+
+/// Outcome counters for one source's ingestion, folded into the cycle totals:
+/// items fully upserted, items parked in the `embedding_status = 'pending'`
+/// retry queue, and DB batch writes that FAILED (logged and counted, never
+/// `.ok()`-swallowed).
+#[derive(Debug, Default, PartialEq, Eq)]
+struct IngestCounts {
+    new_items: usize,
+    pending_items: usize,
+    db_errors: usize,
+}
+
 fn fetched_recently(db: &Database, source_type: &str, cooldown_secs: i64) -> bool {
     let Ok(Some(last_fetch_str)) = db.get_source_last_fetch(source_type) else {
         return false;
@@ -43,21 +104,23 @@ fn fetched_recently(db: &Database, source_type: &str, cooldown_secs: i64) -> boo
 /// Sources are fetched in parallel, bounded by the rate limiter's 6-permit
 /// semaphore. Results stream in as they complete — fast sources don't wait
 /// behind slow ones.
+///
+/// Ingestion is per-source incremental (2026-08-23 scoring audit): each
+/// source's new items are embedded and persisted as soon as that source's
+/// fetch completes. Before this, the whole cycle accumulated into ONE embed
+/// batch and ONE `.ok()`-swallowed upsert at the end, so a single embed
+/// failure, one DB error, or an engine death mid-cycle discarded every
+/// source's new items — permanently, because source windows scroll forward.
+/// Anything that cannot be fully ingested immediately is parked in the
+/// `embedding_status = 'pending'` retry queue instead of being dropped.
 pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::FetchSummary> {
     info!(target: "4da::cache", "=== BACKGROUND CACHE FILL STARTED (parallel) ===");
     void_signal_fetching(app);
 
     let db = get_database()?;
     let mut summary = super::FetchSummary::default();
-    let mut new_items_to_embed: Vec<(
-        String,
-        String,
-        Option<String>,
-        String,
-        String,
-        Option<String>,
-        Option<String>,
-    )> = Vec::new();
+    let mut pending_items_total = 0usize;
+    let mut db_errors_total = 0usize;
 
     let all_sources = crate::sources::build_all_sources();
     let source_count = all_sources.len();
@@ -91,6 +154,14 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
 
     let enabled_count = enabled_sources.len();
     let completed = Arc::new(AtomicUsize::new(summary.skipped_disabled));
+
+    // Language / translation settings are cycle-constant; resolve once.
+    let user_lang = crate::i18n::get_user_language();
+    let auto_translate = crate::get_settings_manager()
+        .lock()
+        .get()
+        .translation
+        .auto_translate;
 
     // Adaptive yield throttle (see yield_throttle): low-yield sources get a smaller
     // fetch budget so we stop pulling+embedding a firehose of noise. Capping the
@@ -140,7 +211,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
         "Spawned parallel fetch for {enabled_count} sources"
     );
 
-    // Collect results as they complete
+    // Collect results as they complete. Each source's batch is embedded and
+    // persisted HERE, so already-ingested sources survive whatever happens later.
     while let Some(join_result) = join_set.join_next().await {
         let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
         void_signal_fetch_progress(app, done, source_count);
@@ -185,16 +257,34 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                     }
                 }
 
+                let mut source_new_items: Vec<RawNewItem> = Vec::new();
                 for item in items {
-                    if db
-                        .get_source_item(&st, &item.source_id)
-                        .ok()
-                        .flatten()
-                        .is_none()
-                    {
+                    // `source_item_exists`, NOT `get_source_item`: the getter filters
+                    // out `embedding_status = 'pending'` rows, so a pending item still
+                    // inside the source window would look "new" and be re-embedded
+                    // every cycle (and its enriched content clobbered). The repair
+                    // loop owns re-embedding; the fetch path only refreshes last_seen.
+                    if db.source_item_exists(&st, &item.source_id).unwrap_or(false) {
+                        db.touch_source_item(&st, &item.source_id).ok();
+                        // Re-see = the only moment engagement counts refresh
+                        // (favourites/score/likes grow after first ingest).
+                        if let Some(tags) = super::extract_source_tags(&item) {
+                            if let Err(e) = db.update_source_item_tags(&st, &item.source_id, &tags)
+                            {
+                                debug!(target: "4da::cache", source = %st, error = %e, "Tags refresh failed on re-seen item");
+                            }
+                        }
+                        summary.cached_touches += 1;
+                    } else {
                         let feed_origin = super::extract_feed_origin(&item);
                         let published_at = super::extract_published_at(&item);
-                        new_items_to_embed.push((
+                        // Tags (topics + engagement keys) come from adapter
+                        // metadata, which is dropped at the DB boundary —
+                        // serialize them NOW or the community-signal reader
+                        // never sees engagement (2026-08-23 audit: the tags
+                        // column was NULL across the entire corpus).
+                        let tags = super::extract_source_tags(&item);
+                        source_new_items.push((
                             st.to_string(),
                             item.source_id,
                             item.url,
@@ -202,11 +292,18 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                             item.content,
                             feed_origin,
                             published_at,
+                            tags,
                         ));
-                    } else {
-                        db.touch_source_item(&st, &item.source_id).ok();
-                        summary.cached_touches += 1;
                     }
+                }
+
+                if !source_new_items.is_empty() {
+                    let counts =
+                        ingest_source_batch(db, &st, source_new_items, &user_lang, auto_translate)
+                            .await;
+                    summary.new_items += counts.new_items;
+                    pending_items_total += counts.pending_items;
+                    db_errors_total += counts.db_errors;
                 }
             }
             Err((st, e)) => {
@@ -223,233 +320,6 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
 
     for (name, count) in cache_tracker.persistent_failures() {
         warn!(target: "4da::cache", adapter = %name, consecutive_failures = count, "Persistent failure during cache fill");
-    }
-
-    // Embed and cache new items
-    if !new_items_to_embed.is_empty() {
-        info!(target: "4da::cache", new_items = new_items_to_embed.len(), "Embedding new items");
-
-        // Decode HTML entities at ingestion time
-        let new_items_to_embed: Vec<_> = new_items_to_embed
-            .into_iter()
-            .map(
-                |(st, sid, url, title, content, feed_origin, published_at)| {
-                    (
-                        st,
-                        sid,
-                        url,
-                        crate::decode_html_entities(&title),
-                        crate::decode_html_entities(&content),
-                        feed_origin,
-                        published_at,
-                    )
-                },
-            )
-            .collect();
-
-        // Detect language from title text (before embedding)
-        let new_items_to_embed: Vec<_> = new_items_to_embed
-            .into_iter()
-            .map(
-                |(st, sid, url, title, content, feed_origin, published_at)| {
-                    let detected_lang =
-                        crate::language_detect::detect_language_with_content(&title, &content);
-                    (
-                        st,
-                        sid,
-                        url,
-                        title,
-                        content,
-                        detected_lang,
-                        feed_origin,
-                        published_at,
-                    )
-                },
-            )
-            .collect();
-
-        // Drop foreign-language items that won't be translated into the user's
-        // language. Two signals are combined: the detected language, and a
-        // script-ratio check that catches predominantly non-Latin titles the
-        // detector misclassifies as English (e.g. a mostly-CJK title with a few
-        // ASCII tokens). Non-English users have foreign titles translated below,
-        // so those are retained for them.
-        let user_lang = crate::i18n::get_user_language();
-        let auto_translate = crate::get_settings_manager()
-            .lock()
-            .get()
-            .translation
-            .auto_translate;
-        let before_filter = new_items_to_embed.len();
-        let new_items_to_embed: Vec<_> = new_items_to_embed
-            .into_iter()
-            .filter(|(st, _, _, title, _, detected, _, _)| {
-                // Security advisories (OSV/CVE) are version-matched to a pinned dependency — they
-                // are relevant regardless of the advisory text's DETECTED language (the title
-                // carries an "[id] pkg:" prefix that skews short-title detection, so an English
-                // advisory like "Next.js Cache Poisoning" can be misclassified and wrongly dropped,
-                // silently losing a real exposure). Never language-filter a security source.
-                if st == "osv" || st == "cve" {
-                    return true;
-                }
-                let foreign_by_detect = detected != &user_lang;
-                let foreign_by_script =
-                    user_lang == "en" && crate::language_detect::is_predominantly_non_latin(title);
-                // Non-English users get foreign-detected titles translated.
-                let will_translate = auto_translate && user_lang != "en" && foreign_by_detect;
-                let keep = (!foreign_by_detect && !foreign_by_script) || will_translate;
-                if !keep {
-                    debug!(target: "4da::ingest", source = %st, lang = %detected, "Filtered foreign-language item at ingestion");
-                }
-                keep
-            })
-            .collect();
-        let filtered_out = before_filter - new_items_to_embed.len();
-        if filtered_out > 0 {
-            info!(target: "4da::ingest", filtered_out, user_lang = %user_lang, "Dropped foreign-language items at ingestion");
-        }
-
-        // Pre-translate titles for non-English users (warms translation cache)
-        if user_lang != "en" {
-            let translation_requests: Vec<crate::content_translation::TranslationRequest> =
-                new_items_to_embed
-                    .iter()
-                    .filter(|(_, _, _, _, _, detected, _, _)| detected != &user_lang)
-                    .map(|(_, sid, _, title, _, _, _, _)| {
-                        crate::content_translation::TranslationRequest {
-                            id: sid.clone(),
-                            text: title.clone(),
-                            source_lang: "en".to_string(),
-                        }
-                    })
-                    .collect();
-
-            if !translation_requests.is_empty() {
-                let total_chars: usize = translation_requests.iter().map(|r| r.text.len()).sum();
-                if crate::content_translation::check_ingest_budget(total_chars) {
-                    let count = translation_requests.len();
-                    let lang = user_lang.clone();
-                    debug!(target: "4da::cache", count, lang = %lang, "Spawning background title translation");
-                    // Non-blocking: translation warms cache asynchronously.
-                    // Content displays immediately; next view hits warm cache.
-                    tokio::spawn(async move {
-                        let result = std::panic::AssertUnwindSafe(
-                            crate::content_translation::translate_content_batch(
-                                &translation_requests,
-                                &lang,
-                            ),
-                        )
-                        .catch_unwind()
-                        .await;
-                        match result {
-                            Ok(results) => {
-                                let translated =
-                                    results.iter().filter(|r| r.provider != "none").count();
-                                info!(target: "4da::cache", translated, total = count, lang = %lang, "Background ingest translation complete");
-                            }
-                            Err(_) => {
-                                warn!(target: "4da::cache", "Background translation panicked — caught and ignored");
-                            }
-                        }
-                    });
-                } else {
-                    debug!(target: "4da::cache", "Ingest translation budget exhausted - skipping until tomorrow");
-                }
-            }
-        }
-
-        let texts: Vec<String> = new_items_to_embed
-            .iter()
-            .map(|(st, _, _, title, content, _, _, _)| {
-                let compressed = crate::compression_rules::compress(st, content);
-                build_embedding_text(title, &compressed)
-            })
-            .collect();
-
-        match embed_texts(&texts).await {
-            Ok(embeddings) => {
-                // Batch upsert: collect non-fallback items for transaction
-                #[allow(clippy::type_complexity)]
-                let items_to_insert: Vec<(
-                    String,
-                    String,
-                    Option<String>,
-                    String,
-                    String,
-                    Vec<f32>,
-                    String,
-                    Option<String>,
-                    Option<String>,
-                    Option<String>,
-                    Option<String>,
-                    Option<String>,
-                )> = new_items_to_embed
-                    .into_iter()
-                    .zip(embeddings)
-                    // Drop items whose embedding failed (all-zero) — EXCEPT manifest-grounded
-                    // security advisories (OSV/CVE). Their relevance is the version-match to a
-                    // pinned dependency, NOT embedding similarity, so dropping one for a zero/
-                    // failed embedding would silently lose a real exposure. A zero vector is inert
-                    // in cosine similarity, and the ledger + engine matcher ground it by version.
-                    .filter(|((source_type, source_id, _, _, _, _, _, _), embedding)| {
-                        if embedding.iter().all(|&v| v == 0.0) {
-                            let security = source_type == "osv" || source_type == "cve";
-                            if security {
-                                debug!(target: "4da::ingest", source = %source_type, id = %source_id, "Retaining zero-embedding security advisory (version-grounded)");
-                            }
-                            return security;
-                        }
-                        true
-                    })
-                    .map(
-                        |(
-                            (
-                                source_type,
-                                source_id,
-                                url,
-                                title,
-                                content,
-                                detected_lang,
-                                feed_origin,
-                                published_at,
-                            ),
-                            embedding,
-                        )| {
-                            let content_type = crate::entity_extraction::classify_for_storage(
-                                &title,
-                                &content,
-                                &source_type,
-                            );
-                            let cve_ids =
-                                crate::entity_extraction::extract_cve_ids(&title, &content);
-                            (
-                                source_type,
-                                source_id,
-                                url,
-                                title,
-                                content,
-                                embedding,
-                                detected_lang,
-                                content_type,
-                                cve_ids,
-                                feed_origin,
-                                None,
-                                published_at,
-                            )
-                        },
-                    )
-                    .collect();
-
-                let count = items_to_insert.len();
-                if !items_to_insert.is_empty() {
-                    db.batch_upsert_source_items(&items_to_insert).ok();
-                    summary.new_items += count;
-                }
-            }
-            Err(e) => {
-                warn!(target: "4da::cache", error = %e, "Embedding failed - items not cached");
-            }
-        }
     }
 
     // Link newly ingested items to known dependencies
@@ -474,9 +344,327 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
         succeeded = summary.succeeded,
         failed = summary.failed,
         new_items = summary.new_items,
+        pending_items = pending_items_total,
+        db_errors = db_errors_total,
         "=== BACKGROUND CACHE FILL COMPLETE ==="
     );
     Ok(summary)
+}
+
+// ============================================================================
+// Per-source incremental ingestion
+// ============================================================================
+
+/// Embed and persist ONE source's new items. Never drops the batch:
+/// - embed call fails        -> whole batch parked as embedding-pending
+/// - one item embeds to zero -> that item parked as embedding-pending
+///   (osv/cve keep their zero vector: version-grounded, not similarity-grounded)
+/// - DB batch upsert fails   -> logged + counted, batch re-queued as pending
+///
+/// Pending rows are re-embedded by the repair loop (`get_pending_embedding_items`
+/// / `upgrade_pending_to_complete`) on later background cycles.
+async fn ingest_source_batch(
+    db: &Database,
+    source_type: &str,
+    raw_items: Vec<RawNewItem>,
+    user_lang: &str,
+    auto_translate: bool,
+) -> IngestCounts {
+    let mut counts = IngestCounts::default();
+
+    let prepared = prepare_source_batch(source_type, raw_items, user_lang, auto_translate);
+    if prepared.is_empty() {
+        return counts;
+    }
+
+    spawn_title_translation_warmup(&prepared, user_lang);
+
+    debug!(target: "4da::cache", source = %source_type, count = prepared.len(), "Embedding new items for source");
+
+    let texts: Vec<String> = prepared.iter().map(|(_, text)| text.clone()).collect();
+    match embed_texts(&texts).await {
+        Ok(embeddings) => {
+            let (insert_rows, pending_rows) = partition_embedded(prepared, embeddings);
+            persist_source_batch(db, source_type, insert_rows, pending_rows, &mut counts);
+        }
+        Err(e) => {
+            // Source windows scroll forward: an item dropped here may never
+            // be fetched again. Park the batch for the repair loop instead.
+            warn!(
+                target: "4da::cache",
+                source = %source_type,
+                items = prepared.len(),
+                error = %e,
+                "Embedding failed - storing source batch as embedding-pending for retry"
+            );
+            let pending_rows: Vec<PendingRow> = prepared
+                .into_iter()
+                .map(|((st, sid, url, title, content, _, _, _, _), embed_text)| {
+                    (st, sid, url, title, content, embed_text)
+                })
+                .collect();
+            persist_pending_rows(db, source_type, pending_rows, &mut counts);
+        }
+    }
+    counts
+}
+
+/// Decode HTML entities, detect language, and apply the foreign-language filter
+/// to one source's raw items; pairs each retained item with its embed text.
+fn prepare_source_batch(
+    source_type: &str,
+    raw_items: Vec<RawNewItem>,
+    user_lang: &str,
+    auto_translate: bool,
+) -> Vec<(PreparedItem, String)> {
+    let before_filter = raw_items.len();
+    let prepared: Vec<(PreparedItem, String)> = raw_items
+        .into_iter()
+        .map(|(st, sid, url, title, content, feed_origin, published_at, tags)| {
+            // Decode HTML entities at ingestion time; detect language from the
+            // decoded title text (before embedding).
+            let title = crate::decode_html_entities(&title);
+            let content = crate::decode_html_entities(&content);
+            let detected_lang =
+                crate::language_detect::detect_language_with_content(&title, &content);
+            (
+                st,
+                sid,
+                url,
+                title,
+                content,
+                detected_lang,
+                feed_origin,
+                published_at,
+                tags,
+            )
+        })
+        // Drop foreign-language items that won't be translated into the user's
+        // language. Two signals are combined: the detected language, and a
+        // script-ratio check that catches predominantly non-Latin titles the
+        // detector misclassifies as English (e.g. a mostly-CJK title with a few
+        // ASCII tokens). Non-English users have foreign titles translated, so
+        // those are retained for them.
+        .filter(|(st, _, _, title, _, detected, _, _, _)| {
+            // Security advisories (OSV/CVE) are version-matched to a pinned dependency — they
+            // are relevant regardless of the advisory text's DETECTED language (the title
+            // carries an "[id] pkg:" prefix that skews short-title detection, so an English
+            // advisory like "Next.js Cache Poisoning" can be misclassified and wrongly dropped,
+            // silently losing a real exposure). Never language-filter a security source.
+            if st == "osv" || st == "cve" {
+                return true;
+            }
+            let foreign_by_detect = detected != user_lang;
+            let foreign_by_script =
+                user_lang == "en" && crate::language_detect::is_predominantly_non_latin(title);
+            // Non-English users get foreign-detected titles translated.
+            let will_translate = auto_translate && user_lang != "en" && foreign_by_detect;
+            let keep = (!foreign_by_detect && !foreign_by_script) || will_translate;
+            if !keep {
+                debug!(target: "4da::ingest", source = %st, lang = %detected, "Filtered foreign-language item at ingestion");
+            }
+            keep
+        })
+        .map(|item| {
+            let (st, _, _, title, content, ..) = &item;
+            let compressed = crate::compression_rules::compress(st, content);
+            let embed_text = build_embedding_text(title, &compressed);
+            (item, embed_text)
+        })
+        .collect();
+
+    let filtered_out = before_filter - prepared.len();
+    if filtered_out > 0 {
+        info!(target: "4da::ingest", source = %source_type, filtered_out, user_lang = %user_lang, "Dropped foreign-language items at ingestion");
+    }
+    prepared
+}
+
+/// Warm the translation cache for foreign-detected titles (non-English users).
+/// Non-blocking: content displays immediately; the next view hits a warm cache.
+fn spawn_title_translation_warmup(prepared: &[(PreparedItem, String)], user_lang: &str) {
+    if user_lang == "en" {
+        return;
+    }
+    let translation_requests: Vec<crate::content_translation::TranslationRequest> = prepared
+        .iter()
+        .filter(|((_, _, _, _, _, detected, _, _, _), _)| detected != user_lang)
+        .map(|((_, sid, _, title, _, _, _, _, _), _)| {
+            crate::content_translation::TranslationRequest {
+                id: sid.clone(),
+                text: title.clone(),
+                source_lang: "en".to_string(),
+            }
+        })
+        .collect();
+
+    if translation_requests.is_empty() {
+        return;
+    }
+    let total_chars: usize = translation_requests.iter().map(|r| r.text.len()).sum();
+    if !crate::content_translation::check_ingest_budget(total_chars) {
+        debug!(target: "4da::cache", "Ingest translation budget exhausted - skipping until tomorrow");
+        return;
+    }
+    let count = translation_requests.len();
+    let lang = user_lang.to_string();
+    debug!(target: "4da::cache", count, lang = %lang, "Spawning background title translation");
+    tokio::spawn(async move {
+        let result = std::panic::AssertUnwindSafe(
+            crate::content_translation::translate_content_batch(&translation_requests, &lang),
+        )
+        .catch_unwind()
+        .await;
+        match result {
+            Ok(results) => {
+                let translated = results.iter().filter(|r| r.provider != "none").count();
+                info!(target: "4da::cache", translated, total = count, lang = %lang, "Background ingest translation complete");
+            }
+            Err(_) => {
+                warn!(target: "4da::cache", "Background translation panicked - caught and ignored");
+            }
+        }
+    });
+}
+
+/// Split embedded items into insertable rows and embedding-pending rows.
+/// Items whose embedding failed (all-zero vector) are NOT dropped: they become
+/// pending rows so the repair loop re-embeds them on a later cycle. The
+/// exception is manifest-grounded security advisories (OSV/CVE): their
+/// relevance is the version-match to a pinned dependency, NOT embedding
+/// similarity, so deferring one for a failed embedding would silently lose a
+/// real exposure. A zero vector is inert in cosine similarity — insert it.
+fn partition_embedded(
+    prepared: Vec<(PreparedItem, String)>,
+    embeddings: Vec<Vec<f32>>,
+) -> (Vec<InsertRow>, Vec<PendingRow>) {
+    let mut insert_rows: Vec<InsertRow> = Vec::new();
+    let mut pending_rows: Vec<PendingRow> = Vec::new();
+    let mut shortfall = 0usize;
+
+    let mut embeddings = embeddings.into_iter();
+    for (item, embed_text) in prepared {
+        let (
+            source_type,
+            source_id,
+            url,
+            title,
+            content,
+            detected_lang,
+            feed_origin,
+            published_at,
+            tags,
+        ) = item;
+        let Some(embedding) = embeddings.next() else {
+            // Embedder returned fewer vectors than texts: park the tail, never truncate.
+            shortfall += 1;
+            pending_rows.push((source_type, source_id, url, title, content, embed_text));
+            continue;
+        };
+
+        let is_zero = embedding.iter().all(|&v| v == 0.0);
+        let security = source_type == "osv" || source_type == "cve";
+        if is_zero && !security {
+            pending_rows.push((source_type, source_id, url, title, content, embed_text));
+            continue;
+        }
+        if is_zero {
+            debug!(target: "4da::ingest", source = %source_type, id = %source_id, "Retaining zero-embedding security advisory (version-grounded)");
+        }
+
+        let content_type =
+            crate::entity_extraction::classify_for_storage(&title, &content, &source_type);
+        let cve_ids = crate::entity_extraction::extract_cve_ids(&title, &content);
+        insert_rows.push((
+            source_type,
+            source_id,
+            url,
+            title,
+            content,
+            embedding,
+            detected_lang,
+            content_type,
+            cve_ids,
+            feed_origin,
+            tags,
+            published_at,
+        ));
+    }
+
+    if shortfall > 0 {
+        warn!(target: "4da::ingest", shortfall, "Embedding batch returned fewer vectors than texts - overflow items parked as pending");
+    }
+    (insert_rows, pending_rows)
+}
+
+/// Persist one source's batch. Every DB error is logged with counts and
+/// surfaced in `IngestCounts::db_errors` — never `.ok()`-swallowed — and a
+/// failed main upsert re-queues its rows as embedding-pending so the items
+/// survive to the next cycle. (The vec-table write path has failed before while
+/// the plain pending path kept working; see `upgrade_pending_to_complete`.)
+fn persist_source_batch(
+    db: &Database,
+    source_type: &str,
+    insert_rows: Vec<InsertRow>,
+    mut pending_rows: Vec<PendingRow>,
+    counts: &mut IngestCounts,
+) {
+    if !insert_rows.is_empty() {
+        match db.batch_upsert_source_items(&insert_rows) {
+            Ok(upserted) => {
+                counts.new_items += upserted;
+            }
+            Err(e) => {
+                counts.db_errors += 1;
+                warn!(
+                    target: "4da::cache",
+                    source = %source_type,
+                    items = insert_rows.len(),
+                    error = %e,
+                    "Batch upsert failed - re-queueing this source's items as embedding-pending"
+                );
+                pending_rows.extend(insert_rows.into_iter().map(
+                    |(st, sid, url, title, content, _, _, _, _, _, _, _)| {
+                        // Rebuild the embed text exactly as the embed attempt built it.
+                        let compressed = crate::compression_rules::compress(&st, &content);
+                        let embed_text = build_embedding_text(&title, &compressed);
+                        (st, sid, url, title, content, embed_text)
+                    },
+                ));
+            }
+        }
+    }
+    persist_pending_rows(db, source_type, pending_rows, counts);
+}
+
+/// Store rows in the `embedding_status = 'pending'` retry queue, counting
+/// (never swallowing) failures. Items that cannot be stored even here are
+/// genuinely lost once the source window scrolls — the log says so.
+fn persist_pending_rows(
+    db: &Database,
+    source_type: &str,
+    pending_rows: Vec<PendingRow>,
+    counts: &mut IngestCounts,
+) {
+    if pending_rows.is_empty() {
+        return;
+    }
+    match db.batch_upsert_pending_source_items(&pending_rows) {
+        Ok(stored) => {
+            counts.pending_items += stored;
+            info!(target: "4da::cache", source = %source_type, count = stored, "Stored items as embedding-pending for retry");
+        }
+        Err(e) => {
+            counts.db_errors += 1;
+            warn!(
+                target: "4da::cache",
+                source = %source_type,
+                items = pending_rows.len(),
+                error = %e,
+                "Failed to store pending items - this source's batch is lost if its window scrolls"
+            );
+        }
+    }
 }
 
 /// Helper to process source items into cache/embed lists
@@ -510,7 +698,7 @@ pub(crate) fn process_source_items(
                     url: cached.url,
                     content: cached.content,
                     feed_origin: cached.feed_origin,
-                    tags: None,
+                    tags: cached.tags,
                     published_at: cached
                         .published_at
                         .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string()),
@@ -526,7 +714,7 @@ pub(crate) fn process_source_items(
                 url: item.url.clone(),
                 content: item.content.clone(),
                 feed_origin: super::extract_feed_origin(&item),
-                tags: None,
+                tags: super::extract_source_tags(&item),
                 published_at: super::extract_published_at(&item),
             };
 
@@ -537,180 +725,6 @@ pub(crate) fn process_source_items(
     }
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test_utils::test_db;
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    /// Helper: replicate the ID hashing logic used in fetch_all_sources and process_source_items
-    fn hash_source_id(source_type: &str, source_id: &str) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        format!("{}:{}", source_type, source_id).hash(&mut hasher);
-        hasher.finish()
-    }
-
-    // ---------- Test 1: ID hashing is deterministic and collision-resistant ----------
-
-    #[test]
-    fn test_source_id_hashing_deterministic_and_distinct() {
-        // Same inputs must produce the same hash (deterministic)
-        let id_a = hash_source_id("hackernews", "12345");
-        let id_b = hash_source_id("hackernews", "12345");
-        assert_eq!(
-            id_a, id_b,
-            "Same source_type + source_id should yield same hash"
-        );
-
-        // Different source_id should produce different hash
-        let id_c = hash_source_id("hackernews", "99999");
-        assert_ne!(
-            id_a, id_c,
-            "Different source_ids should produce different hashes"
-        );
-
-        // Different source_type with same source_id should produce different hash
-        let id_d = hash_source_id("reddit", "12345");
-        assert_ne!(
-            id_a, id_d,
-            "Different source_types should produce different hashes"
-        );
-    }
-
-    // ---------- Test 2: process_source_items routes uncached items to embed list ----------
-
-    #[test]
-    fn test_process_source_items_new_items_go_to_embed_list() {
-        let db = test_db();
-        let mut all_items: Vec<(GenericSourceItem, Vec<f32>)> = Vec::new();
-        let mut new_items_to_embed: Vec<(GenericSourceItem, String)> = Vec::new();
-
-        let items = vec![
-            sources::SourceItem::new("hackernews", "hn_001", "Rust is great")
-                .with_url(Some("https://example.com/rust".to_string()))
-                .with_content("Rust offers memory safety without a GC.".to_string()),
-            sources::SourceItem::new("hackernews", "hn_002", "TypeScript 6.0 Released")
-                .with_content("Major new features in TS 6.".to_string()),
-        ];
-
-        process_source_items(
-            &db,
-            &mut all_items,
-            &mut new_items_to_embed,
-            items,
-            "hackernews",
-        );
-
-        // Nothing in DB, so all items should be in the embed list
-        assert_eq!(
-            all_items.len(),
-            0,
-            "No cached items should appear in all_items"
-        );
-        assert_eq!(
-            new_items_to_embed.len(),
-            2,
-            "Both items should need embedding"
-        );
-
-        // Verify GenericSourceItem fields
-        let (ref item, ref embed_text) = new_items_to_embed[0];
-        assert_eq!(item.source_type, "hackernews");
-        assert_eq!(item.source_id, "hn_001");
-        assert_eq!(item.title, "Rust is great");
-        assert_eq!(item.url, Some("https://example.com/rust".to_string()));
-        assert_eq!(item.content, "Rust offers memory safety without a GC.");
-
-        // Embedding text should contain both title and content
-        assert!(
-            embed_text.contains("Rust is great"),
-            "Embed text should contain the title"
-        );
-        assert!(
-            embed_text.contains("memory safety"),
-            "Embed text should contain the content"
-        );
-    }
-
-    // ---------- Test 3: process_source_items assigns correct source_type ----------
-
-    #[test]
-    fn test_process_source_items_tags_with_source_type() {
-        let db = test_db();
-        let mut all_items: Vec<(GenericSourceItem, Vec<f32>)> = Vec::new();
-        let mut embed_list: Vec<(GenericSourceItem, String)> = Vec::new();
-
-        let reddit_items = vec![sources::SourceItem::new(
-            "reddit",
-            "t3_abc",
-            "Show Reddit: My CLI tool",
-        )];
-        let arxiv_items = vec![sources::SourceItem::new(
-            "arxiv",
-            "2401.00001",
-            "Attention Is Still All You Need",
-        )];
-
-        process_source_items(&db, &mut all_items, &mut embed_list, reddit_items, "reddit");
-        process_source_items(&db, &mut all_items, &mut embed_list, arxiv_items, "arxiv");
-
-        assert_eq!(embed_list.len(), 2);
-        assert_eq!(embed_list[0].0.source_type, "reddit");
-        assert_eq!(embed_list[1].0.source_type, "arxiv");
-
-        // IDs should differ because source_type differs
-        assert_ne!(embed_list[0].0.id, embed_list[1].0.id);
-    }
-
-    // ---------- Test 4: Fallback zero-vector detection ----------
-
-    #[test]
-    fn test_fallback_zero_vector_detection() {
-        // This tests the pattern used to detect fallback embeddings
-        let real_embedding = [0.1f32, -0.5, 0.3, 0.0, 0.8];
-        let zero_embedding = vec![0.0f32; crate::EMBEDDING_DIMS];
-        let empty_embedding: Vec<f32> = vec![];
-
-        let is_fallback_real = real_embedding.iter().all(|&v| v == 0.0);
-        let is_fallback_zero = zero_embedding.iter().all(|&v| v == 0.0);
-        let is_fallback_empty = empty_embedding.iter().all(|&v| v == 0.0);
-
-        assert!(
-            !is_fallback_real,
-            "Real embedding should not be detected as fallback"
-        );
-        assert!(
-            is_fallback_zero,
-            "All-zeros vector should be detected as fallback"
-        );
-        assert!(
-            is_fallback_empty,
-            "Empty vector should satisfy all() vacuously (edge case)"
-        );
-    }
-
-    // ---------- Test 5: Retry backoff constants from fetch_with_retry ----------
-
-    #[test]
-    fn test_retry_backoff_delays() {
-        use crate::source_fetching::{MAX_RETRY_ATTEMPTS, RETRY_BACKOFF_SECS};
-
-        // fetch_with_retry uses exponential backoff: 1s, 2s, 4s
-        assert_eq!(RETRY_BACKOFF_SECS[0], 1, "First retry: 1s");
-        assert_eq!(RETRY_BACKOFF_SECS[1], 2, "Second retry: 2s");
-        assert_eq!(RETRY_BACKOFF_SECS[2], 4, "Third retry: 4s");
-        assert_eq!(MAX_RETRY_ATTEMPTS, 3, "Maximum 3 attempts");
-
-        // Beyond array bounds should fallback to 4
-        assert_eq!(
-            RETRY_BACKOFF_SECS.get(3).copied().unwrap_or(4),
-            4,
-            "Out-of-bounds: fallback 4s"
-        );
-    }
-}
+#[path = "processor_tests.rs"]
+mod tests;

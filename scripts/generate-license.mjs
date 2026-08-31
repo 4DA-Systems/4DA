@@ -14,7 +14,7 @@ import crypto from 'crypto';
 
 // ---------------------------------------------------------------------------
 // Ed25519 license generation (same logic as site/lib/ed25519-license.js, used by
-// site/functions/api/streets/activate.js on Cloudflare Pages)
+// site/functions/api/license/activate.js on Cloudflare Pages)
 // ---------------------------------------------------------------------------
 
 function generateLicenseKey(payload, privateKeyHex) {

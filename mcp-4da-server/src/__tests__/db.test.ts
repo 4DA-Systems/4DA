@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
-import { FourDADatabase } from "../db.js";
+import { DEPENDENCY_GROUP_QUERY, FourDADatabase } from "../db.js";
 
 // =============================================================================
 // Helper: create an in-memory FourDADatabase (same pattern as tools.test.ts)
@@ -289,4 +289,118 @@ describe("FourDADatabase.queryWithRetry", () => {
 
     expect(attempts).toBe(1);
   });
+});
+
+// =============================================================================
+// Standalone-schema compatibility — the is_direct regression
+//
+// 5.0.2 shipped a minimal standalone schema WITHOUT `is_direct`, while the
+// full-DB init branch queries it (DEPENDENCY_GROUP_QUERY). Session 1 of a
+// standalone install worked (fresh DB, scan path); session 2+ hit the full-DB
+// branch, threw `no such column: is_direct`, and silently disabled
+// vulnerability_scan / dependency_health / upgrade_planner. These tests run
+// the EXACT production query against both standalone shapes so the two modes
+// can never drift apart unnoticed again.
+// =============================================================================
+
+describe("standalone schema compatibility (is_direct regression)", () => {
+  // These two create a real SQLite file on disk and run the open-path migration
+  // over it. That is genuinely slow on a cold hosted Windows runner — measured
+  // at 11.7s and 12.6s in the `Fresh clone (windows-latest)` job against
+  // vitest's 5s default, while the same tests finish in well under a second
+  // locally. They failed that job on timeout alone, with 217 of 219 tests
+  // passing and no assertion ever failing: a red build reporting runner speed
+  // rather than a regression.
+  //
+  // The budget is deliberately generous. A timeout should catch a hang, not
+  // adjudicate how fast a disk is.
+  const COLD_RUNNER_TIMEOUT_MS = 60_000;
+
+  async function withTmpDb(
+    name: string,
+    fn: (tmpPath: string) => void | Promise<void>,
+  ): Promise<void> {
+    const { tmpdir } = await import("os");
+    const { unlinkSync } = await import("fs");
+    const { join } = await import("path");
+    const tmpPath = join(
+      tmpdir(),
+      `4da-test-${name}-${Date.now()}-${Math.floor(Math.random() * 1e6)}.db`,
+    );
+    try {
+      await fn(tmpPath);
+    } finally {
+      for (const suffix of ["", "-wal", "-shm"]) {
+        try {
+          unlinkSync(tmpPath + suffix);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    }
+  }
+
+  it("fresh standalone schema satisfies the production dependency-group query", async () => {
+    await withTmpDb("standalone-fresh", (tmpPath) => {
+      const db = new FourDADatabase(tmpPath);
+      try {
+        expect(db.isStandalone).toBe(true);
+        const raw = db.getRawDb();
+        // Scanner-style insert: no is_direct column named — DEFAULT must apply.
+        raw
+          .prepare(
+            "INSERT OR IGNORE INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, language) VALUES (?, ?, ?, ?, ?, ?)",
+          )
+          .run("/tmp/proj", "packagejson", "react", "19.0.0", 0, "javascript");
+        const rows = raw.prepare(DEPENDENCY_GROUP_QUERY).all() as Array<{
+          package_name: string;
+          is_direct: number;
+        }>;
+        expect(rows).toHaveLength(1);
+        expect(rows[0].is_direct).toBe(1);
+      } finally {
+        db.close();
+      }
+    });
+  }, COLD_RUNNER_TIMEOUT_MS);
+
+  it("legacy 5.0.2 standalone DB (no is_direct) is upgraded on open and the query succeeds", async () => {
+    await withTmpDb("standalone-legacy", (tmpPath) => {
+      // Session 1 under 5.0.2: minimal schema WITHOUT is_direct.
+      const legacy = new Database(tmpPath);
+      legacy.exec(`
+        CREATE TABLE project_dependencies (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_path TEXT NOT NULL,
+          manifest_type TEXT NOT NULL,
+          package_name TEXT NOT NULL,
+          version TEXT,
+          is_dev INTEGER DEFAULT 0,
+          language TEXT NOT NULL,
+          last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(project_path, package_name)
+        );
+      `);
+      legacy
+        .prepare(
+          "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, language) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .run("/tmp/proj", "cargotoml", "tokio", "1.50.0", 0, "rust");
+      legacy.close();
+
+      // Session 2: the server reopens the existing DB (full-DB branch).
+      const db = new FourDADatabase(tmpPath);
+      try {
+        const rows = db.getRawDb().prepare(DEPENDENCY_GROUP_QUERY).all() as Array<{
+          package_name: string;
+          is_direct: number;
+        }>;
+        expect(rows).toHaveLength(1);
+        // Backfilled as direct — manifest-scanned deps are direct by definition.
+        expect(rows[0].is_direct).toBe(1);
+      } finally {
+        db.close();
+      }
+    });
+  }, COLD_RUNNER_TIMEOUT_MS);
 });

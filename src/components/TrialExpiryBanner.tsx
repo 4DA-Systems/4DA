@@ -68,7 +68,7 @@ export function TrialExpiryBanner() {
           <p className="text-xs text-text-muted">{t('trialExpiry.body')}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <SignalUpgradeCTA compact />
+          <SignalUpgradeCTA compact source="trial-expiry" />
           <button
             onClick={dismiss}
             className="px-3 py-1.5 text-xs rounded bg-text-primary/5 text-text-secondary hover:text-text-primary hover:bg-text-primary/10 transition-colors whitespace-nowrap"

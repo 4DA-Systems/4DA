@@ -50,11 +50,36 @@ export const ecosystemPulseTool = {
   },
 };
 
-export function executeEcosystemPulse(
-  _db: FourDADatabase,
+/**
+ * Derive the tech stack used to filter HN headlines from the database:
+ * explicit tech_stack entries plus the languages of tracked dependencies.
+ * Works on both the desktop DB and the standalone minimal schema.
+ */
+export function deriveTechStackForHeadlines(db: FourDADatabase): string[] {
+  const stack = new Set<string>();
+  const rawDb = db.getRawDb();
+  try {
+    for (const row of rawDb.prepare("SELECT technology FROM tech_stack").all() as Array<{ technology: string }>) {
+      if (row.technology) stack.add(row.technology.toLowerCase());
+    }
+  } catch {
+    // tech_stack may not exist on exotic DBs — languages below still apply.
+  }
+  try {
+    for (const row of rawDb.prepare("SELECT DISTINCT language FROM project_dependencies").all() as Array<{ language: string }>) {
+      if (row.language) stack.add(row.language.toLowerCase());
+    }
+  } catch {
+    // project_dependencies may not exist — an empty stack yields an honest empty result.
+  }
+  return [...stack];
+}
+
+export async function executeEcosystemPulse(
+  db: FourDADatabase,
   params: EcosystemPulseParams,
   liveIntel: LiveIntelligence | null,
-): EcosystemPulseResult {
+): Promise<EcosystemPulseResult> {
   if (!liveIntel) {
     return {
       headlines: [],
@@ -64,7 +89,16 @@ export function executeEcosystemPulse(
     };
   }
 
-  const headlines = liveIntel.getHeadlines();
+  // The startup prefetch only ever ran in standalone mode, so full-DB servers
+  // returned an empty cache forever. Fetch on demand when the cache is empty —
+  // the cache still serves warm repeat calls.
+  let headlines = liveIntel.getHeadlines();
+  if (headlines.length === 0 && liveIntel.isEnabled()) {
+    const techStack = deriveTechStackForHeadlines(db);
+    if (techStack.length > 0) {
+      headlines = await liveIntel.fetchHeadlines(techStack);
+    }
+  }
   const minPoints = params.min_points ?? 0;
   const limit = params.limit ?? 15;
 

@@ -23,7 +23,9 @@ interface AutopsyResult {
   components: Array<{
     name: string;
     raw_value: number;
-    weight: number;
+    /** The measured axis value (delta from neutral for multipliers) — NOT an
+     * additive share of the final score. PASIFA combines axes multiplicatively
+     * with gates and ceilings, so components do not sum to final_score. */
     contribution: number;
     explanation: string;
   }>;

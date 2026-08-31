@@ -62,3 +62,47 @@ describe("tool registry descriptions", () => {
     }
   });
 });
+
+describe("tools/list inputSchema discoverability (AD-032)", () => {
+  // Ground truth from the schema files themselves — the test never hardcodes
+  // which tools have required params, so adding one later stays consistent.
+  const requiredByFile = new Map(
+    Object.entries(TOOL_REGISTRY).map(([name, entry]) => {
+      const raw = JSON.parse(readFileSync(join(schemaDir, entry.schemaFile), "utf8")) as {
+        inputSchema?: { required?: string[] };
+      };
+      return [name, raw.inputSchema?.required ?? []] as const;
+    }),
+  );
+
+  it("required-param tools serve their REAL inputSchema in tools/list", () => {
+    for (const tool of getSlimToolList()) {
+      const required = requiredByFile.get(tool.name) ?? [];
+      if (required.length === 0) continue;
+      expect(
+        tool.inputSchema.required,
+        `${tool.name}: required params must be discoverable in tools/list`,
+      ).toEqual(required);
+      expect(
+        Object.keys((tool.inputSchema.properties ?? {}) as object).length,
+        `${tool.name}: real schema must carry its properties`,
+      ).toBeGreaterThan(0);
+    }
+    // The line is only meaningful if it actually fires for someone.
+    const servedFull = getSlimToolList().filter(
+      (t) => (requiredByFile.get(t.name) ?? []).length > 0,
+    );
+    expect(servedFull.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("all-optional tools stay slim ({} is a valid call; full schema via resource)", () => {
+    for (const tool of getSlimToolList()) {
+      const required = requiredByFile.get(tool.name) ?? [];
+      if (required.length > 0) continue;
+      expect(
+        tool.inputSchema,
+        `${tool.name}: all-optional tools keep the slim schema`,
+      ).toEqual({ type: "object" });
+    }
+  });
+});

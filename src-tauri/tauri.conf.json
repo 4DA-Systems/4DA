@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "4DA",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "identifier": "com.4da.app",
   "build": {
     "beforeDevCommand": "pnpm run dev",
@@ -39,7 +39,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["4da"]
+        "schemes": ["fourda"]
       }
     },
     "opener": {},
@@ -47,12 +47,13 @@
       "endpoints": [
         "https://github.com/4DA-Systems/4DA/releases/download/desktop-latest/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5QUY0MkIxQjY5NzE3MDMKUldRREY1ZTJzVUt2R1lDUHhrYS9LYXpPWTZzLzh3ODV0SzdDOHJENklSQWIxdWNPaFZmZVBSWkYK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ2RUNFMUQ2QTk3ODQ5RUYKUldUdlNYaXAxdUhzUnVyTzV2QzBUT1NFVmxpcFVxU3pzSGluT0RudTdEWDVUdzExZ3VEdkhRUVoK"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "dmg", "appimage", "deb", "rpm"],
+    "targets": ["app", "nsis", "dmg", "appimage", "deb", "rpm"],
+    "createUpdaterArtifacts": true,
     "category": "DeveloperTool",
     "resources": {
       "../src/locales": "locales",
@@ -92,7 +93,7 @@
       },
       "signCommand": {
         "cmd": "powershell",
-        "args": ["-NoProfile", "-File", "..\\scripts\\sign-windows.ps1", "%1"]
+        "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "..\\scripts\\sign-windows.ps1", "%1"]
       },
       "nsis": {
         "displayLanguageSelector": false,

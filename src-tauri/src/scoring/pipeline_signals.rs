@@ -33,8 +33,8 @@ pub(super) fn build_corroboration(
             .take(5) // Limit to top 5 topics for query performance
             .map(|t| {
                 format!(
-                    "LOWER(title) LIKE '%{}%'",
-                    t.to_lowercase().replace('\'', "''")
+                    "LOWER(title) LIKE '%{}%' ESCAPE '\\'",
+                    escape_like_literal(&t.to_lowercase())
                 )
             })
             .collect();
@@ -71,8 +71,9 @@ pub(super) fn build_corroboration(
             let day_count: i64 = conn
                 .query_row(
                     "SELECT COUNT(DISTINCT DATE(created_at)) FROM source_items \
-                     WHERE created_at >= datetime('now', '-7 days') AND LOWER(title) LIKE ?1",
-                    rusqlite::params![format!("%{}%", topic_lower)],
+                     WHERE created_at >= datetime('now', '-7 days') \
+                     AND LOWER(title) LIKE ?1 ESCAPE '\\'",
+                    rusqlite::params![format!("%{}%", escape_like_literal(&topic_lower))],
                     |row| row.get(0),
                 )
                 .unwrap_or(0);
@@ -97,6 +98,60 @@ pub(super) fn build_corroboration(
     }
 }
 
+/// Escape a topic so it matches LITERALLY inside a SQL LIKE pattern.
+///
+/// Only `'` was escaped here, so `%` and `_` inside a topic acted as LIKE
+/// WILDCARDS against the whole corpus. That is not hypothetical: a majority of
+/// the live ACE topic set carries underscores — `api_calls`, `async_runtime`,
+/// `parking_lot`, `once_cell`, `ts_rs`, `content_dna_classifiers`,
+/// `fourda_macros` — so `api_calls` was matching `api-calls`, `apiXcalls` and
+/// every other single-character variant, inflating the very corroboration
+/// count this function exists to measure (2026-08-26 audit, S4).
+///
+/// Pairs with an explicit `ESCAPE '\'` on every clause; SQLite has no default
+/// escape character for LIKE.
+fn escape_like_literal(topic: &str) -> String {
+    let mut out = String::with_capacity(topic.len() + 4);
+    for ch in topic.chars() {
+        match ch {
+            '\\' | '%' | '_' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            // Doubled for the interpolated clause; harmless when bound.
+            '\'' => out.push_str("''"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod like_escape_tests {
+    use super::escape_like_literal;
+
+    #[test]
+    fn underscores_and_percents_are_escaped_not_wildcards() {
+        assert_eq!(escape_like_literal("api_calls"), "api\\_calls");
+        assert_eq!(escape_like_literal("async_runtime"), "async\\_runtime");
+        assert_eq!(escape_like_literal("100%"), "100\\%");
+        assert_eq!(escape_like_literal("a_b%c"), "a\\_b\\%c");
+    }
+
+    #[test]
+    fn quotes_still_doubled_and_backslash_escaped() {
+        assert_eq!(escape_like_literal("o'brien"), "o''brien");
+        assert_eq!(escape_like_literal("a\\b"), "a\\\\b");
+    }
+
+    #[test]
+    fn ordinary_topics_are_untouched() {
+        for t in ["tokio", "rust", "tauri-apps", "kubernetes"] {
+            assert_eq!(escape_like_literal(t), t);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::build_corroboration;
@@ -118,6 +173,8 @@ mod tests {
             version: None,
             ecosystem: "rust".to_string(),
             corroborated: true,
+            raw_name: None,
+            project_paths: Vec::new(),
         }
     }
 
@@ -192,11 +249,13 @@ mod tests {
     }
 
     #[test]
-    fn corroboration_dependency_match_false_for_dev_or_weak_dep() {
+    fn corroboration_dependency_match_for_dev_and_weak_dep() {
         let db = test_db();
-        // Dev dependency is not a grounding edge even at high confidence.
+        // Dev dependency IS a grounding edge at strong confidence (item 16,
+        // 2026-08-23: manifest devDeps ground the feed; only the Critical
+        // paging lane stays non-dev via `is_strongly_grounded_direct`).
         let c1 = build_corroboration(&db, &["x".to_string()], &[dep("tokio", 0.95, true)]);
-        assert!(!c1.dependency_match);
+        assert!(c1.dependency_match);
         // Confidence below the 0.40 strong floor does not ground.
         let c2 = build_corroboration(&db, &["x".to_string()], &[dep("tokio", 0.30, false)]);
         assert!(!c2.dependency_match);

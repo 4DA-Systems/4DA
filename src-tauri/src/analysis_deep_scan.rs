@@ -19,7 +19,7 @@ use super::{is_aborted, SIGNAL_CLASSIFIER};
 pub(crate) async fn run_multi_source_analysis_impl(
     app: &AppHandle,
     silent: bool,
-) -> Result<Vec<SourceRelevance>> {
+) -> Result<crate::analysis::analysis_cycle::ScoredBatch> {
     info!(target: "4da::analysis", silent, "=== MULTI-SOURCE ANALYSIS STARTED ===");
 
     // Gated emitters: when `silent` (background/scheduled run), suppress
@@ -121,7 +121,9 @@ pub(crate) async fn run_multi_source_analysis_impl(
         0,
         all_items.len(),
     );
-    let scoring_ctx = scoring::build_scoring_context(db)
+    // Deliberately unbounded (deep scans tolerate a slow cold build); the
+    // tagged builder still logs elapsed_ms and warns past its soft ceiling.
+    let scoring_ctx = scoring::build_scoring_context_tagged(db, "deep_scan")
         .await
         .map_err(|e| format!("Failed to build scoring context: {e}"))?;
     let trend_topics = crate::detect_trend_topics(
@@ -224,24 +226,38 @@ pub(crate) async fn run_multi_source_analysis_impl(
         }
     }
 
+    // Evaluated snapshot before the batch layer — `dedup_results` and
+    // `topic_dedup_results` below DELETE entries, and persistence must still
+    // stamp and score them (see `analysis_cycle::EvaluatedItem`). Serendipity
+    // injection happens after this point; `ScoredBatch::new` lets the final
+    // results win for any id present in both, so injected and re-capped items
+    // persist exactly as they did before.
+    let pre_batch: Vec<crate::analysis::analysis_cycle::EvaluatedItem> = results
+        .iter()
+        .map(crate::analysis::analysis_cycle::EvaluatedItem::from)
+        .collect();
+
     scoring::sort_results(&mut results);
     scoring::dedup_results(&mut results);
     scoring::topic_dedup_results(&mut results);
     scoring::apply_domain_diversity(&mut results);
     scoring::apply_source_topic_diversity(&mut results);
+    scoring::apply_source_share_diversity(&mut results);
 
-    // Serendipity Engine: inject anti-bubble items
+    // Serendipity Engine: inject anti-bubble items. Routed through
+    // `inject_serendipity_candidates` so the scorer-rejected originals are
+    // REPLACED, not duplicated — the old compute+extend here double-persisted
+    // every pick (same clone bug as the analyzer path, fixed 2026-08-23).
     {
         let settings = crate::get_settings_manager().lock();
         let serendipity_config = &settings.get().serendipity;
         if serendipity_config.enabled {
-            let candidates = scoring::compute_serendipity_candidates(
-                &results,
+            let injected = scoring::inject_serendipity_candidates(
+                &mut results,
                 serendipity_config.budget_percent,
             );
-            if !candidates.is_empty() {
-                tracing::info!(target: "4da::analysis", count = candidates.len(), "Injecting serendipity items");
-                results.extend(candidates);
+            if injected > 0 {
+                tracing::info!(target: "4da::analysis", count = injected, "Injecting serendipity items");
                 scoring::sort_results(&mut results);
             }
         }
@@ -307,6 +323,10 @@ pub(crate) async fn run_multi_source_analysis_impl(
                                                 applicability: None,
                                                 advisory_id: None,
                                                 primary_topic: None,
+                                                // Injected, never scored: the 0.45
+                                                // cap IS its durable evidence.
+                                                evidence_score: 0.45,
+                                                rank_factors: None,
                                             };
                                             info!(
                                                 target: "4da::analysis",
@@ -473,5 +493,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
         });
     }
 
-    Ok(results)
+    Ok(crate::analysis::analysis_cycle::ScoredBatch::new(
+        results, pre_batch,
+    ))
 }

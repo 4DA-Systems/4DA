@@ -2,7 +2,7 @@
 /**
  * record_feedback tool
  *
- * Record user feedback on an item for learning.
+ * Record explicit user interaction history for an item.
  */
 
 import type { FourDADatabase } from "../db.js";
@@ -13,15 +13,15 @@ import type { RecordFeedbackParams, FeedbackResult, FeedbackAction } from "../ty
  */
 export const recordFeedbackTool = {
   name: "record_feedback",
-  description: `Record user feedback on a content item.
+  description: `Record explicit user interaction history for a content item.
 
 Feedback actions:
-- "click": User clicked/opened the item (moderate positive signal)
-- "save": User saved/bookmarked the item (strong positive signal)
-- "dismiss": User dismissed the item (weak negative signal)
-- "mark_irrelevant": User marked item as not relevant (strong negative signal)
+- "click": User clicked/opened the item
+- "save": User saved/bookmarked the item
+- "dismiss": User dismissed the item
+- "mark_irrelevant": User marked item as not relevant
 
-This feedback helps 4DA learn user preferences over time.`,
+This records what happened; it does not train content preferences (interaction counts only graduate scoring's bootstrap gate).`,
   inputSchema: {
     type: "object" as const,
     properties: {

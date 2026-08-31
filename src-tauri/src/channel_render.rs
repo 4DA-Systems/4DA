@@ -357,7 +357,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
     );
 
     // Call LLM (async -- no locks held at this point)
-    let llm_client = crate::llm::LLMClient::new(llm_settings.clone());
+    let llm_client = crate::llm::LLMClient::with_purpose(llm_settings.clone(), "channel_render");
     let messages = vec![crate::llm::Message {
         role: "user".to_string(),
         content: user_prompt,

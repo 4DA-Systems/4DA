@@ -140,24 +140,6 @@ Get currently active topics.
 invoke('ace_get_active_topics'): Promise<Topic[]>
 ```
 
-### `ace_get_topic_affinities`
-
-Get learned topic affinities.
-
-```typescript
-invoke('ace_get_topic_affinities'): Promise<TopicAffinity[]>
-```
-
-### `ace_get_anti_topics`
-
-Get learned anti-topics.
-
-```typescript
-invoke('ace_get_anti_topics', {
-  minRejections?: number
-}): Promise<AntiTopic[]>
-```
-
 ### `ace_auto_discover`
 
 Run full auto-discovery.

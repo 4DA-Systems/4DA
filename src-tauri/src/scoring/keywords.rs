@@ -234,6 +234,77 @@ fn is_generic_interest_term(
     }
 }
 
+/// Is this (lowercased) interest topic a single-word term that names part of
+/// the user's OWN detected primary stack? "Tauri" is not a generic word to a
+/// Tauri developer — for them it is maximally specific.
+///
+/// Deliberately narrow (2026-08-23 audit item 14):
+/// - single whitespace-token topics only (multi-word topics already get full
+///   specificity weight);
+/// - literal membership in `primary_stack` ONLY — not `all_tech`, not the
+///   role-derived exemption lists (those serve the broad-term mechanism);
+/// - broad terms are excluded and stay with the broad-term machinery
+///   (`is_broad_interest_topic` / `exempts_broad`).
+fn is_own_stack_single_word_topic(
+    topic_lower: &str,
+    profile: &super::calibration::SpecificityProfile,
+) -> bool {
+    let mut words = topic_lower.split_whitespace();
+    let single = match (words.next(), words.next()) {
+        (Some(word), None) => word,
+        _ => return false,
+    };
+    if is_broad_interest_topic(topic_lower, Some(profile)) {
+        return false;
+    }
+    profile.primary_stack.contains(single)
+}
+
+/// Raw (un-discounted) keyword interest score computed over ONLY the user's
+/// own-primary-stack single-word interests. 0.0 when no such interest exists
+/// or none matches.
+///
+/// Why this exists (2026-08-23 audit item 14): the keyword confirmation route
+/// could NEVER confirm a single-word interest — title hit 0.80 × single-word
+/// specificity 0.60 = 0.48 < the 0.70 keyword threshold — locking out "Rust"/
+/// "Tauri"/"React" titles for any user with 3+ interests. The specificity
+/// discount stays on the SCORE (magnitude is unchanged, so items do not score
+/// higher), but the gate may use this un-discounted evidence to CONFIRM the
+/// interest axis for the user's own stack — with embedding corroboration
+/// required on the gate side, so a bare word collision ("Rust Belt cities")
+/// cannot confirm anything.
+///
+/// Interest weight still multiplies through `compute_keyword_interest_score`,
+/// so low-weight synthesized interests (dep synthesis at 0.2–0.3) can never
+/// reach the 0.70 confirmation threshold via this route — it is effectively
+/// declared-interest-only.
+pub(crate) fn own_stack_single_word_keyword_score(
+    title: &str,
+    content: &str,
+    interests: &[context_engine::Interest],
+    profile: Option<&super::calibration::SpecificityProfile>,
+) -> f32 {
+    let Some(profile) = profile else {
+        return 0.0;
+    };
+    let own_stack: Vec<context_engine::Interest> = interests
+        .iter()
+        .filter(|i| is_own_stack_single_word_topic(&i.topic.to_lowercase(), profile))
+        .map(|i| context_engine::Interest {
+            id: i.id,
+            topic: i.topic.clone(),
+            weight: i.weight,
+            // Keyword scoring never reads embeddings — skip the vector clone.
+            embedding: None,
+            source: i.source.clone(),
+        })
+        .collect();
+    if own_stack.is_empty() {
+        return 0.0;
+    }
+    compute_keyword_interest_score(title, content, &own_stack)
+}
+
 /// Negation patterns that indicate a term is mentioned in a negative context.
 /// Returns true if the term appears near a negation phrase in the text.
 fn is_negated_in_context(term: &str, text: &str) -> bool {

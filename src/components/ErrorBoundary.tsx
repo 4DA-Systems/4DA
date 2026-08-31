@@ -27,7 +27,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
       return (
         <div role="alert" style={{
           backgroundColor: 'var(--color-bg-primary)',
-          color: '#fff',
+          color: 'var(--color-text-primary)',
           minHeight: '100vh',
           padding: '2rem',
           fontFamily: 'Inter, sans-serif',
@@ -51,7 +51,10 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
               style={{
                 padding: '0.5rem 1rem',
                 backgroundColor: 'var(--color-border)',
-                color: '#fff',
+                // Token, not #fff: in light theme --color-border is #DDDAD2, and
+                // white on it is ~1.3:1 — the crash screen's primary recovery
+                // button rendered as a blank grey rectangle.
+                color: 'var(--color-text-primary)',
                 border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer',

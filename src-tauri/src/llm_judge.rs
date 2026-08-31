@@ -48,6 +48,69 @@ use tracing::debug;
 /// Versioning convention: `judge-v{N}-{YYYY-MM-DD}`.
 pub const PROMPT_VERSION: &str = "judge-v1-2026-04-15";
 
+/// Select the provider settings for bulk JUDGE work (rerank + ingest
+/// judgments) — the same provider as the user configured, but on the cheap
+/// sibling model when the configured model is a premium tier.
+///
+/// Why: judging is bounded classification (a 1-5 rubric with a one-sentence
+/// reason), squarely within `ModelTier::Full` capability for every cheap
+/// cloud sibling — the app's own tier doctrine already classes Haiku as Full
+/// for reranking while reserving the premium model for brief NARRATION
+/// (`llm_capability::is_brief_capable`). Measured 2026-08-31: judge traffic
+/// was ~95% of all LLM spend, every call on the premium model at 3x the
+/// price for identical judgments. Briefings, synthesis, and every other
+/// surface keep the user's configured model.
+///
+/// Escape hatch: `FOURDA_JUDGE_MODEL` env var — `same` pins judging to the
+/// configured model; any other non-empty value names the judge model
+/// explicitly. Judgment provenance is unaffected either way: the model that
+/// actually judged is stamped on every `llm_judgments` row and advisor
+/// signal.
+pub fn judge_provider(base: &LLMProvider) -> LLMProvider {
+    let mut p = base.clone();
+
+    match std::env::var("FOURDA_JUDGE_MODEL") {
+        Ok(v) if v.eq_ignore_ascii_case("same") => return p,
+        Ok(v) if !v.trim().is_empty() => {
+            p.model = v.trim().to_string();
+            return p;
+        }
+        _ => {}
+    }
+
+    if let Some(cheap) = cheap_judge_sibling(&p.provider, &p.model) {
+        debug!(
+            target: "4da::llm",
+            configured = %p.model,
+            judge = cheap,
+            "Using cheap sibling model for judge tasks (FOURDA_JUDGE_MODEL=same to disable)"
+        );
+        p.model = cheap.to_string();
+    }
+    p
+}
+
+/// The cheap same-provider sibling for judge work, or `None` when the
+/// configured model should be kept (already cheap, local, or unknown
+/// provider). Pure so the routing table is testable without env-var races.
+fn cheap_judge_sibling(provider: &str, model: &str) -> Option<&'static str> {
+    let model = model.to_lowercase();
+    match provider {
+        "anthropic" if model.contains("sonnet") || model.contains("opus") => {
+            Some("claude-haiku-4-5")
+        }
+        "openai" if model.contains("gpt-4o") && !model.contains("mini") => Some("gpt-4o-mini"),
+        "openai"
+            if model.contains("gpt-4.1") && !model.contains("mini") && !model.contains("nano") =>
+        {
+            Some("gpt-4.1-mini")
+        }
+        // Ollama / openai-compatible / already-cheap models: leave untouched —
+        // local inference is free, and there is no cheaper sibling to pick.
+        _ => None,
+    }
+}
+
 /// The relevance judge uses an LLM to determine true relevance
 pub struct RelevanceJudge {
     client: LLMClient,
@@ -56,7 +119,7 @@ pub struct RelevanceJudge {
 impl RelevanceJudge {
     pub fn new(provider: LLMProvider) -> Self {
         Self {
-            client: LLMClient::new(provider),
+            client: LLMClient::with_purpose(provider, "rerank_judge"),
         }
     }
 
@@ -451,6 +514,62 @@ That's it."#;
         assert!(result.is_ok());
         let judgments = result.unwrap();
         assert_eq!(judgments[0].item_id, "42");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // cheap_judge_sibling — the judge-model routing table
+    // ────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_judge_sibling_downgrades_premium_anthropic() {
+        assert_eq!(
+            cheap_judge_sibling("anthropic", "claude-sonnet-4-6"),
+            Some("claude-haiku-4-5")
+        );
+        assert_eq!(
+            cheap_judge_sibling("anthropic", "claude-opus-4-6"),
+            Some("claude-haiku-4-5")
+        );
+    }
+
+    #[test]
+    fn test_judge_sibling_keeps_already_cheap_models() {
+        // Haiku is already the cheap tier — no further downgrade.
+        assert_eq!(cheap_judge_sibling("anthropic", "claude-haiku-4-5"), None);
+        assert_eq!(cheap_judge_sibling("openai", "gpt-4o-mini"), None);
+        assert_eq!(cheap_judge_sibling("openai", "gpt-4.1-nano"), None);
+    }
+
+    #[test]
+    fn test_judge_sibling_never_touches_local_providers() {
+        // Local inference is free; downgrading a local model is pure loss.
+        assert_eq!(cheap_judge_sibling("ollama", "qwen3:14b"), None);
+        assert_eq!(
+            cheap_judge_sibling("openai-compatible", "sonnet-clone"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_judge_provider_env_same_pins_configured_model() {
+        // `FOURDA_JUDGE_MODEL=same` must disable the downgrade. Env mutation is
+        // process-global: restore before asserting so a parallel test that
+        // reads the var sees at most the transient value, never a leak.
+        let base = LLMProvider {
+            provider: "anthropic".to_string(),
+            api_key: "k".to_string(),
+            model: "claude-sonnet-4-6".to_string(),
+            base_url: None,
+            openai_api_key: String::new(),
+            embedding_model: String::new(),
+            allow_cloud_embeddings: false,
+        };
+        std::env::set_var("FOURDA_JUDGE_MODEL", "same");
+        let pinned = judge_provider(&base);
+        std::env::remove_var("FOURDA_JUDGE_MODEL");
+        assert_eq!(pinned.model, "claude-sonnet-4-6");
+        assert_eq!(pinned.provider, "anthropic");
+        assert_eq!(pinned.api_key, "k", "key must ride along unchanged");
     }
 
     // judge_batch — empty items returns immediately

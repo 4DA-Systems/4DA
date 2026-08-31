@@ -179,11 +179,33 @@ pub(super) fn is_breaking_change(title: &str) -> bool {
 }
 
 pub(super) fn is_release(title: &str) -> bool {
+    // "Announcing <thing> <version>" / "Introducing <thing> <version>" — the
+    // most canonical release-post phrasing, and it was invisible here until
+    // 2026-08-25: the live feed carried "Announcing axum 0.6.0" (2022),
+    // "0.7.0" (2023) and "0.8.0" as content_type NULL, i.e. classified as
+    // plain DISCUSSION, so neither the release treatment nor the superseded-
+    // release staleness floor (v23) could reach three of the five oldest
+    // release announcements sitting in the feed at ~0.886. The version token
+    // is required, so project launches with no version ("Announcing Toasty,
+    // an async ORM for Rust") and company news ("Announcing our Series B")
+    // are untouched.
+    let announces = title.contains("announcing") || title.contains("introducing");
+
     // "vX.Y released/is out/available/launched/beta/rc/alpha"
+    //
+    // Bound is `len - 2`, not `len - 3`: reading `bytes[i + 2]` only requires
+    // `i + 2 < len`. The old bound skipped the final valid index, so a version
+    // sitting in the last two characters was invisible — "Announcing Tokio
+    // Metrics 0.1" (live 2026-08-25) missed for exactly that reason, masked
+    // everywhere else by the "what's new in" / " beta" terms catching the
+    // title first.
     let bytes = title.as_bytes();
-    for i in 0..title.len().saturating_sub(3) {
+    for i in 0..title.len().saturating_sub(2) {
         // Look for digit.digit pattern
         if bytes[i].is_ascii_digit() && bytes[i + 1] == b'.' && bytes[i + 2].is_ascii_digit() {
+            if announces {
+                return true;
+            }
             // Check if followed by release-related words
             let rest = &title[i..];
             if rest.contains("released")
@@ -404,6 +426,26 @@ pub(super) fn is_hiring(title: &str) -> bool {
     // Job posting markers: "(f/d)", "(m/f/d)", "full-time", "part-time"
     let job_markers = ["(f/d)", "(m/f/d)", "(m/w/d)", "full-time", "part-time"];
     if job_markers.iter().any(|m| title.contains(m)) {
+        return true;
+    }
+
+    // Job-SEEKER posts — the mirror of a job ad. "Open to work: Haskell and
+    // functional programming expert" name-drops the reader's exact stack as
+    // the POSTER's identity, not as intelligence (live FP 2026-08-23: such a
+    // post rode an own-stack keyword confirmation to 0.695 for a Haskell
+    // specialist persona). Same doctrine as hiring ads: never stack
+    // intelligence, capped below the MATCH band.
+    let seeker_terms = [
+        "open to work",
+        "open for work",
+        "available for hire",
+        "for hire",
+        "seeking opportunities",
+        "looking for work",
+        "seeking new role",
+        "seeking a role",
+    ];
+    if seeker_terms.iter().any(|t| title.contains(t)) {
         return true;
     }
 

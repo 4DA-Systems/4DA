@@ -342,7 +342,6 @@ export function ResultsView({
                         onRecordInteraction={(itemId, actionType, item) => { void recordInteraction(itemId, actionType, item); }}
                         comparePool={expandedItem === item.id ? filteredResults : undefined}
                         itemIndex={idx}
-                        totalItems={displayResults.length}
                       />
                     </div>
                   </div>

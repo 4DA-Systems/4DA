@@ -882,24 +882,189 @@ function isTestCode(entry) {
   return isTestFile(entry.file) || /\#\[cfg\(test\)\]|\#\[test\]|FAKE_|TESTKEYDONOTUSE|sk-ant-test/.test(entry.text);
 }
 
+/**
+ * First line of a file's `#[cfg(test)]` module, or Infinity when it has none.
+ *
+ * WHY: `isTestFile` is FILENAME-only and `isTestCode` only inspects the matched
+ * line's own text — neither can tell that a `.unwrap()` sits inside an inline
+ * `#[cfg(test)] mod tests` block of an otherwise-production file. Rust
+ * convention puts that module at the bottom, so the marker line is a reliable
+ * cut point.
+ *
+ * Measured 2026-08-24 without this: ".unwrap() in prod code" reported 1472 when
+ * the true production figure was 9 (scoring/benchmark.rs + benchmark_calibration).
+ * That pinned the row's own "< 10 = OK" status permanently at REVIEW, and made
+ * sentinel-scan.cjs raise a Security warning routed to 4da-rust-expert every
+ * time somebody ADDED TESTS — i.e. the metric punished good behaviour.
+ */
+const testModuleStartCache = new Map();
+function testModuleStartLine(relFile) {
+  if (testModuleStartCache.has(relFile)) return testModuleStartCache.get(relFile);
+  let start = Infinity;
+  try {
+    const lines = fs.readFileSync(path.join(ROOT, relFile), "utf-8").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (/#\[cfg\(test\)\]/.test(lines[i])) {
+        start = i + 1; // grepFiles reports 1-indexed lines
+        break;
+      }
+    }
+  } catch {
+    // Unreadable: fall back to "no test module" so matches stay VISIBLE
+    // (conservative — this metric must never hide production findings).
+  }
+  testModuleStartCache.set(relFile, start);
+  return start;
+}
+
+/** True when a match is in a test file OR inside a `#[cfg(test)]` module. */
+function isTestContext(entry) {
+  return isTestFile(entry.file) || entry.line >= testModuleStartLine(entry.file);
+}
+
+// ---------------------------------------------------------------------------
+// Secret-in-log detection
+//
+// The old rule was `(log|debug|info|warn|error|println).*(api_key|secret|token
+// |password)` — it fired on any line that MENTIONED a secret word, which made
+// all 23 hits false positives (audited 2026-08-25): LLM token COUNTS
+// (`input_tokens`, `cost_per_token`), key NAMES in message text ("Keychain
+// unavailable for llm_api_key"), webhook IDs, an event name
+// ('synthesis-token'), and — best of all — crash_guard.rs's log line announcing
+// that secrets WILL BE ZEROIZED. It also matched `info` inside
+// `info.input_cost_per_token`, which is not a log call at all.
+//
+// What actually matters is a secret VALUE reaching a log sink. So: require a
+// real log macro, and require the secret word to appear in an interpolation or
+// argument position — never merely inside the message text.
+// ---------------------------------------------------------------------------
+
+/** A `//` or `///` line — documentation ABOUT code, never code itself. */
+function isCommentLine(text) {
+  return /^\s*\/\//.test(text);
+}
+
+const LOG_MACRO = /\b(?:log|trace|debug|info|warn|error|println|eprintln|print|eprint)\s*!/;
+const SECRET_WORD = /(api[_-]?key|secret|password|passwd|token|credential|bearer)/i;
+
+// Identifiers that CONTAIN a secret word but denote a count, a name, or an id —
+// never a credential. Accepting a false negative on a plural `tokens` variable
+// is the deliberate trade for removing 23 false positives.
+// The metering prefixes are enumerated deliberately. A blanket `_tokens?\b`
+// also swallowed `bearer_token`, `access_token`, `auth_token` and
+// `refresh_token` — real credentials, silently unreportable. Caught by
+// generate-knowledge.test.cjs on its first run (2026-08-26). Anything not on
+// this list is treated as a credential, so the failure mode is a false
+// POSITIVE (visible, fixable) rather than a false negative (silent).
+const NOT_A_SECRET =
+  /(\btokens\b|\b(?:input|output|prompt|completion|total|cache|cached|max|min|n|num|used|remaining|reasoning)_tokens?\b|\btokens?_(?:used|limit|count|per|remaining|in|out)\b|\bcost_per_token\b|\btoken_count\b|_id\b|\btokeniz)/i;
+
+/** Identifiers appearing in interpolation / argument position on a log line. */
+function logValueCandidates(text) {
+  const candidates = [];
+  // `{api_key}`, `{self.token:?}` — format-string interpolations.
+  for (const m of text.matchAll(/\{([^{}]*)\}/g)) candidates.push(m[1]);
+  // `field = value`, `field = %value`, `field = ?value` — tracing fields.
+  for (const m of text.matchAll(
+    /(?:[,(]\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*[%?&]*\s*([A-Za-z_][A-Za-z0-9_.]*)/g
+  )) {
+    candidates.push(m[1], m[2]);
+  }
+  // `, api_key,` / `, api_key)` — bare tracing shorthand and positional args.
+  for (const m of text.matchAll(/[,(]\s*&?\s*([A-Za-z_][A-Za-z0-9_.]*)\s*[,)]/g)) {
+    candidates.push(m[1]);
+  }
+  return candidates;
+}
+
+/** True when a log macro puts a credential-bearing VALUE into the record. */
+function logsSecretValue(entry) {
+  if (!LOG_MACRO.test(entry.text)) return false;
+  return logValueCandidates(entry.text).some(
+    (c) => SECRET_WORD.test(c) && !NOT_A_SECRET.test(c)
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic-SQL detection
+//
+// The old rule was `format!\(.*(SELECT|INSERT|UPDATE|DELETE|DROP)` anywhere in
+// the line, so all 30 hits were false positives (audited 2026-08-25): prose
+// containing "update" ("update to >=", "updates this week"), Windows
+// `EdgeUpdate` registry paths, and `format!("{selection_pct:.1}")` matching
+// "SELECT".
+//
+// The real distinction is POSITION. SQLite cannot bind an identifier (table or
+// column), so interpolating one is expected and needs human judgement — those
+// are surfaced for review. It CAN bind a value, so interpolating into a value
+// position is an unambiguous injection bug — that is the CRITICAL gate.
+// ---------------------------------------------------------------------------
+
+// Format string that actually opens with SQL, not prose that mentions "update".
+// NOTE: no `\s*` after the quote. Allowing leading whitespace made
+// `format!(" Update to >= {f}.")` (preemption.rs) parse as an UPDATE statement
+// with `>= {f}` in a value position — a CRITICAL false positive.
+const SQL_FORMAT_START =
+  /&?format!\s*\(\s*"(?:SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|REPLACE|WITH|PRAGMA)\b/i;
+
+// A second, structural keyword — prose beginning with a SQL verb ("Update to
+// >= 1.2") does not also contain FROM/INTO/SET/WHERE/VALUES.
+const SQL_STRUCTURE = /\b(?:FROM|INTO|SET|TABLE|VALUES|WHERE|JOIN|PRAGMA)\b/i;
+
+// Interpolation sitting where a bound parameter belongs.
+// The optional quote matters: `WHERE name = '{user_input}'` is the textbook
+// injection, and requiring `=` to be followed immediately by `{` missed it
+// (caught by the negative-test probe, 2026-08-25).
+const SQL_VALUE_INTERP =
+  /(?:=\s*|\bIN\s*\(\s*|\bVALUES\s*\([^)]*|\bLIKE\s+|[<>]\s*|!=\s*)['"]?\s*\{([^{}]+)\}/gi;
+
+// `IN ({placeholders})` expands to `?,?,?` — the CORRECT way to bind a list.
+const SAFE_INTERP_NAME = /^(?:placeholders|placeholder_list|binds)$/i;
+
+function isSqlFormat(entry) {
+  return SQL_FORMAT_START.test(entry.text) && SQL_STRUCTURE.test(entry.text);
+}
+
+/** True when a value position — one SQLite could have bound — is interpolated. */
+function sqlInterpolatesValue(entry) {
+  for (const m of entry.text.matchAll(SQL_VALUE_INTERP)) {
+    if (!SAFE_INTERP_NAME.test(m[1].trim())) return true;
+  }
+  return false;
+}
+
 function generateSecuritySurface() {
   // Key security patterns — separate production from test code
   // Exclude test files, error context (.with_context, .map_err), and doc comments
-  const apiKeyLogs = grepFiles(RUST_SRC, [".rs"], /(?:log|debug|info|warn|error|println|eprintln).*(?:api_key|secret|token|password)/i)
-    .filter((v) => !isTestFile(v.file))
-    .filter((v) => !/(with_context|map_err|\/\/\/|\/\/ )/.test(v.text));
+  const apiKeyLogs = grepFiles(RUST_SRC, [".rs"], SECRET_WORD)
+    .filter((v) => !isTestContext(v))
+    .filter((v) => !/(with_context|map_err|\/\/\/|\/\/ )/.test(v.text))
+    .filter((v) => logsSecretValue(v));
   const allUnwraps = grepFiles(RUST_SRC, [".rs"], /\.unwrap\(\)/);
-  const prodUnwraps = allUnwraps.filter((u) => !isTestFile(u.file));
-  const testUnwraps = allUnwraps.filter((u) => isTestFile(u.file));
+  const prodUnwraps = allUnwraps.filter((u) => !isTestContext(u));
+  const testUnwraps = allUnwraps.filter((u) => isTestContext(u));
   const allPanics = grepFiles(RUST_SRC, [".rs"], /panic!\(|todo!\(|unimplemented!\(/);
-  const prodPanics = allPanics.filter((p) => !isTestFile(p.file));
+  // Comment lines are documentation ABOUT panics, not panic sites. task_guard.rs
+  // explains payload recovery with `/// panic!("literal") boxes a &'static str`
+  // and was counted as the 5th "panic point", which alone pinned the row at
+  // REVIEW (threshold is < 5). apiKeyLogs already excluded `///`; this did not.
+  const prodPanics = allPanics.filter(
+    (p) => !isTestContext(p) && !isCommentLine(p.text)
+  );
   const unsafeBlocks = grepFiles(RUST_SRC, [".rs"], /unsafe\s*\{/);
-  // Exclude error context formatting — only match format! used in actual SQL string building
-  const sqlInjection = grepFiles(RUST_SRC, [".rs"], /format!\(.*(?:SELECT|INSERT|UPDATE|DELETE|DROP)/i)
-    .filter((s) => !isTestFile(s.file))
-    .filter((s) => !/(with_context|map_err|context\()/.test(s.text));
+  // Only format! calls that actually BUILD SQL (string opens with a SQL verb).
+  const dynamicSql = grepFiles(RUST_SRC, [".rs"], /format!/)
+    .filter((s) => !isTestContext(s))
+    .filter((s) => !/(with_context|map_err|context\()/.test(s.text))
+    .filter((s) => isSqlFormat(s))
+    .filter((s) => /\{[^{}]+\}/.test(s.text));
+  // CRITICAL: a value position was interpolated where SQLite could have bound.
+  const sqlInjection = dynamicSql.filter((s) => sqlInterpolatesValue(s));
+  // REVIEW: only identifiers interpolated — unbindable in SQLite, so this is
+  // expected; it is listed so a new one gets human eyes, not gated as a failure.
+  const sqlIdentifierInterp = dynamicSql.filter((s) => !sqlInterpolatesValue(s));
   const hardcodedSecrets = grepFiles(RUST_SRC, [".rs"], /(?:api_key|secret|password|token)\s*=\s*"/i)
-    .filter((s) => !isTestFile(s.file) && !isTestCode(s));
+    .filter((s) => !isTestContext(s) && !isTestCode(s));
 
   // Frontend security
   const dangerousHTML = grepFiles(REACT_SRC, [".tsx"], /dangerouslySetInnerHTML/);
@@ -920,7 +1085,8 @@ function generateSecuritySurface() {
 | .unwrap() in test code | ${testUnwraps.length} | — | OK (expected in tests) |
 | panic!/todo! in prod code | ${prodPanics.length} | High | ${prodPanics.length < 5 ? "OK" : "REVIEW"} |
 | unsafe blocks | ${unsafeBlocks.length} | Medium | ${unsafeBlocks.length === 0 ? "PASS" : "REVIEW"} |
-| SQL string formatting | ${sqlInjection.length} | CRITICAL | ${sqlInjection.length === 0 ? "PASS" : "**FAIL**"} |
+| SQL value interpolation | ${sqlInjection.length} | CRITICAL | ${sqlInjection.length === 0 ? "PASS" : "**FAIL**"} |
+| SQL identifier interpolation | ${sqlIdentifierInterp.length} | Review | ${sqlIdentifierInterp.length === 0 ? "PASS" : "REVIEW (unbindable in SQLite)"} |
 | Hardcoded secrets | ${hardcodedSecrets.length} | CRITICAL | ${hardcodedSecrets.length === 0 ? "PASS" : "**FAIL**"} |
 | dangerouslySetInnerHTML | ${dangerousHTML.length} | High | ${dangerousHTML.length === 0 ? "PASS" : "REVIEW"} |
 | localStorage usage | ${localStorage.length} | Low | INFO |
@@ -931,6 +1097,17 @@ function generateSecuritySurface() {
     md += `## API Key Logging Violations\n`;
     for (const v of apiKeyLogs) {
       md += `- \`${v.file}:${v.line}\` — ${v.text.slice(0, 100)}\n`;
+    }
+    md += `\n`;
+  }
+
+  if (sqlIdentifierInterp.length > 0) {
+    md += `## Dynamic SQL — identifier interpolation (${sqlIdentifierInterp.length})\n`;
+    md += `SQLite cannot bind a table or column name, so these MUST be interpolated.\n`;
+    md += `Not a failure; confirm each identifier is a literal, a \`const\`, or a\n`;
+    md += `\`&'static str\` — never user input. Audited 2026-08-25: all literal-driven.\n`;
+    for (const s of sqlIdentifierInterp) {
+      md += `- \`${s.file}:${s.line}\` — ${s.text.trim().slice(0, 90)}\n`;
     }
     md += `\n`;
   }
@@ -1029,4 +1206,21 @@ function main() {
   );
 }
 
-main();
+// Only generate when invoked as a CLI. Requiring this file (from
+// generate-knowledge.test.cjs) must not write 7 manifests as a side effect.
+if (require.main === module) {
+  main();
+}
+
+// Exported for scripts/generate-knowledge.test.cjs. These predicates decide
+// whether a line is a CRITICAL security finding, and they have been wrong in
+// both directions (2026-08-25 audit: 53 false positives; then a hand-written
+// probe caught this file MISSING `WHERE name = '{user}'`). They are pinned by
+// self-tests so neither failure can recur silently.
+module.exports = {
+  isTestFile,
+  isCommentLine,
+  logsSecretValue,
+  isSqlFormat,
+  sqlInterpolatesValue,
+};

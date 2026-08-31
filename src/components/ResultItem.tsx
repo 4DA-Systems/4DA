@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 import { useItemSummary } from '../hooks/use-item-summary';
-import { useViewTracking } from '../hooks/use-view-tracking';
 import { useExpandTracking } from '../hooks/use-expand-tracking';
 import { extractTechTopics } from '../lib/known-tech';
 import { ResultItemCollapsed } from './result-item/ResultItemCollapsed';
@@ -58,10 +57,8 @@ interface ResultItemProps {
   ) => void;
   /** Other scored items available for comparison */
   comparePool?: SourceRelevance[];
-  /** Zero-based index in the results list (for scroll depth tracking) */
+  /** Zero-based index in the results list (drives auto-summary for the top items) */
   itemIndex?: number;
-  /** Total items in the results list (for scroll depth tracking) */
-  totalItems?: number;
 }
 
 export const ResultItem = memo(function ResultItem({
@@ -73,7 +70,6 @@ export const ResultItem = memo(function ResultItem({
   onRecordInteraction,
   comparePool,
   itemIndex,
-  totalItems,
 }: ResultItemProps) {
   const { t } = useTranslation();
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -89,16 +85,6 @@ export const ResultItem = memo(function ResultItem({
     extractTechTopics(item.title),
     [item.title],
   );
-
-  const viewRef = useViewTracking({
-    itemId: item.id,
-    sourceType: item.source_type || 'unknown',
-    enabled: !isExpanded, // Passive scroll tracking when collapsed
-    hasExplicitFeedback: !!feedback,
-    itemTopics,
-    itemIndex,
-    totalItems,
-  });
 
   // Track expand dwell time — emits click+dwell when collapsed/unmounted
   useExpandTracking(item.id, item.source_type || 'unknown', isExpanded, itemTopics);
@@ -126,7 +112,6 @@ export const ResultItem = memo(function ResultItem({
 
   return (
     <div
-      ref={viewRef}
       id={`result-item-${item.id}`}
       role="option"
       aria-selected={isFocused}

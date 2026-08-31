@@ -75,6 +75,10 @@ pub async fn ace_record_accuracy_feedback(
         "save" => 1.0,
         "click" => 0.7,
         "dismiss" => 0.2,
+        // A deferral is weak negative evidence, not a rejection: the item was
+        // plausible enough to keep, so it sits between dismiss (0.2) and the
+        // 0.5 neutral default.
+        "snooze" => 0.4,
         "thumbs_down" => 0.0,
         _ => 0.5,
     };

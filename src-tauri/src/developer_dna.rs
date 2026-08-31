@@ -232,27 +232,35 @@ fn get_top_dependencies(conn: &rusqlite::Connection) -> Result<Vec<DependencyEnt
 }
 
 fn get_top_engaged_topics(conn: &rusqlite::Connection) -> Result<Vec<EngagedTopic>> {
-    // Pull from topic_affinities (learned behavior)
+    // Explicit engagement over `interactions` (six-type predicate). v20b:
+    // re-sourced from the dropped topic_affinities table; the return shape is
+    // unchanged and `interactions` now carries an honest engagement count.
     let mut topics = Vec::new();
 
-    let query =
-        "SELECT topic, affinity_score FROM topic_affinities ORDER BY affinity_score DESC LIMIT 20";
+    let query = "SELECT LOWER(je.value) AS topic, COUNT(*) AS engagements
+         FROM interactions i, json_each(i.item_topics) je
+         WHERE i.item_topics IS NOT NULL
+           AND json_valid(i.item_topics)
+           AND i.action_type IN ('click','save','share','briefing_click','engagement_complete','save_with_context')
+         GROUP BY LOWER(je.value)
+         ORDER BY engagements DESC
+         LIMIT 20";
     if let Ok(mut stmt) = conn.prepare(query) {
         if let Ok(rows) = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         }) {
-            let all: Vec<(String, f64)> = rows.flatten().collect();
-            let total_weight: f64 = all.iter().map(|(_, w)| w).sum();
+            let all: Vec<(String, i64)> = rows.flatten().collect();
+            let total: f64 = all.iter().map(|(_, n)| *n as f64).sum();
 
-            for (topic, weight) in all {
-                let pct = if total_weight > 0.0 {
-                    (weight / total_weight * 100.0) as f32
+            for (topic, count) in all {
+                let pct = if total > 0.0 {
+                    (count as f64 / total * 100.0) as f32
                 } else {
                     0.0
                 };
                 topics.push(EngagedTopic {
                     topic,
-                    interactions: weight as u32,
+                    interactions: count as u32,
                     percent_of_total: pct,
                 });
             }

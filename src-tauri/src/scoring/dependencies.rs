@@ -8,10 +8,35 @@
 // the `utils::text` helpers) or an `#[allow]` that states why it is safe.
 #![deny(clippy::string_slice)]
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
 
 use super::ace_context::ACEContext;
 use super::utils::topic_grounds;
+
+/// Whether the most recent `load_dependency_intelligence` call FAILED and
+/// returned empty maps (DB open / dependency query error). Empty-by-error is
+/// score-indistinguishable from "user has no deps", so the pipeline stamps
+/// `degraded_inputs: ["dep_intel_load_failed"]` on every breakdown scored
+/// under it (2026-08-23 audit, item 11). Process-global because the load
+/// happens in `ace_context::build` (once per analysis run) while the marker is
+/// consumed per-item in `pipeline_v2::score_item`; cleared by every successful
+/// load. Concurrent runs sharing the flag is an accepted, documented race —
+/// both runs share the same DB health anyway.
+static DEP_INTEL_LOAD_DEGRADED: AtomicBool = AtomicBool::new(false);
+
+/// True when the ACE dependency intelligence backing the current run came from
+/// a FAILED load (see [`DEP_INTEL_LOAD_DEGRADED`]).
+pub(crate) fn dep_intel_load_degraded() -> bool {
+    DEP_INTEL_LOAD_DEGRADED.load(Ordering::Relaxed)
+}
+
+/// Test hook: force the degraded flag so pipeline tests can assert the marker
+/// is carried onto the breakdown without staging a real DB failure.
+#[cfg(test)]
+pub(crate) fn set_dep_intel_load_degraded_for_test(value: bool) {
+    DEP_INTEL_LOAD_DEGRADED.store(value, Ordering::Relaxed);
+}
 
 /// Metadata for a tracked dependency from user's project manifests
 #[derive(Debug, Clone)]
@@ -28,6 +53,22 @@ pub(crate) struct DepInfo {
     /// Ecosystem/language from the manifest (e.g. "rust", "javascript", "python").
     /// Used for cross-referencing CVE advisories against the correct ecosystem.
     pub ecosystem: String,
+    /// Every project whose manifest or lockfile declares this package, sorted
+    /// and de-duplicated.
+    ///
+    /// The detail map is keyed by NORMALIZED PACKAGE NAME, so one entry stands
+    /// for a package that may live in several of the user's projects. Without
+    /// this list the entry could not say which — and the surfaces downstream
+    /// then say "your dependency axios" about a package that belongs to a
+    /// different repository entirely (measured live: `axios` is a direct
+    /// dependency of `kairos-mvp`, not of this app).
+    pub project_paths: Vec<String>,
+    /// Strongest scan-time project relevance across [`Self::project_paths`]
+    /// (see `temporal::ProjectDependency::project_relevance`). Scales match
+    /// confidence so a package that exists only in a dormant or fixture
+    /// project cannot score like one the user ships. MAX, not min: a package
+    /// declared in both this app and a side project is the app's package.
+    pub project_relevance: f32,
 }
 
 /// A dependency that matched content
@@ -54,6 +95,16 @@ pub(crate) struct DepMatch {
     /// (`is_strong_grounding_match`); the structured-advisory route checks
     /// affected-package metadata independently at its call site.
     pub corroborated: bool,
+    /// Projects that declare this package, sorted and de-duplicated. Answers
+    /// the first question a reader asks of any dependency finding — *which of
+    /// my repositories do I go and fix?* — which a bare package name cannot.
+    pub project_paths: Vec<String>,
+    /// The manifest's pre-normalization package name (`@babel/traverse`,
+    /// `github.com/gin-gonic/gin`) — `package_name` is the NORMALIZED form
+    /// (`babel-traverse`, `github.com-gin-gonic-gin`), which never appears in
+    /// advisory prose. The CVE/OSV survivor text-filter tries BOTH forms
+    /// (2026-08-23 audit, item 8b). `None` only on test-constructed matches.
+    pub raw_name: Option<String>,
 }
 
 /// Version comparison between installed and mentioned
@@ -65,6 +116,27 @@ pub(crate) enum VersionDelta {
     Unknown,
 }
 
+/// Ceiling applied to `dep_match_score` when NOT ONE match in the surviving
+/// evidence set is name-corroborated — i.e. the item never names any package
+/// the user depends on, and every point of confidence came from bare subterm
+/// expansions ("apps" for `@tauri-apps/api`, "single" for
+/// `tauri-plugin-single-instance`, "deep" for `tauri-plugin-deep-link`).
+///
+/// Measured on the live corpus at `e0381216` (2026-08-26 audit, A1-A3): of
+/// 1,758 items whose dependency axis was CONFIRMED from the title alone, 1,320
+/// never named a package — 75.1% — rising to 92.8% by this very predicate.
+/// 166 of the 169 items in the >=0.90 band were pure subterm noise, and one
+/// English word ("apps", shared by four `@tauri-apps/*` packages) produced a
+/// 0.95 dependency axis on an article about Supabase row-level security.
+///
+/// Derived from [`scoring_config::DEPENDENCY_THRESHOLD`] rather than written as
+/// a literal so the invariant survives retuning: uncorroborated evidence can
+/// never confirm the dependency axis, and therefore can never reach the
+/// gate-bypass minimum above it either. `uncorroborated_ceiling_holds_the_invariant`
+/// pins both halves.
+pub(crate) const UNCORROBORATED_DEP_CEILING: f32 =
+    crate::scoring_config::DEPENDENCY_THRESHOLD - 0.01;
+
 /// Confidence at or above which a single non-dev dependency match is "strong"
 /// enough to ground an item in the user's stack. A full-package-name title hit
 /// scores 0.5; an ambiguous subterm with nearby language context scores ~0.4;
@@ -74,16 +146,24 @@ pub(crate) enum VersionDelta {
 /// single question "is this item grounded in the user's dependencies?".
 pub(crate) const STRONG_GROUNDING_CONFIDENCE: f32 = 0.40;
 
-/// Base grounding requirements shared by every route: a non-dev match at or
-/// above the strong-confidence floor whose package name is not so word-like
-/// that a bare text hit can't be trusted (the persistence-layer denylist,
+/// Base grounding requirements shared by every route: a match at or above the
+/// strong-confidence floor whose package name is not so word-like that a bare
+/// text hit can't be trusted (the persistence-layer denylist,
 /// `is_ambiguous_package_name`). NOT sufficient on its own — the text route
 /// additionally requires name corroboration (`is_strong_grounding_match`);
 /// the structured-advisory route (`security_applicability` in `pipeline_v2`)
 /// substitutes affected-package metadata as the proof instead.
+///
+/// Dev dependencies CAN ground (2026-08-23 audit, item 16): a vitest/vite/
+/// typescript release is stack-relevant to the developer who declared it, and
+/// the old `!d.is_dev` hard exclusion crushed those items to 0.03-0.40. The
+/// discount is carried in `confidence` itself (`match_dependencies` applies a
+/// modest 0.8x dev multiplier), still subject to the 0.40 floor here — only
+/// actual manifest devDeps with a real full-name match clear it. The
+/// Critical-alert lane keeps its stricter non-dev discipline separately
+/// (`is_strongly_grounded_direct`, `security_applicability`).
 pub(crate) fn is_grounding_candidate(d: &DepMatch) -> bool {
-    !d.is_dev
-        && d.confidence >= STRONG_GROUNDING_CONFIDENCE
+    d.confidence >= STRONG_GROUNDING_CONFIDENCE
         && !crate::package_ambiguity::is_ambiguous_package_name(&d.package_name)
 }
 
@@ -113,11 +193,14 @@ pub(crate) fn is_strongly_grounded(deps: &[DepMatch]) -> bool {
 }
 
 /// As [`is_strongly_grounded`], but additionally requires the edge to be a
-/// DIRECT dependency — the trust floor for a Critical alert. A CVE in a package
-/// the user chose directly is urgent; one reached only transitively is watch-level.
+/// DIRECT, NON-DEV dependency — the trust floor for a Critical alert. A CVE in
+/// a package the user chose directly is urgent; one reached only transitively
+/// is watch-level. The `!is_dev` guard is explicit here (not inherited from
+/// `is_grounding_candidate`, which admits dev deps since item 16): dev deps
+/// may ground the feed, but the Critical paging lane stays production-only.
 pub(crate) fn is_strongly_grounded_direct(deps: &[DepMatch]) -> bool {
     deps.iter()
-        .any(|d| is_strong_grounding_match(d) && d.is_direct)
+        .any(|d| is_strong_grounding_match(d) && d.is_direct && !d.is_dev)
 }
 
 /// The canonical grounding verdict for one item, computed ONCE per score and
@@ -192,7 +275,11 @@ pub(crate) fn compute_grounding_verdict(
                         && ecosystem_congruent(lang, &info.ecosystem)
                 }) {
                     return GroundingVerdict {
-                        strong: !info.is_dev,
+                        // A release of a package the user's manifests declare
+                        // grounds regardless of dev status (item 16): a vitest
+                        // major from npm IS the user's stack. Only the
+                        // Critical-alert tier stays non-dev.
+                        strong: true,
                         strong_direct: !info.is_dev && info.is_direct,
                         via_registry_subject: true,
                     };
@@ -1106,13 +1193,38 @@ fn compare_version_in_content(
 pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String, DepInfo>) {
     let db = match crate::open_db_connection() {
         Ok(db) => db,
-        Err(_) => return (HashSet::new(), HashMap::new()),
+        Err(e) => {
+            // Empty maps mute the DEPENDENCY axis for the entire scoring run —
+            // no dep matches, no grounding, no critical fast-path floors. That
+            // must degrade loudly, never silently (accuracy-first; 2026-08-21
+            // audit found this indistinguishable from "user has no deps").
+            // The flag makes every breakdown scored under this run carry
+            // `degraded_inputs: ["dep_intel_load_failed"]` (item 11).
+            tracing::warn!(
+                target: "4da::scoring",
+                error = %e,
+                "load_dependency_intelligence: DB open failed — dependency axis degraded to empty for this run"
+            );
+            DEP_INTEL_LOAD_DEGRADED.store(true, Ordering::Relaxed);
+            return (HashSet::new(), HashMap::new());
+        }
     };
 
     let all_deps = match crate::temporal::get_all_dependencies(&db) {
         Ok(deps) => deps,
-        Err(_) => return (HashSet::new(), HashMap::new()),
+        Err(e) => {
+            tracing::warn!(
+                target: "4da::scoring",
+                error = %e,
+                "load_dependency_intelligence: dependency query failed — dependency axis degraded to empty for this run"
+            );
+            DEP_INTEL_LOAD_DEGRADED.store(true, Ordering::Relaxed);
+            return (HashSet::new(), HashMap::new());
+        }
     };
+
+    // Load succeeded — clear any degraded state from a previous failed run.
+    DEP_INTEL_LOAD_DEGRADED.store(false, Ordering::Relaxed);
 
     // Canonical project-inclusion policy, defense in depth: the funnel above
     // (temporal::get_all_dependencies) already enforces all three tiers —
@@ -1133,7 +1245,7 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
         .collect();
 
     let mut names = HashSet::new();
-    let mut details = HashMap::new();
+    let mut details: HashMap<String, DepInfo> = HashMap::new();
 
     for dep in all_deps {
         let normalized = normalize_package_name(&dep.package_name);
@@ -1146,20 +1258,99 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
             names.insert(term.clone());
         }
 
-        details.insert(
-            normalized,
-            DepInfo {
-                package_name: dep.package_name,
-                version: dep.version,
-                is_dev: dep.is_dev,
-                is_direct: dep.is_direct,
-                search_terms,
-                ecosystem: dep.language,
-            },
-        );
+        // MERGE, never overwrite. The map is keyed by normalized package name,
+        // so a package present in several projects previously collapsed to
+        // whichever row the iteration happened to see LAST — taking its
+        // version and its direct/dev flags with it. Union the projects, and
+        // let the strongest relationship win: direct beats transitive, runtime
+        // beats dev, and a known version beats an unknown one.
+        match details.entry(normalized) {
+            std::collections::hash_map::Entry::Occupied(mut e) => {
+                merge_dep_occurrence(
+                    e.get_mut(),
+                    dep.project_path,
+                    dep.is_direct,
+                    dep.is_dev,
+                    dep.version,
+                    dep.project_relevance,
+                );
+            }
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(DepInfo {
+                    package_name: dep.package_name,
+                    version: dep.version,
+                    is_dev: dep.is_dev,
+                    is_direct: dep.is_direct,
+                    search_terms,
+                    ecosystem: dep.language,
+                    project_paths: vec![dep.project_path],
+                    project_relevance: dep.project_relevance,
+                });
+            }
+        }
+    }
+
+    // Stable, de-duplicated provenance for every entry.
+    for info in details.values_mut() {
+        info.project_paths.sort();
+        info.project_paths.dedup();
     }
 
     (names, details)
+}
+
+/// Fold another project's row for the same package into an existing entry.
+///
+/// The detail map is keyed by normalized package name, so every project that
+/// declares a package lands on one entry. This used to be a plain `insert`,
+/// which meant last-write-wins: a package present in several projects took
+/// whichever row the iteration happened to see last, along with ITS version
+/// and its direct/dev flags. Merge instead, and let the strongest relationship
+/// survive — direct beats transitive, runtime beats dev, and a known version
+/// beats an unknown one — because those are the values every downstream
+/// urgency decision reads.
+fn merge_dep_occurrence(
+    existing: &mut DepInfo,
+    project_path: String,
+    is_direct: bool,
+    is_dev: bool,
+    version: Option<String>,
+    project_relevance: f32,
+) {
+    existing.project_paths.push(project_path);
+    existing.is_direct |= is_direct;
+    existing.is_dev &= is_dev;
+    existing.project_relevance = existing.project_relevance.max(project_relevance);
+    if existing.version.is_none() {
+        existing.version = version;
+    }
+}
+
+/// Render a dependency's project list as a short, human-readable location.
+///
+/// Stored paths are absolute and lowercased (`d:/4da/mcp-4da-server`), which is
+/// unreadable in a one-line alert. Keep the last two segments — enough to
+/// identify the repository and any sub-package — and name the extras by count
+/// rather than listing them.
+///
+/// Returns `None` when there is nothing to say, so callers fall back to their
+/// existing wording instead of rendering an empty "in ".
+pub(crate) fn project_label(paths: &[String]) -> Option<String> {
+    let first = paths.first()?;
+    let normalized = first.replace('\\', "/");
+    let segments: Vec<&str> = normalized
+        .split('/')
+        .filter(|s| !s.is_empty() && *s != ".")
+        .collect();
+    let short = match segments.as_slice() {
+        [] => return None,
+        [only] => (*only).to_string(),
+        [.., parent, leaf] => format!("{parent}/{leaf}"),
+    };
+    Some(match paths.len() {
+        1 => short,
+        n => format!("{short} (+{} more)", n - 1),
+    })
 }
 
 /// How a search term occurs in a piece of text.
@@ -1267,8 +1458,117 @@ pub(crate) fn align_registry_corroboration(
     }
 }
 
+/// Ecosystem congruence for the family rule — TypeScript manifests are
+/// scanned as JavaScript-family (mirrors `ecosystem_congruent`); everything
+/// else compares exactly. Empty ecosystems never agree.
+fn family_ecosystem_congruent(a: &str, b: &str) -> bool {
+    let canon = |e: &str| {
+        let e = e.to_lowercase();
+        if e == "typescript" {
+            "javascript".to_string()
+        } else {
+            e
+        }
+    };
+    !a.is_empty() && !b.is_empty() && canon(a) == canon(b)
+}
+
+/// Is `child` a recognized FAMILY FORM of `parent`? Both are RAW manifest
+/// names, lowercased. Recognized forms (deliberately narrow):
+///   * `<parent>_<suffix>` — `serde_derive` ← `serde`
+///   * `<parent>-<suffix>` — `tokio-util` ← `tokio`
+///   * `<parent>/<subpath>` — Go submodule paths
+///   * `@types/<parent>`   — DefinitelyTyped declarations
+///   * same npm scope      — `@babel/traverse` ← `@babel/core` (the `@types`
+///     scope is excluded: it is registry infrastructure shared by unrelated
+///     packages, not one publisher's family)
+fn is_family_form(child: &str, parent: &str) -> bool {
+    if parent.is_empty() || child == parent {
+        return false;
+    }
+    if let Some(rest) = child.strip_prefix(parent) {
+        if rest.len() > 1
+            && (rest.starts_with('_') || rest.starts_with('-') || rest.starts_with('/'))
+        {
+            return true;
+        }
+    }
+    if let Some(typed) = child.strip_prefix("@types/") {
+        if typed == parent {
+            return true;
+        }
+    }
+    if parent.starts_with('@') && child.starts_with('@') {
+        if let (Some(ps), Some(cs)) = (parent.split('/').next(), child.split('/').next()) {
+            if ps == cs && ps != "@types" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// THE FAMILY RULE (2026-08-23 audit, item 15). A transitive dependency keeps
+/// FULL match weight (no 0.5x halving) when it is a family child of a DIRECT
+/// declared dependency. The constraint that keeps this honest has two legs,
+/// BOTH required:
+///
+/// 1. **Lockfile membership** — `child` exists as a `DepInfo` at all only
+///    because `get_all_dependencies` found it in the user's manifests or
+///    lockfiles. A shared-prefix crate that is NOT in the user's tree
+///    (`serde_v8` for a plain serde user) never produces a `DepInfo`, so no
+///    match exists to upgrade — prefix similarity alone can never mint
+///    credit. And if `serde_v8` IS in the lockfile, it is a real transitive
+///    dep of this user's tree, so full weight is earned evidence, not a
+///    look-alike leak.
+/// 2. **Recognized family form of a DIRECT dep** ([`is_family_form`]), same
+///    ecosystem — an npm package named `serde-something` cannot ride a Rust
+///    `serde` declaration.
+fn is_family_child_of_direct(child: &DepInfo, ace_ctx: &ACEContext) -> bool {
+    debug_assert!(!child.is_direct, "family upgrade is for transitive deps");
+    let child_raw = child.package_name.to_lowercase();
+    ace_ctx.dependency_info.values().any(|parent| {
+        parent.is_direct
+            && family_ecosystem_congruent(&parent.ecosystem, &child.ecosystem)
+            && is_family_form(&child_raw, &parent.package_name.to_lowercase())
+    })
+}
+
 /// Match content (title + body) against user's dependency graph.
 /// Returns matched packages and an aggregate score (0.0-1.0).
+/// The npm scope a package belongs to, if any: `@tauri-apps/api` -> `tauri-apps`.
+/// Read from the RAW manifest name, because `normalize_package_name` has
+/// already folded the `/` into a `-` by the time the match is built.
+fn npm_scope_of(m: &DepMatch) -> Option<String> {
+    let raw = m.raw_name.as_deref()?;
+    let (scope, _rest) = raw.strip_prefix('@')?.split_once('/')?;
+    if scope.is_empty() {
+        None
+    } else {
+        Some(scope.to_lowercase())
+    }
+}
+
+/// One scope family contributes ONE match, not one per member.
+///
+/// `@tauri-apps/{api,cli,plugin-opener,plugin-updater}` are four rows in
+/// `project_dependencies` and four entries in `dependency_info`, but they are
+/// one product. Every one of them carries the bare subterm `apps`, so a single
+/// English word in a title produced FOUR independent `DepMatch`es at ~0.5 each
+/// and `min(sum_of_top5 / 2, 1.0)` turned that into a near-maximal dependency
+/// axis — measured live at 0.95 on "Row Level Security in Lovable apps"
+/// (2026-08-26 audit, A2). Keeps the STRONGEST member, so a genuine hit on one
+/// package in the family still scores; the siblings just stop stacking.
+///
+/// Expects `matched` already sorted by confidence descending.
+fn collapse_scope_families(matched: &mut Vec<DepMatch>) {
+    let mut seen: HashSet<String> = HashSet::new();
+    matched.retain(|m| match npm_scope_of(m) {
+        Some(scope) => seen.insert(scope),
+        None => true,
+    });
+}
+
 pub(crate) fn match_dependencies(
     title: &str,
     content: &str,
@@ -1342,23 +1642,63 @@ pub(crate) fn match_dependencies(
             continue;
         }
 
-        // Dev dependencies contribute less
+        // Normalized name + corroboration computed up front — the family and
+        // infrastructure adjustments below consume them. Compare against the
+        // ACTUAL package name, not search_terms[0] (see the version-delta
+        // note further down).
+        let normalized_name = normalize_package_name(&info.package_name);
+        let corroborated = is_name_corroborated(
+            &title_lower,
+            &text_lower,
+            &info.package_name,
+            &normalized_name,
+        );
+
+        // Dev dependencies contribute modestly less — 0.8, not the old 0.7
+        // (2026-08-23 audit, item 16). Dev-dep releases (vitest, typescript)
+        // ARE stack-relevant to the developer who declared them; 0.8 keeps a
+        // full-name title hit (0.5) exactly at the 0.40 strong-grounding
+        // floor, so real dev-dep content grounds while anything weaker still
+        // falls short. Security TN discipline is preserved elsewhere: the
+        // Critical lane (`is_strongly_grounded_direct`, applicability)
+        // remains non-dev.
         if info.is_dev {
-            confidence *= 0.7;
+            confidence *= 0.8;
         }
 
         // Transitive dependencies contribute less than direct dependencies.
         // A user chose `tauri` directly — a CVE in tauri is urgent.
         // `x509-cert` came in via rustls — background noise at half weight.
-        if !info.is_direct {
+        //
+        // EXCEPTION (2026-08-23 audit, item 15): a lockfile-confirmed FAMILY
+        // CHILD of a declared direct dep (`serde_derive` for a `serde` user,
+        // `tokio-util` for `tokio`, `@types/react` for `react`) keeps full
+        // weight — a serde_derive advisory IS a serde-user concern, and the
+        // halving pinned it at 0.25 < the 0.40 strong-grounding floor, so
+        // the critical fast-path never engaged (sec_serde_advisory measured
+        // 0.414 exactly).
+        if !info.is_direct && !is_family_child_of_direct(info, ace_ctx) {
             confidence *= 0.5;
         }
+
+        // Project relevance (2026-08-26 audit, R1/rec 5). The column has been
+        // populated since migration 55 and was never read by scoring: a
+        // package belonging only to a dormant, non-git side project scored
+        // exactly like one this app ships. Measured consequence — ten `axios`
+        // advisories at 0.824-0.900, nine of them in the corpus top-45, for a
+        // package 4DA does not depend on. Legacy rows carry 1.0, so this is a
+        // no-op for anything the scanner has not scored down.
+        confidence *= info.project_relevance;
 
         // Infrastructure dependencies (test libraries, type declarations, linting,
         // monitoring) are present in virtually every project of their ecosystem.
         // Matching "testing" against testing-library-jest-dom doesn't mean the content
-        // is about testing in the user's context. Dampen to prevent false confirmations.
-        if is_infrastructure_dep(&info.package_name) {
+        // is about testing in the user's context. Dampen to prevent false confirmations
+        // — but only for UNCORROBORATED matches (item 16): when the item
+        // demonstrably names the package itself ("Vitest 3.0 released"), the
+        // ubiquity argument doesn't apply, and the dampen was crushing real
+        // dev-tool releases to 0.03-0.12. Subterm/alias noise stays crushed.
+        if !corroborated && is_infrastructure_dep(&info.package_name) {
             confidence *= 0.3;
         }
 
@@ -1376,7 +1716,9 @@ pub(crate) fn match_dependencies(
         // `terms.sort()` the first search term is the alphabetically-first SUBTERM
         // (e.g. "tanstack" for @tanstack/react-query), so version intelligence was
         // reading a sibling product's version near that subterm (bug F).
-        let normalized_name = normalize_package_name(&info.package_name);
+        // (`normalized_name` / `corroborated` — the grounding proof, NOT a
+        // confidence input — are computed above the dev/transitive/infra
+        // adjustments, which consume them.)
         let version_delta =
             compare_version_in_content(&text_lower, &normalized_name, &info.version);
         match version_delta {
@@ -1385,17 +1727,6 @@ pub(crate) fn match_dependencies(
             VersionDelta::OlderMajor => confidence *= 0.5,
             VersionDelta::Unknown => {}
         }
-
-        // Name corroboration — computed only for deps that actually matched.
-        // This is the grounding proof, NOT a confidence input: the score
-        // machinery is unchanged; only the canonical grounding predicate
-        // (`is_strong_grounding_match`) consumes it.
-        let corroborated = is_name_corroborated(
-            &title_lower,
-            &text_lower,
-            &info.package_name,
-            &normalized_name,
-        );
 
         matched.push(DepMatch {
             package_name: normalized_name,
@@ -1406,6 +1737,8 @@ pub(crate) fn match_dependencies(
             version: info.version.clone(),
             ecosystem: info.ecosystem.clone(),
             corroborated,
+            project_paths: info.project_paths.clone(),
+            raw_name: Some(info.package_name.clone()),
         });
     }
 
@@ -1415,10 +1748,39 @@ pub(crate) fn match_dependencies(
             .partial_cmp(&a.confidence)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+    // Collapse scope families BEFORE truncating, or four siblings of one
+    // product can occupy the whole top-5 and crowd out real evidence.
+    collapse_scope_families(&mut matched);
     matched.truncate(5);
 
-    // Aggregate score: sum of confidences, normalized
-    let total: f32 = matched.iter().map(|m| m.confidence).sum();
+    // Aggregate score. Subterms may CORROBORATE a full-name hit; they may
+    // never ORIGINATE one, and they may never STACK into one either.
+    //
+    // Splitting the sum is the whole point. Gating only the all-uncorroborated
+    // case is not enough: one real hit anywhere in a long body unlocks the
+    // entire subterm pile to sum freely, which is how a CVE for a package the
+    // user does not ship ("rclone `serve restic` authorization bypass") scored
+    // 0.56 off `tauri-plugin-single-instance` + `size-limit` +
+    // `i18next-resources-to-backend`. Corroborated evidence — the item
+    // demonstrably names one of the user's packages — carries the axis; every
+    // uncorroborated match TOGETHER contributes a bounded top-up that cannot
+    // reach the confirmation threshold on its own, let alone the gate bypass
+    // above it. See [`UNCORROBORATED_DEP_CEILING`] for the measured scale.
+    let corroborated_total: f32 = matched
+        .iter()
+        .filter(|m| m.corroborated)
+        .map(|m| m.confidence)
+        .sum();
+    let subterm_total: f32 = matched
+        .iter()
+        .filter(|m| !m.corroborated)
+        .map(|m| m.confidence)
+        .sum();
+    // Doubled because the sum is halved below: this bounds the SCORE
+    // contribution, not the raw confidence sum.
+    let subterm_capped = subterm_total.min(UNCORROBORATED_DEP_CEILING * 2.0);
+    // Same normalization as before the split — NOT a midpoint of two operands.
+    let total = corroborated_total + subterm_capped;
     let score = (total / 2.0).min(1.0);
 
     (matched, score)
@@ -1874,6 +2236,8 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["react".to_string()],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -1913,6 +2277,8 @@ mod tests {
             version: None,
             ecosystem: "rust".to_string(),
             corroborated: true,
+            raw_name: None,
+            project_paths: Vec::new(),
         }
     }
 
@@ -1926,6 +2292,8 @@ mod tests {
             is_direct: true,
             search_terms: extract_search_terms(name),
             ecosystem: ecosystem.to_string(),
+            project_paths: Vec::new(),
+            project_relevance: 1.0,
         }
     }
 
@@ -2397,7 +2765,7 @@ mod tests {
     }
 
     #[test]
-    fn strong_grounding_requires_nondev_confident_unambiguous() {
+    fn strong_grounding_requires_confident_unambiguous() {
         // A direct, confident, distinctively-named match grounds.
         assert!(is_strongly_grounded(&[grounding_match(
             "axios", 0.5, false, true
@@ -2406,8 +2774,13 @@ mod tests {
             "axios", 0.5, false, true
         )]));
 
-        // Dev-only matches never ground (a CVE in a test harness isn't urgent).
-        assert!(!is_strongly_grounded(&[grounding_match(
+        // Dev deps DO ground for the feed (item 16: a vitest release is
+        // stack-relevant) — but never at the Critical direct trust floor
+        // (a CVE in a test harness doesn't page).
+        assert!(is_strongly_grounded(&[grounding_match(
+            "axios", 0.9, true, true
+        )]));
+        assert!(!is_strongly_grounded_direct(&[grounding_match(
             "axios", 0.9, true, true
         )]));
 
@@ -2456,6 +2829,8 @@ mod tests {
                     "sys".to_string(),
                 ],
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2527,6 +2902,8 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2556,6 +2933,8 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["axum".to_string()],
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
         let (matches, score) = match_dependencies("crates.io: axum v0.8.9", "", &[], &ace_ctx);
@@ -2590,6 +2969,8 @@ mod tests {
                     "react-query".to_string(),
                 ],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2630,6 +3011,8 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["react".to_string()],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2662,6 +3045,8 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["got".to_string()],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2691,6 +3076,8 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["got".to_string()],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2720,6 +3107,8 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["vitest".to_string()],
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2732,7 +3121,8 @@ mod tests {
 
         assert!(!matches.is_empty(), "Dev dep should still match");
         assert!(matches[0].is_dev, "Should be flagged as dev dependency");
-        // Dev dep confidence is multiplied by 0.7
+        // Dev dep confidence is multiplied by 0.8 (item 16: modest discount,
+        // not exclusion)
         assert!(
             matches[0].confidence < 1.0,
             "Dev dep confidence should be attenuated"
@@ -2751,6 +3141,8 @@ mod tests {
                 is_direct: true,
                 search_terms: extract_search_terms("@tanstack/react-query"),
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2796,6 +3188,8 @@ mod tests {
                 is_direct: true,
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2809,6 +3203,8 @@ mod tests {
                 is_direct: false,
                 search_terms: vec!["tokio".to_string()],
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2864,6 +3260,8 @@ mod tests {
                 is_direct: true,
                 search_terms: extract_search_terms("@sentry/react"),
                 ecosystem: "javascript".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2901,6 +3299,8 @@ mod tests {
                 is_direct: true,
                 search_terms: extract_search_terms("pdf-extract"),
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2937,6 +3337,8 @@ mod tests {
                 is_direct: true,
                 search_terms: extract_search_terms("pdf-extract"),
                 ecosystem: "rust".to_string(),
+                project_paths: Vec::new(),
+                project_relevance: 1.0,
             },
         );
 
@@ -2977,5 +3379,527 @@ mod tests {
         assert!(!is_infrastructure_dep("sentry")); // standalone sentry is domain-relevant
         assert!(!is_infrastructure_dep("image"));
         assert!(!is_infrastructure_dep("i18next-resources-to-backend"));
+    }
+
+    // ── Family rule (item 15) + dev-dep grounding (item 16), 2026-08-23 ──
+
+    fn dep_info(name: &str, ecosystem: &str, is_dev: bool, is_direct: bool) -> DepInfo {
+        DepInfo {
+            package_name: name.to_string(),
+            version: None,
+            is_dev,
+            is_direct,
+            search_terms: extract_search_terms(name),
+            ecosystem: ecosystem.to_string(),
+            project_paths: Vec::new(),
+            project_relevance: 1.0,
+        }
+    }
+
+    fn ace_with(deps: &[DepInfo]) -> ACEContext {
+        let mut ace = ACEContext::default();
+        for info in deps {
+            for term in &info.search_terms {
+                ace.dependency_names.insert(term.clone());
+            }
+            ace.dependency_names.insert(info.package_name.clone());
+            ace.dependency_info
+                .insert(normalize_package_name(&info.package_name), info.clone());
+        }
+        ace
+    }
+
+    #[test]
+    fn family_form_recognizes_family_and_rejects_strangers() {
+        // Recognized family forms.
+        assert!(is_family_form("serde_derive", "serde"));
+        assert!(is_family_form("tokio-util", "tokio"));
+        assert!(is_family_form("@types/react", "react"));
+        assert!(is_family_form("@babel/traverse", "@babel/core"));
+        assert!(is_family_form(
+            "github.com/gin-gonic/gin/v2",
+            "github.com/gin-gonic/gin"
+        ));
+        // NOT family: identity, bare-separator remainders, unrelated names,
+        // and the shared @types registry scope.
+        assert!(!is_family_form("serde", "serde"));
+        assert!(!is_family_form("serde-", "serde"));
+        assert!(!is_family_form("serenity", "serde"));
+        assert!(!is_family_form("@types/node", "react"));
+        assert!(!is_family_form("@types/react", "@types/node"));
+        // `serde_v8` IS a family FORM of serde — by design. The honesty gate
+        // is lockfile membership (`is_family_child_of_direct` only ever sees
+        // deps that exist in the user's tree), not name shape.
+        assert!(is_family_form("serde_v8", "serde"));
+    }
+
+    #[test]
+    fn lockfile_family_child_of_direct_dep_keeps_full_weight_and_grounds() {
+        // The sec_serde_advisory production case: serde declared directly,
+        // serde_derive present only via the lockfile (transitive). Pre-fix
+        // the 0.5x transitive halving pinned the serde_derive title hit at
+        // 0.25 < the 0.40 floor — no strong grounding, no fast-path floor.
+        let ace = ace_with(&[
+            dep_info("serde", "rust", false, true),
+            dep_info("serde_derive", "rust", false, false),
+        ]);
+        let (matches, _) = match_dependencies(
+            "RUSTSEC-2026-0042: serde_derive unbounded recursion during deserialization",
+            "serde_derive versions before 1.0.205 allow unbounded recursion when \
+             deserializing deeply nested structures.",
+            &[],
+            &ace,
+        );
+        let child = matches
+            .iter()
+            .find(|m| m.package_name == "serde_derive")
+            .expect("serde_derive must match");
+        assert!(
+            child.confidence >= STRONG_GROUNDING_CONFIDENCE,
+            "lockfile family child must keep full weight (got {})",
+            child.confidence
+        );
+        assert!(
+            is_strongly_grounded(&matches),
+            "serde_derive advisory must strongly ground a serde user"
+        );
+    }
+
+    #[test]
+    fn shared_prefix_crate_not_in_lockfile_gets_no_family_credit() {
+        // serde_v8 is a third-party crate sharing the prefix. It is NOT in
+        // this user's tree, so no DepInfo exists for it — the only possible
+        // match is `serde` itself via a compound-only occurrence, which stays
+        // minimal credit. No upgrade path exists without lockfile membership.
+        let ace = ace_with(&[dep_info("serde", "rust", false, true)]);
+        let (matches, _) = match_dependencies(
+            "serde_v8 0.240.0 released",
+            "Bindings between v8 and Rust values.",
+            &[],
+            &ace,
+        );
+        assert!(
+            matches
+                .iter()
+                .all(|m| m.confidence < STRONG_GROUNDING_CONFIDENCE),
+            "a compound-only prefix hit must stay below the grounding floor: {matches:?}"
+        );
+        assert!(!is_strongly_grounded(&matches));
+    }
+
+    #[test]
+    fn transitive_non_family_dep_is_still_halved() {
+        // The family exception is narrow: an ordinary transitive dep with no
+        // direct-dep parent keeps the conservative 0.5x halving.
+        let ace = ace_with(&[dep_info("x509-cert", "rust", false, false)]);
+        let (matches, _) = match_dependencies(
+            "x509-cert 0.3.0 released",
+            "Pure Rust X.509 certificate handling.",
+            &[],
+            &ace,
+        );
+        assert!(!matches.is_empty(), "full-name hit still matches");
+        assert!(
+            matches
+                .iter()
+                .all(|m| m.confidence < STRONG_GROUNDING_CONFIDENCE),
+            "no direct parent → halved below the grounding floor: {matches:?}"
+        );
+    }
+
+    #[test]
+    fn dev_dep_full_name_release_grounds_with_modest_discount() {
+        // Item 16: a vitest major release with a full-name title hit must
+        // ground — 0.5 title hit x 0.8 dev discount = 0.40, exactly the
+        // strong-grounding floor. The adjacent version literal corroborates
+        // the name, which also lifts the infrastructure dampen (the item IS
+        // about the tool itself, not subterm noise).
+        let ace = ace_with(&[dep_info("vitest", "javascript", true, true)]);
+        let (matches, _) = match_dependencies(
+            "Vitest 3.0.0 released with a redesigned browser mode",
+            "The vitest 3.0.0 release overhauls the runner API.",
+            &[],
+            &ace,
+        );
+        let m = matches.first().expect("vitest must match");
+        assert!(m.is_dev);
+        assert!(
+            m.confidence >= STRONG_GROUNDING_CONFIDENCE,
+            "dev-dep full-name release must reach the grounding floor (got {})",
+            m.confidence
+        );
+        assert!(
+            is_strongly_grounded(&matches),
+            "manifest devDep release is stack-relevant"
+        );
+        // The Critical paging lane stays production-only.
+        assert!(
+            !is_strongly_grounded_direct(&matches),
+            "dev deps never clear the Critical direct trust floor"
+        );
+    }
+
+    #[test]
+    fn dev_dep_uncorroborated_mention_stays_crushed() {
+        // TN guard for item 16: prose that merely mentions the tool without
+        // naming-it-as-subject evidence (version literal / package context)
+        // keeps the infrastructure dampen — no grounding.
+        let ace = ace_with(&[dep_info("vitest", "javascript", true, true)]);
+        let (matches, _) = match_dependencies(
+            "Five habits of productive developers",
+            "Some teams run vitest, others prefer other runners entirely.",
+            &[],
+            &ace,
+        );
+        assert!(
+            matches
+                .iter()
+                .all(|m| m.confidence < STRONG_GROUNDING_CONFIDENCE),
+            "a bare mention must not ground: {matches:?}"
+        );
+        assert!(!is_strongly_grounded(&matches));
+    }
+
+    // -----------------------------------------------------------------------
+    // Project attribution (2026-08-25 live Signal audit)
+    //
+    // The banner read "Critical: Security issue affects your dependency axios"
+    // on an app that does not depend on axios at all — the package is a direct
+    // dependency of a DIFFERENT repository on the same machine. The detail map
+    // is keyed by package name, and the project each row came from was read
+    // for the exclusion filter and then dropped, so no surface downstream
+    // could answer "which repo do I go and fix?".
+    // -----------------------------------------------------------------------
+
+    fn info_with(paths: &[&str], is_direct: bool, is_dev: bool, version: Option<&str>) -> DepInfo {
+        DepInfo {
+            package_name: "axios".to_string(),
+            version: version.map(str::to_string),
+            is_dev,
+            is_direct,
+            search_terms: vec![],
+            ecosystem: "javascript".to_string(),
+            project_paths: paths.iter().map(|p| (*p).to_string()).collect(),
+            project_relevance: 1.0,
+        }
+    }
+
+    #[test]
+    fn project_label_names_the_repository() {
+        assert_eq!(
+            project_label(&["d:/4da/mcp-4da-server".to_string()]).as_deref(),
+            Some("4da/mcp-4da-server")
+        );
+        assert_eq!(
+            project_label(&["c:/users/admin/documents/kairos-mvp/backend".to_string()]).as_deref(),
+            Some("kairos-mvp/backend")
+        );
+    }
+
+    #[test]
+    fn project_label_counts_extras_instead_of_listing_them() {
+        let paths = vec![
+            "d:/4da/relay".to_string(),
+            "d:/4da/src-tauri".to_string(),
+            "d:/4da/victauri-gauntlet".to_string(),
+        ];
+        assert_eq!(
+            project_label(&paths).as_deref(),
+            Some("4da/relay (+2 more)")
+        );
+    }
+
+    #[test]
+    fn project_label_is_silent_when_it_has_nothing_to_say() {
+        // Callers fall back to their existing wording rather than render "in ".
+        assert_eq!(project_label(&[]), None);
+        assert_eq!(project_label(&["".to_string()]), None);
+    }
+
+    #[test]
+    fn project_label_handles_windows_separators() {
+        assert_eq!(
+            project_label(&[r"D:\4DA\relay".to_string()]).as_deref(),
+            Some("4DA/relay")
+        );
+    }
+
+    #[test]
+    fn merging_unions_projects_instead_of_overwriting() {
+        let mut info = info_with(&["d:/4da/relay"], false, false, None);
+        merge_dep_occurrence(
+            &mut info,
+            "d:/4da/src-tauri".to_string(),
+            false,
+            false,
+            None,
+            1.0,
+        );
+        assert_eq!(info.project_paths, ["d:/4da/relay", "d:/4da/src-tauri"]);
+    }
+
+    #[test]
+    fn merging_keeps_the_strongest_relationship() {
+        // A transitive-first, dev-first entry that is ALSO a direct runtime
+        // dependency somewhere must end up direct and runtime — those two
+        // flags drive every downstream urgency decision.
+        let mut info = info_with(&["d:/4da/relay"], false, true, None);
+        merge_dep_occurrence(
+            &mut info,
+            "d:/4da/src-tauri".to_string(),
+            true,
+            false,
+            Some("1.12.2".to_string()),
+            1.0,
+        );
+        assert!(info.is_direct, "direct beats transitive");
+        assert!(!info.is_dev, "runtime beats dev");
+        assert_eq!(
+            info.version.as_deref(),
+            Some("1.12.2"),
+            "a known version fills an unknown one"
+        );
+    }
+
+    #[test]
+    fn merging_does_not_overwrite_a_known_version() {
+        let mut info = info_with(&["d:/4da/relay"], true, false, Some("1.0.0"));
+        merge_dep_occurrence(
+            &mut info,
+            "d:/4da/other".to_string(),
+            true,
+            false,
+            Some("9.9.9".to_string()),
+            1.0,
+        );
+        assert_eq!(info.version.as_deref(), Some("1.0.0"));
+    }
+
+    // ── project_relevance (2026-08-26 audit, R1 / rec 5) ────────────────
+
+    // ── Subterms corroborate, never originate (2026-08-26 audit, A1-A3) ──
+
+    /// The whole fix rests on one ordering: an uncorroborated evidence set is
+    /// capped BELOW the confirmation threshold, which is itself below the
+    /// gate-bypass minimum. If anyone retunes the DSL so that stops holding,
+    /// bare English words can confirm the dependency axis again — and reach
+    /// the 2.22x/2.57x bypass lever — so fail the build here rather than
+    /// silently in the feed.
+    #[test]
+    fn uncorroborated_ceiling_holds_the_invariant() {
+        assert!(
+            UNCORROBORATED_DEP_CEILING < crate::scoring_config::DEPENDENCY_THRESHOLD,
+            "uncorroborated evidence must never CONFIRM the dependency axis"
+        );
+        assert!(
+            UNCORROBORATED_DEP_CEILING
+                < crate::scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_MIN_SCORE,
+            "uncorroborated evidence must never reach the gate bypass"
+        );
+        assert!(UNCORROBORATED_DEP_CEILING >= 0.0);
+    }
+
+    /// T2 from the audit: run the real matcher over a FIXED adversarial title
+    /// corpus and assert ZERO subterm-only dependency confirmations.
+    ///
+    /// Every title here is a real item from the live corpus at `e0381216` that
+    /// confirmed the dependency axis on a bare subterm alone, with the term
+    /// that did it. Hermetic — no database, no network — so it gates every
+    /// build, unlike the opt-in live sweep.
+    #[test]
+    fn adversarial_corpus_yields_zero_subterm_only_confirmations() {
+        let mut ctx = ACEContext::default();
+        for name in [
+            "@tauri-apps/api",
+            "@tauri-apps/cli",
+            "@tauri-apps/plugin-opener",
+            "@tauri-apps/plugin-updater",
+            "tauri-plugin-single-instance",
+            "tauri-plugin-deep-link",
+            "@anthropic-ai/sdk",
+            "better-sqlite3",
+            "@types/better-sqlite3",
+            "express-rate-limit",
+            "@size-limit/esbuild",
+            "i18next-resources-to-backend",
+            "@alpacahq/alpaca-trade-api",
+            "helmet",
+            "@tanstack/react-virtual",
+            "framer-motion",
+            "react-router-dom",
+        ] {
+            let info = direct_dep_info(name, None, "javascript");
+            ctx.dependency_info
+                .insert(normalize_package_name(name), info);
+        }
+
+        // (title, the bare subterm that used to carry it)
+        let adversarial = [
+            (
+                "A 2,000 year old hololith ring carved entirely from a single massive sapphire",
+                "single",
+            ),
+            (
+                "I hate dropping youtube links, but I am knee deep in the python today",
+                "deep",
+            ),
+            (
+                "Did Anthropic just kill the indie hacker business model?",
+                "anthropic",
+            ),
+            (
+                "Row Level Security in Lovable apps: why your database might be public",
+                "apps",
+            ),
+            (
+                "High Schooler Plays Football With Venomous Snake in His Helmet for an Hour",
+                "helmet",
+            ),
+            (
+                "Should the cache padding size of x86-64 be 128 bytes?",
+                "size",
+            ),
+            (
+                "How to convert variable into type associated data?",
+                "types",
+            ),
+            (
+                "Backend Engineer Ships a Browser Game With One Unintentional Requirement",
+                "backend",
+            ),
+            (
+                "When Your VPS Never Had the Resources It Was Sold With",
+                "resources",
+            ),
+            (
+                "A better way to think about rate limiting in distributed systems",
+                "better/rate",
+            ),
+            ("Trade-offs in virtual DOM diffing", "trade/virtual"),
+            ("Motion design principles for the web", "motion"),
+        ];
+
+        let mut offenders = Vec::new();
+        for (title, term) in adversarial {
+            let (matches, score) = match_dependencies(title, "", &[], &ctx);
+            if score >= crate::scoring_config::DEPENDENCY_THRESHOLD {
+                offenders.push(format!(
+                    "[{score:.2}] via '{term}' :: {title} (evidence: {:?})",
+                    matches.iter().map(|m| &m.package_name).collect::<Vec<_>>()
+                ));
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "subterm-only titles must never confirm the dependency axis:\n  {}",
+            offenders.join("\n  ")
+        );
+    }
+
+    /// The other half of the contract: naming a package the user actually
+    /// depends on must still confirm. A cap that silenced real evidence would
+    /// pass the test above and destroy the feed.
+    #[test]
+    fn full_name_hits_still_confirm_the_dependency_axis() {
+        let mut ctx = ACEContext::default();
+        for name in [
+            "better-sqlite3",
+            "framer-motion",
+            "react-router-dom",
+            "axios",
+        ] {
+            let info = direct_dep_info(name, None, "javascript");
+            ctx.dependency_info
+                .insert(normalize_package_name(name), info);
+        }
+        for title in [
+            "better-sqlite3 12.9.0 released with a faster prepared-statement cache",
+            "framer-motion: layout animations that do not thrash the compositor",
+            "Migrating react-router-dom v6 to v7",
+            "npm: axios v1.12.2",
+        ] {
+            let (_m, score) = match_dependencies(title, "", &[], &ctx);
+            assert!(
+                score >= crate::scoring_config::DEPENDENCY_THRESHOLD,
+                "a full package-name hit must still confirm: {title} scored {score:.3}"
+            );
+        }
+    }
+
+    /// One scope family contributes ONE match. Live, "Row Level Security in
+    /// Lovable apps" drew four `@tauri-apps/*` matches at ~0.5 each and landed
+    /// a 0.95 dependency axis off one English word.
+    #[test]
+    fn scope_family_contributes_one_match_not_four() {
+        let mut ctx = ACEContext::default();
+        for name in [
+            "@tauri-apps/api",
+            "@tauri-apps/cli",
+            "@tauri-apps/plugin-opener",
+            "@tauri-apps/plugin-updater",
+        ] {
+            let info = direct_dep_info(name, None, "javascript");
+            ctx.dependency_info
+                .insert(normalize_package_name(name), info);
+        }
+        let (matches, _score) =
+            match_dependencies("Row Level Security in Lovable apps", "", &[], &ctx);
+        let tauri_apps = matches
+            .iter()
+            .filter(|m| m.package_name.starts_with("tauri-apps"))
+            .count();
+        assert!(
+            tauri_apps <= 1,
+            "one npm scope must contribute at most one match, got {tauri_apps}: {:?}",
+            matches.iter().map(|m| &m.package_name).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn merging_keeps_the_strongest_project_relevance() {
+        // A package declared in BOTH a dormant side project and this app is
+        // the app's package: MAX, never min, or the app's own deps would be
+        // dragged down by a stale copy elsewhere.
+        let mut info = info_with(&["c:/users/x/kairos-mvp"], true, false, None);
+        info.project_relevance = 0.5;
+        merge_dep_occurrence(
+            &mut info,
+            "d:/4da/src-tauri".to_string(),
+            true,
+            false,
+            None,
+            1.0,
+        );
+        assert_eq!(info.project_relevance, 1.0, "MAX relevance must win");
+    }
+
+    #[test]
+    fn foreign_project_relevance_scales_match_confidence_down() {
+        // The axios class: a full-name title hit on a package that exists only
+        // in a non-git side project (relevance 0.5) must not score like one
+        // this app ships. Same item, same term, relevance the only difference.
+        let mut strong = direct_dep_info("axios", None, "javascript");
+        strong.project_relevance = 1.0;
+        let mut weak = direct_dep_info("axios", None, "javascript");
+        weak.project_relevance = 0.5;
+
+        let score_with = |info: DepInfo| {
+            let mut ctx = ACEContext::default();
+            ctx.dependency_info.insert("axios".to_string(), info);
+            match_dependencies("axios 1.2.3 released", "", &[], &ctx).1
+        };
+
+        let s_strong = score_with(strong);
+        let s_weak = score_with(weak);
+        assert!(s_strong > 0.0, "baseline must actually match");
+        assert!(
+            s_weak < s_strong,
+            "relevance 0.5 must score below 1.0 (got {s_weak} vs {s_strong})"
+        );
+        assert!(
+            (s_weak - s_strong * 0.5).abs() < 1e-5,
+            "relevance must scale linearly: {s_weak} != {} ",
+            s_strong * 0.5
+        );
     }
 }

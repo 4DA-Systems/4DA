@@ -14,13 +14,20 @@ mod calibration;
 pub(crate) mod calibration_monitor;
 mod composition;
 mod context;
+pub(crate) mod context_cache;
 pub(crate) mod cvss;
 mod dedup;
+#[cfg(test)]
+mod dep_axis_live_verify;
 mod dependencies;
+#[cfg(test)]
+mod drain_cost_profile;
 pub(crate) mod epochs;
 mod explanation;
 mod explanation_chain;
 mod gate;
+#[cfg(test)]
+mod judge_agreement_live;
 mod keywords;
 pub(crate) mod necessity;
 mod pipeline_signals;
@@ -43,7 +50,7 @@ mod utils;
 pub(crate) mod validation;
 
 // Public API — external callers use crate::scoring::function_name unchanged
-pub(crate) use ace_context::{get_ace_context, ACEContext};
+pub(crate) use ace_context::{get_ace_context, primary_project_dirs, ACEContext};
 pub(crate) use analyzer::{run_post_analysis_hooks, score_items_full};
 pub(crate) use calibration::calibrate_score;
 pub(crate) use calibration_monitor::{
@@ -51,11 +58,13 @@ pub(crate) use calibration_monitor::{
 };
 pub(crate) use composition::{enforce_composition_floors, FloorConfig};
 pub(crate) use context::{
-    build_scoring_context, invalidate_scoring_context_cache, is_low_quality_topic,
+    build_scoring_context, build_scoring_context_tagged, build_scoring_context_with_timeout,
+    invalidate_scoring_context_cache, is_low_quality_topic,
 };
 pub(crate) use dedup::{
-    apply_domain_diversity, apply_source_topic_diversity, compute_serendipity_candidates,
-    dedup_results, fuzzy_dedup_results, normalize_result_url, sort_results, topic_dedup_results,
+    apply_domain_diversity, apply_source_share_diversity, apply_source_topic_diversity,
+    dedup_results, fuzzy_dedup_results, inject_serendipity_candidates, normalize_result_url,
+    sort_results, topic_dedup_results,
 };
 pub(crate) use dependencies::{
     is_ambiguous_dep_name, is_generic_topic_token, match_dependencies, STRONG_GROUNDING_CONFIDENCE,
@@ -299,7 +308,155 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // observed 2026-08-17). No scoring-logic change in this commit; the bump
 // makes the drain re-stamp the corpus with the merged logic. Unregistered
 // (full drain), same cost basis as v20.
-pub(crate) const PIPELINE_VERSION: i32 = 21;
+// v22 (2026-08-24): the adversarial-audit fix queue (2026-08-23, all phases).
+// Scoring-semantics changes landing under this bump: the 6-hour UGC community
+// cliff defused (engagement-based signal from age 0 for federated sources),
+// deterministic dep-interest synthesis (lottery killed; cap 15→40; direct dev
+// deps at 0.2 weight), the ace_independent tautology fixed (keyword-fallback
+// ACE no longer double-counts against a keyword-confirmed interest),
+// own-stack single-word keyword confirmation (corroborated, confirmation-only),
+// family/sub-crate dependency grounding (serde_derive-class lockfile children
+// of direct deps), scoped-package/Go-module advisory raw-name matching +
+// metadata-first survivor filtering, dev-dep grounding at 0.8 discount,
+// published_at staleness discount, the dep-gate bypass conf_mult lift,
+// negative-stack token-boundary matching + migration carve-out, dedup
+// grounded-first retention, platform-domain diversity exemption, serendipity
+// ceiling exclusion, and the job-seeker hiring classification.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS: this bump changes
+// global gate machinery (confirmation gate evidence, keyword confirmation,
+// community signal, staleness evidence — the epochs module contract's
+// explicit do-not-register class), so no predicate can provably bound its
+// reach. The whole corpus drains — correct, just slower; the differential
+// watermark's stale-backlog gate forces full windows until the drain
+// converges to <=500 pending.
+// v23 (2026-08-25): superseded-release staleness floor. Day-1 live assessment
+// of the v22 arc found "TypeScript 5.1 Beta is OUT!" (published 2023-04-19,
+// content_type release_notes, typescript IS a dep) still holding 0.882 and
+// feed-relevant: dev-dep grounding lifted its base while the grounded
+// softening (0.80) kept its staleness discount shallow. A release
+// announcement is time-indexed news — superseded by definition once it ages
+// past the ramp, even for your own dependency (the registry signal is
+// CURRENT releases). ReleaseNotes past the ramp now floor at
+// `stale_content.release_floor` (0.30) with the grounded softening withheld.
+// REGISTERED in epochs::SCOPED_EPOCHS: the multiplier is 1.0 at or below
+// fresh_months, so "published_at older than 12 months" is a provable superset
+// of the change's reach — only that slice drains (~127 items live), the rest
+// of the corpus is promoted untouched.
+// v24 (2026-08-25): superseded-release CEILING. v23 gave aged release
+// announcements a deeper staleness multiplier; one day of live data showed
+// that demotes but does not evict them — a multiplier scales the structural
+// term, and a strongly dep-grounded item keeps enough dep/interest signal to
+// clear 0.40 anyway (18 stale-published items still feed-relevant, NONE below
+// the line; a 2022 "What's new in axum 0.5" at 0.562 for an axum-0.8 user).
+// Releases past `stale_content.superseded_months` (24) now take a categorical
+// ceiling AND a categorical verdict gate — the v18/v19 lesson restated: caps
+// applied as ceilings hold, multipliers get out-voted, and the verdict must be
+// gated too because 0.35 + offset + topic boost lands at 0.42. Security is
+// exempt. REGISTERED in epochs::SCOPED_EPOCHS on published age.
+// v25 (2026-08-27): the ACE -> scoring contamination arc (2026-08-26 audit).
+// Four scoring-semantics changes land under this bump:
+//   1. The git-recency dependency scope filter compared a RAW backslash
+//      `git_signals.repo_path` against a canonicalized forward-slash
+//      `project_dependencies.project_path`, matched 0 of 245 rows on every
+//      Windows run since the column existed, and FAILED OPEN — re-admitting
+//      every dependency it existed to exclude. Ten `axios` advisories (a
+//      package this app does not ship) held nine of the top-45 feed slots.
+//      Normalized + path-boundary matched, and the fail-open now degrades
+//      loudly via `dep_scope_degraded` instead of widening in silence.
+//   2. `project_dependencies.project_relevance` — populated since migration 55,
+//      never once read by scoring — now scales `DepMatch.confidence`.
+//   3. Bare subterms can no longer ORIGINATE or STACK INTO a dependency match.
+//      Corroborated evidence carries the axis; all uncorroborated matches
+//      together are capped below `DEPENDENCY_THRESHOLD`, so they can never
+//      confirm it alone nor reach the gate bypass above it. One npm scope now
+//      contributes one match, not one per member. Measured: 1,758 title-only
+//      confirmations -> 105, of which ZERO are uncorroborated (was 75.1% by
+//      the audit's own definition, 92.8% by `corroborated`).
+//   4. Per-evidence tech weighting — four support paths no longer outvote
+//      seven primary manifests, so javascript/typescript stop scoring at 0.10.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS. The dependency axis feeds
+// the confirmation gate for ANY item, and the loaded dependency SET itself
+// shrank (184 packages -> 143), so no predicate can provably bound the reach —
+// the epochs module contract's explicit do-not-register class, same basis as
+// v22. The whole corpus drains.
+// v26 (2026-08-27): the accuracy + identity arc, second half of the same audit.
+// Scoring-semantics changes landing under this bump:
+//   1. Installed versions are resolved at read time from the lockfile-derived
+//      user_dependencies (0 -> 135 of 143 packages), so the SameMajor x1.2,
+//      NewerMajor x1.1 and OlderMajor x0.5 multipliers fire for the FIRST time
+//      in production. Live effect: title-only dep confirmations 105 -> 97.
+//   2. The semantic ACE boost takes a weighted mean of the TOP-3 closest stack
+//      elements instead of averaging over every topic and tech. Ablation proof:
+//      under the old average one unrelated topic cut an on-stack item from
+//      0.280 to 0.124.
+//   3. The Library tech category is admitted (tech axis 6 -> 13 entries), which
+//      is only safe BECAUSE of (2) — it adds seven terms to what was an average.
+//   4. Topic confidence decays on a 14-day half-life inside a 30-day window,
+//      replacing a hard 7-day cliff that had evicted tokio while keeping a
+//      keyword minted from a test fixture. Admitted topics 22 -> 30.
+//   5. apply_source_share_diversity caps any one source at 30% of a batch.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS, same basis as v22/v25:
+// the semantic boost and the dependency axis feed the confirmation gate for ANY
+// item, so no predicate can provably bound the reach. The whole corpus drains.
+// v27 (2026-08-27): the drain arc. ONE scoring-semantics change, deliberately
+// isolated from the machinery that ships with it.
+//
+//   The grounding filter moved from a Rust-side post-filter into the vec0
+//   PARTITION KEY (schema 113). `find_similar_contexts` used to over-fetch k=24
+//   and keep the first 3 grounding-eligible rows, which vec0 makes necessary
+//   because it selects k rows BEFORE applying join predicates. That was inexact
+//   in one direction: an item whose 24 nearest chunks were all prose got fewer
+//   than three matches, or none, and then scored as though the user's codebase
+//   contained nothing like it. Measured on the live corpus over 800 items:
+//   98.00% get an identical top-3, 2.00% were under-filled by the old
+//   over-fetch, 3 items got NOTHING, and 0.38% see a different top-1 — the only
+//   band that moves a score. Strictly more grounding, never less.
+//
+// Everything else in this arc is deliberately NOT scoring semantics and could
+// not have justified a bump on its own: the per-item context-match cache is
+// exact by construction and verified against a live KNN; the evidence-stamping
+// fix writes the same values to more rows; the drain relocation and the read
+// pool sizing are scheduling.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS. The affected set is
+// "items whose 24 nearest context chunks were mostly prose", which is a fact
+// about embedding geometry and not expressible as a predicate over indexed
+// columns — the module contract's when-unsure-do-not-register rule. The whole
+// corpus drains, which after this arc is a one-off cache warm plus a few
+// minutes rather than 22 days.
+pub(crate) const PIPELINE_VERSION: i32 = 27;
+
+/// Parse the topic tags carried in the `source_items.tags` column.
+///
+/// Canonical shape (2026-08-23) is an object
+/// `{"topics":["rust","async"], "score":42, ...}` — topics under `"topics"`,
+/// engagement keys at the top level for `extract_community_signal`. Legacy
+/// rows hold a bare JSON array of topic strings. Both shapes parse; anything
+/// else yields no topics. Every `ScoringInput::source_tags` build site must
+/// go through this — a raw `Vec<String>` deserialize silently drops the
+/// topics of every object-shaped row.
+pub(crate) fn parse_tags_topics(tags_json: Option<&str>) -> Vec<String> {
+    let Some(raw) = tags_json else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return Vec::new();
+    };
+    let arr = match &value {
+        serde_json::Value::Array(a) => a,
+        serde_json::Value::Object(o) => match o.get("topics").and_then(|t| t.as_array()) {
+            Some(a) => a,
+            None => return Vec::new(),
+        },
+        _ => return Vec::new(),
+    };
+    arr.iter()
+        .filter_map(|v| v.as_str().map(String::from))
+        .collect()
+}
 
 /// Score a single item through the PASIFA V2 pipeline.
 ///
@@ -327,6 +484,11 @@ use fourda_macros::ScoringBuilder;
 #[derive(ScoringBuilder, Clone)]
 pub(crate) struct ScoringContext {
     pub cached_context_count: i64,
+    /// Context-corpus generation this run scores against. Cached per-item
+    /// grounding matches are only served when they carry this exact value —
+    /// see [`crate::db::context_cache`]. Zero on a corpus that has not changed
+    /// since schema 113, which is a real generation, not a sentinel.
+    pub context_generation: i64,
     pub interest_count: usize,
     pub interests: Vec<context_engine::Interest>,
     pub exclusions: Vec<String>,
@@ -335,7 +497,7 @@ pub(crate) struct ScoringContext {
     // feedback_boosts (feedback-derived topic boosts) DELETED in v20a: the
     // loader had pinned it to an empty map since v19 (AD-029) and the last
     // pipeline reader was removed with the dead feedback_boost computation.
-    /// Source quality scores from learned preferences: source_type -> score (-1.0 to 1.0)
+    /// Retired source-quality scaffold: source_type -> score (-1.0 to 1.0)
     ///
     /// Loaded permanently empty and read by nothing since AD-029 demoted the
     /// behavioural scoring signals (V2 pins `source_quality_boost` to 0.0). The

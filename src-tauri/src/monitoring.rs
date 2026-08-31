@@ -11,7 +11,7 @@ use std::time::Duration;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder},
-    AppHandle, Emitter, Manager, Runtime,
+    AppHandle, Emitter, Runtime,
 };
 use tracing::{info, warn};
 
@@ -181,7 +181,10 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
         .on_menu_event(move |app, event| {
             match event.id.as_ref() {
                 "show" => {
-                    if let Some(window) = app.get_webview_window("main") {
+                    // ensure_main_window RECREATES a destroyed main window —
+                    // without it, "Show 4DA" silently no-ops until an app
+                    // restart once the window has died (observed 2026-08-19).
+                    if let Some(window) = crate::app_setup::ensure_main_window(app) {
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
@@ -196,7 +199,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
                             crate::briefing_window::show_briefing(app, &snapshot.briefing);
                         }
                         None => {
-                            if let Some(window) = app.get_webview_window("main") {
+                            if let Some(window) = crate::app_setup::ensure_main_window(app) {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }
@@ -229,7 +232,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
             } = event
             {
                 let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
+                if let Some(window) = crate::app_setup::ensure_main_window(app) {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
@@ -302,6 +305,19 @@ const COLD_BOOT_GRACE_SECS_DEFAULT: u64 = 90;
 fn mark_job_complete(atomic: &AtomicU64, now: u64, job_name: &'static str) {
     atomic.store(now, Ordering::Relaxed);
     crate::scheduler_state::persist_run(job_name, now);
+}
+
+/// Companion to [`mark_job_complete`]: persist how the job actually WENT and
+/// how long it took, once its body has finished. `mark_job_complete` stamps
+/// the schedule BEFORE the body (so a crash can't re-fire in a loop); this
+/// runs AFTER, filling the `last_outcome` / `last_duration_ms` columns that
+/// sat NULL for every job from Phase 51 until 2026-08-31. Best-effort.
+fn record_job_outcome(job_name: &'static str, started: std::time::Instant, error: Option<String>) {
+    crate::scheduler_state::record_outcome(
+        job_name,
+        error.as_deref(),
+        started.elapsed().as_millis() as u64,
+    );
 }
 
 /// Start the background monitoring scheduler
@@ -421,12 +437,23 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     now,
                     crate::scheduler_state::jobs::HEALTH_CHECK,
                 );
+                let job_started = std::time::Instant::now();
                 match crate::run_background_health_check().await {
                     Ok(result) => {
                         info!(target: "4da::monitor", result = %result, "Health check completed");
+                        record_job_outcome(
+                            crate::scheduler_state::jobs::HEALTH_CHECK,
+                            job_started,
+                            None,
+                        );
                     }
                     Err(e) => {
                         warn!(target: "4da::monitor", error = %e, "Health check failed");
+                        record_job_outcome(
+                            crate::scheduler_state::jobs::HEALTH_CHECK,
+                            job_started,
+                            Some(e.to_string()),
+                        );
                     }
                 }
             }
@@ -512,12 +539,23 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         now,
                     );
                     if let Ok(db) = crate::get_database() {
+                        let job_started = std::time::Instant::now();
                         match db.run_scheduled_maintenance() {
                             Ok(()) => {
                                 info!(target: "4da::monitor", "Hourly DB maintenance completed (WAL checkpoint + optimize)");
+                                record_job_outcome(
+                                    crate::scheduler_state::jobs::DB_MAINTENANCE,
+                                    job_started,
+                                    None,
+                                );
                             }
                             Err(e) => {
                                 warn!(target: "4da::monitor", error = %e, "DB maintenance failed");
+                                record_job_outcome(
+                                    crate::scheduler_state::jobs::DB_MAINTENANCE,
+                                    job_started,
+                                    Some(e.to_string()),
+                                );
                             }
                         }
                     }
@@ -552,12 +590,23 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             now,
                         );
                         if let Ok(db) = crate::get_database() {
+                            let job_started = std::time::Instant::now();
                             match db.conn.lock().execute_batch("VACUUM;") {
                                 Ok(()) => {
                                     info!(target: "4da::monitor", "Weekly VACUUM completed — disk space reclaimed");
+                                    record_job_outcome(
+                                        crate::scheduler_state::jobs::VACUUM,
+                                        job_started,
+                                        None,
+                                    );
                                 }
                                 Err(e) => {
                                     warn!(target: "4da::monitor", error = %e, "Weekly VACUUM failed");
+                                    record_job_outcome(
+                                        crate::scheduler_state::jobs::VACUUM,
+                                        job_started,
+                                        Some(e.to_string()),
+                                    );
                                 }
                             }
                         }
@@ -576,14 +625,25 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     now,
                     crate::scheduler_state::jobs::ANOMALY_DETECTION,
                 );
+                let job_started = std::time::Instant::now();
                 match crate::run_background_anomaly_detection_with_results().await {
                     Ok(anomalies) => {
                         info!(target: "4da::monitor", found = anomalies.len(), "Anomaly detection completed");
                         // Fix 5: Process anomalies (notifications, auto-remediation, auto-briefing)
                         crate::monitoring_jobs::process_anomalies(&app, &anomalies).await;
+                        record_job_outcome(
+                            crate::scheduler_state::jobs::ANOMALY_DETECTION,
+                            job_started,
+                            None,
+                        );
                     }
                     Err(e) => {
                         warn!(target: "4da::monitor", error = %e, "Anomaly detection failed");
+                        record_job_outcome(
+                            crate::scheduler_state::jobs::ANOMALY_DETECTION,
+                            job_started,
+                            Some(e.to_string()),
+                        );
                     }
                 }
             }
@@ -601,6 +661,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     now,
                     crate::scheduler_state::jobs::BACKFILL,
                 );
+                let job_started = std::time::Instant::now();
                 match crate::analysis_backfill::backfill_unscored_cycle(250).await {
                     Ok(progress) => {
                         if progress.scored_this_cycle > 0 {
@@ -612,9 +673,19 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                                 "Scoring backfill cycle"
                             );
                         }
+                        record_job_outcome(
+                            crate::scheduler_state::jobs::BACKFILL,
+                            job_started,
+                            None,
+                        );
                     }
                     Err(e) => {
                         warn!(target: "4da::monitor", error = %e, "Scoring backfill cycle failed");
+                        record_job_outcome(
+                            crate::scheduler_state::jobs::BACKFILL,
+                            job_started,
+                            Some(e.to_string()),
+                        );
                     }
                 }
             }
@@ -633,8 +704,10 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     now,
                     crate::scheduler_state::jobs::CALIBRATION_MONITOR,
                 );
+                let job_started = std::time::Instant::now();
                 if let Ok(db) = crate::get_database() {
                     let threshold = crate::get_relevance_threshold();
+                    let mut snapshot_error: Option<String> = None;
                     match crate::scoring::calibration_monitor::compute_calibration_snapshot(
                         db, threshold,
                     ) {
@@ -670,8 +743,14 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
                         Err(e) => {
                             tracing::debug!(target: "4da::calibration", error = %e, "Calibration snapshot failed");
+                            snapshot_error = Some(e.to_string());
                         }
                     }
+                    record_job_outcome(
+                        crate::scheduler_state::jobs::CALIBRATION_MONITOR,
+                        job_started,
+                        snapshot_error,
+                    );
 
                     // Phase 5b: dep-scoped high-stakes recall. Unlike the feedback metrics,
                     // this works at cold start — it needs the dependency graph, not feedback.
@@ -681,13 +760,22 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         if let Ok(hs) =
                             crate::scoring::compute_high_stakes_recall(db, &ctx, threshold)
                         {
-                            if hs.misscored > 0 {
+                            if hs.alert {
                                 warn!(
                                     target: "4da::calibration",
                                     misscored = hs.misscored,
                                     dep_matched = hs.dep_matched_total,
                                     miss_rate = hs.miss_rate,
                                     "Security/breaking advisories affecting your stack scored as noise — recall bug"
+                                );
+                            } else if hs.misscored > 0 {
+                                // Below the alert threshold: note it, don't page.
+                                info!(
+                                    target: "4da::calibration",
+                                    misscored = hs.misscored,
+                                    dep_matched = hs.dep_matched_total,
+                                    miss_rate = hs.miss_rate,
+                                    "High-stakes recall: isolated misses below alert threshold"
                                 );
                             } else if hs.dep_matched_total > 0 {
                                 info!(
@@ -706,7 +794,9 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // now-tracked deps so the backfill re-scores them against the new profile.
             // Checks hourly but only does work when the dep-set epoch HASH actually changes,
             // so it's a no-op almost every time. The run timestamp is in-memory only (a
-            // no-op extra run after restart is harmless); DEP_EPOCH persists the hash.
+            // no-op extra run after restart is harmless); the hash persists in kv_store
+            // (schema 114 moved it out of scheduler_state.last_run_unix, where a 63-bit
+            // hash in a timestamp column poisoned MAX(last_run_unix) staleness math).
             let last_reexam = state.last_reexamination.load(Ordering::Relaxed);
             if now - last_reexam
                 >= crate::scheduler_gate::effective_interval(REEXAMINATION_CHECK_INTERVAL)
@@ -717,19 +807,14 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     match crate::scoring::build_scoring_context(db).await {
                         Ok(ctx) => {
                             let epoch = crate::scoring::reexamination::dep_epoch_hash(&ctx);
-                            let prev = crate::scheduler_state::get_persisted_timestamp(
-                                crate::scheduler_state::jobs::DEP_EPOCH,
-                            );
+                            let prev = crate::scheduler_state::get_dep_epoch_hash();
                             if epoch != prev {
                                 let threshold = crate::get_relevance_threshold();
                                 let requeued =
                                     crate::scoring::reexamination::requeue_reexaminable_items(
                                         db, &ctx, threshold,
                                     );
-                                crate::scheduler_state::persist_run(
-                                    crate::scheduler_state::jobs::DEP_EPOCH,
-                                    epoch,
-                                );
+                                crate::scheduler_state::persist_dep_epoch_hash(epoch);
                                 if requeued > 0 {
                                     info!(
                                         target: "4da::reexamination",
@@ -827,6 +912,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     now,
                     crate::scheduler_state::jobs::DEP_HEALTH,
                 );
+                let job_started = std::time::Instant::now();
                 match crate::run_dependency_health_check() {
                     Ok(health) => {
                         let actionable = health
@@ -845,9 +931,19 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             actionable,
                             "Dependency health check completed"
                         );
+                        record_job_outcome(
+                            crate::scheduler_state::jobs::DEP_HEALTH,
+                            job_started,
+                            None,
+                        );
                     }
                     Err(e) => {
                         warn!(target: "4da::monitor", error = %e, "Dependency health check failed");
+                        record_job_outcome(
+                            crate::scheduler_state::jobs::DEP_HEALTH,
+                            job_started,
+                            Some(e.to_string()),
+                        );
                     }
                 }
             }
@@ -923,12 +1019,23 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     now,
                     crate::scheduler_state::jobs::BEHAVIOR_DECAY,
                 );
+                let job_started = std::time::Instant::now();
                 match crate::run_background_behavior_decay().await {
                     Ok(result) => {
                         info!(target: "4da::monitor", result = %result, "Behavior decay completed");
+                        record_job_outcome(
+                            crate::scheduler_state::jobs::BEHAVIOR_DECAY,
+                            job_started,
+                            None,
+                        );
                     }
                     Err(e) => {
                         warn!(target: "4da::monitor", error = %e, "Behavior decay failed");
+                        record_job_outcome(
+                            crate::scheduler_state::jobs::BEHAVIOR_DECAY,
+                            job_started,
+                            Some(e.to_string()),
+                        );
                     }
                 }
 
@@ -980,6 +1087,15 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     // Instead of blind DELETE, first extract meta-intelligence (calibration
                     // deltas, topic decay, source autopsies, anti-patterns) then prune.
                     {
+                        // The 'autophagy' scheduler row was seeded in Phase 51 but never
+                        // written (hydration takes MAX(behavior_decay, autophagy) into
+                        // last_decay, so cadence still worked) — stamp + outcome make the
+                        // row truthful instead of frozen at 0/NULL.
+                        crate::scheduler_state::persist_run(
+                            crate::scheduler_state::jobs::AUTOPHAGY,
+                            now,
+                        );
+                        let autophagy_started = std::time::Instant::now();
                         match crate::autophagy::run_autophagy_cycle(
                             &daily_conn,
                             max_age_days as i64,
@@ -992,6 +1108,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                                     anti_patterns = cycle.anti_patterns_detected,
                                     duration_ms = cycle.duration_ms,
                                     "Autophagy cycle completed"
+                                );
+                                record_job_outcome(
+                                    crate::scheduler_state::jobs::AUTOPHAGY,
+                                    autophagy_started,
+                                    None,
                                 );
                                 // Emit event so frontend can refresh insights
                                 if let Err(e) = app.emit("autophagy-cycle-complete", &cycle) {
@@ -1014,6 +1135,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             }
                             Err(e) => {
                                 warn!(target: "4da::monitor", error = %e, "Autophagy cycle failed");
+                                record_job_outcome(
+                                    crate::scheduler_state::jobs::AUTOPHAGY,
+                                    autophagy_started,
+                                    Some(e.to_string()),
+                                );
                             }
                         }
 
@@ -1126,12 +1252,17 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     now,
                     crate::scheduler_state::jobs::ACCURACY_RECORD,
                 );
+                let job_started = std::time::Instant::now();
+                // Aggregate outcome: 'ok' only when every sub-step succeeded;
+                // otherwise the FIRST failure names itself (later ones are in logs).
+                let mut job_error: Option<String> = None;
                 if let Ok(db) = crate::get_database() {
                     let conn = db.conn.lock();
                     match crate::accuracy::record_weekly_accuracy(&conn) {
                         Ok(()) => info!(target: "4da::monitor", "Weekly accuracy recorded"),
                         Err(e) => {
                             warn!(target: "4da::monitor", error = %e, "Failed to record weekly accuracy");
+                            job_error.get_or_insert(format!("weekly accuracy: {e}"));
                         }
                     }
                     match crate::temporal_graph::record_weekly_timeline(&conn) {
@@ -1140,6 +1271,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
                         Err(e) => {
                             warn!(target: "4da::monitor", error = %e, "Failed to record weekly timeline snapshot");
+                            job_error.get_or_insert(format!("weekly timeline: {e}"));
                         }
                     }
                 }
@@ -1147,9 +1279,15 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 match crate::trust_ledger::compute_and_store_weekly_precision() {
                     Ok(()) => info!(target: "4da::monitor", "Weekly precision stats computed"),
                     Err(e) => {
-                        warn!(target: "4da::monitor", error = %e, "Precision stats computation failed")
+                        warn!(target: "4da::monitor", error = %e, "Precision stats computation failed");
+                        job_error.get_or_insert(format!("weekly precision: {e}"));
                     }
                 }
+                record_job_outcome(
+                    crate::scheduler_state::jobs::ACCURACY_RECORD,
+                    job_started,
+                    job_error,
+                );
             }
 
             // Digest scheduler (Fix 2) -- check on every tick

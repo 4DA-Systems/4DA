@@ -6,7 +6,7 @@
 //!
 //! Records and measures intelligence quality: precision, preemption lead time,
 //! false positive rates, and action conversion. Makes the invisible visible —
-//! proves 4DA is getting smarter over time.
+//! tracks whether engine and codebase-grounded scoring changes improve quality.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -133,7 +133,16 @@ const MIN_PRECISION_DATA_POINTS: u32 = 5;
 
 /// Record a trust event when user interacts with intelligence.
 pub fn record_trust_event(event: TrustEvent) -> Result<()> {
+    if let Some(db) = crate::try_get_database() {
+        let conn = db.conn.lock();
+        return insert_trust_event(&conn, &event);
+    }
+
     let conn = open_db_connection()?;
+    insert_trust_event(&conn, &event)
+}
+
+fn insert_trust_event(conn: &rusqlite::Connection, event: &TrustEvent) -> Result<()> {
     conn.execute(
         "INSERT INTO trust_events (event_type, signal_id, alert_id, source_type, topic, user_action, confidence_at_surface, notes)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",

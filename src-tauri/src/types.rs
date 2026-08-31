@@ -128,11 +128,21 @@ pub struct ScoreBreakdown {
     #[serde(default)]
     pub matched_deps: Vec<String>,
     /// Canonical grounding verdict: true when at least one matched dependency is
-    /// a strong, non-dev, non-ambiguous edge (confidence >= the strong floor).
+    /// a strong, non-ambiguous edge (confidence >= the strong floor).
     /// This is the SINGLE source of truth the frontend evidence pool and the
     /// Critical gate both read — do not re-derive grounding from `matched_deps`.
     #[serde(default)]
     pub strongly_grounded: bool,
+    /// Degraded-input markers for the scoring run that produced this breakdown
+    /// (2026-08-23 audit, item 11). Non-empty means an input axis silently
+    /// collapsed and the scores are NOT full-fidelity: "context_knn_failed"
+    /// (DB error muted the context axis), "dep_intel_load_failed" (dependency
+    /// intelligence load failed — dep axis empty-by-error), "embedding_missing"
+    /// (zero/absent embedding — semantic axes defaulted). The pipeline only
+    /// CARRIES the honest state; persistence policy (skip/re-score) is decided
+    /// by the analysis-status layer.
+    #[serde(default)]
+    pub degraded_inputs: Vec<String>,
     /// Categorical score ceiling that must survive every post-pipeline
     /// score writer (cross-encoder rerank, dedup cluster boost, source-tier
     /// normalization, LLM reconciler). Set when a commodity cap applied
@@ -430,6 +440,28 @@ pub struct SourceRelevance {
     /// Primary extracted topic for frontend topic clustering (e.g. "webassembly", "rust")
     #[serde(default)]
     pub primary_topic: Option<String>,
+    /// EVIDENCE score (audit 2026-08-23 §3.5, items 12+26): the pure
+    /// `score_item` output for this item — post the pipeline's own ceilings,
+    /// pre every batch-relative layer (cross-encoder blend, dedup cluster
+    /// boost, diversity decay, per-source percentile, LLM advisor delta).
+    /// Set once at construction in `pipeline_v2::score_item` and never
+    /// mutated afterwards; this is what persists as
+    /// `source_items.relevance_score`. `top_score` remains the final
+    /// display/rank value the batch layer produces (persisted separately as
+    /// `source_items.rank_score`). 0.0 on excluded items.
+    #[serde(default)]
+    pub evidence_score: f32,
+    /// Batch-layer rank provenance: compact JSON naming the batch-relative
+    /// factors that actually moved `top_score` away from `evidence_score`
+    /// this run, with their deltas (e.g. `{"ce":-0.12,"percentile":0.03}`).
+    /// Recorded by `scoring::analyzer::RankProvenance`; persisted as
+    /// `source_items.rank_factors`. In-process plumbing only — deliberately
+    /// excluded from IPC events and the TS binding (`serde(skip)`), so the
+    /// frontend contract is untouched. `None` = no factor fired (or the
+    /// path does not record provenance).
+    #[serde(skip)]
+    #[ts(skip)]
+    pub rank_factors: Option<String>,
 }
 
 pub(crate) fn default_lang_en() -> String {

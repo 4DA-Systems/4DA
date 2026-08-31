@@ -40,10 +40,8 @@ pub(super) struct DepInfoSpec {
 /// Full enrichment data for a single persona.
 /// Covers all fields that base persona builders leave at defaults.
 pub(super) struct PersonaEnrichment {
-    // ACEContext enrichment (3 missing fields)
+    // ACEContext enrichment
     pub topic_confidence: HashMap<String, f32>,
-    pub anti_topics: Vec<String>,
-    pub anti_topic_confidence: HashMap<String, f32>,
 
     // ScoringContext enrichment (11 missing fields)
     pub topic_embeddings: HashMap<String, Vec<f32>>,
@@ -123,8 +121,6 @@ fn rust_enrichment() -> PersonaEnrichment {
             ("wasm", 0.75),
             ("systems programming", 0.90),
         ]),
-        anti_topics: string_vec(&["python", "java"]),
-        anti_topic_confidence: confidence_map(&[("python", 0.6), ("java", 0.5)]),
         topic_embeddings: topic_embedding_map(&[
             "rust",
             "tauri",
@@ -193,8 +189,6 @@ fn python_enrichment() -> PersonaEnrichment {
             ("llm", 0.85),
             ("data science", 0.75),
         ]),
-        anti_topics: string_vec(&["rust", "go"]),
-        anti_topic_confidence: confidence_map(&[("rust", 0.5), ("go", 0.4)]),
         topic_embeddings: topic_embedding_map(&[
             "python",
             "pytorch",
@@ -267,8 +261,6 @@ fn fullstack_ts_enrichment() -> PersonaEnrichment {
             ("nodejs", 0.80),
             ("graphql", 0.70),
         ]),
-        anti_topics: string_vec(&["java", "c++"]),
-        anti_topic_confidence: confidence_map(&[("java", 0.5), ("c++", 0.4)]),
         topic_embeddings: topic_embedding_map(&[
             "typescript",
             "react",
@@ -338,8 +330,6 @@ fn devops_enrichment() -> PersonaEnrichment {
             ("ci/cd", 0.80),
             ("observability", 0.75),
         ]),
-        anti_topics: string_vec(&["frontend", "react"]),
-        anti_topic_confidence: confidence_map(&[("frontend", 0.6), ("react", 0.5)]),
         topic_embeddings: topic_embedding_map(&[
             "kubernetes",
             "docker",
@@ -405,8 +395,6 @@ fn mobile_enrichment() -> PersonaEnrichment {
             ("ios", 0.70),
             ("android", 0.70),
         ]),
-        anti_topics: string_vec(&["backend", "devops"]),
-        anti_topic_confidence: confidence_map(&[("backend", 0.4), ("devops", 0.4)]),
         topic_embeddings: topic_embedding_map(&[
             "react native",
             "expo",

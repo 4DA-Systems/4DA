@@ -171,7 +171,7 @@ permalink: "/privacy.html"
 
   <div class="legal-container">
     <h1>Privacy Policy</h1>
-    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 12 August 2026</p>
+    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 18 August 2026</p>
 
     <div class="short-version">
       4DA is a desktop application that runs on your computer. Your data stays on your computer. We do not collect it, we do not transmit it, we do not store it on our servers, and we do not sell it. This privacy policy exists because the law requires one, but also because we believe you deserve to know exactly how your software works.
@@ -306,7 +306,7 @@ permalink: "/privacy.html"
     <h3>3.1 Data We May Collect</h3>
     <ul>
       <li><strong>Server logs:</strong> Our hosting provider (Cloudflare) may collect standard server log data including IP addresses, browser type, referring pages, and pages visited. See <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare's Privacy Policy</a>.</li>
-      <li><strong>Analytics:</strong> We may use privacy-respecting analytics to understand aggregate traffic patterns. If used, this data is anonymised and does not track individual users across sessions.</li>
+      <li><strong>Analytics:</strong> We use <a href="https://posthog.com/privacy">PostHog</a> to understand aggregate traffic patterns. It records page views and a small number of product events (for example, which download button was pressed). It is loaded on every page of this website. We do not use it to build advertising profiles or to track you across other sites.</li>
       <li><strong>Cookies:</strong> The website may use essential cookies for basic functionality. We do not use third-party advertising cookies or cross-site tracking cookies.</li>
     </ul>
 
@@ -359,7 +359,9 @@ permalink: "/privacy.html"
         <tr><td>Keygen</td><td>App (Signal tier only)</td><td>License key</td><td>License validation</td></tr>
         <tr><td>User's SMTP provider</td><td>App (optional, user-configured)</td><td>Digest email contents</td><td>Email delivery</td></tr>
         <tr><td>Cloudflare</td><td>Website</td><td>Server logs, analytics</td><td>Website hosting</td></tr>
-        <tr><td>Resend</td><td>Website (licence recovery only, when you ask for it)</td><td>Your purchase email address and your licence key</td><td>Emailing your licence key to you. We email the key rather than displaying it, because we cannot verify that whoever typed an address owns it.</td></tr>
+        <tr><td>PostHog</td><td>Website (all pages)</td><td>Page views and product events (e.g. which download button was pressed), plus the IP and browser data any web request carries</td><td>Aggregate traffic and funnel analytics. Not used for advertising or cross-site tracking.</td></tr>
+        <tr><td>Stripe</td><td>Website (Signal checkout and subscription billing)</td><td>Your email address, payment details (entered on Stripe's own checkout page &mdash; we never see or store card numbers), and your billing history. Your issued licence key and its expiry are stored against your Stripe customer record so we can re-send it to you.</td><td>Taking payment, managing subscriptions and renewals, and issuing refunds. See <a href="https://stripe.com/privacy">Stripe's Privacy Policy</a>.</td></tr>
+        <tr><td>Resend</td><td>Website (sending your licence key: at purchase, at each renewal, and when you ask us to re-send it)</td><td>Your purchase email address and your licence key</td><td>Emailing your licence key to you, so that a closed browser tab never costs you the key you paid for. When you request a re-send we email the key rather than displaying it, because we cannot verify that whoever typed an address owns it.</td></tr>
         <tr><td>Shopify</td><td>Store</td><td>Purchase and shipping information</td><td>Merchandise sales</td></tr>
       </tbody>
     </table>
@@ -380,7 +382,11 @@ permalink: "/privacy.html"
     <h3>7.2 Website Data</h3>
     <p>Server logs retained by Cloudflare are subject to Cloudflare's data retention policies. We do not independently retain website visitor data.</p>
 
-    <h3>7.3 Store Data</h3>
+    <h3>7.3 Signal Subscription Data</h3>
+    <p>Your Stripe customer record &mdash; your email address, your billing history, and the licence key and expiry we issued you &mdash; is retained for as long as your subscription is active, and afterwards for as long as Australian tax law requires us to keep the transaction record (generally 5 years).</p>
+    <p>That record is also the only copy of your licence key that we hold: the key is verified offline by the App, so we have no other way to look it up. If you ask us to delete it, we can no longer re-send you your key &mdash; keep your own copy of the email first. To request deletion of anything not legally required, contact <a href="mailto:privacy@4da.ai">privacy@4da.ai</a>.</p>
+
+    <h3>7.4 Store Data</h3>
     <p>Purchase records are retained as required by Australian tax law (generally 5 years). You may request deletion of non-legally-required data by contacting <a href="mailto:privacy@4da.ai">privacy@4da.ai</a>.</p>
 
     <h2>8. Children's Privacy</h2>
@@ -388,7 +394,7 @@ permalink: "/privacy.html"
     <p>If you believe a child has provided us with personal information (e.g., via email or the Store), please contact us at <a href="mailto:privacy@4da.ai">privacy@4da.ai</a> and we will promptly delete it.</p>
 
     <h2>9. Your Rights</h2>
-    <p>Because the App collects no personal data, most privacy rights are automatically satisfied for App usage. For data held in connection with the Website or Store, the following rights apply:</p>
+    <p>Because the App collects no personal data, most privacy rights are automatically satisfied for App usage. For data held in connection with the Website, your Signal subscription, or the Store, the following rights apply:</p>
 
     <h3>9.1 Australian Privacy Act</h3>
     <p>Under the Australian Privacy Principles (APPs), you have the right to:</p>
@@ -412,9 +418,9 @@ permalink: "/privacy.html"
       <li><strong>Withdraw consent</strong> at any time where processing is based on consent</li>
       <li><strong>Lodge a complaint</strong> with your local data protection supervisory authority</li>
     </ul>
-    <p><strong>Legal basis for processing:</strong> Where we process personal data (Website analytics, Store transactions), our legal bases are:</p>
+    <p><strong>Legal basis for processing:</strong> Where we process personal data (Website analytics, Signal subscriptions, Store transactions), our legal bases are:</p>
     <ul>
-      <li><strong>Contractual necessity</strong> -- to fulfil merchandise orders</li>
+      <li><strong>Contractual necessity</strong> -- to sell you a Signal licence, deliver the key to you, renew or cancel your subscription, and to fulfil merchandise orders</li>
       <li><strong>Legitimate interests</strong> -- to operate and improve the Website, provided these interests are not overridden by your rights</li>
       <li><strong>Legal obligation</strong> -- to comply with tax and business record-keeping laws</li>
     </ul>
@@ -435,9 +441,10 @@ permalink: "/privacy.html"
         <tr><th>Category</th><th>Collected?</th><th>Source</th><th>Purpose</th></tr>
       </thead>
       <tbody>
-        <tr><td>Identifiers (name, email, address)</td><td>Only via Store purchases</td><td>You (directly)</td><td>Order fulfilment</td></tr>
+        <tr><td>Identifiers (name, email, address)</td><td>Via Signal checkout (email address) and Store purchases (name, email, shipping address)</td><td>You (directly)</td><td>Delivering your licence key, subscription support, order fulfilment</td></tr>
         <tr><td>Internet activity (browsing, search)</td><td>Aggregate analytics only (Website)</td><td>Automatic</td><td>Website improvement</td></tr>
-        <tr><td>Commercial information (purchase history)</td><td>Only via Store</td><td>You (directly)</td><td>Order fulfilment, legal compliance</td></tr>
+        <tr><td>Commercial information (purchase history)</td><td>Via Signal subscriptions and Store purchases</td><td>You (directly)</td><td>Billing, renewals, refunds, order fulfilment, legal compliance</td></tr>
+        <tr><td>Financial information (payment details)</td><td>Never collected or stored by us &mdash; entered directly on Stripe's or Shopify's checkout</td><td>You (directly, to the payment processor)</td><td>Taking payment</td></tr>
       </tbody>
     </table>
     <p>We do not collect biometric data, geolocation data, professional or employment information, education information, or inferences drawn about you from any of the above.</p>

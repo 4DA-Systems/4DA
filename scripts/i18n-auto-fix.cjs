@@ -133,7 +133,11 @@ async function main() {
     for (const f of items) {
       if (!langFixes[f.key]) continue;
       // Determine namespace by checking which file contains the key
-      for (const ns of ['ui', 'errors', 'coach', 'signals']) {
+      // 'coach' was removed here on 2026-08-28: no locale directory has ever
+      // contained coach.json, so i18n:status printed "coach: undefined" and every
+      // tool silently iterated a namespace that does not exist. The real set is
+      // ui / errors / signals, verified against all 13 locale directories.
+      for (const ns of ['ui', 'errors', 'signals']) {
         const nsPath = path.join(LOCALES_DIR, lang, `${ns}.json`);
         if (!fs.existsSync(nsPath)) continue;
         const nsData = JSON.parse(fs.readFileSync(nsPath, 'utf8'));

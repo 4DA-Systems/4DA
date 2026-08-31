@@ -65,6 +65,81 @@ function safeExec(cmd, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Self-baselines (shared by CHECK 3 and CHECK 4)
+//
+// Several checks are delta-based: they compare "now" against what the previous
+// scan recorded. Those values live in sentinel-baselines.json. Writers MUST
+// merge rather than overwrite -- a blind write drops the other check's keys and
+// permanently resets it to "first baseline".
+// ---------------------------------------------------------------------------
+
+const BASELINES_PATH = path.join(ROOT, ".claude", "wisdom", "sentinel-baselines.json");
+
+function readBaselines() {
+  try {
+    return JSON.parse(fs.readFileSync(BASELINES_PATH, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+function mergeBaselines(patch) {
+  try {
+    const current = readBaselines() || {};
+    fs.mkdirSync(path.dirname(BASELINES_PATH), { recursive: true });
+    fs.writeFileSync(
+      BASELINES_PATH,
+      JSON.stringify(
+        { ...current, ...patch, timestamp: new Date().toISOString() },
+        null,
+        2
+      )
+    );
+  } catch {}
+}
+
+/** Recursively collect files under `dir` whose basename passes `matchFile`. */
+function walkFiles(dir, matchFile) {
+  const SKIP = new Set(["node_modules", "target", ".git", "dist", "build", ".vite"]);
+  const found = [];
+  const stack = [dir];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    let entries;
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (!SKIP.has(entry.name)) stack.push(full);
+      } else if (matchFile(entry.name)) {
+        found.push(full);
+      }
+    }
+  }
+  return found;
+}
+
+/** Total regex matches across `files`. */
+function countPattern(files, pattern) {
+  let total = 0;
+  for (const file of files) {
+    let content;
+    try {
+      content = fs.readFileSync(file, "utf-8");
+    } catch {
+      continue;
+    }
+    const matches = content.match(pattern);
+    if (matches) total += matches.length;
+  }
+  return total;
+}
+
+// ---------------------------------------------------------------------------
 // CHECK 1: Rust Compilation
 // ---------------------------------------------------------------------------
 
@@ -294,30 +369,20 @@ function checkKnowledgeDiff() {
   // GAP 4 fix: Dynamic baselines from sentinel state history
   // Use previous scan's values as baseline (drift detection, not absolute thresholds)
   let prevApi = 0, prevSql = 0, prevUnwrap = 0;
-  try {
-    const prevState = JSON.parse(
-      fs.readFileSync(
-        path.join(ROOT, ".claude", "wisdom", "sentinel-baselines.json"),
-        "utf-8"
-      )
-    );
+  const prevState = readBaselines();
+  if (prevState) {
     prevApi = prevState.apiCount || 0;
     prevSql = prevState.sqlCount || 0;
     prevUnwrap = prevState.unwrapCount || 0;
-  } catch {
+  } else {
     // No baseline yet — use current as first baseline
     prevApi = apiCount;
     prevSql = sqlCount;
     prevUnwrap = unwrapCount;
   }
 
-  // Save current as baseline for next run
-  try {
-    fs.writeFileSync(
-      path.join(ROOT, ".claude", "wisdom", "sentinel-baselines.json"),
-      JSON.stringify({ apiCount, sqlCount, unwrapCount, secretCount, timestamp: new Date().toISOString() }, null, 2)
-    );
-  } catch {}
+  // Save current as baseline for next run (MERGE — CHECK 4 keys live here too)
+  mergeBaselines({ apiCount, sqlCount, unwrapCount, secretCount });
 
   // Alert on increase from previous baseline (not hardcoded thresholds)
   const apiDelta = apiCount - prevApi;
@@ -394,122 +459,112 @@ function checkKnowledgeDiff() {
 
 // ---------------------------------------------------------------------------
 // CHECK 4: Test Count Regression
+//
+// Counts test cases STATICALLY from source, and compares against the previous
+// scan's own count in sentinel-baselines.json — the same self-baselining
+// pattern CHECK 3 uses.
+//
+// Why not run the suites (the previous implementation tried to):
+//     cargo test --lib -- --list 2>/dev/null | grep -c 'test$'
+//     npx vitest run --reporter=json | node -e "..."
+// Both are Unix shell pipelines, but execSync spawns cmd.exe on Windows, so the
+// first exited 255 in ~29ms and the second always printed 0 (then swallowed by
+// its own `currentFE > 0` guard). This check emitted NOTHING, on every scan,
+// since it was written. Repairing the shell syntax would not have helped:
+// `cargo test --lib -- --list` measured 156.8s against the 30s safeExec cap,
+// and `vitest run` executes the whole frontend suite. Static counting reads
+// ~600 .rs files + ~110 test files: measured ~0.5s warm, ~7s on a cold file
+// cache (fresh worktree). It cannot time out, and is safe in --quick mode.
+//
+// These counts are NOT comparable to ops-state.json `testCounts`, which record
+// "test result: ok. N passed" from real runs via
+// .claude/scripts/record-test-counts.cjs. Different metric — never mix them.
 // ---------------------------------------------------------------------------
 
+const RUST_TEST_ATTR = /#\[(?:tokio::)?test\b|#\[rstest\b/g;
+const FRONTEND_TEST_CASE = /\b(?:it|test)(?:\.each)?\s*\(/g;
+
+function countRustLibTests() {
+  // --lib scope is src-tauri/src only; src-tauri/tests/ is a separate target.
+  const files = walkFiles(path.join(ROOT, "src-tauri", "src"), (n) =>
+    n.endsWith(".rs")
+  );
+  return countPattern(files, RUST_TEST_ATTR);
+}
+
+function countFrontendTests() {
+  const files = walkFiles(path.join(ROOT, "src"), (n) =>
+    /\.(test|spec)\.(ts|tsx)$/.test(n)
+  );
+  return countPattern(files, FRONTEND_TEST_CASE);
+}
+
+function reportTestDelta(check, domain, expert, label, current, previous, criticalDrop) {
+  const delta = current - previous;
+
+  if (delta < -criticalDrop) {
+    addSignal(
+      check,
+      "critical",
+      domain,
+      expert,
+      `${label} test count dropped by ${Math.abs(delta)} (${previous} → ${current})`,
+      "Tests may have been deleted. Investigate immediately."
+    );
+  } else if (delta < 0) {
+    addSignal(
+      check,
+      "warning",
+      domain,
+      expert,
+      `${label} test count decreased by ${Math.abs(delta)} (${previous} → ${current})`
+    );
+  } else {
+    addSignal(
+      check,
+      "ok",
+      domain,
+      "",
+      `${label} tests: ${current} (${delta >= 0 ? "+" : ""}${delta} since last scan)`
+    );
+  }
+}
+
 function checkTestRegression() {
-  if (QUICK_MODE) return;
+  const currentRust = countRustLibTests();
+  const currentFrontend = countFrontendTests();
 
-  let opsState;
-  try {
-    opsState = JSON.parse(fs.readFileSync(OPS_STATE, "utf-8"));
-  } catch {
+  const baselines = readBaselines();
+  const prevRust =
+    baselines && typeof baselines.rustTests === "number" ? baselines.rustTests : null;
+  const prevFrontend =
+    baselines && typeof baselines.frontendTests === "number"
+      ? baselines.frontendTests
+      : null;
+
+  // Record before reporting, so a later throw cannot strand the baseline.
+  mergeBaselines({ rustTests: currentRust, frontendTests: currentFrontend });
+
+  if (prevRust === null || prevFrontend === null) {
     addSignal(
       "test_regression",
       "info",
       "All",
       "",
-      "Cannot check test regression — ops-state.json not readable"
+      `Test-count baseline established (${currentRust} Rust, ${currentFrontend} frontend)`,
+      "Deltas are reported from the next scan onward."
     );
     return;
   }
 
-  const history = opsState?.testCounts?.history;
-  if (!Array.isArray(history) || history.length === 0) {
-    addSignal(
-      "test_regression",
-      "info",
-      "All",
-      "",
-      "No test count history — baseline not established"
-    );
-    return;
-  }
-
-  const lastRecord = history[history.length - 1];
-  const lastRust = lastRecord.rust || 0;
-  const lastFrontend = lastRecord.frontend || 0;
-
-  // Rust test count (list only, no execution)
-  if (!isCargoRunning()) {
-    const rustResult = safeExec(
-      "cargo test --lib -- --list 2>/dev/null | grep -c 'test$'",
-      { cwd: path.join(ROOT, "src-tauri"), timeout: 30000 }
-    );
-
-    if (rustResult.ok) {
-      const currentRust = parseInt(rustResult.output.trim()) || 0;
-      const delta = currentRust - lastRust;
-
-      if (delta < -5) {
-        addSignal(
-          "test_regression",
-          "critical",
-          "Rust Systems",
-          "4da-rust-expert",
-          `Rust test count dropped by ${Math.abs(delta)} (${lastRust} → ${currentRust})`,
-          "Tests may have been deleted or broken. Investigate immediately."
-        );
-      } else if (delta < 0) {
-        addSignal(
-          "test_regression",
-          "warning",
-          "Rust Systems",
-          "4da-rust-expert",
-          `Rust test count decreased by ${Math.abs(delta)} (${lastRust} → ${currentRust})`
-        );
-      } else {
-        addSignal(
-          "test_regression",
-          "ok",
-          "Rust Systems",
-          "",
-          `Rust tests: ${currentRust} (${delta >= 0 ? "+" : ""}${delta} from baseline ${lastRust})`
-        );
-      }
-    }
-  }
-
-  // GAP 2 fix: Frontend test count regression
-  if (lastFrontend > 0) {
-    const feResult = safeExec(
-      "npx vitest run --reporter=json 2>/dev/null | node -e \"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);console.log(j.numTotalTests)}catch{console.log(0)}})\"",
-      { timeout: 120000 }
-    );
-
-    if (feResult.ok) {
-      const currentFE = parseInt(feResult.output.trim()) || 0;
-      if (currentFE > 0) {
-        const delta = currentFE - lastFrontend;
-
-        if (delta < -10) {
-          addSignal(
-            "test_regression_fe",
-            "critical",
-            "React UI",
-            "4da-react-expert",
-            `Frontend test count dropped by ${Math.abs(delta)} (${lastFrontend} → ${currentFE})`,
-            "Frontend tests may have been deleted or broken."
-          );
-        } else if (delta < 0) {
-          addSignal(
-            "test_regression_fe",
-            "warning",
-            "React UI",
-            "4da-react-expert",
-            `Frontend test count decreased by ${Math.abs(delta)} (${lastFrontend} → ${currentFE})`
-          );
-        } else {
-          addSignal(
-            "test_regression_fe",
-            "ok",
-            "React UI",
-            "",
-            `Frontend tests: ${currentFE} (${delta >= 0 ? "+" : ""}${delta} from baseline ${lastFrontend})`
-          );
-        }
-      }
-    }
-  }
+  reportTestDelta(
+    "test_regression", "Rust Systems", "4da-rust-expert",
+    "Rust", currentRust, prevRust, 5
+  );
+  reportTestDelta(
+    "test_regression_fe", "React UI", "4da-react-expert",
+    "Frontend", currentFrontend, prevFrontend, 10
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -48,18 +48,25 @@ fn is_strongly_grounded_result(item: &SourceRelevance) -> bool {
 }
 
 /// Deduplicate scored results by URL and normalized title.
-/// Keeps the highest-scoring item when duplicates are found.
+/// When duplicates are found the GROUNDED copy survives (grounded-first
+/// doctrine, see `sort_results` above); score is only the tie-break.
 pub(crate) fn dedup_results(results: &mut Vec<SourceRelevance>) {
     let initial = results.len();
     let mut seen_urls: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    // Sort by score desc first so we keep the highest-scoring version
-    results.sort_by(|a, b| {
-        b.top_score
-            .partial_cmp(&a.top_score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    // Canonical order first (excluded last, grounded tier first, score desc
+    // within tier) so the retain below keeps the right duplicate. This used
+    // to be a plain score-desc sort that kept the highest-scoring copy —
+    // contradicting the grounded-first doctrine documented at the top of this
+    // file: a duplicate story at 0.892 ungrounded beat its 0.50
+    // dependency-grounded copy (the arrayref case, adversarial audit
+    // 2026-08-23), discarding the one axis a content author can't fabricate.
+    // Two ordering consequences, both intended: a grounded duplicate now
+    // survives over a higher-scoring ungrounded one (tie-break: score), and
+    // an excluded duplicate can no longer claim the URL/title key from a
+    // visible copy.
+    sort_results(results);
 
     results.retain(|item| {
         // URL-based dedup
@@ -379,10 +386,69 @@ fn extract_domain(url: &str) -> Option<String> {
     }
 }
 
+/// Multi-project platform domains EXEMPT from domain-diversity decay.
+///
+/// The decay exists to stop ONE prolific blog flooding a batch — but a
+/// registry or platform domain is not one voice: crates.io items are
+/// different crates, github.com items different repos, reddit.com items
+/// different communities. Counting them as a single "prolific blog" was the
+/// single largest churn arithmetic in the 2026-08-23 adversarial audit:
+/// three of the user's own crate releases in one batch decayed the 3rd from
+/// 0.73 to 0.297 (×0.41), and the next run's different cohort put it back at
+/// 0.73 — the recorded ±0.42–0.43 oscillation.
+///
+/// Surveyed from the source adapters' item-URL construction (2026-08-23):
+/// every entry is a domain an adapter actually emits for item links, plus
+/// `news.ycombinator.com` for HN permalinks arriving via RSS/cross-posts.
+/// Deliberately NOT listed: mastodon/lemmy instance domains (arbitrary,
+/// cannot be statically enumerated) and external article hosts carried by
+/// HN/Reddit/RSS stories — a genuine single-author blog is exactly what the
+/// decay is for. Finer per-platform diversity keys (repo/crate path segment)
+/// were considered and rejected: identity lives in different path depths per
+/// platform and in the QUERY for HN/YouTube, so a uniform rule collapses
+/// those to one key — a parser table is not "cheap and clean". Intra-platform
+/// flooding stays governed elsewhere: `apply_source_topic_diversity`
+/// (source+topic decay) and the ungrounded-registry commodity ceiling.
+const PLATFORM_DOMAINS: &[&str] = &[
+    "arxiv.org",            // arxiv: arxiv.org/abs/{id}
+    "bsky.app",             // bluesky: bsky.app/profile/{handle}/post/{key}
+    "crates.io",            // crates_io: crates.io/crates/{name}
+    "dev.to",               // devto: dev.to/{author}/{slug}
+    "github.com",           // github repos + GHSA advisory pages
+    "huggingface.co",       // huggingface: huggingface.co/{org}/{model}
+    "lobste.rs",            // lobsters comment-page fallback: lobste.rs/s/{id}
+    "news.ycombinator.com", // HN permalinks
+    "npmjs.com",            // npm_registry: npmjs.com/package/{name}
+    "osv.dev",              // osv: osv.dev/vulnerability/{id}
+    "paperswithcode.com",   // papers_with_code fallback
+    "pkg.go.dev",           // go_modules: pkg.go.dev/{module}@{version}
+    "producthunt.com",      // producthunt posts
+    "pypi.org",             // pypi: pypi.org/project/{name}
+    "reddit.com",           // reddit permalinks
+    "stackoverflow.com",    // stackoverflow questions
+    "x.com",                // twitter: x.com/{handle}/status/{id}
+    "youtube.com",          // youtube: youtube.com/watch?v={id}
+];
+
+/// True when `domain` (as produced by `extract_domain`: lowercased, port and
+/// `www.` stripped) is a platform domain or a subdomain of one
+/// (e.g. `gist.github.com`). Suffix matching requires the dot boundary so
+/// `xbox.com` does not match `x.com`.
+fn is_platform_domain(domain: &str) -> bool {
+    PLATFORM_DOMAINS.iter().any(|p| {
+        domain == *p
+            || domain
+                .strip_suffix(p)
+                .is_some_and(|prefix| prefix.ends_with('.'))
+    })
+}
+
 /// Apply domain diversity decay: penalize items sharing the same URL domain.
 /// Items are processed in score-descending order. The first item from each domain
 /// keeps its full score. Subsequent items get exponentially decayed scores.
 /// This prevents feed clustering around a single prolific blog or source.
+/// Multi-project platform domains (`PLATFORM_DOMAINS`) are exempt — many
+/// independent projects sharing a registry domain are not one prolific blog.
 pub(crate) fn apply_domain_diversity(results: &mut [SourceRelevance]) -> usize {
     let decay = scoring_config::DOMAIN_DIVERSITY_DECAY;
     let floor = scoring_config::DOMAIN_DIVERSITY_FLOOR;
@@ -399,6 +465,11 @@ pub(crate) fn apply_domain_diversity(results: &mut [SourceRelevance]) -> usize {
             Some(d) => d,
             None => continue,
         };
+        // Platform domains host many independent projects/authors — decaying
+        // them as one "prolific blog" is the churn bug the allowlist removes.
+        if is_platform_domain(&domain) {
+            continue;
+        }
         let position = domain_counts.entry(domain).or_insert(0);
         if *position > 0 {
             let multiplier = (1.0 - floor) * decay.powf(*position as f32) + floor;
@@ -410,6 +481,72 @@ pub(crate) fn apply_domain_diversity(results: &mut [SourceRelevance]) -> usize {
 
     if adjusted > 0 {
         info!(target: "4da::scoring", adjusted = adjusted, "Domain diversity applied");
+    }
+    adjusted
+}
+
+/// Apply SOURCE-SHARE diversity: stop one source dominating the RANKING.
+///
+/// SCOPE — read this before trusting the name. This pass is batch-relative and
+/// writes `top_score` ONLY. It does not decide feed MEMBERSHIP: `relevant` is a
+/// per-item verdict computed in `score_item` and persisted long before any batch
+/// layer runs, and nothing here recomputes it. So it changes the ORDER a dominant
+/// source appears in, not how much of the feed it occupies. Measured after this
+/// shipped, on a corpus fully converged at the current pipeline version: mastodon
+/// was still 257 of 560 curated items (45.9%), against the 46.7% that motivated
+/// the change. A genuine membership cap has to be applied at the verdict boundary
+/// in the curation pass — a separate, measured change, not this one. Per AD-034
+/// this pass must therefore NOT drive a `PIPELINE_VERSION` bump: it provably
+/// cannot alter a stored `relevance_score`.
+///
+/// The two diversity passes either side of this one both had a blind spot for a
+/// federated source. `apply_domain_diversity` keys on URL domain, and Mastodon
+/// posts arrive from hundreds of instance domains; `apply_source_topic_diversity`
+/// keys on (source, primary topic), so posts about many different things never
+/// collide.
+///
+/// Items are processed in `sort_results` order — excluded last, then strongly
+/// grounded first, then score-descending WITHIN each tier. A source's strongest
+/// GROUNDED items therefore fill its allowance first, and a high-scoring
+/// ungrounded item can be decayed while a lower-scoring grounded one is not.
+/// Decay is exponential toward a floor rather than a hard cut: a genuinely
+/// excellent item from a dominant source still survives, it just stops crowding
+/// out everything else.
+pub(crate) fn apply_source_share_diversity(results: &mut [SourceRelevance]) -> usize {
+    let max_share = scoring_config::SOURCE_SHARE_MAX_SHARE;
+    let decay = scoring_config::SOURCE_SHARE_DECAY;
+    let floor = scoring_config::SOURCE_SHARE_FLOOR;
+
+    let live = results.iter().filter(|r| !r.excluded).count();
+    // Below a handful of items a share cap is noise, not diversity.
+    if live < 10 {
+        return 0;
+    }
+    let allowance = ((live as f32) * max_share).ceil().max(1.0) as usize;
+
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut adjusted = 0usize;
+
+    for item in results.iter_mut() {
+        if item.excluded {
+            continue;
+        }
+        let position = seen.entry(item.source_type.clone()).or_insert(0);
+        if *position >= allowance {
+            let over = (*position - allowance + 1) as f32;
+            let multiplier = (1.0 - floor) * decay.powf(over) + floor;
+            item.top_score *= multiplier;
+            adjusted += 1;
+        }
+        *position += 1;
+    }
+
+    if adjusted > 0 {
+        info!(
+            target: "4da::scoring",
+            adjusted, allowance, live,
+            "Source-share diversity applied"
+        );
     }
     adjusted
 }
@@ -448,6 +585,19 @@ pub(crate) fn apply_source_topic_diversity(results: &mut [SourceRelevance]) -> u
     adjusted
 }
 
+/// True when the item's breakdown carries a categorical score ceiling — the
+/// marker `score_item` persists whenever a commodity cap applied (ungrounded
+/// registry release → 0.35 ceiling + 0.02 offset = the 0.37 cluster) or the
+/// low-engagement UGC cap (0.50). `ungrounded_registry_release` is a pipeline
+/// local, not a persisted field; its commodity ceiling is unconditional and
+/// mutually exclusive with the fast path, so this check subsumes that marker
+/// without re-deriving content-type classification here.
+fn has_score_ceiling(item: &SourceRelevance) -> bool {
+    item.score_breakdown
+        .as_ref()
+        .is_some_and(|b| b.score_ceiling.is_some())
+}
+
 /// Compute serendipity candidates from items that failed the confirmation gate
 /// but scored well on exactly 1 axis (partial relevance, different perspective)
 pub(crate) fn compute_serendipity_candidates(
@@ -474,6 +624,15 @@ pub(crate) fn compute_serendipity_candidates(
         .filter(|r| {
             !r.relevant
             && !r.excluded
+            // A capped item is not a near-miss: the ceiling says its CLASS
+            // was judged categorically (look-alike registry release, dead
+            // UGC), not that this item narrowly failed on one axis. Without
+            // this check the 0.37-clustered ungrounded registry noise won
+            // the slots by sort order — and a serendipity verdict is
+            // reconciliation-immune for SERENDIPITY_VERDICT_TTL_DAYS, so
+            // each pick squatted in the feed for 14 days
+            // (adversarial audit 2026-08-23, item 8c).
+            && !has_score_ceiling(r)
             && r.top_score > scoring_config::SERENDIPITY_MIN_SCORE // Had some score
             && (r.context_score > scoring_config::SERENDIPITY_MIN_AXIS_SCORE || r.interest_score > scoring_config::SERENDIPITY_MIN_AXIS_SCORE) // Had at least 1 axis
         })
@@ -501,6 +660,38 @@ pub(crate) fn compute_serendipity_candidates(
             item
         })
         .collect()
+}
+
+/// Compute serendipity picks and swap them into `results` IN PLACE.
+///
+/// `compute_serendipity_candidates` returns CLONES of entries still present
+/// in `results`. The analyzer used to `extend` with those clones while the
+/// scorer-rejected originals stayed behind — the duplicate-persist clone
+/// (adversarial audit 2026-08-23, item 8c): the same item id then sat in the
+/// cycle's results twice, once `relevant = false` / verdict-source "score"
+/// and once `relevant = true` / verdict-source "serendipity". Every per-id
+/// persist downstream (`persist_analysis_scores`, `mark_items_scored_version`,
+/// `persist_feed_verdicts`) wrote the id twice, the stored feed verdict was
+/// whichever row iteration order happened to write last, and the returned
+/// feed carried a visible duplicate of each pick. Removing the originals here
+/// makes each id appear — and persist — exactly once, as its serendipity pick.
+///
+/// The retain touches only the candidate pool (`!relevant && !excluded`), so
+/// a relevant entry can never be evicted even if ids were to collide.
+/// Returns the number of items injected; callers re-sort afterwards.
+pub(crate) fn inject_serendipity_candidates(
+    results: &mut Vec<SourceRelevance>,
+    budget_percent: u8,
+) -> usize {
+    let candidates = compute_serendipity_candidates(results, budget_percent);
+    if candidates.is_empty() {
+        return 0;
+    }
+    let injected_ids: std::collections::HashSet<u64> = candidates.iter().map(|c| c.id).collect();
+    results.retain(|r| r.relevant || r.excluded || !injected_ids.contains(&r.id));
+    let injected = candidates.len();
+    results.extend(candidates);
+    injected
 }
 
 #[cfg(test)]

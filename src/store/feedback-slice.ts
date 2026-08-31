@@ -14,6 +14,34 @@ const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
   snooze: -0.05,
 };
 
+/**
+ * Translate the "feedback did not fully save" toast.
+ *
+ * Reads the i18n singleton off `window` rather than importing `../i18n`: that
+ * module runs `.use(initReactI18next)` at import time, which breaks every test
+ * that mocks `react-i18next`. Same approach as `utils/error-messages.ts`.
+ *
+ * The command names are interpolated by this function and also present in the
+ * fallback, so the message names the failing command whether or not i18n is up.
+ * That is load-bearing — the whole point of the toast is that silent IPC
+ * contract drift must never disappear into an anonymous warning.
+ */
+function feedbackFailureMessage(failedCommands: string[]): string {
+  const commands = failedCommands.join(', ');
+  try {
+    const i18n = (window as unknown as Record<string, unknown>).__4da_i18n as
+      | { t: (k: string, o?: Record<string, unknown>) => string; isInitialized: boolean }
+      | undefined;
+    if (i18n?.isInitialized) {
+      const translated = i18n.t('feedback.notFullySaved', { commands });
+      if (translated && translated !== 'feedback.notFullySaved') return translated;
+    }
+  } catch {
+    /* i18n not available — fall through */
+  }
+  return `Feedback not fully saved (${commands} failed)`;
+}
+
 export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> = (set, get) => ({
   feedbackGiven: {},
   snoozedItemIds: new Set<number>(),
@@ -64,11 +92,18 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
     try {
       const topics = extractTechTopics(item.title);
 
-      const feedbackTypeMap: Record<string, string> = {
+      // Keyed on FeedbackAction, NOT on `string`. The loose `Record<string, string>`
+      // is what let `snooze` go missing: the lookup below then yielded `undefined`,
+      // the non-null assertion silenced it, and the field was dropped from the IPC
+      // payload — so `ace_record_accuracy_feedback` rejected on a missing required
+      // arg and the user saw "Feedback not fully saved" on every snooze. With this
+      // type, omitting a member of the union is a compile error.
+      const feedbackTypeMap: Record<FeedbackAction, string> = {
         save: 'save',
         dismiss: 'dismiss',
         mark_irrelevant: 'thumbs_down',
         click: 'click',
+        snooze: 'snooze',
       };
 
       // Optimistic UI update — card disappears immediately
@@ -101,7 +136,7 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
           promise: cmd('ace_record_accuracy_feedback', {
             itemId: itemId,
             predictedScore: item.top_score,
-            feedbackType: feedbackTypeMap[actionType]!,
+            feedbackType: feedbackTypeMap[actionType],
           }),
         },
         {
@@ -129,13 +164,14 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
 
       // Notify user if any backend feedback calls failed, naming the command(s)
       if (failedCommands.length > 0) {
+        // Through i18n like every other user-visible string. This one bypassed it
+        // and shipped English to all 13 locales — and because snooze made it fire
+        // on a primary control, it was the most-seen string in the set.
         get().addToast(
           'warning',
-          `Feedback not fully saved (${failedCommands.join(', ')} failed)`,
+          feedbackFailureMessage(failedCommands),
         );
       }
-
-      const primaryTopic = topics[0] || null;
 
       // Immediate score adjustment for visual feedback
       const delta = FEEDBACK_ADJUSTMENTS[actionType] ?? 0;
@@ -148,17 +184,18 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         }));
       }
 
-      // Show toast with undo action (except for click events)
+      // Show toast with undo action (except for click events).
+      // Plain confirmations only — no learning promise. The implicit-capture
+      // layer was removed in v20b (AD-031); feedback is recorded, not "learned from".
       if (actionType !== 'click') {
         const { addToast } = get();
-        const topicLabel = primaryTopic || 'this type';
-        const learnMessage = actionType === 'save'
-          ? `Saved — boosting '${topicLabel}'. Similar content will rank higher next analysis.`
+        const confirmMessage = actionType === 'save'
+          ? 'Saved.'
           : actionType === 'mark_irrelevant'
-          ? `Got it — '${topicLabel}' added to anti-topics. Matching content will be suppressed.`
-          : `Noted — deprioritizing '${topicLabel}'. 3 dismissals creates an auto-filter.`;
+          ? 'Marked irrelevant.'
+          : 'Dismissed.';
 
-        addToast('success', learnMessage, {
+        addToast('success', confirmMessage, {
           label: 'Undo',
           onClick: () => {
             // Revert feedback
