@@ -78,7 +78,14 @@ export const SignalRow = ({ signal }: { signal: SignalItem }) => {
               {t(getRelevancePresentation(signal.top_score).labelKey)}
             </span>
             <span className="text-[10px] text-text-muted">{sourceLabel}</span>
-            {signal.grounding.length > 0 && (
+            {/* Grounding chip and card copy must tell ONE story (live audit
+                2026-08-31: a card subtitled "no confirmed link to your stack"
+                carried a green "Matches your dependencies" chip). The chip
+                derives from the SAME canonical verdict as the pool assignment
+                (isGrounded → strongly_grounded): matched_deps alone can carry
+                bare subterm hits that are NOT real grounding, so an ungrounded
+                card must not render the chip. */}
+            {signal.pool === 'affects_you' && signal.grounding.length > 0 && (
               <span
                 className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
                 title={t('signals.groundedIn')}

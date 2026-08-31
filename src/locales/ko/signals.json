@@ -20,5 +20,6 @@
   "action.intelStack": "{{tech}} 분야 경쟁 동향: {{title}}",
   "action.intelGeneral": "{{type}}: {{title}}",
   "action.toolEvaluateGrounded": "New tool in your orbit — connects to your {{tech}} stack",
+  "action.toolEvaluateGroundedNoName": "New tool in your orbit — connects to your stack",
   "action.toolEvaluateUngrounded": "New tool spotted — no confirmed link to your stack"
 }
