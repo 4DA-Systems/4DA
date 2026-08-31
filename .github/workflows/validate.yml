@@ -436,6 +436,16 @@ jobs:
       - name: Release channel integrity
         run: node scripts/check-release-channel.cjs
 
+      # `REMOVE BY <date>` expiry markers (#421). The whole-tree gate shipped
+      # in scripts/check-remove-by.cjs but was wired to NOTHING — no package
+      # script, no husky hook, no workflow — so an expired marker could never
+      # fail anything and the convention was back on the honour system the
+      # script exists to end. (.husky/pre-commit's check-dead-code-expiry.cjs
+      # is the staged-files-only cousin and covers just #[allow(dead_code)];
+      # this one scans the whole tree.) Node builtins only, no install needed.
+      - name: Dead-code expiry markers (REMOVE BY)
+        run: node scripts/check-remove-by.cjs --ci
+
       # AD-030's own gate, which until now ran nowhere. `.ai/RULES.md` and
       # AGENTS.md both told every agent it was "enforced by
       # scripts/check-retired-claims.cjs" while nothing invoked it in CI, so the
@@ -493,6 +503,99 @@ jobs:
         # check degrades to a skip, which in CI would be a gate that passes by
         # doing nothing.
         run: node scripts/generate-notice.cjs --check --require
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Dependabot NOTICE auto-heal.
+  #
+  # The NOTICE gate above requires attribution regenerated in the SAME change
+  # as any dependency move. Dependabot cannot run repo scripts, so every cargo
+  # or production-npm bump it opened failed `Third-party attribution is
+  # current (NOTICE)` and rotted — at the time of writing 27 Dependabot PRs
+  # were open with most ecosystems pinned at their open-pull-requests-limit:
+  # the gate had starved automated dependency updates entirely. Rather than
+  # weaken the gate, this job completes the commit on Dependabot's behalf:
+  # check out the PR BRANCH (not the unpushable merge ref), regenerate NOTICE
+  # with the exact toolchain recipe the gate itself uses, and push the result
+  # back when it differs.
+  #
+  # Two GitHub mechanics are load-bearing here:
+  # - Dependabot-triggered runs get a read-only GITHUB_TOKEN whatever the repo
+  #   default; the job-level `permissions:` block elevates THIS job only.
+  # - Pushes made with GITHUB_TOKEN never trigger new workflow runs (the
+  #   recursion guard), so the healed commit would otherwise sit forever with
+  #   no `Validate Success` on it — and the ruleset's sole required check
+  #   reads the PR's head SHA. workflow_dispatch is the documented exception
+  #   to that guard, and this workflow already runs its full suite on
+  #   dispatch, so the job re-dispatches Validate on the healed branch tip.
+  #   Hermetic is deliberately NOT re-dispatched: the healed commit differs
+  #   from the already-hermetic-tested head by NOTICE text only, which cannot
+  #   affect a fresh-clone build, and `Hermetic Success` is not a required
+  #   check — re-running a ~20-min two-OS matrix would spend metered hosted
+  #   minutes to learn nothing.
+  #
+  # No loop is possible: the heal push triggers nothing (recursion guard), and
+  # in the dispatched run this job skips (both `pull_request` and the
+  # Dependabot actor test fail). If Dependabot force-pushes a rebase the
+  # NOTICE commit is dropped — but that push is a Dependabot-actored
+  # pull_request event, so the heal simply runs again on the new head.
+  dependabot-notice:
+    name: Dependabot NOTICE auto-heal
+    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # push the regenerated NOTICE to the PR branch
+      actions: write # re-dispatch Validate on the healed head
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          # The PR branch itself. Dependabot branches always live in this
+          # repo (never a fork), so the job's GITHUB_TOKEN can push them.
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: |
+          corepack disable
+          npm install -g --force pnpm@9.15.0
+
+      # Same recipe as the NOTICE gate in `repo-guards`, so what this job
+      # generates is byte-for-byte what that gate will verify.
+      - name: Install Rust toolchain (for `cargo metadata`)
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+
+      - name: Install dependencies (for `pnpm licenses list`)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Regenerate NOTICE
+        run: node scripts/generate-notice.cjs
+
+      - name: Push regenerated NOTICE and re-dispatch Validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        shell: bash
+        run: |
+          if git diff --quiet -- NOTICE; then
+            echo "NOTICE already matches the resolved dependency graph - nothing to heal."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add NOTICE
+          git commit -m "chore: regenerate NOTICE for this dependency bump"
+          # If Dependabot force-pushed a rebase between checkout and here, this
+          # push is rejected non-fast-forward and the job fails — correct: the
+          # rebase's own pull_request run re-heals against the new head.
+          git push origin "HEAD:$HEAD_REF"
+          gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
+          echo "NOTICE healed and pushed. This run's repo-guards may still fail against the pre-heal commit; the dispatched Validate on the healed head is the run the merge gate reads."
 
   rust:
     name: Rust (${{ matrix.label }})
@@ -745,8 +848,10 @@ jobs:
     # Path-filtered legs report "skipped", which the check below treats as pass.
     # `repo-guards` is unfiltered and therefore never skips — it is the only leg
     # guaranteed to have actually run, and it must gate the merge (this job is
-    # the sole required status check).
-    needs: [changes, repo-guards, frontend, mcp-server, relay, rust]
+    # the sole required status check). `dependabot-notice` skips on every
+    # non-Dependabot PR (skipped == pass); on a Dependabot PR a heal failure
+    # must be visible here rather than vanish behind an unrelated green.
+    needs: [changes, repo-guards, dependabot-notice, frontend, mcp-server, relay, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
