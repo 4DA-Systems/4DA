@@ -2077,6 +2077,16 @@ fn critical_security_action(matched_deps: &[dependencies::DepMatch]) -> String {
     }
 }
 
+/// Freshness gate for ToolDiscovery: "New tool" framing is a claim about NOW.
+/// An item whose effective publication date (`ScoringInput::created_at` —
+/// `published_at` when the source provides one, first-seen otherwise) is older
+/// than this is not a *new* tool, whatever its keywords say. Live audit
+/// 2026-08-31: a 2024-10-23 "Announcing Toasty" post and a 2026-03-03
+/// TokioConf update both surfaced in Key Signals as current "New tool"
+/// signals. Items with NO date pass (fail open — a missing date is not
+/// evidence of staleness, and ad-hoc scoring paths carry none).
+const TOOL_DISCOVERY_MAX_AGE_DAYS: i64 = 30;
+
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn classify_signals(
     relevant: bool,
@@ -2138,6 +2148,55 @@ fn classify_signals(
         &corroboration,
     ) {
         Some(mut c) => {
+            // ── ToolDiscovery freshness gate ─────────────────────────────
+            // "New tool spotted / in your orbit" must not be said about a
+            // months-old announcement. Older items drop out of the signal
+            // lane entirely (the item itself stays in the feed with its
+            // score); there is no honest "old tool spotted" variant to
+            // reclassify into. Display/selection only — evidence scores are
+            // untouched, so no PIPELINE_VERSION bump.
+            if c.signal_type == signals::SignalType::ToolDiscovery
+                && input.created_at.is_some_and(|published| {
+                    (chrono::Utc::now() - *published).num_days() > TOOL_DISCOVERY_MAX_AGE_DAYS
+                })
+            {
+                return (None, None, None, None, None);
+            }
+
+            // ── ToolDiscovery action / grounding coherence ───────────────
+            // The action line and the evidence-pool chip must derive from the
+            // SAME verdict. The classifier only sees declared_tech title
+            // matches, so a tool release that IS dependency-grounded
+            // (`grounding.strong` — the exact predicate behind
+            // `ScoreBreakdown::strongly_grounded`, the pools, and the chip)
+            // still got the "no confirmed link to your stack" disclosure —
+            // rendered inside the "Affects You — grounded in your
+            // dependencies" pool next to a green "Matches your dependencies"
+            // chip (live audit 2026-08-31, tokio). Name the strongest
+            // corroborated dependency; when the grounding came via the
+            // registry-subject route and no match passes the corroboration
+            // filter, say "connects to your stack" without guessing a name
+            // (mirrors critical_security_action's refusal to guess).
+            if c.signal_type == signals::SignalType::ToolDiscovery && grounding.strong {
+                let lang = crate::i18n::get_user_language();
+                let best_dep = matched_deps
+                    .iter()
+                    .filter(|d| dependencies::is_strong_grounding_match(d))
+                    .max_by(|a, b| {
+                        a.confidence
+                            .partial_cmp(&b.confidence)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                c.action = match best_dep {
+                    Some(dep) => crate::i18n::t(
+                        "signals:action.toolEvaluateGrounded",
+                        &lang,
+                        &[("tech", &dep.package_name)],
+                    ),
+                    None => crate::i18n::t("signals:action.toolEvaluateGroundedNoName", &lang, &[]),
+                };
+            }
+
             // Dependency-aware priority escalation
             // Require HIGH confidence match (>= 0.40) for Critical — this means either
             // the full package name matched or 2+ specific subterms confirmed.
@@ -4913,6 +4972,188 @@ mod tests {
         let sec_release =
             stale_published_multiplier(&published_months_ago(40.0), true, false, true);
         assert!((sec_release - 1.0).abs() < 1e-6);
+    }
+
+    // ========================================================================
+    // classify_signals — ToolDiscovery freshness gate + grounding coherence
+    // (live audit 2026-08-31: 2024-10-23 "Announcing Toasty" surfaced as a
+    // current "New tool" signal; a grounded tokio card said "no confirmed
+    // link to your stack" under a green "Matches your dependencies" chip)
+    // ========================================================================
+
+    /// A ToolDiscovery-shaped input: >= 2 classifier triggers, no SemVer in
+    /// the title, no first-person opener.
+    fn tool_discovery_input<'a>(
+        published: &'a chrono::DateTime<chrono::Utc>,
+        embedding: &'a [f32],
+    ) -> ScoringInput<'a> {
+        ScoringInput {
+            id: 42,
+            title: "Announcing Toasty, an async ORM",
+            url: Some("https://example.com/announcing-toasty"),
+            content: "Toasty is a new open source ORM. We built it as a simpler \
+                      alternative to existing data-access layers.",
+            source_type: "hackernews",
+            embedding,
+            created_at: Some(published),
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+            source_id: None,
+        }
+    }
+
+    /// Run classify_signals with a permissive gate (relevant, on-domain,
+    /// score above the classification floor) so only the logic under test
+    /// decides the outcome.
+    #[allow(clippy::type_complexity)]
+    fn classify_tool_discovery(
+        published: &chrono::DateTime<chrono::Utc>,
+        matched_deps: &[dependencies::DepMatch],
+        grounding: dependencies::GroundingVerdict,
+    ) -> (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<Vec<String>>,
+        Option<String>,
+    ) {
+        let db = crate::test_utils::test_db();
+        let ctx = fastpath_ctx(&[]);
+        let options = ScoringOptions {
+            apply_freshness: true,
+            apply_signals: true,
+            trend_topics: vec![],
+        };
+        let classifier = signals::SignalClassifier::new();
+        let embedding: Vec<f32> = Vec::new();
+        let input = tool_discovery_input(published, &embedding);
+        classify_signals(
+            true,
+            0.6,
+            0.9,
+            &crate::content_dna::ContentType::ExpertAnalysis,
+            &options,
+            Some(&classifier),
+            &input,
+            &ctx,
+            matched_deps,
+            grounding,
+            &db,
+        )
+    }
+
+    fn ungrounded_verdict() -> dependencies::GroundingVerdict {
+        dependencies::GroundingVerdict {
+            strong: false,
+            strong_direct: false,
+            via_registry_subject: false,
+        }
+    }
+
+    fn tokio_dep_match() -> dependencies::DepMatch {
+        dependencies::DepMatch {
+            package_name: "tokio".to_string(),
+            confidence: 0.6,
+            version_delta: dependencies::VersionDelta::Unknown,
+            is_dev: false,
+            is_direct: true,
+            version: None,
+            ecosystem: "rust".to_string(),
+            corroborated: true,
+            project_paths: Vec::new(),
+            raw_name: None,
+        }
+    }
+
+    #[test]
+    fn tool_discovery_signal_dropped_when_published_over_30_days_ago() {
+        // The audit's shape: a months-old announcement fetched yesterday.
+        // `created_at` carries the EFFECTIVE publication date (published_at
+        // when the source provides one), so the gate sees the real age.
+        let published = chrono::Utc::now() - chrono::Duration::days(600);
+        let (sig_type, sig_priority, sig_action, ..) =
+            classify_tool_discovery(&published, &[], ungrounded_verdict());
+        assert_eq!(
+            sig_type, None,
+            "a 600-day-old announcement must not be a 'New tool' signal (got {sig_type:?} / {sig_action:?})"
+        );
+        assert_eq!(sig_priority, None);
+    }
+
+    #[test]
+    fn tool_discovery_signal_kept_for_fresh_announcement() {
+        // Negative test for the gate (gate-precision rule): the same input
+        // published 5 days ago keeps its ToolDiscovery signal.
+        let published = chrono::Utc::now() - chrono::Duration::days(5);
+        let (sig_type, _, sig_action, ..) =
+            classify_tool_discovery(&published, &[], ungrounded_verdict());
+        assert_eq!(
+            sig_type.as_deref(),
+            Some("tool_discovery"),
+            "a genuinely fresh launch must still classify"
+        );
+        // Ungrounded: the honest no-link disclosure stands.
+        let lang = crate::i18n::get_user_language();
+        assert_eq!(
+            sig_action.as_deref(),
+            Some(crate::i18n::t("signals:action.toolEvaluateUngrounded", &lang, &[]).as_str()),
+        );
+    }
+
+    #[test]
+    fn grounded_tool_discovery_action_names_the_dependency_not_no_link() {
+        // grounding.strong is the SAME verdict the evidence pool and the
+        // "Matches your dependencies" chip render from — the action line may
+        // not contradict it with "no confirmed link to your stack".
+        let published = chrono::Utc::now() - chrono::Duration::days(5);
+        let deps = [tokio_dep_match()];
+        let grounding = dependencies::GroundingVerdict {
+            strong: true,
+            strong_direct: true,
+            via_registry_subject: false,
+        };
+        let (sig_type, _, sig_action, ..) = classify_tool_discovery(&published, &deps, grounding);
+        assert_eq!(sig_type.as_deref(), Some("tool_discovery"));
+        let action = sig_action.expect("grounded tool discovery keeps its action line");
+        let lang = crate::i18n::get_user_language();
+        assert_eq!(
+            action,
+            crate::i18n::t(
+                "signals:action.toolEvaluateGrounded",
+                &lang,
+                &[("tech", "tokio")]
+            ),
+            "the action must name the grounding dependency"
+        );
+        assert!(
+            !action.contains("no confirmed link"),
+            "a grounded card must never claim no stack link: {action}"
+        );
+    }
+
+    #[test]
+    fn grounded_tool_discovery_without_nameable_dep_still_claims_stack_link() {
+        // Registry-subject grounding can be strong with no corroborated
+        // DepMatch to name (compute_grounding_verdict decides that route
+        // without inspecting deps). Refuse to guess a name — but the action
+        // must still agree with the grounded pool it renders in.
+        let published = chrono::Utc::now() - chrono::Duration::days(5);
+        let grounding = dependencies::GroundingVerdict {
+            strong: true,
+            strong_direct: false,
+            via_registry_subject: true,
+        };
+        let (sig_type, _, sig_action, ..) = classify_tool_discovery(&published, &[], grounding);
+        assert_eq!(sig_type.as_deref(), Some("tool_discovery"));
+        let action = sig_action.expect("action line present");
+        let lang = crate::i18n::get_user_language();
+        assert_eq!(
+            action,
+            crate::i18n::t("signals:action.toolEvaluateGroundedNoName", &lang, &[]),
+        );
+        assert!(!action.contains("no confirmed link"));
     }
 
     // ========================================================================
