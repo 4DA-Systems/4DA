@@ -12,6 +12,7 @@ vi.mock('../../lib/commands', () => ({ cmd: vi.fn() }));
 // i18n bootstrap (which pulls initReactI18next, absent from the partial mock above).
 vi.mock('./LocaleSection', () => ({ LocaleSection: () => null }));
 vi.mock('./MonitoringSection', () => ({ MonitoringSection: () => null }));
+vi.mock('./InterruptionsSection', () => ({ InterruptionsSection: () => null }));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 vi.mock('../PanelErrorBoundary', () => ({ PanelErrorBoundary: ({ children }: any) => children }));
 

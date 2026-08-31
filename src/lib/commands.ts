@@ -221,6 +221,37 @@ export interface SchedulerStatus {
   detail: string;
 }
 
+/** Live state of the interruption gate. Mirrors `presence_commands::PresenceStatus`. */
+export interface PresenceStatus {
+  /** Whether 4DA would deliver a notification right now. */
+  available: boolean;
+  /** Machine-readable reason it would not, e.g. `fullscreen_app`. */
+  reason: string | null;
+  /** Human-readable clause, e.g. "while you were in a fullscreen app". */
+  reason_text: string | null;
+  /** How many surfaces are waiting for the user to become available. */
+  held_count: number;
+  /**
+   * Whether OS-level presence detection exists on this platform (Windows
+   * today). When false only quiet hours and Do Not Disturb are enforced.
+   */
+  os_detection_supported: boolean;
+}
+
+/** User interruption preferences. Mirrors `presence_commands::InterruptionConfigDto`. */
+export interface InterruptionConfig {
+  /** Hold surfaces while fullscreen / presenting / Focus Assist is on. */
+  respect_focus: boolean;
+  /** Quiet hours start, `HH:MM`, or null when unset. */
+  quiet_hours_start: string | null;
+  /** Quiet hours end, `HH:MM`, or null when unset. May wrap midnight. */
+  quiet_hours_end: string | null;
+  /** Whether Do Not Disturb is currently in force. */
+  dnd_active: boolean;
+  /** When timed Do Not Disturb expires (RFC3339), if it is timed. */
+  dnd_until: string | null;
+}
+
 /** Full IPC contract: command name → parameter type & return type. */
 interface CommandMap {
   // -- Analysis & Core --
@@ -293,6 +324,14 @@ interface CommandMap {
   set_briefing_time: { params: { time: string }; result: { briefing_time: string; message: string } };
   trigger_briefing_preview: { params: Record<string, never>; result: { message: string } };
   trigger_morning_briefing: { params: Record<string, never>; result: string };
+  // Interruption gate — never show a briefing over a fullscreen game again.
+  get_presence_status: { params: Record<string, never>; result: PresenceStatus };
+  get_interruption_config: { params: Record<string, never>; result: InterruptionConfig };
+  set_respect_focus: { params: { enabled: boolean }; result: void };
+  set_quiet_hours: { params: { start: string | null; end: string | null }; result: void };
+  set_do_not_disturb: { params: { enabled: boolean; minutes?: number | null }; result: PresenceStatus };
+  flush_held_notifications: { params: Record<string, never>; result: number };
+  discard_held_notifications: { params: Record<string, never>; result: void };
   record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
   snooze_item: { params: { sourceItemId: number; days: number }; result: { success: boolean; snooze_days: number } };
   snooze_items: { params: { sourceItemIds: number[]; days: number }; result: { success: boolean; snoozed: number } };

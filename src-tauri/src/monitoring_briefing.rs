@@ -1859,17 +1859,43 @@ pub(crate) fn build_briefing_labels(lang: &str) -> BriefingLabels {
     }
 }
 
-/// Send a morning briefing via the desktop-level briefing window and OS notification.
+/// Send a morning briefing via the briefing window and OS notification,
+/// **subject to the interruption gate**.
 ///
-/// The briefing window is pinned to the desktop level — behind all normal windows,
-/// never stealing focus, never interrupting fullscreen applications.
-/// A companion OS notification alerts the user that the briefing is ready.
+/// The briefing window is always-on-top for its first 30 seconds and never
+/// steals focus. Because it *is* on top, it will paint over a fullscreen app
+/// unless something stops it — that something is the gate in
+/// [`crate::presence`], consulted here so it covers the OS-notification
+/// fallback below as well as the window itself.
+///
+/// A held briefing is queued, not discarded. That distinction is load-bearing:
+/// `check_morning_briefing` has already marked the brief as fired for today by
+/// the time we get here, so dropping it would cost the user the whole day's
+/// intelligence. (The snapshot on disk is a second backstop — the tray's
+/// "Show today's brief" can always re-summon it.)
+///
+/// For explicit user actions, call [`deliver_morning_briefing`] instead.
 pub fn send_morning_briefing_notification<R: Runtime>(
     app: &AppHandle<R>,
     briefing: &BriefingNotification,
 ) {
-    // Primary: desktop-level briefing window (ambient, non-intrusive)
-    crate::briefing_window::show_briefing(app, briefing);
+    if let Some(reason) = crate::presence::current().busy_reason() {
+        crate::presence::queue::hold_briefing(briefing, reason);
+        return;
+    }
+    deliver_morning_briefing(app, briefing);
+}
+
+/// Send a morning briefing **bypassing the interruption gate**.
+///
+/// For explicit user actions (manual trigger, settings preview) and for the
+/// deferral queue's flush. A user asking to see the brief is not an
+/// interruption, so gating it would be a bug rather than politeness.
+///
+/// A companion OS notification alerts the user only if the window fails to show.
+pub fn deliver_morning_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotification) {
+    // Primary: the briefing window itself.
+    crate::briefing_window::show_briefing_now(app, briefing);
 
     // Companion OS notification — only if the briefing window isn't showing.
     // When the widget is visible, the OS notification is redundant.

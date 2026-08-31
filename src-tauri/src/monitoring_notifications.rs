@@ -5,17 +5,16 @@
 //! and batching of below-threshold items for digest briefings.
 
 use tauri::{AppHandle, Runtime};
-use tauri_plugin_notification::NotificationExt;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::monitoring::{BatchedNotification, MonitoringState};
-use crate::notification_window::NotificationData;
+use crate::notification_window::{Dispatch, NotificationData};
 
 // Re-export briefing types and functions so existing `monitoring_notifications::X` paths still work
 #[allow(unused_imports)]
 pub use crate::monitoring_briefing::{
-    check_morning_briefing, is_morning_briefing_due, send_morning_briefing_notification,
-    BriefingItem, BriefingNotification,
+    check_morning_briefing, deliver_morning_briefing, is_morning_briefing_due,
+    send_morning_briefing_notification, BriefingItem, BriefingNotification,
 };
 
 // ============================================================================
@@ -91,42 +90,31 @@ pub fn complete_scheduled_check<R: Runtime>(
             } else {
                 "high"
             };
-            if notification_style() == "custom" {
-                crate::notification_window::show_notification(
-                    app,
-                    NotificationData {
-                        variant: "multi".to_string(),
-                        priority: summary_priority.to_string(),
-                        signal_type: Some("security_alert".to_string()),
-                        title: title.clone(),
-                        action: Some(crate::i18n::t("ui:notify.openForDetails", &flood_lang, &[])),
-                        source: None,
-                        matched_deps: vec![],
-                        count: Some(total_security),
-                        chain_sources: None,
-                        chain_phase: None,
-                        chain_links_filled: None,
-                        chain_links_total: None,
-                        time_ago: crate::i18n::t("ui:health.justNow", &flood_lang, &[]),
-                        item_id: summary.top_item_id,
-                    },
-                );
-            } else {
-                let native_title = crate::i18n::t(
-                    "ui:notify.securityAlertsDetected",
-                    &flood_lang,
-                    &[("count", &total_security.to_string())],
-                );
-                if let Err(e) = app
-                    .notification()
-                    .builder()
-                    .title(&native_title)
-                    .body(&title)
-                    .show()
-                {
-                    warn!(target: "4da::notify", error = %e, "Failed to send summary security notification");
-                }
-            }
+            let native_title = crate::i18n::t(
+                "ui:notify.securityAlertsDetected",
+                &flood_lang,
+                &[("count", &total_security.to_string())],
+            );
+            crate::notification_window::dispatch(
+                app,
+                &Dispatch::new(NotificationData {
+                    variant: "multi".to_string(),
+                    priority: summary_priority.to_string(),
+                    signal_type: Some("security_alert".to_string()),
+                    title: title.clone(),
+                    action: Some(crate::i18n::t("ui:notify.openForDetails", &flood_lang, &[])),
+                    source: None,
+                    matched_deps: vec![],
+                    count: Some(total_security),
+                    chain_sources: None,
+                    chain_phase: None,
+                    chain_links_filled: None,
+                    chain_links_total: None,
+                    time_ago: crate::i18n::t("ui:health.justNow", &flood_lang, &[]),
+                    item_id: summary.top_item_id,
+                })
+                .with_native_title(native_title),
+            );
 
             info!(target: "4da::notify", total_security, "Sent summary security notification (flood cap)");
             // Batch the rest for briefing
@@ -234,12 +222,6 @@ pub fn drain_batched_notifications(state: &MonitoringState) -> Vec<BatchedNotifi
 // Notification Dispatch
 // ============================================================================
 
-/// Read the notification style setting ("custom" or "native").
-fn notification_style() -> String {
-    let settings = crate::get_settings_manager().lock();
-    settings.get().monitoring.notification_style.clone()
-}
-
 /// Send a notification about new relevant items
 pub fn send_notification<R: Runtime>(
     app: &AppHandle<R>,
@@ -257,42 +239,26 @@ pub fn send_notification<R: Runtime>(
         )
     };
 
-    if notification_style() == "custom" {
-        crate::notification_window::show_notification(
-            app,
-            NotificationData {
-                variant: "digest".to_string(),
-                priority: "watch".to_string(),
-                signal_type: None,
-                title,
-                action: Some(crate::i18n::t("ui:notify.clickToReview", &lang, &[])),
-                source: None,
-                matched_deps: vec![],
-                count: Some(relevant_count),
-                chain_sources: None,
-                chain_phase: None,
-                chain_links_filled: None,
-                chain_links_total: None,
-                time_ago: crate::i18n::t("ui:health.justNow", &lang, &[]),
-                item_id: None,
-            },
-        );
-        return;
-    }
-
-    // Native OS notification fallback
-    let native_title = crate::i18n::t("ui:notify.nativeTitle", &lang, &[]);
-    if let Err(e) = app
-        .notification()
-        .builder()
-        .title(&native_title)
-        .body(&title)
-        .show()
-    {
-        warn!(target: "4da::notify", error = %e, "Failed to send notification");
-    } else {
-        info!(target: "4da::notify", body = %title, "Sent notification");
-    }
+    crate::notification_window::dispatch(
+        app,
+        &Dispatch::new(NotificationData {
+            variant: "digest".to_string(),
+            priority: "watch".to_string(),
+            signal_type: None,
+            title,
+            action: Some(crate::i18n::t("ui:notify.clickToReview", &lang, &[])),
+            source: None,
+            matched_deps: vec![],
+            count: Some(relevant_count),
+            chain_sources: None,
+            chain_phase: None,
+            chain_links_filled: None,
+            chain_links_total: None,
+            time_ago: crate::i18n::t("ui:health.justNow", &lang, &[]),
+            item_id: None,
+        })
+        .with_native_title(crate::i18n::t("ui:notify.nativeTitle", &lang, &[])),
+    );
 }
 
 /// Send a signal-aware notification for critical/high priority signals
@@ -332,33 +298,7 @@ pub fn send_signal_notification<R: Runtime>(
         )
     };
 
-    if notification_style() == "custom" {
-        // Determine variant: multi if >1 signal, else single signal
-        let variant = if count > 1 { "multi" } else { "signal" };
-        crate::notification_window::show_notification(
-            app,
-            NotificationData {
-                variant: variant.to_string(),
-                priority: priority.to_string(),
-                signal_type,
-                title: display_title,
-                action: action_text,
-                source: None,
-                matched_deps: vec![],
-                count: if count > 1 { Some(count) } else { None },
-                chain_sources: None,
-                chain_phase: None,
-                chain_links_filled: None,
-                chain_links_total: None,
-                time_ago: crate::i18n::t("ui:health.justNow", &lang, &[]),
-                item_id: summary.top_item_id,
-            },
-        );
-        return;
-    }
-
     let plural = if count > 1 { "s" } else { "" };
-    // Native OS notification fallback
     let native_title = match priority {
         "critical" => crate::i18n::t(
             "ui:notify.criticalSignals",
@@ -373,17 +313,28 @@ pub fn send_signal_notification<R: Runtime>(
         _ => crate::i18n::t("ui:notify.newSignals", &lang, &[]),
     };
 
-    if let Err(e) = app
-        .notification()
-        .builder()
-        .title(&native_title)
-        .body(&display_title)
-        .show()
-    {
-        warn!(target: "4da::notify", error = %e, "Failed to send signal notification");
-    } else {
-        info!(target: "4da::notify", priority = priority, body = %display_title, "Sent signal notification");
-    }
+    // Determine variant: multi if >1 signal, else single signal
+    let variant = if count > 1 { "multi" } else { "signal" };
+    crate::notification_window::dispatch(
+        app,
+        &Dispatch::new(NotificationData {
+            variant: variant.to_string(),
+            priority: priority.to_string(),
+            signal_type,
+            title: display_title,
+            action: action_text,
+            source: None,
+            matched_deps: vec![],
+            count: if count > 1 { Some(count) } else { None },
+            chain_sources: None,
+            chain_phase: None,
+            chain_links_filled: None,
+            chain_links_total: None,
+            time_ago: crate::i18n::t("ui:health.justNow", &lang, &[]),
+            item_id: summary.top_item_id,
+        })
+        .with_native_title(native_title),
+    );
 }
 
 /// Send a notification about an escalating or peak signal chain prediction
@@ -407,31 +358,7 @@ pub fn send_chain_prediction_notification<R: Runtime>(
     };
 
     let chain_lang = crate::i18n::get_user_language();
-    if notification_style() == "custom" {
-        crate::notification_window::show_notification(
-            app,
-            NotificationData {
-                variant: "chain".to_string(),
-                priority: priority.to_string(),
-                signal_type: None,
-                title: chain_name.to_string(),
-                action: Some(body.clone()),
-                source: None,
-                matched_deps: vec![],
-                count: None,
-                chain_sources: None, // Caller can extend this later
-                chain_phase: Some(phase.to_string()),
-                chain_links_filled: None,
-                chain_links_total: Some(4),
-                time_ago: crate::i18n::t("ui:health.justNow", &chain_lang, &[]),
-                item_id: None,
-            },
-        );
-        return;
-    }
-
-    // Native OS notification fallback
-    let title = match phase {
+    let native_title = match phase {
         "escalating" => crate::i18n::t(
             "ui:notify.chainEscalating",
             &chain_lang,
@@ -445,15 +372,24 @@ pub fn send_chain_prediction_notification<R: Runtime>(
         ),
     };
 
-    if let Err(e) = app
-        .notification()
-        .builder()
-        .title(&title)
-        .body(&body)
-        .show()
-    {
-        warn!(target: "4da::notify", error = %e, "Failed to send chain prediction notification");
-    } else {
-        info!(target: "4da::notify", chain = %chain_name, phase, "Sent chain prediction notification");
-    }
+    crate::notification_window::dispatch(
+        app,
+        &Dispatch::new(NotificationData {
+            variant: "chain".to_string(),
+            priority: priority.to_string(),
+            signal_type: None,
+            title: chain_name.to_string(),
+            action: Some(body),
+            source: None,
+            matched_deps: vec![],
+            count: None,
+            chain_sources: None, // Caller can extend this later
+            chain_phase: Some(phase.to_string()),
+            chain_links_filled: None,
+            chain_links_total: Some(4),
+            time_ago: crate::i18n::t("ui:health.justNow", &chain_lang, &[]),
+            item_id: None,
+        })
+        .with_native_title(native_title),
+    );
 }

@@ -286,8 +286,31 @@ jobs:
         run: pnpm run validate:vite-smoke
 
       - name: Run tests and verify count floor
+        # SELF-LIMITING, in two independent layers, because on 2026-08-31 this
+        # step hung and took the whole self-hosted fleet down with it.
+        #
+        # What happened: `vitest run` wedged. The job's `timeout-minutes: 30`
+        # fired and GitHub cancelled the job — but cancellation does NOT kill
+        # the process tree on Windows. It killed the TOP of the tree; the
+        # `vitest.mjs` below it re-parented, outlived its dead `pnpm` parent,
+        # kept burning CPU and held this runner's only slot. Every later
+        # self-hosted job queued for over an hour while the API reported the
+        # runner idle. It had to be killed by hand.
+        #
+        # Layer 1 — `run-with-timeout.cjs` kills the process tree LEAVES FIRST
+        # while it is still intact, which is exactly what GitHub's cancel does
+        # not do. That is the layer that actually frees the runner. It also
+        # passes the child's exit code through, so a genuine test failure
+        # still fails this step, and returns 124 on expiry.
+        # Layer 2 — the step ceiling below is the backstop if the wrapper
+        # itself is what dies.
+        #
+        # The job's ceiling stays at 30. Raising it hides starvation
+        # (documented decision) and would not have helped anyway: it fired
+        # correctly here and the tree survived it.
+        timeout-minutes: 20
         run: |
-          pnpm run test -- --run 2>&1 | Out-File -FilePath test-output.txt -Encoding utf8
+          node scripts/run-with-timeout.cjs --minutes 15 -- pnpm run test -- --run 2>&1 | Out-File -FilePath test-output.txt -Encoding utf8
           $testExit = $LASTEXITCODE
           $output = Get-Content test-output.txt
           $output | Select-Object -Last 15

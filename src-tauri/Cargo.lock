@@ -2431,6 +2431,7 @@ dependencies = [
  "whichlang",
  "windows-sys 0.61.2",
  "winreg 0.55.0",
+ "x11rb",
  "x25519-dalek",
  "x509-cert",
  "zeroize",

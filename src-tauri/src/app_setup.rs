@@ -633,6 +633,16 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // Store tray handle for later updates
     app.manage(parking_lot::Mutex::new(tray));
 
+    // Interruption gate. The E2E harness drives briefings headlessly, where a
+    // locked/absent desktop would otherwise read as "user is busy" and hold
+    // every surface the tests are waiting on.
+    if crate::startup_frontend::victauri_e2e_active() {
+        crate::presence::disable_gate_for_testing();
+        info!(target: "4da::presence", "Victauri E2E active — interruption gate disabled");
+    } else {
+        crate::presence::watcher::start(app.handle());
+    }
+
     // Load monitoring settings from persistence
     let monitoring_state = get_monitoring_state().clone();
     {
