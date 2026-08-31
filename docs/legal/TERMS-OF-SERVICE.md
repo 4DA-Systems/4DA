@@ -134,7 +134,7 @@ This prorated refund applies to first-time monthly Signal subscriptions only. Su
 
 ### 5.3 Lifetime Purchases -- 14-Day Money-Back Guarantee
 
-If you purchase a Signal Lifetime license and are not satisfied, you may request a full refund within **14 days** of purchase. No reason is required. To request a refund, contact us at [support@4da.ai](mailto:support@4da.ai). If a Lifetime purchase is refunded, the associated license is deactivated.
+If you purchase a Signal Lifetime license and are not satisfied, you may request a full refund within **14 days** of purchase. No reason is required. To request a refund, contact us at [support@4da.ai](mailto:support@4da.ai). If a Lifetime purchase is refunded, your licence to use Signal tier features ends: you agree to stop using Signal features and to remove the licence key from your installations, and we invalidate the key in our records for support, recovery and transfer purposes.
 
 ### 5.4 Refund for Faulty Service
 
