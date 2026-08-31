@@ -7,19 +7,24 @@
  * worktree that has:
  *
  *   1. Uncommitted changes in its working tree
- *   2. Commits whose content is not already in main. "In main" is established
- *      by ANY of three independent proofs — this repo squash-merges every PR,
- *      so a merged branch's commits are NEVER reachable from main, and
- *      ancestry alone refused every merged lane forever while 40+ of them
+ *   2. Commits whose content is not already in the base. "In the base" is
+ *      established by ANY of four independent proofs — this repo squash-merges
+ *      every PR, so a merged branch's commits are NEVER reachable from main,
+ *      and ancestry alone refused every merged lane forever while 40+ of them
  *      accumulated (2026-08-24 audit):
  *
- *        a. ANCESTRY — tip reachable from main (non-squash flows).
+ *        a. ANCESTRY — tip reachable from the base (non-squash flows).
  *        b. TREE IDENTITY — the branch tip's tree object appears in recent
- *           main history, i.e. main once held this branch's exact final
+ *           base history, i.e. the base once held this branch's exact final
  *           state. Offline, needs no API.
  *        c. MERGED PR HEAD — a merged PR's headRefOid is exactly the tip.
+ *        d. CONTENT-IDENTICAL MERGE — three-way merging the branch into the
+ *           base leaves the base tree unchanged (`git merge-tree
+ *           --write-tree`), i.e. the branch adds nothing. Catches work that
+ *           landed on the base outside its own PR (harvested/cherry-picked
+ *           lanes) that (b) and (c) cannot see.
  *
- *      (b) and (c) are COMPLEMENTARY, not redundant. Tree identity only
+ *      (b), (c) and (d) are COMPLEMENTARY, not redundant. Tree identity only
  *      matches when the branch was up to date with main at merge time; that
  *      is guaranteed today by the strict "branches must be up to date"
  *      ruleset, but was NOT for older merges, and it is bounded by
@@ -29,6 +34,11 @@
  *
  *      Every proof is content-level and conservative: anything unproven stays
  *      protected, and reflog keeps 90 days regardless.
+ *
+ *      The BASE is `origin/main`, not the local `main` ref. The local ref
+ *      drifts: on 2026-08-12 it was 10 commits behind origin AND carried one
+ *      unpushed commit, so every verdict computed against it was wrong.
+ *      Falls back to `main` only when no remote-tracking ref exists.
  *
  * Run modes:
  *
@@ -101,34 +111,52 @@ function listOrphanBranches() {
   return out.split(/\r?\n/).filter(Boolean);
 }
 
-function isReachableFromMain(ref) {
+/**
+ * The branch every worktree lands onto.
+ *
+ * `origin/main`, not `main`. The local `main` ref drifts: on 2026-08-12 it was
+ * 10 commits behind origin AND carried one unpushed commit, so every verdict
+ * computed against it was wrong. Falls back to `main` only if there is no
+ * remote-tracking ref.
+ */
+let baseRefCache = null;
+function baseRef() {
+  if (!baseRefCache) {
+    const remote = sh("git rev-parse --verify --quiet origin/main");
+    baseRefCache = typeof remote === "string" && remote ? "origin/main" : "main";
+  }
+  return baseRefCache;
+}
+
+// Proof (a): a genuine fast-forward ancestor is in the base outright.
+function isReachableFromBase(ref, base) {
   const tip = sh(`git rev-parse ${ref}`);
-  const mergeBase = sh(`git merge-base ${ref} main`);
+  const mergeBase = sh(`git merge-base ${ref} ${base}`);
   return typeof tip === "string" && typeof mergeBase === "string" && tip === mergeBase;
 }
 
-// Squash-merge awareness (proof b): how far back in main history to look for
+// Squash-merge awareness (proof b): how far back in base history to look for
 // a branch's tree. Main lands ~5-15 commits/day, so 500 covers a month-plus;
 // a lane older than the window simply stays protected (fail-safe).
 const MAIN_TREE_DEPTH = 500;
-let mainTreesCache = null;
-function mainTrees() {
-  if (!mainTreesCache) {
-    const out = sh(`git log --format=%T -${MAIN_TREE_DEPTH} main`);
-    mainTreesCache = new Set(
+let baseTreesCache = null;
+function baseTrees(base) {
+  if (!baseTreesCache) {
+    const out = sh(`git log --format=%T -${MAIN_TREE_DEPTH} ${base}`);
+    baseTreesCache = new Set(
       typeof out === "string" ? out.split(/\r?\n/).filter(Boolean) : []
     );
   }
-  return mainTreesCache;
+  return baseTreesCache;
 }
 
 // True when the branch tip's TREE object is byte-identical to the tree of
-// some commit in recent main history — i.e. main has held this branch's
+// some commit in recent base history — i.e. the base has held this branch's
 // exact final state (the squash-merge signature). Content-level proof:
 // deleting the branch cannot lose anything the merge flow kept.
-function isSquashMergedIntoMain(ref) {
+function isSquashMergedIntoBase(ref, base) {
   const tree = sh(`git rev-parse "${ref}^{tree}"`);
-  return typeof tree === "string" && mainTrees().has(tree);
+  return typeof tree === "string" && baseTrees(base).has(tree);
 }
 
 /**
@@ -142,8 +170,8 @@ function isSquashMergedIntoMain(ref) {
  * (a)+(b)+(c) reclaimed 30.
  *
  * Returns null when `gh` is missing, unauthenticated, or returns junk — the
- * caller then simply relies on (a)+(b). This must never make the script LESS
- * safe than before.
+ * caller then simply relies on the offline proofs. This must never make the
+ * script LESS safe than before.
  */
 function getMergedPrHeads() {
   const out = sh(
@@ -183,14 +211,57 @@ function isMergedPrHead(ref, mergedHeads) {
   return typeof tip === "string" && tip === mergedOid;
 }
 
-// The combined safety predicate: content is in main by ancestry (a), by
-// squash-merge tree identity (b), or by merged-PR head OID (c).
-function contentPreservedInMain(ref, mergedHeads) {
-  return (
-    isReachableFromMain(ref) ||
-    isSquashMergedIntoMain(ref) ||
-    isMergedPrHead(ref, mergedHeads)
-  );
+/**
+ * Proof (d): does merging this branch into the base change the base AT ALL?
+ *
+ * Three-way merge via `git merge-tree --write-tree` compared to the base tree.
+ * If the merged tree equals the base tree, the branch contributes nothing —
+ * its work already landed, even if it landed through someone else's commit
+ * (harvested lanes, cherry-picks) that proofs (b)/(c) cannot see.
+ *
+ * Three-valued and conservative by construction:
+ *   - true  → provably adds nothing
+ *   - false → has unique content
+ *   - null  → INCONCLUSIVE (merge conflict, old git without `merge-tree
+ *             --write-tree`, bad ref) — the caller must KEEP, never guess
+ */
+function addsNothingToBase(ref, base) {
+  const baseTree = sh(`git rev-parse ${base}^{tree}`);
+  const merged = sh(`git merge-tree --write-tree ${base} ${ref}`);
+  if (typeof baseTree !== "string" || typeof merged !== "string") return null;
+  const mergedTree = merged.split(/\r?\n/)[0].trim();
+  if (mergedTree && mergedTree === baseTree) return true;
+  return false;
+}
+
+// The combined safety predicate: content is in the base by ancestry (a), by
+// squash-merge tree identity (b), by merged-PR head OID (c), or by
+// content-identical merge (d). Returns a verdict with the WINNING PROOF named,
+// so the report explains itself instead of printing a flat boolean.
+function supersededVerdict(ref, mergedHeads, base) {
+  if (isReachableFromBase(ref, base)) {
+    return { superseded: true, reason: `tip is an ancestor of ${base}` };
+  }
+  if (isSquashMergedIntoBase(ref, base)) {
+    return {
+      superseded: true,
+      reason: `tree matches a recent ${base} commit (squash-merge signature)`,
+    };
+  }
+  if (isMergedPrHead(ref, mergedHeads)) {
+    return { superseded: true, reason: "merged PR head OID matches tip exactly" };
+  }
+  const contentVerdict = addsNothingToBase(ref, base);
+  if (contentVerdict === true) {
+    return { superseded: true, reason: `adds nothing to ${base} (content-identical merge)` };
+  }
+  if (contentVerdict === null) {
+    return {
+      superseded: false,
+      reason: "no proof, and content test inconclusive (conflict/old git) — keeping",
+    };
+  }
+  return { superseded: false, reason: "has unique content" };
 }
 
 function hasUncommittedChanges(dirPath) {
@@ -210,6 +281,7 @@ function main() {
   const worktrees = listWorktrees();
   const orphanBranches = listOrphanBranches();
   const mergedHeads = getMergedPrHeads();
+  const base = baseRef();
 
   // Split worktrees: main vs worktree-*
   // `git worktree list --porcelain` writes `branch refs/heads/<name>`, so
@@ -223,13 +295,15 @@ function main() {
   const worktreeWorktrees = worktrees.filter(isWorktreeBranch);
 
   console.log(`Main worktree:       ${mainEntry?.path ?? "(unknown)"}`);
+  console.log(`Base ref:            ${base}`);
   console.log(`Worktree-* dirs:     ${worktreeWorktrees.length}`);
   console.log(`Worktree-* branches: ${orphanBranches.length}`);
   console.log(
     mergedHeads
-      ? `Merged PR heads:     ${mergedHeads.size} (proof c ACTIVE, alongside ancestry + tree identity)`
+      ? `Merged PR heads:     ${mergedHeads.size} (proof c ACTIVE, alongside ancestry + tree identity + content-identical merge)`
       : "Merged PR heads:     unavailable — `gh` missing/unauthenticated; using" +
-        " ancestry + tree identity only (conservative: older merges stay protected)"
+        " ancestry + tree identity + content-identical merge only (conservative:" +
+        " lanes only a PR record can prove stay protected)"
   );
   console.log("");
 
@@ -243,16 +317,15 @@ function main() {
   // Phase 1: worktrees that git knows about
   for (const w of worktreeWorktrees) {
     const branchName = w.branch.replace(/^refs\/heads\//, "");
-    const preserved = contentPreservedInMain(branchName, mergedHeads);
+    const verdict = supersededVerdict(branchName, mergedHeads, base);
     const { empty, status } = hasUncommittedChanges(w.path);
 
-    if (!preserved) {
+    if (!verdict.superseded) {
       plan.unsafe.push({
         kind: "worktree",
         path: w.path,
         branch: branchName,
-        reason:
-          "branch content NOT in main (no ancestry, no tree match, no merged-PR head) — has unique work",
+        reason: `not superseded — ${verdict.reason}`,
       });
       continue;
     }
@@ -275,12 +348,12 @@ function main() {
   );
   for (const b of orphanBranches) {
     if (stillLiveBranches.has(b)) continue; // already handled above
-    if (!contentPreservedInMain(b, mergedHeads)) {
+    const verdict = supersededVerdict(b, mergedHeads, base);
+    if (!verdict.superseded) {
       plan.unsafe.push({
         kind: "branch",
         branch: b,
-        reason:
-          "branch content NOT in main (no ancestry, no tree match, no merged-PR head) — unique work",
+        reason: `not superseded — ${verdict.reason}`,
       });
       continue;
     }
