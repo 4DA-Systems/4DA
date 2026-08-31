@@ -22,6 +22,8 @@
 //!
 //! One return, one interruption.
 
+use std::time::{Duration, Instant};
+
 use parking_lot::Mutex;
 use tauri::{AppHandle, Runtime};
 use tracing::info;
@@ -34,6 +36,19 @@ use crate::notification_window::{Dispatch, NotificationData};
 /// we render a single coalesced card regardless, so retaining more would buy
 /// nothing but memory.
 const MAX_RETAINED_TOASTS: usize = 20;
+
+/// How long a held surface stays worth raising.
+///
+/// "Held, never dropped" is about the *intelligence*, not the *interruption*.
+/// The briefing content is already durable — `briefing_snapshot` persists it and
+/// the Brief tab renders it — so nothing is lost when this expires. What expires
+/// is 4DA's licence to interrupt you about it.
+///
+/// Popping up "your morning brief" at 18:00, ten hours stale and with ten hours
+/// of newer signal already gathered, is worse than not popping up at all: it is
+/// an interruption that presents old intelligence as current. The next scheduled
+/// brief is a better answer than a resurrected one.
+const MAX_HELD_AGE: Duration = Duration::from_hours(6);
 
 /// What the gate is currently holding.
 #[derive(Default)]
@@ -48,6 +63,9 @@ struct Held {
     /// Why the first held surface was held — used for the "held while you
     /// were in a game" line on delivery.
     reason: Option<BusyReason>,
+    /// When the hold began. `Instant` rather than a wall clock so a timezone
+    /// change or an NTP correction cannot make a fresh hold look ancient.
+    held_since: Option<Instant>,
 }
 
 impl Held {
@@ -77,6 +95,7 @@ pub fn hold_briefing(briefing: &BriefingNotification, reason: BusyReason) {
         let superseded = held.briefing.is_some();
         held.briefing = Some(Box::new(briefing.clone()));
         held.reason.get_or_insert(reason);
+        held.held_since.get_or_insert_with(Instant::now);
         info!(
             target: "4da::presence",
             reason = reason.as_str(),
@@ -96,6 +115,7 @@ pub fn hold_toast(dispatch: &Dispatch, reason: BusyReason) {
             held.overflow += 1;
         }
         held.reason.get_or_insert(reason);
+        held.held_since.get_or_insert_with(Instant::now);
         info!(
             target: "4da::presence",
             reason = reason.as_str(),
@@ -159,6 +179,21 @@ pub fn flush<R: Runtime>(app: &AppHandle<R>) {
 
     let reason = held.reason;
     let toast_total = held.total_toasts();
+    let age = held.held_since.map_or(Duration::ZERO, |t| t.elapsed());
+
+    // Too old to be worth raising. The content is not lost — the snapshot and
+    // the Brief tab still have it — but interrupting the user with stale
+    // intelligence would break the one promise the gate exists to keep.
+    if is_stale(age) {
+        info!(
+            target: "4da::presence",
+            held_hours = age.as_secs() / 3600,
+            briefing = held.briefing.is_some(),
+            toasts = toast_total,
+            "Held surfaces expired — content remains in the Brief tab, not raised as a popup"
+        );
+        return;
+    }
 
     if let Some(briefing) = held.briefing {
         info!(
@@ -180,6 +215,13 @@ pub fn flush<R: Runtime>(app: &AppHandle<R>) {
             crate::notification_window::dispatch_now(app, &dispatch);
         }
     }
+}
+
+/// Has a hold outlived its licence to interrupt?
+///
+/// Pure so the boundary is testable without waiting six hours.
+fn is_stale(age: Duration) -> bool {
+    age > MAX_HELD_AGE
 }
 
 /// Collapse the held toasts into at most one card.
@@ -373,14 +415,78 @@ mod tests {
 
     #[test]
     fn held_note_reads_as_a_sentence_fragment() {
+        assert_eq!(held_note(BusyReason::Away), "Held while you were away");
         assert_eq!(
             held_note(BusyReason::ScreenLocked),
-            "Held while you were away"
+            "Held while your screen was locked"
         );
         assert_eq!(
             held_note(BusyReason::QuietHours),
             "Held during your quiet hours"
         );
+    }
+
+    // -- staleness ---------------------------------------------------------
+
+    #[test]
+    fn a_fresh_hold_is_not_stale() {
+        assert!(!is_stale(Duration::ZERO));
+        assert!(!is_stale(Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn a_hold_just_inside_the_window_still_delivers() {
+        assert!(!is_stale(MAX_HELD_AGE - Duration::from_secs(1)));
+        assert!(
+            !is_stale(MAX_HELD_AGE),
+            "the boundary itself still delivers"
+        );
+    }
+
+    #[test]
+    fn a_hold_past_the_window_is_stale() {
+        assert!(is_stale(MAX_HELD_AGE + Duration::from_secs(1)));
+        // The motivating case: an 08:00 brief flushed at 18:00.
+        assert!(is_stale(Duration::from_secs(10 * 60 * 60)));
+    }
+
+    #[test]
+    fn the_stale_window_is_long_enough_for_a_normal_gaming_session() {
+        // A hold must survive an ordinary evening of play, or the gate would
+        // routinely eat briefs it was supposed to be protecting.
+        assert!(
+            !is_stale(Duration::from_secs(4 * 60 * 60)),
+            "a four-hour session must still deliver"
+        );
+    }
+
+    #[test]
+    fn holding_records_when_the_hold_began() {
+        let _serial = QUEUE_TEST_LOCK.lock();
+        clear();
+        hold_toast(&toast("watch", "one"), BusyReason::Away);
+        {
+            let guard = HELD.lock();
+            let held = guard.as_ref().expect("something is held");
+            assert!(held.held_since.is_some(), "hold start time is recorded");
+        }
+        clear();
+    }
+
+    #[test]
+    fn the_hold_start_is_not_pushed_forward_by_later_holds() {
+        let _serial = QUEUE_TEST_LOCK.lock();
+        clear();
+        hold_toast(&toast("watch", "first"), BusyReason::Away);
+        let first = HELD.lock().as_ref().and_then(|h| h.held_since);
+        hold_toast(&toast("watch", "second"), BusyReason::Away);
+        let second = HELD.lock().as_ref().and_then(|h| h.held_since);
+        assert_eq!(
+            first, second,
+            "age is measured from the FIRST hold, or a trickle of new items \
+             would keep resetting the clock and never expire"
+        );
+        clear();
     }
 
     // -- queue state -------------------------------------------------------

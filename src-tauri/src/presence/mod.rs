@@ -77,8 +77,12 @@ pub enum BusyReason {
     Presentation,
     /// Windows Focus Assist (or equivalent) is suppressing notifications.
     OsQuietTime,
-    /// Screen locked, screensaver running, or the user is otherwise away.
+    /// Screen locked or screensaver running.
     ScreenLocked,
+    /// No keyboard or mouse input for long enough that the chair is empty.
+    /// Distinct from [`Self::ScreenLocked`]: most people who walk away neither
+    /// lock the screen nor trigger a screensaver.
+    Away,
 }
 
 impl BusyReason {
@@ -92,6 +96,7 @@ impl BusyReason {
             Self::Presentation => "presentation",
             Self::OsQuietTime => "os_quiet_time",
             Self::ScreenLocked => "screen_locked",
+            Self::Away => "away",
         }
     }
 
@@ -105,7 +110,8 @@ impl BusyReason {
             Self::FullscreenApp | Self::FullscreenWindow => "while you were in a fullscreen app",
             Self::Presentation => "while you were presenting",
             Self::OsQuietTime => "while Focus Assist was on",
-            Self::ScreenLocked => "while you were away",
+            Self::ScreenLocked => "while your screen was locked",
+            Self::Away => "while you were away",
         }
     }
 }
@@ -459,12 +465,31 @@ mod tests {
             BusyReason::Presentation,
             BusyReason::OsQuietTime,
             BusyReason::ScreenLocked,
+            BusyReason::Away,
         ];
         let mut tags: Vec<&str> = all.iter().map(|r| r.as_str()).collect();
         tags.sort_unstable();
         let count = tags.len();
         tags.dedup();
         assert_eq!(tags.len(), count, "busy reason tags must be unique");
+
+        // User-facing copy must be distinct too. Two reasons that render the
+        // same sentence are indistinguishable to the user, which defeats the
+        // point of naming the reason at all — "away" and "screen locked" are
+        // genuinely different situations and must read differently.
+        let mut texts: Vec<&str> = all
+            .iter()
+            .filter(|r| !matches!(r, BusyReason::FullscreenApp | BusyReason::FullscreenWindow))
+            .map(|r| r.user_text())
+            .collect();
+        texts.sort_unstable();
+        let text_count = texts.len();
+        texts.dedup();
+        assert_eq!(
+            texts.len(),
+            text_count,
+            "busy reason copy must be distinct (fullscreen variants deliberately share)"
+        );
 
         for reason in all {
             assert!(!reason.as_str().is_empty());

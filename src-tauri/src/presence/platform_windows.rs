@@ -27,7 +27,9 @@ use windows_sys::Win32::Foundation::{HWND, RECT};
 use windows_sys::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
+use windows_sys::Win32::System::SystemInformation::GetTickCount;
 use windows_sys::Win32::System::Threading::GetCurrentProcessId;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 use windows_sys::Win32::UI::Shell::{
     SHQueryUserNotificationState, QUERY_USER_NOTIFICATION_STATE, QUNS_ACCEPTS_NOTIFICATIONS,
     QUNS_APP, QUNS_BUSY, QUNS_NOT_PRESENT, QUNS_PRESENTATION_MODE, QUNS_QUIET_TIME,
@@ -45,10 +47,38 @@ use super::BusyReason;
 /// path degrades to "available", because wrongly muting the daily brief forever
 /// is a worse failure than one mistimed popup.
 pub(super) fn detect() -> Option<BusyReason> {
+    // If 4DA's own window is in front, the user is literally looking at us —
+    // never infer "busy" from the OS in that case. `SHQueryUserNotificationState`
+    // answers a question about the DESKTOP and has no notion of who is asking,
+    // so a fullscreen 4DA would otherwise report QUNS_BUSY and mute 4DA's own
+    // notifications for as long as the user kept it in front.
+    //
+    // Not reachable today (4DA has no fullscreen mode), so this is an explicit
+    // invariant rather than a fix for an observed bug — a future kiosk or
+    // fullscreen view would introduce it silently otherwise.
+    //
+    // Explicit user preferences (Do Not Disturb, quiet hours) are evaluated in
+    // `presence::current` BEFORE this function and are unaffected: stated
+    // intent always wins over inferred state.
+    if foreground_is_own_process() {
+        return None;
+    }
+
     if let Some(reason) = query_notification_state() {
         return Some(reason);
     }
-    detect_borderless_fullscreen()
+    if let Some(reason) = detect_borderless_fullscreen() {
+        return Some(reason);
+    }
+    detect_away()
+}
+
+/// Is the foreground window owned by this process?
+#[allow(unsafe_code)]
+fn foreground_is_own_process() -> bool {
+    // SAFETY: no arguments; returns a borrowed HWND or null. We never free it.
+    let hwnd: HWND = unsafe { GetForegroundWindow() };
+    !hwnd.is_null() && is_own_window(hwnd)
 }
 
 /// Detector 1: `SHQueryUserNotificationState`.
@@ -170,6 +200,50 @@ const fn zeroed_rect() -> RECT {
     }
 }
 
+/// How long with no keyboard or mouse input before the user counts as away.
+///
+/// Deliberately generous. The point is to catch a genuinely empty chair — the
+/// 08:00 brief that fires while the user is still asleep and is marked
+/// delivered forever — not to hold a notification because someone paused to
+/// read something. Watching a video reads as away and the brief simply waits
+/// until they touch the mouse, which is strictly better than firing at a
+/// screen nobody is reading.
+const AWAY_AFTER_SECS: u64 = 10 * 60;
+
+/// Detector 3: has there been no input for [`AWAY_AFTER_SECS`]?
+///
+/// Complements `QUNS_NOT_PRESENT`, which only covers a locked screen or an
+/// active screensaver — most people who walk away do neither.
+#[allow(unsafe_code)]
+fn detect_away() -> Option<BusyReason> {
+    let mut info = LASTINPUTINFO {
+        cbSize: u32::try_from(size_of::<LASTINPUTINFO>()).ok()?,
+        dwTime: 0,
+    };
+    // SAFETY: `info` is a valid out-param with cbSize set as the API requires.
+    if unsafe { GetLastInputInfo(&raw mut info) } == 0 {
+        return None;
+    }
+    // SAFETY: no arguments, no side effects.
+    let now = unsafe { GetTickCount() };
+
+    if idle_secs_from_ticks(now, info.dwTime) >= AWAY_AFTER_SECS {
+        Some(BusyReason::Away)
+    } else {
+        None
+    }
+}
+
+/// Seconds elapsed between `last_input_ms` and `now_ms`, both `GetTickCount`
+/// millisecond values.
+///
+/// `GetTickCount` wraps every ~49.7 days, so this uses `wrapping_sub`: a naive
+/// subtraction across the rollover yields a colossal "idle" time and would mute
+/// 4DA until the machine rebooted.
+pub(super) fn idle_secs_from_ticks(now_ms: u32, last_input_ms: u32) -> u64 {
+    u64::from(now_ms.wrapping_sub(last_input_ms)) / 1000
+}
+
 /// Tolerance (px) for the fullscreen comparison. Some titles are off by a
 /// pixel or two, and some report a 1px-larger rect to defeat compositing.
 const EDGE_TOLERANCE: i32 = 2;
@@ -276,6 +350,44 @@ mod tests {
         // Secondary monitor to the right: origin is non-zero.
         let mon = rect(2560, 0, 5120, 1440);
         assert!(covers_monitor(&rect(2560, 0, 5120, 1440), &mon));
+    }
+
+    // -- idle / away -------------------------------------------------------
+
+    #[test]
+    fn idle_seconds_from_plain_tick_difference() {
+        assert_eq!(idle_secs_from_ticks(10_000, 4_000), 6);
+        assert_eq!(idle_secs_from_ticks(1_000, 1_000), 0);
+    }
+
+    #[test]
+    fn idle_seconds_survive_the_tick_rollover() {
+        // GetTickCount wraps every ~49.7 days. A naive `now - last` across the
+        // wrap yields ~49 days of "idle" and would mute 4DA until reboot.
+        let last = u32::MAX - 100; // 100ms before the wrap
+        let now = 100u32; // 100ms after it
+        assert_eq!(
+            idle_secs_from_ticks(now, last),
+            0,
+            "201ms of real idle time, not 49 days"
+        );
+    }
+
+    #[test]
+    fn away_threshold_is_generous_enough_not_to_fire_on_a_pause() {
+        // Reading a long page or a coffee refill must not read as "away".
+        assert!(
+            AWAY_AFTER_SECS >= 5 * 60,
+            "threshold must not fire on an ordinary pause"
+        );
+        assert!(
+            idle_secs_from_ticks(4 * 60 * 1000, 0) < AWAY_AFTER_SECS,
+            "four minutes idle is still present"
+        );
+        assert!(
+            idle_secs_from_ticks(11 * 60 * 1000, 0) >= AWAY_AFTER_SECS,
+            "eleven minutes idle is away"
+        );
     }
 
     #[test]
