@@ -1686,6 +1686,7 @@ impl PreemptionAlert {
             // Reversibility is not computed by preemption — leave None.
             reversibility: None,
             evidence,
+            evidence_total: None,
             affected_projects: self.affected_projects.clone(),
             affected_deps: self.affected_dependencies.clone(),
             suggested_actions,
@@ -1727,12 +1728,37 @@ impl PreemptionAlert {
 /// the UI can render the locked tiers honestly. Signal/trial receives the
 /// full three-tier feed (`tier_scope = full`). OSV-verified CVEs matched to
 /// installed versions are a security baseline, never a paywall.
+///
+/// LIST transport (AD-035, 2026-08-31 live audit): the response is mapped
+/// through `evidence::present_preemption_list` — ONE visibility filter
+/// (`dismissed_ids` from the view's persisted local dismissals, plan-covered
+/// per-package alerts regrouped away) so the returned counts equal what the
+/// header renders, then a per-item trim (embedded citations capped with
+/// `evidence_total` recording the real count, unrendered text dropped) plus
+/// the collapsed-plan cap unless `full_plan` (the view's plan "show more"
+/// refetch). Full items stay in the cache untouched;
+/// `get_preemption_item_detail` serves them when a card expands.
 #[tauri::command]
-pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String> {
+pub async fn get_preemption_alerts(
+    dismissed_ids: Option<Vec<String>>,
+    full_plan: Option<bool>,
+) -> std::result::Result<EvidenceFeed, String> {
+    let feed = current_tier_feed()?;
+    let dismissed = dismissed_ids.unwrap_or_default();
+    Ok(crate::evidence::present_preemption_list(
+        feed,
+        &dismissed,
+        full_plan.unwrap_or(false),
+    ))
+}
+
+/// The tier-correct FULL feed backing both the list response and the item
+/// detail path: cache-served when fresh (the tab paints instantly instead of
+/// paying the 30-40s recompute), tier-narrowed for free users, computed and
+/// stored on a miss. Extracted from `get_preemption_alerts` unchanged when
+/// the LIST transport mapping landed (AD-035).
+fn current_tier_feed() -> std::result::Result<EvidenceFeed, String> {
     let entitled = crate::settings::is_signal();
-    // Serve the cached feed when fresh so the tab paints instantly instead of
-    // paying the 30-40s recompute (live OSV matching + adversarial deliberation).
-    // The cache is warmed off the boot path; a TTL miss costs one recompute.
     if let Some(feed) = cached_preemption_feed() {
         if !entitled {
             // A full cached feed narrows losslessly to the floor; a floor
@@ -1754,6 +1780,23 @@ pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String
     };
     store_preemption_feed(&feed);
     Ok(feed)
+}
+
+/// Detail path for ONE preemption card (AD-035): returns the item with its
+/// COMPLETE evidence, relevance notes, action tooltips and untrimmed
+/// explanation — everything the list transport holds back. Serves from the
+/// same tier-correct feed as the list (a free user can only detail floor
+/// items), so it is cache-hit cheap; the card fetches it lazily on first
+/// expand ("Show N more" / explanation "more").
+#[tauri::command]
+pub async fn get_preemption_item_detail(
+    item_id: String,
+) -> std::result::Result<EvidenceItem, String> {
+    let feed = current_tier_feed()?;
+    feed.items
+        .into_iter()
+        .find(|i| i.id == item_id)
+        .ok_or_else(|| format!("Preemption item not found: {item_id}"))
 }
 
 /// Narrow any Preemption feed to the free security floor: Tier 1
@@ -2029,6 +2072,7 @@ mod tests {
             urgency,
             reversibility: None,
             evidence: vec![],
+            evidence_total: None,
             affected_projects: vec![],
             affected_deps: vec![],
             suggested_actions: vec![],

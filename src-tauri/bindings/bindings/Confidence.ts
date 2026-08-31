@@ -13,4 +13,4 @@ provenance: ConfidenceProvenance,
 /**
  * If provenance is `Calibrated`, the N of samples. `None` for others.
  */
-sample_size: number | null, };
+sample_size?: number | null, };

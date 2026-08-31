@@ -159,6 +159,7 @@ fn make_test_item(urgency: Urgency, title: &str) -> EvidenceItem {
         urgency,
         reversibility: None,
         evidence: vec![],
+        evidence_total: None,
         affected_projects: vec![],
         affected_deps: vec![],
         suggested_actions: vec![],

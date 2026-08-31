@@ -39,11 +39,22 @@ pub struct EvidenceItem {
 
     /// 0.0 = fully reversible, 1.0 = irreversible. `None` only when
     /// reversibility is conceptually N/A for this kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reversibility: Option<f32>,
 
     /// Citations backing the claim. Non-empty for all user-surfaced kinds
     /// except `Retrospective`.
     pub evidence: Vec<EvidenceCitation>,
+
+    /// Transport metadata (AD-036, list responses only): the number of
+    /// citations backing this item BEFORE list-payload trimming. `None`
+    /// means `evidence` is complete (detail responses, stored snapshots,
+    /// every non-list surface). When `Some(n)` and `n > evidence.len()`,
+    /// the remaining citations are served by the item-detail path — the
+    /// stored item is never mutated; this is set only in the command's
+    /// response mapping.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_total: Option<usize>,
 
     /// Projects this touches (empty if not project-scoped).
     pub affected_projects: Vec<String>,
@@ -56,10 +67,12 @@ pub struct EvidenceItem {
 
     /// Precedents from the Wisdom Graph. Empty allowed on cold-start;
     /// should populate after Phase 8.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub precedents: Vec<PrecedentRef>,
 
     /// User-set refutation condition. Only populated for accepted
     /// `Decision` items tracked by the commitment-contract watcher.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refutation_condition: Option<String>,
 
     /// Which lenses this item is a candidate for.
@@ -70,6 +83,7 @@ pub struct EvidenceItem {
 
     /// Unix timestamp in millis. `None` for durable items (decisions,
     /// retrospectives).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<i64>,
 }
 
@@ -133,6 +147,7 @@ pub struct Confidence {
     pub provenance: ConfidenceProvenance,
 
     /// If provenance is `Calibrated`, the N of samples. `None` for others.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sample_size: Option<u32>,
 }
 
@@ -233,12 +248,16 @@ pub struct EvidenceCitation {
     pub title: String,
 
     /// URL if available. `None` for inferred signals (git-history).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 
     /// Age in days. 0.0 = today.
     pub freshness_days: f32,
 
-    /// Why this was selected as evidence. ≤ 200 chars.
+    /// Why this was selected as evidence. ≤ 200 chars. May be blanked in
+    /// LIST transport (the Preemption list never renders it — AD-036); the
+    /// detail path always carries the full note.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub relevance_note: String,
 }
 
@@ -301,12 +320,24 @@ pub enum PrecedentOutcome {
 // LensHints
 // ============================================================================
 
+/// `skip_serializing_if` helper: omit `false` flags from the wire (AD-036
+/// transport slimming — the audit measured six spelled-out booleans on every
+/// one of 149 list cards). Deserialization defaults them back to `false`, so
+/// stored JSON from either era round-trips.
+fn is_false(flag: &bool) -> bool {
+    !*flag
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Default)]
 #[ts(export, export_to = "bindings/")]
 pub struct LensHints {
+    #[serde(default, skip_serializing_if = "is_false")]
     pub briefing: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub preemption: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub blind_spots: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub evidence: bool,
     /// Rendering hint (Phase 2c, platform-aware deps): the item is relevant only
     /// to a build target the user does NOT build on the host (e.g. a
@@ -317,7 +348,7 @@ pub struct LensHints {
     /// Set by the preemption + blind-spots materializers when the dep is
     /// platform-inactive in every tracked project/target. Defaults `false` for
     /// back-compat with pre-Phase-2c items.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub other_build_target: bool,
 
     /// Rendering hint (Phase 1 dependency-upgrade plan): the item is a ranked
@@ -325,7 +356,7 @@ pub struct LensHints {
     /// so the Preemption lens groups it under the "Upgrade Plan" section instead
     /// of the flat advisory list. Set by `upgrade_plan::build_upgrade_plan`.
     /// `false` for all normal items; defaults `false` for back-compat.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub upgrade_plan: bool,
 
     /// Rendering hint (2026-08-31 live audit): the coverage-gap dependency has
@@ -336,7 +367,7 @@ pub struct LensHints {
     /// that literally say "found no results". Set by
     /// `uncovered_dep_to_evidence_item` when `available_signal_count == 0`.
     /// `false` for all normal items; defaults `false` for back-compat.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub no_coverage: bool,
 }
 

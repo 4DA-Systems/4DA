@@ -57,3 +57,82 @@ describe('preemption-slice — paywall classification', () => {
     expect(s.preemptionFeed).toBeTruthy();
   });
 });
+
+// AD-035: the backend owns the visibility filter — the slice's job is to hand
+// it the persisted local dismissals (and the plan-expansion scope) and store
+// whatever comes back, verbatim. Dismiss/undo persist locally then refetch so
+// items and counts always move in the same response.
+describe('preemption-slice — backend-owned visibility (AD-035)', () => {
+  const DISMISS_KEY = 'preemption_dismissed';
+
+  beforeEach(() => {
+    useAppStore.setState(initialState, true);
+    mockCmd.mockReset();
+    mockCmd.mockResolvedValue({ items: [], total: 0, critical_count: 0, high_count: 0 });
+    localStorage.removeItem(DISMISS_KEY);
+  });
+
+  it('sends the persisted dismissal ids and the plan scope with every load', async () => {
+    localStorage.setItem(
+      DISMISS_KEY,
+      JSON.stringify([
+        { id: 'osv-lodash', ts: Date.now() },
+        { id: 'llm-42', ts: Date.now() },
+      ]),
+    );
+    await useAppStore.getState().loadPreemption();
+    expect(mockCmd).toHaveBeenCalledWith('get_preemption_alerts', {
+      dismissedIds: ['llm-42', 'osv-lodash'],
+      fullPlan: false,
+    });
+  });
+
+  it('expired dismissals (7-day TTL) are pruned before the call', async () => {
+    const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
+    localStorage.setItem(
+      DISMISS_KEY,
+      JSON.stringify([
+        { id: 'stale-alert', ts: eightDaysAgo },
+        { id: 'fresh-alert', ts: Date.now() },
+      ]),
+    );
+    await useAppStore.getState().loadPreemption();
+    expect(mockCmd).toHaveBeenCalledWith('get_preemption_alerts', {
+      dismissedIds: ['fresh-alert'],
+      fullPlan: false,
+    });
+  });
+
+  it('dismissPreemptionItem persists the id, arms undo, and refetches with it', async () => {
+    await useAppStore.getState().dismissPreemptionItem('osv-axios');
+    expect(useAppStore.getState().preemptionLastDismissed).toBe('osv-axios');
+    expect(mockCmd).toHaveBeenLastCalledWith('get_preemption_alerts', {
+      dismissedIds: ['osv-axios'],
+      fullPlan: false,
+    });
+  });
+
+  it('undoPreemptionDismissal removes the id and refetches without it', async () => {
+    await useAppStore.getState().dismissPreemptionItem('osv-axios');
+    await useAppStore.getState().undoPreemptionDismissal();
+    expect(useAppStore.getState().preemptionLastDismissed).toBeNull();
+    expect(mockCmd).toHaveBeenLastCalledWith('get_preemption_alerts', {
+      dismissedIds: [],
+      fullPlan: false,
+    });
+  });
+
+  it('expandPreemptionPlan refetches with fullPlan and keeps it for later loads', async () => {
+    await useAppStore.getState().expandPreemptionPlan();
+    expect(mockCmd).toHaveBeenLastCalledWith('get_preemption_alerts', {
+      dismissedIds: [],
+      fullPlan: true,
+    });
+    // A dismissal after expansion must not collapse the plan again.
+    await useAppStore.getState().dismissPreemptionItem('osv-axios');
+    expect(mockCmd).toHaveBeenLastCalledWith('get_preemption_alerts', {
+      dismissedIds: ['osv-axios'],
+      fullPlan: true,
+    });
+  });
+});

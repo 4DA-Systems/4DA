@@ -188,6 +188,7 @@ mod tests {
             urgency,
             reversibility: None,
             evidence: vec![],
+            evidence_total: None,
             affected_projects: affected_projects.iter().map(|s| s.to_string()).collect(),
             affected_deps: vec![],
             suggested_actions: vec![],

@@ -2,10 +2,11 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-import { memo, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
+import { cmd } from '../../lib/commands';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 import { useTranslatedContent } from '../ContentTranslationProvider';
 
@@ -112,9 +113,17 @@ function formatProjectNames(paths: string[]): string[] {
 const EvidenceList = memo(function EvidenceList({
   evidence,
   cardTitle,
+  hiddenExtra,
+  onExpand,
 }: {
   evidence: EvidenceItem['evidence'];
   cardTitle?: string;
+  /**
+   * Citations the LIST transport held back server-side (AD-035) — counted in
+   * the header and the "show more" control; `onExpand` fetches them.
+   */
+  hiddenExtra: number;
+  onExpand?: () => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -123,15 +132,15 @@ const EvidenceList = memo(function EvidenceList({
     ? evidence.filter(e => e.title.toLowerCase() !== cardTitle.toLowerCase())
     : evidence;
 
-  if (filtered.length === 0) return null;
+  if (filtered.length === 0 && hiddenExtra === 0) return null;
 
   const shown = expanded ? filtered : filtered.slice(0, EVIDENCE_COLLAPSE_THRESHOLD);
-  const canCollapse = filtered.length > EVIDENCE_COLLAPSE_THRESHOLD;
+  const canCollapse = filtered.length > EVIDENCE_COLLAPSE_THRESHOLD || hiddenExtra > 0;
 
   return (
     <div className="mt-3 pt-3 border-t border-border/50">
       <h4 className="text-[10px] font-medium text-text-muted uppercase tracking-wider mb-2">
-        {t('preemption.evidence')} ({evidence.length})
+        {t('preemption.evidence')} ({evidence.length + hiddenExtra})
       </h4>
       <ul className="space-y-1.5">
         {shown.map((e, i) => (
@@ -166,12 +175,26 @@ const EvidenceList = memo(function EvidenceList({
       {canCollapse && (
         <button
           type="button"
-          onClick={() => { setExpanded(v => !v); }}
+          onClick={() => {
+            if (expanded) {
+              setExpanded(false);
+              return;
+            }
+            // Lazy detail fetch (AD-035): the list shipped only the rendered
+            // rows; the rest hydrate from get_preemption_item_detail. On a
+            // fetch failure the embedded rows still expand.
+            void (async () => {
+              try { await onExpand?.(); } catch { /* keep embedded rows */ }
+              setExpanded(true);
+            })();
+          }}
           className="mt-2 text-[11px] text-text-muted hover:text-text-secondary transition-colors"
         >
           {expanded
             ? t('preemption.evidence.showLess')
-            : t('preemption.evidence.showMore', { count: filtered.length - EVIDENCE_COLLAPSE_THRESHOLD })}
+            : t('preemption.evidence.showMore', {
+                count: Math.max(filtered.length - EVIDENCE_COLLAPSE_THRESHOLD, 0) + hiddenExtra,
+              })}
         </button>
       )}
     </div>
@@ -251,6 +274,26 @@ export const ItemCard = memo(function ItemCard({
   const { t } = useTranslation();
   const { getTranslated, requestTranslation } = useTranslatedContent();
   const [explanationExpanded, setExplanationExpanded] = useState(false);
+  // Lazy hydration (AD-035): the LIST response embeds only what the collapsed
+  // card renders (evidence capped with `evidence_total` recording the real
+  // count, explanation byte-capped, tooltips blanked). The first expansion
+  // fetches the complete item once and renders from it thereafter.
+  const [fullItem, setFullItem] = useState<EvidenceItem | null>(null);
+  const hydratingRef = useRef<Promise<void> | null>(null);
+  const shown = fullItem ?? item;
+  const isListTrimmed = item.evidence_total != null;
+  const evidenceHeldBack = fullItem
+    ? 0
+    : Math.max((item.evidence_total ?? item.evidence.length) - item.evidence.length, 0);
+
+  const hydrate = useCallback((): Promise<void> => {
+    if (fullItem || !isListTrimmed) return Promise.resolve();
+    hydratingRef.current ??= cmd('get_preemption_item_detail', { itemId: item.id })
+      .then(detail => { setFullItem(detail); })
+      .finally(() => { hydratingRef.current = null; });
+    return hydratingRef.current;
+  }, [fullItem, isListTrimmed, item.id]);
+
   const cfg = URGENCY_CONFIG[item.urgency] ?? URGENCY_CONFIG.watch;
   const tier = getTierStyle(item.confidence.provenance);
   const sourceType = kindAsSourceType(item);
@@ -275,8 +318,20 @@ export const ItemCard = memo(function ItemCard({
     requestTranslation(reqs);
   }, [item.id, item.title, item.explanation, item.evidence, requestTranslation]);
 
+  // The hydrated explanation is the FULL text — translate it under its own
+  // key so a cached translation of the transport-capped text can't shadow it.
+  useEffect(() => {
+    if (fullItem?.explanation) {
+      requestTranslation([{ id: `${fullItem.id}:expl:full`, text: fullItem.explanation }]);
+    }
+  }, [fullItem, requestTranslation]);
+
   const displayTitle = getTranslated(item.id, item.title);
-  const explanationText = getTranslated(`${item.id}:expl`, item.explanation);
+  const explanationText = fullItem
+    ? getTranslated(`${fullItem.id}:expl:full`, fullItem.explanation)
+    : getTranslated(`${item.id}:expl`, item.explanation);
+  // A transport-capped explanation always re-expands past the display clamp,
+  // so length alone still decides whether the "more" control renders.
   const needsTruncation = explanationText.length > EXPLANATION_MAX_LENGTH;
   const displayedExplanation = needsTruncation && !explanationExpanded
     ? truncateAt(explanationText, EXPLANATION_MAX_LENGTH)
@@ -335,7 +390,17 @@ export const ItemCard = memo(function ItemCard({
             {needsTruncation && (
               <button
                 type="button"
-                onClick={() => { setExplanationExpanded(v => !v); }}
+                onClick={() => {
+                  if (explanationExpanded) {
+                    setExplanationExpanded(false);
+                    return;
+                  }
+                  // Hydrate first so a transport-capped explanation expands
+                  // to the FULL text, not to the capped tail (AD-035).
+                  void hydrate()
+                    .catch(() => { /* keep the shipped text */ })
+                    .finally(() => { setExplanationExpanded(true); });
+                }}
                 className="ms-1 text-text-muted hover:text-text-secondary underline-offset-2 hover:underline"
               >
                 {explanationExpanded
@@ -346,10 +411,15 @@ export const ItemCard = memo(function ItemCard({
           </p>
         )}
         <AffectedChips item={item} />
-        <EvidenceList evidence={item.evidence.filter(e => e.source !== 'version_context')} cardTitle={item.title} />
-        {item.suggested_actions.length > 0 && (
+        <EvidenceList
+          evidence={shown.evidence.filter(e => e.source !== 'version_context')}
+          cardTitle={item.title}
+          hiddenExtra={evidenceHeldBack}
+          onExpand={hydrate}
+        />
+        {shown.suggested_actions.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
-            {item.suggested_actions.map((action, i) => (
+            {shown.suggested_actions.map((action, i) => (
               <button
                 key={i}
                 type="button"
@@ -369,7 +439,7 @@ export const ItemCard = memo(function ItemCard({
                     const now = Date.now();
                     if (now - lastClickRef.current < 500) return;
                     lastClickRef.current = now;
-                    const url = item.evidence[0]?.url
+                    const url = shown.evidence[0]?.url
                       ?? `https://www.google.com/search?q=${encodeURIComponent(item.title)}`;
                     import('@tauri-apps/plugin-opener')
                       .then(({ openUrl }) => openUrl(url))

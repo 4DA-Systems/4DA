@@ -467,6 +467,7 @@ impl PackageGroup<'_> {
             urgency: self.urgency,
             reversibility: None,
             evidence,
+            evidence_total: None,
             affected_projects: self.projects,
             affected_deps: vec![self.package],
             suggested_actions,

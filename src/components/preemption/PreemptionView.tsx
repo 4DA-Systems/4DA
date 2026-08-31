@@ -2,7 +2,7 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
+import { useEffect, useRef, useCallback, useMemo, useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
@@ -13,145 +13,75 @@ import { PreemptionTierSection } from './PreemptionTierSection';
 import { PreemptionFreeFloorNotice } from './PreemptionFreeFloorNotice';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 
-const DISMISS_STORAGE_KEY = 'preemption_dismissed';
-const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-// The Upgrade Plan is a ranked list that can run to 100+ steps on a large stack.
-// Show the top-ranked steps that matter most; collapse the rest behind a "show
-// more" control so the human surface stays scannable (doctrine: which upgrades
-// MATTER, not an exhaustive wall). The full plan is never suppressed — every
-// step is in the persisted snapshot the `4da plan` CLI / MCP handoff read.
+// The Upgrade Plan is a ranked list that can run to 100+ steps on a large
+// stack. The list transport ships only this many (keep in sync with
+// LIST_PLAN_STEP_CAP in src-tauri/src/evidence/list_transport.rs); the rest
+// are one click away — expanding refetches with `fullPlan`. Nothing is
+// suppressed (every step is in the persisted snapshot the `4da plan` CLI /
+// MCP handoff read).
 const UPGRADE_PLAN_VISIBLE_CAP = 25;
-
-function loadPersistedDismissals(): Set<string> {
-  try {
-    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw) as Array<{ id: string; ts: number }>;
-    const now = Date.now();
-    const valid = parsed.filter(e => now - e.ts < DISMISS_TTL_MS);
-    if (valid.length !== parsed.length) {
-      localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(valid));
-    }
-    return new Set(valid.map(e => e.id));
-  } catch { return new Set(); }
-}
-
-function persistDismissal(id: string) {
-  try {
-    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
-    const parsed: Array<{ id: string; ts: number }> = raw ? JSON.parse(raw) : [];
-    parsed.push({ id, ts: Date.now() });
-    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(parsed));
-  } catch { /* non-fatal */ }
-}
-
-function removeDismissal(id: string) {
-  try {
-    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
-    if (!raw) return;
-    const parsed: Array<{ id: string; ts: number }> = JSON.parse(raw);
-    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(parsed.filter(e => e.id !== id)));
-  } catch { /* non-fatal */ }
-}
 
 const PreemptionView = memo(function PreemptionView() {
   const { t } = useTranslation();
   const isColdStart = useColdStartGate();
   const surfacedRef = useRef(new Set<string>());
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(loadPersistedDismissals);
-  const [lastDismissed, setLastDismissed] = useState<string | null>(null);
-  const [showOtherTargets, setShowOtherTargets] = useState(false);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showOtherTargets, setShowOtherTargets] = useState(false);
 
-  const { feed, loading, error, paywalled } = useAppStore(
+  const { feed, loading, error, paywalled, lastDismissed } = useAppStore(
     useShallow(s => ({
       feed: s.preemptionFeed,
       loading: s.preemptionLoading,
       error: s.preemptionError,
       paywalled: s.preemptionPaywalled,
+      lastDismissed: s.preemptionLastDismissed,
     })),
   );
   const loadPreemption = useAppStore(s => s.loadPreemption);
+  const dismissPreemptionItem = useAppStore(s => s.dismissPreemptionItem);
+  const undoPreemptionDismissal = useAppStore(s => s.undoPreemptionDismissal);
+  const clearPreemptionUndo = useAppStore(s => s.clearPreemptionUndo);
+  const expandPreemptionPlan = useAppStore(s => s.expandPreemptionPlan);
 
   useEffect(() => {
     void loadPreemption();
   }, [loadPreemption]);
 
   const handleDismiss = useCallback((id: string) => {
-    setDismissedIds(prev => new Set(prev).add(id));
-    persistDismissal(id);
-    setLastDismissed(id);
+    // Persist + refetch: the backend re-applies THE visibility filter, so the
+    // card and the header counts move in the same response (AD-035).
+    void dismissPreemptionItem(id);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    undoTimerRef.current = setTimeout(() => setLastDismissed(null), 8000);
-  }, []);
+    undoTimerRef.current = setTimeout(() => clearPreemptionUndo(), 8000);
+  }, [dismissPreemptionItem, clearPreemptionUndo]);
 
   const handleUndo = useCallback(() => {
-    if (!lastDismissed) return;
-    setDismissedIds(prev => {
-      const next = new Set(prev);
-      next.delete(lastDismissed);
-      return next;
-    });
-    removeDismissal(lastDismissed);
-    setLastDismissed(null);
+    void undoPreemptionDismissal();
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-  }, [lastDismissed]);
+  }, [undoPreemptionDismissal]);
 
-  const { planItems, verifiedItems, assessedItems, developingItems, otherTargetItems, criticalCount, highCount } = useMemo(() => {
-    const visible = (feed?.items ?? [])
-      .filter(item => !dismissedIds.has(item.id))
+  // Grouping ONLY — the backend already applied the one visibility filter
+  // (dismissals, plan-covered regrouping) and computed the matching counts
+  // (AD-035). Every item received here is rendered in exactly one section;
+  // filtering or re-counting client-side would recreate the count drift the
+  // 2026-08-31 audit caught (header 12/41/120 vs payload 15/67/149).
+  const { planItems, verifiedItems, assessedItems, developingItems, otherTargetItems } = useMemo(() => {
+    const sorted = (feed?.items ?? [])
       .slice()
       .sort(
         (a, b) => URGENCY_ORDER.indexOf(a.urgency) - URGENCY_ORDER.indexOf(b.urgency),
       );
-
-    // Phase 1 dependency intelligence: ranked "Upgrade Plan" steps (Signal tier;
-    // the free floor never contains them). Rendered as their own section above
-    // the tiers. The stable urgency sort preserves the backend's within-urgency
-    // ranking (fixable-now first, widest blast radius first).
-    const plan: EvidenceItem[] = visible.filter(item => item.lens_hints.upgrade_plan);
-    // A package represented by a plan step must not ALSO appear as its
-    // per-package advisory alert in the verified tier below — same facts, two
-    // cards (the plan step carries the same advisory citations plus the action
-    // framing). Regrouped, not suppressed: free tier has no plan items and is
-    // untouched, and non-verified/other-target items never match this rule.
-    const planPackages = new Set(
-      plan.flatMap(item => item.affected_deps.map(dep => dep.toLowerCase())),
-    );
-
+    const plan: EvidenceItem[] = [];
     const verified: EvidenceItem[] = [];
     const assessed: EvidenceItem[] = [];
     const developing: EvidenceItem[] = [];
-    // Phase 2c: advisories relevant only to a build target the user does not
-    // build on the host are pulled out of the main tiers into a collapsed
-    // "other build targets" group — surfaced, de-prioritised, never hidden.
     const otherTarget: EvidenceItem[] = [];
-    // Count urgencies from the VISIBLE (post-dismissal) set, not feed.*_count from the
-    // backend — otherwise dismissing the only critical leaves the bar reading "1 critical"
-    // over an empty list (the count must match the cards beneath it). Regrouped
-    // duplicates are skipped BEFORE counting for the same reason.
-    let critical = 0;
-    let high = 0;
-    for (const item of visible) {
+    for (const item of sorted) {
       if (item.lens_hints.upgrade_plan) {
-        if (item.urgency === 'critical') critical += 1;
-        else if (item.urgency === 'high') high += 1;
-        continue; // already in `plan`
-      }
-      if (item.lens_hints.other_build_target) {
+        plan.push(item);
+      } else if (item.lens_hints.other_build_target) {
         otherTarget.push(item);
-        continue;
-      }
-      const coveredByPlan =
-        planPackages.size > 0 &&
-        item.confidence.provenance === 'osv_verified' &&
-        item.affected_deps.length > 0 &&
-        item.affected_deps.every(dep => planPackages.has(dep.toLowerCase()));
-      if (coveredByPlan) continue;
-      if (item.urgency === 'critical') critical += 1;
-      else if (item.urgency === 'high') high += 1;
-      if (item.confidence.provenance === 'osv_verified') {
+      } else if (item.confidence.provenance === 'osv_verified') {
         verified.push(item);
       } else if (item.confidence.provenance === 'llm_assessed') {
         assessed.push(item);
@@ -165,14 +95,21 @@ const PreemptionView = memo(function PreemptionView() {
       assessedItems: assessed,
       developingItems: developing,
       otherTargetItems: otherTarget,
-      criticalCount: critical,
-      highCount: high,
     };
-  }, [feed, dismissedIds]);
+  }, [feed]);
 
-  const totalVisible =
-    planItems.length +
-    verifiedItems.length + assessedItems.length + developingItems.length + otherTargetItems.length;
+  // Counts come from the feed verbatim — same filter, same numbers as the
+  // cards below (the backend excludes other-build-target rows from the
+  // critical/high tallies, exactly as this bar always displayed them).
+  const criticalCount = feed?.critical_count ?? 0;
+  const highCount = feed?.high_count ?? 0;
+  const totalAlerts = feed?.total ?? 0;
+  // The list transport ships the top-ranked plan steps and holds the
+  // collapsed tail back; `total` still counts it. The difference IS the
+  // held-back step count (pinned by plan_cap_holds_back_the_collapsed_tail
+  // in list_transport_tests.rs).
+  const planHeldBack = feed ? Math.max(0, feed.total - feed.items.length) : 0;
+
   // Free security floor: the backend served Tier 1 (OSV-verified) only.
   // Render the floor normally plus a compact locked-tiers notice — never a
   // full-page paywall over real security data.
@@ -215,7 +152,7 @@ const PreemptionView = memo(function PreemptionView() {
         </div>
       )}
 
-      {feed && totalVisible === 0 && !isColdStart && (
+      {feed && totalAlerts === 0 && !isColdStart && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-3">
             {/* eslint-disable-next-line i18next/no-literal-string */}
@@ -226,7 +163,7 @@ const PreemptionView = memo(function PreemptionView() {
         </div>
       )}
 
-      {feed && totalVisible > 0 && (
+      {feed && totalAlerts > 0 && (
         <>
           <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-bg-secondary border border-border">
             <div className="flex items-center gap-3 text-xs">
@@ -250,7 +187,7 @@ const PreemptionView = memo(function PreemptionView() {
               )}
             </div>
             <span className="ms-auto text-xs text-text-muted tabular-nums">
-              {t('preemption.alert', { count: totalVisible })}
+              {t('preemption.alert', { count: totalAlerts })}
             </span>
           </div>
 
@@ -269,18 +206,22 @@ const PreemptionView = memo(function PreemptionView() {
 
           {/* Phase 1 dependency intelligence: the ranked Upgrade Plan — which
               upgrade matters most, highest impact first. Signal-tier (the free
-              floor never contains plan steps); absent entirely when empty. */}
+              floor never contains plan steps); absent entirely when empty.
+              The collapsed tail beyond the cap lives server-side; expanding
+              refetches the full plan (AD-035). */}
           {planItems.length > 0 && (
             <PreemptionTierSection
               dotColor="#D4AF37"
               borderColor="rgba(212, 175, 55, 0.25)"
               title={t('preemption.upgradePlan.title')}
-              subtitle={t('preemption.upgradePlan.subtitle', { count: planItems.length })}
+              subtitle={t('preemption.upgradePlan.subtitle', { count: planItems.length + planHeldBack })}
               items={planItems}
               surfacedRef={surfacedRef}
               onDismiss={handleDismiss}
               emptyText={t('preemption.upgradePlan.empty')}
               maxVisible={UPGRADE_PLAN_VISIBLE_CAP}
+              hiddenExtra={planHeldBack}
+              onExpand={expandPreemptionPlan}
               showMoreLabel={hidden => t('preemption.evidence.showMore', { count: hidden })}
             />
           )}

@@ -35,6 +35,7 @@ fn good_alert() -> EvidenceItem {
         urgency: Urgency::High,
         reversibility: Some(0.2),
         evidence: vec![base_citation()],
+        evidence_total: None,
         affected_projects: vec!["4da".into()],
         affected_deps: vec!["tokio".into()],
         suggested_actions: vec![base_action()],

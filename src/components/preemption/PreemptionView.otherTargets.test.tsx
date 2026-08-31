@@ -67,7 +67,12 @@ function setFeed(items: ReturnType<typeof item>[]) {
     preemptionLoading: false,
     preemptionError: null,
     preemptionPaywalled: false,
+    preemptionLastDismissed: null,
     loadPreemption: vi.fn(),
+    dismissPreemptionItem: vi.fn(),
+    undoPreemptionDismissal: vi.fn(),
+    clearPreemptionUndo: vi.fn(),
+    expandPreemptionPlan: vi.fn(),
   };
 }
 

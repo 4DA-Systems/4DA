@@ -54,6 +54,7 @@ import type {
 import type { ChannelRender, RenderProvenance, ChannelChangelog, ChannelSourceMatch } from '../types/channels';
 import type { StackProfileSummary, StackDetection } from '../types/stacks';
 import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
+import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceItem';
 import type { BlindSpotTeaser } from '../../src-tauri/bindings/bindings/BlindSpotTeaser';
 import type { BlindSpotAssessment } from '../../src-tauri/bindings/bindings/BlindSpotAssessment';
 import type { CalibrationSprintCard } from '../../src-tauri/bindings/bindings/CalibrationSprintCard';
@@ -463,7 +464,13 @@ interface CommandMap {
   // Signal-gated — free tier receives the OSV-verified floor with
   // feed.tier_scope === 'free_floor'; Signal/trial gets 'full'.
   // get_blind_spot_teaser is free: real counts only, no item detail.
-  get_preemption_alerts: { params: Record<string, never>; result: EvidenceFeed };
+  // AD-035 (2026-08-31): the LIST response is filtered+counted backend-side
+  // from `dismissedIds` (the view's persisted local dismissals) and trimmed
+  // to what the collapsed cards render; `fullPlan` fetches the collapsed
+  // Upgrade Plan tail. get_preemption_item_detail returns ONE item with its
+  // complete evidence/notes/tooltips for the card's lazy expansion.
+  get_preemption_alerts: { params: { dismissedIds: string[]; fullPlan: boolean }; result: EvidenceFeed };
+  get_preemption_item_detail: { params: { itemId: string }; result: EvidenceItem };
   get_blind_spots: { params: Record<string, never>; result: EvidenceFeed };
   get_blind_spot_teaser: { params: Record<string, never>; result: BlindSpotTeaser };
   assess_blind_spots_with_ai: { params: Record<string, never>; result: BlindSpotAssessment };

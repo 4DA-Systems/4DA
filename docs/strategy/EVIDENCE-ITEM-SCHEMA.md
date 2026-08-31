@@ -47,6 +47,15 @@ pub struct EvidenceItem {
     /// Citations backing the claim. Never empty for user-surfaced items.
     pub evidence: Vec<EvidenceCitation>,
 
+    /// Transport metadata (AD-035, LIST responses only): the number of citations
+    /// backing this item BEFORE list-payload trimming. `None` means `evidence` is
+    /// complete (detail responses, stored snapshots, every non-list surface).
+    /// When `Some(n)` and `n > evidence.len()`, the remaining citations are served
+    /// by the item-detail command — set only in a command's response mapping,
+    /// never on the stored item.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_total: Option<usize>,
+
     /// Projects this touches (empty if not project-scoped).
     pub affected_projects: Vec<String>,
 
@@ -347,6 +356,32 @@ Every `EvidenceItem` surfaced anywhere passes these checks (runtime-validated in
 | `precedents` | May be empty (cold-start); must populate after Phase 8 |
 
 Failure of any rule in dev = hard panic with diagnostic. In prod = item dropped with structured log.
+
+Validation runs at MATERIALIZER output — before any transport mapping. The LIST
+transport trim below may then legitimately blank fields validation saw as full.
+
+---
+
+## LIST transport trim (AD-035)
+
+`EvidenceItem` stays the one canonical type on the wire — there is no parallel
+list DTO. But a LIST-returning command (today: `get_preemption_alerts`) maps
+each item through a transport trim in its response mapping (2026-08-31 live
+audit: 149 items × ~2 KB = a 305 KB IPC payload for a screen that renders two
+evidence rows per card):
+
+- `evidence` capped to what the collapsed card renders (plus the
+  `version_context` strip), with `evidence_total` recording the real count;
+- `relevance_note` / action `description`s blanked (the list never renders
+  them); `explanation` byte-capped past the card's collapsed clamp;
+- optional fields (`None`s, `false` lens flags, empty `precedents`) omitted
+  from the JSON entirely via `serde(skip_serializing_if)` + `default`.
+
+The full item is served by the sibling item-detail command
+(`get_preemption_item_detail`) when a card expands. Trimming NEVER mutates the
+stored/cached item, and stored surfaces (the upgrade-plan snapshot, the feed
+cache) always carry complete items with `evidence_total = None`. Rust source:
+`src-tauri/src/evidence/list_transport.rs`.
 
 ---
 

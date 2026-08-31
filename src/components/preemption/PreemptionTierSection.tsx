@@ -29,6 +29,18 @@ interface PreemptionTierSectionProps {
    * e.g. `preemption.evidence.showMore`). Required for the cap to render.
    */
   showMoreLabel?: (hidden: number) => string;
+  /**
+   * Items the LIST transport held back server-side (AD-035): counted in the
+   * expand control and the subtitle, fetched by `onExpand`. The section is
+   * expandable whenever this is non-zero, even if the shipped array fits
+   * under `maxVisible`.
+   */
+  hiddenExtra?: number;
+  /**
+   * Called before expanding when server-held items exist — refetches the
+   * uncapped list (`fullPlan`), which flows back in through `items`.
+   */
+  onExpand?: () => void | Promise<void>;
 }
 
 export const PreemptionTierSection = memo(function PreemptionTierSection({
@@ -42,11 +54,14 @@ export const PreemptionTierSection = memo(function PreemptionTierSection({
   emptyText,
   maxVisible,
   showMoreLabel,
+  hiddenExtra = 0,
+  onExpand,
 }: PreemptionTierSectionProps) {
   const [expanded, setExpanded] = useState(false);
-  const capped = maxVisible !== undefined && !expanded && items.length > maxVisible;
+  const capped =
+    maxVisible !== undefined && !expanded && (items.length > maxVisible || hiddenExtra > 0);
   const visibleItems = capped ? items.slice(0, maxVisible) : items;
-  const hidden = items.length - visibleItems.length;
+  const hidden = items.length - visibleItems.length + (expanded ? 0 : hiddenExtra);
 
   return (
     <section className="mb-4" aria-label={title}>
@@ -64,7 +79,18 @@ export const PreemptionTierSection = memo(function PreemptionTierSection({
             {capped && showMoreLabel && (
               <button
                 type="button"
-                onClick={() => setExpanded(true)}
+                onClick={() => {
+                  if (!onExpand) {
+                    setExpanded(true);
+                    return;
+                  }
+                  // Server-held items (AD-035): fetch the uncapped list, then
+                  // expand — the refetched steps arrive through `items`.
+                  void (async () => {
+                    try { await onExpand(); } catch { /* keep shipped items */ }
+                    setExpanded(true);
+                  })();
+                }}
                 className="w-full text-xs text-text-secondary hover:text-text-primary py-2 border-t border-border transition-colors"
               >
                 {showMoreLabel(hidden)}
