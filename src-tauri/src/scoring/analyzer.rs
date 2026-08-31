@@ -107,13 +107,9 @@ pub(crate) async fn score_items_full(
     );
 
     crate::diagnostics::log_rss("scoring:before_build_context");
-    let context_started = Instant::now();
-    let scoring_ctx = scoring::build_scoring_context_with_timeout(db).await?;
-    info!(
-        target: "4da::analysis",
-        elapsed_ms = context_started.elapsed().as_millis(),
-        "Scoring context build complete"
-    );
+    // elapsed_ms + cache hit/miss logging lives inside the helper now — one
+    // instrumentation point for all 10 call sites instead of ad-hoc timers.
+    let scoring_ctx = scoring::build_scoring_context_with_timeout(db, "score_items_full").await?;
     crate::diagnostics::log_rss("scoring:after_build_context");
     let trend_topics = crate::detect_trend_topics(keep_indices.iter().map(|&i| {
         (

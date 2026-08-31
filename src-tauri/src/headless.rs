@@ -256,22 +256,40 @@ async fn run_drain_to_completion() -> i32 {
 /// a timestamp is a claim that maintenance ran, and it should only be written when it did.
 fn run_cycle_maintenance() {
     match crate::get_database() {
-        Ok(db) => match db.run_scheduled_maintenance() {
-            Ok(()) => {
-                // An unreadable clock skips the write rather than defaulting to 0 —
-                // a zero timestamp reads as "never ran", which is the same lie in the
-                // other direction. Losing one stamp is recoverable; a false one is not.
-                if let Ok(d) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-                    crate::scheduler_state::persist_run(
+        Ok(db) => {
+            let started = Instant::now();
+            match db.run_scheduled_maintenance() {
+                Ok(()) => {
+                    // An unreadable clock skips the write rather than defaulting to 0 —
+                    // a zero timestamp reads as "never ran", which is the same lie in the
+                    // other direction. Losing one stamp is recoverable; a false one is not.
+                    if let Ok(d) =
+                        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                    {
+                        crate::scheduler_state::persist_run(
+                            crate::scheduler_state::jobs::DB_MAINTENANCE,
+                            d.as_secs(),
+                        );
+                    }
+                    crate::scheduler_state::record_outcome(
                         crate::scheduler_state::jobs::DB_MAINTENANCE,
-                        d.as_secs(),
+                        None,
+                        started.elapsed().as_millis() as u64,
+                    );
+                }
+                Err(e) => {
+                    warn!(target: "4da::headless", error = %e, "Post-cycle DB maintenance failed");
+                    // Outcome is recorded WITHOUT a run stamp — the timestamp claims
+                    // the work happened; the outcome records that it was attempted
+                    // and how it failed.
+                    crate::scheduler_state::record_outcome(
+                        crate::scheduler_state::jobs::DB_MAINTENANCE,
+                        Some(&e.to_string()),
+                        started.elapsed().as_millis() as u64,
                     );
                 }
             }
-            Err(e) => {
-                warn!(target: "4da::headless", error = %e, "Post-cycle DB maintenance failed");
-            }
-        },
+        }
         Err(e) => {
             warn!(target: "4da::headless", error = %e, "Post-cycle DB maintenance could not access database");
         }

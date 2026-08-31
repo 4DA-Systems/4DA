@@ -184,7 +184,7 @@ pub(crate) async fn backfill_unscored_cycle(chunk_size: usize) -> Result<Backfil
     }
 
     // Same scoring context + options as the real pipeline (minus LLM rerank).
-    let ctx = scoring::build_scoring_context_with_timeout(db).await?;
+    let ctx = scoring::build_scoring_context_with_timeout(db, "backfill_unscored").await?;
     let trend_topics = crate::detect_trend_topics(
         items
             .iter()
@@ -441,7 +441,7 @@ pub(crate) async fn drain_stale_scores_cycle(chunk_size: usize) -> Result<Backfi
         });
     }
 
-    let ctx = scoring::build_scoring_context_with_timeout(db).await?;
+    let ctx = scoring::build_scoring_context_with_timeout(db, "drain_stale_scores").await?;
     let trend_topics = crate::detect_trend_topics(
         items
             .iter()
