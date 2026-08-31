@@ -19,11 +19,16 @@ vi.mock('../../hooks/use-license', () => ({
   useLicense: () => ({ isPro: mockIsPro, trialStatus: null, expired: false, daysRemaining: 30 }),
 }));
 
+// AD-035: the panel reads briefVerdicts (the latest briefing's filter
+// verdicts) from the store via useActiveBriefFilteredIds.
+let mockBriefVerdicts: { filtered: Record<number, string>; expiresAtMs: number } | null = null;
+
 vi.mock('../../store', () => ({
   useAppStore: Object.assign(
     vi.fn((selector: (s: Record<string, unknown>) => unknown) => {
       const mockState: Record<string, unknown> = {
         startTrial: vi.fn(),
+        briefVerdicts: mockBriefVerdicts,
       };
       return selector(mockState);
     }),
@@ -55,6 +60,7 @@ describe('SignalsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsPro = true;
+    mockBriefVerdicts = null;
   });
 
   it('renders nothing when there are no results', () => {
@@ -526,5 +532,68 @@ describe('SignalsPanel (free tier)', () => {
     // An empty container also means no upgrade CTA can be shown on emptiness.
     const { container } = render(<SignalsPanel results={[]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  // ---------------------------------------------------------------------------
+  // AD-035: one item, one verdict — the latest briefing's filter verdicts
+  // demote items out of the Key Signals lane while the briefing is fresh.
+  // ---------------------------------------------------------------------------
+  describe('briefing verdict binding (AD-035)', () => {
+    beforeEach(() => {
+      // This block sits inside the free-tier describe (mockIsPro = false);
+      // the verdict-binding assertions read Pro-tier signal rows.
+      mockIsPro = true;
+    });
+
+    it('demotes a Key Signal the briefing filtered and shows the suppressed count', () => {
+      // The live-audit contradiction: the briefing filtered an item as
+      // self-promotion while the panel promoted it as an ALERT.
+      mockBriefVerdicts = {
+        filtered: { 1: 'self-promotional' },
+        expiresAtMs: Date.now() + 60_000,
+      };
+      render(
+        <SignalsPanel
+          results={[
+            makeSignalItem({ id: 1, signal_action: 'Promoted self-promo action' }),
+            makeSignalItem({ id: 2, signal_action: 'Legit alert action' }),
+          ]}
+        />,
+      );
+      expect(screen.queryByText('Promoted self-promo action')).not.toBeInTheDocument();
+      expect(screen.getByText('Legit alert action')).toBeInTheDocument();
+      // Suppression is observable: the header carries a count.
+      expect(screen.getByTestId('brief-suppressed-count')).toBeInTheDocument();
+    });
+
+    it('never suppresses deterministic security truth (is_critical_alert)', () => {
+      mockBriefVerdicts = {
+        filtered: { 1: 'noise' },
+        expiresAtMs: Date.now() + 60_000,
+      };
+      render(
+        <SignalsPanel
+          results={[
+            makeSignalItem({ id: 1, is_critical_alert: true, signal_action: 'Confirmed CVE action' }),
+          ]}
+        />,
+      );
+      expect(screen.getByText('Confirmed CVE action')).toBeInTheDocument();
+      expect(screen.queryByTestId('brief-suppressed-count')).not.toBeInTheDocument();
+    });
+
+    it('expired verdicts bind nothing — the item renders exactly as today', () => {
+      mockBriefVerdicts = {
+        filtered: { 1: 'noise' },
+        expiresAtMs: Date.now() - 1,
+      };
+      render(
+        <SignalsPanel
+          results={[makeSignalItem({ id: 1, signal_action: 'Back after expiry' })]}
+        />,
+      );
+      expect(screen.getByText('Back after expiry')).toBeInTheDocument();
+      expect(screen.queryByTestId('brief-suppressed-count')).not.toBeInTheDocument();
+    });
   });
 });

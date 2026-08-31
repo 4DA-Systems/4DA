@@ -2,7 +2,7 @@
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import { translateError } from '../utils/error-messages';
-import type { AppStore, BriefingSlice, BriefingState, FreeBriefingData, InstantBriefingSnapshot } from './types';
+import type { AppStore, BriefingSlice, BriefingState, BriefVerdicts, FreeBriefingData, InstantBriefingSnapshot } from './types';
 
 const initialBriefingState: BriefingState = {
   content: null,
@@ -32,7 +32,15 @@ function readPreloadedSnapshot(): InstantBriefingSnapshot | null {
   return snap;
 }
 
-export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> = (set) => ({
+/**
+ * AD-035: timer that clears expired brief verdicts so an idle screen stops
+ * suppressing the moment the freshness window closes (state change forces
+ * the selection memos to recompute). Module-scoped — one active verdict set
+ * exists at a time by construction (latest briefing only).
+ */
+let verdictExpiryTimer: ReturnType<typeof setTimeout> | undefined;
+
+export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> = (set, get) => ({
   aiBriefing: { ...initialBriefingState },
   autoBriefingEnabled: true,
   lastBackgroundResultsAt: null,
@@ -45,6 +53,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
   // Sovereign Cold Boot: hydrate from the pre-mount fetch in main.tsx so the
   // first render already has yesterday's briefing on screen.
   instantSnapshot: readPreloadedSnapshot(),
+  briefVerdicts: null,
 
   setMorningBriefSynthesis: (synthesis) => set({ morningBriefSynthesis: synthesis }),
   setMorningBriefClusters: (clusters) => set({ morningBriefClusters: clusters }),
@@ -82,6 +91,45 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
     }
   },
 
+  loadBriefVerdicts: async () => {
+    // AD-035: fetch the LATEST briefing's filter verdicts. Fail-open in
+    // every branch — a fetch problem must never suppress anything, and an
+    // empty answer clears any verdicts we were holding (a newer verdict-less
+    // briefing unbinds its predecessor).
+    if (verdictExpiryTimer) {
+      clearTimeout(verdictExpiryTimer);
+      verdictExpiryTimer = undefined;
+    }
+    try {
+      const result = await cmd('get_brief_display_verdicts');
+      const entries = result?.filtered ?? [];
+      const expiresInMs = (result?.expires_in_seconds ?? 0) * 1000;
+      if (entries.length === 0 || expiresInMs <= 0) {
+        set({ briefVerdicts: null });
+        return;
+      }
+      const filtered: Record<number, string> = {};
+      for (const entry of entries) {
+        filtered[entry.id] = entry.reason;
+      }
+      const verdicts: BriefVerdicts = { filtered, expiresAtMs: Date.now() + expiresInMs };
+      console.info(
+        `[brief-verdicts] latest briefing binds ${entries.length} filtered item(s) for ${Math.round(expiresInMs / 60_000)}m (demote-only)`,
+        entries.map((e) => e.id),
+      );
+      set({ briefVerdicts: verdicts });
+      // At expiry the verdicts bind nothing — clear so the selection memos
+      // recompute even on an otherwise idle screen.
+      verdictExpiryTimer = setTimeout(() => {
+        verdictExpiryTimer = undefined;
+        console.info('[brief-verdicts] briefing left its freshness window — verdicts expired, nothing suppressed');
+        set({ briefVerdicts: null });
+      }, expiresInMs);
+    } catch {
+      set({ briefVerdicts: null });
+    }
+  },
+
   generateBriefing: async () => {
     set(state => ({
       aiBriefing: { ...state.aiBriefing, loading: true, error: null },
@@ -99,6 +147,11 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
             lastGenerated: new Date(),
           },
         });
+        // AD-035: the generation just recorded (or superseded) the display-
+        // binding verdicts — refresh so the same screen the briefing renders
+        // on already honors them. Fire-and-forget: verdicts are supplementary
+        // and must never delay or fail the briefing itself.
+        void get().loadBriefVerdicts();
       } else {
         set(state => ({
           aiBriefing: {

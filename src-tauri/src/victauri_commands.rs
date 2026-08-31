@@ -136,6 +136,7 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "set_digest_config",
     "generate_ai_briefing",
     "get_latest_briefing",
+    "get_brief_display_verdicts",
     "test_digest_email",
     "set_digest_email_config",
     "generate_free_briefing",

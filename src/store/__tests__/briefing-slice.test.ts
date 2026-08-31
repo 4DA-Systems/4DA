@@ -138,6 +138,22 @@ describe('briefing-slice', () => {
       expect(aiBriefing.content).toBeNull();
     });
 
+    it('refreshes display verdicts after a successful generation (AD-035)', async () => {
+      vi.mocked(invoke)
+        .mockResolvedValueOnce({ success: true, briefing: 'Brief', model: 'm', item_count: 1 })
+        .mockResolvedValueOnce({ filtered: [{ id: 5, reason: 'listicle' }], expires_in_seconds: 600 });
+
+      await useAppStore.getState().generateBriefing();
+
+      await vi.waitFor(() => {
+        expect(useAppStore.getState().briefVerdicts?.filtered).toEqual({ 5: 'listicle' });
+      });
+      expect(vi.mocked(invoke).mock.calls.map((c) => c[0])).toEqual([
+        'generate_ai_briefing',
+        'get_brief_display_verdicts',
+      ]);
+    });
+
     it('sets user-friendly error on invoke rejection', async () => {
       vi.mocked(invoke).mockRejectedValueOnce(new Error('Connection refused'));
 
@@ -175,6 +191,67 @@ describe('briefing-slice', () => {
 
       expect(useAppStore.getState().freeBriefingLoading).toBe(false);
       expect(useAppStore.getState().freeBriefing).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // loadBriefVerdicts (AD-035: one item, one verdict)
+  // ---------------------------------------------------------------------------
+  describe('loadBriefVerdicts', () => {
+    it('stores the latest briefing verdicts keyed by item id', async () => {
+      vi.mocked(invoke).mockResolvedValueOnce({
+        filtered: [
+          { id: 42, reason: 'self-promotional' },
+          { id: 7, reason: 'no stack relevance' },
+        ],
+        expires_in_seconds: 3600,
+      });
+
+      await useAppStore.getState().loadBriefVerdicts();
+
+      const { briefVerdicts } = useAppStore.getState();
+      expect(briefVerdicts).not.toBeNull();
+      expect(briefVerdicts!.filtered).toEqual({ 42: 'self-promotional', 7: 'no stack relevance' });
+      expect(briefVerdicts!.expiresAtMs).toBeGreaterThan(Date.now());
+    });
+
+    it('clears verdicts when the backend serves an empty set (stale/verdict-less briefing)', async () => {
+      useAppStore.setState({
+        briefVerdicts: { filtered: { 1: 'old' }, expiresAtMs: Date.now() + 60_000 },
+      });
+      vi.mocked(invoke).mockResolvedValueOnce({ filtered: [], expires_in_seconds: 0 });
+
+      await useAppStore.getState().loadBriefVerdicts();
+
+      expect(useAppStore.getState().briefVerdicts).toBeNull();
+    });
+
+    it('fails open on fetch errors — nothing binds', async () => {
+      useAppStore.setState({
+        briefVerdicts: { filtered: { 1: 'old' }, expiresAtMs: Date.now() + 60_000 },
+      });
+      vi.mocked(invoke).mockRejectedValueOnce(new Error('backend warming up'));
+
+      await useAppStore.getState().loadBriefVerdicts();
+
+      expect(useAppStore.getState().briefVerdicts).toBeNull();
+    });
+
+    it('expires verdicts when the freshness window closes', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(invoke).mockResolvedValueOnce({
+          filtered: [{ id: 42, reason: 'noise' }],
+          expires_in_seconds: 2,
+        });
+        await useAppStore.getState().loadBriefVerdicts();
+        expect(useAppStore.getState().briefVerdicts).not.toBeNull();
+
+        vi.advanceTimersByTime(2_100);
+        expect(useAppStore.getState().briefVerdicts).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

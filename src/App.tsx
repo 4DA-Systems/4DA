@@ -90,6 +90,7 @@ function App() {
   const setActiveView = useAppStore(s => s.setActiveView);
   const setShowOnlyRelevant = useAppStore(s => s.setShowOnlyRelevant);
   const loadPersistedBriefing = useAppStore(s => s.loadPersistedBriefing);
+  const loadBriefVerdicts = useAppStore(s => s.loadBriefVerdicts);
   const loadSourceHealth = useAppStore(s => s.loadSourceHealth);
   const loadLicense = useAppStore(s => s.loadLicense);
   const loadTrialStatus = useAppStore(s => s.loadTrialStatus);
@@ -247,13 +248,17 @@ function App() {
         }
       });
       void loadSourceHealth();
+      // AD-035: pick up the latest briefing's display-binding verdicts so a
+      // cold boot inside the freshness window already honors them. Fail-open
+      // and tiny; suppression only ever appears once this resolves.
+      void loadBriefVerdicts();
     });
     return () => {
       cancelledLicenseRetry = true;
       if (licenseRetryTimer) clearTimeout(licenseRetryTimer);
       cancelIdle();
     };
-  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus]);
+  }, [loadPersistedBriefing, loadBriefVerdicts, loadSourceHealth, loadLicense, loadTrialStatus]);
 
   // Event listeners: deep-link activation, embedding status, framework/comparison triggers, cached result loading
   useAppListeners({

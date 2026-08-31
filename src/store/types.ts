@@ -121,6 +121,7 @@ export type {
   FreeBriefingData,
   InstantBriefingSnapshot,
   MorningBriefData,
+  BriefVerdicts,
   BriefingSlice,
   ContextDiscoverySlice,
   UserContextSlice,

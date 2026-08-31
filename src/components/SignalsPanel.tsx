@@ -8,6 +8,7 @@ import { SIGNAL_CONFIG, PRIORITY_CONFIG, SIGNAL_LABELS, EVIDENCE_POOLS } from '.
 import { SignalRow } from './signals/SignalRow';
 import type { SignalItem } from './signals/SignalRow';
 import { computeEvidencePool, groundingDeps, type EvidencePool } from './signals/evidence-pool';
+import { isBriefSuppressed, useActiveBriefFilteredIds } from '../hooks/use-brief-verdicts';
 import { normalizeUrlForDedup } from '../utils/normalize-url';
 
 // ============================================================================
@@ -29,9 +30,24 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
   const { isPro } = useLicense();
 
-  const { signals, filtered, typeCounts, priorityCounts, poolCounts, pools } = useMemo(() => {
-    const raw: SignalItem[] = results
-      .filter((r) => r.signal_type && r.signal_priority && r.signal_action)
+  // AD-035: while the latest briefing is fresh, its filter verdicts demote
+  // items out of the Key Signals lane — one item, one verdict. Demote-only:
+  // the item stays in the ordinary feed; is_critical_alert rows are exempt.
+  const briefFilteredIds = useActiveBriefFilteredIds();
+
+  const { signals, filtered, typeCounts, priorityCounts, poolCounts, pools, briefSuppressedCount } = useMemo(() => {
+    const signalEligible = results.filter(
+      (r) => r.signal_type && r.signal_priority && r.signal_action,
+    );
+    const briefSuppressed = signalEligible.filter((r) => isBriefSuppressed(r, briefFilteredIds));
+    if (briefSuppressed.length > 0) {
+      console.info(
+        `[brief-verdicts] ${briefSuppressed.length} Key Signal(s) demoted by the latest briefing's verdicts`,
+        briefSuppressed.map((r) => r.id),
+      );
+    }
+    const raw: SignalItem[] = signalEligible
+      .filter((r) => !isBriefSuppressed(r, briefFilteredIds))
       .map((r) => ({
         id: r.id,
         title: r.title,
@@ -91,8 +107,16 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
       items: filtered.filter((s) => s.pool === config.key),
     }));
 
-    return { signals, filtered, typeCounts, priorityCounts, poolCounts, pools };
-  }, [results, typeFilter, priorityFilter]);
+    return {
+      signals,
+      filtered,
+      typeCounts,
+      priorityCounts,
+      poolCounts,
+      pools,
+      briefSuppressedCount: briefSuppressed.length,
+    };
+  }, [results, typeFilter, priorityFilter, briefFilteredIds]);
 
   // Hide-when-empty: a bordered card whose only content is "no signals" is dead
   // chrome that reads as a broken panel. Same contract as WhatYouWouldHaveMissed —
@@ -127,6 +151,11 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
               {affectsYouCount > 0 && (
                 <span className="ms-2 text-emerald-400">
                   {t('signals.affectsYouCount', { count: affectsYouCount })}
+                </span>
+              )}
+              {briefSuppressedCount > 0 && (
+                <span className="ms-2" data-testid="brief-suppressed-count">
+                  {t('signals.briefFiltered', { count: briefSuppressedCount })}
                 </span>
               )}
             </p>

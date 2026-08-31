@@ -987,6 +987,7 @@ pub fn run() {
             digest_config::set_digest_config,
             digest_commands::generate_ai_briefing,
             digest_commands::get_latest_briefing,
+            digest_commands::get_brief_display_verdicts,
             digest_email::test_digest_email,
             digest_email::set_digest_email_config,
             free_briefing::generate_free_briefing,

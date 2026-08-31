@@ -2324,6 +2324,7 @@
   "blindspots.noCoverage.show_one": "シグナルカバレッジのない依存関係が{{count}}件",
   "blindspots.noCoverage.show_other": "シグナルカバレッジのない依存関係が{{count}}件",
   "signals.affectsYouCount": "🎯 {{count}} affecting you",
+  "signals.briefFiltered": "{{count}} filtered by today's briefing",
   "signals.groundedIn": "Matches your dependencies",
   "signals.poolAffectsYou": "Affects You",
   "signals.poolAffectsYouSub": "Grounded in your dependencies",
