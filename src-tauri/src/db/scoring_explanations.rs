@@ -179,11 +179,9 @@ fn bound_value(
                 bound_value(val, &child_path, max_items, max_bytes, truncated);
             }
         }
-        Value::String(s) => {
-            if s.len() > max_bytes {
-                truncated.insert(path.to_string(), Value::from(s.len()));
-                s.truncate(floor_char_boundary(s, max_bytes));
-            }
+        Value::String(s) if s.len() > max_bytes => {
+            truncated.insert(path.to_string(), Value::from(s.len()));
+            s.truncate(floor_char_boundary(s, max_bytes));
         }
         _ => {}
     }
