@@ -466,6 +466,22 @@
 - **Status:** Final
 - **Code:** `src-tauri/src/brief_verdict_display.rs`, `src-tauri/src/db/brief_rejections.rs::get_latest_brief_verdicts`, `src-tauri/src/digest_commands.rs` (+ `briefing_prompt.rs` extraction), `src/hooks/use-brief-verdicts.ts`, `src/hooks/use-briefing-derived.ts`, `src/components/SignalsPanel.tsx`, `src/components/WhatYouWouldHaveMissed.tsx`, `src/store/briefing-slice.ts`.
 
+### AD-036: The Preemption List Ships What the List Shows
+
+- **Decision:** Two changes to `get_preemption_alerts`, both applied in the command's RESPONSE MAPPING (never to stored items — `EvidenceItem` stays the one canonical type, extended by a single transport field `evidence_total: Option<usize>`):
+  1. **One visibility filter, backend-side.** The filter the view used to run client-side (locally dismissed ids — now passed as `dismissed_ids` — and per-package OSV alerts regrouped under their Upgrade Plan step) moved into `evidence::list_transport::preemption_visible_feed`, and the feed's `total`/`critical_count`/`high_count` are computed from its survivors. The view renders every item it receives and echoes the counts verbatim.
+  2. **LIST transport trim.** Each item is trimmed to what the collapsed card renders: citations capped (plus the `version_context` strip) with `evidence_total` recording the real count; unrendered text (relevance notes, action tooltips) blanked; explanations byte-capped past the display clamp; `None`s/`false` lens flags/empty precedents omitted from the JSON; and the ranked Upgrade Plan tail beyond the UI's collapsed cap (25) held back behind a `full_plan` refetch. A new sibling detail command, `get_preemption_item_detail`, serves the complete item from the same cached feed when a card first expands.
+- **Rationale:** 2026-08-31 live audit, two findings on one command:
+  - `get_preemption_alerts` returned **304,868 characters** in one IPC response — 149 items at ~2 KB each, shipping full evidence arrays (9 rows behind a "Show 7 more" nobody had clicked), 200-char relevance notes the card never renders, four `null`s and six spelled-out `false` flags per item, and ~70 ranked plan steps collapsed behind a client-side "show more" that already had all the bytes. Measured on an audit-shaped fixture (calibrated to 309,882 bytes / 149 items), the mapped response is **56,362 bytes — 5.5x lighter** (`list_transport_tests.rs`, asserted ≥5x and <60 KB).
+  - The header read "12 critical / 41 high / 120 alerts" while the same response said `total=149, critical_count=15, high_count=67`: the view filtered (dismissals, plan-covered duplicates) and the command counted the unfiltered vec. Two filter definitions, permanent drift — the 29-item gap was almost entirely the per-package OSV alerts every plan step regroups.
+- **Considered:**
+  - *A bespoke `ListEvidenceItem` DTO:* Rejected — doctrine rule 1 (one canonical type); a parallel struct is exactly the drift this schema exists to prevent. `evidence_total` + serde skips keep one type whose LIST serialization is a strict subset.
+  - *Moving dismissal STORAGE backend-side:* Rejected for now — dismissals are a per-user UI convenience with a 7-day TTL; the command taking the id set as an argument gets count coherence without a storage migration. Revisit if dismissals ever need to sync across devices.
+  - *Client-side count reconciliation (subtract dismissed/covered from the backend counts in the view):* Rejected — that IS the two-definitions bug with extra steps.
+  - *Paginating the whole list:* Rejected — the tiers render fully and must not flicker in; only the plan tail is both ranked and collapsed, so only it is held back.
+- **Date:** 2026-08-31
+- **Status:** Final
+
 ---
 
 ## Decision Template

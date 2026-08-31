@@ -127,7 +127,8 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
                 </p>
                 {it.evidence.length > 0 && (() => {
                   const topCite = it.evidence[0]!;
-                  const isSecurityTop = topCite.relevance_note.toLowerCase().includes('security');
+                  // relevance_note is optional on the wire since AD-035.
+                  const isSecurityTop = (topCite.relevance_note ?? '').toLowerCase().includes('security');
                   const rest = it.evidence.slice(1, 4);
                   return (
                   <div className="mt-2 space-y-1">

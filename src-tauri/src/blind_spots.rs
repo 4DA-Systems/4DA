@@ -2950,6 +2950,7 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         urgency,
         reversibility: None,
         evidence: vec![citation],
+        evidence_total: None,
         affected_projects: d.projects_using.clone(),
         affected_deps: vec![d.name.clone()],
         suggested_actions: vec![EvidenceAction {
@@ -3087,6 +3088,7 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
         urgency,
         reversibility: None,
         evidence: vec![citation],
+        evidence_total: None,
         affected_projects: Vec::new(),
         affected_deps: vec![t.topic.clone()],
         suggested_actions: vec![EvidenceAction {
@@ -3173,6 +3175,7 @@ fn missed_signal_to_evidence_item(m: &MissedSignal) -> EvidenceItem {
         urgency,
         reversibility: None,
         evidence: vec![citation],
+        evidence_total: None,
         affected_projects: Vec::new(),
         affected_deps: m
             .dep_name
@@ -3211,6 +3214,7 @@ fn recommendation_to_evidence_item(r: &BlindSpotRecommendation, idx: usize) -> E
         urgency: priority_to_urgency(&r.priority),
         reversibility: None,
         evidence: vec![citation],
+        evidence_total: None,
         affected_projects: Vec::new(),
         affected_deps: Vec::new(),
         suggested_actions: vec![EvidenceAction {
@@ -3395,6 +3399,7 @@ fn llm_judged_blind_spot_items() -> Vec<EvidenceItem> {
             urgency,
             reversibility: None,
             evidence: vec![citation],
+            evidence_total: None,
             affected_projects: vec![],
             affected_deps: vec![],
             suggested_actions: vec![EvidenceAction {

@@ -36,7 +36,12 @@ function setState(overrides: Record<string, unknown>) {
     preemptionLoading: false,
     preemptionError: null,
     preemptionPaywalled: false,
+    preemptionLastDismissed: null,
     loadPreemption: vi.fn(),
+    dismissPreemptionItem: vi.fn(),
+    undoPreemptionDismissal: vi.fn(),
+    clearPreemptionUndo: vi.fn(),
+    expandPreemptionPlan: vi.fn(),
     ...overrides,
   };
 }

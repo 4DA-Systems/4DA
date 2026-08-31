@@ -1017,6 +1017,7 @@ pub fn run() {
             source_health_diagnostics::get_source_health,
             knowledge_decay::get_knowledge_gaps,
             preemption::get_preemption_alerts,
+            preemption::get_preemption_item_detail,
             // Content Graph
             content_graph::build_content_graph,
             content_graph::get_graph_node_details,

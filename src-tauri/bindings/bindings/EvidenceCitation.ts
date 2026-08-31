@@ -13,12 +13,14 @@ title: string,
 /**
  * URL if available. `None` for inferred signals (git-history).
  */
-url: string | null, 
+url?: string | null, 
 /**
  * Age in days. 0.0 = today.
  */
 freshness_days: number, 
 /**
- * Why this was selected as evidence. ≤ 200 chars.
+ * Why this was selected as evidence. ≤ 200 chars. May be blanked in
+ * LIST transport (the Preemption list never renders it — AD-035); the
+ * detail path always carries the full note.
  */
-relevance_note: string, };
+relevance_note?: string, };

@@ -40,12 +40,22 @@ urgency: Urgency,
  * 0.0 = fully reversible, 1.0 = irreversible. `None` only when
  * reversibility is conceptually N/A for this kind.
  */
-reversibility: number | null, 
+reversibility?: number | null, 
 /**
  * Citations backing the claim. Non-empty for all user-surfaced kinds
  * except `Retrospective`.
  */
 evidence: Array<EvidenceCitation>, 
+/**
+ * Transport metadata (AD-035, list responses only): the number of
+ * citations backing this item BEFORE list-payload trimming. `None`
+ * means `evidence` is complete (detail responses, stored snapshots,
+ * every non-list surface). When `Some(n)` and `n > evidence.len()`,
+ * the remaining citations are served by the item-detail path — the
+ * stored item is never mutated; this is set only in the command's
+ * response mapping.
+ */
+evidence_total?: number | null, 
 /**
  * Projects this touches (empty if not project-scoped).
  */
@@ -62,12 +72,12 @@ suggested_actions: Array<Action>,
  * Precedents from the Wisdom Graph. Empty allowed on cold-start;
  * should populate after Phase 8.
  */
-precedents: Array<PrecedentRef>, 
+precedents?: Array<PrecedentRef>, 
 /**
  * User-set refutation condition. Only populated for accepted
  * `Decision` items tracked by the commitment-contract watcher.
  */
-refutation_condition: string | null, 
+refutation_condition?: string | null, 
 /**
  * Which lenses this item is a candidate for.
  */
@@ -80,4 +90,4 @@ created_at: bigint,
  * Unix timestamp in millis. `None` for durable items (decisions,
  * retrospectives).
  */
-expires_at: bigint | null, };
+expires_at?: bigint | null, };

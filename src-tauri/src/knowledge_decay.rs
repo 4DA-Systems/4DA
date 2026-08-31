@@ -1263,6 +1263,7 @@ impl KnowledgeGap {
             urgency: gap_severity_to_urgency(&self.gap_severity),
             reversibility: None,
             evidence,
+            evidence_total: None,
             affected_projects: vec![self.project_path.clone()],
             affected_deps: vec![self.dependency.clone()],
             suggested_actions: build_gap_actions(&self.missed_items),

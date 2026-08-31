@@ -4,18 +4,24 @@ import { render, screen, within } from '@testing-library/react';
 import PreemptionView from './PreemptionView';
 
 // Phase 1 dependency intelligence: items with lens_hints.upgrade_plan render in
-// a dedicated "Upgrade Plan" section above the tiers; the per-package OSV alert
-// a plan step represents is REGROUPED out of the verified tier (same facts,
-// richer framing above — never shown twice). The free floor never contains plan
-// steps and is untouched.
+// a dedicated "Upgrade Plan" section above the tiers.
+//
+// AD-035 (2026-08-31): the view GROUPS and nothing else. The visibility filter
+// (local dismissals, plan-covered per-package alerts regrouped away) and the
+// summary counts live in ONE backend definition
+// (src-tauri/src/evidence/list_transport.rs, pinned by its own tests) — the
+// view renders every item the feed contains and echoes the feed's counts
+// verbatim. These tests pin that the view does NOT re-filter or re-count
+// (client-side copies of the filter are exactly what produced the audit's
+// 12/41/120-vs-15/67/149 header drift).
 
 vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
 vi.mock('./PreemptionFreeFloorNotice', () => ({ PreemptionFreeFloorNotice: () => <div /> }));
 
 vi.mock('./PreemptionTierSection', () => ({
-  PreemptionTierSection: ({ title, items }: { title: string; items: Array<{ id: string }> }) => (
-    <div data-testid="tier-section" data-title={title}>
+  PreemptionTierSection: ({ title, items, subtitle, hiddenExtra }: { title: string; items: Array<{ id: string }>; subtitle?: string; hiddenExtra?: number }) => (
+    <div data-testid="tier-section" data-title={title} data-subtitle={subtitle} data-hidden-extra={hiddenExtra ?? 0}>
       {items.map((i) => <span key={i.id} data-testid="tier-item" data-section={title}>{i.id}</span>)}
     </div>
   ),
@@ -71,7 +77,11 @@ function osvAlert(pkg: string, overrides: Record<string, unknown> = {}) {
   return baseItem(`osv-${pkg}`, { affected_deps: [pkg], ...overrides });
 }
 
-function setFeed(items: Array<ReturnType<typeof baseItem>>, tierScope: 'full' | 'free_floor' = 'full') {
+function setFeed(
+  items: Array<ReturnType<typeof baseItem>>,
+  tierScope: 'full' | 'free_floor' = 'full',
+  feedOverrides: Record<string, unknown> = {},
+) {
   mockState = {
     preemptionFeed: {
       items,
@@ -83,11 +93,17 @@ function setFeed(items: Array<ReturnType<typeof baseItem>>, tierScope: 'full' | 
       weak_match_count: null,
       data_freshness: null,
       tier_scope: tierScope,
+      ...feedOverrides,
     },
     preemptionLoading: false,
     preemptionError: null,
     preemptionPaywalled: false,
+    preemptionLastDismissed: null,
     loadPreemption: vi.fn(),
+    dismissPreemptionItem: vi.fn(),
+    undoPreemptionDismissal: vi.fn(),
+    clearPreemptionUndo: vi.fn(),
+    expandPreemptionPlan: vi.fn(),
   };
 }
 
@@ -107,33 +123,45 @@ describe('PreemptionView — Upgrade Plan group (Phase 1 dependency intelligence
     expect(itemsInSection(VERIFIED_TITLE)).toEqual(['osv-axios']);
   });
 
-  it('regroups the per-package OSV alert covered by a plan step (no duplicate card)', () => {
+  it('renders EVERY feed item — the regroup filter lives in the backend now (AD-035)', () => {
+    // Pre-AD-035 the view dropped 'osv-lodash' here as a plan-covered
+    // duplicate, while the backend still counted it — the exact source of the
+    // audit's header-vs-payload count drift. The one filter definition now
+    // runs in get_preemption_alerts (pinned by list_transport_tests.rs);
+    // whatever survives it is rendered, without exception.
     setFeed([planStep('lodash'), osvAlert('lodash'), osvAlert('axios')]);
     render(<PreemptionView />);
 
-    // lodash appears ONCE — as the plan step; its raw alert is regrouped away.
     expect(itemsInSection(PLAN_TITLE)).toEqual(['upgrade-plan:npm:lodash']);
     const verified = itemsInSection(VERIFIED_TITLE);
     expect(verified).toContain('osv-axios');
-    expect(verified).not.toContain('osv-lodash');
+    expect(verified).toContain('osv-lodash');
   });
 
-  it('never regroups non-OSV items or alerts not fully covered by the plan', () => {
-    setFeed([
-      planStep('lodash'),
-      // Covers lodash AND axios — axios has no plan step, so this alert must stay.
-      osvAlert('multi', { affected_deps: ['lodash', 'axios'] }),
-      // Heuristic (non-OSV) item mentioning lodash — never regrouped.
-      baseItem('chain-lodash', {
-        confidence: { value: 0.5, provenance: 'heuristic', sample_size: null },
-        affected_deps: ['lodash'],
-      }),
-    ]);
+  it('echoes the feed counts verbatim — the view never re-counts', () => {
+    // Deliberately inconsistent with the items array: the bar must show the
+    // BACKEND numbers (same filter that chose the items), not a local tally.
+    setFeed([osvAlert('axios', { urgency: 'high' })], 'full', {
+      critical_count: 3,
+      high_count: 7,
+      total: 11,
+    });
+    const { container } = render(<PreemptionView />);
+
+    expect(container.textContent).toContain('3 preemption.urgency.critical');
+    expect(container.textContent).toContain('7 preemption.urgency.high');
+  });
+
+  it('derives the held-back plan tail from total - items.length and wires it to the plan section', () => {
+    // The list transport ships the top plan steps and holds the collapsed
+    // tail server-side; the counts still include it.
+    setFeed([planStep('lodash'), osvAlert('axios')], 'full', { total: 96 });
     render(<PreemptionView />);
 
-    expect(itemsInSection(VERIFIED_TITLE)).toContain('osv-multi');
-    const all = screen.getAllByTestId('tier-item').map((n) => n.textContent);
-    expect(all).toContain('chain-lodash');
+    const plan = screen
+      .getAllByTestId('tier-section')
+      .find((s) => s.getAttribute('data-title') === PLAN_TITLE);
+    expect(plan?.getAttribute('data-hidden-extra')).toBe('94');
   });
 
   it('keeps platform-inactive alerts in the other-targets group even when covered', () => {

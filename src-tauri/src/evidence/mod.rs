@@ -20,6 +20,7 @@
 //! Plan: `docs/strategy/INTELLIGENCE-RECONCILIATION.md`.
 //! Doctrine: `.claude/rules/intelligence-doctrine.md`.
 
+mod list_transport;
 mod liveness;
 mod materializer;
 mod types;
@@ -40,6 +41,11 @@ pub use liveness::{
 // Phase 1 dependency Upgrade Plan brain. `_with_drops` returns the ranked plan
 // plus the validation-drop canary the persisted snapshot records.
 pub use upgrade_plan::build_upgrade_plan_with_drops;
+
+// Preemption LIST transport (AD-036): the single visibility filter (returned
+// counts == rendered cards) plus the list-payload trim, applied only in
+// `get_preemption_alerts`' response mapping.
+pub use list_transport::present_preemption_list;
 
 // These are published for consumption by Phases 3-5 (where existing
 // Preemption / BlindSpots / KnowledgeDecay / SignalChains producers will
