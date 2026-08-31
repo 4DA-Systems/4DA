@@ -109,7 +109,7 @@ image = "0.25"                                    # Image analysis (OCR + file e
 ocrs = { version = "0.12", optional = true }     # Pure Rust OCR engine
 rten = { version = "0.24", optional = true }     # Model loading for ocrs (text-detection.rten, text-recognition.rten)
 # whisper-rs = "0.14"       # DISABLED: Requires vcpkg/system deps - audio.rs stubbed
-zip = "0.6"                                        # ZIP archive extraction (OSV cache + extractors)
+zip = "8.6"                                        # ZIP archive extraction (OSV cache + extractors)
 tar = { version = "0.4.45", optional = true }        # TAR archive extraction
 flate2 = { version = "1.0", optional = true }     # Gzip compression/decompression
 
@@ -141,7 +141,9 @@ victauri-plugin = "0.8"
 
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
-ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
+# v3: the v2 "rand_core" feature is gone (and was unused — every call site is
+# from_bytes / sign / verify; no RNG-backed key generation anywhere).
+ed25519-dalek = "3.0.0"
 tauri-plugin-deep-link = "2.4.7"
 
 # SSO cryptographic verification (enterprise feature)
@@ -154,7 +156,9 @@ x509-cert = { version = "0.3.0-pre", optional = true }
 
 # Team sync — E2E encrypted metadata relay (AD-023)
 chacha20poly1305 = "0.11"
-x25519-dalek = { version = "2", features = ["static_secrets"] }
+# v3: "getrandom" provides StaticSecret::random() (system CSPRNG), replacing
+# v2's random_from_rng(rand 0.8 OsRng) — same randomness source, new API.
+x25519-dalek = { version = "3", features = ["static_secrets", "getrandom"] }
 hkdf = "0.13"
 uuid = { version = "1", features = ["v4", "serde"] }
 rand = "0.8"

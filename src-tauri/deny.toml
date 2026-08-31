@@ -166,6 +166,11 @@ allow = [
     "CC0-1.0",
     "Unlicense",
 
+    # --- bzip2 (BSD-style, attribution-only) ---
+    # libbz2-rs-sys — the pure-Rust libbzip2 used by bzip2 0.6+ (pulled via
+    # zip 8.x). Same permissive terms as the original libbzip2 C library.
+    "bzip2-1.0.6",
+
     # --- Unicode / standards body ---
     "Unicode-3.0",
     "Unicode-DFS-2016",

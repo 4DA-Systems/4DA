@@ -398,10 +398,10 @@ mod tests {
     /// is exactly `MAX_OFFICE_RATIO` — a fixture sitting on its own threshold
     /// flips with any flate2 bump. Callers that mean to exercise the ratio
     /// guard pass level 9 (~1000:1) and assert the margin.
-    fn write_bomb(path: &Path, payload_mb: usize, level: i32) {
+    fn write_bomb(path: &Path, payload_mb: usize, level: i64) {
         let file = fs::File::create(path).expect("create bomb fixture");
         let mut zip = zip::ZipWriter::new(file);
-        let options = zip::write::FileOptions::default()
+        let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
             .compression_level(Some(level));
 
@@ -502,8 +502,8 @@ mod tests {
 
         let file = fs::File::create(&bomb).expect("create fixture");
         let mut zip = zip::ZipWriter::new(file);
-        let options =
-            zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
         for i in 0..=OfficeExtractor::MAX_OFFICE_ENTRIES {
             zip.start_file(format!("part{i}.xml"), options)
                 .expect("start entry");
