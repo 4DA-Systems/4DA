@@ -32,12 +32,20 @@ const FILES = [
 const DEST_ROOT = path.resolve(__dirname, '..', 'src-tauri', 'models', 'embeddings');
 
 // A \r-redrawn progress bar is meaningful on a terminal and is pure noise
-// anywhere else. On a pipe every redraw becomes its OWN log line: the 105 MB
-// model emitted ~7,300 of them, and GitHub Actions then parked the step for a
-// dead-flat 240.00s (measured across 6 merge-group runs, +/-0.01s) draining
-// that burst — against ~5s of actual download. Print a single summary line per
-// file when stdout is not a terminal.
+// anywhere else. On a pipe every redraw becomes its OWN log line — the 105 MB
+// model emitted ~7,300 of them per run. Cosmetic, but CI logs should be
+// readable. Print a single summary line per file when stdout is not a terminal.
 const SHOW_PROGRESS = process.stdout.isTTY === true && !process.env.CI;
+
+// See download-ort.cjs for the full measurement. Node leaves HTTPS keep-alive
+// sockets pooled, and an idle TLS socket holds the event loop open long after
+// the last byte arrives: this script's real work is ~5s and it then sat for a
+// dead-flat 240.00s (+/-0.01s across six CI runs) doing nothing at all. Drop
+// the pooled sockets once the downloads are done so the process can exit.
+function closeIdleConnections() {
+  https.globalAgent.destroy();
+  require('http').globalAgent.destroy();
+}
 
 function downloadBuffer(url) {
   return new Promise((resolve, reject) => {
@@ -174,7 +182,9 @@ async function main() {
   console.log(`\nDone. Embedding model ready for Tauri bundling (${totalMb}MB total).`);
 }
 
-main().catch((err) => {
-  console.error(`\nFATAL: ${err.message}`);
-  process.exit(1);
-});
+main()
+  .then(closeIdleConnections)
+  .catch((err) => {
+    console.error(`\nFATAL: ${err.message}`);
+    process.exit(1);
+  });

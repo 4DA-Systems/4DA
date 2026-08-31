@@ -26,10 +26,25 @@ const { execSync } = require('child_process');
 const ORT_VERSION = '1.24.2';
 const DEST_DIR = path.resolve(__dirname, '..', 'src-tauri', 'models', 'ort');
 
-// See download-embedding-model.cjs for the measurement. Same failure here at
-// smaller scale: ~500 redraw lines for the 7.7 MB archive bought a dead-flat
-// 29.7s stall on top of 0.5s of real download, every run.
+// A \r-redrawn progress bar is meaningful on a terminal and is pure noise
+// anywhere else — on a pipe every redraw becomes its own log line (~500 of them
+// for this archive, ~7,300 for the 105 MB model). Cosmetic, but CI logs should
+// be readable.
 const SHOW_PROGRESS = process.stdout.isTTY === true && !process.env.CI;
+
+// Node pools HTTPS keep-alive sockets, and an idle TLS socket left in the pool
+// holds the event loop open long after the last byte has arrived — the process
+// just sits there until the socket ages out. Measured here: the 70.6 MB archive
+// finished downloading at +5.8s and the process did not exit until +30.1s, with
+// one live TLSSocket (destroyed=false) as the only remaining handle. In CI that
+// showed up as a dead-flat 29.7s (+/-0.08s) tail on this script and 240.00s
+// (+/-0.01s) on download-embedding-model.cjs, six runs running, which reads as
+// a slow download and is nothing of the kind. Drop the pooled sockets once the
+// work is done and the process exits immediately (verified: 6.6s, not 30.1s).
+function closeIdleConnections() {
+  https.globalAgent.destroy();
+  require('http').globalAgent.destroy();
+}
 
 const PLATFORMS = {
   'win32-x64': {
@@ -248,7 +263,9 @@ async function main() {
   console.log('\nDone. ORT libraries ready for Tauri bundling.');
 }
 
-main().catch((err) => {
-  console.error(`\nFATAL: ${err.message}`);
-  process.exit(1);
-});
+main()
+  .then(closeIdleConnections)
+  .catch((err) => {
+    console.error(`\nFATAL: ${err.message}`);
+    process.exit(1);
+  });
