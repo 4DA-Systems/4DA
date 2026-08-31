@@ -36,13 +36,17 @@ vi.mock('../../store', () => ({
 // ---------------------------------------------------------------------------
 import { SignalsPanel } from '../SignalsPanel';
 import { makeItem } from '../../test/factories';
+import type { SourceRelevance } from '../../types';
 
-function makeSignalItem(overrides = {}) {
+function makeSignalItem(overrides: Partial<SourceRelevance> = {}) {
   return makeItem({
     signal_type: 'security_alert',
     signal_priority: 'alert',
     signal_action: 'Update dependency immediately',
     signal_triggers: ['CVE-2025-001'],
+    // Distinct stories get distinct URLs (makeItem's shared default URL would
+    // trip the panel's one-story-one-row dedup for unrelated fixtures).
+    url: `https://example.com/article-${overrides.id ?? 1}`,
     ...overrides,
   });
 }
@@ -345,6 +349,103 @@ describe('SignalsPanel', () => {
     );
 
     expect(screen.getByText(/signals\.similar/)).toBeInTheDocument();
+  });
+
+  // ===========================================================================
+  // One story, one row — URL-level dedup (live audit 2026-08-31)
+  // ===========================================================================
+
+  it('collapses same-URL signals into a single row', () => {
+    // The audit's exact shape: one URL, three ALERT rows (HN, Lobsters, HN),
+    // accumulated across differential cycles under different item ids.
+    const url = 'https://blog.wybxc.cc/blog/rust-gui-survey-2026/';
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({ id: 1, url, source_type: 'hackernews', signal_action: 'Row one' }),
+          makeSignalItem({ id: 2, url: 'https://www.blog.wybxc.cc/blog/rust-gui-survey-2026', source_type: 'lobsters', signal_action: 'Row two' }),
+          makeSignalItem({ id: 3, url, source_type: 'hackernews', signal_action: 'Row three' }),
+        ]}
+      />,
+    );
+    const rows = screen.getAllByText(/^Row (one|two|three)$/);
+    expect(rows).toHaveLength(1);
+    // The header count reflects the deduped list, not the raw row count.
+    expect(screen.getByText('signals.actionable')).toBeInTheDocument();
+  });
+
+  it('keeps the highest-priority copy when the same URL appears twice', () => {
+    const url = 'https://example.com/one-story';
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({ id: 1, url, signal_priority: 'advisory', signal_action: 'Advisory copy' }),
+          makeSignalItem({ id: 2, url, signal_priority: 'critical', signal_action: 'Critical copy' }),
+        ]}
+      />,
+    );
+    expect(screen.getByText('Critical copy')).toBeInTheDocument();
+    expect(screen.queryByText('Advisory copy')).not.toBeInTheDocument();
+  });
+
+  it('never collapses distinct URLs or items without a URL', () => {
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({ id: 1, url: 'https://example.com/a', signal_action: 'Story A' }),
+          makeSignalItem({ id: 2, url: 'https://example.com/b', signal_action: 'Story B' }),
+          makeSignalItem({ id: 3, url: null, signal_action: 'No URL one' }),
+          makeSignalItem({ id: 4, url: null, signal_action: 'No URL two' }),
+        ]}
+      />,
+    );
+    expect(screen.getByText('Story A')).toBeInTheDocument();
+    expect(screen.getByText('Story B')).toBeInTheDocument();
+    expect(screen.getByText('No URL one')).toBeInTheDocument();
+    expect(screen.getByText('No URL two')).toBeInTheDocument();
+  });
+
+  // ===========================================================================
+  // Grounding chip / card copy coherence (live audit 2026-08-31)
+  // ===========================================================================
+
+  it('renders the dependency chip only for grounded (Affects You) signals', () => {
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({
+            id: 1,
+            signal_action: 'Grounded tool signal',
+            score_breakdown: { matched_deps: ['tokio'], strongly_grounded: true } as never,
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText(/tokio/)).toBeInTheDocument();
+  });
+
+  it('does NOT render the dependency chip when matched_deps is only a weak, ungrounded hit', () => {
+    // matched_deps can carry bare subterm hits (e.g. "windows" from
+    // windows-sys) that are NOT real grounding. A card whose copy says
+    // "no confirmed link" must not simultaneously flash a green
+    // "Matches your dependencies" chip.
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({
+            id: 1,
+            signal_action: 'New tool spotted — no confirmed link to your stack',
+            score_breakdown: {
+              matched_deps: ['tokio'],
+              strongly_grounded: false,
+              domain_relevance: 0.15,
+            } as never,
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText('New tool spotted — no confirmed link to your stack')).toBeInTheDocument();
+    expect(screen.queryByText(/🎯/)).not.toBeInTheDocument();
   });
 });
 
