@@ -802,6 +802,16 @@ mod recovery_tests {
 /// Measured on a 296 MB / 15,659-item database: it came back as 0 items.
 pub(crate) const SCHEMA_TOO_NEW_PHRASE: &str = "is newer than this version of 4DA supports";
 
+/// The one phrase that identifies a migration halted by the cascade-wipe guard.
+///
+/// Shared by the producer ([`Database::assert_no_cascade_wipe`]) and the detector
+/// (`state.rs::is_migration_safety_abort`) for exactly the reason
+/// [`SCHEMA_TOO_NEW_PHRASE`] is: the guard exists to stop a migration from deleting the
+/// user's rows, so an unrecognised guard error reaching the corrupt-database fallback
+/// would quarantine the whole corpus to `.db.corrupt` — destroying far more than the
+/// migration would have. The two must not drift apart.
+pub(crate) const CASCADE_WIPE_PHRASE: &str = "would have emptied a table that had rows";
+
 /// How many files of each backup family survive a prune.
 pub(crate) const BACKUP_RETENTION_COUNT: usize = 2;
 
@@ -1134,6 +1144,96 @@ impl Database {
         Ok(())
     }
 
+    /// Quote an identifier read back from `sqlite_master` for interpolation.
+    fn quote_ident(name: &str) -> String {
+        format!("\"{}\"", name.replace('"', "\"\""))
+    }
+
+    /// Row counts for every populated table that is the child of an
+    /// `ON DELETE CASCADE` foreign key.
+    ///
+    /// Read from the live schema rather than a hard-coded list, so a child table added
+    /// years from now is covered the day it is created. Only populated tables are
+    /// recorded: an empty one cannot be emptied, and skipping them keeps the census
+    /// free on a fresh database, where all 117 migrations run back to back.
+    fn cascade_child_census(conn: &Connection) -> SqliteResult<Vec<(String, i64)>> {
+        let tables: Vec<String> = {
+            let mut stmt = conn.prepare(
+                "SELECT DISTINCT m.name
+                   FROM sqlite_master m
+                   JOIN pragma_foreign_key_list(m.name) f
+                  WHERE m.type = 'table'
+                    AND m.name NOT LIKE 'sqlite_%'
+                    AND f.\"on_delete\" = 'CASCADE'
+                  ORDER BY m.name",
+            )?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+            rows.collect::<SqliteResult<Vec<String>>>()?
+        };
+
+        let mut census = Vec::new();
+        for table in tables {
+            let count: i64 = conn.query_row(
+                &format!("SELECT COUNT(*) FROM {}", Self::quote_ident(&table)),
+                [],
+                |row| row.get(0),
+            )?;
+            if count > 0 {
+                census.push((table, count));
+            }
+        }
+        Ok(census)
+    }
+
+    /// Refuse to commit a migration that emptied a table which had rows going in.
+    ///
+    /// This is the trap the guard exists for, and it is invisible by inspection.
+    /// `PRAGMA foreign_keys` **cannot be changed inside a transaction** — SQLite
+    /// silently ignores it and the pragma still reads back as enabled. Migrations here
+    /// run inside `unchecked_transaction`, and the connection enables foreign keys at
+    /// open (`Database::new`). So the standard SQLite table-rebuild recipe — create the
+    /// new table, copy, `DROP` the old one, `RENAME` — cascade-deletes every child row
+    /// the moment the `DROP` lands, and the author cannot switch enforcement off from
+    /// where they are standing. Verified empirically on SQLite 3.49.1: with the pragma
+    /// set *inside* the transaction the children still died, and the pragma still
+    /// reported `1`.
+    ///
+    /// A migration that drops the child table outright is doing so deliberately and is
+    /// left alone; only a table that still exists and is now empty is the silent cascade.
+    fn assert_no_cascade_wipe(
+        conn: &Connection,
+        name: &str,
+        census: &[(String, i64)],
+    ) -> SqliteResult<()> {
+        for (table, before) in census {
+            let Ok(after) = conn.query_row::<i64, _, _>(
+                &format!("SELECT COUNT(*) FROM {}", Self::quote_ident(table)),
+                [],
+                |row| row.get(0),
+            ) else {
+                continue; // table dropped on purpose by this migration
+            };
+
+            if after == 0 {
+                return Err(rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CONSTRAINT),
+                    Some(format!(
+                        "Migration '{name}' {CASCADE_WIPE_PHRASE}: '{table}' held {before} \
+                         row(s) before it ran and none after. The migration was rolled back \
+                         and your data has NOT been modified. '{table}' is the child of an \
+                         ON DELETE CASCADE foreign key. Migrations run inside a transaction, \
+                         and PRAGMA foreign_keys is a no-op there, so rebuilding a parent \
+                         table (create new / copy / DROP old / RENAME) cascade-deletes every \
+                         child row even though the pragma still reads as enabled. To rebuild \
+                         a parent table, disable foreign keys OUTSIDE the transaction, before \
+                         it is opened."
+                    )),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Run a migration step inside a transaction with history recording.
     /// If the migration function fails, the transaction rolls back and schema_version is unchanged.
     pub(crate) fn run_versioned_migration(
@@ -1146,16 +1246,22 @@ impl Database {
         let start = std::time::Instant::now();
         info!(target: "4da::db", "Running {} (schema version {} -> {})", name, from_version, to_version);
 
+        // Taken before the transaction opens so the "before" figures describe the
+        // database as it actually was, independent of anything the migration does.
+        let census = Self::cascade_child_census(conn)?;
+
         // Execute migration inside a transaction
         let result = {
             let tx = conn.unchecked_transaction()?;
-            let res = migration_fn(&tx).and_then(|()| {
-                tx.execute(
-                    "UPDATE schema_version SET version = ?1",
-                    params![to_version],
-                )?;
-                Ok(())
-            });
+            let res = migration_fn(&tx)
+                .and_then(|()| Self::assert_no_cascade_wipe(&tx, name, &census))
+                .and_then(|()| {
+                    tx.execute(
+                        "UPDATE schema_version SET version = ?1",
+                        params![to_version],
+                    )?;
+                    Ok(())
+                });
             match res {
                 Ok(()) => tx.commit(),
                 Err(e) => Err(e), // tx dropped -> auto-rollback
@@ -6041,6 +6147,130 @@ impl Database {
         )?;
         info!(target: "4da::db", "Cleaned up 4 abandoned feature tables");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod cascade_guard_tests {
+    use crate::db::Database;
+    use crate::test_utils::test_db;
+
+    /// A parent rebuild that would silently take its children with it.
+    ///
+    /// This is the exact shape SQLite's own documentation recommends for altering a
+    /// table, and the shape already used in this file for `dependency_edges`.
+    const REBUILD_SOURCE_ITEMS: &str = "
+        CREATE TABLE source_items_new AS SELECT * FROM source_items;
+        DROP TABLE source_items;
+        ALTER TABLE source_items_new RENAME TO source_items;";
+
+    /// Seed one `source_items` row and one `scoring_explanations` row that cascades
+    /// from it, so the guard has something to protect.
+    fn seed_parent_and_child(conn: &rusqlite::Connection) {
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding)
+             VALUES ('test', 'cascade-1', 'title', 'body', 'hash-1', X'00');",
+        )
+        .unwrap();
+        let item_id: i64 = conn
+            .query_row(
+                "SELECT id FROM source_items WHERE source_id='cascade-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        conn.execute(
+            "INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+             VALUES (?1, 1, '{}')",
+            rusqlite::params![item_id],
+        )
+        .unwrap();
+    }
+
+    /// The guard's reason for existing: a parent rebuild must not silently delete the
+    /// child rows, and the rollback must leave them intact.
+    #[test]
+    fn a_parent_rebuild_that_would_wipe_children_is_refused_and_rolled_back() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        seed_parent_and_child(&conn);
+
+        let err = Database::run_versioned_migration(&conn, 900, 901, "wipes children", |c| {
+            c.execute_batch(REBUILD_SOURCE_ITEMS)
+        })
+        .expect_err("a migration that empties scoring_explanations must not commit");
+
+        assert!(
+            err.to_string().contains(super::CASCADE_WIPE_PHRASE),
+            "guard must raise the shared phrase so state.rs can route it away from the \
+             corrupt-db fallback; got: {err}"
+        );
+        // Rolled back: the row is still there, and the version did not advance.
+        let kept: i64 = conn
+            .query_row("SELECT COUNT(*) FROM scoring_explanations", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(kept, 1, "the rollback must leave the child row in place");
+    }
+
+    /// The negative test that keeps the guard honest: an ordinary migration — one that
+    /// adds a column and touches nothing else — must still pass. A guard that blocks
+    /// legitimate migrations bricks every user at their current schema.
+    #[test]
+    fn an_ordinary_migration_is_untouched_by_the_guard() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        seed_parent_and_child(&conn);
+
+        Database::run_versioned_migration(&conn, 900, 901, "adds a column", |c| {
+            c.execute_batch("ALTER TABLE source_items ADD COLUMN guard_probe TEXT")
+        })
+        .expect("a migration that deletes nothing must commit");
+
+        let kept: i64 = conn
+            .query_row("SELECT COUNT(*) FROM scoring_explanations", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(kept, 1);
+    }
+
+    /// A migration that drops the child table outright is deliberate, not a cascade,
+    /// and must be allowed through — otherwise no table could ever be retired.
+    #[test]
+    fn dropping_a_child_table_outright_is_allowed() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        seed_parent_and_child(&conn);
+
+        Database::run_versioned_migration(&conn, 900, 901, "retires a table", |c| {
+            c.execute_batch("DROP TABLE scoring_explanations")
+        })
+        .expect("deliberately retiring a child table must still be possible");
+    }
+
+    /// The census must find children from the live schema, not a hard-coded list, so a
+    /// table added later is covered the day it is created.
+    #[test]
+    fn the_census_reads_cascade_children_from_the_live_schema() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        seed_parent_and_child(&conn);
+
+        let census = Database::cascade_child_census(&conn).unwrap();
+        assert!(
+            census
+                .iter()
+                .any(|(t, n)| t == "scoring_explanations" && *n == 1),
+            "scoring_explanations declares ON DELETE CASCADE and holds a row, so the \
+             census must list it; got {census:?}"
+        );
+        // Empty children are skipped — they cannot be emptied.
+        assert!(
+            census.iter().all(|(_, n)| *n > 0),
+            "the census must only record populated tables; got {census:?}"
+        );
     }
 }
 

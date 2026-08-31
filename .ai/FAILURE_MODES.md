@@ -367,7 +367,11 @@ attempt.
 ---
 
 ## FM: A migration that rebuilds a table silently cascades its children away
-*(observed 2026-08-31 by immune scan; latent — no migration has triggered it yet)*
+*(observed 2026-08-31 by immune scan; latent — no migration has triggered it yet.
+**Guarded 2026-09-01**: the silence is gone. `run_versioned_migration` now takes a
+census of every populated `ON DELETE CASCADE` child before it runs, and refuses to
+commit a migration that emptied one — see "How the guard behaves" below. The advice
+in this entry still stands; the guard is a backstop, not a substitute for it.)*
 
 `run_versioned_migration` (`src-tauri/src/db/migrations.rs`) opens its transaction
 **before** calling `migration_fn`, and **`PRAGMA foreign_keys` is a no-op inside an
@@ -391,6 +395,35 @@ closed would reopen in a single statement.
 4. Add a migration test that seeds child rows, runs the migration, and asserts the
    children survive. A migration test that only checks the parent's shape will pass
    while the cascade quietly empties everything downstream.
+
+**How the guard behaves** (`Database::assert_no_cascade_wipe`): it fires only on the
+unambiguous case — a table that had rows before the migration and has none after,
+while still existing. A migration that *drops* a child table outright is deliberate
+and passes. A migration that deletes some rows passes. On a fresh database every
+child table is empty, so the census is empty and the guard is inert through all 117
+migrations; it can only fire on a database that already holds data, which is exactly
+where the loss would matter.
+
+When it fires, the transaction rolls back and **nothing is modified**. The error
+carries `CASCADE_WIPE_PHRASE`, and `state.rs::is_migration_safety_abort` routes it
+away from the corrupt-database fallback. **That routing is load-bearing, not
+housekeeping**: an unrecognised error out of `Database::new` reaches the fallback at
+`state.rs`, which renames the file to `.db.corrupt` and starts empty — so a guard
+without it would answer "this migration would have deleted 13,109 explanation rows"
+by deleting all 63,897 items instead. Same trap as [`SCHEMA_TOO_NEW_PHRASE`], and it
+is why both constants are shared between producer and detector rather than duplicated.
+
+**Verified empirically** (SQLite 3.49.1), the three cases that make this invisible:
+
+| setup | `PRAGMA foreign_keys` reads | children surviving |
+|---|---|---|
+| FK on, no pragma — today's migrations | `1` | **0 / 2** |
+| FK on, `PRAGMA foreign_keys=OFF` *inside* the tx | `1` | **0 / 2** |
+| `PRAGMA foreign_keys=OFF` *before* the tx | `0` | 2 / 2 |
+
+Row two is the trap: the pragma is accepted, reads back as still enabled, and changes
+nothing. Code that looks correct — and that a reviewer would sign off — still destroys
+the children. Turning enforcement off has to happen before the transaction opens.
 
 **The generalisable rule:** a `DROP TABLE` is not a local edit — it is a delete
 statement for every table that references it. Enumerate the children before you

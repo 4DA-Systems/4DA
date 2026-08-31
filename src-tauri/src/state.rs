@@ -380,6 +380,20 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
                     return Err(format!("{e}"));
                 }
 
+                // A migration the guard stopped is the opposite of a corrupt database:
+                // the transaction rolled back, every row is still there, and the file is
+                // intact. Quarantining it here would delete the whole corpus to avoid
+                // losing part of one table.
+                if is_migration_safety_abort(&e) {
+                    tracing::error!(
+                        target: "4da::db",
+                        error = %e,
+                        "Migration halted by the cascade-wipe guard — refusing to start. \
+                         Your data has NOT been touched."
+                    );
+                    return Err(format!("{e}"));
+                }
+
                 // Last-resort recovery — Database::new() still failed even after
                 // the preemptive pass. Rename the offending file to the legacy
                 // single-slot `.db.corrupt` name and create a fresh DB. This
@@ -462,6 +476,22 @@ fn is_schema_newer_than_binary(e: &rusqlite::Error) -> bool {
     ) && e
         .to_string()
         .contains(crate::db::migrations::SCHEMA_TOO_NEW_PHRASE)
+}
+
+/// Is this the cascade-wipe guard halting a migration to protect the user's rows?
+///
+/// Same shape, and same stakes, as [`is_schema_newer_than_binary`]: keyed on both the
+/// code the guard raises (`SQLITE_CONSTRAINT`) and the phrase it shares with the guard,
+/// so an unrelated constraint violation cannot suppress genuine corruption recovery.
+/// Without this arm the guard is worse than useless — it stops a migration from deleting
+/// some rows, and the fallback below answers by quarantining the entire database.
+fn is_migration_safety_abort(e: &rusqlite::Error) -> bool {
+    matches!(
+        e.sqlite_error_code(),
+        Some(rusqlite::ErrorCode::ConstraintViolation)
+    ) && e
+        .to_string()
+        .contains(crate::db::migrations::CASCADE_WIPE_PHRASE)
 }
 
 // ============================================================================
@@ -751,6 +781,44 @@ mod tests {
     fn an_unrelated_type_mismatch_is_not_version_skew() {
         let err = sqlite_failure(rusqlite::ffi::SQLITE_MISMATCH, "datatype mismatch");
         assert!(!is_schema_newer_than_binary(&err));
+    }
+
+    /// The guard stops a migration to save rows; the fallback answers a failed open by
+    /// renaming the file. Without this routing the guard would cost the whole corpus.
+    #[test]
+    fn a_halted_migration_is_not_corruption() {
+        let err = sqlite_failure(
+            rusqlite::ffi::SQLITE_CONSTRAINT,
+            &format!(
+                "Migration 'Phase 118' {}: 'scoring_explanations' held 13109 row(s) \
+                 before it ran and none after.",
+                crate::db::migrations::CASCADE_WIPE_PHRASE
+            ),
+        );
+        assert!(is_migration_safety_abort(&err));
+        // ...and it must not be mistaken for the other special case.
+        assert!(!is_schema_newer_than_binary(&err));
+    }
+
+    /// An ordinary constraint violation during migration is NOT the guard, and must
+    /// still reach the fallback — otherwise a genuinely broken database never heals.
+    #[test]
+    fn an_unrelated_constraint_violation_still_reaches_the_fallback() {
+        let err = sqlite_failure(
+            rusqlite::ffi::SQLITE_CONSTRAINT,
+            "UNIQUE constraint failed: source_items.content_hash",
+        );
+        assert!(!is_migration_safety_abort(&err));
+    }
+
+    /// Real corruption must not be swallowed by the new arm either.
+    #[test]
+    fn genuine_corruption_is_not_a_halted_migration() {
+        let err = sqlite_failure(
+            rusqlite::ffi::SQLITE_CORRUPT,
+            "database disk image is malformed",
+        );
+        assert!(!is_migration_safety_abort(&err));
     }
 
     /// End-to-end: the error the migration guard ACTUALLY produces must be the one the
