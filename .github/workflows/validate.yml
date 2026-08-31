@@ -3,11 +3,21 @@ name: Validate
 on:
   pull_request:
     branches: [main]
+  # Merge-queue entries. The queue builds PR(s)+main on a gh-readonly-queue/
+  # ref and reads the SAME required context ("Validate Success") from it —
+  # without this trigger the queue would wait forever on a check that never
+  # runs, and nothing could merge. On merge_group the path detector skips
+  # (it is PR-only), so every heavy leg carries an explicit merge_group
+  # clause and the FULL suite runs: the queue is the last gate before main,
+  # and a batch may combine PRs whose union touches everything.
+  merge_group: {}
   workflow_dispatch: {}
 
-# Cancel superseded runs on the same ref. This workflow is PR-only, so a new
-# push to a PR makes the in-flight run moot — cancelling it frees the shared
-# self-hosted runner immediately instead of queueing redundant work behind it.
+# Cancel superseded runs on the same ref. A new push to a PR makes the
+# in-flight run moot — cancelling it frees the shared self-hosted runner
+# immediately instead of queueing redundant work behind it. merge_group refs
+# are unique per queue entry, so queue runs never cancel each other here
+# (GitHub retires superseded queue entries itself).
 concurrency:
   group: validate-${{ github.ref }}
   cancel-in-progress: true
@@ -144,7 +154,7 @@ jobs:
     # rather than passing with nothing run. It deliberately does NOT trigger the
     # Rust matrix or MCP legs; those are 30-minute builds and an unrecognised
     # path is far more likely to be JS/config than Rust.
-    if: ${{ !cancelled() && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.workflows == 'true' || needs.changes.outputs.uncovered == 'true' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.workflows == 'true' || needs.changes.outputs.uncovered == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') }}
     runs-on: [self-hosted, windows, 4da]
     timeout-minutes: 30
     defaults:
@@ -257,7 +267,7 @@ jobs:
     needs: changes
     # See the `!cancelled()` note on the frontend job — without it the
     # workflow_dispatch clause is unreachable.
-    if: ${{ !cancelled() && (needs.changes.outputs.mcp == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.mcp == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') }}
     runs-on: [self-hosted, windows, 4da]
     timeout-minutes: 15
     defaults:
@@ -296,7 +306,7 @@ jobs:
     needs: changes
     # See the `!cancelled()` note on the frontend job — without it the
     # workflow_dispatch clause is unreachable.
-    if: ${{ !cancelled() && (needs.changes.outputs.relay == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.relay == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -602,7 +612,7 @@ jobs:
     needs: changes
     # See the `!cancelled()` note on the frontend job — without it the
     # workflow_dispatch clause is unreachable.
-    if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') }}
     # GitHub-HOSTED ubuntu, NOT the self-hosted box. The self-hosted Windows
     # runner shares 16 cores with the whole fleet's dev/cargo churn, so Rust
     # compiles there crawl under contention (a cold leg false-timed-out at 45m,
