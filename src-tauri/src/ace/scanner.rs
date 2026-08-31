@@ -1992,7 +1992,9 @@ fn compute_git_recency(manifest_path: &Path) -> f32 {
 /// worktree-hosted project silently scored the neutral 0.5. A linked
 /// worktree's gitdir has its own `HEAD` and `logs/HEAD`, which is exactly the
 /// per-worktree activity we want.
-fn resolve_git_dir(git_path: &Path) -> Option<PathBuf> {
+/// (`pub(crate)`: also used by `ace::dormancy` to timestamp a project's last
+/// activity from the same git markers.)
+pub(crate) fn resolve_git_dir(git_path: &Path) -> Option<PathBuf> {
     if git_path.is_dir() {
         return Some(git_path.to_path_buf());
     }

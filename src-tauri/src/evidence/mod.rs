@@ -20,6 +20,7 @@
 //! Plan: `docs/strategy/INTELLIGENCE-RECONCILIATION.md`.
 //! Doctrine: `.claude/rules/intelligence-doctrine.md`.
 
+mod liveness;
 mod materializer;
 mod types;
 mod upgrade_plan;
@@ -27,6 +28,14 @@ mod validate;
 
 #[cfg(test)]
 mod tests;
+
+// Liveness policy (2026-08-31 audit): dormant-project and unverified-
+// provenance urgency caps applied at materializer output. Cap-and-annotate,
+// never drop.
+pub use liveness::{
+    cap_dormant_items, cap_unverified_item_urgency, dormant_projects_note, inactive_label,
+    load_user_dependency_names, provenance_is_unverified, ProjectLiveness,
+};
 
 // Phase 1 dependency Upgrade Plan brain. `_with_drops` returns the ranked plan
 // plus the validation-drop canary the persisted snapshot records.

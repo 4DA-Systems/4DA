@@ -16,6 +16,7 @@ pub mod behavior;
 pub(crate) mod builtin_modules;
 pub mod context;
 pub mod db;
+pub mod dormancy;
 pub mod embedding;
 pub mod git;
 pub(crate) mod platform_cfg;
@@ -299,6 +300,12 @@ impl ACE {
 
         for path in scan_paths {
             if !path.exists() {
+                // A configured root that is not on this machine — deleted,
+                // an unplugged drive, or a path from a different OS left in
+                // settings.json (2026-08-31 live audit: a Linux path sat in a
+                // Windows instance's context_dirs, silently accepted). Named
+                // loudly instead of silently shaping context.
+                warn!(target: "ace::detect", path = %path.display(), "Skipping non-existent context root");
                 continue;
             }
 
@@ -432,6 +439,17 @@ impl ACE {
                                                 .map(|n| n.to_string_lossy().to_string())
                                                 .unwrap_or_else(|| "unknown".to_string())
                                         });
+                                    // last_activity must reflect the PROJECT's
+                                    // activity (git markers / manifest mtimes),
+                                    // not the scan clock: `signal.detected_at`
+                                    // is "now" on every rescan, which stamped
+                                    // even repos dead since February as
+                                    // active-today and blinded the dormancy
+                                    // signal downstream (2026-08-31 audit).
+                                    let last_activity = dormancy::last_activity_from_fs(
+                                        std::path::Path::new(&project_path),
+                                    )
+                                    .unwrap_or_else(|| signal.detected_at.clone());
                                     if let Err(e) = upsert_detected_project(
                                         &conn,
                                         &project_path,
@@ -439,7 +457,7 @@ impl ACE {
                                         &signal.languages,
                                         &signal.frameworks,
                                         &signal.dependencies,
-                                        &signal.detected_at,
+                                        &last_activity,
                                         relevance,
                                     ) {
                                         tracing::warn!(target: "4da::ace", error = %e, path = %project_path, "Failed to upsert detected_project");

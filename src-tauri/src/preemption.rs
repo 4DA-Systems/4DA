@@ -530,6 +530,13 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
         .map(|conn| crate::platform_filter::load_platform_inactive_packages(&conn))
         .unwrap_or_default();
 
+    // Dormancy lookup for explanation labels: a graveyard repo must not read
+    // as active work (2026-08-31 audit: "next@5" nagged as critical from a
+    // repo dead since February, with no hint the repo was dead).
+    let liveness = crate::open_db_connection()
+        .map(|conn| crate::evidence::ProjectLiveness::load(&conn))
+        .unwrap_or_default();
+
     pkg_groups
         .into_values()
         .map(|group| {
@@ -612,7 +619,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             } else {
                 let mut names: Vec<String> = all_projects
                     .iter()
-                    .map(|p| shorten_project_path(p))
+                    .map(|p| dormancy_labeled_project(p, &liveness))
                     .collect();
                 names.sort();
                 names.dedup();
@@ -988,6 +995,12 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
         "Final preemption feed"
     );
 
+    // ─── Liveness + provenance policy (2026-08-31 live audit) ────────────
+    // Applied BEFORE sort/counts so dormant-project and heuristic-guess
+    // alerts can neither lead the feed nor enter the briefing's
+    // Critical/High card pool. Cap-and-annotate — nothing is dropped.
+    apply_liveness_policy(&mut alerts, &conn);
+
     // Sort: Critical first, then High, Medium, Watch. Within same urgency, highest confidence first.
     alerts.sort_by(|a, b| {
         urgency_rank(&a.urgency)
@@ -1022,6 +1035,80 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
 }
 
 // (Tier 3 heuristics and suppression list removed — see get_preemption_feed comment)
+
+/// Feed-level liveness + provenance policy (2026-08-31 live audit). Runs on
+/// the legacy alert vec so every consumer — the Preemption tab, the briefing's
+/// Critical/High card pool, and the EvidenceItem conversion — sees the same
+/// capped urgencies.
+///
+/// 1. Heuristic-tier alerts (signal chains: neither OSV-verified nor
+///    LLM-classified) can never rank Critical/High, and any affected dep they
+///    name must exist in `user_dependencies` — the audit found "environment",
+///    keyword-lifted from an arXiv paper title, shipped as a CRITICAL affected
+///    dep at confidence 0.57 beside 0.95 OSV-verified items.
+/// 2. An alert whose EVERY affected project is dormant (>90 days without git
+///    or manifest activity) is capped at Medium and its explanation says why.
+///    Alerts are never dropped: a real CVE in a dead repo is still true — it
+///    just is not today's emergency.
+fn apply_liveness_policy(alerts: &mut [PreemptionAlert], conn: &rusqlite::Connection) {
+    let user_deps = crate::evidence::load_user_dependency_names(conn);
+    let liveness = crate::evidence::ProjectLiveness::load(conn);
+    let (heuristic_capped, deps_dropped, dormant_capped) =
+        apply_liveness_policy_with(alerts, user_deps.as_ref(), &liveness);
+    if heuristic_capped + deps_dropped + dormant_capped > 0 {
+        info!(
+            target: "4da::preemption",
+            heuristic_capped,
+            ungrounded_deps_dropped = deps_dropped,
+            dormant_capped,
+            "liveness policy adjusted alerts"
+        );
+    }
+}
+
+/// Pure core of [`apply_liveness_policy`] — unit-testable without a database.
+/// `user_deps = None` means the dependency registry was unreadable: the dep
+/// filter is skipped (cannot-verify is not verified-absent) but the urgency
+/// caps still apply.
+fn apply_liveness_policy_with(
+    alerts: &mut [PreemptionAlert],
+    user_deps: Option<&std::collections::HashSet<String>>,
+    liveness: &crate::evidence::ProjectLiveness,
+) -> (usize, usize, usize) {
+    let mut heuristic_capped = 0usize;
+    let mut deps_dropped = 0usize;
+    let mut dormant_capped = 0usize;
+    for alert in alerts.iter_mut() {
+        if crate::evidence::provenance_is_unverified(alert.provenance()) {
+            if let Some(known) = user_deps {
+                let before = alert.affected_dependencies.len();
+                alert
+                    .affected_dependencies
+                    .retain(|dep| known.contains(&dep.to_lowercase()));
+                deps_dropped += before - alert.affected_dependencies.len();
+            }
+            if matches!(alert.urgency, AlertUrgency::Critical | AlertUrgency::High) {
+                alert.urgency = AlertUrgency::Medium;
+                heuristic_capped += 1;
+            }
+        }
+        if matches!(alert.urgency, AlertUrgency::Critical | AlertUrgency::High)
+            && liveness.all_dormant(&alert.affected_projects)
+        {
+            alert.urgency = AlertUrgency::Medium;
+            let note = crate::evidence::dormant_projects_note();
+            if !alert.explanation.contains(&note) {
+                if !alert.explanation.is_empty() && !alert.explanation.ends_with(' ') {
+                    alert.explanation.push(' ');
+                }
+                alert.explanation.push_str(&note);
+            }
+            dormant_capped += 1;
+        }
+    }
+    (heuristic_capped, deps_dropped, dormant_capped)
+}
+
 // ============================================================================
 // Converters
 // ============================================================================
@@ -1189,6 +1276,19 @@ fn shorten_project_path(full_path: &str) -> String {
         segments.join("/")
     } else {
         segments[segments.len() - 2..].join("/")
+    }
+}
+
+/// [`shorten_project_path`] plus an "(inactive Nd)" suffix when the project
+/// is known-dormant — explanations must not present graveyard repos as
+/// active work (2026-08-31 live audit).
+fn dormancy_labeled_project(path: &str, liveness: &crate::evidence::ProjectLiveness) -> String {
+    let label = shorten_project_path(path);
+    match liveness.dormant_days(path) {
+        Some(days) if crate::ace::dormancy::is_dormant_days(days) => {
+            format!("{label} {}", crate::evidence::inactive_label(days))
+        }
+        _ => label,
     }
 }
 
@@ -1496,6 +1596,19 @@ fn preemption_kind_to_canonical(t: &PreemptionType) -> EvidenceKind {
 }
 
 impl PreemptionAlert {
+    /// The confidence provenance this alert carries as an `EvidenceItem`.
+    /// Single source of truth for `to_evidence_item` and the feed-level
+    /// liveness policy — the two must never drift.
+    fn provenance(&self) -> ConfidenceProvenance {
+        if self.osv_verified {
+            ConfidenceProvenance::OsvVerified
+        } else if self.id.starts_with("llm-") || self.source_classified {
+            ConfidenceProvenance::LlmAssessed
+        } else {
+            ConfidenceProvenance::Heuristic
+        }
+    }
+
     /// Convert to the canonical `EvidenceItem` for lens consumption.
     /// Used by `get_preemption_alerts` (command boundary).
     pub fn to_evidence_item(&self) -> EvidenceItem {
@@ -1555,17 +1668,19 @@ impl PreemptionAlert {
             .map(suggested_action_to_canonical)
             .collect();
 
-        EvidenceItem {
+        let mut item = EvidenceItem {
             id: self.id.clone(),
             kind,
             title,
             explanation: self.explanation.clone(),
-            confidence: if self.osv_verified {
-                Confidence::osv_verified(self.confidence.clamp(0.0, 1.0))
-            } else if self.id.starts_with("llm-") || self.source_classified {
-                Confidence::llm_assessed(self.confidence.clamp(0.0, 1.0))
-            } else {
-                Confidence::heuristic(self.confidence.clamp(0.0, 1.0))
+            confidence: match self.provenance() {
+                ConfidenceProvenance::OsvVerified => {
+                    Confidence::osv_verified(self.confidence.clamp(0.0, 1.0))
+                }
+                ConfidenceProvenance::LlmAssessed => {
+                    Confidence::llm_assessed(self.confidence.clamp(0.0, 1.0))
+                }
+                _ => Confidence::heuristic(self.confidence.clamp(0.0, 1.0)),
             },
             urgency: alert_urgency_to_canonical(&self.urgency),
             // Reversibility is not computed by preemption — leave None.
@@ -1585,7 +1700,13 @@ impl PreemptionAlert {
             },
             created_at,
             expires_at: None,
-        }
+        };
+        // Materializer invariant (2026-08-31 live audit): heuristic
+        // provenance can never rank Critical/High, whatever upstream policy
+        // produced. The feed-level pass caps the legacy alert vec; this
+        // guarantees it for every EvidenceItem this module emits.
+        crate::evidence::cap_unverified_item_urgency(&mut item);
+        item
     }
 }
 
@@ -1741,7 +1862,23 @@ fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, Stri
 fn append_upgrade_plan_items(items: &mut Vec<EvidenceItem>) {
     match crate::get_database() {
         Ok(db) => {
-            let (plan, drops) = crate::evidence::build_upgrade_plan_with_drops(db);
+            let (mut plan, drops) = crate::evidence::build_upgrade_plan_with_drops(db);
+            // Dormancy cap (2026-08-31) BEFORE persisting: the upgrade steps
+            // are exactly the cards the live audit caught nagging Critical
+            // about repos dead since February, and the persisted snapshot the
+            // MCP server reads must carry the same capped urgencies the feed
+            // shows.
+            if let Ok(conn) = crate::open_db_connection() {
+                let liveness = crate::evidence::ProjectLiveness::load(&conn);
+                let capped = crate::evidence::cap_dormant_items(&mut plan, &liveness);
+                if capped > 0 {
+                    info!(
+                        target: "4da::preemption",
+                        capped,
+                        "dormant-project upgrade steps capped to Medium"
+                    );
+                }
+            }
             // Persist the plan to kv_store (D-1, DB-as-interface) so the MCP
             // server / CLI can read it out-of-process. Always persist — even an
             // empty plan — so a reader distinguishes "evaluated, nothing to do"
@@ -1783,22 +1920,37 @@ fn compute_preemption_free_floor_feed() -> std::result::Result<EvidenceFeed, Str
 }
 
 fn validated_osv_preemption_items() -> Vec<EvidenceItem> {
-    osv_matches_to_alerts()
+    let mut items: Vec<EvidenceItem> = osv_matches_to_alerts()
         .iter()
         .map(PreemptionAlert::to_evidence_item)
-        .filter(|item| match crate::evidence::validate_item(item) {
-            Ok(()) => true,
-            Err(e) => {
-                warn!(
-                    target: "4da::evidence::validate",
-                    id = %item.id,
-                    error = %e,
-                    "dropped OSV preemption item failing schema validation"
-                );
-                false
-            }
-        })
-        .collect()
+        .collect();
+    // The free floor bypasses `get_preemption_feed`, so the dormancy cap
+    // (2026-08-31) applies here — before validation, so validation sees the
+    // final explanation text.
+    if let Ok(conn) = crate::open_db_connection() {
+        let liveness = crate::evidence::ProjectLiveness::load(&conn);
+        let capped = crate::evidence::cap_dormant_items(&mut items, &liveness);
+        if capped > 0 {
+            info!(
+                target: "4da::preemption",
+                capped,
+                "dormant-project OSV floor items capped to Medium"
+            );
+        }
+    }
+    items.retain(|item| match crate::evidence::validate_item(item) {
+        Ok(()) => true,
+        Err(e) => {
+            warn!(
+                target: "4da::evidence::validate",
+                id = %item.id,
+                error = %e,
+                "dropped OSV preemption item failing schema validation"
+            );
+            false
+        }
+    });
+    items
 }
 
 /// Shared materialization step: produce canonical `EvidenceItem`s from the
@@ -2261,7 +2413,11 @@ mod tests {
 
     #[test]
     fn to_evidence_item_maps_urgency() {
-        let alert = sample_alert();
+        // OSV-verified so the mapping is exercised unclamped — a heuristic
+        // alert is capped at Medium by the materializer invariant (see
+        // `to_evidence_item_caps_heuristic_critical`, 2026-08-31 audit).
+        let mut alert = sample_alert();
+        alert.osv_verified = true;
         let item = alert.to_evidence_item();
         assert_eq!(item.urgency, crate::evidence::Urgency::Critical);
     }
@@ -2796,6 +2952,177 @@ mod tests {
         assert_eq!(
             total_axios, 2,
             "unscoped query returns both Alpha and Beta rows -- ambiguous"
+        );
+    }
+
+    // ─── Liveness + provenance policy (2026-08-31 live audit) ────────
+    // Dormant graveyard projects and heuristic keyword guesses can no
+    // longer rank Critical/High beside OSV-verified items.
+
+    fn liveness_test_alert(id: &str, urgency: AlertUrgency) -> PreemptionAlert {
+        PreemptionAlert {
+            id: id.to_string(),
+            alert_type: PreemptionType::SecurityAdvisory,
+            title: "test alert".to_string(),
+            explanation: "Because a test requires it.".to_string(),
+            evidence: vec![],
+            affected_projects: vec![],
+            affected_dependencies: vec![],
+            urgency,
+            confidence: 0.57,
+            predicted_window: None,
+            suggested_actions: vec![],
+            created_at: chrono::Utc::now().to_rfc3339(),
+            osv_verified: false,
+            source_classified: false,
+            installed_version: None,
+            fixed_version: None,
+            is_direct: None,
+            is_dev: None,
+            platform_inactive: false,
+        }
+    }
+
+    fn empty_liveness() -> crate::evidence::ProjectLiveness {
+        crate::evidence::ProjectLiveness::from_entries(&[])
+    }
+
+    /// THE audit case: a signal-chain alert (heuristic provenance) reached
+    /// CRITICAL at confidence 0.57 and ranked beside 0.95 OSV items.
+    #[test]
+    fn heuristic_alerts_never_rank_critical_or_high() {
+        let mut alerts = vec![
+            liveness_test_alert("chain-1", AlertUrgency::Critical),
+            liveness_test_alert("chain-2", AlertUrgency::High),
+        ];
+        let (capped, _, _) = apply_liveness_policy_with(&mut alerts, None, &empty_liveness());
+        assert_eq!(capped, 2);
+        assert!(matches!(alerts[0].urgency, AlertUrgency::Medium));
+        assert!(matches!(alerts[1].urgency, AlertUrgency::Medium));
+    }
+
+    #[test]
+    fn osv_and_llm_alerts_keep_their_urgency() {
+        let mut osv = liveness_test_alert("osv-pkg-x-npm", AlertUrgency::Critical);
+        osv.osv_verified = true;
+        let llm = liveness_test_alert("llm-42", AlertUrgency::Medium);
+        let mut alerts = vec![osv, llm];
+        let (capped, _, _) = apply_liveness_policy_with(&mut alerts, None, &empty_liveness());
+        assert_eq!(capped, 0);
+        assert!(matches!(alerts[0].urgency, AlertUrgency::Critical));
+        assert!(matches!(alerts[1].urgency, AlertUrgency::Medium));
+        // And the provenance derivation the policy keys on:
+        assert_eq!(alerts[0].provenance(), ConfidenceProvenance::OsvVerified);
+        assert_eq!(alerts[1].provenance(), ConfidenceProvenance::LlmAssessed);
+    }
+
+    /// The 'environment' kill: a heuristically extracted dep name counts as
+    /// an affected_dep ONLY if it exists in user_dependencies.
+    #[test]
+    fn heuristic_affected_deps_must_exist_in_user_dependencies() {
+        let mut alert = liveness_test_alert("chain-env", AlertUrgency::Critical);
+        alert.affected_dependencies = vec!["environment".to_string(), "Tokio".to_string()];
+        let known: std::collections::HashSet<String> = ["tokio".to_string()].into_iter().collect();
+        let mut alerts = vec![alert];
+        let (_, dropped, _) =
+            apply_liveness_policy_with(&mut alerts, Some(&known), &empty_liveness());
+        assert_eq!(dropped, 1, "'environment' is not an installed dependency");
+        assert_eq!(
+            alerts[0].affected_dependencies,
+            vec!["Tokio".to_string()],
+            "a real installed dep survives (case-insensitively)"
+        );
+    }
+
+    /// Cannot-verify is not verified-absent: with the dep registry unreadable
+    /// the filter is skipped, but the urgency cap still applies.
+    #[test]
+    fn unreadable_dep_registry_skips_the_dep_filter_not_the_cap() {
+        let mut alert = liveness_test_alert("chain-env", AlertUrgency::Critical);
+        alert.affected_dependencies = vec!["environment".to_string()];
+        let mut alerts = vec![alert];
+        let (capped, dropped, _) = apply_liveness_policy_with(&mut alerts, None, &empty_liveness());
+        assert_eq!(dropped, 0);
+        assert_eq!(capped, 1);
+        assert_eq!(alerts[0].affected_dependencies.len(), 1);
+    }
+
+    /// An OSV-verified critical whose EVERY affected project is dormant is
+    /// capped to Medium and annotated — never dropped.
+    #[test]
+    fn all_dormant_projects_cap_and_annotate() {
+        let mut alert = liveness_test_alert("osv-pkg-next-npm", AlertUrgency::Critical);
+        alert.osv_verified = true;
+        alert.affected_projects = vec![
+            r"C:\Users\Dev\Documents\kairos-mvp".to_string(),
+            r"C:\Users\Dev\Documents\old-site".to_string(),
+        ];
+        let liveness = crate::evidence::ProjectLiveness::from_entries(&[
+            (r"c:/users/dev/documents/kairos-mvp", 190),
+            (r"c:/users/dev/documents/old-site", 300),
+        ]);
+        let mut alerts = vec![alert];
+        let (_, _, dormant_capped) = apply_liveness_policy_with(&mut alerts, None, &liveness);
+        assert_eq!(dormant_capped, 1);
+        assert!(matches!(alerts[0].urgency, AlertUrgency::Medium));
+        assert!(
+            alerts[0]
+                .explanation
+                .contains(&crate::evidence::dormant_projects_note()),
+            "explanation must carry the dormancy note: {}",
+            alerts[0].explanation
+        );
+    }
+
+    /// One active (or unknown) project keeps the alert fully urgent.
+    #[test]
+    fn one_active_project_keeps_critical() {
+        let mut alert = liveness_test_alert("osv-pkg-tokio-crates", AlertUrgency::Critical);
+        alert.osv_verified = true;
+        alert.affected_projects = vec!["/proj/dead".to_string(), "/proj/live".to_string()];
+        let liveness = crate::evidence::ProjectLiveness::from_entries(&[
+            ("/proj/dead", 200),
+            ("/proj/live", 2),
+        ]);
+        let mut alerts = vec![alert];
+        let (_, _, dormant_capped) = apply_liveness_policy_with(&mut alerts, None, &liveness);
+        assert_eq!(dormant_capped, 0);
+        assert!(matches!(alerts[0].urgency, AlertUrgency::Critical));
+    }
+
+    /// The materializer invariant holds even if a heuristic alert somehow
+    /// reaches conversion still marked Critical.
+    #[test]
+    fn to_evidence_item_caps_heuristic_critical() {
+        let alert = liveness_test_alert("chain-x", AlertUrgency::Critical);
+        let item = alert.to_evidence_item();
+        assert_eq!(item.confidence.provenance, ConfidenceProvenance::Heuristic);
+        assert_eq!(item.urgency, Urgency::Medium);
+
+        let mut osv = liveness_test_alert("osv-pkg-y-npm", AlertUrgency::Critical);
+        osv.osv_verified = true;
+        let item = osv.to_evidence_item();
+        assert_eq!(item.urgency, Urgency::Critical);
+    }
+
+    /// Dormant project labels carry the inactivity span in explanations.
+    #[test]
+    fn dormancy_labeled_project_annotates_only_known_dormant() {
+        let liveness = crate::evidence::ProjectLiveness::from_entries(&[
+            ("/home/dev/dead-app", 142),
+            ("/home/dev/live-app", 1),
+        ]);
+        assert_eq!(
+            dormancy_labeled_project("/home/dev/dead-app", &liveness),
+            "dev/dead-app (inactive 142 days)"
+        );
+        assert_eq!(
+            dormancy_labeled_project("/home/dev/live-app", &liveness),
+            "dev/live-app"
+        );
+        assert_eq!(
+            dormancy_labeled_project("/home/dev/unknown-app", &liveness),
+            "dev/unknown-app"
         );
     }
 }

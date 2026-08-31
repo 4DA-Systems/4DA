@@ -439,7 +439,13 @@ pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String> {
 
 #[tauri::command]
 pub async fn get_context_dirs() -> Result<Vec<String>> {
-    Ok(crate::get_context_dirs()
+    // AS CONFIGURED, not existence-filtered: this feeds the settings UI, and
+    // a dead entry must stay visible so the user can see it and remove it.
+    // Intelligence consumers go through `crate::get_context_dirs()`, which
+    // skips (and warns about) roots that do not exist on this machine.
+    // (`crate::state::` path: lib.rs's explicit re-export list is owned by a
+    // concurrent worktree right now; the module path is equivalent.)
+    Ok(crate::state::configured_context_dirs()
         .into_iter()
         .map(|p| p.to_string_lossy().to_string())
         .collect())
