@@ -162,7 +162,7 @@ describe('ItemCard — lazy expansion of a list-trimmed item', () => {
   });
 
   it('fetches the full item on "show more" and renders the hydrated rows', async () => {
-    mockCmd.mockResolvedValue(fullItem() as never);
+    mockCmd.mockResolvedValue(fullItem());
     render(<ItemCard item={trimmedItem()} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
 
     expect(screen.queryByText('hydrated row three')).toBeNull();
@@ -200,7 +200,7 @@ describe('ItemCard — lazy expansion of a list-trimmed item', () => {
 
   it('hydrates the full explanation when a transport-capped explanation expands', async () => {
     const longFull = 'B'.repeat(500);
-    mockCmd.mockResolvedValue(makeItem({ explanation: longFull, evidence_total: null }) as never);
+    mockCmd.mockResolvedValue(makeItem({ explanation: longFull, evidence_total: null }));
     const capped = makeItem({
       explanation: `${'B'.repeat(320)}…`,
       evidence: embeddedEvidence,
