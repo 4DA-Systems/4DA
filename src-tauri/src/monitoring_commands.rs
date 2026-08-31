@@ -310,7 +310,9 @@ pub async fn trigger_notification_preview(
         },
     };
 
-    crate::notification_window::show_notification(&app, data);
+    // Explicit user action (the settings preview button) — bypasses the
+    // interruption gate, or previewing during a game would silently show nothing.
+    crate::notification_window::show_notification_now(&app, data);
     Ok(serde_json::json!({ "success": true, "priority": priority }))
 }
 

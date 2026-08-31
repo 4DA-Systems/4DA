@@ -155,7 +155,12 @@ fi
 # TypeScript dead code detection (knip, ~3s) — warning only, does not block
 if [ -n "$STAGED_TS" ]; then
     KNIP_OUT=$(npx knip --no-progress --include files 2>/dev/null || true)
-    KNIP_COUNT=$(echo "$KNIP_OUT" | grep -c "Unused files" 2>/dev/null || echo "0")
+    # `grep -c` already prints 0 on no match AND exits 1, so the old
+    # `|| echo "0"` appended a SECOND zero, making KNIP_COUNT "0\n0". The
+    # comparison below then died with "integer expression expected" and the
+    # check silently never ran. `|| true` swallows the exit status without
+    # adding output.
+    KNIP_COUNT=$(echo "$KNIP_OUT" | grep -c "Unused files" 2>/dev/null || true)
     if [ "$KNIP_COUNT" -gt 0 ]; then
         echo "[WARN] knip detected unused TypeScript files. Run 'npx knip' for details."
     fi

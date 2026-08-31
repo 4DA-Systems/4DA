@@ -272,6 +272,28 @@ pub struct MonitoringConfig {
     /// Default: "custom".
     #[serde(default = "default_notification_style")]
     pub notification_style: String,
+    /// Hold notifications while a fullscreen app, presentation, or the OS's own
+    /// Focus Assist says the user is busy (default: true).
+    ///
+    /// Held surfaces are delivered when the user is available again — this
+    /// defers, it never discards. See `crate::presence`.
+    #[serde(default)]
+    pub respect_focus: Option<bool>,
+    /// Start of quiet hours in HH:MM local time. Both ends must be set for
+    /// quiet hours to apply.
+    #[serde(default)]
+    pub quiet_hours_start: Option<String>,
+    /// End of quiet hours in HH:MM local time. May be earlier than the start,
+    /// which means the window wraps midnight (e.g. 22:00 -> 07:00).
+    #[serde(default)]
+    pub quiet_hours_end: Option<String>,
+    /// Do Not Disturb is on until this RFC3339 instant. `None` means no timed
+    /// DND is active. Persisted so a restart does not cancel it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dnd_until: Option<String>,
+    /// Do Not Disturb is on with no expiry, until the user turns it off.
+    #[serde(default)]
+    pub dnd_indefinite: Option<bool>,
 }
 
 fn default_notification_threshold() -> String {
@@ -296,6 +318,11 @@ impl Default for MonitoringConfig {
             last_briefing_date: None,
             launch_at_startup: None,
             notification_style: default_notification_style(),
+            respect_focus: None, // Defaults to true via unwrap_or(true)
+            quiet_hours_start: None,
+            quiet_hours_end: None,
+            dnd_until: None,
+            dnd_indefinite: None,
         }
     }
 }

@@ -11,7 +11,7 @@ use std::time::Duration;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder},
-    AppHandle, Emitter, Runtime,
+    AppHandle, Emitter, Manager, Runtime,
 };
 use tracing::{info, warn};
 
@@ -137,12 +137,61 @@ impl MonitoringState {
 // System Tray
 // ============================================================================
 
+/// Handle to the tray's Do Not Disturb item, kept so its label can be updated
+/// when DND is toggled from anywhere (tray, settings, or expiry).
+pub struct DndMenuHandle<R: Runtime>(pub parking_lot::Mutex<Option<MenuItem<R>>>);
+
+/// Label for the DND menu item, reflecting the current state.
+fn dnd_menu_label() -> &'static str {
+    if crate::presence::is_do_not_disturb_on() {
+        "Do Not Disturb: ON"
+    } else {
+        "Do Not Disturb"
+    }
+}
+
+/// Tray tooltip, surfacing anything the interruption gate is holding so the
+/// user can see there is something waiting without opening the app.
+fn tray_tooltip() -> String {
+    let held = crate::presence::queue::held_count();
+    if held == 0 {
+        return "4DA — All signal. No feed.".to_string();
+    }
+    let plural = if held == 1 { "" } else { "s" };
+    format!("4DA — {held} update{plural} waiting until you're free")
+}
+
+/// Re-read presence state and update the tray's DND label and tooltip.
+///
+/// Safe to call from anywhere; a no-op when the tray was never created (some
+/// Linux desktops) or the handles are not managed yet.
+pub fn refresh_tray_menu<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(handle) = app.try_state::<DndMenuHandle<R>>() {
+        if let Some(item) = handle.0.lock().as_ref() {
+            if let Err(e) = item.set_text(dnd_menu_label()) {
+                tracing::debug!(target: "4da::tray", error = %e, "Failed to update DND label");
+            }
+        }
+    }
+    if let Some(tray) = app.try_state::<parking_lot::Mutex<Option<TrayIcon<R>>>>() {
+        if let Some(tray) = tray.lock().as_ref() {
+            if let Err(e) = tray.set_tooltip(Some(tray_tooltip())) {
+                tracing::debug!(target: "4da::tray", error = %e, "Failed to update tray tooltip");
+            }
+        }
+    }
+}
+
 /// Set up the system tray with menu
 pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
     // Create menu items
     let show_item = MenuItem::with_id(app, "show", "Show 4DA", true, None::<&str>)?;
     let brief_item =
         MenuItem::with_id(app, "show_brief", "Show today's brief", true, None::<&str>)?;
+    let dnd_item = MenuItem::with_id(app, "toggle_dnd", dnd_menu_label(), true, None::<&str>)?;
+    app.manage(DndMenuHandle(parking_lot::Mutex::new(Some(
+        dnd_item.clone(),
+    ))));
     let analyze_item = MenuItem::with_id(app, "analyze", "Analyze Now", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let monitoring_item = MenuItem::with_id(
@@ -163,6 +212,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
             &brief_item,
             &analyze_item,
             &separator,
+            &dnd_item,
             &monitoring_item,
             &separator2,
             &quit_item,
@@ -177,7 +227,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
                 .clone(),
         )
         .menu(&menu)
-        .tooltip("4DA — All signal. No feed.")
+        .tooltip(tray_tooltip())
         .on_menu_event(move |app, event| {
             match event.id.as_ref() {
                 "show" => {
@@ -196,7 +246,9 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
                     // renders the persisted briefing.
                     match crate::briefing_snapshot::load_snapshot() {
                         Some(snapshot) => {
-                            crate::briefing_window::show_briefing(app, &snapshot.briefing);
+                            // Explicit user action from the tray — bypasses the
+                            // interruption gate on purpose.
+                            crate::briefing_window::show_briefing_now(app, &snapshot.briefing);
                         }
                         None => {
                             if let Some(window) = crate::app_setup::ensure_main_window(app) {
@@ -211,6 +263,26 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
                     if let Err(e) = app.emit("tray-analyze", ()) {
                         tracing::warn!("Failed to emit 'tray-analyze': {e}");
                     }
+                }
+                "toggle_dnd" => {
+                    let turning_off = crate::presence::is_do_not_disturb_on();
+                    let result = if turning_off {
+                        crate::presence::clear_do_not_disturb()
+                    } else {
+                        // Indefinite from the tray: the menu item is a plain
+                        // toggle, and the label makes the state obvious. Timed
+                        // durations live in Settings.
+                        crate::presence::set_do_not_disturb(None)
+                    };
+                    if let Err(e) = result {
+                        warn!(target: "4da::tray", error = %e, "Failed to toggle Do Not Disturb");
+                    }
+                    // Turning DND off is an explicit "I'm back" — release
+                    // anything held rather than waiting out the settle period.
+                    if turning_off && crate::presence::is_available() {
+                        crate::presence::queue::flush(app);
+                    }
+                    refresh_tray_menu(app);
                 }
                 "toggle_monitoring" => {
                     // Emit event to toggle monitoring

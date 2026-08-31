@@ -127,18 +127,34 @@ function analyzeDiff(commitRange) {
   const fileChanges = {};
   let currentFile = null;
 
+  // Line number in the POST-change file of the next line we read. Tracked so an
+  // added line can be located in the file on disk, which is what lets the
+  // unwrap rule tell production code from an inline `#[cfg(test)]` module.
+  let newLineNo = 0;
+
   for (const line of diff.split('\n')) {
     if (line.startsWith('diff --git')) {
-      const match = line.match(/b\/(.+)$/);
-      currentFile = match ? match[1] : null;
+      currentFile = parseDiffGitPath(line);
       if (currentFile && !fileChanges[currentFile]) {
-        fileChanges[currentFile] = { added: 0, removed: 0, addedContent: [] };
+        fileChanges[currentFile] = { added: 0, removed: 0, addedContent: [], addedLines: [] };
       }
+      newLineNo = 0;
+    } else if (line.startsWith('@@')) {
+      // @@ -old[,count] +new[,count] @@
+      const hunk = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)/);
+      newLineNo = hunk ? parseInt(hunk[1], 10) : 0;
     } else if (currentFile && line.startsWith('+') && !line.startsWith('+++')) {
       fileChanges[currentFile].added++;
       fileChanges[currentFile].addedContent.push(line.slice(1));
+      if (newLineNo > 0) {
+        fileChanges[currentFile].addedLines.push({ n: newLineNo, text: line.slice(1) });
+        newLineNo++;
+      }
     } else if (currentFile && line.startsWith('-') && !line.startsWith('---')) {
       fileChanges[currentFile].removed++;
+    } else if (currentFile && newLineNo > 0 && line.startsWith(' ')) {
+      // Context line — present in both versions, so it advances the new file.
+      newLineNo++;
     }
   }
 
@@ -281,7 +297,95 @@ function checkTestCoverage(changedFiles, fileChanges) {
   }
 }
 
+/**
+ * Extract the post-change path from a `diff --git a/<path> b/<path>` header.
+ *
+ * The previous form was `line.match(/b\/(.+)$/)`, which finds the FIRST `b/`
+ * anywhere in the line — and `src-tauri/src/db/migrations.rs` contains one, in
+ * `d[b/]migrations.rs`. That yielded the path
+ * `migrations.rs b/src-tauri/src/db/migrations.rs`, which does not exist on
+ * disk, so every rule that reads the file (including the `#[cfg(test)]`
+ * exclusion) silently fell back to its strictest branch. Real effect: all 13
+ * unwraps in `db/migrations.rs` were reported as production code when every one
+ * of them is inside a `#[cfg(test)] mod tests`.
+ *
+ * Anchoring the match and requiring the SPACE before ` b/` fixes it: a path may
+ * contain `b/`, but the separator is the last ` b/` on the line.
+ */
+function parseDiffGitPath(line) {
+  const match = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+  return match ? match[2] : null;
+}
+
 // --- Rule 2: Error Handling Direction ---
+
+/**
+ * Line ranges (1-based, inclusive) covered by `#[cfg(test)]` items in `source`.
+ *
+ * This rule used to classify test code by FILENAME alone (`*_tests.rs`), which
+ * misses the dominant convention in this repo: an inline `#[cfg(test)] mod
+ * tests` at the bottom of a production module. 383 files use the inline form
+ * against 71 named `*_tests.rs`, so almost every Rust change that added tests
+ * produced a false "unwrap in production code" warning — which trains reviewers
+ * to ignore the rule, and a rule nobody reads protects nothing.
+ *
+ * Brace matching is naive (it does not parse strings or comments), which is
+ * fine here: it is used only to EXCUSE lines, and a miscount ends the range
+ * early, leaving the gate stricter rather than weaker.
+ */
+function cfgTestRanges(source) {
+  const lines = source.split('\n');
+  const ranges = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*#\[cfg\(test\)\]/.test(lines[i])) continue;
+
+    // Find the item's opening brace (usually the next `mod tests {`).
+    let open = i + 1;
+    while (open < lines.length && !lines[open].includes('{')) open++;
+    if (open >= lines.length) break;
+
+    let depth = 0;
+    let end = open;
+    let closed = false;
+    for (; end < lines.length; end++) {
+      for (const ch of lines[end]) {
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+      }
+      if (depth <= 0) {
+        closed = true;
+        break;
+      }
+    }
+
+    ranges.push([i + 1, (closed ? end : lines.length - 1) + 1]);
+    i = closed ? end : lines.length;
+  }
+
+  return ranges;
+}
+
+/** Is 1-based line `n` inside any of `ranges`? */
+function inTestRange(n, ranges) {
+  return n > 0 && ranges.some(([start, end]) => n >= start && n <= end);
+}
+
+/** Read a repo-relative file, or null if it is gone (deleted in this change). */
+function readRepoFile(file) {
+  try {
+    return fs.readFileSync(path.join(ROOT, file), 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/** A real `.unwrap()`, not one sitting in a trailing comment. */
+function isProductionUnwrap(text) {
+  return (
+    /\.unwrap\(\)/.test(text) && !/\/\//.test(text.split('.unwrap()')[0].slice(-10))
+  );
+}
 
 function checkErrorHandling(changedFiles, fileChanges) {
   const RULE = 'Error Handling';
@@ -297,9 +401,26 @@ function checkErrorHandling(changedFiles, fileChanges) {
   const unwrapFiles = [];
 
   for (const [file, changes] of rustFiles) {
-    const unwrapCount = changes.addedContent.filter(line =>
-      /\.unwrap\(\)/.test(line) && !/\/\//.test(line.split('.unwrap()')[0].slice(-10))
-    ).length;
+    const source = readRepoFile(file);
+    const ranges = source ? cfgTestRanges(source) : [];
+    const fileLines = source ? source.split('\n') : [];
+
+    // Prefer line-located additions so inline test modules can be excused.
+    // Fall back to raw text when the hunk header could not be parsed — that
+    // path keeps the old (stricter) behaviour rather than silently excusing.
+    const located = changes.addedLines && changes.addedLines.length > 0;
+    const candidates = located
+      ? changes.addedLines
+      : changes.addedContent.map((text) => ({ n: 0, text }));
+
+    const unwrapCount = candidates.filter(({ n, text }) => {
+      if (!isProductionUnwrap(text)) return false;
+      // Only trust the line number if the file on disk agrees with it; if the
+      // diff drifted, fall through and count the unwrap (stay strict).
+      const agrees = n > 0 && fileLines[n - 1] === text;
+      return !(agrees && inTestRange(n, ranges));
+    }).length;
+
     if (unwrapCount > 0) {
       newUnwraps += unwrapCount;
       unwrapFiles.push({ file, count: unwrapCount });
@@ -584,4 +705,13 @@ function main() {
   }
 }
 
-main();
+module.exports = {
+  cfgTestRanges,
+  inTestRange,
+  isProductionUnwrap,
+  parseDiffGitPath,
+};
+
+if (require.main === module) {
+  main();
+}
