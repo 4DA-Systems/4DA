@@ -99,7 +99,13 @@ jobs:
               - '!package.json'
               - '!pnpm-lock.yaml'
               - '!index.html'
-              - '!vite.config.*'
+              # Mirrors the positive 'frontend' filter below, which is
+              # 'vite*.config.*'. Left as '!vite.config.*' by #604, this list stopped
+              # excluding vitest.config.ts — so that file matched frontend AND
+              # uncovered at once, and 'uncovered' is the signal that exists to reveal
+              # paths NOTHING recognises. A permanent false positive there teaches
+              # people to ignore the one output designed to catch real blind spots.
+              - '!vite*.config.*'
               - '!tsconfig*.json'
               - '!tailwind.config.*'
 
