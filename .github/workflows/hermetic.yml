@@ -91,7 +91,11 @@ jobs:
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'index.html'
-              - 'vite.config.*'
+              # vite*.config.* so 'vitest.config.ts' is covered too — it decides how
+              # every frontend test in this gate executes. Unlike validate.yml this
+              # filter has NO 'uncovered' fail-safe, so a miss here does not degrade to
+              # 'run the generic gate', it SKIPS the fresh clone outright (#603: 19s).
+              - 'vite*.config.*'
               - 'tsconfig*.json'
               - 'scripts/**'
               - '.github/workflows/**'

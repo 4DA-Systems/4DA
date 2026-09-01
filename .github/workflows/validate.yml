@@ -123,7 +123,12 @@ jobs:
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'index.html'
-              - 'vite.config.*'
+              # vite*.config.* — NOT vite.config.*. Both files exist, and
+              # 'vite.config.*' does not match 'vitest.config.ts' (picomatch wants
+              # '.config' immediately after 'vite'). Verified on #603: a PR changing
+              # ONLY vitest.config.ts reported 'Filter frontend = false' and ran this
+              # job solely through the 'uncovered' fail-safe below.
+              - 'vite*.config.*'
               - 'tsconfig*.json'
               - 'tailwind.config.*'
               - 'scripts/**'
