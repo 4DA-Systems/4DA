@@ -95,6 +95,9 @@ enum DrainAction {
 #[derive(Debug, Default)]
 pub(crate) struct DrainSummary {
     pub judged: usize,
+    /// Markers resolved from an already-stored ingest-lane judgment, with no
+    /// LLM call. See the B1 block in `run_drain_with`.
+    pub reused: usize,
     pub demoted: usize,
     pub confirmed: usize,
     pub escalated: usize,
@@ -189,18 +192,7 @@ async fn run_drain_with(
         }
     }
 
-    // Phase B — one cheap batched re-judgment for the oldest workable slice.
-    if llm_limit_reached {
-        summary.skipped = Some("llm_budget_reached");
-        log_summary(db, &summary);
-        return summary;
-    }
-    let Some(provider) = provider else {
-        summary.skipped = Some("no_llm_provider");
-        log_summary(db, &summary);
-        return summary;
-    };
-
+    // Phase B — resolve the oldest workable slice.
     let slice: Vec<&PendingVerdictRow> = backlog
         .iter()
         .filter(|r| {
@@ -216,52 +208,97 @@ async fn run_drain_with(
         return summary;
     }
 
-    let ids: Vec<i64> = slice.iter().map(|r| r.id).collect();
-    let items = match load_items(db, &ids) {
-        Ok(items) => items,
-        Err(e) => {
-            warn!(target: "4da::verdict_drain", error = %e, "Failed to load drain items");
-            log_summary(db, &summary);
-            return summary;
+    // ── B1: reuse before re-buying (free, no budget needed) ─────────────
+    // A pending marker means "a verdict flip was deferred, waiting for a
+    // second judging run". If the INGEST lane has already judged this item
+    // under the current prompt SINCE the flip was deferred, that second run
+    // has happened — buying another LLM read pays twice for one piece of
+    // evidence. Measured 2026-09-01: across 109 items judged by both lanes
+    // the drain changed the call 7 times (6.4%) while consuming 38% of all
+    // judge spend.
+    //
+    // Deliberately ABOVE the budget gate: reuse costs nothing, so the drain
+    // keeps making progress on a day whose cap is already spent — which,
+    // measured the same day, is the last 6.7 hours of every day.
+    let mut relevance_by_id: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
+    let mut needs_llm: Vec<&PendingVerdictRow> = Vec::new();
+    for row in &slice {
+        match reusable_ingest_relevance(db, row) {
+            Some(relevance) => {
+                relevance_by_id.insert(row.id, relevance);
+                summary.reused += 1;
+            }
+            None => needs_llm.push(row),
         }
-    };
+    }
 
-    let model_name = provider.model.clone();
-    let client = LLMClient::with_purpose(provider, "verdict_drain");
-    let judgments = match judge_items(&client, &items).await {
-        Ok(j) => j,
-        Err(e) => {
-            // A failed call consumes no attempt: no evidence was obtained, so
-            // the markers are left exactly as found for the next cycle.
-            warn!(target: "4da::verdict_drain", error = %e, "Drain re-judgment call failed — no attempts consumed");
-            log_summary(db, &summary);
-            return summary;
+    // ── B2: paid lane, only for what reuse could not answer ─────────────
+    if !needs_llm.is_empty() {
+        if llm_limit_reached {
+            summary.skipped = Some("llm_budget_reached");
+        } else if let Some(provider) = provider {
+            let ids: Vec<i64> = needs_llm.iter().map(|r| r.id).collect();
+            match load_items(db, &ids) {
+                Ok(items) => {
+                    let model_name = provider.model.clone();
+                    let client = LLMClient::with_purpose(provider, "verdict_drain");
+                    match judge_items(&client, &items).await {
+                        Ok(judgments) => {
+                            for row in &needs_llm {
+                                let Some(judged) = judgments.iter().find(|j| j.id == Some(row.id))
+                                else {
+                                    // The model dropped this item from its
+                                    // reply: no evidence, no attempt consumed.
+                                    continue;
+                                };
+                                summary.judged += 1;
+                                let relevance = judged.relevance.unwrap_or(0.0).clamp(0.0, 1.0);
+                                let confidence = judged.confidence.unwrap_or(0.0).clamp(0.0, 1.0);
+                                if let Err(e) = db.upsert_llm_judgment(
+                                    row.id,
+                                    relevance,
+                                    judged.reason.as_deref().unwrap_or_default(),
+                                    None,
+                                    confidence,
+                                    &model_name,
+                                    DRAIN_PROMPT_VERSION,
+                                ) {
+                                    warn!(target: "4da::verdict_drain", error = %e, item_id = row.id, "Failed to store drain judgment");
+                                }
+                                relevance_by_id.insert(row.id, relevance);
+                            }
+                        }
+                        Err(e) => {
+                            // A failed call consumes no attempt: no evidence
+                            // was obtained, so those markers are left exactly
+                            // as found for the next cycle. Anything B1 already
+                            // resolved still applies below.
+                            warn!(target: "4da::verdict_drain", error = %e, "Drain re-judgment call failed — no attempts consumed");
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::verdict_drain", error = %e, "Failed to load drain items");
+                }
+            }
+        } else {
+            summary.skipped = Some("no_llm_provider");
         }
-    };
+    }
 
+    if relevance_by_id.is_empty() {
+        log_summary(db, &summary);
+        return summary;
+    }
+
+    // ── B3: apply, from whichever lane produced the reading ─────────────
     let mut demote: Vec<(i64, bool, VerdictSource, Option<VerdictReason>)> = Vec::new();
     let mut clear: Vec<i64> = Vec::new();
     let mut escalate: Vec<i64> = Vec::new();
     for row in &slice {
-        let Some(judged) = judgments.iter().find(|j| j.id == Some(row.id)) else {
-            // The model dropped this item from its reply: no evidence, no
-            // attempt consumed.
+        let Some(&relevance) = relevance_by_id.get(&row.id) else {
             continue;
         };
-        summary.judged += 1;
-        let relevance = judged.relevance.unwrap_or(0.0).clamp(0.0, 1.0);
-        let confidence = judged.confidence.unwrap_or(0.0).clamp(0.0, 1.0);
-        if let Err(e) = db.upsert_llm_judgment(
-            row.id,
-            relevance,
-            judged.reason.as_deref().unwrap_or_default(),
-            None,
-            confidence,
-            &model_name,
-            DRAIN_PROMPT_VERSION,
-        ) {
-            warn!(target: "4da::verdict_drain", error = %e, item_id = row.id, "Failed to store drain judgment");
-        }
         let direction = row.marker.map(|m| m.direction);
         match resolve_action(direction, relevance) {
             DrainAction::Demote => demote.push((
@@ -290,6 +327,43 @@ async fn run_drain_with(
 
     log_summary(db, &summary);
     summary
+}
+
+/// The relevance an ALREADY-STORED ingest-lane judgment supplies for this
+/// pending item, when that judgment can honestly serve as the marker's second
+/// opinion. `None` means the drain must buy a fresh read.
+///
+/// Two conditions, both load-bearing:
+///
+///   * **Current INGEST prompt version.** A `drain_v1` row is this lane's own
+///     earlier output; resolving a marker from it would be circular — the
+///     drain would confirm its own previous guess and call it evidence. Only
+///     the ingest lane's current cohort counts.
+///   * **Judged AFTER the flip was deferred.** An older reading is not
+///     evidence about the flip; it is part of what the pipeline had already
+///     weighed when it deferred. Reusing it would resolve a marker with the
+///     very data that failed to resolve it.
+fn reusable_ingest_relevance(db: &Database, row: &PendingVerdictRow) -> Option<f64> {
+    let marker = row.marker?;
+    let judgment = db.get_llm_judgment(row.id).ok().flatten()?;
+    if judgment.prompt_version != crate::llm_judgments::PROMPT_VERSION {
+        return None;
+    }
+    let judged_at = parse_stored_utc(&judgment.judged_at)?;
+    (judged_at >= marker.first_seen).then_some(judgment.relevance_score)
+}
+
+/// Parse a `llm_judgments.judged_at` stamp. The column is written by SQLite's
+/// `datetime('now')` (`YYYY-MM-DD HH:MM:SS`, UTC); RFC-3339 is accepted too so
+/// a future writer changing format degrades to "buy a fresh read" rather than
+/// to a wrong comparison.
+fn parse_stored_utc(raw: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S") {
+        return Some(naive.and_utc());
+    }
+    chrono::DateTime::parse_from_rfc3339(raw)
+        .ok()
+        .map(|dt| dt.with_timezone(&chrono::Utc))
 }
 
 /// One decision table, pure so the safety boundary is unit-testable.
@@ -326,6 +400,7 @@ fn resolve_action(pending_direction: Option<bool>, relevance: f64) -> DrainActio
 fn log_summary(db: &Database, summary: &DrainSummary) {
     let remaining = db.count_pending_verdicts().unwrap_or(-1);
     if summary.judged > 0
+        || summary.reused > 0
         || summary.exhausted > 0
         || summary.corrupt_cleared > 0
         || summary.skipped.is_some()
@@ -333,6 +408,7 @@ fn log_summary(db: &Database, summary: &DrainSummary) {
         info!(
             target: "4da::verdict_drain",
             judged = summary.judged,
+            reused = summary.reused,
             demoted = summary.demoted,
             confirmed = summary.confirmed,
             escalated = summary.escalated,

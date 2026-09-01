@@ -1,0 +1,185 @@
+[
+  {
+    "id": "jn_showhn_email_components",
+    "category": "self_promotional",
+    "description": "Show HN launch post for a library outside the user's problem space",
+    "item": {
+      "title": "Show HN: Unitpost/email - open-source Email Components and Layouts",
+      "content": "I built a set of open-source email components and responsive layouts you can drop into transactional email templates. Supports dark mode, works in Outlook, MIT licensed. Would love feedback on the API.",
+      "source_type": "hackernews"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Measured live 2026-09-01: ingest judge scored 0.75 / confidence 0.80 and the pipeline correctly excluded it. 'Show HN'/'I built X' launches are self-promotional and almost never actionable unless they solve the user's current problem. The rerank judge's prompt has this rule; the ingest judge's did not."
+  },
+  {
+    "id": "jn_showhn_agent_browser",
+    "category": "self_promotional",
+    "description": "Show HN launch for an AI-agent browser tool, adjacent but not in the stack",
+    "item": {
+      "title": "Show HN: Saccade - Live semantic browser truth for AI agents",
+      "content": "Saccade gives AI agents a live semantic view of the browser DOM so they stop hallucinating page state. Early alpha, would appreciate testers and feedback on the protocol design.",
+      "source_type": "hackernews"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Measured live: judge 0.72 / confidence 0.75. Adjacent topic (agents, browsers) but a v0 launch post asking for testers, not something a Tauri/Rust developer acts on."
+  },
+  {
+    "id": "jn_beginner_promise_executor",
+    "category": "beginner_for_expert",
+    "description": "Beginner JS async question for a developer who writes async daily",
+    "item": {
+      "title": "How do I use async function as Promise executor in js?",
+      "content": "I tried new Promise(async (resolve, reject) => { ... }) and my errors are being swallowed. Why does this not work and what should I do instead? I am new to promises.",
+      "source_type": "stackoverflow"
+    },
+    "profile": "fullstack_js",
+    "relevant": false,
+    "notes": "Measured live: judge 0.75 / confidence 0.82. Textbook beginner question about a language feature an expert uses daily. The rerank prompt scores 'tutorials for technologies they already use expertly' 1-2; the ingest prompt had no equivalent rule."
+  },
+  {
+    "id": "jn_beginner_ts_import",
+    "category": "beginner_for_expert",
+    "description": "Beginner TypeScript module-resolution configuration error",
+    "item": {
+      "title": "Why I can't import .ts file using express and typescript",
+      "content": "I get 'Cannot find module ./routes.ts' when I run my express server. I am using ts-node. What am I doing wrong with my tsconfig?",
+      "source_type": "stackoverflow"
+    },
+    "profile": "fullstack_js",
+    "relevant": false,
+    "notes": "Measured live: judge 0.71 / confidence 0.82. A setup error, not knowledge. Names the user's stack (TypeScript, express) without being useful to someone who ships it."
+  },
+  {
+    "id": "jn_beginner_controlled_input",
+    "category": "beginner_for_expert",
+    "description": "Basic React controlled-component question",
+    "item": {
+      "title": "How to build a controlled and uncontrolled Input component in React at the same time?",
+      "content": "I want my Input to work with and without a value prop. Should I use defaultValue or state? Every example I find only covers one of the two cases.",
+      "source_type": "stackoverflow"
+    },
+    "profile": "fullstack_js",
+    "relevant": false,
+    "notes": "Measured live: judge 0.68 / confidence 0.75. Introductory React pattern for a developer shipping a React frontend."
+  },
+  {
+    "id": "jn_offdomain_paper_anonymization",
+    "category": "offdomain_academic",
+    "description": "ML privacy paper with no connection to the user's engineering work",
+    "item": {
+      "title": "GuardianAgent: Policy-Conditioned Risk-Adaptive Anonymization with Verified Adversarial Escalation",
+      "content": "We present GuardianAgent, a policy-conditioned anonymization framework that adaptively selects redaction strength under a verified adversarial escalation budget. We evaluate on three benchmark corpora and report utility-privacy tradeoff curves against six baselines.",
+      "source_type": "arxiv"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Measured live: judge 0.78 / confidence 0.80 against a pipeline score of 0.081. An academic paper outside the user's domain - the rerank prompt scores this class 1."
+  },
+  {
+    "id": "jn_obscure_crate_namematch",
+    "category": "namematch_only",
+    "description": "v0.1.0 crate that matches the framework name and nothing else",
+    "item": {
+      "title": "crates.io: tauri-plugin-dglab-ws-server v0.1.0",
+      "content": "A Tauri plugin exposing a websocket server for the DG-Lab hardware controller. Initial release.",
+      "source_type": "crates_io"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Measured live: judge 0.62-0.82 across a whole family of tauri-plugin-* v0.x releases the pipeline scored 0.37 and excluded. Naming the user's framework is not relevance: this plugin wraps hardware the user does not own. Contrast jp_thiserror_release, which IS in the stack."
+  },
+  {
+    "id": "jn_obscure_crate_hkt",
+    "category": "namematch_only",
+    "description": "Obscure release-candidate crate for a type-theory experiment",
+    "item": {
+      "title": "crates.io: higher-kinded-types v0.3.2-rc1",
+      "content": "Emulation of higher-kinded types in stable Rust via the lifetime-GAT trick. Release candidate; API may change.",
+      "source_type": "crates_io"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Measured live: judge 0.72 / confidence 0.70. A Rust crate, but a pre-1.0 experimental library the user has no dependency on and no reason to adopt."
+  },
+  {
+    "id": "jn_crossecosystem_php_cve",
+    "category": "cross_ecosystem_security",
+    "description": "PHP CMS advisory against a JavaScript/Rust stack",
+    "item": {
+      "title": "[CVE-2026-71415] Kirby: File upload permissions are not checked during processing of chunk data",
+      "content": "Kirby CMS fails to re-check upload permissions when processing chunked uploads, allowing an authenticated user with restricted rights to write files outside their allowance. Affects Kirby 4.x before 4.8.2.",
+      "source_type": "cve"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Regression guard, not a new failure: the live judge already rejects this class correctly (all 34 demoted CVEs were cross-ecosystem). A prompt change that raises rejection rates must not be credited for what already worked."
+  },
+
+  {
+    "id": "jp_rustc_soundness_paper",
+    "category": "indomain_academic",
+    "description": "Academic paper about the user's own language toolchain",
+    "item": {
+      "title": "Rust's Type Checker Implementation Is Unsound: An Empirical Study on Soundness Bugs in rustc",
+      "content": "We systematically study 87 soundness bugs in rustc's type checker, classify their root causes across trait resolution, lifetime inference and variance, and show that a majority remain reachable from safe code. We release reproductions for each.",
+      "source_type": "arxiv"
+    },
+    "profile": "rust_developer",
+    "relevant": true,
+    "notes": "NEGATIVE TEST for the off-domain-paper rule. Measured live: judge 0.80 / confidence 0.92 against a pipeline score of 0.32 - here the judge is RIGHT and the pipeline undervalued it. A v6 that rejects academic papers wholesale must fail on this one."
+  },
+  {
+    "id": "jp_thiserror_release",
+    "category": "instack_release",
+    "description": "Release of a crate that is actually in the user's dependency list",
+    "item": {
+      "title": "crates.io: thiserror v2.0.20",
+      "content": "thiserror provides a derive macro for the standard library's std::error::Error trait. This release fixes a regression in generic bounds on transparent variants and improves spans in error messages.",
+      "source_type": "crates_io"
+    },
+    "profile": "rust_developer",
+    "relevant": true,
+    "notes": "NEGATIVE TEST for the name-match rule. thiserror is a declared dependency of this project. Measured live: judge 0.75 / confidence 0.95, correctly in the feed. A v6 that dismisses crates.io releases as noise must fail here while still rejecting jn_obscure_crate_namematch."
+  },
+  {
+    "id": "jp_dep_upgrade_breakage_paper",
+    "category": "indomain_academic",
+    "description": "Paper directly about dependency-upgrade breakage detection",
+    "item": {
+      "title": "Update from Hell: Can Coding Agents Survive Hidden Breakage in Dependency Upgrades?",
+      "content": "We construct a benchmark of 240 real dependency upgrades containing silent behavioural breakage and measure whether coding agents detect it. Agents catch compile-time breaks reliably but miss 71% of semantic regressions that pass the type checker.",
+      "source_type": "arxiv"
+    },
+    "profile": "rust_developer",
+    "relevant": true,
+    "notes": "NEGATIVE TEST. Measured live: judge 0.72 / confidence 0.85, pipeline 0.308 and excluded. Directly applicable to a developer maintaining dependency-upgrade tooling."
+  },
+  {
+    "id": "jp_useeffect_internals",
+    "category": "advanced_indepth",
+    "description": "Deep dive into React internals, not a beginner tutorial",
+    "item": {
+      "title": "How Does useEffect Actually Work?",
+      "content": "We walk through React's fiber commit phase to show exactly when effects are scheduled, why the cleanup runs before the next effect rather than after unmount, and how the dependency array is compared with Object.is at the hook slot level.",
+      "source_type": "devto"
+    },
+    "profile": "fullstack_js",
+    "relevant": true,
+    "notes": "NEGATIVE TEST for the beginner rule. Measured live: judge 0.85 / confidence 0.92, pipeline 0.32 and excluded. Same technology as the beginner React question above; the difference is depth, which is exactly the discrimination being tested."
+  },
+  {
+    "id": "jp_llm_spend_limits",
+    "category": "instack_tooling",
+    "description": "Tooling for a problem the user is actively hitting",
+    "item": {
+      "title": "Tollgate: Open-Source Hard Limits for LLM Spend",
+      "content": "Tollgate sits in front of your LLM provider and enforces hard per-day and per-feature spend ceilings, with preflight cost estimation so the call that would cross the limit is refused rather than billed. Supports Anthropic and OpenAI.",
+      "source_type": "mastodon"
+    },
+    "profile": "rust_developer",
+    "relevant": true,
+    "notes": "NEGATIVE TEST. Measured live: judge 0.72 / confidence 0.85, pipeline 0.278 and excluded. This app enforces exactly this mechanism and hit its own daily cap on 2026-09-01 - a case where the judge's recall beat the pipeline's."
+  }
+]
