@@ -203,26 +203,54 @@ jobs:
     # Rust matrix or MCP legs; those are 30-minute builds and an unrecognised
     # path is far more likely to be JS/config than Rust.
     if: ${{ !cancelled() && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.workflows == 'true' || needs.changes.outputs.uncovered == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') }}
-    runs-on: [self-hosted, windows, 4da]
+    # GitHub-HOSTED windows, not the self-hosted box. This job and `MCP Server`
+    # were the last two on `[self-hosted, windows, 4da]`, and that single runner
+    # was the merge queue's throughput ceiling: `merge_group` deliberately
+    # bypasses the path filters (a queue batch may combine PRs whose union
+    # touches everything), so EVERY queue entry paid Frontend + MCP on one
+    # machine, serially. Measured 2026-09-01: `Frontend` executed in 7m00s but
+    # `MCP Server` on the same entry did not start until 22 minutes after it
+    # finished — the wait, not the work, was the cost, and four queue entries sat
+    # ~1 hour behind it.
+    #
+    # Three further reasons the self-hosted box was the wrong home:
+    #   - It IS the operator's dev machine. CI shared state with a live 4DA and a
+    #     live Vite server (see the smoke-test note below, and issue #501).
+    #   - `clean: false` made it non-hermetic — runs inherited the last run's tree.
+    #   - Load starved timing-sensitive tests, producing timeouts unrelated to the
+    #     change under test; a flaky queue entry is ejected and everything behind
+    #     it re-runs, which is how one flake cost an hour.
+    #
+    # Platform coverage is NOT lost: hermetic.yml's fresh-clone matrix already
+    # runs "Frontend — fresh build + tests" and "MCP server — fresh install,
+    # build, tests" on BOTH ubuntu-22.04 and windows-latest for any PR touching
+    # this code. This mirrors #159, which moved the Rust matrix off the same
+    # runner for the same reason ("contention-immune") on the same argument.
+    # The repo is public, so hosted minutes are free.
+    runs-on: windows-latest
     timeout-minutes: 30
     defaults:
       run:
         shell: pwsh
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      # pnpm BEFORE setup-node: `cache: 'pnpm'` resolves the store via the pnpm
+      # on PATH and fails without it. An ephemeral runner has no warm
+      # node_modules (the `clean: false` this job used to rely on), so the store
+      # cache is what keeps the install off the critical path.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v4
         with:
-          clean: false
+          # MUST equal package.json's packageManager — action-setup hard-errors
+          # on a mismatch (the reason nightly-audit.yml installs pnpm 11 by hand).
+          version: 9.15.0
 
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
           node-version: '22'
-
-      - name: Install pnpm
-        run: |
-          corepack disable
-          npm install -g --force pnpm@9.15.0
-          pnpm --version
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -269,8 +297,12 @@ jobs:
         # identifies module-resolution regressions before they reach prod.
         #
         # NEVER add a `taskkill /F /IM fourda.exe` (or any image-name kill)
-        # here. This job runs on the self-hosted dev box: a blanket kill
-        # murders the operator's live app and every agent-launched instance
+        # here. This job now runs on an ephemeral hosted runner, so the blast
+        # radius is gone — but the rule stands: the step is a template someone
+        # may copy back onto a developer machine, and the same kill in a local
+        # script is still lethal. When this job DID run on the operator's dev
+        # box, a blanket kill
+        # murdered the operator's live app and every agent-launched instance
         # with exit code exactly 1, silently — no RunEvent::Exit, no panic,
         # no Event Log record — which is precisely the issue #501 "silent
         # exit(1)" signature, and it poisoned that investigation for days
@@ -308,6 +340,12 @@ jobs:
         # The job's ceiling stays at 30. Raising it hides starvation
         # (documented decision) and would not have helped anyway: it fired
         # correctly here and the tree survived it.
+        #
+        # Still load-bearing after the move to a hosted runner. A hung vitest no
+        # longer strands a machine the whole fleet shares, but it would still
+        # burn the full 30-minute ceiling and — on a merge_group entry — eject
+        # the batch, re-running everything queued behind it. Layer 1 fails it at
+        # 15 minutes instead.
         timeout-minutes: 20
         run: |
           node scripts/run-with-timeout.cjs --minutes 15 -- pnpm run test -- --run 2>&1 | Out-File -FilePath test-output.txt -Encoding utf8
@@ -339,26 +377,31 @@ jobs:
     # See the `!cancelled()` note on the frontend job — without it the
     # workflow_dispatch clause is unreachable.
     if: ${{ !cancelled() && (needs.changes.outputs.mcp == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') }}
-    runs-on: [self-hosted, windows, 4da]
+    # GitHub-HOSTED windows — see the runner note on the `frontend` job above.
+    # Kept on Windows rather than ubuntu so `better-sqlite3` is exercised on the
+    # platform 4DA ships; Node 22 has a published prebuilt for it, so no node-gyp
+    # native build is attempted (the failure release.yml documents).
+    runs-on: windows-latest
     timeout-minutes: 15
     defaults:
       run:
         shell: pwsh
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v4
         with:
-          clean: false
+          version: 9.15.0 # must match package.json packageManager
 
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
           node-version: '22'
-
-      - name: Install pnpm
-        run: |
-          corepack disable
-          npm install -g --force pnpm@9.15.0
-          pnpm --version
+          cache: 'pnpm'
+          # This job installs in mcp-4da-server/, so key the store cache on that
+          # lockfile rather than the root one it never reads.
+          cache-dependency-path: mcp-4da-server/pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: mcp-4da-server
