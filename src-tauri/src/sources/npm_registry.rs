@@ -219,8 +219,17 @@ impl Source for NpmRegistrySource {
 
         info!(count = self.packages.len(), "Fetching npm registry updates");
 
+        // Rotating window for the same reason as crates.io: `fetch_package_list`
+        // already stops at `max_items`, but it always stopped at the same FIRST
+        // `max_items` names, so a dependency list longer than the cap had a
+        // permanently unwatched tail.
+        let monitored = crate::source_fetching::rotating_window(
+            "sources.npm_registry.rotation_cursor",
+            &self.packages,
+            self.config.max_items,
+        );
         let items = self
-            .fetch_package_list(&self.packages, self.config.max_items)
+            .fetch_package_list(&monitored, self.config.max_items)
             .await?;
 
         info!(items = items.len(), "Fetched npm registry items");

@@ -71,6 +71,65 @@ pub enum ManifestType {
 }
 
 impl ManifestType {
+    /// The exact string this variant is stored as in
+    /// `project_dependencies.manifest_type`.
+    ///
+    /// One definition, used by BOTH the writer and every reader that matches on
+    /// it. Before this existed the writer used
+    /// `format!("{:?}", ty).to_lowercase()` -> `"cargotoml"` while
+    /// `source_fetching::ace_manifest_types` returned the Debug spelling
+    /// `"CargoToml"`, and the comparison between them is an exact
+    /// `Vec<&str>::contains`. It therefore never matched: every registry source
+    /// read an EMPTY dependency list and silently fell back to its hardcoded
+    /// list of popular packages. Measured on the founder's corpus 2026-09-01 —
+    /// 245 scanned manifest deps (110 Cargo, 135 package.json), 7,933
+    /// user_dependencies, and crates.io was still monitoring the 12 names in
+    /// `DEFAULT_CRATES`.
+    ///
+    /// The values are byte-identical to what the old `format!` produced, which
+    /// `db_key_matches_the_stored_debug_spelling` asserts for every variant, so
+    /// existing rows keep matching and no migration is needed.
+    pub(crate) fn db_key(&self) -> &'static str {
+        match self {
+            ManifestType::CargoToml => "cargotoml",
+            ManifestType::PackageJson => "packagejson",
+            ManifestType::PyprojectToml => "pyprojecttoml",
+            ManifestType::RequirementsTxt => "requirementstxt",
+            ManifestType::GoMod => "gomod",
+            ManifestType::ComposerJson => "composerjson",
+            ManifestType::Gemfile => "gemfile",
+            ManifestType::PomXml => "pomxml",
+            ManifestType::BuildGradle => "buildgradle",
+            ManifestType::CMakeLists => "cmakelists",
+            ManifestType::Csproj => "csproj",
+            ManifestType::PubspecYaml => "pubspecyaml",
+        }
+    }
+
+    /// Every variant, so the guards can enumerate the vocabulary instead of
+    /// hand-listing it — a hand-written list is exactly how the reader drifted
+    /// from the writer in the first place.
+    ///
+    /// Test-only: no production path needs to iterate the variants today, and
+    /// carrying it in release builds would be dead code. It exists so
+    /// `every_manifest_type_the_reader_emits_is_a_real_writer_key` can compare
+    /// the two vocabularies rather than restate one of them.
+    #[cfg(test)]
+    pub(crate) const ALL: &'static [ManifestType] = &[
+        ManifestType::CargoToml,
+        ManifestType::PackageJson,
+        ManifestType::PyprojectToml,
+        ManifestType::RequirementsTxt,
+        ManifestType::GoMod,
+        ManifestType::ComposerJson,
+        ManifestType::Gemfile,
+        ManifestType::PomXml,
+        ManifestType::BuildGradle,
+        ManifestType::CMakeLists,
+        ManifestType::Csproj,
+        ManifestType::PubspecYaml,
+    ];
+
     fn filename(&self) -> &'static str {
         match self {
             ManifestType::CargoToml => "Cargo.toml",
@@ -2527,6 +2586,37 @@ pub(crate) fn detect_learning_directories(path: &Path) -> Vec<LearningSignal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `db_key()` must reproduce EXACTLY what the old writer stored, or every
+    /// existing `project_dependencies` row stops matching and the fix silently
+    /// becomes the bug it replaces. Proving equality here is what makes this a
+    /// pure refactor with no migration.
+    #[test]
+    fn db_key_matches_the_stored_debug_spelling() {
+        for ty in ManifestType::ALL {
+            assert_eq!(
+                ty.db_key(),
+                format!("{ty:?}").to_lowercase(),
+                "db_key() drifted from the value already stored for {ty:?}"
+            );
+        }
+    }
+
+    /// Every variant needs a distinct key, or two manifest kinds collapse into
+    /// one and a lookup returns the wrong ecosystem's packages.
+    #[test]
+    fn db_keys_are_unique_and_cover_every_variant() {
+        let keys: std::collections::HashSet<&str> =
+            ManifestType::ALL.iter().map(|t| t.db_key()).collect();
+        assert_eq!(
+            keys.len(),
+            ManifestType::ALL.len(),
+            "two ManifestType variants share a db_key"
+        );
+        // ALL must not drift from the enum: a new variant added without being
+        // listed here would silently never be matched by any reader.
+        assert_eq!(ManifestType::ALL.len(), 12, "ManifestType::ALL is stale");
+    }
 
     // ------------------------------------------------------------------
     // Dependency edge parsers (Step 1: reachability foundation)
