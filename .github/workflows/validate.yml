@@ -245,7 +245,7 @@ jobs:
       # node_modules (the `clean: false` this job used to rely on), so the store
       # cache is what keeps the install off the critical path.
       - name: Setup pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           # MUST equal package.json's packageManager — action-setup hard-errors
           # on a mismatch (the reason nightly-audit.yml installs pnpm 11 by hand).
@@ -395,7 +395,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: 9.15.0 # must match package.json packageManager
 
