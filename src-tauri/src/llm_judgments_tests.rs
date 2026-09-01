@@ -591,3 +591,76 @@ fn drain_reserve_is_backlog_bounded_and_capped() {
         "the live-audit backlog caps at the 20% slice"
     );
 }
+
+// ============================================================================
+// Truncated-batch salvage
+//
+// Regression cover for the 2026-09-01 finding: a single truncated element
+// discarded all ten judgments in a paid-for batch. Surfaced by
+// `scoring::judge_benchmark`, which lost 11 of 87 scenarios to exactly one
+// such reply.
+// ============================================================================
+
+#[test]
+fn truncated_batch_salvages_the_complete_elements() {
+    // Element 3 is cut off mid-object, exactly as a max_tokens truncation
+    // leaves it. The two complete elements before it must survive.
+    let truncated = r#"[
+      {"id": 101, "relevance": 0.8, "explanation": "tokio is in their stack", "confidence": 0.9},
+      {"id": 102, "relevance": 0.1, "explanation": "unrelated ecosystem", "confidence": 0.85},
+      {"id": 103, "relevance": 0.7, "explan"#;
+
+    let parsed = parse_batch_response(truncated).expect("salvage must not error");
+    assert_eq!(parsed.len(), 2, "both complete elements must be recovered");
+    assert_eq!(parsed[0].0, 101);
+    assert_eq!(parsed[1].0, 102);
+    assert!((parsed[0].1.relevance.unwrap() - 0.8).abs() < f64::EPSILON);
+    assert!((parsed[1].1.confidence.unwrap() - 0.85).abs() < f64::EPSILON);
+}
+
+#[test]
+fn salvage_is_not_confused_by_braces_inside_strings() {
+    // A brace inside an explanation string must not open or close an element,
+    // or the scanner would split one judgment into two malformed halves.
+    let text = r#"[
+      {"id": 7, "relevance": 0.9, "explanation": "use Handler{} for }this{ case", "confidence": 0.8},
+      {"id": 8, "relevance": 0.2, "explanation": "escaped quote \" and a { brace", "confidence": 0.75},
+      {"id": 9, "relevance": 0.5, "expl"#;
+
+    let parsed = parse_batch_response(text).expect("salvage must not error");
+    assert_eq!(parsed.len(), 2);
+    assert_eq!(parsed[0].0, 7);
+    assert_eq!(parsed[1].0, 8);
+    assert!(parsed[0]
+        .1
+        .explanation
+        .as_deref()
+        .unwrap()
+        .contains("}this{"));
+}
+
+#[test]
+fn a_reply_with_no_recoverable_element_is_still_an_error() {
+    // Salvage must not convert a genuinely broken reply into a silent empty
+    // success — that would look like "the judge rejected nothing" instead of
+    // "the judge did not answer", the exact ambiguity the WARN paths exist to
+    // remove.
+    let junk = "I'm sorry, I cannot evaluate these items.";
+    assert!(
+        parse_batch_response(junk).is_err(),
+        "a non-JSON reply must stay a hard error"
+    );
+}
+
+#[test]
+fn salvage_drops_elements_that_have_no_id() {
+    // An element without an id has nothing to attach a judgment to; it is
+    // dropped, and must not shift the ids of its neighbours.
+    let text = r#"[
+      {"relevance": 0.9, "explanation": "no id here", "confidence": 0.8},
+      {"id": 42, "relevance": 0.3, "explanation": "keeps its id", "confidence": 0.7}
+    ]"#;
+    let parsed = parse_batch_response(text).expect("valid JSON");
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0].0, 42);
+}
