@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Victauri dogfood tests — validate 4DA using our own testing framework.
 //!
 //! Every test has real assertions. No log-and-continue patterns.

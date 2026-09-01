@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Database scale benchmarks for 4DA
 //!
 //! Measures insert and query performance at various scales.
