@@ -55,6 +55,25 @@ const ALLOWLIST_PATH = path.join(__dirname, 'remove-by-allowlist.json');
 // Mirrors the marker regex in .husky/pre-commit so the two gates agree on what a marker is.
 const MARKER_RE = /REMOVE BY (\d{4})[-/](\d{2})[-/](\d{2})/g;
 
+/// How many days before a deadline the gate starts saying so, out loud.
+///
+/// Without a runway this gate is binary: a marker is invisible (listed only under
+/// --verbose) right up to the day it hard-blocks EVERY pull request, including
+/// ones that touch no Rust. That is not hypothetical — on 2026-09-01 two markers
+/// came due together and turned the whole repo red, dequeuing a frontend-only PR
+/// mid-queue. Fourteen days is enough notice to delete the code or move the
+/// deadline deliberately, which is what the marker is for.
+const DUE_SOON_DAYS = 14;
+
+/// `today` plus `days`, as a zero-padded ISO date. Uses UTC arithmetic so the
+/// result cannot shift with the runner's timezone — the same class of bug the
+/// 2026-09-01 outage was made of.
+function isoDaysFrom(today, days) {
+  const d = new Date(`${today}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -119,13 +138,16 @@ function loadAllowlist(allowlistPath = ALLOWLIST_PATH) {
 
 /**
  * Find every REMOVE BY marker in a set of { rel, src } sources and classify it against `today`.
- * Pure (no filesystem) so it can be unit-tested. Returns { expired, upcoming }.
+ * Pure (no filesystem) so it can be unit-tested. Returns { expired, dueSoon, upcoming },
+ * where `dueSoon` is everything falling inside the next [`DUE_SOON_DAYS`] days.
  *
  * `allow` entries suppress an expired marker when file AND date both match.
  */
 function analyzeSources(sources, today, allow = []) {
   const expired = [];
+  const dueSoon = [];
   const upcoming = [];
+  const soon = isoDaysFrom(today, DUE_SOON_DAYS);
 
   const allowKeys = new Set(
     allow
@@ -159,11 +181,12 @@ function analyzeSources(sources, today, allow = []) {
         // String compare is correct for zero-padded ISO dates.
         // `<=` matches .husky/pre-commit, which treats the deadline day itself as expired.
         if (date <= today) expired.push(record);
+        else if (date <= soon) dueSoon.push(record);
         else upcoming.push(record);
       }
     }
   }
-  return { expired, upcoming };
+  return { expired, dueSoon, upcoming };
 }
 
 // ---------------------------------------------------------------------------
@@ -186,16 +209,40 @@ function main(argv) {
     src: fs.readFileSync(f, 'utf8'),
   }));
 
-  const { expired, upcoming } = analyzeSources(sources, today, allow);
+  const { expired, dueSoon, upcoming } = analyzeSources(sources, today, allow);
   const blocking = expired.filter((e) => !e.allowlisted);
   const excused = expired.filter((e) => e.allowlisted);
 
   console.log(
     `remove-by gate: scanned ${files.length} files, ` +
-      `${expired.length + upcoming.length} REMOVE BY marker(s) ` +
-      `(${upcoming.length} upcoming, ${excused.length} allowlisted, ${blocking.length} expired) ` +
+      `${expired.length + dueSoon.length + upcoming.length} REMOVE BY marker(s) ` +
+      `(${upcoming.length} upcoming, ${dueSoon.length} due within ${DUE_SOON_DAYS}d, ` +
+      `${excused.length} allowlisted, ${blocking.length} expired) ` +
       `as of ${today}.`
   );
+
+  // Say it BEFORE it blocks. These are not failures — they are the runway. Printed
+  // unconditionally (not just under --verbose) because a warning nobody sees is the
+  // same as no warning, which is how two markers took the repo red without notice.
+  if (dueSoon.length) {
+    const byDate = [...dueSoon].sort((a, b) => a.date.localeCompare(b.date));
+    console.log(
+      `
+${dueSoon.length} REMOVE BY deadline(s) land within ${DUE_SOON_DAYS} days — ` +
+        `delete the code or move the deadline with a written reason BEFORE they block:
+`
+    );
+    for (const u of byDate) {
+      console.log(`  ${u.rel}:${u.lineNo}  due ${u.date}`);
+      if (ciMode) {
+        console.log(
+          `::warning file=${u.rel},line=${u.lineNo}::REMOVE BY ${u.date} is due within ` +
+            `${DUE_SOON_DAYS} days. When it passes it blocks every PR, not just this one.`
+        );
+      }
+    }
+    console.log('');
+  }
 
   if (verbose) {
     for (const u of [...upcoming].sort((a, b) => a.date.localeCompare(b.date))) {

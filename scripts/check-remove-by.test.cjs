@@ -37,10 +37,37 @@ test('the deadline day itself counts as expired (matches .husky/pre-commit)', ()
   assert.strictEqual(expired.length, 1, 'EXPIRY <= TODAY is expired');
 });
 
-test('the day after the deadline is still valid', () => {
-  const { expired, upcoming } = analyze('// REMOVE BY 2026-08-13');
+test('the day after the deadline is still valid (and now also flagged due-soon)', () => {
+  const { expired, dueSoon, upcoming } = analyze('// REMOVE BY 2026-08-13');
+  assert.strictEqual(expired.length, 0, 'tomorrow is not expired — nothing blocks');
+  assert.strictEqual(dueSoon.length, 1, 'but it is inside the 14-day runway');
+  assert.strictEqual(upcoming.length, 0);
+});
+
+test('a marker inside the runway warns but never blocks', () => {
+  // The whole point: this must not reach `expired`, or the runway becomes the
+  // outage it exists to prevent.
+  const { expired, dueSoon } = analyze('// REMOVE BY 2026-08-20'); // today + 8
   assert.strictEqual(expired.length, 0);
-  assert.strictEqual(upcoming.length, 1);
+  assert.strictEqual(dueSoon.length, 1);
+  assert.strictEqual(dueSoon[0].date, '2026-08-20');
+});
+
+test('the runway boundary is inclusive at +14 days and clear at +15', () => {
+  const inside = analyze('// REMOVE BY 2026-08-26'); // today + 14
+  assert.strictEqual(inside.dueSoon.length, 1, '+14 days is inside the runway');
+  assert.strictEqual(inside.upcoming.length, 0);
+
+  const outside = analyze('// REMOVE BY 2026-08-27'); // today + 15
+  assert.strictEqual(outside.dueSoon.length, 0, '+15 days is not yet warned about');
+  assert.strictEqual(outside.upcoming.length, 1);
+});
+
+test('the runway crosses a month boundary without arithmetic drift', () => {
+  // Date maths, in a gate that exists because of a date bug. today + 12.
+  const { expired, dueSoon } = analyze('// REMOVE BY 2026-09-01', [], '2026-08-20');
+  assert.strictEqual(expired.length, 0);
+  assert.strictEqual(dueSoon.length, 1, 'Aug 20 + 12d = Sep 1, still inside 14 days');
 });
 
 test('accepts YYYY/MM/DD and normalizes it to YYYY-MM-DD', () => {
