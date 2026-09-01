@@ -29,8 +29,9 @@ function item(partial: {
   } as any as SourceRelevance;
 }
 
-const RED = '#EF4444';
-const GOLD = '#D4AF37';
+const RED = 'var(--color-error)';
+const GOLD = 'var(--color-accent-gold)';
+const ORANGE = 'var(--color-accent-action)';
 
 describe('WhatYouWouldHaveMissed signal classification', () => {
   it('labels a content-vocab security advisory as Security advisory (the bug)', () => {
@@ -70,6 +71,33 @@ describe('WhatYouWouldHaveMissed signal classification', () => {
     expect(classifySignal(it_)).toBeNull();
     expect(getSignalLabel(it_)).toBeNull();
     expect(getSignalColor(it_)).toBe(GOLD);
+  });
+
+  // The breaking branch was the ONLY one with no colour assertion, and it was the
+  // only one returning a different shape (a var() reference while the others were
+  // hex literals). Every consumer built a wash by concatenating a hex alpha suffix,
+  // so `var(--color-accent-action)15` reached the DOM as invalid CSS and the browser
+  // dropped the card tint, the border and the badge background to transparent --
+  // silently, on every breaking-change signal. Assert the colour here too.
+  it('colours a breaking change from either vocabulary', () => {
+    expect(getSignalColor(item({ content_type: 'breaking_change' }))).toBe(ORANGE);
+    expect(getSignalColor(item({ signal_type: 'breaking_change' }))).toBe(ORANGE);
+  });
+
+  // Structural guard, not a value check: a hex literal is frozen to the dark
+  // palette, and the light theme redefines these tokens (--color-error becomes
+  // #B91C1C, --color-accent-action becomes #EA580C). Returning a raw hex would
+  // silently ignore the theme, so require a token reference for every branch.
+  it('returns a design-system token for every signal kind, never a raw hex', () => {
+    const kinds = [
+      item({ signal_type: 'security_alert' }),
+      item({ signal_type: 'breaking_change' }),
+      item({ signal_type: 'tool_discovery' }),
+      item({ content_type: 'release_notes', signal_type: null }),
+    ];
+    for (const it_ of kinds) {
+      expect(getSignalColor(it_)).toMatch(/^var\(--[a-z-]+\)$/);
+    }
   });
 });
 
