@@ -346,6 +346,10 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
                 tracing::error!(target: "4da::db", %reason, "Preemptive DB recovery failed — falling through to Database::new");
             }
         }
+        // Captured BEFORE `recovery` is moved into the notice. This verdict is the
+        // only evidence that the file is actually corrupt, and it is what licenses
+        // the last-resort fallback below to quarantine the user's corpus.
+        let file_verified_intact = db_verified_intact(&recovery);
         crate::db::migrations::set_db_recovery_notice(recovery);
 
         let db = match Database::new(&db_path) {
@@ -394,6 +398,44 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
                     return Err(format!("{e}"));
                 }
 
+                // DESTRUCTION REQUIRES EVIDENCE OF CORRUPTION, NOT MERELY AN ERROR.
+                //
+                // Everything above this line is an allowlist of errors that are known
+                // to be safe, which made quarantine the DEFAULT for anything not yet
+                // recognised. That default has cost real data twice: on 2026-08-16 a
+                // correct schema-too-new refusal renamed 296 MB / 15,659 items and the
+                // app came up with 0, and the cascade-wipe guard added in #595 would
+                // have done the same until its error was allowlisted too. Every new
+                // error class anywhere under `Database::new` inherits that behaviour
+                // until someone remembers to add an arm here — a denylist by omission.
+                //
+                // `PRAGMA quick_check` already ran in the pre-flight above and its
+                // verdict is right here. If it says the file is intact, then whatever
+                // made `Database::new` fail is not corruption, and renaming the user's
+                // only copy would destroy far more than it protects. Refuse to start
+                // instead: an unopenable database with the data intact is a support
+                // question, while a quarantined one can be the whole corpus.
+                if file_verified_intact {
+                    tracing::error!(
+                        target: "4da::db",
+                        error = %e,
+                        "Database failed to open but PRAGMA quick_check found it intact — \
+                         refusing to start rather than quarantine. Data NOT modified."
+                    );
+                    // Say what to do next. A refusal with no path forward is the same
+                    // dead end as an error telling the user to run something that
+                    // cannot help — it just fails in a tidier place.
+                    return Err(format!(
+                        "4DA could not open its database, but the file is not corrupt — \
+                         PRAGMA quick_check passed, so your data has NOT been modified or \
+                         moved. This is usually transient: another 4DA instance holding the \
+                         file, antivirus scanning it, or a binary older than the schema. Try \
+                         starting again. If it persists, the database is at {} — moving it \
+                         aside starts 4DA fresh without losing it. Underlying error: {e}",
+                        db_path.display()
+                    ));
+                }
+
                 // Last-resort recovery — Database::new() still failed even after
                 // the preemptive pass. Rename the offending file to the legacy
                 // single-slot `.db.corrupt` name and create a fresh DB. This
@@ -426,6 +468,16 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
                     corrupt = ?corrupt_path,
                     "Corrupt database preserved, creating fresh database"
                 );
+                // Overwrite the pre-flight notice, which recorded the state BEFORE
+                // this fallback ran. Without this the health surface reports the
+                // database healthy while the user's corpus has just been renamed away
+                // and the app has come up empty — the app resets itself and says
+                // nothing. `startup_health::check_database` reads this notice.
+                crate::db::migrations::set_db_recovery_notice(
+                    crate::db::migrations::CorruptionRecovery::QuarantinedNoBackup {
+                        quarantined_to: corrupt_path.clone(),
+                    },
+                );
                 Database::new(&db_path)
                     .map_err(|e2| format!("Failed to create fresh database after recovery: {e2}"))?
             }
@@ -454,6 +506,18 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
     });
 
     Ok(db)
+}
+
+/// Did the pre-flight `PRAGMA quick_check` find the database file INTACT?
+///
+/// This is the load-bearing predicate for whether the last-resort fallback may
+/// rename the user's corpus. `Healthy` means quick_check returned `ok`;
+/// `NoExistingDb` means there is nothing to lose. Every other variant means
+/// corruption was actually observed, and quarantining is then a real repair
+/// rather than a guess.
+fn db_verified_intact(recovery: &crate::db::migrations::CorruptionRecovery) -> bool {
+    use crate::db::migrations::CorruptionRecovery as R;
+    matches!(recovery, R::Healthy | R::NoExistingDb)
 }
 
 fn is_database_lock_contention(e: &rusqlite::Error) -> bool {
@@ -773,6 +837,32 @@ mod tests {
             "database disk image is malformed",
         );
         assert!(!is_schema_newer_than_binary(&err));
+    }
+
+    /// Quarantine is licensed by EVIDENCE of corruption, so the two verdicts that
+    /// mean "nothing is wrong with the file" must block it.
+    #[test]
+    fn a_file_quick_check_called_intact_is_never_quarantined() {
+        use crate::db::migrations::CorruptionRecovery as R;
+        assert!(db_verified_intact(&R::Healthy));
+        assert!(db_verified_intact(&R::NoExistingDb));
+    }
+
+    /// ...and every verdict that DID observe corruption must still allow it, or a
+    /// genuinely broken database never heals.
+    #[test]
+    fn an_observed_corruption_still_permits_quarantine() {
+        use crate::db::migrations::CorruptionRecovery as R;
+        use std::path::PathBuf;
+        assert!(!db_verified_intact(&R::RestoredFromBackup {
+            restored_from: PathBuf::from("x.db.backup.v1")
+        }));
+        assert!(!db_verified_intact(&R::QuarantinedNoBackup {
+            quarantined_to: PathBuf::from("x.db.corrupt")
+        }));
+        assert!(!db_verified_intact(&R::RecoveryFailed {
+            reason: "disk full".to_string()
+        }));
     }
 
     /// An unrelated `SQLITE_MISMATCH` must not suppress corruption recovery — the code

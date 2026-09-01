@@ -396,13 +396,61 @@ closed would reopen in a single statement.
    children survive. A migration test that only checks the parent's shape will pass
    while the cascade quietly empties everything downstream.
 
+## FM: The corrupt-database fallback quarantined on ANY error, not on evidence
+*(fixed 2026-09-01; two incidents before the fix, one shipped)*
+
+`get_database()` opened the DB, and on failure ran three allowlist checks — lock
+contention, schema-too-new, cascade-wipe abort — and **quarantined the file for
+everything else**. That made destruction the DEFAULT: every new error class anywhere
+under `Database::new` inherited "rename the user's corpus to `.db.corrupt` and start
+empty" until someone remembered to add an arm. A denylist by omission.
+
+It was not theoretical. On 2026-08-16 a *correct* schema-too-new refusal renamed
+296 MB / 15,659 items and the app came up with 0. The cascade-wipe guard (#595) would
+have done the same, answering "this migration would delete 13,878 rows" by moving all
+64,000+ aside, until its error was allowlisted too. Two for two.
+
+**The fix inverts the default: quarantine now requires evidence.** `PRAGMA quick_check`
+already runs in the pre-flight immediately above, and its verdict is in scope. If it
+says the file is intact (`Healthy` / `NoExistingDb`), the failure is not corruption —
+it is a bug, a migration refusal, a stale binary, another instance holding the file, or
+antivirus — and the app refuses to start with the path to the database and what to try,
+rather than moving it. The three allowlist arms remain as belt-and-braces.
+
+That asymmetry is the whole argument: refusing to start is a support question with the
+data intact; quarantining silently can be the user's entire corpus, and on Windows a
+transient AV lock is a realistic trigger.
+
+**Second silent path closed in the same change:** the fallback never called
+`set_db_recovery_notice`, so after it quarantined the corpus `startup_health::
+check_database` still reported the pre-flight verdict — **healthy**. The app reset
+itself and the health surface said nothing was wrong. It now records
+`QuarantinedNoBackup` so the reset is visible.
+
+**Generalisable rule:** when an error path can destroy user data, the destructive
+branch must be the one that requires proof. If your code reads "handle the safe cases,
+else destroy", every future error is a data-loss bug you have not written yet.
+
 **How the guard behaves** (`Database::assert_no_cascade_wipe`): it fires only on the
 unambiguous case — a table that had rows before the migration and has none after,
 while still existing. A migration that *drops* a child table outright is deliberate
 and passes. A migration that deletes some rows passes. On a fresh database every
 child table is empty, so the census is empty and the guard is inert through all 117
 migrations; it can only fire on a database that already holds data, which is exactly
-where the loss would matter.
+where the loss would matter. It costs ~18 ms per migration (measured on an 803 MB
+corpus, 150 tables) — about 2 s once on a fresh install's full chain, and negligible
+on an existing database, where only the pending migrations run.
+
+**Scope correction.** The guard reads the live schema, so it covers every
+`ON DELETE CASCADE` relationship, not only the ones hanging off `source_items`. On the
+founder's corpus that is **~18,300 rows across three parent tables** — measured
+2026-09-01: `scoring_explanations` 13,878 (parent `source_items`), `facet_evidence`
+3,771 (`learned_facets`), `source_item_dependencies` 386, `advisor_judgments` 248, and
+`document_chunks` 0 only because no local documents are indexed on that machine. Two of
+those cannot be re-fetched: the explanation rows are the audit trail #591 restored, and
+`facet_evidence` is per-user learned evidence with no upstream source. #595's own commit
+message understates this as 13,109 rows / one parent — the correction landed on the PR
+page after the merge queue had already frozen the body.
 
 When it fires, the transaction rolls back and **nothing is modified**. The error
 carries `CASCADE_WIPE_PHRASE`, and `state.rs::is_migration_safety_abort` routes it
