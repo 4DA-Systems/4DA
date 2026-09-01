@@ -612,19 +612,80 @@ fn strict_manifest_packages_for(conn: &rusqlite::Connection, ecosystem: &str) ->
 /// default packages instead of the user's real deps (scoring audit 2026-08-23).
 /// Empty = ecosystem not tracked by ACE (Swift, C/C++, unknown).
 fn ace_manifest_types(ecosystem: &str) -> Vec<&'static str> {
+    use crate::ace::scanner::ManifestType as M;
     use crate::ecosystem::Ecosystem;
+    // Spelled via `ManifestType::db_key()`, never by hand. These strings are
+    // compared with `==` against `project_dependencies.manifest_type`, and until
+    // 2026-09-01 they were hand-written in the Debug spelling ("CargoToml")
+    // while the writer stored the lowercase form ("cargotoml"). Nothing ever
+    // matched, so every registry source read an empty dependency list and fell
+    // back to its hardcoded popular-package list — the opposite of "your
+    // codebase decides what's relevant". Same defect class the 2026-08-23
+    // scoring audit fixed for ecosystem NAMES; it survived here in the
+    // manifest-type values.
     match Ecosystem::parse(ecosystem) {
-        Some(Ecosystem::Npm) => vec!["PackageJson"],
-        Some(Ecosystem::Cargo) => vec!["CargoToml"],
-        Some(Ecosystem::PyPI) => vec!["PyprojectToml", "RequirementsTxt"],
-        Some(Ecosystem::Go) => vec!["GoMod"],
-        Some(Ecosystem::Maven) => vec!["PomXml", "BuildGradle"],
-        Some(Ecosystem::NuGet) => vec!["Csproj"],
-        Some(Ecosystem::RubyGems) => vec!["Gemfile"],
-        Some(Ecosystem::Packagist) => vec!["ComposerJson"],
-        Some(Ecosystem::Pub) => vec!["PubspecYaml"],
+        Some(Ecosystem::Npm) => vec![M::PackageJson.db_key()],
+        Some(Ecosystem::Cargo) => vec![M::CargoToml.db_key()],
+        Some(Ecosystem::PyPI) => vec![M::PyprojectToml.db_key(), M::RequirementsTxt.db_key()],
+        Some(Ecosystem::Go) => vec![M::GoMod.db_key()],
+        Some(Ecosystem::Maven) => vec![M::PomXml.db_key(), M::BuildGradle.db_key()],
+        Some(Ecosystem::NuGet) => vec![M::Csproj.db_key()],
+        Some(Ecosystem::RubyGems) => vec![M::Gemfile.db_key()],
+        Some(Ecosystem::Packagist) => vec![M::ComposerJson.db_key()],
+        Some(Ecosystem::Pub) => vec![M::PubspecYaml.db_key()],
         None => Vec::new(),
     }
+}
+
+/// Take a bounded, ROTATING window over a monitored package list.
+///
+/// Registry adapters pace themselves against the registry's rate limit (crates.io
+/// ~1 req/sec, npm 500 ms) and the whole fetch runs under a 90-second per-source
+/// timeout. A real dependency list is far larger than that budget — the founder's
+/// stack has 107 runtime Cargo deps, which at 1 req/sec is ~107 s and would time
+/// the source out entirely, surfacing NOTHING. So the list must be capped.
+///
+/// A plain cap is not enough: `take(n)` fetches the same first `n` names for
+/// ever and the tail is never checked, which is the same "we are watching your
+/// dependencies" claim being false, just quieter. The cursor advances by the
+/// window each call and wraps, so a list of any length is fully covered in
+/// `ceil(len / window)` cycles — 107 crates at 30/cycle is four cycles, well
+/// inside a release-monitoring cadence.
+///
+/// The cursor lives in `kv_store`; if it cannot be read or written the window
+/// still returns a valid slice (starting at 0), because a degraded rotation is
+/// better than a failed fetch.
+pub(crate) fn rotating_window(cursor_key: &str, names: &[String], window: usize) -> Vec<String> {
+    if names.is_empty() || window == 0 {
+        return Vec::new();
+    }
+    if names.len() <= window {
+        return names.to_vec();
+    }
+
+    let db = crate::get_database().ok();
+    let start = db
+        .as_ref()
+        .and_then(|d| d.get_kv(cursor_key).ok().flatten())
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0)
+        % names.len();
+
+    let picked: Vec<String> = names
+        .iter()
+        .cycle()
+        .skip(start)
+        .take(window)
+        .cloned()
+        .collect();
+
+    if let Some(d) = db {
+        let next = (start + window) % names.len();
+        if let Err(e) = d.set_kv(cursor_key, &next.to_string()) {
+            tracing::debug!(target: "4da::sources", error = %e, cursor_key, "Could not persist rotation cursor");
+        }
+    }
+    picked
 }
 
 /// Load user's actual dependency names from ACE for a specific ecosystem.
@@ -751,18 +812,30 @@ mod strict_manifest_tests {
         // types — before normalization only "npm" and "crates.io" matched, so
         // 7 of 9 ecosystems queried hardcoded defaults instead of the user's
         // real deps (scoring audit 2026-08-23).
-        assert_eq!(ace_manifest_types("npm"), vec!["PackageJson"]);
-        assert_eq!(ace_manifest_types("crates.io"), vec!["CargoToml"]);
+        use crate::ace::scanner::ManifestType as M;
+        // Asserted through `db_key()`, not hand-spelled. These assertions used to
+        // read `vec!["CargoToml"]` — the Debug spelling — which is NOT what the
+        // writer stores, so the suite was green while the lookup matched nothing
+        // in production. A test that hand-writes the value it is guarding cannot
+        // catch the value being wrong.
+        assert_eq!(ace_manifest_types("npm"), vec![M::PackageJson.db_key()]);
+        assert_eq!(ace_manifest_types("crates.io"), vec![M::CargoToml.db_key()]);
         assert_eq!(
             ace_manifest_types("PyPI"),
-            vec!["PyprojectToml", "RequirementsTxt"]
+            vec![M::PyprojectToml.db_key(), M::RequirementsTxt.db_key()]
         );
-        assert_eq!(ace_manifest_types("Go"), vec!["GoMod"]);
-        assert_eq!(ace_manifest_types("Maven"), vec!["PomXml", "BuildGradle"]);
-        assert_eq!(ace_manifest_types("NuGet"), vec!["Csproj"]);
-        assert_eq!(ace_manifest_types("RubyGems"), vec!["Gemfile"]);
-        assert_eq!(ace_manifest_types("Packagist"), vec!["ComposerJson"]);
-        assert_eq!(ace_manifest_types("Pub"), vec!["PubspecYaml"]);
+        assert_eq!(ace_manifest_types("Go"), vec![M::GoMod.db_key()]);
+        assert_eq!(
+            ace_manifest_types("Maven"),
+            vec![M::PomXml.db_key(), M::BuildGradle.db_key()]
+        );
+        assert_eq!(ace_manifest_types("NuGet"), vec![M::Csproj.db_key()]);
+        assert_eq!(ace_manifest_types("RubyGems"), vec![M::Gemfile.db_key()]);
+        assert_eq!(
+            ace_manifest_types("Packagist"),
+            vec![M::ComposerJson.db_key()]
+        );
+        assert_eq!(ace_manifest_types("Pub"), vec![M::PubspecYaml.db_key()]);
     }
 
     #[test]
@@ -776,11 +849,92 @@ mod strict_manifest_tests {
         assert_eq!(ace_manifest_types("php"), ace_manifest_types("packagist"));
         assert_eq!(ace_manifest_types("dart"), ace_manifest_types("pub"));
         assert_eq!(ace_manifest_types("ruby"), ace_manifest_types("rubygems"));
-        assert_eq!(ace_manifest_types("go"), vec!["GoMod"]);
+        assert_eq!(
+            ace_manifest_types("go"),
+            vec![crate::ace::scanner::ManifestType::GoMod.db_key()]
+        );
         // Untracked ecosystems stay empty — callers keep their fallbacks.
         assert!(ace_manifest_types("swift").is_empty());
         assert!(ace_manifest_types("cpp").is_empty());
         assert!(ace_manifest_types("made-up").is_empty());
+    }
+
+    /// THE regression test for 2026-09-01.
+    ///
+    /// `ace_manifest_types` returns strings that are compared with `==` against
+    /// `project_dependencies.manifest_type`. If they are not drawn from the SAME
+    /// vocabulary the writer uses, the comparison silently matches nothing and
+    /// every registry source falls back to its hardcoded popular-package list —
+    /// which is what happened: the reader said "CargoToml", the column holds
+    /// "cargotoml", and crates.io monitored 12 default crates while the user had
+    /// 934 real ones.
+    ///
+    /// Asserting the strings by hand cannot catch this (the old test did exactly
+    /// that and stayed green). Asserting that every string the reader can emit is
+    /// a real `ManifestType::db_key()` can.
+    /// A window smaller than the list must still COVER the list as cycles pass.
+    /// Without the cursor this returns the same names for ever and the tail is
+    /// silently unwatched — the cap would be hiding the same broken promise the
+    /// hardcoded default list did.
+    #[test]
+    fn rotation_covers_the_whole_list_across_cycles() {
+        let names: Vec<String> = (0..7).map(|i| format!("pkg{i}")).collect();
+        // No database in unit tests, so the cursor cannot persist; the window must
+        // still be valid and bounded rather than panicking or returning nothing.
+        let w = rotating_window("test.cursor", &names, 3);
+        assert_eq!(w.len(), 3, "window must be capped at the budget");
+        assert!(w.iter().all(|n| names.contains(n)));
+
+        // A window at or above the list length returns everything, un-rotated.
+        assert_eq!(rotating_window("test.cursor", &names, 7).len(), 7);
+        assert_eq!(rotating_window("test.cursor", &names, 99).len(), 7);
+
+        // Degenerate inputs must not panic — an empty monitored list is the
+        // normal state before the first ACE scan.
+        assert!(rotating_window("test.cursor", &[], 3).is_empty());
+        assert!(rotating_window("test.cursor", &names, 0).is_empty());
+    }
+
+    #[test]
+    fn every_manifest_type_the_reader_emits_is_a_real_writer_key() {
+        use crate::ace::scanner::ManifestType;
+        let writer_vocab: std::collections::HashSet<&str> =
+            ManifestType::ALL.iter().map(|t| t.db_key()).collect();
+
+        // Every ecosystem alias any adapter passes in.
+        let ecosystems = [
+            "npm",
+            "javascript",
+            "typescript",
+            "crates.io",
+            "rust",
+            "PyPI",
+            "pypi",
+            "python",
+            "Go",
+            "go",
+            "Maven",
+            "java",
+            "NuGet",
+            "csharp",
+            "RubyGems",
+            "ruby",
+            "Packagist",
+            "php",
+            "Pub",
+            "dart",
+        ];
+        let mut emitted = 0usize;
+        for eco in ecosystems {
+            for ty in ace_manifest_types(eco) {
+                emitted += 1;
+                assert!(
+                    writer_vocab.contains(ty),
+                    "ace_manifest_types({eco:?}) emits {ty:?}, which no ManifestType writes.                      A reader outside the writer's vocabulary matches NOTHING and silently                      falls back to hardcoded defaults."
+                );
+            }
+        }
+        assert!(emitted > 0, "no ecosystem resolved — the table is dead");
     }
 
     #[test]

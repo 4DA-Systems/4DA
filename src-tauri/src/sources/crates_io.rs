@@ -333,12 +333,19 @@ impl Source for CratesIoSource {
         // FULL pinned manifest (can be hundreds); at ~1 req/sec that overruns the adapter's fetch
         // timeout and surfaces NOTHING. Cap per cycle to max_items so the fetch finishes in-budget —
         // every fetched crate is still manifest-grounded. Non-strict is unchanged (loops the list).
-        let monitored: Vec<&String> = if crate::source_fetching::strict_manifest_mode() {
-            self.crates.iter().take(self.config.max_items).collect()
-        } else {
-            self.crates.iter().collect()
-        };
-        for name in monitored {
+        // Bounded AND rotating, in both modes. The cap keeps the fetch inside the
+        // 90-second per-source timeout (~1 req/sec here); the rotation is what
+        // makes the cap honest — without it the tail of a real dependency list is
+        // never checked at all. Non-strict used to loop the WHOLE list, which was
+        // safe only because the list was the 12-name `DEFAULT_CRATES` fallback;
+        // now that the user's real deps reach this list, an unbounded loop would
+        // time the source out and surface nothing.
+        let monitored = crate::source_fetching::rotating_window(
+            "sources.crates_io.rotation_cursor",
+            &self.crates,
+            self.config.max_items,
+        );
+        for name in &monitored {
             match self.fetch_crate(name).await {
                 Ok(item) => {
                     if seen_ids.insert(item.source_id.clone()) {
