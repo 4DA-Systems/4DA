@@ -50,6 +50,28 @@ fn chain_detection_db() -> Connection {
     conn
 }
 
+/// Anchor for every fixture timestamp: **noon yesterday**, not "now".
+///
+/// Chain detection buckets items by calendar day (`DATE(signal_at)` in the
+/// candidate query, `ts.get(..10)` in the multi-day gate), so a fixture that
+/// offsets from `now` silently changes shape depending on the wall clock. With
+/// `now` as the anchor, `-10 minutes` and `-1 day` land on DIFFERENT days for
+/// most of the day but the SAME day whenever the suite runs in the first ten
+/// minutes after UTC midnight — at 00:02 UTC both resolve to yesterday, the
+/// topic collapses to one distinct date, and the multi-day gate rejects it.
+///
+/// That is not hypothetical: it took out four tests in a merge-queue run at
+/// 2026-09-01T00:02Z and dequeued a frontend-only PR that could not have caused
+/// it. For this fleet the window is 10:00-10:10 AEST — the middle of a working
+/// day, not a quiet night.
+///
+/// Anchoring to a fixed time-of-day makes every offset land on a deterministic
+/// calendar date whatever the clock says. Yesterday rather than today so that
+/// no fixture is stamped in the future, and noon so that a whole-day offset
+/// cannot drift across a boundary. The largest offset in use is `-4 days`,
+/// giving 5 days from now — still inside the 7-day candidate window.
+const FIXTURE_ANCHOR: (&str, &str) = ("-1 day", "+12 hours");
+
 fn insert_chain_test_item(
     conn: &Connection,
     source_id: &str,
@@ -59,20 +81,81 @@ fn insert_chain_test_item(
     time_modifier: &str,
     relevance_score: f64,
 ) {
+    let (anchor_day, anchor_hour) = FIXTURE_ANCHOR;
     conn.execute(
         "INSERT INTO source_items (
             source_type, source_id, title, content, created_at, relevance_score, embedding_status
-         ) VALUES (?1, ?2, ?3, ?4, datetime('now', ?5), ?6, 'complete')",
+         ) VALUES (?1, ?2, ?3, ?4, datetime(date('now'), ?7, ?8, ?5), ?6, 'complete')",
         params![
             source_type,
             source_id,
             title,
             content,
             time_modifier,
-            relevance_score
+            relevance_score,
+            anchor_day,
+            anchor_hour
         ],
     )
     .expect("insert chain test item");
+}
+
+/// The fixture anchor must make day bucketing independent of the wall clock.
+///
+/// Guards the regression directly: assert that the two offsets which collided at
+/// 00:02 UTC (`-10 minutes` and `-1 day`) resolve to two distinct calendar dates,
+/// and that a same-day pair still shares one. Without the anchor this passes for
+/// 1430 minutes a day and fails for 10, which is exactly why it went unnoticed.
+#[test]
+fn fixture_offsets_land_on_stable_calendar_days() {
+    let conn = chain_detection_db();
+    for (id, offset) in [
+        ("recent", "-10 minutes"),
+        ("also-recent", "-1 minutes"),
+        ("yesterday", "-1 day"),
+        ("older", "-4 days"),
+    ] {
+        insert_chain_test_item(&conn, id, "hackernews", "t", "c", offset, 1.0);
+    }
+
+    let day_of = |source_id: &str| -> String {
+        conn.query_row(
+            "SELECT DATE(created_at) FROM source_items WHERE source_id = ?1",
+            params![source_id],
+            |r| r.get::<_, String>(0),
+        )
+        .expect("read fixture day")
+    };
+
+    assert_eq!(
+        day_of("recent"),
+        day_of("also-recent"),
+        "two sub-hour offsets must share a calendar day"
+    );
+    assert_ne!(
+        day_of("recent"),
+        day_of("yesterday"),
+        "a sub-hour offset and a -1 day offset must land on DIFFERENT calendar days, \
+         whatever time the suite runs — this is the multi-day gate's whole premise"
+    );
+    assert_ne!(day_of("yesterday"), day_of("older"));
+
+    // Every fixture must stay inside the 7-day candidate window and never be
+    // stamped in the future.
+    let (in_window, in_past): (i64, i64) = conn
+        .query_row(
+            "SELECT SUM(created_at >= datetime('now', '-7 days')),
+                    SUM(created_at <= datetime('now'))
+             FROM source_items",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("window check");
+    assert_eq!(
+        in_window, 4,
+        "all fixtures must fall inside the 7-day window"
+    );
+    assert_eq!(in_past, 4, "no fixture may be stamped in the future");
 }
 
 // ------------------------------------------------------------------------
