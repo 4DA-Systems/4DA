@@ -8,10 +8,13 @@
 //! lane already persisted its explanations (`llm_judgments.explanation`); this
 //! module gives the deterministic scorer the same property.
 //!
-//! Write lane: [`Database::persist_analysis_scores`] upserts one
+//! Write lane: [`Database::persist_analysis_scores`] writes one
 //! `scoring_explanations` row per persisted score, in the SAME transaction as
-//! the score write (newest evaluation wins — `source_item_id` is the primary
-//! key). The stored value is a bounded envelope, not the raw struct:
+//! the score write. The invariant it maintains is *a scored item always has
+//! an explanation, and a hysteresis-suppressed re-score never replaces a
+//! better one*: a score-changing write upserts (newest evaluation wins —
+//! `source_item_id` is the primary key), a suppressed write only seeds a
+//! missing row. The stored value is a bounded envelope, not the raw struct:
 //!
 //! ```json
 //! {"score": 0.42, "breakdown": { ...ScoreBreakdown... },
@@ -23,8 +26,9 @@
 //! - `breakdown` is the full [`ScoreBreakdown`] with long arrays and strings
 //!   truncated IN PLACE (arrays stay homogeneous, so the object still
 //!   deserializes into the typed struct).
-//! - `truncated` maps each shortened path to its original length — the
-//!   marker demanded by the size bound: truncate loudly, never fail.
+//! - `truncated` maps each shortened path to its original length (element
+//!   count for arrays, BYTE length for strings) — the marker demanded by the
+//!   size bound: truncate loudly, never fail.
 //!
 //! This is WRITE-ONLY additional data: scores are byte-identical with or
 //! without it, so there is deliberately NO `PIPELINE_VERSION` bump.
@@ -42,11 +46,16 @@ use crate::types::ScoreBreakdown;
 /// First-pass bounds: generous enough that a normal breakdown is stored
 /// verbatim (typical serialized size is 1.5–3 KB).
 const MAX_ARRAY_ITEMS: usize = 8;
-const MAX_STRING_CHARS: usize = 400;
+/// String bounds are measured in BYTES, matching the unit of
+/// [`EXPLANATION_HARD_CAP_BYTES`]. They were once measured in characters,
+/// which let multi-byte content (CJK, emoji — 4DA ingests Mastodon and Lemmy)
+/// pass the string bound untouched at up to 4x its budget and blow the
+/// envelope cap, forcing the aggressive pass to sacrifice whole array entries.
+const MAX_STRING_BYTES: usize = 400;
 /// Second-pass bounds when the first pass still exceeds the hard cap
 /// (pathological inputs: hundreds of matched deps with long evidence text).
 const AGGRESSIVE_ARRAY_ITEMS: usize = 3;
-const AGGRESSIVE_STRING_CHARS: usize = 80;
+const AGGRESSIVE_STRING_BYTES: usize = 80;
 /// The stored envelope never exceeds this many bytes.
 pub const EXPLANATION_HARD_CAP_BYTES: usize = 8192;
 
@@ -75,9 +84,9 @@ pub struct PersistedExplanation {
 /// bound must be unconditional) the envelope degrades to `{"score", "elided"}`.
 pub fn bounded_breakdown_json(score: f32, breakdown: &ScoreBreakdown) -> Option<String> {
     let full = serde_json::to_value(breakdown).ok()?;
-    for (max_items, max_chars) in [
-        (MAX_ARRAY_ITEMS, MAX_STRING_CHARS),
-        (AGGRESSIVE_ARRAY_ITEMS, AGGRESSIVE_STRING_CHARS),
+    for (max_items, max_bytes) in [
+        (MAX_ARRAY_ITEMS, MAX_STRING_BYTES),
+        (AGGRESSIVE_ARRAY_ITEMS, AGGRESSIVE_STRING_BYTES),
     ] {
         let mut bounded = full.clone();
         let mut truncated = serde_json::Map::new();
@@ -87,7 +96,7 @@ pub fn bounded_breakdown_json(score: f32, breakdown: &ScoreBreakdown) -> Option<
             &mut bounded,
             "breakdown",
             max_items,
-            max_chars,
+            max_bytes,
             &mut truncated,
         );
 
@@ -112,15 +121,36 @@ pub fn bounded_breakdown_json(score: f32, breakdown: &ScoreBreakdown) -> Option<
     )
 }
 
+/// Largest index `<= max_bytes` that lies on a UTF-8 character boundary.
+///
+/// `str::floor_char_boundary` is still unstable, so this is the hand-rolled
+/// equivalent: UTF-8 continuation bytes are `0b10xxxxxx` and a sequence is at
+/// most four bytes, so walking back at most three bytes always lands on a
+/// boundary. Truncating at this index can never split a character (which
+/// `String::truncate` would panic on).
+fn floor_char_boundary(s: &str, max_bytes: usize) -> usize {
+    if max_bytes >= s.len() {
+        return s.len();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    end
+}
+
 /// Recursively truncate arrays longer than `max_items` and strings longer
-/// than `max_chars` (char-boundary safe), recording `path -> original length`
-/// in `truncated`. Arrays are shortened, never replaced with marker strings,
-/// so a truncated breakdown still deserializes into [`ScoreBreakdown`].
+/// than `max_bytes`, recording `path -> original length` in `truncated`
+/// (element count for arrays, BYTE length for strings — the same unit as the
+/// bound). Strings are cut at a UTF-8 character boundary, so a multi-byte
+/// character is dropped whole rather than split. Arrays are shortened, never
+/// replaced with marker strings, so a truncated breakdown still deserializes
+/// into [`ScoreBreakdown`].
 fn bound_value(
     v: &mut Value,
     path: &str,
     max_items: usize,
-    max_chars: usize,
+    max_bytes: usize,
     truncated: &mut serde_json::Map<String, Value>,
 ) {
     match v {
@@ -134,7 +164,7 @@ fn bound_value(
                     item,
                     &format!("{path}[{i}]"),
                     max_items,
-                    max_chars,
+                    max_bytes,
                     truncated,
                 );
             }
@@ -146,15 +176,12 @@ fn bound_value(
                 } else {
                     format!("{path}.{key}")
                 };
-                bound_value(val, &child_path, max_items, max_chars, truncated);
+                bound_value(val, &child_path, max_items, max_bytes, truncated);
             }
         }
-        Value::String(s) => {
-            let char_count = s.chars().count();
-            if char_count > max_chars {
-                truncated.insert(path.to_string(), Value::from(char_count));
-                *s = s.chars().take(max_chars).collect();
-            }
+        Value::String(s) if s.len() > max_bytes => {
+            truncated.insert(path.to_string(), Value::from(s.len()));
+            s.truncate(floor_char_boundary(s, max_bytes));
         }
         _ => {}
     }
@@ -312,9 +339,12 @@ mod tests {
         );
     }
 
-    /// A hysteresis-suppressed re-score keeps the OLD durable score, so it
-    /// must keep the OLD explanation too — the explanation lane explains the
-    /// persisted score, not the wobble the damper discarded.
+    /// Half of the seed/keep invariant: a hysteresis-suppressed re-score keeps
+    /// the OLD durable score, so it must keep the OLD explanation too — the
+    /// explanation lane explains the persisted score, not the wobble the
+    /// damper discarded. Pairs with
+    /// [`test_suppressed_write_seeds_missing_explanation`], which covers the
+    /// case where there is no old explanation to keep.
     #[test]
     fn test_hysteresis_suppressed_write_keeps_old_explanation() {
         let db = test_db();
@@ -335,6 +365,140 @@ mod tests {
         assert!(
             (envelope["score"].as_f64().unwrap() - 0.50).abs() < 1e-6,
             "suppressed write must not replace the explanation of the durable score"
+        );
+    }
+
+    /// The other half of the invariant, and the 81% lockout this repairs
+    /// (measured on the live corpus 2026-08-31: 50,788 of 62,822 scored items
+    /// had no explanation and could never acquire one). An item that already
+    /// carried a score when schema 115 landed has no row, and a STABLE score
+    /// is exactly the condition that suppresses the write — so skipping the
+    /// suppressed path locked the item out permanently. A suppressed re-score
+    /// must SEED the missing row.
+    #[test]
+    fn test_suppressed_write_seeds_missing_explanation() {
+        let db = test_db();
+        let id = insert_test_item(&db, "hackernews", "expl_seed", "pre-115 item", "content");
+
+        // Pre-schema-115 state: a durable score with no explanation row.
+        db.persist_analysis_scores(&[(id, 0.50, None, None, None)], "analysis")
+            .unwrap();
+        assert!(
+            db.get_scoring_explanation(id).unwrap().is_none(),
+            "precondition: the item carries a score but no explanation"
+        );
+
+        // 0.52 is inside the 0.05 hysteresis band, so this write is
+        // suppressed. Before the fix that skipped the explanation entirely,
+        // and every future re-score of a stable item would skip it too.
+        let bd = bounded_breakdown_json(0.52, &minimal_breakdown()).expect("serializes");
+        db.persist_analysis_scores(&[(id, 0.52, None, None, Some(bd))], "analysis")
+            .unwrap();
+
+        let row = db
+            .get_scoring_explanation(id)
+            .unwrap()
+            .expect("a suppressed re-score must seed the missing explanation");
+        let envelope: serde_json::Value = serde_json::from_str(&row.breakdown_json).unwrap();
+        assert!(
+            (envelope["score"].as_f64().unwrap() - 0.52).abs() < 1e-6,
+            "the seeded breakdown is the one this evaluation produced"
+        );
+
+        // Seeding is a write-path repair, not a change to the hysteresis
+        // contract: the durable score is still damped to the old value.
+        let durable: f64 = db
+            .conn
+            .lock()
+            .query_row(
+                "SELECT relevance_score FROM source_items WHERE id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            (durable - 0.50).abs() < 1e-6,
+            "hysteresis still damps the durable score; only the explanation seeds"
+        );
+    }
+
+    /// The hard cap is measured in BYTES, but the string bound was measured in
+    /// CHARACTERS. Multi-byte content (CJK, emoji — 4DA ingests Mastodon and
+    /// Lemmy, so this is live-reachable) therefore passed the string bound
+    /// untouched at up to 4x its byte budget, overflowed the envelope, and
+    /// forced the aggressive second pass to sacrifice whole array entries.
+    /// Byte-aware bounding keeps the entries and never splits a character.
+    #[test]
+    fn test_multibyte_strings_bounded_by_bytes_not_chars() {
+        let mut bd = minimal_breakdown();
+
+        // 300 chars but 1200 bytes: under the old 400-CHARACTER bound this
+        // string was not truncated at all, and MAX_ARRAY_ITEMS of them
+        // (9600 bytes) alone overflow the 8192-byte cap.
+        let emoji = "\u{1F680}".repeat(300);
+        assert_eq!(emoji.chars().count(), 300, "inside the old 400-char bound");
+        assert_eq!(emoji.len(), 1200, "but 4x that in bytes");
+        bd.matched_deps = vec![emoji; MAX_ARRAY_ITEMS];
+        // 800 chars / 2400 bytes of 3-byte characters, and 400 is NOT a
+        // character boundary in it — the truncation must walk back to 399.
+        bd.llm_reason = Some("\u{6F22}\u{5B57}".repeat(400));
+
+        let json = bounded_breakdown_json(0.5, &bd).expect("serializes");
+        assert!(
+            json.len() <= EXPLANATION_HARD_CAP_BYTES,
+            "envelope must respect the byte cap; got {} bytes",
+            json.len()
+        );
+
+        let envelope: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let truncated = envelope["truncated"]
+            .as_object()
+            .expect("truncation must be marked, not silent");
+
+        // The substantive claim first: bounding the STRINGS by bytes keeps the
+        // whole array. The old char bound left these strings untouched at 1200
+        // bytes each, overflowed the envelope, and the aggressive second pass
+        // bought the size back by cutting the array 8 -> 3 — five dependency
+        // matches silently lost to a bound measured in the wrong unit.
+        let parsed: ScoreBreakdown =
+            serde_json::from_value(envelope["breakdown"].clone()).expect("typed re-read works");
+        assert_eq!(
+            parsed.matched_deps.len(),
+            MAX_ARRAY_ITEMS,
+            "every dependency match survives the first pass"
+        );
+        assert!(
+            !truncated.contains_key("breakdown.matched_deps"),
+            "the array is not truncated at all, so it carries no marker"
+        );
+        assert_eq!(
+            truncated["breakdown.matched_deps[0]"].as_u64(),
+            Some(1200),
+            "the marker records the original BYTE length, matching the bound's unit"
+        );
+
+        for dep in &parsed.matched_deps {
+            assert!(
+                dep.len() <= MAX_STRING_BYTES,
+                "each string is byte-bounded; got {} bytes",
+                dep.len()
+            );
+            assert!(
+                dep.chars().all(|c| c == '\u{1F680}'),
+                "characters are dropped whole — a split UTF-8 sequence would \
+                 not round-trip through JSON as the original character"
+            );
+        }
+
+        let reason = parsed.llm_reason.expect("llm_reason survives, truncated");
+        assert_eq!(
+            reason.len(),
+            399,
+            "truncation walks back from 400 to the nearest character boundary"
+        );
+        assert!(
+            reason.chars().all(|c| c == '\u{6F22}' || c == '\u{5B57}'),
+            "no partial character at the cut"
         );
     }
 
