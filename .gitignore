@@ -78,6 +78,11 @@ data/*.db.corrupt
 # Runtime usage stats (changes every session)
 data/usage.json
 
+# Judge accuracy benchmark results — one JSONL row per `pnpm run bench:judge`
+# run, written next to the database so the trend lives with the corpus it was
+# measured against. Local measurement history, never tracked.
+data/judge-benchmark-results.jsonl
+
 # User settings (contains API keys and local paths)
 data/settings.json
 
