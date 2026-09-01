@@ -424,8 +424,12 @@ impl ACE {
                             };
                             if relevance >= 0.15 || force_persist {
                                 if let Ok(conn) = crate::open_db_connection() {
-                                    let manifest_type =
-                                        format!("{:?}", signal.manifest_type).to_lowercase();
+                                    // One vocabulary, shared with every reader that
+                                    // matches on this column. The old
+                                    // `format!("{:?}", ..).to_lowercase()` produced the
+                                    // same bytes but was an unwritten convention, and
+                                    // the registry-source reader spelled it differently.
+                                    let manifest_type = signal.manifest_type.db_key().to_string();
                                     let language = signal.manifest_type.language();
 
                                     // Record the project itself so the Cross-Project
