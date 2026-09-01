@@ -49,20 +49,16 @@ pub enum FeedBucket {
 /// implementation does NOT enforce that — callers picking non-summing
 /// configs just get approximately what they ask for.
 ///
-/// `comfort_pct` is kept on the struct for settings roundtrip and UI
-/// display even though the algorithm derives comfort from
-/// `top_n - stretch - horizon` so rounding slack lands in comfort
-/// automatically. Exposing it lets the settings UI show the three
-/// ratios symmetrically.
+/// There is deliberately no `comfort_pct` here. The algorithm derives comfort
+/// from `top_n - stretch - horizon`, so rounding slack lands in comfort
+/// automatically and a stored percentage would be a second source of truth
+/// that nothing reads. The settings struct keeps its own `comfort_pct` for
+/// roundtrip and for showing the three ratios symmetrically in the UI; that is
+/// the one users see.
 #[derive(Debug, Clone)]
 pub struct FloorConfig {
     /// How many items to compose. Items past this index are untouched.
     pub top_n: usize,
-    /// Target fraction of top-N that should be Comfort items.
-    /// Read by settings/UI; algorithm derives from remainder.
-    // REMOVE BY 2026-09-01 — comfort_pct read via settings but algorithm uses remainder
-    #[allow(dead_code)]
-    pub comfort_pct: u8,
     /// Target fraction that should be Stretch items.
     pub stretch_pct: u8,
     /// Target fraction that should be Horizon items.
@@ -73,7 +69,6 @@ impl Default for FloorConfig {
     fn default() -> Self {
         Self {
             top_n: 20,
-            comfort_pct: 70,
             stretch_pct: 20,
             horizon_pct: 10,
         }
@@ -389,7 +384,6 @@ mod tests {
         ];
         let config = FloorConfig {
             top_n: 5,
-            comfort_pct: 60,
             stretch_pct: 20,
             horizon_pct: 20,
         };
@@ -419,7 +413,6 @@ mod tests {
         ];
         let config = FloorConfig {
             top_n: 5,
-            comfort_pct: 60,
             stretch_pct: 20,
             horizon_pct: 20,
         };
@@ -487,7 +480,6 @@ mod tests {
         ];
         let config = FloorConfig {
             top_n: 5,
-            comfort_pct: 60,
             stretch_pct: 20,
             horizon_pct: 20,
         };
@@ -506,7 +498,6 @@ mod tests {
             &mut results,
             &FloorConfig {
                 top_n: 0,
-                comfort_pct: 70,
                 stretch_pct: 20,
                 horizon_pct: 10,
             },
@@ -518,7 +509,6 @@ mod tests {
     #[test]
     fn default_config_is_70_20_10() {
         let c = FloorConfig::default();
-        assert_eq!(c.comfort_pct, 70);
         assert_eq!(c.stretch_pct, 20);
         assert_eq!(c.horizon_pct, 10);
         assert_eq!(c.top_n, 20);

@@ -410,7 +410,6 @@ pub(crate) async fn run_multi_source_analysis_impl(
         if fc.enabled {
             let cfg = scoring::FloorConfig {
                 top_n: fc.top_n as usize,
-                comfort_pct: fc.comfort_pct,
                 stretch_pct: fc.stretch_pct,
                 horizon_pct: fc.horizon_pct,
             };

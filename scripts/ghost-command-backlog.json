@@ -103,6 +103,12 @@
       "retired_on": "2026-08-31",
       "pr": "#567",
       "how": "deleted"
+    },
+    {
+      "command": "toolkit_kill_process",
+      "retired_on": "2026-09-01",
+      "pr": "#597",
+      "how": "deleted"
     }
   ],
   "backlog": [
@@ -668,12 +674,6 @@
       "command": "toolkit_http_request",
       "since": "2026-08-14",
       "rust": "src-tauri/src/toolkit_http.rs:91",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
-      "command": "toolkit_kill_process",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/toolkit.rs:232",
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {

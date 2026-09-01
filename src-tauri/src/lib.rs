@@ -1058,7 +1058,6 @@ pub fn run() {
             delegation::get_delegation_score,
             // Toolkit
             toolkit::toolkit_list_ports,
-            toolkit::toolkit_kill_process,
             toolkit::toolkit_env_snapshot,
             toolkit_http::toolkit_http_request,
             toolkit_http::toolkit_get_http_history,
