@@ -181,7 +181,6 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "generate_agent_brief",
     "get_delegation_score",
     "toolkit_list_ports",
-    "toolkit_kill_process",
     "toolkit_env_snapshot",
     "toolkit_http_request",
     "toolkit_get_http_history",

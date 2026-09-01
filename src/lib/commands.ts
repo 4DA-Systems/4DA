@@ -635,7 +635,6 @@ interface CommandMap {
 
   // -- Toolkit --
   toolkit_list_ports: { params: Record<string, never>; result: ListeningPort[] };
-  toolkit_kill_process: { params: { pid: number }; result: string };
   toolkit_http_request: { params: { request: HttpProbeRequest }; result: HttpProbeResponse };
   toolkit_get_http_history: { params: { limit: number }; result: HttpHistoryEntry[] };
   toolkit_test_feed: { params: { url: string }; result: FeedTestResult };
