@@ -103,13 +103,40 @@ export function getSignalLabel(item: SourceRelevance): string | null {
   }
 }
 
+/**
+ * Every signal colour is a design-system token reference, never a hex literal.
+ *
+ * Both matter. A hex literal is frozen to the dark palette — the light theme
+ * redefines `--color-error` (#EF4444 -> #B91C1C) and `--color-accent-action`
+ * (#F97316 -> #EA580C), so a hardcoded value silently ignores the theme. And a
+ * `var()` reference cannot be turned into a wash by string-concatenating a hex
+ * alpha suffix: `var(--color-accent-action)15` is invalid CSS, which the browser
+ * drops to `rgba(0, 0, 0, 0)` without warning. Use [`tint`] and [`onTint`].
+ */
 export function getSignalColor(item: SourceRelevance): string {
   switch (classifySignal(item)) {
-    case 'security': return '#EF4444';
+    case 'security': return 'var(--color-error)';
     case 'breaking': return 'var(--color-accent-action)';
-    default: return '#D4AF37';
+    default: return 'var(--color-accent-gold)';
   }
 }
+
+/** A translucent wash of `color`, valid for a token reference as well as a hex. */
+const tint = (color: string, percent: number) =>
+  `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+
+/**
+ * The same hue pushed toward the theme's own text colour, so small text clears
+ * WCAG AA against the washed background it sits on.
+ *
+ * Measured on the live app: the raw signal colour as 10px text on its own 8%
+ * wash reaches only 4.41:1, under the 4.5:1 AA floor for normal text. Mixing
+ * 15% of `--color-text-primary` lifts it to 5.22:1. That token is #FFFFFF on
+ * dark and #141414 on light, so the mix moves away from the background in both
+ * themes rather than lightening unconditionally.
+ */
+const onTint = (color: string) =>
+  `color-mix(in srgb, ${color} 85%, var(--color-text-primary))`;
 
 export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
   const { t } = useTranslation();
@@ -150,7 +177,7 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
 
   const { relevant, totalScanned, rejected, rejectionRate, criticalSave } = insight;
   const signalLabel = criticalSave ? getSignalLabel(criticalSave) : null;
-  const signalColor = criticalSave ? getSignalColor(criticalSave) : '#D4AF37';
+  const signalColor = criticalSave ? getSignalColor(criticalSave) : 'var(--color-accent-gold)';
 
   // Only show when there's a compelling story (enough rejection + a critical save)
   if (relevant.length === 0 || parseFloat(rejectionRate) < 80) return null;
@@ -235,8 +262,8 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
           <div
             className="rounded-lg p-3 border"
             style={{
-              backgroundColor: `${signalColor}08`,
-              borderColor: `${signalColor}20`,
+              backgroundColor: tint(signalColor, 3),
+              borderColor: tint(signalColor, 13),
             }}
           >
             <div className="flex items-start gap-3">
@@ -249,8 +276,8 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
                   <span
                     className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded mb-1.5"
                     style={{
-                      color: signalColor,
-                      backgroundColor: `${signalColor}15`,
+                      color: onTint(signalColor),
+                      backgroundColor: tint(signalColor, 8),
                     }}
                   >
                     {signalLabel}
