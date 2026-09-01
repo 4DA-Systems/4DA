@@ -161,9 +161,35 @@ fn prompt_pins_confidence_semantics_and_mandatory_field() {
         "the low-relevance omission rule must exempt confidence explicitly"
     );
     assert!(prompt.contains("CTX"), "user context must be embedded");
+
+    // v6 discrimination rules. Each pins a class the benchmark measured v5
+    // getting WRONG (beginner_for_expert 0/3, namematch_only 0/2), and the
+    // do-not-over-reject clause pins the other direction — without it a
+    // future edit could "improve" the prompt by rejecting everything.
+    assert!(
+        prompt.contains("Naming the user's stack is NOT relevance"),
+        "the topic-not-vocabulary rule is load-bearing for the name-match class"
+    );
+    assert!(
+        prompt.contains("pre-1.0 or release-candidate package is not relevant merely because"),
+        "the pre-1.0 name-match rule missing — tauri-plugin-* v0.1.0 scored 0.62-0.82 without it"
+    );
+    assert!(
+        prompt.contains("already ships expertly"),
+        "the beginner-for-expert rule missing — v5 scored 0/3 on that class"
+    );
+    assert!(
+        prompt.contains("Do NOT over-reject"),
+        "the anti-over-correction clause must survive: it is what stops a stricter          prompt from scoring better by rejecting genuinely relevant items"
+    );
+    assert!(
+        prompt.contains("IS in their stack or dependencies"),
+        "the in-stack-release exemption must survive alongside the name-match rule"
+    );
+
     assert_eq!(
-        PROMPT_VERSION, "v5",
-        "the no-fabrication fix must ride its own cohort"
+        PROMPT_VERSION, "v6",
+        "the topic-not-vocabulary fix must ride its own cohort"
     );
 }
 

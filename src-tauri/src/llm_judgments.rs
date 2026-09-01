@@ -60,10 +60,36 @@ use tracing::{debug, info, warn};
 /// satisfy any `>= threshold` consumer) and is counted into a WARN, so a
 /// judge that stops answering can never again disable the gate in silence.
 ///
+/// Bumped v5 -> v6 on the first evidence the judge accuracy benchmark ever
+/// produced. v5 scored MCC 0.607 against 101 labeled cases, and its errors
+/// were not random: it accepted, with high confidence, precisely the classes
+/// the RERANK judge's prompt has always guarded against and this one never
+/// mentioned. Measured on the live corpus 2026-09-01 and reproduced in the
+/// benchmark:
+///
+/// | class                                   | v5 |
+/// |-----------------------------------------|----|
+/// | beginner Q&A for expert-level tech      | 0/3 |
+/// | pre-1.0 packages that merely name-match | 0/2 |
+///
+/// Live examples: a family of `tauri-plugin-*` v0.1.0 releases scored 0.62-0.82
+/// for a Tauri developer, and "Why I can't import .ts file using express" scored
+/// 0.71 for someone who ships TypeScript. Naming the stack was reading as
+/// relevance. v6 ports the rerank judge's topic-not-vocabulary discipline into
+/// this lane, WITH an explicit do-not-over-reject clause — the benchmark pairs
+/// every negative with a near-twin positive (`thiserror` against
+/// `tauri-plugin-dglab-ws-server`, a React-internals deep dive against a React
+/// setup question), so a prompt that simply rejects more scores worse, not
+/// better.
+///
+/// The bump quarantines the cohort as every previous bump has: the demotion
+/// gate reads only current-version judgments, so it pauses until v6 judgments
+/// accumulate rather than mixing two rubrics.
+///
 /// `pub(crate)`: the judge accuracy benchmark (`scoring::judge_benchmark`)
 /// stamps every result row with the prompt cohort it measured, so a stored
 /// score can never be misread as belonging to a prompt it never ran under.
-pub(crate) const PROMPT_VERSION: &str = "v5";
+pub(crate) const PROMPT_VERSION: &str = "v6";
 const INGESTION_THRESHOLD: f64 = 0.25;
 /// 10 items per call: the system prompt + user-context block (~800 tokens) is
 /// resent on every call, so batch size directly divides that fixed overhead.
@@ -764,7 +790,23 @@ pub(crate) fn judge_system_prompt(user_context: &str) -> String {
            four are mandatory on every element, rejections included\n\
          - Judge technical_depth/novelty/audience_level ONLY from the provided text; if the \
            content preview is too thin to judge them, OMIT those fields entirely rather than guessing\n\
-         - Return ONLY a valid JSON array, no other text"
+         - Return ONLY a valid JSON array, no other text\n\n\
+         Naming the user's stack is NOT relevance — judge the TOPIC, not the vocabulary:\n\
+         - A pre-1.0 or release-candidate package is not relevant merely because its name \
+           contains a framework the user works in. Ask whether THIS package solves a problem \
+           they actually have\n\
+         - Basic or introductory material about a technology the user already ships expertly \
+           — setup and configuration errors, \"how do I use X\", first-principles tutorials — \
+           is relevance < 0.3 however exactly it names their stack\n\
+         - \"Show HN\", \"I built X\", and launch or feedback-request posts are relevance < 0.3 \
+           unless the thing built is directly applicable to their current work\n\
+         - A paper is relevant only when its SUBJECT is their domain. A paper that merely \
+           uses a language they write is not\n\n\
+         Do NOT over-reject. These ARE relevant even though they look ordinary:\n\
+         - A release of a package that IS in their stack or dependencies\n\
+         - A deep technical treatment — internals, implementation detail, an empirical study \
+           — of a technology they use, whatever the venue or author\n\
+         - Tooling that solves a problem their stack or workflow actually has"
     )
 }
 
