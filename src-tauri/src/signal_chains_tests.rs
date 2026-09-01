@@ -50,7 +50,9 @@ fn chain_detection_db() -> Connection {
     conn
 }
 
-/// Anchor for every fixture timestamp: **noon yesterday**, not "now".
+/// Anchor for every fixture timestamp: **noon yesterday**, not `now` — and the
+/// SINGLE definition of it, shared by the fixtures and by the test that proves it
+/// is clock-independent.
 ///
 /// Chain detection buckets items by calendar day (`DATE(signal_at)` in the
 /// candidate query, `ts.get(..10)` in the multi-day gate), so a fixture that
@@ -70,7 +72,15 @@ fn chain_detection_db() -> Connection {
 /// no fixture is stamped in the future, and noon so that a whole-day offset
 /// cannot drift across a boundary. The largest offset in use is `-4 days`,
 /// giving 5 days from now — still inside the 7-day candidate window.
-const FIXTURE_ANCHOR: (&str, &str) = ("-1 day", "+12 hours");
+///
+/// `base` is a SQL expression standing in for "now" — `'now'` for real fixtures,
+/// an explicit bound timestamp for the test. Both callers go through here on
+/// purpose: if someone reverts the anchor to `datetime({base}, {offset})`, the
+/// test breaks too. A regression test that re-implements the thing it guards
+/// guards nothing.
+fn fixture_timestamp_sql(base: &str, offset_param: &str) -> String {
+    format!("datetime(date({base}), '-1 day', '+12 hours', {offset_param})")
+}
 
 fn insert_chain_test_item(
     conn: &Connection,
@@ -81,23 +91,73 @@ fn insert_chain_test_item(
     time_modifier: &str,
     relevance_score: f64,
 ) {
-    let (anchor_day, anchor_hour) = FIXTURE_ANCHOR;
-    conn.execute(
+    let sql = format!(
         "INSERT INTO source_items (
             source_type, source_id, title, content, created_at, relevance_score, embedding_status
-         ) VALUES (?1, ?2, ?3, ?4, datetime(date('now'), ?7, ?8, ?5), ?6, 'complete')",
+         ) VALUES (?1, ?2, ?3, ?4, {}, ?6, 'complete')",
+        fixture_timestamp_sql("'now'", "?5")
+    );
+    conn.execute(
+        &sql,
         params![
             source_type,
             source_id,
             title,
             content,
             time_modifier,
-            relevance_score,
-            anchor_day,
-            anchor_hour
+            relevance_score
         ],
     )
     .expect("insert chain test item");
+}
+
+/// The anchor must separate days at EVERY hour — including the ten minutes after
+/// UTC midnight that hid the original bug.
+///
+/// The sibling test below exercises the anchor at whatever time the suite happens
+/// to run, which is not enough on its own: the OLD `datetime('now', ?)` anchor also
+/// satisfies it for 1430 minutes out of every 1440. A guard that only fires during
+/// the 0.7% of the day when the bug is visible is the same blind spot that let this
+/// reach the merge queue in the first place. This test pins the shared
+/// [`fixture_timestamp_sql`] against explicit base timestamps, so a revert fails it
+/// at any hour of any day.
+#[test]
+fn the_anchor_separates_days_at_every_hour_including_just_after_midnight() {
+    let conn = Connection::open_in_memory().expect("in-memory db");
+    let sql = fixture_timestamp_sql("?1", "?2");
+    let day_of = |base: &str, offset: &str| -> String {
+        conn.query_row(&format!("SELECT DATE({sql})"), params![base, offset], |r| {
+            r.get::<_, String>(0)
+        })
+        .expect("evaluate the fixture anchor")
+    };
+
+    for base in [
+        "2026-09-01 00:00:00", // the boundary itself
+        "2026-09-01 00:02:00", // the minute CI actually failed
+        "2026-09-01 00:09:59", // last second of the old anchor's blind spot
+        "2026-09-01 00:10:01", // first second outside it
+        "2026-09-01 12:00:00", // the ordinary case that always passed
+        "2026-08-31 23:59:59", // the far side of the boundary
+        "2026-03-01 00:05:00", // a month boundary, inside the window
+    ] {
+        assert_ne!(
+            day_of(base, "-10 minutes"),
+            day_of(base, "-1 day"),
+            "with the clock at {base} the anchor put a sub-hour offset and a -1 day \
+             offset on the SAME calendar day. That collapse is what failed four \
+             signal_chains tests at 2026-09-01T00:02Z and dequeued a frontend-only PR."
+        );
+    }
+
+    // The same-day pairing the fixtures rely on must still hold at those hours.
+    for base in ["2026-09-01 00:02:00", "2026-09-01 12:00:00"] {
+        assert_eq!(
+            day_of(base, "-10 minutes"),
+            day_of(base, "-1 minutes"),
+            "two sub-hour offsets must share a calendar day at {base}"
+        );
+    }
 }
 
 /// The fixture anchor must make day bucketing independent of the wall clock.
