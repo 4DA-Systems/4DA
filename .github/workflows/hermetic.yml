@@ -2,15 +2,24 @@
 #
 # Proves that a PRISTINE checkout — with ZERO operator state — compiles and
 # tests green on its own. This is the one thing the main `Validate` workflow
-# CANNOT prove: Validate runs on the self-hosted `[self-hosted, windows, 4da]`
-# runner, which carries the operator's pre-fetched OCR models, a populated
-# `data/4da.db`, and a warm cargo cache. Both 2026-06-13 pre-launch findings
-# were the same failure class — green in the operator's tree, broken on a fresh
-# clone:
+# CANNOT prove — though no longer for the original reason. Validate is now
+# entirely GitHub-hosted: the Rust matrix moved in #159, and Frontend + MCP
+# Server followed once that single self-hosted runner became the merge queue's
+# throughput ceiling. So "hosted vs the operator's box" is no longer the
+# distinction. What still separates the two is CACHING and ISOLATION — Validate
+# restores a pnpm store and a cargo cache and never asserts a cold path, while
+# this job clones cold, installs from nothing (exercising the postinstall
+# OCR-model fetch), and pins FOURDA_DATA_DIR to a throwaway path.
+#
+# Historically the gap WAS operator state: the self-hosted runner carried
+# pre-fetched OCR models, a populated `data/4da.db`, and a warm cargo cache.
+# Both 2026-06-13 pre-launch findings were that failure class — green in the
+# operator's tree, broken on a fresh clone:
 #   Finding 1 (e77e6020): gitignored OCR bundle resource → `cargo` build fails
 #                         with "resource path `models` doesn't exist".
 #   Finding 2 (b047dd36): blind-spots unit tests read the live SQLite corpus.
-# Neither could surface on the self-hosted runner. This job is the canary that
+# Neither could surface on a cached, operator-state-carrying run. This job is
+# the canary that
 # makes that whole class impossible to land silently — and the gate that must
 # pass before the repo is flipped public (a contributor's first `git clone`).
 #
