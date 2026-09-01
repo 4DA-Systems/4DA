@@ -28,6 +28,8 @@ mod explanation_chain;
 mod gate;
 #[cfg(test)]
 mod judge_agreement_live;
+#[cfg(test)]
+mod judge_benchmark;
 mod keywords;
 pub(crate) mod necessity;
 mod pipeline_signals;

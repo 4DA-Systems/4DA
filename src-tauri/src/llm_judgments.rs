@@ -59,12 +59,16 @@ use tracing::{debug, info, warn};
 /// longer invents a value for an absent field: unknown is 0.0 (which cannot
 /// satisfy any `>= threshold` consumer) and is counted into a WARN, so a
 /// judge that stops answering can never again disable the gate in silence.
-const PROMPT_VERSION: &str = "v5";
+///
+/// `pub(crate)`: the judge accuracy benchmark (`scoring::judge_benchmark`)
+/// stamps every result row with the prompt cohort it measured, so a stored
+/// score can never be misread as belonging to a prompt it never ran under.
+pub(crate) const PROMPT_VERSION: &str = "v5";
 const INGESTION_THRESHOLD: f64 = 0.25;
 /// 10 items per call: the system prompt + user-context block (~800 tokens) is
 /// resent on every call, so batch size directly divides that fixed overhead.
 /// Was 5 — measured 2026-08-31, the fixed overhead was ~40% of input spend.
-const BATCH_SIZE: usize = 10;
+pub(crate) const BATCH_SIZE: usize = 10;
 
 /// Demote-only verdict feedback: judged relevance strictly below this…
 ///
@@ -120,14 +124,17 @@ const DEMOTION_JUDGMENT_WINDOW_DAYS: u32 = 7;
 const DEMOTION_PROBE_RELEVANCE_BELOW: f64 = 0.40;
 const DEMOTION_PROBE_CONFIDENCE_MIN: f64 = 0.6;
 
+/// `pub(crate)`: the judge accuracy benchmark scores THESE parsed fields, from
+/// the shipped parser, so the benchmark can never drift from what production
+/// actually reads out of the model.
 #[derive(Debug, Deserialize)]
-struct JudgmentResponse {
+pub(crate) struct JudgmentResponse {
     #[serde(default, deserialize_with = "de_f64_lenient")]
-    relevance: Option<f64>,
-    explanation: Option<String>,
+    pub(crate) relevance: Option<f64>,
+    pub(crate) explanation: Option<String>,
     actions: Option<Vec<String>>,
     #[serde(default, deserialize_with = "de_f64_lenient")]
-    confidence: Option<f64>,
+    pub(crate) confidence: Option<f64>,
     /// Content-analysis fields (prompt v2). All optional: the model is
     /// instructed to OMIT them when the content preview is too thin to judge,
     /// and parsing must never fail because a field is missing.
@@ -590,12 +597,16 @@ fn apply_judgment_demotions(db: &Database, cap: usize) -> Result<usize> {
 // Internal Types
 // ============================================================================
 
-struct ItemForJudgment {
-    id: i64,
-    title: String,
-    content: Option<String>,
-    source_type: String,
-    relevance_score: f64,
+/// `pub(crate)`: the judge accuracy benchmark builds these from labeled
+/// scenarios and renders them through the SAME [`format_items_block`] the
+/// production judge uses, so the benchmark measures the shipped prompt rather
+/// than a re-implementation of it.
+pub(crate) struct ItemForJudgment {
+    pub(crate) id: i64,
+    pub(crate) title: String,
+    pub(crate) content: Option<String>,
+    pub(crate) source_type: String,
+    pub(crate) relevance_score: f64,
 }
 
 // ============================================================================
@@ -658,12 +669,16 @@ fn load_items_for_judgment(db: &Database, ids: &[i64]) -> Result<Vec<ItemForJudg
     Ok(items)
 }
 
-async fn evaluate_batch(
-    client: &LLMClient,
-    items: &[ItemForJudgment],
-    user_context: &str,
-) -> Result<Vec<(i64, JudgmentResponse)>> {
-    let items_block: String = items
+/// Render a batch of items into the user-message block the judge reads.
+///
+/// Extracted so the judge accuracy benchmark
+/// (`scoring::judge_benchmark`) renders its labeled scenarios through the
+/// EXACT text production sends. A benchmark that re-implements this block
+/// measures its own copy: it would keep passing while a change here silently
+/// altered what the live judge sees — the same "measured a copy, not the
+/// shipped thing" class that let the v3 confidence regression run for a day.
+pub(crate) fn format_items_block(items: &[ItemForJudgment]) -> String {
+    items
         .iter()
         .enumerate()
         .map(|(i, item)| {
@@ -686,7 +701,15 @@ async fn evaluate_batch(
             )
         })
         .collect::<Vec<_>>()
-        .join("\n\n");
+        .join("\n\n")
+}
+
+async fn evaluate_batch(
+    client: &LLMClient,
+    items: &[ItemForJudgment],
+    user_context: &str,
+) -> Result<Vec<(i64, JudgmentResponse)>> {
+    let items_block: String = format_items_block(items);
 
     let system_prompt = judge_system_prompt(user_context);
 
@@ -706,7 +729,7 @@ async fn evaluate_batch(
 /// demotion gate reads `confidence >= 0.7` as "the judge is sure", and both
 /// prior prompt versions let the model express rejection AS low confidence,
 /// which kept the gate at zero demotions forever (see PROMPT_VERSION doc).
-fn judge_system_prompt(user_context: &str) -> String {
+pub(crate) fn judge_system_prompt(user_context: &str) -> String {
     format!(
         "You are an intelligence relevance evaluator for a developer tool. \
          Evaluate each item's relevance to this specific user.\n\n\
@@ -751,7 +774,7 @@ fn judge_system_prompt(user_context: &str) -> String {
 /// fields are `Option`); elements without an `id` are dropped — there is
 /// nothing to attach them to. A reply that is not a JSON array at all is an
 /// error (the caller logs and stops the batch loop).
-fn parse_batch_response(text: &str) -> Result<Vec<(i64, JudgmentResponse)>> {
+pub(crate) fn parse_batch_response(text: &str) -> Result<Vec<(i64, JudgmentResponse)>> {
     let trimmed = text.trim();
     // Extract JSON from a potential markdown code block
     let json_text = if trimmed.starts_with("```") {
@@ -765,20 +788,101 @@ fn parse_batch_response(text: &str) -> Result<Vec<(i64, JudgmentResponse)>> {
         trimmed.to_string()
     };
 
-    #[derive(Deserialize)]
-    struct BatchItem {
-        #[serde(default, deserialize_with = "de_i64_lenient")]
-        id: Option<i64>,
-        #[serde(flatten)]
-        judgment: JudgmentResponse,
+    match serde_json::from_str::<Vec<BatchItem>>(&json_text) {
+        Ok(parsed) => Ok(parsed
+            .into_iter()
+            .filter_map(|bi| Some((bi.id?, bi.judgment)))
+            .collect()),
+        Err(strict) => {
+            // A single malformed or TRUNCATED element used to discard the
+            // whole batch — all ten judgments lost with the money already
+            // spent. Measured 2026-09-01 by `scoring::judge_benchmark`: one
+            // batch in eleven died on `expected ',' or '}'`, costing 11 of 87
+            // judgments (13%). The failure is worst exactly where it hurts
+            // most: `max_tokens` is 4096 and the v5 prompt omits the analysis
+            // fields only BELOW 0.4 relevance, so the batches that truncate
+            // are the ones densest in RELEVANT items.
+            //
+            // Salvage every complete element instead. Returning the strict
+            // error still happens when nothing at all could be recovered, so
+            // a genuinely non-JSON reply is still a hard error.
+            let salvaged = salvage_batch_elements(&json_text);
+            if salvaged.is_empty() {
+                return Err(strict.into());
+            }
+            warn!(
+                target: "4da::llm_judgments",
+                salvaged = salvaged.len(),
+                error = %strict,
+                "Judge reply was not a well-formed JSON array — recovered the complete elements rather than discarding the paid-for batch"
+            );
+            Ok(salvaged)
+        }
     }
+}
 
-    let parsed: Vec<BatchItem> = serde_json::from_str(&json_text)?;
+/// One element of the judge's batched reply.
+///
+/// Module-level rather than nested in [`parse_batch_response`] so the salvage
+/// path below deserializes the SAME shape the strict path does.
+#[derive(Deserialize)]
+struct BatchItem {
+    #[serde(default, deserialize_with = "de_i64_lenient")]
+    id: Option<i64>,
+    #[serde(flatten)]
+    judgment: JudgmentResponse,
+}
 
-    Ok(parsed
-        .into_iter()
-        .filter_map(|bi| Some((bi.id?, bi.judgment)))
-        .collect())
+/// Recover every complete `{...}` element from a malformed or truncated JSON
+/// array by scanning for balanced, string-aware brace pairs and parsing each
+/// independently. An element that fails to parse is skipped, never fatal.
+fn salvage_batch_elements(json_text: &str) -> Vec<(i64, JudgmentResponse)> {
+    let bytes = json_text.as_bytes();
+    let mut out = Vec::new();
+    let (mut depth, mut start) = (0usize, 0usize);
+    let (mut in_str, mut escaped) = (false, false);
+
+    for (i, &b) in bytes.iter().enumerate() {
+        if in_str {
+            if escaped {
+                escaped = false;
+            } else if b == b'\\' {
+                escaped = true;
+            } else if b == b'"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match b {
+            b'"' => in_str = true,
+            b'{' => {
+                if depth == 0 {
+                    start = i;
+                }
+                depth += 1;
+            }
+            b'}' => {
+                if depth == 0 {
+                    continue;
+                }
+                depth -= 1;
+                if depth > 0 {
+                    continue;
+                }
+                // SAFE: `start` and `i` are byte offsets of the ASCII bytes
+                // '{' and '}' found by this scan, so both are char
+                // boundaries and the range is well-ordered.
+                let element = &json_text[start..=i];
+                if let Ok(item) = serde_json::from_str::<BatchItem>(element) {
+                    if let Some(id) = item.id {
+                        out.push((id, item.judgment));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 #[cfg(test)]
