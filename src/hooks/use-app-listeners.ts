@@ -149,6 +149,7 @@ export function useAppListeners({
             ...s,
             relevanceResults: results,
             nearMisses: analysisState.near_misses ?? null,
+            judged: analysisState.judged === true,
             status: `${relevantCount}/${results.length} items relevant (cached)`,
             analysisComplete: true,
             loading: false,

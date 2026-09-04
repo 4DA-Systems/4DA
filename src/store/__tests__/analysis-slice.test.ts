@@ -55,6 +55,10 @@ describe('analysis-slice', () => {
       expect(useAppStore.getState().appState.lastAnalyzedAt).toBeNull();
     });
 
+    it('starts unjudged — the conservative default until the backend says otherwise', () => {
+      expect(useAppStore.getState().appState.judged).toBe(false);
+    });
+
     it('has expandedItem null', () => {
       expect(useAppStore.getState().expandedItem).toBeNull();
     });
@@ -134,6 +138,7 @@ describe('analysis-slice', () => {
         progressMessage: 'Done',
         progressStage: 'complete',
         lastAnalyzedAt: new Date(),
+        judged: false,
       };
 
       useAppStore.getState().setAppStateFull(newState);

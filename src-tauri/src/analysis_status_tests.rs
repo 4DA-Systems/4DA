@@ -75,6 +75,7 @@ mod tests {
             near_misses: None,
             started_at: None,
             last_completed_at: None,
+            judged: false,
         };
         assert!(!state.running);
         assert!(!state.completed);
@@ -82,6 +83,17 @@ mod tests {
         assert!(state.results.is_none());
         assert!(state.near_misses.is_none());
         assert!(state.started_at.is_none());
+        assert!(!state.judged);
+    }
+
+    #[test]
+    fn judged_defaults_to_false_when_absent_from_the_wire() {
+        // A state serialized by a build that predates the flag (or any caller
+        // that omits it) must read as UNJUDGED — the conservative answer.
+        // `#[serde(default)]` is what makes that true; this pins it.
+        let json = r#"{"running":false,"completed":true,"error":null,"results":null}"#;
+        let state: AnalysisState = serde_json::from_str(json).expect("deserialize");
+        assert!(!state.judged);
     }
 
     #[test]
@@ -94,6 +106,7 @@ mod tests {
             near_misses: None,
             started_at: Some(12345),
             last_completed_at: None,
+            judged: true,
         };
         let mut cloned = original.clone();
         cloned.running = false;

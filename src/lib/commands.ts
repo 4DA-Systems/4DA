@@ -255,10 +255,11 @@ export interface InterruptionConfig {
 /** Full IPC contract: command name → parameter type & return type. */
 interface CommandMap {
   // -- Analysis & Core --
-  get_analysis_status: { params: Record<string, never>; result: { running: boolean; completed: boolean; error: string | null; results: SourceRelevance[] | null; started_at: number | null; last_completed_at: string | null; near_misses: SourceRelevance[] | null } };
+  get_analysis_status: { params: Record<string, never>; result: { running: boolean; completed: boolean; error: string | null; results: SourceRelevance[] | null; started_at: number | null; last_completed_at: string | null; near_misses: SourceRelevance[] | null; judged: boolean } };
   run_cached_analysis: { params: Record<string, never>; result: void };
   cancel_analysis: { params: Record<string, never>; result: void };
   get_scoring_stats: { params: Record<string, never>; result: ScoringStats };
+  get_feedback_liveness: { params: Record<string, never>; result: FeedbackLiveness };
   measure_triage_recall: { params: { relevantThreshold: number; sampleLimit: number; topicMin?: number }; result: unknown };
   get_scoring_coverage: { params: Record<string, never>; result: unknown };
   get_calibration_snapshot: { params: { threshold?: number }; result: unknown };
@@ -1510,6 +1511,15 @@ interface ScoringStats {
   last_run_rejection_rate: number | null;
 }
 
+/** Mirrors src-tauri/src/feedback_liveness.rs#FeedbackLiveness (i64 → number on the wire). */
+interface FeedbackLiveness {
+  surfaced_14d: number;
+  feedback_14d: number;
+  interactions_14d: number;
+  last_feedback_at: string | null;
+  last_interaction_at: string | null;
+}
+
 interface DiagnosticsSnapshot {
   memory_bytes: number;
   db_size_bytes: number;
@@ -1953,6 +1963,7 @@ export type {
   EnvSnapshot,
   ScanSummary,
   ScoringStats,
+  FeedbackLiveness,
   DiagnosticsSnapshot,
   ComposedStackSummary,
   IntelligencePulseData,

@@ -16,4 +16,16 @@ last_completed_at: string | null,
 /**
  * Top items that fell just below the relevance threshold (for zero-result guidance)
  */
-near_misses: Array<SourceRelevance> | null, };
+near_misses: Array<SourceRelevance> | null, 
+/**
+ * Whether `results` carry an applied LLM judge pass.
+ *
+ * The fresh-launch run is the foreground fast path (`llm_rerank: false`),
+ * so what the Signal tab shows first is pipeline scores only — no LLM
+ * rerank, no reconciler. `false` there is the honest state, and the header
+ * badges it as "unjudged" rather than letting a fast pass read like a
+ * judged one. Set `true` only when the run asked for a rerank AND
+ * `analysis_rerank::apply_llm_reranking` actually returned `Reranked`
+ * (every `Skipped` reason — budget, tier, no candidates — stays `false`).
+ */
+judged: boolean, };

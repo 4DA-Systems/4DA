@@ -2522,5 +2522,8 @@
   "settings.context.addDirectory": "Verzeichnis hinzufügen",
   "settings.personalization.addSuggestion": "{{name}} zu Ihren Interessen hinzufügen",
   "settings.personalization.dismissSuggestion": "{{name}} verwerfen",
-  "feedback.notFullySaved": "Feedback nicht vollständig gespeichert ({{commands}} fehlgeschlagen)"
+  "feedback.notFullySaved": "Feedback nicht vollständig gespeichert ({{commands}} fehlgeschlagen)",
+  "header.unjudgedBadge": "unjudged",
+  "header.unjudgedTooltip": "Fast pass, LLM judge not applied yet",
+  "missed.feedbackLiveness": "No ratings or clicks in 14 days. Scores are not calibrated to you yet."
 }

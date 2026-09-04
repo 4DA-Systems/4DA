@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect } from 'vitest';
 
-import { classifySignal, getSignalLabel, getSignalColor, findMostCriticalSave } from './WhatYouWouldHaveMissed';
+import {
+  classifySignal,
+  getSignalLabel,
+  getSignalColor,
+  findMostCriticalSave,
+  partitionSignal,
+} from './WhatYouWouldHaveMissed';
+import { isSurfacedSignal } from '../utils/score';
 import type { SourceRelevance } from '../types/analysis';
 
 // Minimal SourceRelevance factory — only the fields the label/color + chooser read.
@@ -13,10 +20,14 @@ function item(partial: {
   strongly_grounded?: boolean;
   is_critical_alert?: boolean;
   top_score?: number;
+  relevant?: boolean;
+  excluded?: boolean;
 }): SourceRelevance {
   return {
     title: 'x',
     top_score: partial.top_score ?? 0.9,
+    relevant: partial.relevant ?? true,
+    excluded: partial.excluded,
     is_critical_alert: partial.is_critical_alert,
     signal_type: partial.signal_type ?? null,
     score_breakdown: {
@@ -141,5 +152,51 @@ describe('findMostCriticalSave hero selection', () => {
       strongly_grounded: false,
     });
     expect(findMostCriticalSave([phantom])).toBeNull();
+  });
+});
+
+describe('partitionSignal — ONE definition of "signal"', () => {
+  // Live 2026-09-04: the header said "69 relevant" while this card said
+  // "101 signal surfaced / 479 noise rejected" on the same screen, because the
+  // card counted `top_score >= 0.35` — a threshold the pipeline never applies.
+  it('counts a high-scoring item the pipeline did NOT call relevant as noise (the bug)', () => {
+    const highScoreNoise = item({ top_score: 0.52, relevant: false });
+    const signal = item({ top_score: 0.41, relevant: true });
+    const { surfaced, rejected } = partitionSignal([highScoreNoise, signal]);
+    expect(surfaced).toEqual([signal]);
+    expect(rejected).toBe(1);
+  });
+
+  it('counts an excluded item as noise even when relevant is still true', () => {
+    // An exclusion (Brief verdict, user rule) demotes without flipping `relevant`.
+    const demoted = item({ top_score: 0.9, relevant: true, excluded: true });
+    const { surfaced, rejected } = partitionSignal([demoted]);
+    expect(surfaced).toEqual([]);
+    expect(rejected).toBe(1);
+  });
+
+  it('agrees with the header predicate item-for-item', () => {
+    const run = [
+      item({ top_score: 0.9, relevant: true }),
+      item({ top_score: 0.36, relevant: false }),
+      item({ top_score: 0.2, relevant: true, excluded: false }),
+      item({ top_score: 0.8, relevant: true, excluded: true }),
+    ];
+    const { surfaced, rejected } = partitionSignal(run);
+    expect(surfaced).toEqual(run.filter(isSurfacedSignal));
+    expect(surfaced.length + rejected).toBe(run.length);
+  });
+
+  it('draws the hero from the surfaced set only', () => {
+    // A stack-grounded CVE that the pipeline rejected must not be the hero.
+    const rejectedCve = item({
+      content_type: 'security_advisory',
+      matched_deps: ['react'],
+      strongly_grounded: true,
+      top_score: 0.7,
+      relevant: false,
+    });
+    const { surfaced } = partitionSignal([rejectedCve]);
+    expect(findMostCriticalSave(surfaced)).toBeNull();
   });
 });

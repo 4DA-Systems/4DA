@@ -53,6 +53,16 @@ export function handleAnalysisProgress(event: Event<AnalysisProgress>): void {
   }
 }
 
+/**
+ * `analysis-judged` — the backend's verdict on whether the result set it is
+ * about to publish (or just replaced in the scheduled path) carries an applied
+ * LLM judge pass. Emitted BEFORE `analysis-complete` so the header never
+ * renders fresh results against the previous run's flag.
+ */
+export function handleAnalysisJudged(event: Event<boolean>): void {
+  useAppStore.getState().setAppState({ judged: event.payload === true });
+}
+
 export function handleAnalysisComplete(event: Event<SourceRelevance[]>): void {
   const results = event.payload;
   const relevantCount = results.filter((r) => r.relevant).length;

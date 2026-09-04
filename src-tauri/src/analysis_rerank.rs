@@ -244,6 +244,26 @@ pub(crate) enum RerankOutcome {
     Skipped(RerankSkip),
 }
 
+/// Process-wide count of rerank passes that actually APPLIED (returned
+/// [`RerankOutcome::Reranked`]). Every `Skipped` outcome leaves it untouched.
+///
+/// The analysis boundary (`analysis_status::analyze_cached_content_inner`)
+/// reads it before and after a cycle to learn whether THAT cycle's results were
+/// judged, and stamps the answer into `AnalysisState::judged`. A counter rather
+/// than a threaded return value because the full-pass path reaches this
+/// function through `scoring::score_items_full`, whose `ScoredBatch` only
+/// carries results — the outcome is logged there and dropped.
+static APPLIED_RERANK_PASSES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many rerank passes have applied since process start. Monotonic.
+pub(crate) fn applied_rerank_passes() -> u64 {
+    APPLIED_RERANK_PASSES.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn note_rerank_applied() {
+    APPLIED_RERANK_PASSES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+}
+
 impl RerankOutcome {
     /// Emit the single honest log line for this outcome.
     pub(crate) fn log(&self, elapsed_ms: u128, phase: &str) {
@@ -856,6 +876,7 @@ pub(crate) async fn apply_llm_reranking(
         "LLM reranking complete"
     );
 
+    note_rerank_applied();
     RerankOutcome::Reranked {
         judged: all_judgments.len(),
     }

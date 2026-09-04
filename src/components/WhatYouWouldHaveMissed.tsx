@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import type { SourceRelevance } from '../types/analysis';
-import { getRelevancePresentation } from '../utils/score';
+import { getRelevancePresentation, isSurfacedSignal } from '../utils/score';
 import { useLicense } from '../hooks/use-license';
 import { isBriefSuppressed, useActiveBriefFilteredIds } from '../hooks/use-brief-verdicts';
 import { SignalUpgradeCTA } from './SignalUpgradeCTA';
@@ -38,6 +38,20 @@ function hasConfirmedStackLink(r: SourceRelevance): boolean {
   // matched_deps length. matched_deps names what the card can display, but the
   // strong-grounding flag is the source of truth for "affects you" placement.
   return r.is_critical_alert === true || r.score_breakdown?.strongly_grounded === true;
+}
+
+/**
+ * Split a run into what 4DA surfaced and what it rejected, by the ONE
+ * definition of signal (`isSurfacedSignal`). The hero pool is drawn from
+ * `surfaced` only: an item the pipeline did not call relevant, or that an
+ * exclusion demoted, must never be "the one you would have missed".
+ */
+export function partitionSignal(results: SourceRelevance[]): {
+  surfaced: SourceRelevance[];
+  rejected: number;
+} {
+  const surfaced = results.filter(isSurfacedSignal);
+  return { surfaced, rejected: results.length - surfaced.length };
 }
 
 export function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | null {
@@ -158,9 +172,11 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
   const insight = useMemo(() => {
     if (!analysisComplete || results.length === 0) return null;
 
-    const relevant = results.filter(r => r.top_score >= 0.35);
+    // Same predicate as the header's "N relevant" chip — see isSurfacedSignal.
+    // A `top_score >= 0.35` filter lived here until 2026-09-04 and put a
+    // second, larger "signal" number on the same screen as the header's.
+    const { surfaced: relevant, rejected } = partitionSignal(results);
     const totalScanned = results.length;
-    const rejected = totalScanned - relevant.length;
     const rejectionRate = totalScanned > 0 ? ((rejected / totalScanned) * 100).toFixed(1) : '0';
     const heroPool = relevant.filter(r => !isBriefSuppressed(r, briefFilteredIds));
     if (heroPool.length < relevant.length) {
