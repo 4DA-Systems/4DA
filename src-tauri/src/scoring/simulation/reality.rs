@@ -19,6 +19,7 @@ use super::{ExpectedOutcome, PERSONA_NAMES};
 // ============================================================================
 
 fn run_persona_simulation(persona_idx: usize, ctx: &ScoringContext) -> SimMetrics {
+    let verbose = std::env::var("FOURDA_SIM_VERBOSE").is_ok_and(|v| v == "1");
     let items = corpus();
     let db = sim_db();
     let opts = sim_no_freshness();
@@ -37,6 +38,27 @@ fn run_persona_simulation(persona_idx: usize, ctx: &ScoringContext) -> SimMetric
             .unwrap_or(&zero_emb);
         let input = sim_input(item.id, item.title, item.content, emb);
         let result = score_item(&input, ctx, &db, &opts, None);
+        // FOURDA_SIM_VERBOSE=1: print every miss (false negative / false
+        // positive) with its score and confirmed axes, so a recall drop can be
+        // read item by item instead of as one aggregate number.
+        if verbose {
+            let predicted = result.relevant && !result.excluded;
+            let expected_relevant = matches!(
+                expected,
+                ExpectedOutcome::StrongRelevant | ExpectedOutcome::WeakRelevant
+            );
+            if predicted != expected_relevant {
+                let signals = result
+                    .score_breakdown
+                    .as_ref()
+                    .map(|b| b.confirmed_signals.join(","))
+                    .unwrap_or_default();
+                eprintln!(
+                    "SIM-MISS persona={persona_idx} id={} score={:.3} relevant={predicted} expected={expected:?} signals=[{signals}] title={}",
+                    item.id, result.top_score, item.title
+                );
+            }
+        }
         metrics.record(&result, expected);
     }
     metrics

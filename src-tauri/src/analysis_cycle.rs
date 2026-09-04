@@ -424,18 +424,49 @@ pub(crate) fn persist_cycle_results(
     // signature matters: an inferred one ("top_score == 0.45") catches only the
     // second path, and the first keeps its original score, so it is
     // indistinguishable from a stale verdict by score alone.
-    let verdicts: Vec<(i64, bool, crate::db::VerdictSource)> = results
+    // v29: cross-cycle twin check at the persist boundary. Batch dedup only
+    // sees the items of ONE cycle; a story re-fetched under a new id in a
+    // later differential cycle used to earn its own standing verdict (one
+    // Bun story feed-relevant ten times). A scorer-approved item whose
+    // canonical URL / normalized title is already curated is written as
+    // NOT relevant with reason `duplicate_curated` — the original keeps the
+    // slot. Serendipity picks are exempt (their verdict is not the scorer's).
+    let mut twins = 0usize;
+    let verdicts: Vec<(
+        i64,
+        bool,
+        crate::db::VerdictSource,
+        Option<crate::db::VerdictReason>,
+    )> = results
         .iter()
         .filter(|r| persistable(r))
         .map(|r| {
-            (
-                r.id as i64,
-                r.relevant,
-                crate::db::VerdictSource::from_serendipity(r.serendipity),
-            )
+            let source = crate::db::VerdictSource::from_serendipity(r.serendipity);
+            let is_twin = r.relevant
+                && source == crate::db::VerdictSource::Score
+                && matches!(
+                    db.find_curated_twin(r.id as i64, r.url.as_deref(), &r.title),
+                    Ok(Some(_))
+                );
+            if is_twin {
+                twins += 1;
+                (
+                    r.id as i64,
+                    false,
+                    source,
+                    Some(crate::db::VerdictReason::DuplicateCurated),
+                )
+            } else {
+                (r.id as i64, r.relevant, source, None)
+            }
         })
         .collect();
-    if let Err(e) = db.persist_feed_verdicts(&verdicts, crate::scoring::PIPELINE_VERSION) {
+    if twins > 0 {
+        tracing::info!(target: "4da::scoring", twins, "Cross-cycle duplicates held out of the curated set");
+    }
+    if let Err(e) =
+        db.persist_feed_verdicts_with_reasons(&verdicts, crate::scoring::PIPELINE_VERSION)
+    {
         warn!(target: "4da::scoring", error = %e, "Failed to persist feed verdicts");
     }
 
@@ -475,14 +506,19 @@ pub(crate) fn persist_cycle_results(
 pub(crate) const DEGRADED_OVERWRITE_MAX_AGE_DAYS: u32 = 7;
 
 /// True when this result was produced under a SYSTEMIC input collapse
-/// (`dep_intel_load_failed` / `context_knn_failed` on the breakdown, set by
-/// `pipeline_v2`). Per-item `embedding_missing` does not count — see the guard
-/// note in [`persist_cycle_results`].
+/// (`dep_intel_load_failed` / `context_knn_failed` / `ace_profile_thin` on the
+/// breakdown, set by `pipeline_v2`). Per-item `embedding_missing` does not
+/// count — see the guard note in [`persist_cycle_results`].
+///
+/// `ace_profile_thin` (v29): the run scored against a stack profile with no
+/// primary stack AND no detected tech — the state in which the user's own
+/// language reads as off-stack. Those scores are confidently wrong for every
+/// item, exactly like a dependency-load failure.
 fn has_systemic_degradation(r: &SourceRelevance) -> bool {
     r.score_breakdown.as_ref().is_some_and(|b| {
-        b.degraded_inputs
-            .iter()
-            .any(|m| m == "dep_intel_load_failed" || m == "context_knn_failed")
+        b.degraded_inputs.iter().any(|m| {
+            m == "dep_intel_load_failed" || m == "context_knn_failed" || m == "ace_profile_thin"
+        })
     })
 }
 
@@ -658,5 +694,80 @@ mod evidence_rank_tests {
             (rank.unwrap() - 0.31).abs() < 1e-6,
             "rank rewrites without hysteresis — rank churn is honest"
         );
+    }
+
+    /// v29: a full re-drain re-scores BOTH curated twins in one cycle; only
+    /// the later-ingested copy may be demoted, or the story vanishes.
+    #[test]
+    fn persist_redrain_keeps_exactly_one_curated_twin() {
+        let db = test_db();
+        let first = insert_test_item(&db, "hackernews", "rd1", "Bun 1.3 released", "x");
+        let second = insert_test_item(&db, "lobsters", "rd2", "Bun 1.3 released", "x");
+        db.persist_feed_verdicts(
+            &[
+                (first, true, crate::db::VerdictSource::Score),
+                (second, true, crate::db::VerdictSource::Score),
+            ],
+            crate::scoring::PIPELINE_VERSION,
+        )
+        .unwrap();
+        let mut a = make_result(first as u64, 0.70, 0.70, true);
+        a.title = "Bun 1.3 released".to_string();
+        let mut b = make_result(second as u64, 0.70, 0.70, true);
+        b.title = "Bun 1.3 released".to_string();
+        let results = [a, b];
+        let evaluated: Vec<EvaluatedItem> = results.iter().map(EvaluatedItem::from).collect();
+        persist_cycle_results(&db, &results, &evaluated);
+
+        let conn = db.conn.lock();
+        let relevant = |id: i64| -> i64 {
+            conn.query_row(
+                "SELECT feed_relevant FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |row| row.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(relevant(first), 1, "the first-ingested copy keeps the slot");
+        assert_eq!(relevant(second), 0, "the later copy yields");
+    }
+
+    /// v29: a scorer-approved item whose story is already curated is written
+    /// as not relevant with reason `duplicate_curated`; the original keeps
+    /// its slot.
+    #[test]
+    fn persist_holds_cross_cycle_twin_out_of_the_curated_set() {
+        let db = test_db();
+        let original = insert_test_item(&db, "hackernews", "tw1", "Bun 1.3 released", "x");
+        db.persist_feed_verdicts(
+            &[(original, true, crate::db::VerdictSource::Score)],
+            crate::scoring::PIPELINE_VERSION,
+        )
+        .unwrap();
+        let twin = insert_test_item(&db, "lobsters", "tw2", "Bun 1.3 released", "x");
+        let mut r = make_result(twin as u64, 0.70, 0.70, true);
+        r.title = "Bun 1.3 released".to_string();
+
+        let evaluated = [EvaluatedItem::from(&r)];
+        persist_cycle_results(&db, std::slice::from_ref(&r), &evaluated);
+
+        let conn = db.conn.lock();
+        let (relevant, reason): (i64, Option<String>) = conn
+            .query_row(
+                "SELECT feed_relevant, feed_verdict_reason FROM source_items WHERE id = ?1",
+                rusqlite::params![twin],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(relevant, 0, "the twin must not earn a second curated slot");
+        assert_eq!(reason.as_deref(), Some("duplicate_curated"));
+        let original_relevant: i64 = conn
+            .query_row(
+                "SELECT feed_relevant FROM source_items WHERE id = ?1",
+                rusqlite::params![original],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(original_relevant, 1, "the original keeps its slot");
     }
 }

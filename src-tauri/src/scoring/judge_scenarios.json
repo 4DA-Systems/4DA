@@ -116,7 +116,6 @@
     "relevant": false,
     "notes": "Regression guard, not a new failure: the live judge already rejects this class correctly (all 34 demoted CVEs were cross-ecosystem). A prompt change that raises rejection rates must not be credited for what already worked."
   },
-
   {
     "id": "jp_rustc_soundness_paper",
     "category": "indomain_academic",
@@ -181,5 +180,187 @@
     "profile": "rust_developer",
     "relevant": true,
     "notes": "NEGATIVE TEST. Measured live: judge 0.72 / confidence 0.85, pipeline 0.278 and excluded. This app enforces exactly this mechanism and hit its own daily cap on 2026-09-01 - a case where the judge's recall beat the pipeline's."
+  },
+  {
+    "id": "jn_mastodon_k8s_paradox",
+    "category": "offstack_ops",
+    "description": "Kubernetes ops post for a desktop-app developer with no k8s",
+    "item": {
+      "title": "Solve the K8s \"Low CPU, High Latency\" paradox! CFS Quotas freeze apps in 100ms windows.",
+      "content": "A thread on Kubernetes CFS quota throttling: why a pod with low average CPU still sees latency spikes, how to read cpu.stat, and when to drop CPU limits.",
+      "source_type": "mastodon"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Live 2026-09-04 feed item at exactly 0.50 (UGC cap). The user ships a Tauri desktop app with no Kubernetes anywhere in manifests or lockfiles; \"kubernetes\" was an ACE topic minted from a JSON fixture. Ops content for an infrastructure the user does not run."
+  },
+  {
+    "id": "jp_mastodon_tauri_release",
+    "category": "instack_release",
+    "description": "Mastodon post announcing a release of a direct dependency",
+    "item": {
+      "title": "tauri v2.12.0 is out: WebView2 crash fix on Windows, new tray API, plugin capability changes",
+      "content": "The Tauri team shipped 2.12.0 today. Windows users hit a WebView2 crash on resume that is now fixed; the tray API gained menu icons; plugin capability files need one migration step. Release notes linked.",
+      "source_type": "mastodon"
+    },
+    "profile": "rust_developer",
+    "relevant": true,
+    "notes": "Twin of jn_mastodon_k8s_paradox: same source, same engagement, but the subject is a release of the user's core dependency with a migration step. Relevance is the SUBJECT, not the platform."
+  },
+  {
+    "id": "jn_mastodon_rust_chatter",
+    "category": "namematch_only",
+    "description": "Countdown post that only mentions the language name",
+    "item": {
+      "title": "Only 10 weeks till Rust 1.100 🦀 NoUB",
+      "content": "",
+      "source_type": "mastodon"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Live 2026-09-04 feed item. One token (\"Rust\") and a countdown; nothing a developer can act on or learn from. The pipeline confirmed interest AND ace from that one word."
+  },
+  {
+    "id": "jn_mastodon_job_ad",
+    "category": "hiring",
+    "description": "Non-tech job advertisement that embeds near the user's code by accident",
+    "item": {
+      "title": "Dogs Trust (UK) are looking to hire a data officer in the Data Science and Analytics team",
+      "content": "Permanent role, hybrid, London. Working with the analytics team on donor data, reporting and dashboards. Apply via the careers page.",
+      "source_type": "mastodon"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Live 2026-09-04 Signal tab row, shown as \"Strong match\" with the explanation \"Similar to your code in main.rs (53% similar)\". A job ad for a charity data role; the context axis was a constant."
+  },
+  {
+    "id": "jn_mastodon_security_news",
+    "category": "offdomain_news",
+    "description": "Security industry news with no software relevance to the stack",
+    "item": {
+      "title": "Age Verification Company IDScan Hacked: 153 Million Drivers Licenses Compromised",
+      "content": "A breach at an identity verification vendor exposed scans of government IDs. The company has not said how the attackers got in.",
+      "source_type": "mastodon"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Live 2026-09-04 feed item (\"Similar to your code in trust_ledger.rs\"). Breach news about a vendor the user does not use is not a security advisory for their dependencies."
+  },
+  {
+    "id": "jn_devto_dom_basics",
+    "category": "beginner_for_expert",
+    "description": "Beginner DOM explainer for a senior TypeScript developer",
+    "item": {
+      "title": "DOM In JavaScript",
+      "content": "The DOM (Document Object Model) is a tree of nodes. document.getElementById lets you find an element. You can change its innerHTML or add a class. Events like click let you respond to the user.",
+      "source_type": "devto"
+    },
+    "profile": "fullstack_js",
+    "relevant": false,
+    "notes": "Live 2026-09-04 Signal tab row at 0.809 (\"Similar to your code in briefing.js\"). Introductory material for someone who ships a React/TypeScript product."
+  },
+  {
+    "id": "jp_devto_react_template_engine",
+    "category": "advanced_indepth",
+    "description": "Substantive React article that names the user's dependencies",
+    "item": {
+      "title": "React as template engine",
+      "content": "Using react-dom/server renderToStaticMarkup as a typed HTML template engine for emails and server-rendered fragments: pitfalls with hydration markers, escaping, and how to keep the TypeScript types honest across the boundary.",
+      "source_type": "devto"
+    },
+    "profile": "fullstack_js",
+    "relevant": true,
+    "notes": "Twin of jn_devto_dom_basics: same source, same day, but a real technique on the user's exact stack (react, react-dom, typescript) with the sharp edges spelled out."
+  },
+  {
+    "id": "jn_devto_side_project_showcase",
+    "category": "self_promotional",
+    "description": "\"Why I built\" showcase of a generic browser tool",
+    "item": {
+      "title": "Why I Built a 100% Client-Side Suite of 50 Web Tools (No Ads, No Tracking, Zero Uploads)",
+      "content": "I made a collection of converters and formatters that run entirely in the browser: JSON to YAML, image compression, base64, regex tester. Built with React. Here is the link.",
+      "source_type": "devto"
+    },
+    "profile": "fullstack_js",
+    "relevant": false,
+    "notes": "Live 2026-09-04 feed item at 0.697 with the evidence \"Uses react v19.2.0 (your stack)\". Mentioning React is not applicability; this is a showcase of unrelated utilities."
+  },
+  {
+    "id": "jn_reddit_why_rust_question",
+    "category": "beginner_for_expert",
+    "description": "Beginner \"why is Rust great\" question with a long body",
+    "item": {
+      "title": "could someone plz explain why Rust is so great to a C++ programmer?",
+      "content": "I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? ",
+      "source_type": "reddit"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Live 2026-09-04: ranked in the top 30 at 0.86, classified deep_dive by body length alone. A beginner question is not a deep dive because it is long."
+  },
+  {
+    "id": "jp_reddit_rust_gui_survey",
+    "category": "advanced_indepth",
+    "description": "Substantive ecosystem survey on the user's exact problem space",
+    "item": {
+      "title": "A 2026 Survey of Rust GUI Libraries: what actually ships on Windows and macOS",
+      "content": "Hands-on comparison of Tauri, egui, iced, Slint and gpui for a production desktop app: startup time, WebView2 dependency, packaging size, accessibility, and where each one falls over. Benchmarks and a decision table.",
+      "source_type": "reddit"
+    },
+    "profile": "rust_developer",
+    "relevant": true,
+    "notes": "Twin of jn_reddit_why_rust_question: same source, but a decision-grade survey of the exact category (Rust desktop GUI) the user ships in."
+  },
+  {
+    "id": "jn_lemmy_game_patch_notes",
+    "category": "offdomain_news",
+    "description": "Video-game patch notes that pattern-match a release",
+    "item": {
+      "title": "Easy Red 2 - [2.1.0] Better AI, Bipod System, Redesigned UI, New Vehicles and More",
+      "content": "Patch 2.1.0 is live. Improved squad AI, a new bipod system for machine guns, redesigned menus and four new vehicles. See the full changelog on Steam.",
+      "source_type": "lemmy"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Live 2026-09-04: promoted into the durable feed at 0.50. A game update reads like a software release to a regex; it is not developer intelligence."
+  },
+  {
+    "id": "jn_github_repo_listing",
+    "category": "namematch_only",
+    "description": "Bare trending-repository row for a well-known project",
+    "item": {
+      "title": "microsoft/TypeScript (★110139 • TypeScript)",
+      "content": "TypeScript is a superset of JavaScript that compiles to clean JavaScript output.",
+      "source_type": "github"
+    },
+    "profile": "fullstack_js",
+    "relevant": false,
+    "notes": "Live 2026-09-04: rank #1 in the durable feed at 0.945. A repository listing carries no news; the user already depends on TypeScript. Only an actual release or advisory of it is intelligence."
+  },
+  {
+    "id": "jn_rss_stale_ts_tip",
+    "category": "stale",
+    "description": "Four-year-old evergreen tip on a dependency",
+    "item": {
+      "title": "Get a TypeScript package ready for release to NPM in under 2 minutes (tip)",
+      "content": "Add a build script, set \"types\" in package.json, run npm publish. That is it.",
+      "source_type": "rss"
+    },
+    "profile": "fullstack_js",
+    "relevant": false,
+    "notes": "Live 2026-09-04: published 2022-09, held 0.888 because the novelty detector saw \"release\" while the classifier said Discussion. A two-minute tip from four years ago is not what a senior developer opens 4DA for."
+  },
+  {
+    "id": "jn_hn_stripe_openrouter",
+    "category": "offdomain_news",
+    "description": "Fintech industry commentary that matches an ACE topic minted from billing code",
+    "item": {
+      "title": "With OpenRouter, Is Stripe Becoming the Amazon of AI",
+      "content": "Stripe's acquisition of OpenRouter positions it as the payments and routing layer for AI inference. What that means for the model marketplace and for Stripe's margins.",
+      "source_type": "hackernews"
+    },
+    "profile": "rust_developer",
+    "relevant": false,
+    "notes": "Live 2026-09-04 feed item at 0.772 because \"stripe\" was an ACE active topic minted from the user's own billing module. Company strategy commentary about a vendor is not stack intelligence; a Stripe API deprecation would be."
   }
 ]

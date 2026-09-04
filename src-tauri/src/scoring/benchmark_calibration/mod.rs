@@ -10,6 +10,8 @@
 #[cfg(feature = "fastembed-local")]
 mod embeddings;
 #[cfg(feature = "fastembed-local")]
+mod fixtures;
+#[cfg(feature = "fastembed-local")]
 mod optimizer;
 #[cfg(feature = "fastembed-local")]
 mod profile;
@@ -50,7 +52,9 @@ pub(crate) use self::types::CalibrationResult;
 
 /// Run the complete calibration pipeline:
 /// 1. Load scenarios
-/// 2. Generate real embeddings for all texts
+/// 2. Load the committed real-model embeddings (`fixtures.rs`; deterministic
+///    across machines — live generation on GitHub's runners flipped scenarios
+///    between runs, 2026-09-05)
 /// 3. Run benchmark with default params
 /// 4. Hill-climb to optimize params
 /// 5. Run final benchmark with optimized params
@@ -66,10 +70,10 @@ pub(crate) fn run_calibration_sync() -> crate::error::Result<CalibrationResult> 
     let scenarios = load_scenarios();
     info!("Loaded {} scenarios", scenarios.len());
 
-    // Step 2: Generate embeddings
-    let (item_emb, topic_emb) = embeddings::generate_all_embeddings(&scenarios)?;
+    // Step 2: Load the committed real-model embeddings (a stale fixture is an error)
+    let (item_emb, topic_emb) = fixtures::load_fixture_embeddings(&scenarios)?;
     info!(
-        "Generated {} item embeddings, {} topic embeddings",
+        "Loaded {} item embeddings, {} topic embeddings from the committed fixture",
         item_emb.len(),
         topic_emb.len()
     );
@@ -275,6 +279,31 @@ fn embedding_generation_works() {
     }
 }
 
+/// CI must still SEE the real model even though the benchmark reads
+/// fixtures: embed one text through the production path. An unavailable
+/// model skips loudly by default and FAILS under
+/// FOURDA_REQUIRE_REAL_EMBEDDINGS=1 (the audit's item-22 guard).
+#[cfg(feature = "fastembed-local")]
+#[test]
+fn real_model_embeds_one_text() {
+    match crate::fastembed_sync(&["4DA reads the internet for developers".to_string()]) {
+        Ok(vectors) => {
+            assert_eq!(vectors.len(), 1);
+            assert!(
+                vectors[0].len() >= 256,
+                "unexpected embedding width {}",
+                vectors[0].len()
+            );
+            assert!(vectors[0].iter().all(|x| x.is_finite()));
+        }
+        Err(e) => skip_or_fail_model_unavailable(
+            "real_model_embeds_one_text",
+            &e.to_string(),
+            real_embeddings_required(),
+        ),
+    }
+}
+
 #[cfg(feature = "fastembed-local")]
 #[test]
 fn full_calibration_with_real_embeddings() {
@@ -284,17 +313,10 @@ fn full_calibration_with_real_embeddings() {
     // Under FOURDA_REQUIRE_REAL_EMBEDDINGS=1 an unavailable model FAILS: this
     // is the audit's E8 hazard test — a CI run must never pass having measured
     // nothing.
-    let result = match run_calibration_sync() {
-        Ok(r) => r,
-        Err(e) => {
-            skip_or_fail_model_unavailable(
-                "full_calibration_with_real_embeddings",
-                &e.to_string(),
-                real_embeddings_required(),
-            );
-            return;
-        }
-    };
+    // The benchmark reads committed real-model embeddings (fixtures.rs), so
+    // the only error here is a STALE fixture — always fatal, in every mode.
+    // `real_model_embeds_one_text` below is what keeps CI proving the model.
+    let result = run_calibration_sync().unwrap_or_else(|e| panic!("{e}"));
 
     let r = &result.benchmark_report;
     eprintln!("\n=== PASIFA Auto-Calibration Results ===");
@@ -736,7 +758,8 @@ fn quality_gate_tolerates_one_cross_machine_flip_but_not_two() {
 #[ignore]
 fn diagnostic_dump_all_scenarios() {
     let scenarios = load_scenarios();
-    let (item_emb, topic_emb) = embeddings::generate_all_embeddings(&scenarios).unwrap();
+    let (item_emb, topic_emb) =
+        fixtures::load_fixture_embeddings(&scenarios).unwrap_or_else(|e| panic!("{e}"));
     let db = bench_db();
     let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 

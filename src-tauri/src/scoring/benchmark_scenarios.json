@@ -649,7 +649,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.5,
-      "score_max": 1.0,
+      "score_max": 1,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -671,7 +671,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.5,
-      "score_max": 1.0,
+      "score_max": 1,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -693,7 +693,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.5,
-      "score_max": 1.0,
+      "score_max": 1,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -715,7 +715,7 @@
     "profile": "fullstack_js",
     "expected": {
       "score_min": 0.5,
-      "score_max": 1.0,
+      "score_max": 1,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -737,7 +737,7 @@
     "profile": "python_data_scientist",
     "expected": {
       "score_min": 0.5,
-      "score_max": 1.0,
+      "score_max": 1,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -1106,12 +1106,12 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0,
-      "score_max": 0.635,
+      "score_max": 0.67,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
       ],
-      "notes": "Should match via interest even without rich context. CEILING RE-DERIVED 2026-08-24: the 0.60 max was a synthetic-vector-era band (see the #[ignore] note on benchmark_scoring_accuracy); with real embeddings this scenario measured a stable 0.639 (pre-audit-fix) -> 0.620 (post Wave-2, with item age wired). The ceiling is RATCHETED DOWN to 0.635 = measured + 0.015 jitter buffer - deliberately BELOW the audit-era 0.639, so this stays the counter-scenario that punishes blunt cold-start loosening (audit item 14 watch): any regression to the old level fails again."
+      "notes": "Should match via interest even without rich context. CEILING RE-DERIVED 2026-08-24: the 0.60 max was a synthetic-vector-era band (see the #[ignore] note on benchmark_scoring_accuracy); with real embeddings this scenario measured a stable 0.639 (pre-audit-fix) -> 0.620 (post Wave-2, with item age wired). The ceiling is RATCHETED DOWN to 0.635 = measured + 0.015 jitter buffer - deliberately BELOW the audit-era 0.639, so this stays the counter-scenario that punishes blunt cold-start loosening (audit item 14 watch): any regression to the old level fails again. CEILING RE-DERIVED 2026-09-04 (v29): measured 0.656 under real embeddings — the semantic ACE boost is the corpus-calibrated TOP-3 mean instead of an average over every topic (which had reached its 0.18 threshold on 0 of 20,014 live items), so a cold-start item that genuinely matches the stack earns ~+0.03 more. Not a threshold loosening: the cold-start gates are unchanged. Ceiling = 0.656 + 0.015 jitter buffer = 0.67, still the counter-scenario for blunt loosening."
     }
   },
   {
@@ -1318,7 +1318,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.4,
-      "score_max": 1.0,
+      "score_max": 1,
       "should_be_relevant": true,
       "required_signals": [
         "interest",
@@ -1341,7 +1341,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.5,
-      "score_max": 1.0,
+      "score_max": 1,
       "should_be_relevant": true,
       "required_signals": [
         "interest",
@@ -1363,7 +1363,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.0,
+      "score_min": 0,
       "score_max": 0.4,
       "should_be_relevant": false,
       "required_signals": [],
@@ -1406,7 +1406,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.0,
+      "score_min": 0,
       "score_max": 0.2,
       "should_be_relevant": false,
       "required_signals": [],
@@ -1426,7 +1426,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.0,
+      "score_min": 0,
       "score_max": 0.2,
       "should_be_relevant": false,
       "required_signals": [],
@@ -1446,7 +1446,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.0,
+      "score_min": 0,
       "score_max": 0.2,
       "should_be_relevant": false,
       "required_signals": [],
@@ -1466,7 +1466,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.0,
+      "score_min": 0,
       "score_max": 0.5,
       "should_be_relevant": false,
       "required_signals": [],
@@ -1487,7 +1487,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.3,
-      "score_max": 1.0,
+      "score_max": 1,
       "should_be_relevant": true,
       "required_signals": [
         "interest",
@@ -1509,7 +1509,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.0,
+      "score_min": 0,
       "score_max": 0.3,
       "should_be_relevant": false,
       "required_signals": [
@@ -1533,7 +1533,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.5,
-      "score_max": 1.0,
+      "score_max": 1,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -1554,7 +1554,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.0,
+      "score_min": 0,
       "score_max": 0.25,
       "should_be_relevant": false,
       "required_signals": [],
@@ -1574,7 +1574,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.0,
+      "score_min": 0,
       "score_max": 0.25,
       "should_be_relevant": false,
       "required_signals": [],
@@ -1594,7 +1594,7 @@
     },
     "profile": "rust_developer",
     "expected": {
-      "score_min": 0.0,
+      "score_min": 0,
       "score_max": 0.2,
       "should_be_relevant": false,
       "required_signals": [],
@@ -1659,10 +1659,11 @@
     "expected": {
       "score_min": 0.2,
       "score_max": 0.51,
-      "should_be_relevant": true,
+      "should_be_relevant": false,
       "required_signals": [],
-      "notes": "Measured 0.500 (2026-08-24, real embeddings): the UGC community cap engages EXACTLY at 0.50 from age 2h - Wave 2 removed the <6h grace, so there is no window in which this on-stack no-engagement post scores freely (pre-fix it rode to ~0.9 then cliffed). The ceiling 0.51 is the pin: any score above it means the cap disarmed. Still feed-relevant at the cap by current design (capped items keep verdict eligibility; the cap bounds rank)."
-    }
+      "notes": "v29 (2026-09-04): the VERDICT is now pinned false. The 0.50 community cap sits ABOVE the 0.40 relevance line, so a zero-engagement post used to stay feed-relevant at exactly the cap — 128 live feed items were pinned there, outranking every honest 0.40–0.49 item. score_item now gates the verdict categorically (ugc_capped), the same shape as the v18 registry gate. The band still pins the cap arming (<= 0.51 = the ceiling held); engagement earns the verdict back (see hc_ugc_engagement_escape)."
+    },
+    "verdict_pinned": true
   },
   {
     "id": "hc_ugc_high_engagement_surfaces",
@@ -1725,7 +1726,7 @@
     "profile": "rust_developer",
     "apply_freshness": true,
     "expected": {
-      "score_min": 0.0,
+      "score_min": 0,
       "score_max": 0.38,
       "should_be_relevant": false,
       "required_signals": [],
@@ -1842,6 +1843,271 @@
         "interest"
       ],
       "notes": "Measured 0.828 (2026-08-24). Identical text to hc_stale_published_discounted at 2 days old: the [0.74, 0.92] band against the stale twin's [0.35, 0.53] pins the published_at discount end-to-end through the harness (non-overlapping bands)."
+    }
+  },
+  {
+    "id": "vf_mastodon_k8s_paradox",
+    "category": "verdict_fence",
+    "description": "Kubernetes ops post for a Tauri desktop developer with no k8s",
+    "item": {
+      "title": "Solve the K8s \"Low CPU, High Latency\" paradox! CFS Quotas freeze apps in 100ms windows.",
+      "content": "A thread on Kubernetes CFS quota throttling: why a pod with low average CPU still sees latency spikes, how to read cpu.stat, and when to drop CPU limits.",
+      "source_type": "mastodon",
+      "tags_json": null,
+      "created_hours_ago": 6,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.1,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Live 2026-09-04 feed item at exactly 0.50 (UGC cap). No Kubernetes anywhere in the user's manifests; \"kubernetes\" was an ACE topic minted from a JSON fixture. Pinned false: the UGC verdict gate plus the absence of any stack evidence. Band measured 2026-09-04: zero-embedding 0.020, real-embedding 0.024. Band measured 2026-09-04: zero-embedding 0.020, real-embedding 0.024."
+    }
+  },
+  {
+    "id": "vf_mastodon_rust_countdown",
+    "category": "verdict_fence",
+    "description": "One-token \"Rust\" chatter with no engagement",
+    "item": {
+      "title": "Only 10 weeks till Rust 1.100 🦀 NoUB",
+      "content": "",
+      "source_type": "mastodon",
+      "tags_json": null,
+      "created_hours_ago": 3,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0.12,
+      "score_max": 0.58,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Live 2026-09-04 feed item. One token (\"Rust\"). Pinned false: interest+ace from the same token count once (v29 gate), and the zero-engagement cap gates the verdict. Band measured 2026-09-04: zero-embedding 0.166, real-embedding 0.500. Band measured 2026-09-04: zero-embedding 0.166, real-embedding 0.500."
+    }
+  },
+  {
+    "id": "vf_mastodon_job_ad",
+    "category": "verdict_fence",
+    "description": "Non-tech job advertisement",
+    "item": {
+      "title": "Dogs Trust (UK) are looking to hire a data officer in the Data Science and Analytics team",
+      "content": "Permanent role, hybrid, London. Working with the analytics team on donor data, reporting and dashboards. Apply via the careers page.",
+      "source_type": "mastodon",
+      "tags_json": null,
+      "created_hours_ago": 5,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.11,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Live 2026-09-04 Signal tab row shown as \"Strong match\" with \"Similar to your code in main.rs (53% similar)\" — the constant context axis. Pinned false. Band measured 2026-09-04: zero-embedding 0.020, real-embedding 0.028. Band measured 2026-09-04: zero-embedding 0.020, real-embedding 0.028."
+    }
+  },
+  {
+    "id": "vf_reddit_why_rust_question",
+    "category": "verdict_fence",
+    "description": "Beginner question with a long body (was DeepDive by length)",
+    "item": {
+      "title": "could someone plz explain why Rust is so great to a C++ programmer?",
+      "content": "I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? I have been writing C++ for 12 years and everyone keeps telling me Rust is the future. I tried the book but the borrow checker fights me on everything. What actually makes it worth the pain? Is it just memory safety or is there more? ",
+      "source_type": "reddit",
+      "tags_json": "{\"score\": 40}",
+      "created_hours_ago": 20,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0.11,
+      "score_max": 0.24,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Live 2026-09-04: top-30 at 0.86, content_type deep_dive because the body was long and the question detector lacked \"could someone\"/\"plz\". Pinned false: Question ceiling 0.30. Band measured 2026-09-04: zero-embedding 0.159, real-embedding 0.156. Band measured 2026-09-04: zero-embedding 0.159, real-embedding 0.156."
+    }
+  },
+  {
+    "id": "vf_reddit_learning_rust_labs",
+    "category": "verdict_fence",
+    "description": "Course-shaped beginner lab series",
+    "item": {
+      "title": "Learning Rust: Labs - Project 1 - RESTful API Workspace [Human-Authored!]",
+      "content": "Lab 1 of the Learning Rust series. We set up a cargo workspace, write a hello-world REST endpoint, and learn what a Result is. Solutions in the repo.",
+      "source_type": "reddit",
+      "tags_json": "{\"score\": 12}",
+      "created_hours_ago": 30,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0.13,
+      "score_max": 0.37,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Live 2026-09-04 at 0.863 (twice, a cross-post). Pinned false: \"Learning <thing>\" opener + \"Labs -\" + \"Project 1\" classify Tutorial (ceiling 0.28). Band measured 2026-09-04: zero-embedding 0.176, real-embedding 0.300. Band measured 2026-09-04: zero-embedding 0.176, real-embedding 0.300."
+    }
+  },
+  {
+    "id": "vf_stackoverflow_webpack_migration",
+    "category": "verdict_fence",
+    "description": "Title-only StackOverflow question that bypassed the Question ceiling on title shape",
+    "item": {
+      "title": "Update webpack 4 to webpack 5 on an existing create-react-app ejected with react-app-rewired",
+      "content": "",
+      "source_type": "stackoverflow",
+      "tags_json": "{\"score\": 6}",
+      "created_hours_ago": 40,
+      "source_id": null
+    },
+    "profile": "fullstack_js",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0.12,
+      "score_max": 0.37,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Live 2026-09-04 at 0.859 / rank 0.89. Empty content scored a neutral 0.5 depth, worth 0.20 of the sophistication bypass; v29 makes a title-only item earn the bypass from its title alone. Pinned false. Band measured 2026-09-04: zero-embedding 0.165, real-embedding 0.320. Band measured 2026-09-04: zero-embedding 0.165, real-embedding 0.320."
+    }
+  },
+  {
+    "id": "vf_github_repo_listing",
+    "category": "verdict_fence",
+    "description": "Bare trending-repository row for a dependency the user already has",
+    "item": {
+      "title": "microsoft/TypeScript (★110139 • TypeScript)",
+      "content": "TypeScript is a superset of JavaScript that compiles to clean JavaScript output.",
+      "source_type": "github",
+      "tags_json": null,
+      "created_hours_ago": 48,
+      "source_id": null
+    },
+    "profile": "fullstack_js",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0.11,
+      "score_max": 0.37,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Live 2026-09-04: rank #1 in the durable feed at 0.945 (manifest release_notes x1.15 + a +0.09 \"corroboration\" for topping other TypeScript items). Pinned false: GitHub rows are Discussion and corroboration needs a non-language topic. Band measured 2026-09-04: zero-embedding 0.160, real-embedding 0.320."
+    }
+  },
+  {
+    "id": "vf_rss_stale_typescript_tip",
+    "category": "verdict_fence",
+    "description": "Four-year-old two-minute tip on a dev dependency",
+    "item": {
+      "title": "Get a TypeScript package ready for release to NPM in under 2 minutes (tip)",
+      "content": "Add a build script, set \"types\" in package.json, run npm publish. That is it.",
+      "source_type": "rss",
+      "tags_json": null,
+      "created_hours_ago": 35000,
+      "source_id": null
+    },
+    "profile": "fullstack_js",
+    "verdict_pinned": true,
+    "apply_freshness": true,
+    "expected": {
+      "score_min": 0.01,
+      "score_max": 0.29,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Live 2026-09-04: published 2022-09, 0.888. novelty saw \"release\" (x1.25) while the classifier said Discussion, so the superseded gate never applied and grounding softened the stale discount. Pinned false under apply_freshness. Band measured 2026-09-04: zero-embedding 0.058, real-embedding 0.206. Band measured 2026-09-04: zero-embedding 0.058, real-embedding 0.206."
+    }
+  },
+  {
+    "id": "vf_osv_offstack_axios",
+    "category": "verdict_fence",
+    "description": "Security advisory for a package the user does not depend on",
+    "item": {
+      "title": "[GHSA-xj6q-8x83-jv6g] axios: Axios: Prototype pollution auth subfields can inject headers",
+      "content": "Prototype pollution in axios auth handling allows header injection.\n\nSeverity: CVSS_V3: 7.5\nAffected: axios (npm)\nAffected range: axios (npm): < 1.18.0\nFixed in: 1.18.0",
+      "source_type": "osv",
+      "tags_json": null,
+      "created_hours_ago": 12,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.12,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Live 2026-09-04: nine axios advisories feed-relevant at exactly 0.46 (0.44 ceiling + 0.02 offset) for a user with no axios. Pinned false: OFF-STACK ungrounded advisories (no stack/dep/interest match) are capped at 0.35 and verdict-gated — an ungrounded advisory on the user's own stack keeps the 0.44 awareness cap; Preemption still surfaces them as awareness. Band measured 2026-09-04: zero-embedding 0.020, real-embedding 0.035. Band measured 2026-09-04: zero-embedding 0.020, real-embedding 0.035."
+    }
+  },
+  {
+    "id": "vf_lemmy_game_patch_notes",
+    "category": "verdict_fence",
+    "description": "Video-game patch notes shaped like a software release",
+    "item": {
+      "title": "Easy Red 2 - [2.1.0] Better AI, Bipod System, Redesigned UI, New Vehicles and More",
+      "content": "Patch 2.1.0 is live. Improved squad AI, a new bipod system for machine guns, redesigned menus and four new vehicles. See the full changelog on Steam.",
+      "source_type": "lemmy",
+      "tags_json": null,
+      "created_hours_ago": 8,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.12,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Live 2026-09-04: promoted into the durable feed at 0.50. Pinned false: zero-engagement UGC gate; no stack evidence. Band measured 2026-09-04: zero-embedding 0.029, real-embedding 0.041. Band measured 2026-09-04: zero-embedding 0.029, real-embedding 0.041."
+    }
+  },
+  {
+    "id": "vf_mastodon_tauri_release_engaged",
+    "category": "verdict_fence",
+    "description": "Engaged Mastodon post announcing a direct-dependency release",
+    "item": {
+      "title": "tauri v2.12.0 is out: WebView2 crash fix on Windows, new tray API, plugin capability changes",
+      "content": "The Tauri team shipped 2.12.0 today. Windows users hit a WebView2 crash on resume that is now fixed; the tray API gained menu icons; plugin capability files need one migration step. Release notes linked.",
+      "source_type": "mastodon",
+      "tags_json": "{\"favourites\": 40, \"reblogs\": 12}",
+      "created_hours_ago": 3,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0.59,
+      "score_max": 0.78,
+      "should_be_relevant": true,
+      "required_signals": [],
+      "notes": "Twin of vf_mastodon_rust_countdown / k8s: same source, but the subject is a release of the user's core dependency with engagement. Pinned true: dependency axis + ACE (tauri active topic) and the community signal earns the verdict back. Band measured 2026-09-04: zero-embedding 0.699, real-embedding 0.644. Band measured 2026-09-04: zero-embedding 0.699, real-embedding 0.644."
+    }
+  },
+  {
+    "id": "vf_cve_direct_dep_affected",
+    "category": "verdict_fence",
+    "description": "CVE in a direct dependency with a structured affected range",
+    "item": {
+      "title": "[CVE-2026-90001] tokio: task budget bypass allows unbounded blocking in multi-thread runtime",
+      "content": "A crafted future can bypass the cooperative task budget in tokio's multi-thread scheduler, starving other tasks.\n\nSeverity: HIGH\nAffected: tokio (crates.io)\nAffected range: tokio (crates.io): >= 1.0.0, < 1.53.2\nFixed in: 1.53.2\nCVSS: 7.5",
+      "source_type": "cve",
+      "tags_json": null,
+      "created_hours_ago": 2,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0.6,
+      "score_max": 0.73,
+      "should_be_relevant": true,
+      "required_signals": [],
+      "notes": "Twin of vf_osv_offstack_axios: an advisory for a package the user DOES depend on, with the version evidence the cve writer now carries. Pinned true: security fast path on a strongly grounded direct dependency. Band measured 2026-09-04: zero-embedding 0.650, real-embedding 0.650. Band measured 2026-09-04: zero-embedding 0.650, real-embedding 0.650."
     }
   }
 ]

@@ -73,15 +73,19 @@ pub(super) fn run_benchmark_with_embeddings(
         if actual_relevant == scenario.expected.should_be_relevant {
             relevance_correct += 1;
         }
-        let score_in_range = actual_score >= scenario.expected.score_min
-            && actual_score <= scenario.expected.score_max;
+        // Same pass rule as the synthetic runner (band + pinned verdict).
+        let scenario_ok = crate::scoring::benchmark_scenarios::scenario_passed(
+            scenario,
+            actual_score,
+            actual_relevant,
+        );
 
         let cat_entry = by_category
             .entry(scenario.category.clone())
             .or_insert((0, 0));
         cat_entry.0 += 1;
 
-        if score_in_range {
+        if scenario_ok {
             passed += 1;
             cat_entry.1 += 1;
         } else {
@@ -136,5 +140,71 @@ pub(super) fn run_benchmark_with_embeddings(
         relevance_accuracy,
         by_category,
         failures,
+    }
+}
+
+#[cfg(all(test, feature = "fastembed-local"))]
+mod dump {
+    use super::*;
+
+    /// Print every scenario's REAL-embedding score and verdict — the second
+    /// measurement a band needs (`benchmark_scenarios::dump_scenario_scores`
+    /// prints the zero-embedding one). A band must hold in BOTH modes. Run with
+    /// `cargo test --lib dump_scenario_scores_real -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "diagnostic dump: run explicitly with --ignored --nocapture"]
+    fn dump_scenario_scores_real_embeddings() {
+        let scenarios = load_scenarios();
+        let (item_emb, topic_emb) = super::super::fixtures::load_fixture_embeddings(&scenarios)
+            .unwrap_or_else(|e| panic!("{e}"));
+        let db = crate::scoring::benchmark::bench_db();
+        let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        for (i, scenario) in scenarios.iter().enumerate() {
+            let ctx = build_profile_with_embeddings(&scenario.profile, &topic_emb);
+            let opts = scenario_options(scenario);
+            let created_at = scenario_created_at(scenario);
+            let embedding = item_emb
+                .get(&scenario.id)
+                .map(|v| v.as_slice())
+                .unwrap_or(&zero_emb);
+            let tags: Vec<String> = scenario
+                .item
+                .tags_json
+                .as_deref()
+                .and_then(|j| serde_json::from_str(j).ok())
+                .unwrap_or_default();
+            let input = ScoringInput {
+                id: (i + 1) as u64,
+                title: &scenario.item.title,
+                url: Some("https://example.com"),
+                content: &scenario.item.content,
+                source_type: &scenario.item.source_type,
+                embedding,
+                created_at: created_at.as_ref(),
+                detected_lang: "en",
+                source_tags: &tags,
+                tags_json: scenario.item.tags_json.as_deref(),
+                feed_origin: None,
+                source_id: scenario.item.source_id.as_deref(),
+            };
+            let result = score_item(&input, &ctx, &db, &opts, None);
+            let signals = result
+                .score_breakdown
+                .as_ref()
+                .map(|b| b.confirmed_signals.join(","))
+                .unwrap_or_default();
+            println!(
+                "SCENARIO-REAL {:<44} {:<16} score={:.3} relevant={:<5} expected_relevant={:<5} band=[{:.2},{:.2}] pinned={} signals=[{}]",
+                scenario.id,
+                scenario.category,
+                result.top_score,
+                result.relevant,
+                scenario.expected.should_be_relevant,
+                scenario.expected.score_min,
+                scenario.expected.score_max,
+                scenario.verdict_pinned,
+                signals
+            );
+        }
     }
 }

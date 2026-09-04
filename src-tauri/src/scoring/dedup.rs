@@ -164,7 +164,7 @@ pub(crate) fn normalize_result_url(url: &str) -> String {
     format!("{base}?{normalized_query}")
 }
 
-fn normalize_result_title(title: &str) -> String {
+pub(crate) fn normalize_result_title(title: &str) -> String {
     let decoded = crate::decode_html_entities(title);
     decoded
         .trim()
@@ -344,13 +344,48 @@ pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
         }
     }
 
-    // Annotate representatives and apply corroboration boost
+    // Corroboration counts only DISTINCT sources sharing a NON-GENERIC topic.
+    // v29 (2026-09-04): a shared language/ecosystem token ("typescript",
+    // "rust") is not cross-source confirmation of a story — it is the batch's
+    // subject — yet it handed a bare GitHub repo listing +0.09 (rank #1 at
+    // 0.945) and a dog-charity job ad +0.09 for sharing "data" with two other
+    // items. Grouping (display dedup) is unchanged; only the boost is gated.
+    let corroborations: std::collections::HashMap<usize, usize> = {
+        let mut m: std::collections::HashMap<usize, std::collections::HashSet<String>> =
+            std::collections::HashMap::new();
+        for &gi in &grouped_indices {
+            let grouped_topics = extract_topics(&results[gi].title, "", &[]);
+            for topic in &grouped_topics {
+                if topic.len() < 3 {
+                    continue;
+                }
+                let Some(&rep_idx) = topic_to_representative.get(topic.as_str()) else {
+                    continue;
+                };
+                if rep_idx == gi {
+                    continue;
+                }
+                if !is_corroborating_topic(topic)
+                    || results[rep_idx].source_type == results[gi].source_type
+                {
+                    break;
+                }
+                m.entry(rep_idx)
+                    .or_default()
+                    .insert(results[gi].source_type.clone());
+                break;
+            }
+        }
+        m.into_iter().map(|(k, v)| (k, v.len())).collect()
+    };
+
+    // Annotate representatives and apply the (gated) corroboration boost
     for (rep_idx, titles) in &rep_to_titles {
         results[*rep_idx].similar_count = titles.len() as u32;
         results[*rep_idx].similar_titles = titles.clone();
-        // Corroboration boost: items confirmed across multiple sources are more important.
-        // +0.03 per grouped item, capped at +0.09 (3 corroborating items)
-        let boost = (titles.len() as f32 * 0.03).min(0.09);
+        // +0.03 per corroborating DISTINCT source, capped at +0.09.
+        let sources = corroborations.get(rep_idx).copied().unwrap_or(0);
+        let boost = (sources as f32 * 0.03).min(0.09);
         results[*rep_idx].top_score = (results[*rep_idx].top_score + boost).min(1.0);
     }
 
@@ -366,6 +401,41 @@ pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
     if total_grouped > 0 {
         info!(target: "4da::scoring", grouped = total_grouped, representatives = rep_to_titles.len(), "Topic-level deduplication");
     }
+}
+
+/// Language / ecosystem tokens that a large share of every batch carries. A
+/// story is corroborated when several sources cover THE STORY, not when they
+/// all happen to be about Rust.
+const BATCH_SUBJECT_TOPICS: &[&str] = &[
+    "rust",
+    "typescript",
+    "javascript",
+    "python",
+    "golang",
+    "java",
+    "react",
+    "node",
+    "nodejs",
+    "linux",
+    "windows",
+    "ai",
+    "llm",
+    "data",
+    "security",
+    "programming",
+    "software",
+    "developer",
+    "developers",
+    "open",
+    "source",
+    "github",
+];
+
+/// May a shared title topic count as cross-source corroboration?
+fn is_corroborating_topic(topic: &str) -> bool {
+    !BATCH_SUBJECT_TOPICS.contains(&topic)
+        && !super::is_generic_topic_token(topic)
+        && !super::dependencies::is_ambiguous_dep_name(topic)
 }
 
 /// Extract the registrable domain from a URL string.

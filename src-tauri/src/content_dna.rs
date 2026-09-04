@@ -640,4 +640,60 @@ mod tests {
         let (ct, _) = classify_content("i ported doom to run on a microcontroller", "short");
         assert_eq!(ct, ContentType::ShowAndTell);
     }
+
+    // ========================================================================
+    // v29 (2026-09-04): live-feed misclassifications
+    // ========================================================================
+
+    #[test]
+    fn test_polite_beginner_question_with_long_body_is_a_question() {
+        let body = "I have been writing C++ for 12 years and everyone keeps telling me \
+                    Rust is the future. "
+            .repeat(30);
+        let (ct, _) = classify_content(
+            "could someone plz explain why Rust is so great to a C++ programmer?",
+            &body,
+        );
+        assert!(
+            matches!(ct, ContentType::Question | ContentType::HelpRequest),
+            "a beginner question is not a DeepDive because its body is long (got {ct:?})"
+        );
+    }
+
+    #[test]
+    fn test_learning_series_lab_is_a_tutorial() {
+        let (ct, _) = classify_content(
+            "Learning Rust: Labs - Project 1 - RESTful API Workspace [Human-Authored!]",
+            "",
+        );
+        assert_eq!(ct, ContentType::Tutorial);
+    }
+
+    #[test]
+    fn test_machine_learning_is_not_a_tutorial() {
+        let (ct, _) = classify_content("Machine Learning in Rust: a production story", "");
+        assert_ne!(
+            ct,
+            ContentType::Tutorial,
+            "'learning' is a tutorial opener only at the start of the title"
+        );
+    }
+
+    #[test]
+    fn test_github_repo_row_is_not_release_notes() {
+        let (ct, mult) = classify_content_for_source(
+            "microsoft/TypeScript (★110139 • TypeScript)",
+            "TypeScript is a superset of JavaScript that compiles to clean JavaScript output.",
+            "github",
+        );
+        assert_ne!(
+            ct,
+            ContentType::ReleaseNotes,
+            "a bare trending-repo row is not a release"
+        );
+        assert!(
+            mult < ContentType::ReleaseNotes.multiplier(),
+            "no release multiplier for a repo listing (got {mult})"
+        );
+    }
 }

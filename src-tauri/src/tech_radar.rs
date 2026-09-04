@@ -99,20 +99,21 @@ pub async fn get_radar_entry(name: String) -> Result<Option<RadarEntry>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::{params, Connection};
 
-    fn setup_test_db() -> Connection {
-        crate::register_sqlite_vec_extension();
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE tech_stack (id INTEGER PRIMARY KEY, technology TEXT NOT NULL UNIQUE);
-             CREATE TABLE detected_tech (id INTEGER PRIMARY KEY, name TEXT NOT NULL, category TEXT, confidence REAL DEFAULT 0.5);
-             CREATE TABLE explicit_interests (id INTEGER PRIMARY KEY, topic TEXT NOT NULL);
-             CREATE TABLE project_dependencies (id INTEGER PRIMARY KEY, project_path TEXT, manifest_type TEXT, package_name TEXT, version TEXT, is_dev INTEGER DEFAULT 0, is_direct INTEGER DEFAULT 1, language TEXT, last_scanned TEXT DEFAULT (datetime('now')), UNIQUE(project_path, package_name));
-             CREATE TABLE developer_decisions (id INTEGER PRIMARY KEY AUTOINCREMENT, decision_type TEXT NOT NULL, subject TEXT NOT NULL, decision TEXT NOT NULL, rationale TEXT, alternatives_rejected TEXT DEFAULT '[]', context_tags TEXT DEFAULT '[]', confidence REAL DEFAULT 0.8, status TEXT DEFAULT 'active', superseded_by INTEGER, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
-             CREATE TABLE source_items (id INTEGER PRIMARY KEY AUTOINCREMENT, source_type TEXT NOT NULL, source_id TEXT NOT NULL, url TEXT, title TEXT NOT NULL, content TEXT DEFAULT '', content_hash TEXT DEFAULT '', embedding BLOB DEFAULT x'00', created_at TEXT DEFAULT (datetime('now')), last_seen TEXT DEFAULT (datetime('now')), UNIQUE(source_type, source_id));",
-        ).unwrap();
-        conn
+    /// The REAL schema (every migration), not a hand-built subset. The radar
+    /// reads dependencies through `build_domain_profile`, which uses the
+    /// git-scoped `temporal::get_all_dependencies`; its queries touch
+    /// git_signals, user_dependencies and the project_dependencies scope
+    /// columns, and a subset schema made that reader error silently so the
+    /// radar lost every dependency (v29 merge-queue failure, 2026-09-05).
+    fn setup_test_db() -> crate::db::Database {
+        let db = crate::test_utils::test_db();
+        // detected_tech lives in the ACE schema and tech_stack /
+        // explicit_interests in the context engine's; production applies both
+        // on this same connection at app setup.
+        crate::ace::db::migrate(&db.conn).expect("ACE schema");
+        crate::context_engine::ContextEngine::new(db.conn.clone()).expect("context-engine schema");
+        db
     }
 
     #[test]
@@ -132,7 +133,8 @@ mod tests {
 
     #[test]
     fn test_compute_radar_with_profile() {
-        let conn = setup_test_db();
+        let db = setup_test_db();
+        let conn = db.conn.lock();
         conn.execute("INSERT INTO tech_stack (technology) VALUES ('rust')", [])
             .unwrap();
         conn.execute(
@@ -164,7 +166,8 @@ mod tests {
 
     #[test]
     fn test_decision_overlay() {
-        let conn = setup_test_db();
+        let db = setup_test_db();
+        let conn = db.conn.lock();
         conn.execute("INSERT INTO tech_stack (technology) VALUES ('sqlite')", [])
             .unwrap();
         conn.execute(
@@ -268,18 +271,25 @@ mod tests {
 
     #[test]
     fn test_signal_trends() {
-        let conn = setup_test_db();
-        conn.execute("INSERT INTO tech_stack (technology) VALUES ('rust')", [])
-            .unwrap();
+        let db = setup_test_db();
+        {
+            let conn = db.conn.lock();
+            conn.execute("INSERT INTO tech_stack (technology) VALUES ('rust')", [])
+                .unwrap();
+        }
+        // Real rows through the real helper (content_hash, embedding, FTS):
+        // the production schema rejects the bare INSERT the old subset accepted.
         for i in 0..8 {
-            conn.execute(
-                "INSERT INTO source_items (source_type, source_id, title, content)
-                 VALUES ('hackernews', ?1, ?2, 'Rust programming language news')",
-                params![format!("hn-{}", i), format!("Rust {} release notes", i)],
-            )
-            .unwrap();
+            crate::test_utils::insert_test_item(
+                &db,
+                "hackernews",
+                &format!("hn-{i}"),
+                &format!("Rust {i} release notes"),
+                "Rust programming language news",
+            );
         }
 
+        let conn = db.conn.lock();
         let radar = compute_radar(&conn).unwrap();
         let rust = radar.entries.iter().find(|e| e.name == "rust").unwrap();
         assert_eq!(rust.movement, RadarMovement::Up);

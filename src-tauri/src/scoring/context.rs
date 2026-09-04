@@ -241,6 +241,11 @@ async fn build_scoring_context_cold(db: &Database) -> Result<ScoringContext> {
     let topic_embeddings = get_topic_embeddings(&ace_ctx).await;
     crate::diagnostics::log_rss("ctx:after_topic_embeddings");
 
+    // v29: calibrate the two embedding axes against the LIVE corpus — see
+    // corpus_calibration.rs for why a per-model sigmoid could not do this job.
+    let corpus_calibration = build_corpus_calibration(db, &ace_ctx, &topic_embeddings);
+    crate::diagnostics::log_rss("ctx:after_corpus_calibration");
+
     // Behavioral scoring inputs DEMOTED in v19 (AD-029): feedback-derived
     // topic boosts and learned per-source quality no longer enter scoring.
     // The capture pipeline keeps writing (preferences UI, engagement
@@ -408,6 +413,7 @@ async fn build_scoring_context_cold(db: &Database) -> Result<ScoringContext> {
         sovereign_profile,
         user_role,
         experience_level,
+        corpus_calibration,
     };
 
     // Store in cache for subsequent calls within TTL
@@ -420,6 +426,76 @@ async fn build_scoring_context_cold(db: &Database) -> Result<ScoringContext> {
     }
 
     Ok(context)
+}
+
+/// Sample size for the corpus calibration of each embedding axis. 1,500 items
+/// × ~60 stack embeddings × 768 dims is ~70M multiply-adds — well under the
+/// KNN cost of scoring a single batch — and the percentiles it produces are
+/// stable to ±0.005 across samples on the live corpus.
+const CORPUS_CALIBRATION_SAMPLE: usize = 1_500;
+
+/// Fit the v29 corpus-relative calibration for both embedding axes, or fall
+/// back to the per-model defaults when the corpus is too small to describe.
+/// Every outcome is logged with the sample size and the fitted parameters so a
+/// calibration that silently fell back can never look like a fitted one.
+fn build_corpus_calibration(
+    db: &Database,
+    ace_ctx: &super::ace_context::ACEContext,
+    topic_embeddings: &HashMap<String, Vec<f32>>,
+) -> super::corpus_calibration::CorpusCalibration {
+    use super::corpus_calibration as cc;
+
+    let mut top1_cosines: Vec<f32> = match db
+        .context_top1_distance_sample(CORPUS_CALIBRATION_SAMPLE * 2)
+    {
+        Ok(distances) => distances.into_iter().map(cc::l2_to_cosine).collect(),
+        Err(e) => {
+            tracing::warn!(target: "4da::scoring", error = %e, "Context calibration sample failed — using per-model fallback");
+            Vec::new()
+        }
+    };
+    let context_sample = top1_cosines.len();
+    let context = cc::context_from_top1_cosines(&mut top1_cosines).unwrap_or_default();
+
+    // The SAME stack set the per-item boost consumes (active topics + detected
+    // tech), so the sampled percentiles describe exactly what items are scored
+    // against.
+    let stack: Vec<&Vec<f32>> = ace_ctx
+        .active_topics
+        .iter()
+        .chain(ace_ctx.detected_tech.iter())
+        .filter_map(|t| topic_embeddings.get(t))
+        .collect();
+    let mut top_k_means: Vec<f32> = if stack.is_empty() {
+        Vec::new()
+    } else {
+        match db.random_item_embeddings(CORPUS_CALIBRATION_SAMPLE) {
+            Ok(items) => items
+                .iter()
+                .filter_map(|item| cc::stack_top_k_mean(item, crate::vector_norm(item), &stack))
+                .collect(),
+            Err(e) => {
+                tracing::warn!(target: "4da::scoring", error = %e, "Semantic calibration sample failed — using legacy pivot");
+                Vec::new()
+            }
+        }
+    };
+    let semantic_sample = top_k_means.len();
+    let semantic = cc::semantic_from_top_k_means(&mut top_k_means).unwrap_or_default();
+
+    info!(target: "4da::scoring",
+        context_sample,
+        context_source = ?context.source,
+        context_center = format!("{:.3}", context.center),
+        context_scale = format!("{:.1}", context.scale),
+        semantic_sample,
+        stack_embeddings = stack.len(),
+        semantic_source = ?semantic.source,
+        semantic_pivot = format!("{:.3}", semantic.pivot),
+        semantic_gain = format!("{:.2}", semantic.gain),
+        "Corpus calibration for the embedding axes"
+    );
+    cc::CorpusCalibration { context, semantic }
 }
 
 /// Clear the cached scoring context so the next `build_scoring_context()` reads
@@ -2353,5 +2429,14 @@ mod tests {
             err.contains("boom"),
             "the underlying build error must survive the mapping; got {err:?}"
         );
+    }
+
+    #[test]
+    fn corpus_calibration_falls_back_on_an_empty_corpus() {
+        use crate::scoring::corpus_calibration::CalibrationSource;
+        let db = crate::test_utils::test_db();
+        let cal = build_corpus_calibration(&db, &ACEContext::default(), &HashMap::new());
+        assert_eq!(cal.context.source, CalibrationSource::Fallback);
+        assert_eq!(cal.semantic.source, CalibrationSource::Fallback);
     }
 }

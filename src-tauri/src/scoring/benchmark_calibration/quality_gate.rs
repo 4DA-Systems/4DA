@@ -80,6 +80,13 @@ const HARNESS_FLOOR: f64 = 1.00;
 /// the only category with NO floor of its own; a second edge regression is
 /// red both here and via the overall floor.
 const EDGE_FLOOR: f64 = 0.92;
+/// Verdict-fence floor (v29, 2026-09-04) — the scenarios whose VERDICT is
+/// pinned (`verdict_pinned: true`, category `verdict_fence`): the ten live
+/// false positives the adversarial audit found in the served feed, each with
+/// a near-twin positive. A band cannot pin what a developer sees; this
+/// category asserts the verdict itself (with the #527 noise margin). 100%:
+/// one of these flipping back IS the regression the fence exists for.
+const VERDICT_FENCE_FLOOR: f64 = 1.00;
 
 pub(super) fn model_meets_quality_gate(report: &BenchmarkReport) -> bool {
     let category = |name: &str| -> f64 {
@@ -107,6 +114,10 @@ pub(super) fn model_meets_quality_gate(report: &BenchmarkReport) -> bool {
         .by_category
         .get("edge_case")
         .is_none_or(|c| c.accuracy as f64 >= EDGE_FLOOR);
+    let fence_ok = report
+        .by_category
+        .get("verdict_fence")
+        .is_none_or(|c| c.accuracy as f64 >= VERDICT_FENCE_FLOOR);
 
     let check = |ok: bool, name: &str, actual: f64, floor: f64| {
         if !ok {
@@ -131,6 +142,12 @@ pub(super) fn model_meets_quality_gate(report: &BenchmarkReport) -> bool {
         HARNESS_FLOOR,
     );
     check(edge_ok, "edge_case", category("edge_case"), EDGE_FLOOR);
+    check(
+        fence_ok,
+        "verdict_fence",
+        category("verdict_fence"),
+        VERDICT_FENCE_FLOOR,
+    );
 
-    overall_ok && tp_ok && tn_ok && sec_ok && cold_ok && harness_ok && edge_ok
+    overall_ok && tp_ok && tn_ok && sec_ok && cold_ok && harness_ok && edge_ok && fence_ok
 }

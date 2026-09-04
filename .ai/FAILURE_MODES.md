@@ -476,3 +476,42 @@ the children. Turning enforcement off has to happen before the transaction opens
 **The generalisable rule:** a `DROP TABLE` is not a local edit — it is a delete
 statement for every table that references it. Enumerate the children before you
 drop the parent, and let a test prove they survived.
+
+## FM: A confirmation axis that fires on almost everything is a constant, not a signal
+
+**Observed 2026-09-04.** The scoring gate needs two independent confirmed axes.
+The CONTEXT axis ("similar to your code") was confirmed on 87.7% of every
+scored item and 100% of the feed — a Lemmy headline about a military strike
+scored 0.73. Cause: `1/(1+L2)` (a 0.42–0.50 band for unrelated unit vectors)
+was fed into a sigmoid tuned for COSINE (center 0.42), so "unrelated" calibrated
+to 0.50–0.75. Every explanation the user read led with that axis at weight 1.0.
+
+**Why it stayed invisible.** Each per-item breakdown looked plausible — a number
+between 0.7 and 0.9, a file name, a percentage. Only the DISTRIBUTION across the
+corpus (feed vs non-feed having the same shape) showed the axis carried no
+information, and no test, gate or monitor looked at a distribution: the
+benchmark drives a zero embedding (context axis 0) and asserts score bands.
+
+**The rule.** Before trusting any gate axis, histogram it for the accepted set
+and the rejected set. If the shapes match, the axis is a constant and the gate
+is one axis weaker than its documentation claims. `corpus_calibration.rs` now
+fits both embedding axes to the live corpus and logs the fitted parameters;
+the fence for this class is the distribution, not a unit test on one item.
+
+## FM: A drain freezes whatever the profile was during that hour
+
+**Observed 2026-09-04.** One PIPELINE_VERSION drain hour (2026-08-31 14h UTC)
+wrote 60,684 of 70,823 scores. During that hour the user's primary language
+was absent from the domain profile (a capitalized `IN ('Language', …)` list
+matched the lowercase stored category zero times — the #606 vocabulary class
+again — and the promoted-tech path had decayed `rust` below its 0.75 floor
+after seven idle days), so Rust-titled items scored domain 0.25 (×0.19) in 282
+of 304 cases. The rows were stamped v28 and the drain never revisited them; the
+profile recovered at the next rescan and NOTHING recorded that 86% of the corpus
+had been scored against a collapsed profile.
+
+**The rule.** A systemic input collapse must be a `degraded_inputs` marker
+(`ace_profile_thin` now joins `dep_intel_load_failed` / `context_knn_failed`),
+because the persist boundary is the only place that can refuse to make a
+collapsed run durable. And after any drain, check `scored_at` by hour against
+the profile state of that hour before believing the corpus.

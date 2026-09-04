@@ -324,6 +324,20 @@ pub(super) fn is_question(title: &str) -> bool {
         "is there",
         "can someone",
         "does anyone",
+        // v29 (2026-09-04): the live feed carried "could someone plz explain
+        // why Rust is so great to a C++ programmer?" at 0.86 classified
+        // DeepDive — a 2,872-char reddit body walked past this list because
+        // none of these openers were in it.
+        "could someone",
+        "could anyone",
+        "can anyone",
+        "anyone know",
+        "why is ",
+        "why does ",
+        "why do ",
+        "should i ",
+        "plz ",
+        "please explain",
     ];
     if start_patterns.iter().any(|p| title.starts_with(p)) {
         return true;
@@ -334,12 +348,20 @@ pub(super) fn is_question(title: &str) -> bool {
         "recommendations for",
         "which should i",
         "ask hn:",
+        "explain why",
+        "explain to me",
+        "eli5",
+        " plz ",
     ];
     contains_patterns.iter().any(|p| title.contains(p))
 }
 
 pub(super) fn is_tutorial(title: &str) -> bool {
-    if title.starts_with("how to") {
+    // v29 (2026-09-04): "Learning Rust: Labs - Project 1 - RESTful API
+    // Workspace" sat at 0.863 in the live feed (twice). A "Learning <thing>"
+    // OPENER is course-shaped; it is a start pattern only, so "Machine
+    // Learning in Rust" (a topic, not a course) is untouched.
+    if title.starts_with("how to") || title.starts_with("learning ") {
         return true;
     }
 
@@ -352,6 +374,14 @@ pub(super) fn is_tutorial(title: &str) -> bool {
         "beginner's guide",
         "introduction to",
         "learn to",
+        // Numbered course units (same v29 case).
+        " labs -",
+        " lab 1",
+        "project 1 ",
+        "lesson 1",
+        " 101:",
+        " 101 -",
+        "for beginners",
     ];
     terms.iter().any(|t| title.contains(t))
 }

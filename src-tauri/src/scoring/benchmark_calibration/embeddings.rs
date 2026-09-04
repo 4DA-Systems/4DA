@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Embedding generation for benchmark calibration scenarios.
 
+#[cfg(feature = "generate-sim-fixtures")]
 use std::collections::HashMap;
+#[cfg(feature = "generate-sim-fixtures")]
 use tracing::info;
 
+#[cfg(feature = "generate-sim-fixtures")]
 use super::types::pad_and_normalize;
 use super::Scenario;
 
@@ -12,6 +15,10 @@ use super::Scenario;
 /// Returns (item_embeddings, topic_embeddings) where:
 /// - item_embeddings: scenario_id -> embedding vector
 /// - topic_embeddings: topic_name -> embedding vector
+/// Live generation through the production embedding path. Since the
+/// benchmark reads committed fixtures (`fixtures.rs`), this is the fixture
+/// GENERATOR's input and compiles only with that feature.
+#[cfg(feature = "generate-sim-fixtures")]
 pub(super) fn generate_all_embeddings(
     scenarios: &[Scenario],
 ) -> crate::error::Result<(HashMap<String, Vec<f32>>, HashMap<String, Vec<f32>>)> {
@@ -19,7 +26,7 @@ pub(super) fn generate_all_embeddings(
     let mut item_texts: Vec<String> = Vec::with_capacity(scenarios.len());
     let mut item_ids: Vec<String> = Vec::with_capacity(scenarios.len());
     for s in scenarios {
-        item_texts.push(format!("{}. {}", s.item.title, s.item.content));
+        item_texts.push(scenario_text(s));
         item_ids.push(s.id.clone());
     }
 
@@ -40,6 +47,38 @@ pub(super) fn generate_all_embeddings(
     // Collect ALL unique topic names across all profiles — interest names, ACE
     // active_topics, and detected_tech. The semantic boost function looks up by
     // lowercase key so we embed every variant and store under lowercase.
+    let unique_topics = profile_topics();
+
+    info!(
+        "Embedding {} topic names via fastembed...",
+        unique_topics.len()
+    );
+    let topic_vectors: Vec<Vec<f32>> = crate::fastembed_sync(&unique_topics)?
+        .into_iter()
+        .map(pad_and_normalize)
+        .collect();
+
+    let mut topic_embeddings = HashMap::with_capacity(unique_topics.len() * 2);
+    for (name, vec) in unique_topics.into_iter().zip(topic_vectors) {
+        let lower = name.to_lowercase();
+        if lower != name {
+            topic_embeddings.insert(lower, vec.clone());
+        }
+        topic_embeddings.insert(name, vec);
+    }
+
+    Ok((item_embeddings, topic_embeddings))
+}
+
+/// The text a scenario is embedded from — ONE definition shared by live
+/// generation and the fixture key digest.
+pub(super) fn scenario_text(s: &Scenario) -> String {
+    format!("{}. {}", s.item.title, s.item.content)
+}
+
+/// Every topic string the benchmark profiles are built from, in a stable
+/// order, exact case (the lowercase twins are derived by the caller).
+pub(super) fn profile_topics() -> Vec<String> {
     let all_profile_topics: &[&[&str]] = &[
         // rust_developer: interests + ACE topics + detected tech + deps
         &[
@@ -76,7 +115,6 @@ pub(super) fn generate_all_embeddings(
             "transformers",
         ],
     ];
-
     let mut unique_topics: Vec<String> = Vec::new();
     for group in all_profile_topics {
         for &t in *group {
@@ -86,24 +124,5 @@ pub(super) fn generate_all_embeddings(
             }
         }
     }
-
-    info!(
-        "Embedding {} topic names via fastembed...",
-        unique_topics.len()
-    );
-    let topic_vectors: Vec<Vec<f32>> = crate::fastembed_sync(&unique_topics)?
-        .into_iter()
-        .map(pad_and_normalize)
-        .collect();
-
-    let mut topic_embeddings = HashMap::with_capacity(unique_topics.len() * 2);
-    for (name, vec) in unique_topics.into_iter().zip(topic_vectors) {
-        let lower = name.to_lowercase();
-        if lower != name {
-            topic_embeddings.insert(lower, vec.clone());
-        }
-        topic_embeddings.insert(name, vec);
-    }
-
-    Ok((item_embeddings, topic_embeddings))
+    unique_topics
 }

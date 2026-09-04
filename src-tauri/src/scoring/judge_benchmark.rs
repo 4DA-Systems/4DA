@@ -19,11 +19,12 @@
 //!   * the only outcome signal that could adjudicate any of it is empty:
 //!     `feedback` holds ONE row ever, `interactions` stopped 2026-08-24.
 //!
-//! `benchmark_scenarios.json` already carried 87 human-labeled scenarios,
-//! 40 relevant / 47 not — a BALANCED set, which the live corpus (~95% reject)
-//! emphatically is not. Nothing had ever run the judge against them.
-//! `judge_scenarios.json` adds 14 more, written from live failures this
-//! benchmark exposed: 101 cases, 45 relevant / 56 not.
+//! `benchmark_scenarios.json` carried 87 human-labeled scenarios when this
+//! was written (40 relevant / 47 not — a BALANCED set, which the live corpus
+//! (~95% reject) emphatically is not) and nothing had ever run the judge
+//! against them. `judge_scenarios.json` adds cases written from live failures.
+//! As of v29 (2026-09-04): 99 + 28 = 127 cases, 49 relevant / 78 not — the
+//! v29 additions are the live 2026-09-04 feed false positives and their twins.
 //!
 //! What it has already caught, in its first three runs:
 //!   * a truncated element discarding an entire paid-for batch of ten

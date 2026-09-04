@@ -70,13 +70,36 @@ pub fn build_domain_profile(conn: &rusqlite::Connection) -> DomainProfile {
         }
     }
 
-    // 2. ACE-detected tech (secondary — auto-scanned)
+    // 2. ACE-detected tech (secondary — auto-scanned).
+    //
+    // v29 (2026-09-04): the stored `category` is LOWERCASE ("language",
+    // "framework", "library" — `format!("{:?}").to_lowercase()` at the write
+    // site), and this query compared it against the capitalized Debug
+    // spelling, so it had matched ZERO rows since it was written — the same
+    // vocabulary-drift class as #606. Detected tech only ever reached
+    // `all_tech` through the `ace_promoted_tech` path (confidence >= 0.75),
+    // which `ace/behavior/decay.rs` drops a language below after seven idle
+    // days. With `rust` absent from both, the user's primary language read as
+    // an OFF-STACK technology (domain 0.25, ×0.19) for 60,684 of 70,823 items
+    // in one drain hour. Two rules restore the invariant that a language the
+    // user's manifests declare is their stack: match the stored spelling at
+    // the detection floor (0.5), and admit detected LANGUAGES to
+    // `primary_stack` — a scanned `Cargo.toml` is a stronger declaration than
+    // an onboarding checkbox.
     if let Ok(mut stmt) = conn.prepare(
-        "SELECT name FROM detected_tech WHERE category IN ('Language', 'Framework', 'Database', 'Library') AND confidence >= 0.8",
+        "SELECT name, LOWER(category) FROM detected_tech
+         WHERE LOWER(category) IN ('language', 'framework', 'database', 'library')
+           AND confidence >= 0.5",
     ) {
-        if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
-            for tech in rows.flatten() {
-                all_tech.insert(tech.to_lowercase());
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            for (tech, category) in rows.flatten() {
+                let lower = tech.to_lowercase();
+                all_tech.insert(lower.clone());
+                if category == "language" && is_display_worthy(&lower) {
+                    primary_stack.insert(lower);
+                }
             }
         }
     }
@@ -90,17 +113,19 @@ pub fn build_domain_profile(conn: &rusqlite::Connection) -> DomainProfile {
         }
     }
 
-    // 4. Project dependencies (non-dev packages only)
-    if let Ok(mut stmt) =
-        conn.prepare("SELECT DISTINCT package_name FROM project_dependencies WHERE is_dev = 0")
-    {
-        if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
-            for dep in rows.flatten() {
-                let lower = dep.to_lowercase();
-                if is_notable_dependency(&lower) {
-                    dependency_names.insert(lower.clone());
-                    all_tech.insert(lower);
-                }
+    // 4. Project dependencies (non-dev packages only) — the SAME git-scoped
+    // set scoring's dependency axis uses (`temporal::get_all_dependencies`:
+    // active roots by 60-day git activity + user exclusions). This used to
+    // read `project_dependencies` unscoped, so a dormant git-less side
+    // project (kairos-mvp, last touched 2025-10) put Express/Redis/Postgres/
+    // Supabase into the domain profile and those items earned domain 0.85 for
+    // a Rust/Tauri developer (2026-09-04 audit, C4).
+    if let Ok(deps) = crate::temporal::get_all_dependencies(conn) {
+        for dep in deps.into_iter().filter(|d| !d.is_dev) {
+            let lower = dep.package_name.to_lowercase();
+            if is_notable_dependency(&lower) {
+                dependency_names.insert(lower.clone());
+                all_tech.insert(lower);
             }
         }
     }
@@ -399,6 +424,11 @@ pub fn compute_domain_relevance(topics: &[String], profile: &DomainProfile) -> f
     // "debugging strategies" → no known tech topics → no suppression.
     // "Supabase validation" → "supabase" is off-stack → suppress.
     if best_relevance <= 0.60 {
+        // v29: a TECHNOLOGY the user DECLARED as an interest is never "off-stack".
+        // Before this the suppressor consulted stack/deps/tech only, so with
+        // `rust` missing from the tech tables (see build_domain_profile, step
+        // 2) the user's own explicit `rust` interest was clamped to 0.25 as an
+        // off-stack technology.
         let has_on_stack = topics.iter().any(|t| {
             let lower = t.to_lowercase();
             profile
@@ -410,6 +440,14 @@ pub fn compute_domain_relevance(topics: &[String], profile: &DomainProfile) -> f
                     .iter()
                     .any(|d| fuzzy_tech_match(&lower, d))
                 || profile.all_tech.iter().any(|s| fuzzy_tech_match(&lower, s))
+                // Only an interest that names a TECHNOLOGY counts: a generic
+                // interest ("security") must not shield an off-stack tech
+                // ("Angular security vulnerability" stays suppressed).
+                || (is_known_technology(&lower)
+                    && profile
+                        .interest_topics
+                        .iter()
+                        .any(|i| fuzzy_tech_match(&lower, i)))
         });
 
         if !has_on_stack {
@@ -1461,6 +1499,69 @@ mod tests {
             compute_domain_relevance(&topics, &profile),
             0.85,
             "Specific dep (tokio) keeps dependency-tier relevance"
+        );
+    }
+
+    // v29 (2026-09-04): the detected_tech read matches the STORED spelling.
+    #[test]
+    fn test_build_profile_reads_lowercase_detected_tech() {
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS detected_tech (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                category TEXT NOT NULL,
+                confidence REAL DEFAULT 0.5,
+                source TEXT NOT NULL,
+                evidence TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+            INSERT INTO detected_tech (name, category, confidence, source) VALUES
+                ('Rust', 'language', 0.9, 'manifest'),
+                ('tokio', 'library', 0.6, 'manifest'),
+                ('kubernetes', 'tool', 0.9, 'manifest'),
+                ('django', 'framework', 0.3, 'file_extension');",
+        )
+        .unwrap();
+        let profile = build_domain_profile(&conn);
+        assert!(
+            profile.primary_stack.contains("rust"),
+            "a detected LANGUAGE is the user's stack: {:?}",
+            profile.primary_stack
+        );
+        assert!(
+            profile.all_tech.contains("tokio"),
+            "a detected library at the 0.5 floor enters all_tech"
+        );
+        assert!(
+            !profile.all_tech.contains("kubernetes"),
+            "categories outside language/framework/database/library stay out"
+        );
+        assert!(
+            !profile.all_tech.contains("django"),
+            "below the 0.5 detection floor"
+        );
+    }
+
+    #[test]
+    fn test_declared_technology_interest_is_never_off_stack() {
+        let profile = DomainProfile {
+            primary_stack: HashSet::new(),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["react".to_string()]),
+            dependency_names: HashSet::new(),
+            interest_topics: HashSet::from(["rust".to_string()]),
+            domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
+        };
+        let topics = vec!["rust".to_string(), "async".to_string()];
+        let relevance = compute_domain_relevance(&topics, &profile);
+        assert!(
+            (relevance - 0.50).abs() < 1e-6,
+            "an explicit interest keeps the 0.50 interest tier; the off-stack \
+             suppressor must not clamp it to 0.25 (got {relevance})"
         );
     }
 }

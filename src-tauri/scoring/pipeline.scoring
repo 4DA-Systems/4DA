@@ -302,12 +302,41 @@ commodity_ceiling {
     # community/sophistication bypasses are withheld so a popular "Who's hiring"
     # thread can't ride upvotes into the brief.
     hiring: 0.28          # [0.15, 0.40]
-    # Off-stack security advisories — a CVE/GHSA for a package NOT in the
+    # Ungrounded security advisories — a CVE/GHSA for a package NOT in the
     # developer's dependency graph (observed: 9router 0.91, rama 0.78 scoring
-    # CORE though neither is a dependency). Awareness-only: capped to the MATCH
-    # band so it stays visible but never CORE. In-stack advisories
-    # (strongly_grounded) are exempt and surface at full score.
+    # CORE though neither is a dependency). In-stack advisories
+    # (strongly_grounded) are exempt and surface at full score. An ungrounded
+    # advisory ON the user's stack (a popular Rust crate for a Rust developer,
+    # SQLite for a SQLite user) is ecosystem awareness: it keeps this cap,
+    # which with the +0.02 offset sits just above the 0.40 line, so it can
+    # surface when interest/ace confirm it but never outranks a grounded one.
     security_advisory_ungrounded: 0.44   # [0.30, 0.55]
+    # v29 (2026-09-04): an ungrounded advisory OFF the user's stack (axios for
+    # a developer with no JavaScript; omnigent for one with no Python) is capped
+    # BELOW the 0.40 relevance line like registry_release_ungrounded, and the
+    # VERDICT is gated categorically in score_item. Live, 20 of the 24 security
+    # items in the curated feed matched no dependency and most were off-stack
+    # (axios x9 for a user with no axios). Off-stack advisories still rank in
+    # lists and still reach Preemption via the OSV matcher — the Signal feed
+    # is for the user's graph and ecosystem. Measured before this split
+    # (2026-09-04): gating every ungrounded advisory dropped a Rust developer's
+    # "critical vulnerability in a popular Rust crate" from the persona guard.
+    security_advisory_offstack: 0.35     # [0.20, 0.37]
+    # "Off the stack" = domain relevance below the lowest positive tier
+    # (compute_domain_relevance returns >= 0.50 for any stack, dependency,
+    # adjacent-tech, interest or cross-cutting match; 0.15/0.25 otherwise).
+    # An EMPTY profile scores 1.0, so an unknown stack is never "off-stack".
+    security_offstack_domain_relevance: 0.50   # [0.25, 0.70]
+    # v29 (2026-09-04): a bare GitHub trending row whose repository IS one of
+    # the user's own stack tools ("microsoft/TypeScript (★110139 • TypeScript)"
+    # for a TypeScript developer). The user already has the tool; a star-count
+    # row about it carries no release, no version, no story. Live it ranked #1
+    # in the durable feed at 0.945 (release_notes x1.15 + corroboration); with
+    # those two fixed it still measured 0.799 under real embeddings, because
+    # the interest and ACE axes cannot tell "TypeScript itself" from "a new
+    # TypeScript library". Capped below the relevance line. A repo row for a
+    # tool NOT in the stack is untouched (that is how new libraries surface).
+    stack_tool_listing: 0.30   # [0.15, 0.37]
     # Registry releases whose SUBJECT package is not one of the user's
     # dependencies (observed 2026-07-23: forge-plugin-sdk-rust 0.947,
     # axum-connect-rpc 0.926 — dep_links=0 — out-scoring tokio/axum). The
@@ -410,6 +439,49 @@ source_share {
 # Inspired by X's offset_score() pattern.
 score_offset {
     negative_floor: 0.02      # [0.01, 0.10]
+}
+
+# Corpus-relative calibration (v29, 2026-09-04). The two embedding axes were
+# calibrated against a per-MODEL cosine sigmoid that never described what the
+# axes actually consume: the context axis fed 1/(1+L2) (not cosine) into it and
+# confirmed on 87.7% of the whole corpus — political headlines at 0.73-0.82 —
+# and the semantic ACE boost averaged ~55 topics into a uniform ~0.47 so its
+# 0.18 threshold was reached by 0 of 20,014 items. Both are now calibrated
+# against the LIVE corpus at scoring-context build: "confirmed" means "closer
+# to your code / stack than most of what we ingest", which is model-agnostic.
+corpus_calibration {
+    # Context axis: the cosine at this corpus percentile of top-1 KNN similarity
+    # calibrates to the confirmation threshold (0.45) — i.e. roughly the top
+    # quarter of ingested items can have the context axis confirmed.
+    context_confirm_percentile: 0.75    # [0.50, 0.95]
+    # ...and this percentile calibrates to 0.85 (a clearly-strong match).
+    context_strong_percentile: 0.95     # [0.80, 0.99]
+    # Semantic ACE boost: top-3 mean stack similarity at this percentile is the
+    # zero-boost pivot...
+    semantic_pivot_percentile: 0.50     # [0.30, 0.70]
+    # ...and this percentile reaches exactly the SEMANTIC_THRESHOLD (0.18), so
+    # about 10% of ingested items confirm the ACE axis on embeddings alone.
+    semantic_confirm_percentile: 0.90   # [0.70, 0.98]
+    # Below this many sampled items the corpus is too small to calibrate and the
+    # per-model cosine sigmoid (embedding_calibration) is used unchanged.
+    min_sample: 200                     # [50, 5000]
+}
+
+# Trend boost — a topic is "trending" when several items in the batch share it
+# AND it is not simply the batch's dominant subject. Without the share cap the
+# 500-item drain chunks made rust/react/javascript trend every cycle (a blanket
+# +0.08 on every on-domain item, measured 2026-09-04).
+trend_boost {
+    max_topic_share: 0.10   # [0.02, 0.50]
+    min_batch_items: 30     # [10, 500]
+}
+
+# Cross-encoder rerank bound — the reranker blends 0.4*evidence + 0.6*ce, which
+# could lift an item up to +0.6 above its evidence (live: a 0.494 duplicate
+# ranked 0.815). Rank may refine order, not overrule evidence: bounded like the
+# LLM reconciler.
+cross_encoder {
+    max_adjustment: 0.15    # [0.05, 0.40]
 }
 
 # Unified engagement formula — replaces separate multiplicative
