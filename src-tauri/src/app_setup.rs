@@ -1219,6 +1219,23 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     }
                 }
 
+                // Self-heal active_topics (2026-09-04 audit): file-content
+                // topics that name nothing the user depends on — own-crate
+                // modules (`briefing_prompt`), keywords from fixtures/prose
+                // (`kubernetes`, `azure`), Node builtins (`node:fs`). Same
+                // rule the mint gate now applies; each deletion is ledgered.
+                match crate::ace::topic_hygiene::purge_non_dependency_topics(&conn) {
+                    Ok(n) => {
+                        total_deleted += n;
+                        if n > 0 {
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: non-dependency file_content active_topics");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: non-dependency topic purge failed");
+                    }
+                }
+
                 // ── Append-only telemetry / audit / learning tables ──────────────
                 // These accumulate one row per scoring cycle / AI artifact / trust
                 // event and previously had NO retention (unbounded growth). Windows

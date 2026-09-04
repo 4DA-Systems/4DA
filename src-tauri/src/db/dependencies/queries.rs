@@ -91,6 +91,50 @@ fn retain_included(deps: Vec<StoredDependency>) -> Vec<StoredDependency> {
         .collect()
 }
 
+/// Active-root scope for the audit / OSV / CVE readers — the SAME rule as
+/// [`crate::temporal::get_all_dependencies`]: only rows under a `git_signals`
+/// repo root with a commit in the last 60 days. `user_dependencies` had no
+/// such scope (2026-09-04 audit): every lockfile ever walked — a dormant side
+/// project, a nested third-party clone — fed `cargo audit`, OSV matching and
+/// the CVE scan at full weight, and `dependency_alerts` cannot say which
+/// project a finding came from.
+///
+/// With no active roots at all (first run, no git analysis yet, or the table
+/// absent) the set is returned UNSCOPED and says so at warn — the same
+/// `dep_scope_degraded` posture temporal takes, never a silent widening.
+fn scope_to_active_roots(
+    conn: &rusqlite::Connection,
+    deps: Vec<StoredDependency>,
+    reader: &str,
+) -> Vec<StoredDependency> {
+    let roots = crate::temporal::active_repo_roots(conn);
+    if roots.is_empty() {
+        tracing::warn!(
+            target: "4da::deps",
+            reader,
+            rows = deps.len(),
+            "dep_scope_degraded: no git_signals repo root with commits in 60 days — \
+             {reader} dependency set is UNSCOPED (first run, or no recent commits anywhere)"
+        );
+        return deps;
+    }
+    let before = deps.len();
+    let scoped: Vec<StoredDependency> = deps
+        .into_iter()
+        .filter(|d| crate::temporal::dep_within_active_root(&d.project_path, &roots))
+        .collect();
+    if scoped.is_empty() && before > 0 {
+        tracing::warn!(
+            target: "4da::deps",
+            reader,
+            active_roots = roots.len(),
+            unscoped_rows = before,
+            "dependency scope matched NOTHING — every lockfile project is outside the active repo roots; {reader} set is empty by scope, not widened"
+        );
+    }
+    scoped
+}
+
 impl Database {
     /// Store (upsert) a dependency confirmed by a LOCKFILE walk (a direct dep
     /// whose resolved version the lockfile provides). Kept name for history;
@@ -284,6 +328,7 @@ impl Database {
     ///
     /// Includes direct, transitive, runtime, and dev dependencies, while excluding
     /// ephemeral worktrees and temp clones that would duplicate findings.
+    /// Scoped to active repo roots (see [`scope_to_active_roots`]).
     pub fn get_auditable_user_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
@@ -300,7 +345,7 @@ impl Database {
         )?;
 
         let rows = stmt.query_map([], map_dependency_row)?;
-        Ok(retain_included(
+        let included = retain_included(
             rows.filter_map(|r| match r {
                 Ok(v) => Some(v),
                 Err(e) => {
@@ -309,13 +354,15 @@ impl Database {
                 }
             })
             .collect(),
-        ))
+        );
+        Ok(scope_to_active_roots(&conn, included, "auditable"))
     }
 
     /// Get user dependencies filtered to relevant runtime deps only.
     ///
     /// Excludes dev deps, transitive deps, and worktree paths to prevent
     /// inflated advisory matches from agent-generated worktree copies.
+    /// Scoped to active repo roots (see [`scope_to_active_roots`]).
     pub fn get_relevant_user_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
@@ -330,7 +377,7 @@ impl Database {
         )?;
 
         let rows = stmt.query_map([], map_dependency_row)?;
-        Ok(retain_included(
+        let included = retain_included(
             rows.filter_map(|r| match r {
                 Ok(v) => Some(v),
                 Err(e) => {
@@ -339,7 +386,45 @@ impl Database {
                 }
             })
             .collect(),
-        ))
+        );
+        Ok(scope_to_active_roots(&conn, included, "relevant"))
+    }
+
+    /// Delete `user_dependencies` rows of one (project, ecosystem) whose
+    /// package is no longer present in that project's lockfile OR manifest.
+    ///
+    /// Mirror of [`crate::temporal::prune_removed_dependencies`], which only
+    /// ever pruned `project_dependencies`: a package dropped from a lockfile
+    /// lived on here forever (upsert-only persistence), still auditable,
+    /// still OSV-matched. The keep-list is `lockfile_names` (what the
+    /// lockfile resolves now) plus every `project_dependencies` row the
+    /// manifest scan still declares for this project — import-scraped and
+    /// manifest-only rows are synced from there and must survive. No-op on an
+    /// empty `lockfile_names`, so a parse failure can never wipe a project.
+    /// Name comparison is case-insensitive (PyPI names are). Returns rows
+    /// removed.
+    pub fn prune_stale_user_dependencies(
+        &self,
+        project_path: &str,
+        ecosystem: &str,
+        lockfile_names: &[String],
+    ) -> SqliteResult<usize> {
+        if lockfile_names.is_empty() {
+            return Ok(0);
+        }
+        let project_path = canonicalize_project_path(project_path);
+        let keep: Vec<String> = lockfile_names.iter().map(|n| n.to_lowercase()).collect();
+        let keep_json = serde_json::to_string(&keep).unwrap_or_else(|_| "[]".to_string());
+        let conn = self.conn.lock();
+        conn.execute(
+            "DELETE FROM user_dependencies
+             WHERE project_path = ?1 AND ecosystem = ?2
+               AND LOWER(package_name) NOT IN (SELECT value FROM json_each(?3))
+               AND LOWER(package_name) NOT IN (
+                   SELECT LOWER(package_name) FROM project_dependencies
+                    WHERE project_path = ?1 AND language = ?2)",
+            params![project_path, ecosystem, keep_json],
+        )
     }
 
     /// Get all ACE-scanned dependencies from `project_dependencies`.

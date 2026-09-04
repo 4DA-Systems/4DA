@@ -1155,7 +1155,7 @@ impl Database {
     /// Read from the live schema rather than a hard-coded list, so a child table added
     /// years from now is covered the day it is created. Only populated tables are
     /// recorded: an empty one cannot be emptied, and skipping them keeps the census
-    /// free on a fresh database, where all 117 migrations run back to back.
+    /// free on a fresh database, where all 118 migrations run back to back.
     fn cascade_child_census(conn: &Connection) -> SqliteResult<Vec<(String, i64)>> {
         let tables: Vec<String> = {
             let mut stmt = conn.prepare(
@@ -1430,7 +1430,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 117;
+        const TARGET_VERSION: i64 = 118;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5458,6 +5458,46 @@ impl Database {
                             target: "4da::db",
                             healed,
                             "Phase 117: re-derived mastodon titles (paragraph headlines)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 118: dependency_alerts.project_path — WHICH project's
+            // lockfile an audit finding came from. The local audit runs
+            // `cargo audit` / `npm audit` once per distinct
+            // `user_dependencies.project_path`, but the alert it stores had
+            // no column for that path (2026-09-04 audit): all 109 `rkyv`
+            // alerts traced to a nested third-party clone were
+            // indistinguishable from the user's own findings. Nullable —
+            // CVE-scan alerts match on package identity across projects and
+            // legitimately carry none; the audit writer backfills existing
+            // rows the next time it reports the same advisory with a path.
+            // Additive column, no data rewrite.
+            if current_version < 118 {
+                Self::run_versioned_migration(
+                    &conn,
+                    117,
+                    118,
+                    "Phase 118: dependency_alerts.project_path",
+                    |c| {
+                        let has_column: bool = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM pragma_table_info('dependency_alerts') WHERE name='project_path'",
+                                [],
+                                |row| row.get::<_, i64>(0).map(|n| n > 0),
+                            )
+                            .unwrap_or(false);
+                        if !has_column {
+                            c.execute(
+                                "ALTER TABLE dependency_alerts ADD COLUMN project_path TEXT",
+                                [],
+                            )?;
+                        }
+                        info!(
+                            target: "4da::db",
+                            "Phase 118: dependency_alerts.project_path added — audit findings now name the project they were audited in"
                         );
                         Ok(())
                     },

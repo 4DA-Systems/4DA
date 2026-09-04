@@ -2040,8 +2040,57 @@ fn compute_git_recency(manifest_path: &Path) -> f32 {
         }
         dir = d.parent();
     }
-    0.5 // no git found, neutral
+    filesystem_recency(manifest_path)
 }
+
+/// Recency for a project with NO git repository anywhere above it, derived
+/// from the newest mtime of its manifest/lockfiles (the same evidence
+/// `dormancy::last_activity_from_fs` uses for `detected_projects`).
+///
+/// This used to return a flat 0.5 "neutral" — ABOVE the 0.1 a git repo idle
+/// for 90+ days scores. Live (2026-09-04 audit): `kairos-mvp`, no `.git`, files
+/// last touched 2025-10-14, held 61 manifest rows at relevance 0.5 while a
+/// dormant *git* project would have scored 0.1. A project untouched for 90
+/// days is dormant whether or not it was ever committed. Only when the
+/// filesystem offers no readable marker at all does 0.5 remain.
+fn filesystem_recency(manifest_path: &Path) -> f32 {
+    let Some(project_dir) = manifest_path.parent() else {
+        return 0.5;
+    };
+    let Some(last_activity) = super::dormancy::last_activity_from_fs(project_dir) else {
+        return 0.5;
+    };
+    match super::dormancy::project_dormant_days(&last_activity) {
+        Some(days) => recency_from_age_days(days as f32),
+        None => 0.5,
+    }
+}
+
+/// Strict-manifest (ledger) mode: a manifest under a user-configured context
+/// dir is relevant by definition — the ledger's fixture stacks are plain dirs
+/// with no git history, so they score below the 0.15 relevance gate and
+/// their deps would never persist, leaving the registry/OSV grounding paths
+/// empty. Shared by the manifest scan (`ace/mod.rs`) and the lockfile walk
+/// (`ace_commands::dependencies`) so both paths apply ONE gate.
+pub(crate) fn forced_relevant_by_context_dir(manifest_path: &Path) -> bool {
+    if !crate::source_fetching::strict_manifest_mode() {
+        return false;
+    }
+    let dirs = crate::get_context_dirs();
+    let norm = |p: &Path| p.to_string_lossy().replace('\\', "/").to_lowercase();
+    let manifest = norm(manifest_path);
+    !dirs.is_empty()
+        && dirs.iter().any(|d| {
+            let d = norm(d.as_path());
+            let d = d.trim_end_matches('/');
+            manifest == d || manifest.starts_with(&format!("{d}/"))
+        })
+}
+
+/// Minimum `compute_project_relevance` for a project's dependencies to enter
+/// the dependency tables. ONE constant for the manifest scan and the lockfile
+/// walk — the walk used to hardcode `project_relevance: 1.0` and skip nothing.
+pub(crate) const PROJECT_RELEVANCE_FLOOR: f32 = 0.15;
 
 /// Resolve the real git directory for a `.git` entry.
 ///
@@ -3972,6 +4021,37 @@ serde = "1.0"
         );
     }
 
+    /// A project with no `.git` scores from its manifest mtimes, not a flat
+    /// 0.5: a just-written manifest is activity NOW (1.0); one untouched for
+    /// 120 days is dormant (0.1) — exactly like a git repo idle that long.
+    #[test]
+    fn test_relevance_without_git_derives_recency_from_manifest_mtime() {
+        use std::time::{Duration, SystemTime};
+        // Same premise as dormancy's `fs_activity_none_when_no_markers`: the
+        // OS temp root carries no `.git`, so this measures the no-git path.
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("kairos-mvp");
+        std::fs::create_dir_all(&project).unwrap();
+        let manifest = project.join("package.json");
+        std::fs::write(&manifest, "{}").unwrap();
+        assert!(
+            (compute_project_relevance(&manifest) - 1.0).abs() < f32::EPSILON,
+            "fresh manifest, no git: active now"
+        );
+
+        let old = SystemTime::now() - Duration::from_secs(120 * 86_400);
+        std::fs::File::options()
+            .write(true)
+            .open(&manifest)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        assert!(
+            (compute_project_relevance(&manifest) - 0.1).abs() < f32::EPSILON,
+            "manifest untouched for 120 days, no git: dormant — same as a stale repo"
+        );
+    }
+
     #[test]
     fn test_relevance_all_penalty_patterns() {
         let penalty_patterns = vec![
@@ -4681,8 +4761,13 @@ name = \"x\"
         );
     }
 
+    /// No repository: recency comes from the manifest's own mtime, not a
+    /// flat "neutral" 0.5 (which out-scored a dormant git repo's 0.1 — the
+    /// kairos-mvp case, 2026-09-04 audit). A manifest written now is active;
+    /// one untouched for 400 days is as dormant as a stale repo. Only when
+    /// nothing on disk can be read does the neutral value remain.
     #[test]
-    fn git_recency_is_neutral_with_no_repository() {
+    fn git_recency_without_a_repository_comes_from_manifest_mtime() {
         let dir = tempfile::tempdir().unwrap();
         let manifest = dir.path().join("Cargo.toml");
         fs::write(
@@ -4692,6 +4777,12 @@ name = \"x\"
 ",
         )
         .unwrap();
-        assert_eq!(compute_git_recency(&manifest), 0.5);
+        assert_eq!(compute_git_recency(&manifest), 1.0);
+
+        backdate(&manifest, 400);
+        assert_eq!(compute_git_recency(&manifest), 0.1);
+
+        let missing = dir.path().join("nowhere").join("Cargo.toml");
+        assert_eq!(compute_git_recency(&missing), 0.5, "unreadable: neutral");
     }
 }

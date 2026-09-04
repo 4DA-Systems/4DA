@@ -191,6 +191,20 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
             super::dependencies::store_direct_dependencies(db);
             super::dependencies::store_lockfile_dependencies(db, &dependency_scan_paths);
         }
+        // The dependency vocabulary just changed; re-apply the topic mint
+        // rule to what is already held (own-crate modules, fixture
+        // keywords). Same pass as startup, now against fresh tables.
+        if let Ok(conn) = crate::open_db_connection() {
+            match crate::ace::topic_hygiene::purge_non_dependency_topics(&conn) {
+                Ok(n) if n > 0 => {
+                    info!(target: "4da::ace", deleted = n, "Purged non-dependency file_content topics after scan");
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    warn!(target: "4da::ace", error = %e, "Non-dependency topic purge failed after scan");
+                }
+            }
+        }
     })
     .await
     {

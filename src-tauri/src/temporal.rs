@@ -304,48 +304,39 @@ fn map_project_dependency_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proje
 /// `project_dependencies` (the Your Stack list reads the table directly so the
 /// user can toggle projects back on).
 pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDependency>> {
-    // Get active repo roots from git_signals (repos with recent commits)
-    let active_roots: Vec<String> = conn
-        .prepare(
-            "SELECT DISTINCT repo_path FROM git_signals
-             WHERE commit_hash IS NOT NULL AND commit_hash != ''
-             AND timestamp > datetime('now', '-60 days')",
-        )
-        .and_then(|mut stmt| {
-            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
-            Ok(rows
-                .filter_map(|r| match r {
-                    Ok(v) => Some(v),
-                    Err(e) => {
-                        tracing::warn!("Row processing failed in temporal: {e}");
-                        None
-                    }
-                })
-                .collect())
-        })
-        .unwrap_or_default();
+    let active_roots = active_repo_roots(conn);
 
-    let mut stmt = conn.prepare(
-        // The manifest parsers extract dependency NAMES only — a manifest
-        // carries a RANGE ("^2.0.0"), not an installed version — so
-        // `project_dependencies.version` has been NULL for every row since
-        // the column existed. Consequence (2026-08-26 audit, A6): the
-        // SameMajor x1.2, NewerMajor x1.1 and OlderMajor x0.5 multipliers in
-        // `match_dependencies` have NEVER fired in production, including the
-        // one documented in-code as the fix for "just because it's Tauri
-        // doesn't mean it's relevant".
-        //
-        // The resolved version was one JOIN away the whole time: the LOCKFILE
-        // parsers do capture (name, version) and write it to
-        // `user_dependencies`, which covers 175 of the 184 packages here
-        // (95.1%). Resolve it at READ time rather than backfilling once, so
-        // it tracks lockfile changes instead of going stale. Direct rows win
-        // over transitive, then most-recently-seen.
+    // The manifest parsers extract dependency NAMES only — a manifest
+    // carries a RANGE ("^2.0.0"), not an installed version — so
+    // `project_dependencies.version` has been NULL for every row since
+    // the column existed. Consequence (2026-08-26 audit, A6): the
+    // SameMajor x1.2, NewerMajor x1.1 and OlderMajor x0.5 multipliers in
+    // `match_dependencies` have NEVER fired in production, including the
+    // one documented in-code as the fix for "just because it's Tauri
+    // doesn't mean it's relevant".
+    //
+    // The resolved version was one JOIN away the whole time: the LOCKFILE
+    // parsers do capture (name, version) and write it to
+    // `user_dependencies`. Resolve it at READ time rather than backfilling
+    // once, so it tracks lockfile changes instead of going stale.
+    //
+    // Tier (i), here in SQL: the SAME project path and a congruent
+    // ecosystem. The first cut of this join matched on package name alone,
+    // across every project and ecosystem (2026-09-04 audit): 40 of 184 d:/4da
+    // deps resolved from a FOREIGN lockfile — `vite` took navcal's 7.2.2 over
+    // 4DA's own 8.1.3, the Rust `jsonwebtoken` crate took an npm 9.0.2, and
+    // src-tauri's `axum` resolved to relay's 0.7.9. Tier (ii), in Rust below,
+    // widens only to lockfiles under the SAME active repo root (a workspace
+    // member resolving from the workspace lockfile). Never across roots or
+    // ecosystems. Direct rows win over transitive, then most-recently-seen.
+    let sql = format!(
         "SELECT pd.id, pd.project_path, pd.manifest_type, pd.package_name,
                     COALESCE(
                         pd.version,
                         (SELECT ud.version FROM user_dependencies ud
-                          WHERE LOWER(ud.package_name) = LOWER(pd.package_name)
+                          WHERE ud.project_path = pd.project_path
+                            AND LOWER(ud.package_name) = LOWER(pd.package_name)
+                            AND {ud_family} = {pd_family}
                             AND ud.version IS NOT NULL AND ud.version <> ''
                           ORDER BY ud.is_direct DESC, ud.last_seen_at DESC
                           LIMIT 1)
@@ -354,10 +345,13 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
                     pd.detected_from, pd.project_relevance
              FROM project_dependencies pd
              ORDER BY pd.project_path, pd.package_name",
-    )?;
+        ud_family = ecosystem_family_sql("ud.ecosystem"),
+        pd_family = ecosystem_family_sql("pd.language"),
+    );
+    let mut stmt = conn.prepare(&sql)?;
 
     let user_excluded = crate::project_inclusion::user_excluded_paths();
-    let all_deps: Vec<ProjectDependency> = stmt
+    let mut all_deps: Vec<ProjectDependency> = stmt
         .query_map([], map_project_dependency_row)?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
@@ -373,6 +367,7 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
             )
         })
         .collect();
+    resolve_versions_within_roots(conn, &mut all_deps, &active_roots);
 
     // Filter to deps from active project trees only
     if active_roots.is_empty() {
@@ -424,6 +419,140 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
     Ok(primary)
 }
 
+/// Repo roots with a commit in the last 60 days — the scope every
+/// dependency reader shares (this module's manifest funnel and the
+/// `user_dependencies` audit/OSV readers in `db::dependencies::queries`).
+/// `git_signals.repo_path` is stored RAW; compare via
+/// [`dep_within_active_root`]. Empty on first run (no git analysis yet) or
+/// when the table is absent; callers treat empty as "unscoped".
+pub(crate) fn active_repo_roots(conn: &rusqlite::Connection) -> Vec<String> {
+    conn.prepare(
+        "SELECT DISTINCT repo_path FROM git_signals
+         WHERE commit_hash IS NOT NULL AND commit_hash != ''
+         AND timestamp > datetime('now', '-60 days')",
+    )
+    .and_then(|mut stmt| {
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        Ok(rows
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in temporal: {e}");
+                    None
+                }
+            })
+            .collect())
+    })
+    .unwrap_or_default()
+}
+
+/// Alias -> family pairs for ecosystem congruence. Mirrors
+/// [`crate::ecosystem::Ecosystem::parse`] (a test pins the two together);
+/// kept as data so the same table can be rendered into SQL. Labels not
+/// listed are their own family (lowercased).
+const ECOSYSTEM_FAMILY_ALIASES: &[(&str, &str)] = &[
+    ("npm", "javascript"),
+    ("typescript", "javascript"),
+    ("node", "javascript"),
+    ("js", "javascript"),
+    ("ts", "javascript"),
+    ("cargo", "rust"),
+    ("crates.io", "rust"),
+    ("crates", "rust"),
+    ("pypi", "python"),
+    ("pip", "python"),
+    ("py", "python"),
+    ("golang", "go"),
+    ("maven", "java"),
+    ("kotlin", "java"),
+    ("gradle", "java"),
+    ("c#", "csharp"),
+    ("dotnet", "csharp"),
+    ("nuget", "csharp"),
+    ("composer", "php"),
+    ("packagist", "php"),
+    ("rubygems", "ruby"),
+    ("gem", "ruby"),
+    ("flutter", "dart"),
+    ("pub", "dart"),
+];
+
+/// The ecosystem family a `project_dependencies.language` or
+/// `user_dependencies.ecosystem` label belongs to: rust <-> rust,
+/// javascript/typescript/npm <-> javascript, python/pypi <-> python, ...
+pub(crate) fn ecosystem_family(label: &str) -> String {
+    let lower = label.trim().to_lowercase();
+    ECOSYSTEM_FAMILY_ALIASES
+        .iter()
+        .find(|(alias, _)| *alias == lower)
+        .map_or(lower, |(_, family)| (*family).to_string())
+}
+
+/// SQL rendering of [`ecosystem_family`] for a column expression, so the
+/// read-time join applies exactly the Rust rule.
+fn ecosystem_family_sql(column: &str) -> String {
+    use std::fmt::Write as _;
+    let arms = ECOSYSTEM_FAMILY_ALIASES
+        .iter()
+        .fold(String::new(), |mut acc, (alias, family)| {
+            // Writing to a String cannot fail.
+            let _ = write!(acc, " WHEN '{alias}' THEN '{family}'");
+            acc
+        });
+    format!("CASE LOWER({column}){arms} ELSE LOWER({column}) END")
+}
+
+/// Tier (ii) of version resolution: a dep still version-less after the
+/// same-project lookup may resolve from a lockfile elsewhere under the SAME
+/// active repo root (a workspace member's crate resolved by the workspace
+/// `Cargo.lock`), same ecosystem family. Never across roots or ecosystems;
+/// with no active roots (first run) nothing widens.
+fn resolve_versions_within_roots(
+    conn: &rusqlite::Connection,
+    deps: &mut [ProjectDependency],
+    active_roots: &[String],
+) {
+    if active_roots.is_empty() || deps.iter().all(|d| d.version.is_some()) {
+        return;
+    }
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT ud.project_path, ud.ecosystem, ud.version FROM user_dependencies ud
+         WHERE LOWER(ud.package_name) = LOWER(?1)
+           AND ud.version IS NOT NULL AND ud.version <> ''
+         ORDER BY ud.is_direct DESC, ud.last_seen_at DESC",
+    ) else {
+        return;
+    };
+    for dep in deps.iter_mut().filter(|d| d.version.is_none()) {
+        let family = ecosystem_family(&dep.language);
+        let dep_path = dep.project_path.clone();
+        let Ok(rows) = stmt.query_map(params![dep.package_name], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        }) else {
+            continue;
+        };
+        dep.version = rows
+            .flatten()
+            .find(|(path, ecosystem, _)| {
+                ecosystem_family(ecosystem) == family
+                    && shares_active_root(&dep_path, path, active_roots)
+            })
+            .map(|(_, _, version)| version);
+    }
+}
+
+/// Do two project paths sit under one common active repo root?
+fn shares_active_root(a: &str, b: &str, active_roots: &[String]) -> bool {
+    active_roots.iter().any(|root| {
+        let root = std::slice::from_ref(root);
+        dep_within_active_root(a, root) && dep_within_active_root(b, root)
+    })
+}
+
 /// Is this dependency's project inside one of the active repo roots?
 ///
 /// Both sides go through [`crate::project_inclusion::comparison_form`] because
@@ -436,7 +565,7 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
 /// contains its subprojects (`d:/4da` covers `d:/4da/src-tauri`) and a dep
 /// path at or above a root still counts (a repo root recorded deeper than the
 /// manifest), but `d:/4da` must never match `d:/4da-experiments`.
-fn dep_within_active_root(dep_path: &str, active_roots: &[String]) -> bool {
+pub(crate) fn dep_within_active_root(dep_path: &str, active_roots: &[String]) -> bool {
     let dep = crate::project_inclusion::comparison_form(dep_path);
     let dep = dep.trim_end_matches('/');
     if dep.is_empty() {
@@ -528,307 +657,5 @@ fn map_event(row: &rusqlite::Row) -> rusqlite::Result<TemporalEvent> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use rusqlite::Connection;
-
-    fn setup_test_db() -> Connection {
-        let conn = Connection::open_in_memory().expect("in-memory db");
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS temporal_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_type TEXT NOT NULL,
-                subject TEXT NOT NULL,
-                data JSON NOT NULL,
-                embedding BLOB,
-                source_item_id INTEGER,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                expires_at TEXT
-            );",
-        )
-        .expect("create tables");
-        conn
-    }
-
-    #[test]
-    fn record_and_query_event_roundtrip() {
-        let conn = setup_test_db();
-        let data = serde_json::json!({"key": "value", "count": 42});
-        let id = record_event(&conn, "test_type", "test_subject", &data, Some(100), None).unwrap();
-        assert!(id > 0);
-
-        let events = query_events(&conn, "test_type", None, 10).unwrap();
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].id, id);
-        assert_eq!(events[0].event_type, "test_type");
-        assert_eq!(events[0].subject, "test_subject");
-        assert_eq!(events[0].source_item_id, Some(100));
-        assert_eq!(events[0].data["key"], "value");
-        assert_eq!(events[0].data["count"], 42);
-    }
-
-    #[test]
-    fn query_events_respects_limit() {
-        let conn = setup_test_db();
-        let data = serde_json::json!({});
-        for i in 0..5 {
-            record_event(&conn, "bulk", &format!("subj_{}", i), &data, None, None).unwrap();
-        }
-        let events = query_events(&conn, "bulk", None, 3).unwrap();
-        assert_eq!(events.len(), 3);
-    }
-
-    #[test]
-    fn query_events_filters_by_type() {
-        let conn = setup_test_db();
-        let data = serde_json::json!({});
-        record_event(&conn, "type_a", "s1", &data, None, None).unwrap();
-        record_event(&conn, "type_b", "s2", &data, None, None).unwrap();
-        record_event(&conn, "type_a", "s3", &data, None, None).unwrap();
-
-        let a_events = query_events(&conn, "type_a", None, 10).unwrap();
-        assert_eq!(a_events.len(), 2);
-        let b_events = query_events(&conn, "type_b", None, 10).unwrap();
-        assert_eq!(b_events.len(), 1);
-    }
-
-    #[test]
-    fn temporal_event_serde_roundtrip() {
-        let event = TemporalEvent {
-            id: 1,
-            event_type: "version_release".to_string(),
-            subject: "react".to_string(),
-            data: serde_json::json!({"version": "19.0.0", "breaking": true}),
-            source_item_id: Some(42),
-            created_at: "2026-02-28T10:00:00".to_string(),
-            expires_at: Some("2026-03-28T10:00:00".to_string()),
-        };
-        let json = serde_json::to_string(&event).unwrap();
-        let deserialized: TemporalEvent = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.event_type, "version_release");
-        assert_eq!(deserialized.data["version"], "19.0.0");
-        assert_eq!(deserialized.source_item_id, Some(42));
-        assert!(deserialized.expires_at.is_some());
-    }
-
-    fn setup_deps_db() -> Connection {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE project_dependencies (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_path TEXT NOT NULL,
-                manifest_type TEXT NOT NULL DEFAULT 'cargotoml',
-                package_name TEXT NOT NULL,
-                version TEXT,
-                is_dev INTEGER DEFAULT 0,
-                is_direct INTEGER DEFAULT 1,
-                language TEXT NOT NULL DEFAULT 'rust',
-                last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
-                project_relevance REAL DEFAULT 1.0,
-                target_cfg TEXT,
-                platform_active INTEGER DEFAULT 1,
-                detected_from TEXT NOT NULL DEFAULT 'unknown',
-                UNIQUE(project_path, package_name)
-            );",
-        )
-        .unwrap();
-        conn
-    }
-
-    #[test]
-    fn prune_removes_dropped_deps_direct_and_indirect() {
-        let conn = setup_deps_db();
-        let proj = "D:/proj/app";
-        // Two current direct deps + one stale (removed) direct dep.
-        for (name, keep) in [("serde", true), ("tokio", true), ("removed_crate", false)] {
-            let _ = keep;
-            upsert_dependency(
-                &conn,
-                proj,
-                "cargotoml",
-                name,
-                None,
-                false,
-                true,
-                "rust",
-                1.0,
-                "manifest",
-            )
-            .unwrap();
-        }
-        // A manifest-indirect dep still IN the manifest (kept via
-        // current_names) and one REMOVED from the manifest. Every
-        // project_dependencies row is manifest-sourced, so indirect rows
-        // absent from the latest scan are pruned too — the old
-        // `is_direct = 1` scope left them immortal.
-        upsert_manifest_indirect_dependency(&conn, proj, "gomod", "kept_indirect", "rust", 1.0)
-            .unwrap();
-        upsert_manifest_indirect_dependency(&conn, proj, "gomod", "removed_indirect", "rust", 1.0)
-            .unwrap();
-        // A different-language direct dep must NOT be pruned by a rust scan.
-        conn.execute(
-            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, language, is_direct)
-             VALUES (?1, 'packagejson', 'react', 'javascript', 1)",
-            params![canonicalize_project_path(proj)],
-        )
-        .unwrap();
-
-        let current = vec![
-            "serde".to_string(),
-            "tokio".to_string(),
-            "kept_indirect".to_string(),
-        ];
-        let removed = prune_removed_dependencies(&conn, proj, "rust", &current).unwrap();
-        assert_eq!(
-            removed, 2,
-            "dropped direct dep AND dropped indirect dep are removed"
-        );
-
-        let names: Vec<String> = conn
-            .prepare("SELECT package_name FROM project_dependencies ORDER BY package_name")
-            .unwrap()
-            .query_map([], |r| r.get::<_, String>(0))
-            .unwrap()
-            .filter_map(|r| r.ok())
-            .collect();
-        assert!(names.contains(&"serde".to_string()));
-        assert!(names.contains(&"tokio".to_string()));
-        assert!(!names.contains(&"removed_crate".to_string()));
-        assert!(
-            names.contains(&"kept_indirect".to_string()),
-            "indirect dep still in the manifest must survive"
-        );
-        assert!(
-            !names.contains(&"removed_indirect".to_string()),
-            "indirect dep removed from the manifest must be pruned"
-        );
-        assert!(
-            names.contains(&"react".to_string()),
-            "other-language dep must survive"
-        );
-    }
-
-    #[test]
-    fn prune_is_noop_on_empty_keep_list() {
-        let conn = setup_deps_db();
-        let proj = "D:/proj/app";
-        upsert_dependency(
-            &conn,
-            proj,
-            "cargotoml",
-            "serde",
-            None,
-            false,
-            true,
-            "rust",
-            1.0,
-            "manifest",
-        )
-        .unwrap();
-        // An empty keep-list must NOT wipe deps (guards against a parse failure
-        // deleting a whole project's dependency set).
-        let removed = prune_removed_dependencies(&conn, proj, "rust", &[]).unwrap();
-        assert_eq!(removed, 0);
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM project_dependencies", [], |r| {
-                r.get(0)
-            })
-            .unwrap();
-        assert_eq!(count, 1);
-    }
-
-    #[test]
-    fn record_event_with_null_source_item_id() {
-        let conn = setup_test_db();
-        let data = serde_json::json!({"note": "no source"});
-        let id = record_event(&conn, "manual", "user_action", &data, None, None).unwrap();
-        let events = query_events(&conn, "manual", None, 10).unwrap();
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].id, id);
-        assert_eq!(events[0].source_item_id, None);
-    }
-
-    #[test]
-    fn test_canonicalize_windows_paths() {
-        let result = canonicalize_project_path(r"D:\Users\Admin\Documents\my-project");
-        if cfg!(windows) {
-            assert_eq!(result, "d:/users/admin/documents/my-project");
-        } else {
-            assert_eq!(result, "D:/Users/Admin/Documents/my-project");
-        }
-    }
-
-    #[test]
-    fn test_canonicalize_merges_case_variants() {
-        let a = canonicalize_project_path(r"C:\Users\Dev\Documents\kairos-mvp");
-        let b = canonicalize_project_path(r"C:\Users\Dev\documents\kairos-mvp");
-        if cfg!(windows) {
-            assert_eq!(a, b, "Case variants should canonicalize to the same key");
-        }
-    }
-
-    #[test]
-    fn test_canonicalize_forward_slashes() {
-        let result = canonicalize_project_path("C:/Users/Dev/project");
-        if cfg!(windows) {
-            assert_eq!(result, "c:/users/dev/project");
-        } else {
-            assert_eq!(result, "C:/Users/Dev/project");
-        }
-    }
-
-    // ── Dependency scope filter (2026-08-26 audit, R2) ──────────────────
-    //
-    // The bug these pin: `git_signals.repo_path` is stored RAW (`D:\\4DA`)
-    // while `project_dependencies.project_path` is canonicalized
-    // (`d:/4da/src-tauri`). The old filter lowercased both but compared them
-    // with raw `starts_with`, so on Windows it matched 0 of 245 rows on every
-    // run — and `filtered.is_empty()` then re-admitted everything, making a
-    // dead filter indistinguishable from a correctly-empty one.
-
-    #[test]
-    fn backslash_root_matches_forward_slash_dep_path() {
-        // THE regression. Fails against the pre-audit implementation.
-        let roots = vec!["D:\\4DA".to_string()];
-        assert!(dep_within_active_root("d:/4da/src-tauri", &roots));
-        assert!(dep_within_active_root("d:/4da", &roots));
-        assert!(dep_within_active_root("D:\\4DA\\relay", &roots));
-    }
-
-    #[test]
-    fn foreign_project_is_excluded() {
-        let roots = vec!["D:\\4DA".to_string()];
-        assert!(!dep_within_active_root(
-            "c:/users/administrator/documents/kairos-mvp/backend",
-            &roots
-        ));
-    }
-
-    #[test]
-    fn sibling_prefix_is_not_a_match() {
-        // Path-BOUNDARY matching: `d:/4da` must never swallow `d:/4da-experiments`.
-        let roots = vec!["D:\\4DA".to_string()];
-        assert!(!dep_within_active_root("d:/4da-experiments", &roots));
-        assert!(!dep_within_active_root("d:/4dafoo/src", &roots));
-    }
-
-    #[test]
-    fn root_recorded_deeper_than_the_manifest_still_matches() {
-        // Reverse containment: git root deeper than the dep's project path.
-        let roots = vec!["D:\\4DA\\src-tauri".to_string()];
-        assert!(dep_within_active_root("d:/4da", &roots));
-    }
-
-    #[test]
-    fn case_and_trailing_slash_are_normalized() {
-        let roots = vec!["d:/4DA/".to_string()];
-        assert!(dep_within_active_root("D:/4da/site", &roots));
-    }
-
-    #[test]
-    fn empty_inputs_never_match() {
-        assert!(!dep_within_active_root("", &["D:\\4DA".to_string()]));
-        assert!(!dep_within_active_root("d:/4da", &[String::new()]));
-        assert!(!dep_within_active_root("d:/4da", &[]));
-    }
-}
+#[path = "temporal_tests.rs"]
+mod tests;

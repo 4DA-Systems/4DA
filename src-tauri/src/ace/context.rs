@@ -159,6 +159,10 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
 
     let conn = conn.lock();
     let extractor_registry = ExtractorRegistry::new();
+    // Mint gate (2026-09-04 audit): a topic mined from source is only the
+    // user's stack when it names a dependency they actually have (or a
+    // detected tech / rich pattern label). Loaded once per batch.
+    let known = super::topic_hygiene::KnownTopicNames::load(&conn);
 
     for change in changes {
         let change_type_str = match change.change_type {
@@ -228,6 +232,15 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
                 (topics, None, "text".to_string())
             }
         };
+        let extracted = topics.len();
+        let topics: Vec<String> = topics.into_iter().filter(|t| known.allows(t)).collect();
+        if topics.len() < extracted {
+            debug!(target: "ace::watcher",
+                path = %change.path.display(),
+                rejected = extracted - topics.len(),
+                "Topics not naming a known dependency were not minted"
+            );
+        }
 
         let topics_json = serde_json::to_string(&topics).unwrap_or_default();
 
