@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE dependency storage: direct and transitive dependency discovery from lockfiles.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tracing::info;
 
+use crate::ace::repo_identity::{self, RepoScope, Step};
 use crate::db::Database;
 use crate::db::DependencyInstanceInput;
 use crate::get_ace_engine;
@@ -76,22 +77,86 @@ pub(super) fn store_direct_dependencies(db: &Database) {
     }
 }
 
+/// Every file the walk reads dependencies from. Used to pick the relevance
+/// probe for a directory (the gate is per project dir, not per lockfile).
+const LOCKFILE_NAMES: &[&str] = &[
+    "Cargo.lock",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "poetry.lock",
+    "requirements.txt",
+    "go.sum",
+    "go.mod",
+    "Gemfile.lock",
+    "composer.lock",
+];
+
+/// Directory names the walk never descends into. Mirrors the ACE scanner's
+/// skip list: build output, package caches, and agent infrastructure
+/// (`.claude`/`.codex` worktrees + scratch fixtures are not user projects).
+const SKIPPED_DIR_NAMES: &[&str] = &[
+    "node_modules",
+    "target",
+    ".git",
+    "dist",
+    "build",
+    ".next",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "vendor",
+    ".cargo",
+    ".claude",
+    ".codex",
+];
+
+/// One pending directory of the lockfile walk: where it is, how deep, and
+/// which repository (if any) it belongs to.
+type PendingDir = (PathBuf, u8, RepoScope);
+
 /// Parse lockfiles for transitive dependency discovery and store in the database.
+///
+/// Two gates that the manifest scan already had and this walk lacked
+/// (2026-09-04 audit — a nested third-party clone contributed 1,811 of 7,933
+/// `user_dependencies` rows and every `rkyv` advisory):
+/// - a subdirectory that is a checkout of a DIFFERENT repository than the one
+///   enclosing it is skipped as foreign code (`repo_identity`);
+/// - a project dir whose relevance is below `PROJECT_RELEVANCE_FLOOR` (example
+///   / fixture paths, repos or no-git projects idle 90+ days) is skipped, with
+///   the same strict-manifest override the manifest path honours.
 pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf]) {
     let scanner = crate::ace::scanner::ProjectScanner::new();
     let mut lockfile_count = 0u32;
+    for dir in collect_lockfile_dirs(scan_paths) {
+        let project_path = dir.to_string_lossy().to_string();
+        lockfile_count += process_lockfile_dir(db, &scanner, &dir, &project_path);
+    }
+    if lockfile_count > 0 {
+        info!(target: "4da::ace", count = lockfile_count, "Stored transitive dependencies from lockfiles");
+    }
+}
+
+/// Walk `scan_paths` and return every directory whose lockfiles may feed
+/// `user_dependencies`: it holds at least one lockfile/manifest, is not
+/// excluded by the inclusion policy, passes the relevance gate, and is not a
+/// nested checkout of somebody else's repository. Pure with respect to the
+/// database, so the walk's decisions are testable on a temp tree.
+fn collect_lockfile_dirs(scan_paths: &[PathBuf]) -> Vec<PathBuf> {
     // "Your Stack" exclusions (tier 3), fetched once per walk: lockfiles under
     // a user-excluded project must not feed user_dependencies (the OSV / audit
     // surface). Tiers 1+2 are handled by is_scan_excluded_dir below plus the
     // DB write guards.
     let user_excluded = crate::project_inclusion::user_excluded_paths();
+    let mut selected = Vec::new();
 
     for path in scan_paths {
         if !path.exists() || !path.is_dir() {
             continue;
         }
-        let mut dirs_to_visit = vec![(path.clone(), 0u8)];
-        while let Some((dir, depth)) = dirs_to_visit.pop() {
+        let mut dirs_to_visit: Vec<PendingDir> =
+            vec![(path.clone(), 0u8, repo_identity::scope_at(path))];
+        while let Some((dir, depth, scope)) = dirs_to_visit.pop() {
             if depth > 5 {
                 continue;
             }
@@ -104,85 +169,163 @@ pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf])
             {
                 continue;
             }
-
-            lockfile_count += process_cargo_lock(db, &scanner, &dir, &project_path);
-            lockfile_count += process_package_lock(db, &scanner, &dir, &project_path);
-            lockfile_count += process_pnpm_lock(db, &scanner, &dir, &project_path);
-            lockfile_count += process_yarn_lock(db, &scanner, &dir, &project_path);
-            lockfile_count += process_poetry_lock(db, &scanner, &dir, &project_path);
-            lockfile_count += process_requirements_txt(db, &dir, &project_path);
-            lockfile_count += process_go_sum(db, &scanner, &dir, &project_path);
-            lockfile_count += process_gemfile_lock(db, &scanner, &dir, &project_path);
-            lockfile_count += process_composer_lock(db, &dir, &project_path);
-
-            // Go stdlib/toolchain synthetic deps carry their VERSION from the
-            // go.mod directives (`go 1.22.3` / `toolchain go1.22.5`), which the
-            // manifest persistence path drops (it stores version: None). OSV
-            // publishes standard-library and toolchain advisories against the
-            // package names "stdlib"/"toolchain" (ecosystem Go) with SEMVER
-            // ranges, so without the version the matcher can only produce
-            // unconfirmed matches that Preemption filters out. Done here, not
-            // in process_go_sum: a stdlib-only project has no go.sum.
-            if let Ok(content) = std::fs::read_to_string(dir.join("go.mod")) {
-                for (name, version) in
-                    crate::ace::scanner::ProjectScanner::parse_go_directives(&content)
-                {
-                    if let Err(e) = db.store_manifest_dependency(
-                        &project_path,
-                        &name,
-                        Some(&version),
-                        "go",
-                        false,
-                        true,
-                        "manifest",
-                    ) {
-                        tracing::warn!(
-                            target: "4da::ace",
-                            error = %e,
-                            package = %name,
-                            "Failed to store Go directive synthetic dependency"
-                        );
-                    }
+            if let Some(probe) = lockfile_probe(&dir) {
+                if lockfile_dir_is_relevant(&dir, &probe) {
+                    selected.push(dir.clone());
                 }
             }
+            queue_subdirectories(&dir, depth, &scope, &mut dirs_to_visit);
+        }
+    }
+    selected
+}
 
-            // Recurse into subdirectories (skip common non-project dirs)
-            if let Ok(entries) = std::fs::read_dir(&dir) {
-                for entry in entries.flatten() {
-                    let entry_path = entry.path();
-                    if entry_path.is_dir() {
-                        if let Some(name) = entry_path.file_name().and_then(|n| n.to_str()) {
-                            if !matches!(
-                                name,
-                                "node_modules"
-                                    | "target"
-                                    | ".git"
-                                    | "dist"
-                                    | "build"
-                                    | ".next"
-                                    | "__pycache__"
-                                    | ".venv"
-                                    | "venv"
-                                    | "vendor"
-                                    | ".cargo"
-                                    // Agent infrastructure: worktrees + scratch
-                                    // fixtures (.claude/plans/ledger-fixtures/*)
-                                    // are not user projects. Mirrors the ACE
-                                    // scanner's is_excluded_path doctrine.
-                                    | ".claude"
-                                    | ".codex"
-                            ) {
-                                dirs_to_visit.push((entry_path, depth + 1));
-                            }
-                        }
-                    }
-                }
+/// The first lockfile/manifest present in `dir` — the file the relevance
+/// gate is computed against — or `None` when there is nothing to read.
+fn lockfile_probe(dir: &Path) -> Option<PathBuf> {
+    LOCKFILE_NAMES
+        .iter()
+        .map(|name| dir.join(name))
+        .find(|p| p.exists())
+}
+
+/// The relevance gate the manifest scan applies (`ace/mod.rs`), applied to a
+/// lockfile's directory via its probe file.
+fn lockfile_dir_is_relevant(dir: &Path, probe: &Path) -> bool {
+    let relevance = crate::ace::scanner::compute_project_relevance(probe);
+    if relevance >= crate::ace::scanner::PROJECT_RELEVANCE_FLOOR
+        || crate::ace::scanner::forced_relevant_by_context_dir(probe)
+    {
+        return true;
+    }
+    info!(
+        target: "4da::ace",
+        dir = %dir.display(),
+        relevance,
+        floor = crate::ace::scanner::PROJECT_RELEVANCE_FLOOR,
+        "Lockfile walk: skipping low-relevance project (example/fixture path or dormant)"
+    );
+    false
+}
+
+/// Run every lockfile processor on one project directory.
+fn process_lockfile_dir(
+    db: &Database,
+    scanner: &crate::ace::scanner::ProjectScanner,
+    dir: &PathBuf,
+    project_path: &str,
+) -> u32 {
+    let mut count = 0u32;
+    count += process_cargo_lock(db, scanner, dir, project_path);
+    count += process_package_lock(db, scanner, dir, project_path);
+    count += process_pnpm_lock(db, scanner, dir, project_path);
+    count += process_yarn_lock(db, scanner, dir, project_path);
+    count += process_poetry_lock(db, scanner, dir, project_path);
+    count += process_requirements_txt(db, dir, project_path);
+    count += process_go_sum(db, scanner, dir, project_path);
+    count += process_gemfile_lock(db, scanner, dir, project_path);
+    count += process_composer_lock(db, dir, project_path);
+    store_go_directive_dependencies(db, dir, project_path);
+    count
+}
+
+/// Go stdlib/toolchain synthetic deps carry their VERSION from the go.mod
+/// directives (`go 1.22.3` / `toolchain go1.22.5`), which the manifest
+/// persistence path drops (it stores version: None). OSV publishes
+/// standard-library and toolchain advisories against the package names
+/// "stdlib"/"toolchain" (ecosystem Go) with SEMVER ranges, so without the
+/// version the matcher can only produce unconfirmed matches that Preemption
+/// filters out. Done here, not in process_go_sum: a stdlib-only project has
+/// no go.sum.
+fn store_go_directive_dependencies(db: &Database, dir: &Path, project_path: &str) {
+    let Ok(content) = std::fs::read_to_string(dir.join("go.mod")) else {
+        return;
+    };
+    for (name, version) in crate::ace::scanner::ProjectScanner::parse_go_directives(&content) {
+        if let Err(e) = db.store_manifest_dependency(
+            project_path,
+            &name,
+            Some(&version),
+            "go",
+            false,
+            true,
+            "manifest",
+        ) {
+            tracing::warn!(
+                target: "4da::ace",
+                error = %e,
+                package = %name,
+                "Failed to store Go directive synthetic dependency"
+            );
+        }
+    }
+}
+
+/// Queue `dir`'s subdirectories, skipping build/cache/agent dirs and any
+/// nested checkout of a DIFFERENT repository (a vendored third-party clone
+/// is that project's stack, not the user's). Skips log both remotes.
+fn queue_subdirectories(dir: &Path, depth: u8, scope: &RepoScope, stack: &mut Vec<PendingDir>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let entry_path = entry.path();
+        if !entry_path.is_dir() {
+            continue;
+        }
+        let Some(name) = entry_path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if SKIPPED_DIR_NAMES.contains(&name) {
+            continue;
+        }
+        match repo_identity::step_into(&entry_path, scope) {
+            Step::Continue(next) => stack.push((entry_path, depth + 1, next)),
+            Step::ForeignRepo { nested, enclosing } => {
+                info!(
+                    target: "4da::ace",
+                    dir = %entry_path.display(),
+                    nested_remote = nested.as_deref().unwrap_or("(none)"),
+                    enclosing_remote = enclosing.as_deref().unwrap_or("(none)"),
+                    "Lockfile walk: skipping nested checkout of a different repository"
+                );
             }
         }
     }
+}
 
-    if lockfile_count > 0 {
-        info!(target: "4da::ace", count = lockfile_count, "Stored transitive dependencies from lockfiles");
+/// Item 7 of the ACE input-hygiene fix: rows this project's lockfile no
+/// longer resolves are stale. Mirrors `temporal::prune_removed_dependencies`
+/// (which prunes only `project_dependencies`); the keep-list is the lockfile's
+/// packages plus whatever the manifest scan still declares for this project.
+fn prune_stale_rows(
+    db: &Database,
+    project_path: &str,
+    ecosystem: &str,
+    packages: &[(String, String)],
+    extra_names: &[String],
+) {
+    let names: Vec<String> = packages
+        .iter()
+        .map(|(name, _)| name.clone())
+        .chain(extra_names.iter().cloned())
+        .collect();
+    match db.prune_stale_user_dependencies(project_path, ecosystem, &names) {
+        Ok(0) => {}
+        Ok(removed) => info!(
+            target: "4da::ace",
+            project = %project_path,
+            ecosystem,
+            removed,
+            "Pruned user_dependencies rows no longer present in the lockfile/manifest"
+        ),
+        Err(e) => tracing::warn!(
+            target: "4da::ace",
+            error = %e,
+            project = %project_path,
+            ecosystem,
+            "Failed to prune stale user_dependencies rows"
+        ),
     }
 }
 
@@ -262,6 +405,7 @@ fn process_cargo_lock(
             .ok();
         }
     }
+    prune_stale_rows(db, project_path, "rust", &packages, &direct_deps);
     count
 }
 
@@ -319,6 +463,7 @@ fn process_package_lock(
             .ok();
         }
     }
+    prune_stale_rows(db, project_path, "javascript", &packages, &direct_deps);
     count
 }
 
@@ -375,6 +520,7 @@ fn process_pnpm_lock(
             .ok();
         }
     }
+    prune_stale_rows(db, project_path, "javascript", &packages, &direct_deps);
     count
 }
 
@@ -426,6 +572,7 @@ fn process_yarn_lock(
             .ok();
         }
     }
+    prune_stale_rows(db, project_path, "javascript", &packages, &direct_deps);
     count
 }
 
@@ -477,6 +624,7 @@ fn process_poetry_lock(
             .ok();
         }
     }
+    prune_stale_rows(db, project_path, "python", &packages, &direct_deps);
     count
 }
 
@@ -526,6 +674,7 @@ fn process_requirements_txt(db: &Database, dir: &PathBuf, project_path: &str) ->
         .ok();
         count += 1;
     }
+    prune_stale_rows(db, project_path, "python", &pins, &[]);
     count
 }
 
@@ -571,6 +720,18 @@ fn process_go_sum(
             .ok();
         }
     }
+    // The go.mod `go`/`toolchain` directives become synthetic "stdlib" /
+    // "toolchain" rows (store_go_directive_dependencies, after this call) —
+    // keep them, or every scan would delete and re-insert them.
+    let mut keep = direct_deps.clone();
+    if let Ok(go_mod) = std::fs::read_to_string(dir.join("go.mod")) {
+        keep.extend(
+            crate::ace::scanner::ProjectScanner::parse_go_directives(&go_mod)
+                .into_iter()
+                .map(|(name, _)| name),
+        );
+    }
+    prune_stale_rows(db, project_path, "go", &packages, &keep);
     count
 }
 
@@ -622,6 +783,7 @@ fn process_gemfile_lock(
             .ok();
         }
     }
+    prune_stale_rows(db, project_path, "ruby", &packages, &direct_deps);
     count
 }
 
@@ -667,6 +829,7 @@ fn process_composer_lock(db: &Database, dir: &PathBuf, project_path: &str) -> u3
             .ok();
         }
     }
+    prune_stale_rows(db, project_path, "php", &packages, &direct_deps);
     count
 }
 
@@ -801,3 +964,7 @@ fn read_gemfile_deps(dir: &PathBuf) -> Vec<String> {
     }
     deps
 }
+
+#[cfg(test)]
+#[path = "dependencies_tests.rs"]
+mod tests;

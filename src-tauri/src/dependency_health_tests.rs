@@ -379,6 +379,7 @@ fn store_active_alert(db: &Database, pkg: &str, eco: &str, sev: &str, affected: 
         source_item_id: None,
         detected_at: String::new(),
         resolved_at: None,
+        project_path: None,
     })
     .unwrap();
 }
@@ -482,6 +483,7 @@ fn store_audit_alert(db: &Database, pkg: &str, eco: &str, title: &str, affected:
         source_item_id: None,
         detected_at: String::new(),
         resolved_at: None,
+        project_path: None,
     })
     .unwrap();
 }
@@ -706,6 +708,7 @@ fn live_snapshot_alert_lifecycle() {
             source_item_id: None,
             detected_at: String::new(),
             resolved_at: None,
+            project_path: None,
         })
         .unwrap();
     assert_eq!(rowid, 0, "a re-reported advisory must not insert a new row");

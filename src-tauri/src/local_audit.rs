@@ -25,6 +25,9 @@ pub(crate) struct LocalAuditFinding {
     pub affected_versions: Option<String>,
     pub source_url: Option<String>,
     pub fix_version: Option<String>,
+    /// The `user_dependencies.project_path` whose lockfile the tool audited.
+    /// Stamped by `run_local_audits`; the parsers leave it `None`.
+    pub project_path: Option<String>,
 }
 
 impl LocalAuditFinding {
@@ -323,6 +326,7 @@ fn parse_npm_audit_payload(json_str: &str) -> Option<Vec<LocalAuditFinding>> {
             affected_versions,
             source_url,
             fix_version,
+            project_path: None,
         });
     }
 
@@ -487,6 +491,7 @@ fn parse_cargo_audit_payload(json_str: &str) -> Option<Vec<LocalAuditFinding>> {
             affected_versions,
             source_url: url,
             fix_version,
+            project_path: None,
         });
     }
 
@@ -550,7 +555,12 @@ pub(crate) async fn run_local_audits() -> LocalAuditOutcome {
                     crate::sources::cve_matching::normalize_ecosystem(ecosystem).to_string(),
                 );
             }
-            all_findings.extend(run.findings);
+            // Every finding names the project it was audited in — the
+            // alert writer persists it (dependency_alerts.project_path).
+            all_findings.extend(run.findings.into_iter().map(|mut finding| {
+                finding.project_path = Some(project_path.clone());
+                finding
+            }));
         }
     }
 
@@ -926,6 +936,7 @@ mod advisory_range_tests {
             affected_versions: None,
             source_url: None,
             fix_version: None,
+            project_path: None,
         };
         let (pkg, eco, title) = f.alert_key();
         assert_eq!(pkg, "bytes");

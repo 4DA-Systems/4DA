@@ -582,7 +582,16 @@ pub fn extract_topics_from_file(path: &Path) -> Result<Vec<String>> {
     Ok(extract_topics_from_content(&content, ext))
 }
 
-/// Extract topics from content based on file type
+/// Extract topics from content based on file type.
+///
+/// Only CODE files mint topics — imports are evidence of what the user
+/// builds with. Every other extension (json/toml/yaml/md/txt/lock, extracted
+/// PDFs and Office docs) yields nothing: the old generic keyword scan minted
+/// `azure` from an editor extension's `package-lock.json`, `docker` from
+/// `.ai/DECISIONS.md` and `kubernetes`/`grpc` from the scoring benchmark
+/// fixture (2026-09-04 audit). A keyword in prose is a mention, not a stack.
+/// Non-code files still produce `file_signals` rows; they just carry no
+/// topics.
 pub fn extract_topics_from_content(content: &str, file_ext: &str) -> Vec<String> {
     let mut topics = HashSet::new();
 
@@ -591,7 +600,7 @@ pub fn extract_topics_from_content(content: &str, file_ext: &str) -> Vec<String>
         "ts" | "tsx" | "js" | "jsx" => extract_js_topics(content, &mut topics),
         "py" => extract_python_topics(content, &mut topics),
         "go" => extract_go_topics(content, &mut topics),
-        _ => extract_generic_topics(content, &mut topics),
+        _ => {}
     }
 
     topics.into_iter().collect()
@@ -658,11 +667,8 @@ fn extract_js_topics(content: &str, topics: &mut HashSet<String>) {
                 #[allow(clippy::string_slice)]
                 let module = &trimmed[from_idx + 6..];
                 let module = module.trim_matches(&['"', '\'', ';'][..]);
-                if !module.starts_with('.') && !module.starts_with('/') {
-                    // External module
-                    let base_module = module.split('/').next().unwrap_or(module);
-                    let base_module = base_module.trim_start_matches('@');
-                    topics.insert(base_module.to_string());
+                if let Some(base_module) = external_package_root(module) {
+                    topics.insert(base_module.trim_start_matches('@').to_string());
                 }
             }
         }
@@ -678,8 +684,7 @@ fn extract_js_topics(content: &str, topics: &mut HashSet<String>) {
                 #[allow(clippy::string_slice)]
                 if let Some(end) = rest.find(')') {
                     let module = rest[..end].trim_matches(&['"', '\''][..]);
-                    if !module.starts_with('.') && !module.starts_with('/') {
-                        let base_module = module.split('/').next().unwrap_or(module);
+                    if let Some(base_module) = external_package_root(module) {
                         topics.insert(base_module.to_string());
                     }
                 }
@@ -694,6 +699,25 @@ fn extract_js_topics(content: &str, topics: &mut HashSet<String>) {
     if content.contains("Vue") || content.contains("defineComponent") {
         topics.insert("vue".to_string());
     }
+}
+
+/// The package root of a JS/TS import specifier when it names an EXTERNAL
+/// package: `react/jsx-runtime` -> `react`, `@scope/pkg` -> `@scope`.
+/// `None` for relative/absolute paths and for Node builtins — `node:fs`,
+/// `fs/promises`, `path`, `os`, `events`, `stream` are the runtime, not a
+/// dependency, and were minted as user topics (2026-09-04 audit). The
+/// builtin list is the canonical one in `ace::builtin_modules`.
+fn external_package_root(specifier: &str) -> Option<&str> {
+    if specifier.starts_with('.') || specifier.starts_with('/') || specifier.is_empty() {
+        return None;
+    }
+    let root = specifier.split('/').next().unwrap_or(specifier);
+    if crate::ace::builtin_modules::is_node_builtin(specifier)
+        || crate::ace::builtin_modules::is_node_builtin(root)
+    {
+        return None;
+    }
+    Some(root)
 }
 
 fn extract_python_topics(content: &str, topics: &mut HashSet<String>) {
@@ -766,47 +790,25 @@ fn extract_go_topics(content: &str, topics: &mut HashSet<String>) {
     }
 }
 
-fn extract_generic_topics(content: &str, topics: &mut HashSet<String>) {
-    // Look for common tech keywords. Word-boundary matched — raw substring
-    // `contains` minted `rest` from "restore" and `aws` from "flaws" (Wave 7).
-    let keywords = [
-        "docker",
-        "kubernetes",
-        "k8s",
-        "aws",
-        "gcp",
-        "azure",
-        "terraform",
-        "graphql",
-        "rest",
-        "grpc",
-        "websocket",
-        "redis",
-        "postgres",
-        "mysql",
-        "mongodb",
-        "elasticsearch",
-        "kafka",
-        "rabbitmq",
-    ];
-
-    let content_lower = content.to_lowercase();
-    // Generic tokens ("rest", "websocket") are never minted — they can't
-    // ground scoring and the startup purge (same predicate) would delete
-    // them again (mint/purge churn loop).
-    for keyword in keywords {
-        if crate::scoring::is_generic_topic_token(keyword) {
-            continue;
-        }
-        if crate::scoring::has_word_boundary_match(&content_lower, keyword) {
-            topics.insert(keyword.to_string());
-        }
-    }
-}
-
 // ============================================================================
 // Rich Topic Extraction — deeper semantic analysis of file content
 // ============================================================================
+
+/// Every pattern-level label the `extract_rich_*` extractors can emit. The
+/// non-dependency topic purge (`ace::topic_hygiene`) keeps exactly these
+/// besides dependency and detected-tech names; a label emitted below but
+/// missing here would be purged on the next startup (a test pins the two).
+pub(crate) const RICH_PATTERN_LABELS: &[&str] = &[
+    "error_handling",
+    "concurrency",
+    "async_runtime",
+    "database",
+    "state_management",
+    "side_effects",
+    "performance_optimization",
+    "api_calls",
+    "styling",
+];
 
 /// Extract richer semantic topics from file content beyond basic imports.
 /// Returns (topic, confidence) pairs. Supplements the basic extract_topics_from_content().
@@ -1281,19 +1283,82 @@ from sqlalchemy.orm import Session
         assert!(topics.contains(&"sqlalchemy".to_string()));
     }
 
+    /// Non-code files mint NOTHING (2026-09-04 audit): a keyword in prose,
+    /// config or a lockfile is a mention, not the user's stack. The live
+    /// mints this closes: `azure` from a `package-lock.json`, `docker` from
+    /// `DECISIONS.md`, `kubernetes`/`grpc` from `benchmark_scenarios.json`.
     #[test]
-    fn test_extract_generic_topics_word_boundary() {
-        // "restore" must no longer mint `rest`, "flaws" must not mint `aws` (Wave 7)
-        let topics = extract_topics_from_content("restore the backup after finding flaws", "txt");
-        assert!(!topics.contains(&"rest".to_string()));
-        assert!(!topics.contains(&"aws".to_string()));
+    fn non_code_files_mint_no_topics() {
+        let prose = "deploy on aws with docker and kubernetes; grpc to azure; redis + kafka";
+        for ext in [
+            "txt", "md", "json", "toml", "yaml", "yml", "lock", "pdf", "docx", "",
+        ] {
+            assert!(
+                extract_topics_from_content(prose, ext).is_empty(),
+                "extension {ext:?} must mint no topics"
+            );
+        }
+        // Code files still mine imports.
+        assert!(extract_topics_from_content("use tokio::main;", "rs").contains(&"tokio".into()));
+    }
 
-        // Genuine whole-word mentions of SPECIFIC tech still mint; generic
-        // tokens ("rest") are never minted at all (F1 — mint/purge churn).
-        let topics = extract_topics_from_content("deploy REST api on aws with docker", "txt");
-        assert!(!topics.contains(&"rest".to_string()));
-        assert!(topics.contains(&"aws".to_string()));
-        assert!(topics.contains(&"docker".to_string()));
+    /// Node builtins are the runtime, not a dependency. Live mints this
+    /// closes: `node:fs`, `node:url`, `node:path`, `node:os`, `node:events`,
+    /// `node:stream`, `path`.
+    #[test]
+    fn node_builtins_never_mint() {
+        let content = r#"
+import fs from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import path from 'path';
+import os from "node:os";
+import { pipeline } from 'stream/promises';
+const { EventEmitter } = require('events');
+const url = require("node:url");
+import express from 'express';
+import { z } from 'zod/v4';
+import { invoke } from '@tauri-apps/api/core';
+"#;
+        let topics = extract_topics_from_content(content, "ts");
+        for builtin in [
+            "fs", "node:fs", "path", "os", "node:os", "stream", "events", "url",
+        ] {
+            assert!(
+                !topics.contains(&builtin.to_string()),
+                "builtin {builtin} must not mint; got {topics:?}"
+            );
+        }
+        assert!(!topics.iter().any(|t| t.starts_with("node:")));
+        assert!(topics.contains(&"express".to_string()));
+        assert!(topics.contains(&"zod".to_string()));
+        assert!(topics.contains(&"tauri-apps".to_string()));
+    }
+
+    /// Every label the rich extractors emit must be registered, or the
+    /// non-dependency purge would delete it on the next startup.
+    #[test]
+    fn rich_pattern_labels_are_all_registered() {
+        let rust =
+            "use anyhow::Result;\nlet g: MutexGuard<_> = m.lock();\nx.await;\nrusqlite::Connection";
+        let js = "useState(); useEffect(); useMemo(); fetch('/x'); className=\"p\"";
+        let mut emitted: Vec<String> = extract_rich_topics(rust, "rs")
+            .into_iter()
+            .chain(extract_rich_topics(js, "tsx"))
+            .map(|(t, _)| t)
+            .collect();
+        emitted.sort();
+        emitted.dedup();
+        assert_eq!(
+            emitted.len(),
+            RICH_PATTERN_LABELS.len(),
+            "fixture must trigger every label"
+        );
+        for label in &emitted {
+            assert!(
+                RICH_PATTERN_LABELS.contains(&label.as_str()),
+                "rich label {label} is not registered in RICH_PATTERN_LABELS"
+            );
+        }
     }
 
     #[test]

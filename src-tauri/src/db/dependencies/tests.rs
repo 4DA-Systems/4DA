@@ -290,6 +290,7 @@ fn test_store_and_resolve_alert() {
         source_item_id: None,
         detected_at: String::new(),
         resolved_at: None,
+        project_path: None,
     };
 
     let alert_id = db.store_dependency_alert(&alert).unwrap();
@@ -332,6 +333,7 @@ fn test_alert_deduplication() {
         source_item_id: None,
         detected_at: String::new(),
         resolved_at: None,
+        project_path: None,
     };
 
     // First insert should succeed

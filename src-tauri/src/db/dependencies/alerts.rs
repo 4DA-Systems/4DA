@@ -86,12 +86,22 @@ impl Database {
                     params![id],
                 )?;
             }
+            // Rows written before migration 118 carry no project_path; a
+            // re-report that knows the path teaches the existing row.
+            if alert.project_path.is_some() {
+                conn.execute(
+                    "UPDATE dependency_alerts
+                     SET project_path = COALESCE(project_path, ?2)
+                     WHERE id = ?1",
+                    params![id, alert.project_path],
+                )?;
+            }
             return Ok(0); // Already tracked — no new row
         }
 
         conn.execute(
-            "INSERT INTO dependency_alerts (package_name, ecosystem, alert_type, severity, title, description, affected_versions, source_url, source_item_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO dependency_alerts (package_name, ecosystem, alert_type, severity, title, description, affected_versions, source_url, source_item_id, project_path)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 alert.package_name,
                 ecosystem,
@@ -102,6 +112,7 @@ impl Database {
                 alert.affected_versions,
                 alert.source_url,
                 alert.source_item_id,
+                alert.project_path,
             ],
         )?;
         Ok(conn.last_insert_rowid())
@@ -128,7 +139,8 @@ impl Database {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, package_name, ecosystem, alert_type, severity, title, description,
-                    affected_versions, source_url, source_item_id, detected_at, resolved_at
+                    affected_versions, source_url, source_item_id, detected_at, resolved_at,
+                    project_path
              FROM dependency_alerts
              WHERE resolved_at IS NULL
              ORDER BY

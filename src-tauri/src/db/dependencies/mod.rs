@@ -14,6 +14,8 @@ mod inclusion_tests;
 pub(crate) mod mappers;
 mod queries;
 #[cfg(test)]
+mod scope_tests;
+#[cfg(test)]
 mod tests;
 pub mod types;
 

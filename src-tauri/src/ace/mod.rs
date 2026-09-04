@@ -21,8 +21,10 @@ pub mod embedding;
 pub mod git;
 pub(crate) mod platform_cfg;
 pub(crate) mod readme_indexing;
+pub(crate) mod repo_identity;
 pub mod scanner;
 pub mod topic_embeddings;
+pub(crate) mod topic_hygiene;
 pub mod watcher;
 
 pub use behavior::*;
@@ -404,25 +406,16 @@ impl ACE {
                             // Skip low-relevance projects (example/demo/test dirs)
                             // to prevent irrelevant preemption alerts.
                             let relevance = signal.project_relevance;
-                            // Strict manifest mode (ledger): a user-configured context_dir is
-                            // relevant by definition. The ledger's fixture stacks are plain dirs
-                            // with no git history, so they score below 0.15 and their deps would
-                            // never persist — leaving the registry/OSV grounding paths empty.
-                            // Persist when the manifest lives under a configured context_dir.
-                            let force_persist = crate::source_fetching::strict_manifest_mode() && {
-                                let dirs = crate::get_context_dirs();
-                                let norm = |p: &std::path::Path| {
-                                    p.to_string_lossy().replace('\\', "/").to_lowercase()
-                                };
-                                let manifest = norm(signal.manifest_path.as_path());
-                                !dirs.is_empty()
-                                    && dirs.iter().any(|d| {
-                                        let d = norm(d.as_path());
-                                        let d = d.trim_end_matches('/');
-                                        manifest == d || manifest.starts_with(&format!("{d}/"))
-                                    })
-                            };
-                            if relevance >= 0.15 || force_persist {
+                            // Strict manifest mode (ledger): a user-configured
+                            // context_dir is relevant by definition — see
+                            // `scanner::forced_relevant_by_context_dir`. The
+                            // same gate guards the lockfile walk.
+                            let force_persist = crate::ace::scanner::forced_relevant_by_context_dir(
+                                signal.manifest_path.as_path(),
+                            );
+                            if relevance >= crate::ace::scanner::PROJECT_RELEVANCE_FLOOR
+                                || force_persist
+                            {
                                 if let Ok(conn) = crate::open_db_connection() {
                                     // One vocabulary, shared with every reader that
                                     // matches on this column. The old
