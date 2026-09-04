@@ -1228,7 +1228,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     Ok(n) => {
                         total_deleted += n;
                         if n > 0 {
-                            info!(target: "4da::startup", deleted = n, "Startup cleanup: non-dependency file_content active_topics");
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: non-dependency active_topics minted from files");
                         }
                     }
                     Err(e) => {

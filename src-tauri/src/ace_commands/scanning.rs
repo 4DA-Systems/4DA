@@ -197,7 +197,7 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         if let Ok(conn) = crate::open_db_connection() {
             match crate::ace::topic_hygiene::purge_non_dependency_topics(&conn) {
                 Ok(n) if n > 0 => {
-                    info!(target: "4da::ace", deleted = n, "Purged non-dependency file_content topics after scan");
+                    info!(target: "4da::ace", deleted = n, "Purged non-dependency topics minted from files after scan");
                 }
                 Ok(_) => {}
                 Err(e) => {
