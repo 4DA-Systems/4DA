@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Embedding generation for benchmark calibration scenarios.
 
+#[cfg(feature = "generate-sim-fixtures")]
 use std::collections::HashMap;
+#[cfg(feature = "generate-sim-fixtures")]
 use tracing::info;
 
+#[cfg(feature = "generate-sim-fixtures")]
 use super::types::pad_and_normalize;
 use super::Scenario;
 
@@ -12,6 +15,10 @@ use super::Scenario;
 /// Returns (item_embeddings, topic_embeddings) where:
 /// - item_embeddings: scenario_id -> embedding vector
 /// - topic_embeddings: topic_name -> embedding vector
+/// Live generation through the production embedding path. Since the
+/// benchmark reads committed fixtures (`fixtures.rs`), this is the fixture
+/// GENERATOR's input and compiles only with that feature.
+#[cfg(feature = "generate-sim-fixtures")]
 pub(super) fn generate_all_embeddings(
     scenarios: &[Scenario],
 ) -> crate::error::Result<(HashMap<String, Vec<f32>>, HashMap<String, Vec<f32>>)> {
