@@ -214,14 +214,20 @@ pub fn save_detected_stacks(
 /// `compose_profiles` has no notion of confidence — which broadens matching
 /// onto stacks the user does not work in. Manual selections
 /// (`auto_detected = 0`) always compose, whatever their stored confidence.
+///
+/// The floor is EXCLUSIVE: a detection must score strictly above it. The
+/// detector's own "unsure" output lands exactly on 0.5 (live 2026-09-04:
+/// `bootstrap_webdev` at 0.5000 composed into scoring under the old `>=`),
+/// and a coin-flip is not evidence the user works in that stack.
 const AUTO_STACK_CONFIDENCE_FLOOR: f64 = 0.5;
 
 /// Load the stack IDs that should participate in SCORING: manual selections
-/// unconditionally, auto-detected ones only at/above the confidence floor.
+/// unconditionally, auto-detected ones only strictly above the confidence
+/// floor.
 fn load_scoring_stacks(conn: &Connection) -> Vec<String> {
     let mut stmt = match conn.prepare(
         "SELECT profile_id FROM selected_stacks
-         WHERE auto_detected = 0 OR confidence >= ?1
+         WHERE auto_detected = 0 OR confidence > ?1
          ORDER BY id",
     ) {
         Ok(s) => s,
@@ -371,6 +377,37 @@ mod tests {
         assert!(
             !composed.all_tech.contains("laravel"),
             "stale 0.30-confidence laravel must NOT compose into scoring"
+        );
+    }
+
+    /// The floor is exclusive: exactly 0.5 — the detector's "unsure" value
+    /// (live: `bootstrap_webdev` 0.5000) — must NOT compose; 0.51 must.
+    #[test]
+    fn auto_detection_at_exactly_the_floor_does_not_compose() {
+        let conn = stacks_test_conn();
+        let mut insert = conn
+            .prepare(
+                "INSERT INTO selected_stacks (profile_id, auto_detected, confidence)
+                 VALUES (?1, ?2, ?3)",
+            )
+            .unwrap();
+        insert
+            .execute(params!["nextjs_fullstack", 1, AUTO_STACK_CONFIDENCE_FLOOR])
+            .unwrap();
+        insert
+            .execute(params![
+                "rust_systems",
+                1,
+                AUTO_STACK_CONFIDENCE_FLOOR + 0.01
+            ])
+            .unwrap();
+        drop(insert);
+
+        let ids = load_scoring_stacks(&conn);
+        assert_eq!(
+            ids,
+            vec!["rust_systems".to_string()],
+            "exactly-at-floor auto-detection is excluded; just above composes"
         );
     }
 

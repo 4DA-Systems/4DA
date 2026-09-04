@@ -32,5 +32,6 @@ pub(crate) fn map_alert_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Depende
         source_item_id: row.get(9)?,
         detected_at: row.get(10)?,
         resolved_at: row.get(11)?,
+        project_path: row.get(12)?,
     })
 }

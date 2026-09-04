@@ -619,6 +619,9 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
                             source_item_id: None,
                             detected_at: chrono::Utc::now().to_rfc3339(),
                             resolved_at: None,
+                            // A CVE match is on package identity, not on a
+                            // specific project's lockfile.
+                            project_path: None,
                         };
 
                         match db.store_dependency_alert(&alert) {
@@ -707,6 +710,7 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
             source_item_id: None,
             detected_at: chrono::Utc::now().to_rfc3339(),
             resolved_at: None,
+            project_path: finding.project_path,
         };
         let _ = db.store_dependency_alert(&alert);
     }

@@ -93,4 +93,11 @@ pub struct DependencyAlert {
     pub source_item_id: Option<i64>,
     pub detected_at: String,
     pub resolved_at: Option<String>,
+    /// Canonical path of the project whose lockfile the audit tool actually
+    /// audited (migration 118). `None` for CVE-scan alerts, which match on
+    /// package identity across projects, and for rows written before the
+    /// column existed — `store_dependency_alert` backfills those when the
+    /// same advisory is reported again with a path.
+    #[serde(default)]
+    pub project_path: Option<String>,
 }
