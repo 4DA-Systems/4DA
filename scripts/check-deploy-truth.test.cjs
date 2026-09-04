@@ -10,9 +10,64 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { readSourceVersions, evaluate, STALE_HOURS } = require('./check-deploy-truth.cjs');
+const { readSourceVersions, dbFacts, evaluate, STALE_HOURS } = require('./check-deploy-truth.cjs');
 
 const HOUR = 3_600_000;
+
+test('loading this test never loads the native SQLite module', () => {
+  // The exact CI failure: `require('better-sqlite3')` at module top made the
+  // test file unloadable where native modules are not built.
+  const loaded = Object.keys(require.cache).some((k) => /[\\/]better-sqlite3[\\/]/.test(k));
+  assert.equal(loaded, false, 'better-sqlite3 must only load inside the real database path');
+});
+
+// ---------------------------------------------------------------------------
+// dbFacts over a stubbed row getter (no SQLite)
+// ---------------------------------------------------------------------------
+
+/** A `one(sql, ...params)` stub keyed on the distinguishing SQL fragment. */
+function rowGetter(answers) {
+  return (sql) => {
+    for (const [fragment, row] of Object.entries(answers)) {
+      if (sql.includes(fragment)) return row;
+    }
+    throw new Error(`unexpected query: ${sql}`);
+  };
+}
+
+test('dbFacts assembles the live shape from the five queries', () => {
+  const one = rowGetter({
+    'MAX(scored_pipeline_version)': { v: 28 },
+    'scored_pipeline_version = ?': { n: 70_960 },
+    'ORDER BY judged_at DESC': { v: 'v6' },
+    'llm_judgments WHERE prompt_version = ?': { n: 128 },
+    'FROM engine_runs': { started_at: '2026-09-04T03:49:58+00:00', ok: 1 },
+  });
+  assert.deepEqual(dbFacts(one, { pipelineVersion: 28, promptVersion: 'v6' }), {
+    maxPipelineVersion: 28,
+    rowsAtPipelineVersion: 70_960,
+    latestPromptVersion24h: 'v6',
+    rowsAtPromptVersion: 128,
+    latestEngineRun: { started_at: '2026-09-04T03:49:58+00:00', ok: 1 },
+  });
+});
+
+test('dbFacts on an empty database degrades to null / 0, never a throw', () => {
+  const one = rowGetter({
+    'MAX(scored_pipeline_version)': { v: null },
+    'scored_pipeline_version = ?': { n: 0 },
+    'ORDER BY judged_at DESC': undefined,
+    'llm_judgments WHERE prompt_version = ?': { n: 0 },
+    'FROM engine_runs': undefined,
+  });
+  assert.deepEqual(dbFacts(one, { pipelineVersion: 29, promptVersion: 'v7' }), {
+    maxPipelineVersion: null,
+    rowsAtPipelineVersion: 0,
+    latestPromptVersion24h: null,
+    rowsAtPromptVersion: 0,
+    latestEngineRun: null,
+  });
+});
 const NOW = Date.parse('2026-09-04T12:00:00Z');
 const COMMIT = '2026-09-01T16:37:38Z';
 const COMMIT_MS = Date.parse(COMMIT);

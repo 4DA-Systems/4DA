@@ -31,12 +31,18 @@
  * Every version constant is READ FROM THE RUST SOURCE by regex, never copied
  * here (exit 2 when a pattern stops matching) — a checker with its own copy of
  * a constant checks a build that no longer exists.
+ *
+ * Structure: `evaluate()` is pure over gathered facts, and `dbFacts()` reads
+ * through an injected `one(sql, ...params)` row getter, so the tests never
+ * touch SQLite. The native module is required lazily, inside the real
+ * database path only — CI's "Repo guards" job installs without building
+ * native modules, and a top-level `require('better-sqlite3')` made the test
+ * file unloadable there.
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const Database = require('better-sqlite3');
 
 const repoRoot = path.resolve(__dirname, '..');
 const DEFAULT_DB_PATH = process.env.FOURDA_DB_PATH || path.join(repoRoot, 'data', '4da.db');
@@ -86,24 +92,34 @@ function binaryFacts(binDir) {
   });
 }
 
-function dbFacts(db, { pipelineVersion, promptVersion }) {
-  const one = (sql, ...params) => db.prepare(sql).get(...params);
+/**
+ * Read the database-side facts through `one(sql, ...params) -> row|undefined`
+ * (the production getter is `db.prepare(sql).get(...params)`; the tests pass a
+ * stub). Absent rows degrade to null / 0, never to a throw.
+ */
+function dbFacts(one, { pipelineVersion, promptVersion }) {
   return {
-    maxPipelineVersion: one('SELECT MAX(scored_pipeline_version) v FROM source_items').v ?? null,
-    rowsAtPipelineVersion: one(
-      'SELECT COUNT(*) n FROM source_items WHERE scored_pipeline_version = ?',
-      pipelineVersion,
-    ).n,
+    maxPipelineVersion: one('SELECT MAX(scored_pipeline_version) v FROM source_items')?.v ?? null,
+    rowsAtPipelineVersion:
+      one('SELECT COUNT(*) n FROM source_items WHERE scored_pipeline_version = ?', pipelineVersion)?.n ?? 0,
     latestPromptVersion24h:
       one(
         `SELECT prompt_version v FROM llm_judgments
          WHERE judged_at >= datetime('now', '-1 day') AND prompt_version != 'drain_v1'
          ORDER BY judged_at DESC LIMIT 1`,
       )?.v ?? null,
-    rowsAtPromptVersion: one('SELECT COUNT(*) n FROM llm_judgments WHERE prompt_version = ?', promptVersion)
-      .n,
+    rowsAtPromptVersion:
+      one('SELECT COUNT(*) n FROM llm_judgments WHERE prompt_version = ?', promptVersion)?.n ?? 0,
     latestEngineRun: one('SELECT started_at, ok FROM engine_runs ORDER BY started_at DESC LIMIT 1') ?? null,
   };
+}
+
+/** Open the live database read-only. The native module loads here and only here. */
+function openReadOnly(dbPath) {
+  const Database = require('better-sqlite3');
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  db.pragma('query_only = 1');
+  return db;
 }
 
 // ── Evaluation (pure — tested) ───────────────────────────────────────────
@@ -220,15 +236,14 @@ function main() {
     process.exit(2);
   }
 
-  const db = new Database(DEFAULT_DB_PATH, { readonly: true, fileMustExist: true });
-  db.pragma('query_only = 1');
+  const db = openReadOnly(DEFAULT_DB_PATH);
   let facts;
   try {
     facts = {
       source,
       lastCommitIso: lastSrcTauriCommit(repoRoot),
       binaries: binaryFacts(BIN_DIR),
-      db: dbFacts(db, source),
+      db: dbFacts((sql, ...params) => db.prepare(sql).get(...params), source),
     };
   } finally {
     db.close();
@@ -243,4 +258,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { readSourceVersions, evaluate, printReport, STALE_HOURS };
+module.exports = { readSourceVersions, dbFacts, evaluate, printReport, STALE_HOURS };

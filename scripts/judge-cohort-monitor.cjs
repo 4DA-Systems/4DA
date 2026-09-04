@@ -50,11 +50,17 @@
  * Thresholds and the current prompt version are READ FROM THE RUST SOURCE, not
  * copied here — a monitor with its own copy of a constant reports on a gate the
  * product no longer runs.
+ *
+ * Structure: every database read goes through a `CohortReader` (named
+ * queries), and `run()` is pure over one. Production wraps a better-sqlite3
+ * handle (`sqliteReader`); the tests hand in a reader over plain arrays. The
+ * native module is required lazily, inside the real database path only —
+ * CI's "Repo guards" job installs without building native modules, and a
+ * top-level `require('better-sqlite3')` made the test file unloadable there.
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
-const Database = require('better-sqlite3');
 
 const repoRoot = path.resolve(__dirname, '..');
 const DEFAULT_DB_PATH = process.env.FOURDA_DB_PATH || path.join(repoRoot, 'data', '4da.db');
@@ -63,7 +69,7 @@ const DEFAULT_BIN_DIR = path.join(repoRoot, 'src-tauri', 'target', 'debug');
 
 /** A built binary older than this with zero rows at the source version is a deploy gap, not a warm-up. */
 const STALE_BINARY_HOURS = 6;
-/** The window that defines the live cohort. */
+/** The window that defines the live cohort (SQLite modifier). */
 const LIVE_WINDOW = '-1 day';
 /** The always-live drain cohort (stale-score drain judgments carry this label). */
 const DRAIN_COHORT = 'drain_v1';
@@ -112,22 +118,99 @@ function newestBinary(binDir) {
   return best;
 }
 
+// ── Database reader ───────────────────────────────────────────────────────
+/**
+ * Everything the monitor reads, as named queries.
+ *
+ * @typedef {object} CohortReader
+ * @property {(relevanceBelow: number) => Array<{prompt_version:string, model:string, n:number, avg_rel:number, avg_conf:number, omitted:number, rejects:number, first:string, last:string}>} cohorts
+ *   one row per (prompt_version, model), ordered by first judgment
+ * @property {() => string|null} liveVersion
+ *   the non-drain prompt_version with the newest judged_at inside LIVE_WINDOW
+ * @property {(version: string, model: string) => {v:number, n:number}|undefined} topConfidence
+ *   the single most frequent confidence value (2dp) in that cohort
+ * @property {(version: string) => number} rowsAt  judgments carrying `version`
+ * @property {(relevanceBelow: number, confidenceMin: number, version: string) => {at_gate:number|null, at_probe:number|null, curated_judged:number}} gateReach
+ * @property {() => Array<{d:string, n:number}>} demotions  llm_reject stamps per day, last 7 days
+ */
+
+/**
+ * The production reader over a better-sqlite3 handle.
+ * @returns {CohortReader}
+ */
+function sqliteReader(db) {
+  return {
+    cohorts: (relevanceBelow) =>
+      db
+        .prepare(
+          `SELECT prompt_version, model, COUNT(*) n,
+                  ROUND(AVG(relevance_score),3) avg_rel,
+                  ROUND(AVG(confidence),3) avg_conf,
+                  SUM(CASE WHEN confidence = 0.0 THEN 1 ELSE 0 END) omitted,
+                  SUM(CASE WHEN relevance_score < ? THEN 1 ELSE 0 END) rejects,
+                  MIN(judged_at) first, MAX(judged_at) last
+           FROM llm_judgments GROUP BY 1,2 ORDER BY MIN(judged_at)`,
+        )
+        .all(relevanceBelow),
+    liveVersion: () =>
+      db
+        .prepare(
+          `SELECT prompt_version FROM llm_judgments
+           WHERE judged_at >= datetime('now', ?) AND prompt_version != ?
+           ORDER BY judged_at DESC LIMIT 1`,
+        )
+        .get(LIVE_WINDOW, DRAIN_COHORT)?.prompt_version ?? null,
+    topConfidence: (version, model) =>
+      db
+        .prepare(
+          `SELECT ROUND(confidence,2) v, COUNT(*) n FROM llm_judgments
+           WHERE prompt_version = ? AND model = ? GROUP BY 1 ORDER BY n DESC LIMIT 1`,
+        )
+        .get(version, model),
+    rowsAt: (version) =>
+      db.prepare('SELECT COUNT(*) n FROM llm_judgments WHERE prompt_version = ?').get(version).n,
+    gateReach: (relevanceBelow, confidenceMin, version) =>
+      db
+        .prepare(
+          `SELECT
+             SUM(CASE WHEN lj.relevance_score < ? AND lj.confidence >= ? THEN 1 ELSE 0 END) at_gate,
+             SUM(CASE WHEN lj.relevance_score < 0.40 AND lj.confidence >= 0.60 THEN 1 ELSE 0 END) at_probe,
+             COUNT(*) curated_judged
+           FROM source_items si
+           JOIN llm_judgments lj ON lj.source_item_id = si.id AND lj.prompt_version = ?
+           WHERE si.feed_relevant = 1 AND COALESCE(si.feed_verdict_source,'score') = 'score'`,
+        )
+        .get(relevanceBelow, confidenceMin, version),
+    demotions: () =>
+      db
+        .prepare(
+          `SELECT DATE(feed_verdict_at) d, COUNT(*) n FROM source_items
+           WHERE feed_verdict_reason = 'llm_reject' AND feed_verdict_at >= datetime('now','-7 days')
+           GROUP BY 1 ORDER BY d DESC`,
+        )
+        .all(),
+  };
+}
+
+/** Open the live database read-only. The native module loads here and only here. */
+function openReadOnly(dbPath) {
+  const Database = require('better-sqlite3');
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  db.pragma('query_only = 1');
+  return db;
+}
+
 // ── Cohort classification ────────────────────────────────────────────────
 /**
  * The versions the anomaly checks apply to: the prompt_version with the newest
  * judged_at inside LIVE_WINDOW, plus the drain cohort. Deliberately NOT the
  * source constant — see item 5 in the header.
+ * @param {CohortReader} reader
  */
-function liveCohortVersions(db) {
-  const row = db
-    .prepare(
-      `SELECT prompt_version FROM llm_judgments
-       WHERE judged_at >= datetime('now', ?) AND prompt_version != ?
-       ORDER BY judged_at DESC LIMIT 1`,
-    )
-    .get(LIVE_WINDOW, DRAIN_COHORT);
+function liveCohortVersions(reader) {
   const live = new Set([DRAIN_COHORT]);
-  if (row) live.add(row.prompt_version);
+  const newest = reader.liveVersion();
+  if (newest) live.add(newest);
   return live;
 }
 
@@ -174,23 +257,23 @@ function deployDrift({ promptVersion, sourceRows, liveVersion, binary, now = Dat
 
 // ── The monitor ───────────────────────────────────────────────────────────
 /**
- * Run every check against an open database.
+ * Run every check over a reader.
  *
  * @param {object} opts
- * @param {import('better-sqlite3').Database} opts.db read-only handle
+ * @param {CohortReader} opts.reader
  * @param {{promptVersion: string, relevanceBelow: number, confidenceMin: number}} opts.constants
  * @param {{path: string, mtimeMs: number}|null} opts.binary newest built binary
  * @param {number} [opts.now]
  * @param {(line: string) => void} [opts.log]
  * @returns {{ exitCode: number, findings: string[], live: Set<string>, drift: object }}
  */
-function run({ db, constants, binary, now = Date.now(), log = console.log }) {
+function run({ reader, constants, binary, now = Date.now(), log = console.log }) {
   const { promptVersion: PROMPT_VERSION, relevanceBelow: RELEVANCE_BELOW, confidenceMin: CONFIDENCE_MIN } =
     constants;
   const findings = [];
   const pct = (n, d) => (d === 0 ? 0 : (100 * n) / d);
 
-  const live = liveCohortVersions(db);
+  const live = liveCohortVersions(reader);
   const liveVersion = [...live].find((v) => v !== DRAIN_COHORT) ?? null;
 
   log(`  current prompt : ${PROMPT_VERSION}  (source)`);
@@ -198,17 +281,7 @@ function run({ db, constants, binary, now = Date.now(), log = console.log }) {
   log(`  shipped gate   : relevance < ${RELEVANCE_BELOW} AND confidence >= ${CONFIDENCE_MIN}\n`);
 
   // ── Cohorts ─────────────────────────────────────────────────────────────
-  const cohorts = db
-    .prepare(
-      `SELECT prompt_version, model, COUNT(*) n,
-              ROUND(AVG(relevance_score),3) avg_rel,
-              ROUND(AVG(confidence),3) avg_conf,
-              SUM(CASE WHEN confidence = 0.0 THEN 1 ELSE 0 END) omitted,
-              SUM(CASE WHEN relevance_score < ? THEN 1 ELSE 0 END) rejects,
-              MIN(judged_at) first, MAX(judged_at) last
-       FROM llm_judgments GROUP BY 1,2 ORDER BY MIN(judged_at)`,
-    )
-    .all(RELEVANCE_BELOW);
+  const cohorts = reader.cohorts(RELEVANCE_BELOW);
 
   log('cohort            model                  n   avg_rel  avg_conf  omit%  reject%');
   for (const c of cohorts) {
@@ -222,9 +295,7 @@ function run({ db, constants, binary, now = Date.now(), log = console.log }) {
   log('  (* = source cohort the demotion gate reads · ~ = live cohort that is NOT the source one)\n');
 
   // ── 5: MERGED != RUNNING ────────────────────────────────────────────────
-  const sourceRows = db
-    .prepare('SELECT COUNT(*) n FROM llm_judgments WHERE prompt_version = ?')
-    .get(PROMPT_VERSION).n;
+  const sourceRows = reader.rowsAt(PROMPT_VERSION);
   const drift = deployDrift({ promptVersion: PROMPT_VERSION, sourceRows, liveVersion, binary, now });
   log('deploy truth');
   log(`  ${drift.status.padEnd(19)}: ${drift.message}\n`);
@@ -239,12 +310,8 @@ function run({ db, constants, binary, now = Date.now(), log = console.log }) {
   for (const c of cohorts) {
     if (c.n < 20) continue;
     const isLive = live.has(c.prompt_version);
-    const top = db
-      .prepare(
-        `SELECT ROUND(confidence,2) v, COUNT(*) n FROM llm_judgments
-         WHERE prompt_version = ? AND model = ? GROUP BY 1 ORDER BY n DESC LIMIT 1`,
-      )
-      .get(c.prompt_version, c.model);
+    const top = reader.topConfidence(c.prompt_version, c.model);
+    if (!top) continue;
     const share = pct(top.n, c.n);
     const flag = share >= 40 ? (isLive ? '  <-- SPIKE' : '  <-- spike (retired cohort)') : '';
     log(
@@ -276,17 +343,7 @@ function run({ db, constants, binary, now = Date.now(), log = console.log }) {
   }
 
   // ── 4: can the gate still reach anything? ──────────────────────────────
-  const reach = db
-    .prepare(
-      `SELECT
-         SUM(CASE WHEN lj.relevance_score < ? AND lj.confidence >= ? THEN 1 ELSE 0 END) at_gate,
-         SUM(CASE WHEN lj.relevance_score < 0.40 AND lj.confidence >= 0.60 THEN 1 ELSE 0 END) at_probe,
-         COUNT(*) curated_judged
-       FROM source_items si
-       JOIN llm_judgments lj ON lj.source_item_id = si.id AND lj.prompt_version = ?
-       WHERE si.feed_relevant = 1 AND COALESCE(si.feed_verdict_source,'score') = 'score'`,
-    )
-    .get(RELEVANCE_BELOW, CONFIDENCE_MIN, PROMPT_VERSION);
+  const reach = reader.gateReach(RELEVANCE_BELOW, CONFIDENCE_MIN, PROMPT_VERSION);
 
   log('\ngate reach on the CURATED feed (current cohort)');
   log(`  curated + judged      : ${reach.curated_judged ?? 0}`);
@@ -303,13 +360,7 @@ function run({ db, constants, binary, now = Date.now(), log = console.log }) {
   }
 
   // ── Demotion volume ────────────────────────────────────────────────────
-  const demotions = db
-    .prepare(
-      `SELECT DATE(feed_verdict_at) d, COUNT(*) n FROM source_items
-       WHERE feed_verdict_reason = 'llm_reject' AND feed_verdict_at >= datetime('now','-7 days')
-       GROUP BY 1 ORDER BY d DESC`,
-    )
-    .all();
+  const demotions = reader.demotions();
   log('\ndemotions stamped llm_reject, last 7 days');
   if (demotions.length === 0) {
     log('  none');
@@ -344,15 +395,14 @@ function main() {
     process.exit(2);
   }
 
-  const db = new Database(DEFAULT_DB_PATH, { readonly: true, fileMustExist: true });
-  db.pragma('query_only = 1');
+  const db = openReadOnly(DEFAULT_DB_PATH);
   console.log('judge cohort monitor');
   console.log(`  db             : ${DEFAULT_DB_PATH}`);
   const binary = newestBinary(process.env.FOURDA_BIN_DIR || DEFAULT_BIN_DIR);
   console.log(`  binary         : ${binary ? `${binary.path} (built ${new Date(binary.mtimeMs).toISOString()})` : 'none found'}`);
   let result;
   try {
-    result = run({ db, constants, binary });
+    result = run({ reader: sqliteReader(db), constants, binary });
   } finally {
     db.close();
   }
@@ -366,9 +416,11 @@ if (require.main === module) {
 module.exports = {
   parseShippedConstants,
   newestBinary,
+  sqliteReader,
   liveCohortVersions,
   deployDrift,
   run,
   STALE_BINARY_HOURS,
+  LIVE_WINDOW,
   DRAIN_COHORT,
 };
