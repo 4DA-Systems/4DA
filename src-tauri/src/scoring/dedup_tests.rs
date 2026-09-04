@@ -1120,3 +1120,97 @@ mod source_share_tests {
         }
     }
 }
+
+// ============================================================================
+// v29 (2026-09-04): corroboration needs DISTINCT sources on a STORY topic
+// ============================================================================
+
+fn sourced(title: &str, url: &str, score: f32, source_type: &str) -> SourceRelevance {
+    let mut item = make_item(title, Some(url), score);
+    item.source_type = source_type.to_string();
+    item
+}
+
+#[test]
+fn test_corroboration_counts_distinct_sources_on_a_story_topic() {
+    let mut results = vec![
+        sourced(
+            "Zorblax 4 arrives",
+            "https://a.example/1",
+            0.80,
+            "hackernews",
+        ),
+        sourced(
+            "Zorblax 4 arrives, faster",
+            "https://b.example/2",
+            0.60,
+            "reddit",
+        ),
+        sourced(
+            "Zorblax 4 arrives at last",
+            "https://c.example/3",
+            0.55,
+            "lobsters",
+        ),
+    ];
+    topic_dedup_results(&mut results);
+    assert_eq!(
+        results.len(),
+        1,
+        "the two lower items group under the representative"
+    );
+    assert_eq!(results[0].similar_count, 2);
+    assert!(
+        (results[0].top_score - 0.86).abs() < 1e-6,
+        "two distinct corroborating sources earn +0.06 (got {})",
+        results[0].top_score
+    );
+}
+
+#[test]
+fn test_corroboration_ignores_the_same_source_repeating_itself() {
+    let mut results = vec![
+        sourced(
+            "Zorblax 4 arrives",
+            "https://a.example/1",
+            0.80,
+            "hackernews",
+        ),
+        sourced(
+            "Zorblax 4 arrives, faster",
+            "https://a.example/2",
+            0.60,
+            "hackernews",
+        ),
+    ];
+    topic_dedup_results(&mut results);
+    assert_eq!(results.len(), 1);
+    assert!(
+        (results[0].top_score - 0.80).abs() < 1e-6,
+        "one source twice is not corroboration (got {})",
+        results[0].top_score
+    );
+}
+
+#[test]
+fn test_corroboration_ignores_batch_subject_tokens() {
+    // Sharing "rust" is the batch's subject, not cross-source confirmation of
+    // a story (live 2026-09-04: a bare repo listing took +0.09 for it).
+    let mut results = vec![
+        sourced(
+            "Rust 1.90 arrives",
+            "https://a.example/1",
+            0.80,
+            "hackernews",
+        ),
+        sourced("Rust survey arrives", "https://b.example/2", 0.60, "reddit"),
+        sourced("Rust jobs arrive", "https://c.example/3", 0.55, "lobsters"),
+    ];
+    topic_dedup_results(&mut results);
+    assert_eq!(results.len(), 1, "grouping is unchanged");
+    assert!(
+        (results[0].top_score - 0.80).abs() < 1e-6,
+        "no boost for a shared language token (got {})",
+        results[0].top_score
+    );
+}

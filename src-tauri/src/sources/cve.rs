@@ -246,15 +246,50 @@ pub(crate) fn advisories_to_source_items(advisories: &[CveAdvisory]) -> Vec<Sour
                 .map(|p| format!("{} ({})", p.name, p.ecosystem))
                 .collect();
 
-            let content = format!(
-                "{}\n\nSeverity: {}\nAffected: {}\n{}",
+            // v29 (2026-09-04): carry the VERSION evidence into the item.
+            // Before this the content named only the package
+            // ("Affected: hono (npm)"), so `extract_fixed_version` /
+            // `check_version_affected` returned None on every cve item —
+            // `is_version_affected` was NULL on 746 of 746 security
+            // breakdowns, and a hono advisory fixed in 4.12.34 paged as
+            // Critical against an installed 4.13.3. `Affected range:` carries
+            // the GitHub `vulnerable_version_range` per package and
+            // `Fixed in:` the first patched version, in the exact line shapes
+            // the pipeline's extractors already parse.
+            let ranges: Vec<String> = a
+                .affected_packages
+                .iter()
+                .filter(|p| !p.affected_versions.trim().is_empty())
+                .map(|p| {
+                    format!(
+                        "{} ({}): {}",
+                        p.name,
+                        p.ecosystem,
+                        p.affected_versions.trim()
+                    )
+                })
+                .collect();
+            let fixed = a
+                .affected_packages
+                .iter()
+                .filter_map(|p| p.patched_version.as_deref())
+                .map(str::trim)
+                .find(|v| !v.is_empty());
+            let mut content = format!(
+                "{}\n\nSeverity: {}\nAffected: {}\n",
                 a.description,
                 a.severity,
                 packages.join(", "),
-                a.cvss_score
-                    .map(|s| format!("CVSS: {s:.1}"))
-                    .unwrap_or_default()
             );
+            if !ranges.is_empty() {
+                content.push_str(&format!("Affected range: {}\n", ranges.join("; ")));
+            }
+            if let Some(fixed) = fixed {
+                content.push_str(&format!("Fixed in: {fixed}\n"));
+            }
+            if let Some(score) = a.cvss_score {
+                content.push_str(&format!("CVSS: {score:.1}"));
+            }
 
             SourceItem {
                 source_id: a.cve_id.clone(),
@@ -587,5 +622,18 @@ mod tests {
         for (ace_key, _) in GITHUB_ECOSYSTEM_MAP {
             assert!(!ace_key.is_empty());
         }
+    }
+
+    // v29 (2026-09-04): the item carries the version evidence the pipeline parses.
+    #[test]
+    fn test_advisory_item_carries_version_evidence() {
+        let items = advisories_to_source_items(&[sample_advisory()]);
+        let content = &items[0].content;
+        assert!(
+            content.contains("Affected range: lodash (npm): < 4.17.21"),
+            "{content}"
+        );
+        assert!(content.contains("Fixed in: 4.17.21"), "{content}");
+        assert!(content.contains("CVSS: 7.5"), "{content}");
     }
 }

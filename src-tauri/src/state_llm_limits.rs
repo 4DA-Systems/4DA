@@ -320,7 +320,11 @@ pub(crate) fn get_context_dir() -> Option<PathBuf> {
 }
 
 /// File extensions we care about for Phase 0
-pub(crate) const SUPPORTED_EXTENSIONS: &[&str] = &["md", "txt", "rs", "ts", "js", "py"];
+/// `tsx`/`jsx` added 2026-09-04: the frontend's 240 `.tsx` components were
+/// never indexed into the grounding corpus (0 of 240), so "similar to your
+/// code" could not match React work at all.
+pub(crate) const SUPPORTED_EXTENSIONS: &[&str] =
+    &["md", "txt", "rs", "ts", "tsx", "js", "jsx", "py"];
 
 /// Relevance threshold stored as atomic u32 bits for thread-safe auto-tuning.
 /// Adjusted daily based on user engagement rate (see `compute_threshold_adjustment`).
@@ -411,7 +415,8 @@ mod tests {
         assert!(SUPPORTED_EXTENSIONS.contains(&"ts"));
         assert!(SUPPORTED_EXTENSIONS.contains(&"py"));
         assert!(SUPPORTED_EXTENSIONS.contains(&"md"));
-        assert_eq!(SUPPORTED_EXTENSIONS.len(), 6);
+        // v29: + tsx, jsx (a React/Tauri frontend's own components).
+        assert_eq!(SUPPORTED_EXTENSIONS.len(), 8);
     }
 
     // Tests that share global LLM_DAILY_TOKENS must not run in parallel.
@@ -480,5 +485,13 @@ mod tests {
         assert!(!would_exceed_llm_cost_limit(0));
 
         LLM_DAILY_COST_MILLICENTS.store(0, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn test_supported_extensions_include_react_files() {
+        // v29: a React/Tauri frontend's own components were invisible to the
+        // file analyser.
+        assert!(SUPPORTED_EXTENSIONS.contains(&"tsx"));
+        assert!(SUPPORTED_EXTENSIONS.contains(&"jsx"));
     }
 }

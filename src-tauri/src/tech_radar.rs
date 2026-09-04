@@ -108,7 +108,12 @@ mod tests {
             "CREATE TABLE tech_stack (id INTEGER PRIMARY KEY, technology TEXT NOT NULL UNIQUE);
              CREATE TABLE detected_tech (id INTEGER PRIMARY KEY, name TEXT NOT NULL, category TEXT, confidence REAL DEFAULT 0.5);
              CREATE TABLE explicit_interests (id INTEGER PRIMARY KEY, topic TEXT NOT NULL);
-             CREATE TABLE project_dependencies (id INTEGER PRIMARY KEY, project_path TEXT, manifest_type TEXT, package_name TEXT, version TEXT, is_dev INTEGER DEFAULT 0, is_direct INTEGER DEFAULT 1, language TEXT, last_scanned TEXT DEFAULT (datetime('now')), UNIQUE(project_path, package_name));
+             CREATE TABLE project_dependencies (id INTEGER PRIMARY KEY, project_path TEXT, manifest_type TEXT, package_name TEXT, version TEXT, is_dev INTEGER DEFAULT 0, is_direct INTEGER DEFAULT 1, language TEXT, last_scanned TEXT DEFAULT (datetime('now')), detected_from TEXT, project_relevance REAL DEFAULT 1.0, UNIQUE(project_path, package_name));
+             -- v29: build_domain_profile reads dependencies through the git-scoped
+             -- temporal::get_all_dependencies, which joins user_dependencies and
+             -- consults git_signals; the schema must carry both or the reader errors.
+             CREATE TABLE user_dependencies (id INTEGER PRIMARY KEY, package_name TEXT, version TEXT, is_direct INTEGER DEFAULT 1, last_seen_at TEXT DEFAULT (datetime('now')));
+             CREATE TABLE git_signals (id INTEGER PRIMARY KEY, repo_path TEXT, commit_hash TEXT, timestamp TEXT);
              CREATE TABLE developer_decisions (id INTEGER PRIMARY KEY AUTOINCREMENT, decision_type TEXT NOT NULL, subject TEXT NOT NULL, decision TEXT NOT NULL, rationale TEXT, alternatives_rejected TEXT DEFAULT '[]', context_tags TEXT DEFAULT '[]', confidence REAL DEFAULT 0.8, status TEXT DEFAULT 'active', superseded_by INTEGER, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
              CREATE TABLE source_items (id INTEGER PRIMARY KEY AUTOINCREMENT, source_type TEXT NOT NULL, source_id TEXT NOT NULL, url TEXT, title TEXT NOT NULL, content TEXT DEFAULT '', content_hash TEXT DEFAULT '', embedding BLOB DEFAULT x'00', created_at TEXT DEFAULT (datetime('now')), last_seen TEXT DEFAULT (datetime('now')), UNIQUE(source_type, source_id));",
         ).unwrap();

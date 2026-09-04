@@ -129,8 +129,17 @@ impl Source for GitHubSource {
     fn manifest(&self) -> super::SourceManifest {
         super::SourceManifest {
             category: super::SourceCategory::News,
-            default_content_type: "release_notes",
-            default_multiplier: 1.15,
+            // v29 (2026-09-04): GitHub items are trending REPOSITORY listings
+            // ("microsoft/TypeScript (★110139 • TypeScript)"), not release
+            // notes. The manifest default `release_notes` x1.15 short-circuited
+            // the regex classifier for every GitHub row, so the educational-repo
+            // rule (awesome-*, roadmap, learn-*) never ran on the one source it
+            // was written for, and a bare repo listing ranked #1 in the live
+            // feed at 0.945. Discussion x1.0 routes GitHub through
+            // `classify_content` like an unknown source: genuine "Release vX.Y"
+            // rows still classify as ReleaseNotes by regex.
+            default_content_type: "discussion",
+            default_multiplier: 1.0,
             label: "GitHub",
             color_hint: "gray",
             min_title_words: 3,

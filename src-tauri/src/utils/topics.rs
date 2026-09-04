@@ -439,15 +439,27 @@ pub(crate) fn detect_trend_topics<'a>(
     items: impl Iterator<Item = (&'a str, &'a str)>,
 ) -> Vec<String> {
     let mut topic_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut item_count: u32 = 0;
     for (title, content) in items {
+        item_count += 1;
         let topics = extract_topics(title, content, &[]);
         for topic in topics {
             *topic_counts.entry(topic).or_insert(0) += 1;
         }
     }
+    // A topic carried by more than `max_topic_share` of a large batch is the
+    // batch's SUBJECT, not a trend: the 500-item drain chunks made
+    // rust/react/javascript "trend" every cycle and handed every on-domain
+    // item a blanket +0.08 (measured live 2026-09-04). The share cap only
+    // applies once the batch is big enough for a share to mean anything.
+    let share_cap = if item_count >= crate::scoring_config::TREND_BOOST_MIN_BATCH_ITEMS as u32 {
+        Some((item_count as f32 * crate::scoring_config::TREND_BOOST_MAX_TOPIC_SHARE).ceil() as u32)
+    } else {
+        None
+    };
     topic_counts
         .into_iter()
-        .filter(|(_, count)| *count >= 3)
+        .filter(|(_, count)| *count >= 3 && share_cap.is_none_or(|cap| *count <= cap))
         .map(|(topic, _)| topic)
         .collect()
 }
@@ -628,5 +640,37 @@ mod tests {
         let topics = vec!["rust".to_string()];
         let exclusions: Vec<String> = vec![];
         assert!(check_exclusions(&topics, &exclusions).is_none());
+    }
+
+    // v29 (2026-09-04): the batch's subject is not a trend.
+    #[test]
+    fn test_trend_detection_excludes_the_batch_subject() {
+        let mut items: Vec<(String, String)> = (0..40)
+            .map(|i| (format!("Rust crate roundup number {i}"), String::new()))
+            .collect();
+        for _ in 0..3 {
+            items.push(("Turbopack bundler rewrite lands".to_string(), String::new()));
+        }
+        let trends = detect_trend_topics(items.iter().map(|(t, c)| (t.as_str(), c.as_str())));
+        assert!(
+            !trends.iter().any(|t| t == "rust"),
+            "a topic on 40 of 43 items is the batch subject, not a trend: {trends:?}"
+        );
+        assert!(
+            trends.iter().any(|t| t == "turbopack"),
+            "a three-item story is still a trend: {trends:?}"
+        );
+    }
+
+    #[test]
+    fn test_trend_share_cap_waits_for_a_real_batch() {
+        let items: Vec<(String, String)> = (0..5)
+            .map(|i| (format!("Rust crate roundup number {i}"), String::new()))
+            .collect();
+        let trends = detect_trend_topics(items.iter().map(|(t, c)| (t.as_str(), c.as_str())));
+        assert!(
+            trends.iter().any(|t| t == "rust"),
+            "below the minimum batch size a share means nothing: {trends:?}"
+        );
     }
 }

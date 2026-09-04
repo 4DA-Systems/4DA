@@ -347,10 +347,16 @@ pub(crate) fn apply_cross_encoder_reranking(
 
     let reranked = rerank_candidates(&query, &candidates);
 
-    // Apply blended scores back to results
+    // Apply blended scores back to results — BOUNDED around the evidence.
+    // The 0.4/0.6 blend can lift an item by up to 0.6*(1 - evidence): live
+    // 2026-09-04, a 0.494-evidence Lobsters duplicate ranked 0.815 and 243 of
+    // 580 ranks sat more than 0.10 from their evidence. Rank may refine order,
+    // never overrule the evidence the verdict was decided on, so the reranker
+    // gets the same +/- band as the LLM reconciler (`cross_encoder.max_adjustment`).
+    let max_adj = crate::scoring_config::CROSS_ENCODER_MAX_ADJUSTMENT;
     for rr in &reranked {
         if let Some(item) = results.iter_mut().find(|r| r.id == rr.id) {
-            item.top_score = rr.blended_score;
+            item.top_score = bounded_rank(item.top_score, rr.blended_score, max_adj);
         }
     }
 
@@ -372,9 +378,33 @@ pub(crate) fn apply_cross_encoder_reranking(
     unload_reranker();
 }
 
+/// Rank may refine order, never overrule the evidence the verdict was
+/// decided on: the blend is held to `original ± max_adj` and the unit range.
+fn bounded_rank(original: f32, blended: f32, max_adj: f32) -> f32 {
+    blended
+        .clamp(original - max_adj, original + max_adj)
+        .clamp(0.0, 1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rerank_is_bounded_around_the_evidence() {
+        let max_adj = crate::scoring_config::CROSS_ENCODER_MAX_ADJUSTMENT;
+        assert!(
+            (bounded_rank(0.494, 0.815, max_adj) - (0.494 + max_adj)).abs() < 1e-6,
+            "a 0.494-evidence item cannot rank 0.815 (live 2026-09-04)"
+        );
+        assert!((bounded_rank(0.80, 0.50, max_adj) - (0.80 - max_adj)).abs() < 1e-6);
+        assert!(
+            (bounded_rank(0.60, 0.65, max_adj) - 0.65).abs() < 1e-6,
+            "inside the band the blend stands"
+        );
+        assert!(bounded_rank(0.02, 0.0, max_adj) >= 0.0);
+        assert!(bounded_rank(0.99, 1.5, max_adj) <= 1.0);
+    }
 
     #[test]
     fn empty_candidates_returns_empty() {

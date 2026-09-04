@@ -190,6 +190,22 @@ impl Database {
         Ok(saw_entry.then_some(out))
     }
 
+    /// A random sample of cached TOP-1 (`rank = 0`) KNN distances — the corpus
+    /// distribution the context axis is calibrated against (v29,
+    /// `scoring::corpus_calibration`). Rank 0 only: the axis reads the best
+    /// match, so the calibration must describe best matches. Items with a zero
+    /// embedding never enter this table (they skip the KNN), which is exactly
+    /// the population the axis scores.
+    pub(crate) fn context_top1_distance_sample(&self, limit: usize) -> SqliteResult<Vec<f32>> {
+        let conn = self.read_conn();
+        let mut stmt = conn.prepare_cached(
+            "SELECT distance FROM item_context_match
+             WHERE rank = 0 ORDER BY RANDOM() LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit as i64], |r| r.get::<_, f32>(0))?;
+        rows.collect()
+    }
+
     /// The raw cached `(context_id, distance)` lists for a batch of items, for
     /// the incremental merge. Only entries at `generation` or older are useful
     /// to the merge, so the caller passes the generation each was stamped at.
@@ -468,5 +484,38 @@ impl Database {
             );
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod calibration_sample_tests {
+    use crate::test_utils::{insert_test_item, test_db};
+
+    #[test]
+    fn top1_distance_sample_reads_rank_zero_only() {
+        let db = test_db();
+        let id = insert_test_item(&db, "hackernews", "c1", "t", "c");
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "INSERT INTO item_context_match (item_id, rank, context_id, distance)
+                 VALUES (?1, 0, 1, 0.9), (?1, 1, 2, 1.1)",
+                rusqlite::params![id],
+            )
+            .unwrap();
+        }
+        let sample = db.context_top1_distance_sample(10).unwrap();
+        assert_eq!(sample.len(), 1, "one top-1 row per item");
+        assert!((sample[0] - 0.9).abs() < 1e-6);
+    }
+
+    #[test]
+    fn random_item_embeddings_returns_full_vectors() {
+        let db = test_db();
+        insert_test_item(&db, "hackernews", "e1", "t", "c");
+        insert_test_item(&db, "hackernews", "e2", "t2", "c2");
+        let embeddings = db.random_item_embeddings(5).unwrap();
+        assert_eq!(embeddings.len(), 2);
+        assert!(embeddings.iter().all(|e| e.len() == crate::EMBEDDING_DIMS));
     }
 }

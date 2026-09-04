@@ -54,11 +54,22 @@ fn extract_advisory_id(title: &str) -> Option<String> {
     None
 }
 
-/// Extract CVSS score and severity label from content that contains "Severity: CVSS_V3: X.X".
+/// Extract CVSS score and severity label from content that contains
+/// "Severity: CVSS_V3: X.X" (OSV) or a standalone "CVSS: X.X" line (the cve
+/// source writes `Severity: HIGH` and the numeric score on its own line —
+/// v29: 0 of 569 live cve breakdowns carried a score because only the
+/// `Severity:` line was read).
 fn extract_cvss_from_content(content: &str) -> (Option<f32>, Option<String>) {
     for line in content.lines() {
         let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("Severity:") {
+        let rest = if let Some(rest) = trimmed.strip_prefix("Severity:") {
+            rest
+        } else if let Some(rest) = trimmed.strip_prefix("CVSS:") {
+            rest
+        } else {
+            continue;
+        };
+        {
             // Producer format: osv_types::vuln_to_source_item emits `format!("{severity_type}: {score}")`,
             // e.g. "CVSS_V3: 9.8" OR "CVSS_V3: CVSS:3.1/AV:N/…/A:H" (OSV usually stores the VECTOR). The
             // severity-TYPE label has no internal colon, so splitting on the FIRST colon isolates the score
@@ -118,6 +129,64 @@ fn extract_affected_range(content: &str) -> Option<String> {
     None
 }
 
+/// OSV ecosystem name for a dependency's manifest language, as stored in
+/// `osv_advisories.ecosystem` by the mirror sync.
+fn osv_ecosystem_for(dep_ecosystem: &str) -> Option<&'static str> {
+    match dep_ecosystem.to_lowercase().as_str() {
+        "rust" => Some("crates.io"),
+        "javascript" | "typescript" | "node" => Some("npm"),
+        "python" => Some("PyPI"),
+        "go" | "golang" => Some("Go"),
+        _ => None,
+    }
+}
+
+/// The advisory ids an item carries: the id in its title and the GHSA id in
+/// its URL (cve items are keyed by CVE id but link to the GHSA advisory,
+/// which is the key the OSV mirror stores).
+fn item_advisory_ids(input: &ScoringInput, title_id: Option<&str>) -> Vec<String> {
+    let mut ids: Vec<String> = title_id.map(str::to_string).into_iter().collect();
+    if let Some(url) = input.url {
+        if let Some(start) = url.find("GHSA-") {
+            let rest = &url[start..];
+            let end = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+                .unwrap_or(rest.len());
+            ids.push(rest[..end].to_string());
+        }
+    }
+    ids
+}
+
+/// Version verdict from the OSV mirror's STRUCTURED ranges for the advisory
+/// this item is about (matched by advisory id) against the installed version
+/// of the matched dependency. `None` when the mirror holds no row for this
+/// advisory/package or the range cannot be evaluated — the caller falls back
+/// to the text route, and a `None` there stays honestly unknown.
+fn mirror_version_verdict(
+    db: &Database,
+    input: &ScoringInput,
+    dep: &DepMatch,
+    installed: &str,
+    title_id: Option<&str>,
+) -> Option<bool> {
+    let ecosystem = osv_ecosystem_for(&dep.ecosystem)?;
+    let ids = item_advisory_ids(input, title_id);
+    if ids.is_empty() {
+        return None;
+    }
+    let raw_name = dep.raw_name.as_deref().unwrap_or(&dep.package_name);
+    let advisories = db
+        .get_osv_advisories_for_package(raw_name, ecosystem)
+        .ok()?;
+    let advisory = advisories
+        .iter()
+        .find(|a| ids.iter().any(|id| a.advisory_id.eq_ignore_ascii_case(id)))?;
+    let (affected, confirmed) =
+        crate::osv::matching::check_version_affected(Some(installed), &advisory.affected_ranges);
+    confirmed.then_some(affected)
+}
+
 /// Check if installed_version falls within the affected range.
 /// Supports patterns like "< 3.0.1", "<= 2.8.0", ">= 1.0 < 3.0".
 /// Returns None if either input is missing or unparseable.
@@ -171,19 +240,13 @@ fn check_version_affected(
 // KNN-specific calibration
 // ============================================================================
 
-/// Calibrate a raw KNN distance-derived score using a sigmoid stretch.
-/// Uses adaptive parameters from embedding_calibration — auto-adapts to
-/// whatever embedding model the user runs.
-fn calibrate_knn(raw: f32) -> f32 {
-    if raw <= 0.0 {
-        return 0.0;
-    }
-    if raw >= 1.0 {
-        return 1.0;
-    }
-    let center = crate::embedding_calibration::get_sigmoid_center();
-    let scale = crate::embedding_calibration::get_sigmoid_scale();
-    1.0 / (1.0 + ((center - raw) * scale).exp())
+/// Calibrate the raw context-axis COSINE against the corpus-fitted sigmoid
+/// (v29). The pre-v29 `calibrate_knn` fed `1/(1+L2)` into the per-model
+/// cosine sigmoid: an unrelated unit-vector pair (L2 ≈ 1.0–1.4 → raw
+/// 0.42–0.50) calibrated to 0.50–0.75 and the axis confirmed on 87.7% of
+/// the corpus. See `corpus_calibration.rs`.
+fn calibrate_knn(cosine: f32, ctx: &ScoringContext) -> f32 {
+    super::corpus_calibration::calibrate_context(cosine, &ctx.corpus_calibration.context)
 }
 
 // ============================================================================
@@ -605,8 +668,12 @@ fn extract_signals(
     // independent ACE evidence against a keyword-confirmed interest (audit
     // item 8e — the degraded/embedding-less state used to confirm MORE
     // signals than the healthy one, flipping the 1↔2 signal cliff).
-    let embedding_ace =
-        compute_semantic_ace_boost(input.embedding, &ctx.ace_ctx, &ctx.topic_embeddings);
+    let embedding_ace = compute_semantic_ace_boost(
+        input.embedding,
+        &ctx.ace_ctx,
+        &ctx.topic_embeddings,
+        &ctx.corpus_calibration.semantic,
+    );
     let semantic_is_embedding_derived = embedding_ace.is_some();
     let semantic_boost =
         embedding_ace.unwrap_or_else(|| semantic::compute_keyword_ace_boost(&topics, &ctx.ace_ctx));
@@ -750,9 +817,9 @@ fn extract_signals(
 // Phase 2: Calibrate raw signals
 // ============================================================================
 
-fn calibrate_signals(raw: &RawSignals) -> CalibratedSignals {
+fn calibrate_signals(raw: &RawSignals, ctx: &ScoringContext) -> CalibratedSignals {
     CalibratedSignals {
-        context_score: calibrate_knn(raw.context),
+        context_score: calibrate_knn(raw.context, ctx),
         interest_score: calibrate_score(raw.interest),
         keyword_score: raw.keyword_score,   // passthrough
         semantic_boost: raw.semantic_boost, // passthrough
@@ -1099,6 +1166,23 @@ fn compute_quality_composite(
         ctx.user_role.as_deref(),
         ctx.experience_level.as_deref(),
     );
+    // v29: ONE release detector. `novelty::detect_release` keys on loose
+    // substrings ("release", "patch", " v1.") while the content classifier
+    // (`content_dna::is_release`) is the detector every categorical rule
+    // (superseded ceiling, registry grounding) trusts. When they disagree the
+    // classifier wins: a 2022 "package ready for release to NPM" tip held
+    // 0.888 because novelty gave it the ×1.25 release boost the classifier
+    // (Discussion) had denied the superseded gate.
+    let classifier_says_release = matches!(
+        content_type,
+        crate::content_dna::ContentType::ReleaseNotes
+            | crate::content_dna::ContentType::BreakingChange
+    );
+    let novelty_mult = if novelty.is_release && !novelty.is_security && !classifier_says_release {
+        1.0
+    } else {
+        novelty.multiplier
+    };
 
     // Ecosystem shift from stack profiles
     let ecosystem_shift_mult = crate::stacks::scoring::detect_ecosystem_shift(
@@ -1122,8 +1206,17 @@ fn compute_quality_composite(
         &ctx.domain_profile,
     );
     let sophistication_mult = sophistication.multiplier;
-    let sophistication_raw =
-        sophistication.title_complexity * 0.6 + sophistication.content_depth * 0.4;
+    // v29: a title-only item must earn the commodity-ceiling bypass from its
+    // TITLE. `assess_content_depth_signals` returns a neutral 0.5 for empty
+    // content, worth 0.20 of this blend, so any title above 0.25 complexity
+    // cleared the 0.35 bypass — all 452 live StackOverflow rows are title-only
+    // and 7 of 8 in the feed bypassed the Question ceiling that way ("Update
+    // webpack 4 to webpack 5 on an existing create-react-app" at 0.859).
+    let sophistication_raw = if input.content.trim().is_empty() {
+        sophistication.title_complexity * 0.6
+    } else {
+        sophistication.title_complexity * 0.6 + sophistication.content_depth * 0.4
+    };
 
     // Content analysis multiplier (from cached LLM pre-analysis, if available)
     let content_analysis_mult = {
@@ -1280,7 +1373,7 @@ fn compute_quality_composite(
     let structural = competing_mult
         * content_quality.multiplier
         * content_dna_mult
-        * novelty.multiplier
+        * novelty_mult
         * sophistication_mult
         * freshness
         * stale_mult
@@ -1397,7 +1490,7 @@ fn compute_quality_composite(
         content_quality.multiplier,
         content_dna_mult,
         content_type,
-        novelty.multiplier,
+        novelty_mult,
         ecosystem_shift_mult,
         stack_competing_mult,
         sophistication_mult,
@@ -1690,6 +1783,7 @@ fn apply_gate_effect(
 // Phase 8: Apply final adjustments — short title cap + commodity ceiling
 // ============================================================================
 
+#[allow(clippy::too_many_arguments)]
 fn apply_final_adjustments(
     score: f32,
     title: &str,
@@ -1697,7 +1791,9 @@ fn apply_final_adjustments(
     sophistication_raw: f32,
     community_signal: f32,
     strongly_grounded: bool,
+    off_stack: bool,
     ungrounded_registry_release: bool,
+    stack_tool_listing: bool,
 ) -> f32 {
     let meaningful_words = title.split_whitespace().filter(|w| w.len() >= 2).count();
     let score = if meaningful_words < 3 {
@@ -1709,15 +1805,59 @@ fn apply_final_adjustments(
     // Commodity content ceiling: hard cap on low-sophistication commodity content.
     // Applied AFTER all boosts and gate effects — no amount of dep_boost or
     // bootstrap doubling can push a basic "how to" tutorial into the briefing.
-    apply_commodity_ceiling(
+    let capped = apply_commodity_ceiling(
         score,
         title,
         content_type,
         sophistication_raw,
         community_signal,
         strongly_grounded,
+        off_stack,
         ungrounded_registry_release,
-    )
+    );
+    // v29: a bare repo row for a tool the user already has (see
+    // `github_repo_row_is_stack_tool`) is capped below the relevance line
+    // regardless of how well its language token matches the stack.
+    if stack_tool_listing {
+        capped.min(scoring_config::COMMODITY_CEILING_STACK_TOOL_LISTING)
+    } else {
+        capped
+    }
+}
+
+/// A GitHub trending row (`owner/repo (★N • Lang)`) whose `repo` names one
+/// of the user's own stack tools — the language or framework itself, not a
+/// library built on it. "microsoft/TypeScript" for a TypeScript developer,
+/// "tauri-apps/tauri" for a Tauri developer. A star-count row about a tool
+/// the user already runs carries no release, version or story; the interest
+/// and ACE axes still confirm it on the language token alone (live
+/// 2026-09-04: rank #1 at 0.945; 0.799 with the multiplier fixes). A row for
+/// a tool NOT in the stack is left alone — that is how new libraries surface.
+fn github_repo_row_is_stack_tool(title: &str, ctx: &ScoringContext) -> bool {
+    if !title.contains('★') {
+        return false;
+    }
+    let Some((owner_repo, _)) = title.split_once(" (") else {
+        return false;
+    };
+    let Some((_, repo)) = owner_repo.split_once('/') else {
+        return false;
+    };
+    let repo = repo.trim().to_lowercase();
+    if repo.is_empty() {
+        return false;
+    }
+    // "next.js" names the same tool as a declared "next" / "nextjs".
+    let repo_bare = repo.replace(".js", "").replace("js", "");
+    ctx.domain_profile
+        .primary_stack
+        .iter()
+        .chain(ctx.declared_tech.iter())
+        .map(|t| t.to_lowercase())
+        .any(|t| {
+            t == repo
+                || (!repo_bare.is_empty() && t.replace(".js", "").replace("js", "") == repo_bare)
+        })
 }
 
 /// Hard ceiling for commodity content types.
@@ -1743,6 +1883,7 @@ fn apply_commodity_ceiling(
     sophistication_raw: f32,
     community_signal: f32,
     strongly_grounded: bool,
+    off_stack: bool,
     ungrounded_registry_release: bool,
 ) -> f32 {
     use crate::content_dna::ContentType;
@@ -1760,14 +1901,22 @@ fn apply_commodity_ceiling(
         return score.min(scoring_config::COMMODITY_CEILING_CLICKBAIT);
     }
 
-    // Off-stack security advisory: a CVE/GHSA for a package NOT in the user's
-    // dependency graph. It matches the security vocabulary (so it would sail
-    // past every other exemption below via has_security_pattern) but has no
-    // bearing on this developer's stack — awareness-only, never CORE. Checked
-    // BEFORE the security exemption precisely because the advisory IS a security
-    // pattern. In-stack advisories (strongly_grounded) fall through untouched.
+    // Ungrounded security advisory: a CVE/GHSA for a package NOT in the
+    // user's dependency graph. It matches the security vocabulary (so it would
+    // sail past every other exemption below via has_security_pattern) but has
+    // no bearing on this developer's build — awareness-only, never CORE.
+    // Checked BEFORE the security exemption precisely because the advisory IS
+    // a security pattern. In-stack advisories (strongly_grounded) fall through
+    // untouched. v29: an advisory OFF the user's stack (no stack, dependency,
+    // adjacent or interest match at all) is capped below the relevance line;
+    // one ON the stack keeps the awareness cap just above it.
     if matches!(content_type, ContentType::SecurityAdvisory) && !strongly_grounded {
-        return score.min(scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED);
+        let cap = if off_stack {
+            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_OFFSTACK
+        } else {
+            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED
+        };
+        return score.min(cap);
     }
 
     // Ungrounded registry release: a release/deprecation notice for a package
@@ -1846,9 +1995,31 @@ fn has_version_conflict(title_lower: &str) -> bool {
         "migration",
     ];
     let has_conflict = conflict_terms.iter().any(|t| title_lower.contains(t));
-    let has_version = title_lower.chars().any(|c| c.is_ascii_digit())
-        && (title_lower.contains('v') || title_lower.contains('.'));
-    has_conflict && has_version
+    has_conflict && has_version_literal(title_lower)
+}
+
+/// A real version literal: `v` + digit ("v2", "v0.18") or `digit.digit`
+/// ("1.2", "0.8.9"). v29: the previous test was "any digit AND the title
+/// contains the letter 'v' or a '.'", which nearly every English title
+/// satisfies — the bypass fired on any conflict word next to any number.
+fn has_version_literal(title_lower: &str) -> bool {
+    let bytes = title_lower.as_bytes();
+    for i in 0..bytes.len() {
+        if bytes[i] == b'v' && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit() {
+            let boundary_ok = i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
+            if boundary_ok {
+                return true;
+            }
+        }
+        if bytes[i].is_ascii_digit()
+            && i + 2 < bytes.len()
+            && bytes[i + 1] == b'.'
+            && bytes[i + 2].is_ascii_digit()
+        {
+            return true;
+        }
+    }
+    false
 }
 
 // ============================================================================
@@ -2365,6 +2536,15 @@ pub(crate) fn score_item(
         // why a broken filter survived unnoticed on every Windows run.
         degraded_inputs.push("dep_scope_degraded".to_string());
     }
+    if ctx.domain_profile.primary_stack.is_empty() && ctx.ace_ctx.detected_tech.is_empty() {
+        // v29: NO stack at all — no declared tech, no detected tech. In this
+        // state the domain profile treats the user's own languages as
+        // off-stack (0.25, ×0.19) and every score is confidently wrong. It
+        // happened silently for 60,684 items in one drain hour (2026-08-31)
+        // and nothing marked them; `analysis_cycle::has_systemic_degradation`
+        // now treats this like a dependency-load failure.
+        degraded_inputs.push("ace_profile_thin".to_string());
+    }
 
     let matches: Vec<RelevanceMatch> = if ctx.cached_context_count > 0 && has_real_embedding {
         // A DB error here silently zeroes the CONTEXT axis for this item —
@@ -2404,7 +2584,10 @@ pub(crate) fn score_item(
         // the displayed evidence.
         .filter(|result| !crate::utils::is_boilerplate_chunk(&result.text))
         .map(|result| {
-            let similarity = 1.0 / (1.0 + result.distance);
+            // v29: COSINE, not `1/(1+L2)` — the unit mismatch that made the
+            // context axis a constant (see corpus_calibration.rs). Stored
+            // embeddings are unit vectors, so the conversion is exact.
+            let similarity = super::corpus_calibration::l2_to_cosine(result.distance);
             let matched_text = if result.text.len() > 100 {
                 let truncated: String = result.text.chars().take(100).collect();
                 format!("{truncated}...")
@@ -2426,7 +2609,7 @@ pub(crate) fn score_item(
     let raw = extract_signals(input, ctx, &matches);
 
     // ── Phase 2: Calibrate ────────────────────────────────────────────
-    let cal = calibrate_signals(&raw);
+    let cal = calibrate_signals(&raw, ctx);
 
     // ── Phase 3: Gate count on clean signals ──────────────────────────
     let confirmation = gate::count_confirmed_signals_with_evidence(
@@ -2605,6 +2788,13 @@ pub(crate) fn score_item(
                 ((chrono::Utc::now() - *published).num_days().max(0) as f32) / DAYS_PER_MONTH;
             age_months >= scoring_config::STALE_CONTENT_SUPERSEDED_MONTHS
         });
+    // v29: "off the stack" for the ungrounded-advisory rules — no stack,
+    // dependency, adjacent-tech, interest or cross-cutting match at all. An
+    // empty profile reads as 1.0, so an unknown stack is never off-stack.
+    let off_stack =
+        raw.domain_relevance < scoring_config::COMMODITY_CEILING_SECURITY_OFFSTACK_DOMAIN_RELEVANCE;
+    let stack_tool_listing =
+        input.source_type == "github" && github_repo_row_is_stack_tool(input.title, ctx);
     let combined_score = apply_final_adjustments(
         gated_score,
         input.title,
@@ -2614,7 +2804,9 @@ pub(crate) fn score_item(
         // Same grounding evidence the gate consumes — lets a dep-grounded
         // academic paper bypass its commodity ceiling.
         grounding.strong,
+        off_stack,
         ungrounded_registry_release,
+        stack_tool_listing,
     );
 
     // ── Score offset normalization ────────────────────────────────────
@@ -2706,20 +2898,35 @@ pub(crate) fn score_item(
     // exclusion). The ceiling is enforced here — after every additive
     // term — persisted on the breakdown, and re-asserted once more in
     // `finalize_scores` so post-pipeline writers cannot reopen it either.
+    // Critical fast-path items are exempt from the UGC ceiling: a
+    // strongly-grounded security advisory shared on a UGC platform must keep
+    // its floor (grounding beats popularity capping). The commodity ceiling
+    // needs no such exemption — it is mutually exclusive with the fast path
+    // by construction. Hoisted out of the ceiling block (v29) because the
+    // VERDICT reads it too: the 0.50 cap sits ABOVE the 0.40 relevance line,
+    // so a capped zero-engagement post was still feed-relevant — 128 live feed
+    // items pinned at exactly 0.50, outranking every honest 0.40–0.49 item.
+    let ugc_capped = !critical_fast_path
+        && community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD
+        && is_low_community_ugc_source(input.source_type);
+    // v29: an OFF-STACK ungrounded security advisory is capped BELOW the
+    // line (DSL 0.35 + 0.02) and, like the registry look-alike gate,
+    // categorically not feed-relevant — 20 of the 24 security items in the
+    // live feed matched no dependency, most of them off-stack (axios x9 for a
+    // user with no JavaScript). Preemption's OSV matcher still surfaces them
+    // as awareness. An ungrounded advisory ON the user's stack (a popular Rust
+    // crate, for a Rust developer) keeps the 0.44 awareness cap and is decided
+    // by score like any other item: the persona guards measured that gating it
+    // too dropped a Rust developer's "critical CVE in a popular Rust crate".
+    let security_ungrounded = content_type == crate::content_dna::ContentType::SecurityAdvisory
+        && !grounding.strong
+        && off_stack;
     let score_ceiling: Option<f32> = {
         let commodity = ungrounded_registry_release.then_some(
             scoring_config::COMMODITY_CEILING_REGISTRY_RELEASE_UNGROUNDED
                 + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR,
         );
-        // Critical fast-path items are exempt from the UGC ceiling: a
-        // strongly-grounded security advisory shared on a UGC platform
-        // must keep its floor (grounding beats popularity capping). The
-        // commodity ceiling needs no such exemption — it is mutually
-        // exclusive with the fast path by construction.
-        let ugc = (!critical_fast_path
-            && community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD
-            && is_low_community_ugc_source(input.source_type))
-        .then_some(0.50);
+        let ugc = ugc_capped.then_some(0.50);
         // Superseded release (v24): same shape as the commodity ceiling —
         // the offset is added here so the cap survives `normalize_score_offset`.
         let superseded = superseded_release.then_some(
@@ -2776,8 +2983,15 @@ pub(crate) fn score_item(
     // incident verbatim. Gating the VERDICT makes it score-independent. The
     // security exemption is already inside the flag, so a genuine advisory is
     // untouched; the score keeps its capped value for ranking/display.
+    // v29 adds two more categorical gates of the same shape: a zero-engagement
+    // UGC post (score pinned at 0.50 by the community cap) and an off-stack
+    // security advisory are never feed-relevant. Both keep their capped score
+    // for ranking/display; neither can reach the fast path (`ugc_capped`
+    // excludes it, `security_ungrounded` negates `grounding.strong`).
     let relevant = !ungrounded_registry_release
         && !superseded_release
+        && !ugc_capped
+        && !security_ungrounded
         && ((critical_fast_path && !lang_mismatch)  // Critical items always relevant
             || (combined_score >= get_relevance_threshold()
                 && (signal_count >= min_signals
@@ -2863,11 +3077,25 @@ pub(crate) fn score_item(
         }
     });
     let installed_version = display_deps.first().and_then(|d| d.version.clone());
-    let is_version_affected = check_version_affected(
-        installed_version.as_deref(),
-        affected_versions.as_deref(),
-        fixed_version.as_deref(),
-    );
+    // v29: the OSV mirror's STRUCTURED ranges decide first (introduced/fixed/
+    // last_affected, via the same matcher Preemption trusts); the text route
+    // is the fallback for advisories the mirror does not hold. Before this
+    // `is_version_affected` was NULL on 746 of 746 live security breakdowns
+    // (the cve source wrote no range and no fix), so a hono advisory fixed in
+    // 4.12.34 paged as Critical against an installed 4.13.3.
+    let is_version_affected = display_deps
+        .first()
+        .zip(installed_version.as_deref())
+        .and_then(|(dep, installed)| {
+            mirror_version_verdict(db, input, dep, installed, advisory_id.as_deref())
+        })
+        .or_else(|| {
+            check_version_affected(
+                installed_version.as_deref(),
+                affected_versions.as_deref(),
+                fixed_version.as_deref(),
+            )
+        });
 
     // A CONFIRMED not-affected advisory (installed version outside the affected
     // range / at-or-past the fix) is awareness at most — never Critical/Alert.
@@ -2882,6 +3110,16 @@ pub(crate) fn score_item(
         )
     {
         sig_priority = Some("watch".to_string());
+    }
+    // v29: CRITICAL requires a POSITIVE version verdict. A grounded advisory
+    // whose applicability to the installed version cannot be confirmed is an
+    // Alert ("likely affected — verify"), never a Critical page: the version
+    // evidence is exactly what separates "your build is exposed" from "a
+    // package you use has had an advisory".
+    let critical_unverified =
+        sig_priority.as_deref() == Some("critical") && is_version_affected != Some(true);
+    if critical_unverified {
+        sig_priority = Some("alert".to_string());
     }
 
     // ── Necessity scoring ─────────────────────────────────────────────
@@ -2946,7 +3184,16 @@ pub(crate) fn score_item(
     let (applicability, is_critical_alert) = if version_negative {
         (Some("not_affected".to_string()), false)
     } else if sig_type.as_deref() == Some("security_alert") {
-        security_applicability(&raw.matched_deps, &advisory_ecosystems)
+        let (applicability, critical) =
+            security_applicability(&raw.matched_deps, &advisory_ecosystems);
+        // v29: "Affects You" (the Critical pool + notifications) needs the
+        // positive version verdict; a name-and-ecosystem match without one is
+        // `likely_affected`, which the evidence pool shows as such.
+        if critical && is_version_affected != Some(true) {
+            (Some("likely_affected".to_string()), false)
+        } else {
+            (applicability, critical)
+        }
     } else {
         (None, false)
     };
@@ -4404,6 +4651,7 @@ mod tests {
             0.0,
             0.0,
             false,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4422,6 +4670,7 @@ mod tests {
             0.0,
             0.0,
             true,  // strongly grounded in the user's dependencies,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4446,6 +4695,7 @@ mod tests {
             0.0,
             0.0,
             false,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4466,6 +4716,7 @@ mod tests {
             0.9,
             1.0,
             true,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4486,12 +4737,38 @@ mod tests {
             0.5,
             0.0,
             false, // NOT in the user's dependency graph,
+            true,  // off_stack: no stack/dep/interest match at all
             false, // ungrounded_registry_release
         );
         assert_eq!(
             capped,
+            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_OFFSTACK,
+            "off-stack advisory must be capped below the relevance line"
+        );
+    }
+
+    #[test]
+    fn on_stack_ungrounded_advisory_keeps_the_awareness_cap() {
+        // v29: a CVE for a popular crate the user does NOT depend on, in the
+        // user's own ecosystem, is awareness — capped at 0.44, not gated.
+        let capped = apply_commodity_ceiling(
+            0.91,
+            "CVE-2024-1234: Critical vulnerability in popular Rust crate",
+            &crate::content_dna::ContentType::SecurityAdvisory,
+            0.5,
+            0.0,
+            false, // not in the dependency graph
+            false, // but ON the stack (rust)
+            false,
+        );
+        assert_eq!(
+            capped,
             scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED,
-            "off-stack advisory must be capped to the MATCH band"
+            "on-stack ungrounded advisory keeps the awareness cap"
+        );
+        assert!(
+            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_OFFSTACK
+                < scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED
         );
     }
 
@@ -4512,7 +4789,8 @@ mod tests {
             0.9, // sophistication bypass must NOT apply
             1.0, // community bypass must NOT apply
             false,
-            true, // ungrounded_registry_release
+            false, // off_stack
+            true,  // ungrounded_registry_release
         );
         assert_eq!(
             capped,
@@ -4538,7 +4816,8 @@ mod tests {
             0.0,
             0.0,
             false,
-            true, // ungrounded_registry_release
+            false, // off_stack
+            true,  // ungrounded_registry_release
         );
         assert_eq!(
             capped,
@@ -4556,6 +4835,7 @@ mod tests {
             0.0,
             0.0,
             true,  // strongly grounded (subject ∈ user deps)
+            false, // off_stack
             false, // NOT ungrounded
         );
         assert_eq!(
@@ -4575,6 +4855,7 @@ mod tests {
             0.5,
             0.0,
             true,  // strongly grounded — axios IS a dependency,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(score, 0.91, "in-stack advisory must NOT be capped");
@@ -4591,6 +4872,7 @@ mod tests {
             0.9,
             0.0,
             false,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4609,6 +4891,7 @@ mod tests {
             0.0,
             1.0,
             false,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4628,6 +4911,7 @@ mod tests {
             0.0,
             0.0,
             false,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4645,6 +4929,7 @@ mod tests {
             0.0,
             0.0,
             false,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4663,6 +4948,7 @@ mod tests {
             0.0,
             scoring_config::COMMUNITY_SIGNAL_HIGH_THRESHOLD,
             false,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4681,6 +4967,7 @@ mod tests {
             0.5,
             0.0,
             false,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4700,6 +4987,7 @@ mod tests {
             0.0,
             0.0,
             true,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4719,6 +5007,7 @@ mod tests {
             0.0,
             0.0,
             false,
+            false, // off_stack
             false, // ungrounded_registry_release
         );
         assert_eq!(score, 0.90, "non-commodity types must pass through");
@@ -5188,5 +5477,360 @@ mod tests {
             gated <= scoring_config::CONFIRMATION_GATE[1].1 + 1e-4,
             "weak dep match must stay capped at 0.28 (got {gated})"
         );
+    }
+
+    // ========================================================================
+    // v29 (2026-09-04): verdict gates, version literals, mirror verdicts
+    // ========================================================================
+
+    #[test]
+    fn version_literal_requires_v_digit_or_dotted_number() {
+        assert!(has_version_literal("tauri v2.12.0 released"));
+        assert!(has_version_literal("python 3.12 is faster"));
+        assert!(has_version_literal("hono fixed in 4.12.34"));
+        assert!(has_version_literal("v2 breaking changes"));
+        assert!(!has_version_literal("update webpack 4 to webpack 5 on cra"));
+        assert!(!has_version_literal("top 10 rust crates of 2026"));
+        assert!(!has_version_literal("vue3 vs svelte"));
+        assert!(!has_version_literal("cve-2026-0001 in lodash"));
+    }
+
+    #[test]
+    fn cvss_line_written_by_the_cve_source_is_read() {
+        let (score, sev) =
+            extract_cvss_from_content("Severity: HIGH\nAffected: tokio (crates.io)\nCVSS: 7.5");
+        assert_eq!(score, Some(7.5));
+        assert_eq!(sev.as_deref(), Some("high"));
+        let (score, sev) = extract_cvss_from_content("Severity: CRITICAL\nCVSS: 9.8");
+        assert_eq!(score, Some(9.8));
+        assert_eq!(sev.as_deref(), Some("critical"));
+    }
+
+    fn mastodon_release_input<'a>(
+        embedding: &'a [f32],
+        tags: &'a [String],
+        tags_json: Option<&'a str>,
+    ) -> ScoringInput<'a> {
+        ScoringInput {
+            id: 7,
+            title: "tauri v2.12.0 is out: WebView2 crash fix on Windows and a new tray API",
+            url: Some("https://fosstodon.org/@tauri/1"),
+            content: "The Tauri team shipped 2.12.0 today with a WebView2 crash fix \
+                      and tray menu icons.",
+            source_type: "mastodon",
+            embedding,
+            created_at: None,
+            detected_lang: "",
+            source_tags: tags,
+            tags_json,
+            feed_origin: None,
+            source_id: None,
+        }
+    }
+
+    #[test]
+    fn zero_engagement_ugc_is_verdict_gated_not_merely_capped() {
+        let db = crate::test_utils::test_db();
+        let ctx = fastpath_ctx(&[("tauri", "rust")]);
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let tags = vec!["tauri".to_string()];
+
+        let silent = score_item(
+            &mastodon_release_input(&zero, &tags, None),
+            &ctx,
+            &db,
+            &fastpath_options(),
+            None,
+        );
+        let bd = silent.score_breakdown.as_ref().expect("breakdown");
+        assert_eq!(
+            bd.score_ceiling,
+            Some(0.50),
+            "a zero-engagement mastodon post must arm the community cap"
+        );
+        assert!(
+            silent.top_score <= 0.50 + 1e-6,
+            "cap held (got {})",
+            silent.top_score
+        );
+        assert!(
+            !silent.relevant,
+            "the capped post sits ABOVE the 0.40 line and was feed-relevant \
+             before v29 (score {})",
+            silent.top_score
+        );
+
+        let engaged = score_item(
+            &mastodon_release_input(&zero, &tags, Some(r#"{"favourites": 40, "reblogs": 12}"#)),
+            &ctx,
+            &db,
+            &fastpath_options(),
+            None,
+        );
+        let bd = engaged.score_breakdown.as_ref().expect("breakdown");
+        assert_ne!(
+            bd.score_ceiling,
+            Some(0.50),
+            "engagement must lift the cap, and with it the verdict gate"
+        );
+    }
+
+    fn advisory_input<'a>(
+        title: &'a str,
+        url: &'a str,
+        content: &'a str,
+        source_type: &'a str,
+        embedding: &'a [f32],
+        tags: &'a [String],
+    ) -> ScoringInput<'a> {
+        ScoringInput {
+            id: 9,
+            title,
+            url: Some(url),
+            content,
+            source_type,
+            embedding,
+            created_at: None,
+            detected_lang: "",
+            source_tags: tags,
+            tags_json: None,
+            feed_origin: None,
+            source_id: None,
+        }
+    }
+
+    fn rust_domain_profile() -> crate::domain_profile::DomainProfile {
+        use std::collections::HashSet;
+        crate::domain_profile::DomainProfile {
+            primary_stack: HashSet::from(["rust".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["rust".to_string(), "tokio".to_string()]),
+            dependency_names: HashSet::from(["tokio".to_string()]),
+            interest_topics: HashSet::from(["rust".to_string()]),
+            domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
+        }
+    }
+
+    #[test]
+    fn offstack_ungrounded_security_advisory_is_capped_below_the_line_and_not_relevant() {
+        let db = crate::test_utils::test_db();
+        let mut ctx = fastpath_ctx(&[("tokio", "rust")]);
+        ctx.domain_profile = rust_domain_profile();
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let tags: Vec<String> = Vec::new();
+        let input = advisory_input(
+            "[GHSA-xj6q-8x83-jv6g] axios: Prototype pollution auth subfields can inject headers",
+            "https://osv.dev/vulnerability/GHSA-xj6q-8x83-jv6g",
+            "Prototype pollution in axios auth handling allows header injection.\n\n\
+             Severity: CVSS_V3: 7.5\nAffected: axios (npm)\n\
+             Affected range: axios (npm): < 1.18.0\nFixed in: 1.18.0",
+            "osv",
+            &zero,
+            &tags,
+        );
+        let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
+        let bd = result.score_breakdown.as_ref().expect("breakdown");
+        assert!(!bd.strongly_grounded, "axios is not in this user's graph");
+        assert!(
+            bd.domain_relevance
+                < scoring_config::COMMODITY_CEILING_SECURITY_OFFSTACK_DOMAIN_RELEVANCE,
+            "axios is off a Rust developer's stack (domain {})",
+            bd.domain_relevance
+        );
+        let line = scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_OFFSTACK
+            + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR;
+        assert!(
+            line < get_relevance_threshold(),
+            "the DSL cap ({line}) must sit below the relevance threshold"
+        );
+        assert!(
+            result.top_score <= line + 1e-6,
+            "off-stack advisory must sit below the relevance line (got {}, line {line})",
+            result.top_score
+        );
+        assert!(
+            !result.relevant,
+            "off-stack advisories are Preemption awareness, never Signal feed items"
+        );
+    }
+
+    #[test]
+    fn on_stack_ungrounded_security_advisory_is_not_verdict_gated() {
+        // The same shape for a package IN the user's ecosystem: no grounding,
+        // but the stack says it is theirs — the awareness cap applies and the
+        // verdict is decided by score, never by the off-stack gate.
+        let db = crate::test_utils::test_db();
+        let mut ctx = fastpath_ctx(&[("tokio", "rust")]);
+        ctx.domain_profile = rust_domain_profile();
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let tags: Vec<String> = Vec::new();
+        let input = advisory_input(
+            "[GHSA-aaaa-bbbb-cccc] rustls: Critical vulnerability in popular Rust crate rustls",
+            "https://osv.dev/vulnerability/GHSA-aaaa-bbbb-cccc",
+            "A certificate validation flaw in rustls.\n\nSeverity: CVSS_V3: 9.1\nAffected: rustls (crates.io)",
+            "osv",
+            &zero,
+            &tags,
+        );
+        let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
+        let bd = result.score_breakdown.as_ref().expect("breakdown");
+        assert!(!bd.strongly_grounded, "rustls is not a dependency here");
+        assert!(
+            bd.domain_relevance
+                >= scoring_config::COMMODITY_CEILING_SECURITY_OFFSTACK_DOMAIN_RELEVANCE,
+            "a Rust crate is on a Rust developer's stack (domain {})",
+            bd.domain_relevance
+        );
+        let awareness = scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED
+            + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR;
+        assert!(
+            result.top_score <= awareness + 1e-6,
+            "awareness cap holds (got {}, cap {awareness})",
+            result.top_score
+        );
+        // Not categorically gated: the verdict follows the score rule.
+        let by_score = result.top_score >= get_relevance_threshold();
+        assert!(
+            result.relevant || !by_score,
+            "an on-stack advisory above the line must not be verdict-gated (score {})",
+            result.top_score
+        );
+    }
+
+    fn mirror_dep(installed: &str) -> DepMatch {
+        DepMatch {
+            package_name: "tokio".to_string(),
+            confidence: 0.9,
+            version_delta: dependencies::VersionDelta::Unknown,
+            is_dev: false,
+            is_direct: true,
+            version: Some(installed.to_string()),
+            ecosystem: "rust".to_string(),
+            corroborated: true,
+            raw_name: Some("tokio".to_string()),
+            project_paths: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn mirror_verdict_decides_from_structured_ranges() {
+        let db = crate::test_utils::test_db();
+        db.upsert_osv_advisory(
+            "GHSA-abcd-efgh-ijkl",
+            "task budget bypass",
+            None,
+            "tokio",
+            "crates.io",
+            Some(r#"[{"type":"SEMVER","events":[{"introduced":"1.0.0"},{"fixed":"1.53.2"}]}]"#),
+            Some("1.53.2"),
+            Some("CVSS_V3"),
+            Some(7.5),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("mirror row");
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let tags: Vec<String> = Vec::new();
+        // The cve source keys the item by CVE id and links the GHSA advisory —
+        // the id the mirror stores.
+        let input = advisory_input(
+            "[CVE-2026-90001] tokio: task budget bypass",
+            "https://github.com/advisories/GHSA-abcd-efgh-ijkl",
+            "",
+            "cve",
+            &zero,
+            &tags,
+        );
+        let id = Some("CVE-2026-90001");
+        assert_eq!(
+            mirror_version_verdict(&db, &input, &mirror_dep("1.50.0"), "1.50.0", id),
+            Some(true)
+        );
+        assert_eq!(
+            mirror_version_verdict(&db, &input, &mirror_dep("1.53.2"), "1.53.2", id),
+            Some(false),
+            "the first patched version is not affected"
+        );
+        // No mirror row for this advisory: None, so the text route decides.
+        let unknown = advisory_input(
+            "[CVE-2026-90002] tokio: something else",
+            "https://example.com/advisory",
+            "",
+            "cve",
+            &zero,
+            &tags,
+        );
+        assert_eq!(
+            mirror_version_verdict(
+                &db,
+                &unknown,
+                &mirror_dep("1.50.0"),
+                "1.50.0",
+                Some("CVE-2026-90002")
+            ),
+            None
+        );
+        // An ecosystem the mirror does not carry: None.
+        let mut elixir = mirror_dep("1.50.0");
+        elixir.ecosystem = "elixir".to_string();
+        assert_eq!(
+            mirror_version_verdict(&db, &input, &elixir, "1.50.0", id),
+            None
+        );
+    }
+
+    #[test]
+    fn github_row_for_a_stack_tool_is_recognised() {
+        let mut ctx = fastpath_ctx(&[]);
+        ctx.declared_tech = vec!["typescript".to_string(), "next".to_string()];
+        assert!(github_repo_row_is_stack_tool(
+            "microsoft/TypeScript (★110139 • TypeScript)",
+            &ctx
+        ));
+        assert!(github_repo_row_is_stack_tool(
+            "vercel/next.js (★130000 • JavaScript)",
+            &ctx
+        ));
+        assert!(
+            !github_repo_row_is_stack_tool("some-org/tiny-orm (★2000 • TypeScript)", &ctx),
+            "a library built ON the stack is how new tools surface"
+        );
+        assert!(
+            !github_repo_row_is_stack_tool("TypeScript 5.9 released", &ctx),
+            "only star-count repo rows"
+        );
+    }
+
+    #[test]
+    fn stack_tool_repo_row_is_capped_below_the_line() {
+        let db = crate::test_utils::test_db();
+        let mut ctx = fastpath_ctx(&[]);
+        ctx.declared_tech = vec!["typescript".to_string()];
+        ctx.domain_profile
+            .primary_stack
+            .insert("typescript".to_string());
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let tags: Vec<String> = Vec::new();
+        let input = advisory_input(
+            "microsoft/TypeScript (★110139 • TypeScript)",
+            "https://github.com/microsoft/TypeScript",
+            "TypeScript is a superset of JavaScript that compiles to clean JavaScript output.",
+            "github",
+            &zero,
+            &tags,
+        );
+        let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
+        let line = scoring_config::COMMODITY_CEILING_STACK_TOOL_LISTING
+            + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR;
+        assert!(line < get_relevance_threshold());
+        assert!(
+            result.top_score <= line + 1e-6,
+            "a repo row for the user's own tool sits below the line (got {})",
+            result.top_score
+        );
+        assert!(!result.relevant);
     }
 }

@@ -511,6 +511,25 @@ impl Database {
         Ok(count)
     }
 
+    /// A random sample of stored item embeddings with the live dimensionality —
+    /// the corpus the semantic ACE boost is calibrated against (v29,
+    /// `scoring::corpus_calibration`). Zero/degenerate blobs are excluded by
+    /// byte length here and by norm at the caller.
+    pub(crate) fn random_item_embeddings(&self, limit: usize) -> SqliteResult<Vec<Vec<f32>>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT embedding FROM source_items
+             WHERE embedding IS NOT NULL AND length(embedding) = ?1
+             ORDER BY RANDOM() LIMIT ?2",
+        )?;
+        let blob_len = (crate::EMBEDDING_DIMS * 4) as i64;
+        let rows = stmt.query_map(params![blob_len, limit as i64], |row| {
+            let blob: Vec<u8> = row.get(0)?;
+            Ok(blob_to_embedding(&blob))
+        })?;
+        rows.collect()
+    }
+
     /// Persist the batch-relative RANK layer for the set the analysis cycle's
     /// batch layer actually ranked: `rank_score` (the final `top_score`),
     /// `rank_factors` (compact JSON provenance of the factors that fired, NULL

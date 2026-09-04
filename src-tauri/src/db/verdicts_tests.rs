@@ -996,3 +996,174 @@ fn drain_codes_are_stable_strings() {
         "pending_retries_exhausted"
     );
 }
+
+// ============================================================================
+// v29 (2026-09-04): cross-cycle twins of a curated item
+// ============================================================================
+
+#[test]
+fn curated_twin_found_by_canonical_url_or_title() {
+    use crate::test_utils::insert_test_item_with_url;
+    let db = test_db();
+    let original = insert_test_item_with_url(
+        &db,
+        "hackernews",
+        "t1",
+        "https://bun.sh/blog/bun-v1.3?utm_source=x",
+        "Bun 1.3 released",
+        "body",
+    );
+    db.persist_feed_verdicts(&[(original, true, VerdictSource::Score)], 29)
+        .unwrap();
+
+    let by_url = insert_test_item_with_url(
+        &db,
+        "lobsters",
+        "t2",
+        "https://bun.sh/blog/bun-v1.3",
+        "Bun v1.3 is here",
+        "body",
+    );
+    assert_eq!(
+        db.find_curated_twin(
+            by_url,
+            Some("https://bun.sh/blog/bun-v1.3"),
+            "Bun v1.3 is here"
+        )
+        .unwrap(),
+        Some(original),
+        "tracking-parameter variants of one URL are one story"
+    );
+
+    let by_title = insert_test_item_with_url(
+        &db,
+        "reddit",
+        "t3",
+        "https://reddit.com/r/x/1",
+        "Bun 1.3 released",
+        "body",
+    );
+    assert_eq!(
+        db.find_curated_twin(
+            by_title,
+            Some("https://reddit.com/r/x/1"),
+            "Bun 1.3 released"
+        )
+        .unwrap(),
+        Some(original),
+        "a re-post under the same normalized title is one story"
+    );
+
+    let unrelated = insert_test_item_with_url(
+        &db,
+        "reddit",
+        "t4",
+        "https://reddit.com/r/x/2",
+        "Deno 3 roadmap",
+        "body",
+    );
+    assert_eq!(
+        db.find_curated_twin(
+            unrelated,
+            Some("https://reddit.com/r/x/2"),
+            "Deno 3 roadmap"
+        )
+        .unwrap(),
+        None
+    );
+    assert_eq!(
+        db.find_curated_twin(
+            original,
+            Some("https://bun.sh/blog/bun-v1.3?utm_source=x"),
+            "Bun 1.3 released"
+        )
+        .unwrap(),
+        None,
+        "an item is never its own twin"
+    );
+}
+
+#[test]
+fn rejected_items_are_not_twins() {
+    use crate::test_utils::insert_test_item_with_url;
+    let db = test_db();
+    let rejected = insert_test_item_with_url(
+        &db,
+        "hackernews",
+        "r1",
+        "https://bun.sh/blog/bun-v1.3",
+        "Bun 1.3 released",
+        "body",
+    );
+    db.persist_feed_verdicts(&[(rejected, false, VerdictSource::Score)], 29)
+        .unwrap();
+    let later = insert_test_item_with_url(
+        &db,
+        "lobsters",
+        "r2",
+        "https://bun.sh/blog/bun-v1.3",
+        "Bun 1.3 released",
+        "body",
+    );
+    assert_eq!(
+        db.find_curated_twin(
+            later,
+            Some("https://bun.sh/blog/bun-v1.3"),
+            "Bun 1.3 released"
+        )
+        .unwrap(),
+        None,
+        "only the CURATED set can hold the slot"
+    );
+}
+
+#[test]
+fn twin_rule_is_stable_under_a_full_redrain() {
+    use crate::test_utils::insert_test_item_with_url;
+    let db = test_db();
+    let first = insert_test_item_with_url(
+        &db,
+        "hackernews",
+        "d1",
+        "https://bun.sh/blog/bun-v1.3",
+        "Bun 1.3 released",
+        "body",
+    );
+    let second = insert_test_item_with_url(
+        &db,
+        "lobsters",
+        "d2",
+        "https://bun.sh/blog/bun-v1.3",
+        "Bun 1.3 released",
+        "body",
+    );
+    // Both curated by earlier cycles (the state a drain re-scores).
+    db.persist_feed_verdicts(
+        &[
+            (first, true, VerdictSource::Score),
+            (second, true, VerdictSource::Score),
+        ],
+        29,
+    )
+    .unwrap();
+    assert_eq!(
+        db.find_curated_twin(
+            first,
+            Some("https://bun.sh/blog/bun-v1.3"),
+            "Bun 1.3 released"
+        )
+        .unwrap(),
+        None,
+        "the first-ingested copy never yields to a later one"
+    );
+    assert_eq!(
+        db.find_curated_twin(
+            second,
+            Some("https://bun.sh/blog/bun-v1.3"),
+            "Bun 1.3 released"
+        )
+        .unwrap(),
+        Some(first),
+        "the later copy yields to the first"
+    );
+}

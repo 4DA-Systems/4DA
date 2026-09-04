@@ -220,6 +220,14 @@ pub enum VerdictReason {
     /// (attempts + age gates, see `llm_judge::drain`) and no real verdict ever
     /// resolved it. Recorded alongside `VerdictSource::FallbackExhausted`.
     PendingRetriesExhausted,
+    /// The item is a cross-cycle twin (same canonical URL or normalized title)
+    /// of an item ALREADY curated. Dedup is batch-scoped and differential
+    /// cycles score 250–300 items, so the same story re-fetched under a new
+    /// `source_items` id in a later cycle earned its own standing verdict —
+    /// "Bun 1.4 Rust rewrite is not looking good" was feed-relevant TEN times
+    /// across four cycles (2026-09-04 audit, M2). Written at the persist
+    /// boundary; the original keeps its verdict.
+    DuplicateCurated,
 }
 
 impl VerdictReason {
@@ -231,6 +239,7 @@ impl VerdictReason {
             Self::StaleVersion => "stale_version",
             Self::LlmReject => "llm_reject",
             Self::PendingRetriesExhausted => "pending_retries_exhausted",
+            Self::DuplicateCurated => "duplicate_curated",
         }
     }
 }
@@ -418,6 +427,70 @@ impl Database {
             );
         }
         Ok(count)
+    }
+
+    /// The id of an ALREADY-curated item that is the same story as
+    /// (`url`, `title`) — same canonical URL (tracking params stripped) or
+    /// same normalized title — excluding `id` itself. `None` when the story
+    /// is new to the curated set.
+    ///
+    /// Candidates are pre-filtered in SQL on the raw URL prefix / exact
+    /// lowercase title so the query stays cheap, then the exact canonical
+    /// comparison happens in Rust with the same normalizers the batch dedup
+    /// uses (`scoring::normalize_result_url` / `normalize_result_title`) — one
+    /// definition of "same story" for both the batch and the persist boundary.
+    ///
+    /// Only a twin ingested EARLIER (lower id) can hold the slot. A full
+    /// re-drain re-scores every curated twin pair in one cycle, and the
+    /// pre-pass reads the corpus before any verdict is written — with a
+    /// symmetric rule both twins would find each other and BOTH be demoted,
+    /// erasing the story from the feed. Anchoring on ingest order makes the
+    /// outcome stable across drains: the first copy keeps the slot, every
+    /// later copy yields to it.
+    pub fn find_curated_twin(
+        &self,
+        id: i64,
+        url: Option<&str>,
+        title: &str,
+    ) -> SqliteResult<Option<i64>> {
+        let url_key = url
+            .map(crate::scoring::normalize_result_url)
+            .unwrap_or_default();
+        let title_key = crate::scoring::normalize_result_title(title);
+        if url_key.is_empty() && title_key.is_empty() {
+            return Ok(None);
+        }
+        let url_prefix = url
+            .map(|u| u.split(['?', '#']).next().unwrap_or(u).to_string())
+            .unwrap_or_default();
+        let conn = self.read_conn();
+        let mut stmt = conn.prepare_cached(
+            "SELECT id, url, title FROM source_items
+             WHERE feed_relevant = 1 AND id < ?1
+               AND ((?2 <> '' AND url LIKE ?2 || '%') OR LOWER(title) = LOWER(?3))
+             ORDER BY id ASC
+             LIMIT 25",
+        )?;
+        let rows = stmt.query_map(params![id, url_prefix, title], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (other_id, other_url, other_title) = row?;
+            let same_url = !url_key.is_empty()
+                && other_url
+                    .as_deref()
+                    .is_some_and(|u| crate::scoring::normalize_result_url(u) == url_key);
+            let same_title = !title_key.is_empty()
+                && crate::scoring::normalize_result_title(&other_title) == title_key;
+            if same_url || same_title {
+                return Ok(Some(other_id));
+            }
+        }
+        Ok(None)
     }
 
     /// How many curated items hold a stale, score-derived verdict.

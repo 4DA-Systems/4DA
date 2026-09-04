@@ -15,6 +15,7 @@ pub(crate) mod calibration_monitor;
 mod composition;
 mod context;
 pub(crate) mod context_cache;
+pub(crate) mod corpus_calibration;
 pub(crate) mod cvss;
 mod dedup;
 #[cfg(test)]
@@ -63,6 +64,7 @@ pub(crate) use context::{
     build_scoring_context, build_scoring_context_tagged, build_scoring_context_with_timeout,
     invalidate_scoring_context_cache, is_low_quality_topic,
 };
+pub(crate) use dedup::normalize_result_title;
 pub(crate) use dedup::{
     apply_domain_diversity, apply_source_share_diversity, apply_source_topic_diversity,
     dedup_results, fuzzy_dedup_results, inject_serendipity_candidates, normalize_result_url,
@@ -389,12 +391,15 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 //      user_dependencies (0 -> 135 of 143 packages), so the SameMajor x1.2,
 //      NewerMajor x1.1 and OlderMajor x0.5 multipliers fire for the FIRST time
 //      in production. Live effect: title-only dep confirmations 105 -> 97.
-//   2. The semantic ACE boost takes a weighted mean of the TOP-3 closest stack
-//      elements instead of averaging over every topic and tech. Ablation proof:
-//      under the old average one unrelated topic cut an on-stack item from
-//      0.280 to 0.124.
-//   3. The Library tech category is admitted (tech axis 6 -> 13 entries), which
-//      is only safe BECAUSE of (2) — it adds seven terms to what was an average.
+//   2. [NEVER LANDED — corrected 2026-09-04] This note described a top-3 semantic
+//      ACE boost (commit 9396b152) that was REVERTED on the PR branch (f758f314)
+//      before the #538 squash; neither commit is an ancestor of main and
+//      semantic/boost.rs kept averaging over every topic and tech until v29.
+//      Live consequence: 0 of 20,014 breakdowns ever reached the 0.18 semantic
+//      threshold. The top-k boost ships in v29 with a corpus-derived pivot.
+//   3. [NEVER LANDED — same revert] The Library tech category was never admitted
+//      to the ACE tech axis (ace_context.rs still filters Language|Framework|
+//      Database).
 //   4. Topic confidence decays on a 14-day half-life inside a 30-day window,
 //      replacing a hard 7-day cliff that had evicted tokio while keeping a
 //      keyword minted from a test fixture. Admitted topics 22 -> 30.
@@ -450,7 +455,51 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // confirmation gate for ANY item — the SELECTED SET itself changes, so no
 // row predicate can provably bound the reach. The whole corpus drains
 // (measured cost since the v27 arc: ~4 minutes at 59k items).
-pub(crate) const PIPELINE_VERSION: i32 = 28;
+// v29 (2026-09-04): the adversarial-audit remediation (see
+// .claude/plans/scoring-pipeline-adversarial-investigation-2026-09-04.md and
+// AD-037). Scoring-semantics changes landing under this bump:
+//   1. The context axis is calibrated on COSINE against the live corpus
+//      (corpus_calibration.rs). It had fed 1/(1+L2) into a cosine sigmoid and
+//      confirmed on 87.7% of the corpus / 100% of the feed — the 2-signal gate
+//      was a 1-signal gate. 86% of the corpus (60,684 items) carried scores
+//      from one drain hour in that state.
+//   2. The semantic ACE boost is the corpus-calibrated TOP-3 mean (the v26
+//      note's fix that never landed); 0 of 20,014 items had reached its 0.18
+//      threshold.
+//   3. [MEASURED AND REJECTED] "an active-topic overlap that is also an
+//      interest topic counts once" — one title token confirmed interest AND
+//      ace on 84% of feed items — collapsed the synthetic persona guards
+//      (rust_systems recall 0.625 -> 0.100: every persona's interests ARE its
+//      active topics, so the ACE axis could never count). The junk that pair
+//      carried is handled by items 5, 7 and 8 instead; the gate is unchanged.
+//   4. Domain profile: detected tech read with the STORED lowercase category
+//      (the capitalized IN-list had matched zero rows since it was written),
+//      at confidence >= 0.5; detected Languages define the primary stack
+//      regardless of decay; the off-stack suppressor never fires on a
+//      technology the user declared as an interest; dependency names come
+//      from the git-scoped set.
+//      Live cause of "rust scored off-stack for 86% of the corpus".
+//   5. Verdict gates: zero-engagement UGC (the 0.50 cap) and OFF-STACK
+//      ungrounded security advisories (new cap 0.35; on-stack ungrounded ones
+//      keep the 0.44 awareness cap) are categorically NOT feed-relevant, the
+//      same shape as v18's registry gate. 128 feed items sat at exactly 0.50;
+//      20 of 24 feed security items matched no dependency.
+//   6. Security version verdict: the OSV mirror's structured ranges decide
+//      `is_version_affected` (it was NULL on 746/746 breakdowns); Critical and
+//      "Affects You" require a positive verdict; the cve writer now carries
+//      ranges + fixed version; the `CVSS:` line is parsed.
+//   7. Commodity classifiers: question/tutorial openers; title-only items must
+//      earn the sophistication bypass from the title alone; version-conflict
+//      requires a real version literal; novelty's release boost defers to the
+//      content classifier; GitHub repo rows are Discussion, not release notes,
+//      and a repo row that IS a primary-stack tool is capped below the line.
+//   8. Trend boost excludes a batch's dominant topics; the cross-encoder is
+//      bounded to +/-0.15 around evidence; corroboration needs distinct
+//      sources and a non-language topic.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS: items 1-4 change the
+// confirmation gate's inputs for EVERY item. The whole corpus drains.
+pub(crate) const PIPELINE_VERSION: i32 = 29;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///
@@ -564,4 +613,8 @@ pub(crate) struct ScoringContext {
     pub user_role: Option<String>,
     /// User's experience level (learning, building, leading, architecting)
     pub experience_level: Option<String>,
+    /// Corpus-relative calibration for the context and semantic axes (v29).
+    /// Fitted once per context build from live samples; `Default` is the
+    /// per-model fallback the benchmark harnesses and cold starts use.
+    pub corpus_calibration: corpus_calibration::CorpusCalibration,
 }

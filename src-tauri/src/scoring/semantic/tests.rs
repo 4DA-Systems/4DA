@@ -5,6 +5,12 @@ use super::*;
 use crate::test_utils::seed_embedding;
 use std::collections::HashMap;
 
+/// The pre-v29 boost shape `(sim - 0.5) * 1.0`, so the historical assertions
+/// below keep their arithmetic while the production pivot comes from the corpus.
+fn legacy_calibration() -> super::super::corpus_calibration::SemanticCalibration {
+    super::super::corpus_calibration::SemanticCalibration::default()
+}
+
 /// Helper: build a minimal ACEContext with active topics and confidence
 fn ace_ctx_with_topics(topics: &[(&str, f32)]) -> super::super::ace_context::ACEContext {
     let mut ctx = super::super::ace_context::ACEContext::default();
@@ -21,7 +27,12 @@ fn test_empty_topic_embeddings_returns_none() {
     let ace_ctx = ace_ctx_with_topics(&[("rust", 0.9)]);
     let topic_embeddings: HashMap<String, Vec<f32>> = HashMap::new();
 
-    let result = compute_semantic_ace_boost(&item_emb, &ace_ctx, &topic_embeddings);
+    let result = compute_semantic_ace_boost(
+        &item_emb,
+        &ace_ctx,
+        &topic_embeddings,
+        &legacy_calibration(),
+    );
     assert!(
         result.is_none(),
         "Empty topic embeddings should return None, got {:?}",
@@ -36,7 +47,8 @@ fn test_identical_embedding_produces_max_boost() {
     let mut topic_embeddings = HashMap::new();
     topic_embeddings.insert("rust".to_string(), emb.clone());
 
-    let result = compute_semantic_ace_boost(&emb, &ace_ctx, &topic_embeddings);
+    let result =
+        compute_semantic_ace_boost(&emb, &ace_ctx, &topic_embeddings, &legacy_calibration());
     assert!(
         result.is_some(),
         "Identical embeddings should produce a result"
@@ -69,7 +81,8 @@ fn test_orthogonal_embeddings_produce_zero_boost() {
     let mut topic_embeddings = HashMap::new();
     topic_embeddings.insert("topic_b".to_string(), emb_b);
 
-    let result = compute_semantic_ace_boost(&emb_a, &ace_ctx, &topic_embeddings);
+    let result =
+        compute_semantic_ace_boost(&emb_a, &ace_ctx, &topic_embeddings, &legacy_calibration());
     assert!(
         result.is_some(),
         "Should return Some for orthogonal vectors"
@@ -96,7 +109,12 @@ fn test_zero_norm_embedding_handled_gracefully() {
     let mut topic_embeddings = HashMap::new();
     topic_embeddings.insert("rust".to_string(), seed_embedding("rust"));
 
-    let result = compute_semantic_ace_boost(&zero_emb, &ace_ctx, &topic_embeddings);
+    let result = compute_semantic_ace_boost(
+        &zero_emb,
+        &ace_ctx,
+        &topic_embeddings,
+        &legacy_calibration(),
+    );
     // Zero-norm item embedding returns None (checked at line 23-25)
     assert!(
         result.is_none(),
