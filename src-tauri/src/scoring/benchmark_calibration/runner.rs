@@ -155,16 +155,8 @@ mod dump {
     #[ignore = "diagnostic dump: run explicitly with --ignored --nocapture"]
     fn dump_scenario_scores_real_embeddings() {
         let scenarios = load_scenarios();
-        let (item_emb, topic_emb) =
-            match super::super::embeddings::generate_all_embeddings(&scenarios) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!(
-                    "SKIP dump_scenario_scores_real_embeddings: embedding model unavailable ({e})"
-                );
-                    return;
-                }
-            };
+        let (item_emb, topic_emb) = super::super::fixtures::load_fixture_embeddings(&scenarios)
+            .unwrap_or_else(|e| panic!("{e}"));
         let db = crate::scoring::benchmark::bench_db();
         let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
         for (i, scenario) in scenarios.iter().enumerate() {
