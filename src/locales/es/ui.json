@@ -2485,5 +2485,8 @@
   "settings.context.addDirectory": "Agregar directorio",
   "settings.personalization.addSuggestion": "Agregar {{name}} a tus intereses",
   "settings.personalization.dismissSuggestion": "Descartar {{name}}",
-  "feedback.notFullySaved": "Feedback no se guardó completamente ({{commands}} fallaron)"
+  "feedback.notFullySaved": "Feedback no se guardó completamente ({{commands}} fallaron)",
+  "header.unjudgedBadge": "unjudged",
+  "header.unjudgedTooltip": "Fast pass, LLM judge not applied yet",
+  "missed.feedbackLiveness": "No ratings or clicks in 14 days. Scores are not calibrated to you yet."
 }

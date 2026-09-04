@@ -23,7 +23,9 @@ use super::analysis_cycle::{
     merge_freshness_refresh_batch, persist_cycle_results, CycleResults, RankProvenance,
 };
 use super::analysis_deep_scan::run_multi_source_analysis_impl;
-use super::analysis_fast_path::{elapsed_ms, spawn_post_foreground_cache_fill, CachedAnalysisRun};
+use super::analysis_fast_path::{
+    elapsed_ms, judged_for_run, spawn_post_foreground_cache_fill, CachedAnalysisRun, JudgedCycle,
+};
 use super::{is_aborted, SIGNAL_CLASSIFIER};
 
 // ============================================================================
@@ -70,13 +72,15 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
         guard.running = false;
 
         match result {
-            Ok(Ok(results)) => {
+            Ok(Ok(JudgedCycle { cycle, judged })) => {
+                let results = cycle.results;
                 // Store results INTO state BEFORE marking completed.
                 // This ensures the frontend can always read results from state
                 // even if the event emission below fails or races.
                 let near_misses = crate::types::extract_near_misses(&results);
                 guard.results = Some(results.clone());
                 guard.near_misses = near_misses;
+                guard.judged = judged;
                 // A completion supersedes any stale watchdog verdict: if
                 // get_analysis_status auto-reset this run as "timed out"
                 // while it was still (slowly) progressing, the error must
@@ -94,6 +98,9 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 // all curate the corpus identically. Do NOT re-add a per-wrapper
                 // persist here — that split is the regression this fix removed.
 
+                // `judged` goes out BEFORE the results so the header never
+                // renders a fresh result set against the previous run's flag.
+                emit_judged(&app, judged);
                 if let Err(e) = app.emit("analysis-complete", &results) {
                     tracing::warn!("Failed to emit 'analysis-complete': {e}");
                 }
@@ -222,6 +229,7 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                     let state = get_analysis_state();
                     let mut guard = state.lock();
                     guard.results = Some(results);
+                    guard.judged = judged;
                 }
             }
             Ok(Err(e)) => {
@@ -250,12 +258,17 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
 }
 
 /// Uses differential analysis when previous results exist (only scores new items)
-pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<SourceRelevance>> {
-    Ok(
-        analyze_cached_content_inner(app, CachedAnalysisRun::foreground_fast())
-            .await?
-            .results,
-    )
+async fn analyze_cached_content_impl(app: &AppHandle) -> Result<JudgedCycle> {
+    analyze_cached_content_inner(app, CachedAnalysisRun::foreground_fast()).await
+}
+
+/// Tell the frontend whether the shared result set is LLM-judged. Emitted at
+/// every site that writes `AnalysisState::judged`, so the header badge tracks
+/// the backend's flag instead of guessing from the run type.
+fn emit_judged(app: &AppHandle, judged: bool) {
+    if let Err(e) = app.emit("analysis-judged", judged) {
+        tracing::warn!("Failed to emit 'analysis-judged': {e}");
+    }
 }
 
 /// Cache-first analysis with control over user-facing progress emission.
@@ -265,7 +278,8 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
 /// score, persist) still runs from the caller's orchestration path; only the
 /// intermediate `emit_progress`/`emit_narration` surface events are suppressed.
 pub(crate) async fn analyze_cached_content_silent(app: &AppHandle) -> Result<CycleResults> {
-    let cycle = analyze_cached_content_inner(app, CachedAnalysisRun::background_deep()).await?;
+    let JudgedCycle { cycle, judged } =
+        analyze_cached_content_inner(app, CachedAnalysisRun::background_deep()).await?;
     // Item 9 state-restore fix: the scheduled path used to TAKE state.results
     // for the differential merge and never put them back, so the next run's
     // merge base (and the frontend's get_analysis_status hydration) was empty.
@@ -278,8 +292,11 @@ pub(crate) async fn analyze_cached_content_silent(app: &AppHandle) -> Result<Cyc
         if !guard.running {
             guard.near_misses = crate::types::extract_near_misses(&cycle.results);
             guard.results = Some(cycle.results.clone());
+            guard.judged = judged;
             guard.last_completed_at =
                 Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
+            drop(guard);
+            emit_judged(app, judged);
         }
     }
     Ok(cycle)
@@ -299,7 +316,7 @@ pub(crate) async fn analyze_cached_content_silent(app: &AppHandle) -> Result<Cyc
 async fn analyze_cached_content_inner(
     app: &AppHandle,
     run: CachedAnalysisRun,
-) -> Result<CycleResults> {
+) -> Result<JudgedCycle> {
     let drain_backlog = run.drain_stale_backlog;
     // Warm the context-match cache BEFORE the cycle scores anything: score_item
     // reads that cache and never writes it, so an unwarmed cycle pays the full
@@ -312,7 +329,16 @@ async fn analyze_cached_content_inner(
             );
         }
     }
+    // Judged = this run asked for a rerank AND one actually applied while it
+    // ran. Diffed around the cycle because the full-pass path drops the
+    // `RerankOutcome` inside `score_items_full`; see `judged_for_run`.
+    let passes_before = analysis_rerank::applied_rerank_passes();
     let cycle = analyze_cached_content_inner_impl(app, run).await?;
+    let judged = judged_for_run(
+        run.llm_rerank,
+        passes_before,
+        analysis_rerank::applied_rerank_passes(),
+    );
     if let Ok(db) = get_database() {
         // `cycle.evaluated` is always exactly what the scorer judged THIS run —
         // the pre-dedup set on a full pass, the new-items set on a differential
@@ -351,7 +377,7 @@ async fn analyze_cached_content_inner(
     if drain_backlog {
         crate::analysis_backfill::maintain_scoring_epoch().await;
     }
-    Ok(cycle)
+    Ok(JudgedCycle { cycle, judged })
 }
 
 async fn analyze_cached_content_inner_impl(

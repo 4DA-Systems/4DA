@@ -2439,5 +2439,8 @@
   "settings.context.addDirectory": "Dizin ekle",
   "settings.personalization.addSuggestion": "{{name}} öğesini ilgi alanlarınıza ekle",
   "settings.personalization.dismissSuggestion": "{{name}} öğesini reddet",
-  "feedback.notFullySaved": "Geri bildirim tam olarak kaydedilmedi ({{commands}} başarısız oldu)"
+  "feedback.notFullySaved": "Geri bildirim tam olarak kaydedilmedi ({{commands}} başarısız oldu)",
+  "header.unjudgedBadge": "unjudged",
+  "header.unjudgedTooltip": "Fast pass, LLM judge not applied yet",
+  "missed.feedbackLiveness": "No ratings or clicks in 14 days. Scores are not calibrated to you yet."
 }

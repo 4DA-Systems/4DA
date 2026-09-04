@@ -6,6 +6,21 @@ export function formatScore(score: number): string {
   return `${Math.round(score * 100)}%`;
 }
 
+/**
+ * THE definition of "signal" for every user-facing count: the backend called
+ * it relevant AND no exclusion demoted it — the same predicate the analysis
+ * boundary uses for its own `relevant_count` (analysis_status.rs).
+ *
+ * One predicate, on purpose. Until 2026-09-04 the header chip counted
+ * `r.relevant` while "What you would have missed" counted `top_score >= 0.35`,
+ * so the same screen said "69 relevant" and "101 signal surfaced" at once —
+ * two definitions of the one word, and the larger one was a score threshold
+ * the pipeline never applied. Every surface that says "signal" reads this.
+ */
+export function isSurfacedSignal(item: Pick<SourceRelevance, 'relevant' | 'excluded'>): boolean {
+  return item.relevant && item.excluded !== true;
+}
+
 export interface RelevancePresentation {
   labelKey: string;
   colorClass: string;

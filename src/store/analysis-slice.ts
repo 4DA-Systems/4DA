@@ -16,6 +16,7 @@ const initialAppState: AppState = {
   progressMessage: '',
   progressStage: '',
   lastAnalyzedAt: null,
+  judged: false,
 };
 
 export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> = (set, get) => ({

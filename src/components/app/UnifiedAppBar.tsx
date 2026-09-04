@@ -26,6 +26,13 @@ interface UnifiedAppBarProps {
   /** True when the license probe failed and never succeeded — badge shows "?" not "FREE". */
   licenseUnverified?: boolean;
   summaryBadges: { relevantCount: number; topCount: number; total: number } | null;
+  /**
+   * Backend truth (`AnalysisState.judged`): did an LLM judge pass apply to the
+   * results the chip is counting? The fresh-launch run is a fast pass, so this
+   * is false until a deep run lands — and the chip says so, because a
+   * pipeline-only "69 relevant" must not read as a judged 69.
+   */
+  judged: boolean;
   aiBriefing: { error: string | null };
   onAnalyze: () => void;
   onOpenSettings: () => void;
@@ -45,6 +52,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
   tier,
   licenseUnverified,
   summaryBadges,
+  judged,
   aiBriefing,
   onAnalyze,
   onOpenSettings,
@@ -132,6 +140,19 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
               )}
               <span className="text-green-400">{summaryBadges.relevantCount}</span>
               <span className="text-text-muted">{t('header.relevantBadge', 'relevant')}</span>
+              {/* Unjudged: the count is pipeline scores only — the fast path
+                  skips the LLM rerank + reconciler, and the badge is the only
+                  thing telling the user this 69 is not the judged 69. */}
+              {!judged && (
+                <span
+                  data-testid="unjudged-badge"
+                  className="ms-1 px-1 py-px rounded bg-amber-500/15 text-amber-300 uppercase tracking-wider"
+                  title={t('header.unjudgedTooltip', 'Fast pass, LLM judge not applied yet')}
+                  aria-label={t('header.unjudgedTooltip', 'Fast pass, LLM judge not applied yet')}
+                >
+                  {t('header.unjudgedBadge', 'unjudged')}
+                </span>
+              )}
             </span>
           )}
 

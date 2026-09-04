@@ -14,6 +14,13 @@ export interface SourceRelevance {
   top_score: number;
   matches: RelevanceMatch[];
   relevant: boolean;
+  /**
+   * Set by the backend when an exclusion (Brief verdict, user rule) demoted the
+   * item; `relevant` can still be true on such a row. Always serialized by
+   * Rust (`#[serde(default)]`), optional here only so fixtures stay small —
+   * read it through `isSurfacedSignal`, never directly.
+   */
+  excluded?: boolean;
   explanation?: string;
   source_type?: string;
   confidence?: number;

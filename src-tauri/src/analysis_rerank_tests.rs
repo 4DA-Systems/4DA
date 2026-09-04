@@ -2,7 +2,8 @@
 //! Circuit-breaker, budget-pacing and skip-reporting tests for `analysis_rerank`.
 
 use super::{
-    budget_allowance_by_now, rerank_pass_is_uniform, secs_into_utc_day, RerankOutcome, RerankSkip,
+    applied_rerank_passes, budget_allowance_by_now, note_rerank_applied, rerank_pass_is_uniform,
+    secs_into_utc_day, RerankOutcome, RerankSkip,
 };
 use crate::llm::RelevanceJudgment;
 
@@ -165,4 +166,20 @@ fn a_skipped_outcome_is_never_a_reranked_one() {
     let done = RerankOutcome::Reranked { judged: 48 };
     assert_ne!(skipped, done);
     assert!(matches!(done, RerankOutcome::Reranked { judged } if judged == 48));
+}
+
+#[test]
+fn applied_pass_counter_only_moves_when_a_pass_applies() {
+    // The counter is what lets the analysis boundary stamp `judged` without a
+    // return value threaded through `score_items_full`. It must advance by
+    // exactly one per applied pass and never for a constructed Skipped outcome
+    // (skips return early, before `note_rerank_applied`).
+    let before = applied_rerank_passes();
+    let _skipped = RerankOutcome::Skipped(RerankSkip::NoCandidates);
+    assert_eq!(applied_rerank_passes(), before, "a skip must not count");
+    note_rerank_applied();
+    assert!(
+        applied_rerank_passes() >= before + 1,
+        "an applied pass must advance the counter (>= because tests run in parallel)"
+    );
 }

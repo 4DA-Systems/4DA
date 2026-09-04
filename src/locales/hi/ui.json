@@ -2481,5 +2481,8 @@
   "settings.context.addDirectory": "निर्देशिका जोड़ें",
   "settings.personalization.addSuggestion": "{{name}} को अपनी रुचियों में जोड़ें",
   "settings.personalization.dismissSuggestion": "{{name}} को खारिज करें",
-  "feedback.notFullySaved": "प्रतिक्रिया पूरी तरह सहेजी नहीं गई ({{commands}} विफल)"
+  "feedback.notFullySaved": "प्रतिक्रिया पूरी तरह सहेजी नहीं गई ({{commands}} विफल)",
+  "header.unjudgedBadge": "unjudged",
+  "header.unjudgedTooltip": "Fast pass, LLM judge not applied yet",
+  "missed.feedbackLiveness": "No ratings or clicks in 14 days. Scores are not calibrated to you yet."
 }

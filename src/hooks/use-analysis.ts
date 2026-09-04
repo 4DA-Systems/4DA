@@ -9,6 +9,7 @@ import { safeListen, type UnlistenFn } from '../lib/tauri-events';
 import type { NarrationEvent } from './analysis-utils';
 import {
   handleAnalysisProgress,
+  handleAnalysisJudged,
   handleAnalysisComplete,
   handleAnalysisError,
   handleSourceError,
@@ -47,6 +48,7 @@ export function useAnalysis(
       loading: s.appState.loading,
       analysisComplete: s.appState.analysisComplete,
       lastAnalyzedAt: s.appState.lastAnalyzedAt,
+      judged: s.appState.judged,
     }))
   );
   const expandedItem = useAppStore(s => s.expandedItem);
@@ -71,6 +73,7 @@ export function useAnalysis(
     const setupListeners = async () => {
       const results = await Promise.all([
         safeListen<AnalysisProgress>('analysis-progress', handleAnalysisProgress),
+        safeListen<boolean>('analysis-judged', handleAnalysisJudged),
         safeListen<SourceRelevance[]>('analysis-complete', handleAnalysisComplete),
         safeListen<string>('analysis-error', handleAnalysisError),
         safeListen<{ source: string; error: string; retry_count: number }>('source-error', handleSourceError),

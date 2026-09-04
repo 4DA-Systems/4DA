@@ -2430,5 +2430,8 @@
   "settings.context.addDirectory": "إضافة مجلد",
   "settings.personalization.addSuggestion": "أضف {{name}} إلى اهتماماتك",
   "settings.personalization.dismissSuggestion": "تجاهل {{name}}",
-  "feedback.notFullySaved": "لم يتم حفظ الملاحظات بالكامل ({{commands}} فشل)"
+  "feedback.notFullySaved": "لم يتم حفظ الملاحظات بالكامل ({{commands}} فشل)",
+  "header.unjudgedBadge": "unjudged",
+  "header.unjudgedTooltip": "Fast pass, LLM judge not applied yet",
+  "missed.feedbackLiveness": "No ratings or clicks in 14 days. Scores are not calibrated to you yet."
 }

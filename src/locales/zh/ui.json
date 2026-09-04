@@ -2419,5 +2419,8 @@
   "settings.standingQueries.inputLabel": "新常设查询",
   "settings.standingQueries.inputPlaceholder": "例如：sqlite vector search performance",
   "settings.standingQueries.create": "创建",
-  "settings.standingQueries.creating": "创建中…"
+  "settings.standingQueries.creating": "创建中…",
+  "header.unjudgedBadge": "unjudged",
+  "header.unjudgedTooltip": "Fast pass, LLM judge not applied yet",
+  "missed.feedbackLiveness": "No ratings or clicks in 14 days. Scores are not calibrated to you yet."
 }
