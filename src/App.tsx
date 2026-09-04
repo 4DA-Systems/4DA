@@ -58,6 +58,7 @@ import { useDirection } from './i18n/rtl';
 import { useAppListeners } from './hooks/use-app-listeners';
 import { ALL_SOURCE_IDS, loadSourceMeta } from './config/sources';
 import { runWhenIdle } from './lib/defer';
+import { isSurfacedSignal } from './utils/score';
 
 function App() {
   const { t } = useTranslation();
@@ -177,7 +178,8 @@ function App() {
     if (!state.analysisComplete || state.loading) return null;
     let relevantCount = 0, topCount = 0;
     for (const r of state.relevanceResults) {
-      if (r.relevant) relevantCount++;
+      // The one definition of "signal", shared with the Signal tab's card.
+      if (isSurfacedSignal(r)) relevantCount++;
       if (r.top_score >= 0.6) topCount++;
     }
     return { relevantCount, topCount, total: state.relevanceResults.length };
@@ -338,6 +340,7 @@ function App() {
           tier={badgeTier}
           licenseUnverified={licenseUnverified}
           summaryBadges={summaryBadges}
+          judged={state.judged}
           aiBriefing={aiBriefing}
           onAnalyze={handleAnalyze}
           onOpenSettings={() => setShowSettings(true)}

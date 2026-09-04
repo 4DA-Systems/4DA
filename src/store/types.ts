@@ -101,6 +101,15 @@ export interface AppState {
   progressMessage: string;
   progressStage: string;
   lastAnalyzedAt: Date | null;
+  /**
+   * Mirrors the backend's `AnalysisState.judged`: whether `relevanceResults`
+   * carry an applied LLM judge pass. The fresh-launch foreground run is a fast
+   * pass (pipeline scores only), so this is `false` until a deep run replaces
+   * the set — and the header badges that as "unjudged" rather than letting a
+   * fast pass read like a judged one. Hydrated from `get_analysis_status` and
+   * the `analysis-judged` event; never inferred frontend-side.
+   */
+  judged: boolean;
 }
 
 // ============================================================================

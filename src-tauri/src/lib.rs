@@ -268,6 +268,7 @@ mod evidence;
 mod exit_guard;
 mod external;
 pub mod extractors;
+mod feedback_liveness;
 mod free_briefing;
 /// Intelligence Reconciliation Phase 7 — Cold Start Layer 1.
 mod git_decision_miner;
@@ -840,6 +841,7 @@ pub fn run() {
             analysis::get_analysis_status,
             analysis::get_scoring_stats,
             analysis::cancel_analysis,
+            feedback_liveness::get_feedback_liveness,
             triage_audit_commands::measure_triage_recall,
             triage_audit_commands::get_scoring_coverage,
             triage_audit_commands::get_calibration_snapshot,

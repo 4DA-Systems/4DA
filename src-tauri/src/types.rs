@@ -500,6 +500,17 @@ pub struct AnalysisState {
     /// Top items that fell just below the relevance threshold (for zero-result guidance)
     #[serde(default)]
     pub near_misses: Option<Vec<SourceRelevance>>,
+    /// Whether `results` carry an applied LLM judge pass.
+    ///
+    /// The fresh-launch run is the foreground fast path (`llm_rerank: false`),
+    /// so what the Signal tab shows first is pipeline scores only — no LLM
+    /// rerank, no reconciler. `false` there is the honest state, and the header
+    /// badges it as "unjudged" rather than letting a fast pass read like a
+    /// judged one. Set `true` only when the run asked for a rerank AND
+    /// `analysis_rerank::apply_llm_reranking` actually returned `Reranked`
+    /// (every `Skipped` reason — budget, tier, no candidates — stays `false`).
+    #[serde(default)]
+    pub judged: bool,
 }
 
 /// Maximum analysis duration in seconds before auto-timeout.

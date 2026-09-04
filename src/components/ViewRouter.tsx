@@ -13,6 +13,7 @@ const BriefingView = lazy(() => import('./BriefingView').then(m => ({ default: m
 const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m.SignalsPanel })));
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
 const WhatYouWouldHaveMissed = lazy(() => import('./WhatYouWouldHaveMissed').then(m => ({ default: m.WhatYouWouldHaveMissed })));
+const FeedbackLivenessBanner = lazy(() => import('./FeedbackLivenessBanner').then(m => ({ default: m.FeedbackLivenessBanner })));
 const PreemptionView = lazy(() => import('./preemption/PreemptionView'));
 const BlindSpotsView = lazy(() => import('./blindspots/BlindSpotsView'));
 const ContentGraphView = lazy(() => import('./signals/ContentGraphView'));
@@ -111,6 +112,7 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
               <>
                 {analysisComplete && (
                   <Suspense fallback={null}>
+                    <FeedbackLivenessBanner />
                     <WhatYouWouldHaveMissed />
                     <SignalsPanel results={relevanceResults} />
                     <KnowledgeGapsPanel />

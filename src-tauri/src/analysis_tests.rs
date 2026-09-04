@@ -57,6 +57,7 @@ mod tests {
             near_misses: None,
             started_at: None,
             last_completed_at: None,
+            judged: false,
         };
         assert!(!state.running);
         assert!(!state.completed);
@@ -65,6 +66,7 @@ mod tests {
         assert!(state.near_misses.is_none());
         assert!(state.started_at.is_none());
         assert!(state.last_completed_at.is_none());
+        assert!(!state.judged);
     }
 
     #[test]
@@ -78,6 +80,7 @@ mod tests {
             near_misses: None,
             started_at: Some(now),
             last_completed_at: None,
+            judged: false,
         };
         assert!(state.running);
         assert!(state.started_at.is_some());
@@ -94,6 +97,7 @@ mod tests {
             near_misses: None,
             started_at: Some(1700000000),
             last_completed_at: Some("2025-01-01 00:00:00".to_string()),
+            judged: true,
         };
 
         let json = serde_json::to_string(&state).expect("serialize");
@@ -104,6 +108,7 @@ mod tests {
         assert_eq!(deserialized.error, state.error);
         assert_eq!(deserialized.started_at, state.started_at);
         assert_eq!(deserialized.last_completed_at, state.last_completed_at);
+        assert!(deserialized.judged, "judged must survive the wire");
     }
 
     // ========================================================================
@@ -156,6 +161,7 @@ mod tests {
             near_misses: None,
             started_at: Some(chrono::Utc::now().timestamp() - 1_200),
             last_completed_at: None,
+            judged: false,
         };
 
         // Apply timeout recovery logic (mirror of get_analysis_status)

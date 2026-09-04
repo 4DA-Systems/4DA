@@ -723,6 +723,7 @@ pub(crate) fn get_analysis_state() -> &'static Mutex<AnalysisState> {
             started_at: None,
             last_completed_at: None,
             near_misses: None,
+            judged: false,
         })
     })
 }
