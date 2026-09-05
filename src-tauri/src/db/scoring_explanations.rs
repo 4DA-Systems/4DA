@@ -14,7 +14,9 @@
 //! an explanation, and a hysteresis-suppressed re-score never replaces a
 //! better one*: a score-changing write upserts (newest evaluation wins —
 //! `source_item_id` is the primary key), a suppressed write only seeds a
-//! missing row. The stored value is a bounded envelope, not the raw struct:
+//! missing row. Suppression is a SAME-VERSION notion — a `PIPELINE_VERSION`
+//! drain always replaces (v31). The stored value is a bounded envelope, not
+//! the raw struct:
 //!
 //! ```json
 //! {"score": 0.42, "breakdown": { ...ScoreBreakdown... },
@@ -419,6 +421,94 @@ mod tests {
         assert!(
             (durable - 0.50).abs() < 1e-6,
             "hysteresis still damps the durable score; only the explanation seeds"
+        );
+    }
+
+    /// v31: a PIPELINE_VERSION drain is by definition the re-judgement, so the
+    /// damper must not apply across a version change. Live after the v30 drain
+    /// (2026-09-06): every one of 75,600 rows was stamped 30, but only 1,053
+    /// explanation rows were — 63,513 still explained the item with the v29
+    /// breakdown, 10,138 with v28, 896 with v27 — because a re-score whose
+    /// score moved less than the band took the seed-only path and kept the
+    /// previous pipeline's "why". A version change bypasses the damper: the new
+    /// score is written and the explanation is REPLACED. Same-version churn
+    /// keeps the damper (the two tests above, and the tail of this one).
+    #[test]
+    fn test_version_change_bypasses_hysteresis_and_replaces_explanation() {
+        let db = test_db();
+        let id = insert_test_item(&db, "hackernews", "expl_drain", "drained item", "content");
+        let current = crate::scoring::PIPELINE_VERSION;
+
+        let bd1 = bounded_breakdown_json(0.50, &minimal_breakdown()).expect("serializes");
+        db.persist_analysis_scores(&[(id, 0.50, None, None, Some(bd1))], "analysis")
+            .unwrap();
+        // Age the row to the PREVIOUS pipeline: score and explanation at N-1.
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET scored_pipeline_version = ?1 WHERE id = ?2",
+                params![current - 1, id],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE scoring_explanations SET pipeline_version = ?1 WHERE source_item_id = ?2",
+                params![current - 1, id],
+            )
+            .unwrap();
+        }
+
+        // 0.52 is inside the 0.05 band — damped at the same version — but this
+        // write IS the version drain.
+        let bd2 = bounded_breakdown_json(0.52, &minimal_breakdown()).expect("serializes");
+        db.persist_analysis_scores(&[(id, 0.52, None, None, Some(bd2))], "drain")
+            .unwrap();
+
+        let read_durable = || -> (f64, i64) {
+            db.conn
+                .lock()
+                .query_row(
+                    "SELECT relevance_score, scored_pipeline_version FROM source_items WHERE id = ?1",
+                    params![id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap()
+        };
+        let read_explained_score = || -> (f64, i64) {
+            let row = db.get_scoring_explanation(id).unwrap().unwrap();
+            let envelope: serde_json::Value = serde_json::from_str(&row.breakdown_json).unwrap();
+            (envelope["score"].as_f64().unwrap(), row.pipeline_version)
+        };
+
+        let (durable, version) = read_durable();
+        assert!(
+            (durable - 0.52).abs() < 1e-6,
+            "a version drain writes the new score even inside the band (got {durable})"
+        );
+        assert_eq!(version, i64::from(current), "the row is stamped current");
+        let (explained, expl_version) = read_explained_score();
+        assert!(
+            (explained - 0.52).abs() < 1e-6,
+            "the drain's breakdown REPLACES the previous pipeline's (got {explained})"
+        );
+        assert_eq!(
+            expl_version,
+            i64::from(current),
+            "the explanation is re-judged with the score"
+        );
+
+        // Same version from here on: the damper is back.
+        let bd3 = bounded_breakdown_json(0.54, &minimal_breakdown()).expect("serializes");
+        db.persist_analysis_scores(&[(id, 0.54, None, None, Some(bd3))], "analysis")
+            .unwrap();
+        let (durable, _) = read_durable();
+        assert!(
+            (durable - 0.52).abs() < 1e-6,
+            "same-version churn inside the band is still damped (got {durable})"
+        );
+        let (explained, _) = read_explained_score();
+        assert!(
+            (explained - 0.52).abs() < 1e-6,
+            "and the explanation of the kept score stands (got {explained})"
         );
     }
 

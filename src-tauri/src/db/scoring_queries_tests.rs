@@ -16,34 +16,46 @@ fn score_and_version(db: &Database, id: i64) -> (Option<f64>, i64) {
     .unwrap()
 }
 
-/// Item 10 (score side): a sub-hysteresis re-score keeps the durable score
-/// but STILL advances the version stamp — skipping the stamp would trap the
-/// item in the version-drain set forever. A move at/above the hysteresis
-/// writes through, and a first-ever score (old NULL) always writes.
+/// Item 10 (score side): a SAME-VERSION sub-hysteresis re-score keeps the
+/// durable score. A move at/above the hysteresis writes through, and a
+/// first-ever score (old NULL) always writes. v31: a row stamped by a
+/// PREVIOUS pipeline is a version drain — the damper does not apply, the new
+/// score is written and the stamp advances (skipping the stamp would trap
+/// the item in the version-drain set forever).
 #[test]
 fn hysteresis_keeps_score_but_stamps_version() {
     let db = test_db();
     let wobble = insert_test_item(&db, "hackernews", "hy1", "Wobbler", "x");
     let mover = insert_test_item(&db, "hackernews", "hy2", "Mover", "x");
     let fresh = insert_test_item(&db, "hackernews", "hy3", "First score", "x");
+    let drained = insert_test_item(&db, "hackernews", "hy4", "Drained wobbler", "x");
+    let current = crate::scoring::PIPELINE_VERSION;
 
-    // Seed wobble+mover with a prior score at an OLD pipeline version, so
-    // the version stamp is observable.
+    // Seed wobble+mover with a prior score at the CURRENT pipeline version
+    // (same-version churn), and `drained` at the previous one (a version
+    // drain).
     {
         let conn = db.conn.lock();
         conn.execute(
-            "UPDATE source_items SET relevance_score = 0.50, scored_pipeline_version = 1
+            "UPDATE source_items SET relevance_score = 0.50, scored_pipeline_version = ?3
              WHERE id IN (?1, ?2)",
-            params![wobble, mover],
+            params![wobble, mover, current],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE source_items SET relevance_score = 0.50, scored_pipeline_version = ?2
+             WHERE id = ?1",
+            params![drained, current - 1],
         )
         .unwrap();
     }
 
     db.persist_analysis_scores(
         &[
-            (wobble, 0.52, None, None, None), // |Δ| = 0.02 < 0.05 → damped
-            (mover, 0.60, None, None, None),  // |Δ| = 0.10 ≥ 0.05 → written
-            (fresh, 0.03, None, None, None),  // old NULL → always written
+            (wobble, 0.52, None, None, None),  // |Δ| = 0.02 < 0.05 → damped
+            (mover, 0.60, None, None, None),   // |Δ| = 0.10 ≥ 0.05 → written
+            (fresh, 0.03, None, None, None),   // old NULL → always written
+            (drained, 0.52, None, None, None), // |Δ| = 0.02 but version changed → written
         ],
         "analysis",
     )
@@ -53,12 +65,12 @@ fn hysteresis_keeps_score_but_stamps_version() {
     assert_eq!(
         s_wobble,
         Some(0.50),
-        "sub-hysteresis move keeps the old score"
+        "same-version sub-hysteresis move keeps the old score"
     );
     assert_eq!(
         v_wobble,
-        i64::from(crate::scoring::PIPELINE_VERSION),
-        "damped write must still stamp the pipeline version (drain safety)"
+        i64::from(current),
+        "damped write still carries the current pipeline version"
     );
     let (s_mover, _) = score_and_version(&db, mover);
     assert!(
@@ -67,7 +79,17 @@ fn hysteresis_keeps_score_but_stamps_version() {
     );
     let (s_fresh, v_fresh) = score_and_version(&db, fresh);
     assert!(s_fresh.is_some(), "first-ever score always writes");
-    assert_eq!(v_fresh, i64::from(crate::scoring::PIPELINE_VERSION));
+    assert_eq!(v_fresh, i64::from(current));
+    let (s_drained, v_drained) = score_and_version(&db, drained);
+    assert!(
+        (s_drained.unwrap() - 0.52).abs() < 1e-6,
+        "a version drain is never damped: the re-judged score is written"
+    );
+    assert_eq!(
+        v_drained,
+        i64::from(current),
+        "the drained row is stamped current (drain safety)"
+    );
 }
 
 /// Tightening T1 (2026-08-25): `scored_at` stamps on EVERY evaluation —
@@ -95,14 +117,15 @@ fn scored_at_stamps_on_suppressed_and_zero_evidence_evaluations() {
         "no stamp before any evaluation"
     );
 
-    // Seed a prior score, then re-score inside the hysteresis band: the
-    // durable score is kept, the evaluation stamp is not skipped.
+    // Seed a prior score at the CURRENT version (v31: only same-version churn
+    // is damped), then re-score inside the hysteresis band: the durable score
+    // is kept, the evaluation stamp is not skipped.
     {
         let conn = db.conn.lock();
         conn.execute(
-            "UPDATE source_items SET relevance_score = 0.50, scored_pipeline_version = 1
+            "UPDATE source_items SET relevance_score = 0.50, scored_pipeline_version = ?2
              WHERE id = ?1",
-            params![wobble],
+            params![wobble, crate::scoring::PIPELINE_VERSION],
         )
         .unwrap();
     }

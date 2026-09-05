@@ -658,7 +658,10 @@ fn get_llm_settings() -> Option<LLMProvider> {
     Some(provider)
 }
 
-fn load_items_for_judgment(db: &Database, ids: &[i64]) -> Result<Vec<ItemForJudgment>> {
+/// `pub(crate)`: the live-sample judge (`scoring::judge_live_sample`) loads
+/// real corpus rows through this exact query, so it judges what production
+/// judges.
+pub(crate) fn load_items_for_judgment(db: &Database, ids: &[i64]) -> Result<Vec<ItemForJudgment>> {
     let conn = db.conn.lock();
     let placeholders: String = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!(
