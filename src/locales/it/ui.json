@@ -1201,6 +1201,7 @@
   "about.attributionLegitimacy": "Questo modello di sviluppo diretto dall'uomo e implementato dall'IA è un approccio legittimo e sempre più standard nell'ingegneria del software. La cronologia completa di git serve come registro verificabile ed esternamente verificabile di questo processo.",
   "about.copyright": "v{{version}} · © 2025–2026 4DA Systems",
   "about.tagline": "Tutti i diritti riservati. Costruito con visione, progettato con Claude.",
+  "about.quitApp": "Quit 4DA",
   "about.privacyPolicy": "Informativa sulla privacy",
   "about.termsOfService": "Termini di servizio",
   "about.frameworkSubtitle": "Una filosofia per l’intelligence privata degli sviluppatori",

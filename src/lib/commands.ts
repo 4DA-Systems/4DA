@@ -260,6 +260,7 @@ interface CommandMap {
   cancel_analysis: { params: Record<string, never>; result: void };
   get_scoring_stats: { params: Record<string, never>; result: ScoringStats };
   get_feedback_liveness: { params: Record<string, never>; result: FeedbackLiveness };
+  quit_app: { params: Record<string, never>; result: void };
   measure_triage_recall: { params: { relevantThreshold: number; sampleLimit: number; topicMin?: number }; result: unknown };
   get_scoring_coverage: { params: Record<string, never>; result: unknown };
   get_calibration_snapshot: { params: { threshold?: number }; result: unknown };

@@ -515,3 +515,43 @@ had been scored against a collapsed profile.
 because the persist boundary is the only place that can refuse to make a
 collapsed run durable. And after any drain, check `scored_at` by hour against
 the profile state of that hour before believing the corpus.
+
+## FM: A window close is not a quit
+
+**Observed 2026-09-05.** The exit guard (#501) keeps the tray-resident app alive
+when its window closes — correct for users, but it means every scripted stop
+(activation drains, Victauri sessions, `stop-fourda.ps1`) was a force-kill.
+A killed process never runs `Drop`, so Windows cannot be told to remove the
+tray icon: two ghost icons from two activations in one day, each needing an
+explorer.exe restart to clear.
+
+**The rule.** Only `app.exit(0)` exits. Stop the app through `quit_app` (About
+panel, or Victauri `invoke_command`) — the same path as the tray menu's Quit —
+and reserve `stop-fourda.ps1` for a hung process.
+
+## FM: A hand-built test schema is not the production reader's schema
+
+**Observed 2026-09-05.** Radar tests created their own `tech_stack` table
+shape and inserted rows by hand; #612 changed the production reader to the
+real ACE schema and the merge queue failed on "no such table: tech_stack" and
+a NOT NULL `content_hash` — in a test that had passed on the branch. The
+test was asserting against a schema no production code ever wrote.
+
+**The rule.** Tests that exercise a reader use the production writer:
+`test_db()` + the real migration (`ace::db::migrate`) + the real insert
+helpers (`insert_test_item`, `ContextEngine::new`). A test-local
+`CREATE TABLE` is a second schema, and it drifts.
+
+## FM: A benchmark that embeds at test time is a coin flip on CI
+
+**Observed 2026-09-04.** The real-embedding calibration gate passed and failed
+on the SAME commit across two CI runners: the ONNX embedder's output differs
+by ~1e-3 between machines, and 32 of 87 scenario bands straddled the 0.40
+relevance line, so one item flipping verdict flipped the gate.
+
+**The rule.** Anything the gate measures is committed as a fixture
+(`fixtures/scenario_{item,topic}_embeddings.bin`, keyed by
+`id#fnv1a64(text)`); the test refuses to run without them under
+`FOURDA_REQUIRE_REAL_EMBEDDINGS=1`. Regenerate through the
+`generate-sim-fixtures` feature when the scenario text changes — never let
+CI embed.

@@ -1206,6 +1206,7 @@
   "about.attributionLegitimacy": "Dieses menschlich geleitete, KI-implementierte Entwicklungsmodell ist ein legitimer und zunehmend üblicher Ansatz in der Softwareentwicklung. Die vollständige Git-Historie dient als überprüfbare, extern prüfbare Aufzeichnung dieses Prozesses.",
   "about.copyright": "v{{version}} · © 2025–2026 4DA Systems",
   "about.tagline": "Alle Rechte vorbehalten. Geschaffen mit Vision, entwickelt mit Claude.",
+  "about.quitApp": "Quit 4DA",
   "about.privacyPolicy": "Datenschutzrichtlinie",
   "about.termsOfService": "Nutzungsbedingungen",
   "about.frameworkSubtitle": "Eine Philosophie für private Entwickler-Intelligenz",

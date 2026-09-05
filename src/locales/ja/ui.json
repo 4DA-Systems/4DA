@@ -1201,6 +1201,7 @@
   "about.attributionLegitimacy": "この人間が指揮し、AIが実装する開発モデルは、ソフトウェアエンジニアリングの正当でますます標準的なアプローチです。完全なGitヒストリーがこのプロセスの検証可能で外部監査可能な記録として機能します。",
   "about.copyright": "v{{version}} · © 2025–2026 4DA Systems",
   "about.tagline": "全著作権所有。ビジョンで構想し、Claudeでエンジニアリング。",
+  "about.quitApp": "Quit 4DA",
   "about.privacyPolicy": "プライバシーポリシー",
   "about.termsOfService": "利用規約",
   "about.frameworkSubtitle": "プライベート開発者インテリジェンスの哲学",

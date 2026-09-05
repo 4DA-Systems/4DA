@@ -63,12 +63,15 @@ const ALLOWLIST = {
 const ESCAPE = /privacy-egress-ok:/;
 
 function trackedRustFiles() {
-  const out = execSync('git ls-files "src-tauri/src/**/*.rs"', {
+  // Both globs: git's `**/` matches one-or-more directories, so
+  // "src-tauri/src/**/*.rs" alone never matched the 299 top-level files
+  // (monitoring.rs, data_export.rs, ...) — they were unscanned until 2026-09-05.
+  const out = execSync('git ls-files "src-tauri/src/*.rs" "src-tauri/src/**/*.rs"', {
     cwd: ROOT,
     encoding: 'utf8',
     maxBuffer: 32 * 1024 * 1024,
   });
-  return out.split('\n').map((s) => s.trim()).filter(Boolean);
+  return [...new Set(out.split('\n').map((s) => s.trim()).filter(Boolean))];
 }
 
 function isAllowed(token, file) {

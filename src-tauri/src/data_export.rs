@@ -634,7 +634,7 @@ pub async fn export_all_data(format: String) -> Result<ExportManifest> {
     let file_name = format!("export-{}.{}", &export_id[..8], extension);
     let file_path = exports_dir.join(&file_name);
 
-    let file_content = if format == "csv" {
+    let export_body = if format == "csv" {
         // For CSV, convert each section
         // Start with UTF-8 BOM for Excel compatibility (prevents garbled CJK text)
         let mut csv = String::from("\u{FEFF}# 4DA Data Export\n");
@@ -651,7 +651,7 @@ pub async fn export_all_data(format: String) -> Result<ExportManifest> {
         serde_json::to_string_pretty(&export_doc).context("Failed to serialize export data")?
     };
 
-    std::fs::write(&file_path, &file_content)
+    std::fs::write(&file_path, &export_body)
         .with_context(|| format!("Failed to write export file: {}", file_path.display()))?;
 
     let created_at = chrono::Utc::now().to_rfc3339();

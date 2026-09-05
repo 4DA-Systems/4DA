@@ -328,7 +328,10 @@ impl ProjectScanner {
     pub fn scan_directory(&self, path: &Path) -> Result<Vec<ProjectSignal>> {
         let mut signals = Vec::new();
         let mut visited = HashSet::new();
-        self.scan_recursive(path, 0, &mut signals, &mut visited)?;
+        // The walk root's repository (if any): a nested checkout of a DIFFERENT
+        // repository is skipped below, exactly as the lockfile walk does.
+        let scope = crate::ace::repo_identity::scope_at(path);
+        self.scan_recursive(path, 0, &scope, &mut signals, &mut visited)?;
         Ok(signals)
     }
 
@@ -336,6 +339,7 @@ impl ProjectScanner {
         &self,
         path: &Path,
         depth: usize,
+        scope: &crate::ace::repo_identity::RepoScope,
         signals: &mut Vec<ProjectSignal>,
         visited: &mut HashSet<PathBuf>,
     ) -> Result<()> {
@@ -389,6 +393,26 @@ impl ProjectScanner {
             return Ok(());
         }
 
+        // v30: a nested checkout whose origin differs from the enclosing
+        // repository is someone else's project. `github.com/vercel/workflow`
+        // cloned under Documents/navcal supplied 1,811 dependency rows and
+        // every rkyv alert on the live box; the lockfile walk learned to skip
+        // it in #612 while this walk recursed straight through. Same policy
+        // (repo_identity): no origin on either side reads as the same project.
+        let scope = match crate::ace::repo_identity::step_into(path, scope) {
+            crate::ace::repo_identity::Step::Continue(next) => next,
+            crate::ace::repo_identity::Step::ForeignRepo { nested, enclosing } => {
+                tracing::info!(
+                    target: "4da::ace",
+                    dir = %path.display(),
+                    nested_remote = nested.as_deref().unwrap_or("(none)"),
+                    enclosing_remote = enclosing.as_deref().unwrap_or("(none)"),
+                    "Manifest scan: skipping nested checkout of a different repository"
+                );
+                return Ok(());
+            }
+        };
+
         // Check for manifests in this directory
         self.check_manifests(path, signals)?;
 
@@ -400,7 +424,9 @@ impl ProjectScanner {
             let entry_path = entry.path();
             if entry_path.is_dir() {
                 // Don't propagate errors from subdirectories - just skip them
-                if let Err(e) = self.scan_recursive(&entry_path, depth + 1, signals, visited) {
+                if let Err(e) =
+                    self.scan_recursive(&entry_path, depth + 1, &scope, signals, visited)
+                {
                     tracing::warn!("Recursive scan failed: {e}");
                 }
             }
@@ -4784,5 +4810,83 @@ name = \"x\"
 
         let missing = dir.path().join("nowhere").join("Cargo.toml");
         assert_eq!(compute_git_recency(&missing), 0.5, "unreadable: neutral");
+    }
+
+    fn write_fake_repo(dir: &std::path::Path, origin: &str) {
+        std::fs::create_dir_all(dir.join(".git")).unwrap();
+        std::fs::write(dir.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+        std::fs::write(
+            dir.join(".git/config"),
+            format!(
+                "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = {origin}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+            ),
+        )
+        .unwrap();
+    }
+
+    /// v30: a nested checkout with a DIFFERENT origin is someone else's
+    /// project. The lockfile walk learned this in #612; the manifest walk
+    /// recursed straight through (vercel/workflow under Documents/navcal).
+    #[test]
+    fn manifest_scan_skips_nested_foreign_repository() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_fake_repo(root, "https://github.com/acme/navcal.git");
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"navcal\"\nversion = \"0.1.0\"\n\n[dependencies]\ntokio = \"1\"\n",
+        )
+        .unwrap();
+        // A plain subdirectory (no .git) inherits the root's scope.
+        let own_sub = root.join("web");
+        std::fs::create_dir_all(&own_sub).unwrap();
+        std::fs::write(
+            own_sub.join("package.json"),
+            r#"{"name":"web","dependencies":{"react":"^19.0.0"}}"#,
+        )
+        .unwrap();
+        // A nested checkout of ANOTHER repository.
+        let foreign = root.join("vercel-workflow");
+        write_fake_repo(&foreign, "https://github.com/vercel/workflow.git");
+        std::fs::write(
+            foreign.join("package.json"),
+            r#"{"name":"workflow","dependencies":{"rkyv-js":"^1.0.0"}}"#,
+        )
+        .unwrap();
+        // A nested checkout of the SAME repository (a worktree-style clone) stays.
+        let twin = root.join("mirror");
+        write_fake_repo(&twin, "git@github.com:acme/navcal.git");
+        std::fs::write(
+            twin.join("package.json"),
+            r#"{"name":"mirror","dependencies":{"vite":"^8.0.0"}}"#,
+        )
+        .unwrap();
+
+        let signals = ProjectScanner::new().scan_directory(root).unwrap();
+        let paths: Vec<String> = signals
+            .iter()
+            .map(|s| {
+                s.manifest_path
+                    .to_string_lossy()
+                    .replace('\\', "/")
+                    .to_lowercase()
+            })
+            .collect();
+        assert!(
+            paths.iter().any(|p| p.ends_with("/cargo.toml")),
+            "own manifest scanned: {paths:?}"
+        );
+        assert!(
+            paths.iter().any(|p| p.contains("/web/package.json")),
+            "a plain subdirectory inherits the scope: {paths:?}"
+        );
+        assert!(
+            paths.iter().any(|p| p.contains("/mirror/package.json")),
+            "a nested checkout of the SAME repository is the user's project: {paths:?}"
+        );
+        assert!(
+            !paths.iter().any(|p| p.contains("vercel-workflow")),
+            "a nested checkout of a DIFFERENT repository is skipped: {paths:?}"
+        );
     }
 }

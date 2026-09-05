@@ -86,6 +86,7 @@
     "ops:source-health": "node scripts/source-pipeline-health.cjs",
     "ops:funnel": "node scripts/ops-funnel-snapshot.cjs",
     "flush-tray-ghosts": "node scripts/flush-tray-ghosts.cjs",
+    "hooks:ensure": "node scripts/ensure-hooks.cjs",
     "generate:knowledge": "node scripts/generate-knowledge.cjs",
     "sentinel": "node scripts/sentinel-scan.cjs",
     "sentinel:quick": "node scripts/sentinel-scan.cjs --quick",

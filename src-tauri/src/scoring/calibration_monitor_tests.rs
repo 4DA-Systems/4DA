@@ -245,3 +245,94 @@ fn high_stakes_recall_requires_name_corroboration_not_just_confidence() {
     assert_eq!(hs.misscored, 0);
     assert!(!hs.alert);
 }
+
+fn store_breakdown(db: &crate::db::Database, id: i64, breakdown_json: &str) {
+    db.conn
+        .lock()
+        .execute(
+            "INSERT OR REPLACE INTO scoring_explanations (source_item_id, pipeline_version, breakdown, scored_at)
+             VALUES (?1, ?2, ?3, datetime('now'))",
+            rusqlite::params![id, crate::scoring::PIPELINE_VERSION, breakdown_json],
+        )
+        .unwrap();
+}
+
+/// v30: a grounded advisory the pipeline has CONFIRMED does not affect the
+/// installed version is correctly noise — not a recall miss (live 2026-09-05:
+/// "6 of 19 dep-matched advisories scored as noise" were exactly this).
+#[test]
+fn version_negative_grounded_advisory_is_not_a_miss() {
+    let db = test_db();
+    let id = insert_test_item(
+        &db,
+        "osv",
+        "GHSA-hono-1",
+        "[GHSA-hono-1] hono: header injection",
+        "Affected: hono (npm) < 4.12.0\nFixed in: 4.12.0",
+    );
+    set_score(
+        &db,
+        id,
+        0.10,
+        Some("security_advisory"),
+        Some("GHSA-hono-1"),
+    );
+    store_breakdown(
+        &db,
+        id,
+        r#"{"breakdown":{"strongly_grounded":true,"is_version_affected":false}}"#,
+    );
+    let hs = compute_high_stakes_recall(&db, &ctx_with_dep("hono"), 0.4).unwrap();
+    assert_eq!(hs.misscored, 0, "confirmed not-affected is not a miss");
+    assert_eq!(hs.dep_matched_total, 0, "and it leaves the denominator too");
+
+    // Without a version verdict the same grounded row IS a miss — the stored
+    // grounding verdict is what the monitor trusts, not the text matcher.
+    store_breakdown(
+        &db,
+        id,
+        r#"{"breakdown":{"strongly_grounded":true,"is_version_affected":null}}"#,
+    );
+    let hs = compute_high_stakes_recall(&db, &ctx_with_dep("hono"), 0.4).unwrap();
+    assert_eq!((hs.dep_matched_total, hs.misscored), (1, 1));
+
+    // And the pipeline's NOT-grounded verdict wins over a text coincidence.
+    store_breakdown(&db, id, r#"{"breakdown":{"strongly_grounded":false}}"#);
+    let hs = compute_high_stakes_recall(&db, &ctx_with_dep("hono"), 0.4).unwrap();
+    assert_eq!(
+        hs.dep_matched_total, 0,
+        "the stored verdict is authoritative"
+    );
+}
+
+/// v30: the cliff probe counts items perched within ±0.03 of an embedding
+/// axis's confirmation threshold — the pipeline's exposure to jitter.
+#[test]
+fn threshold_cliffs_count_items_perched_on_a_confirmation_threshold() {
+    use crate::scoring_config::{CONTEXT_THRESHOLD, INTEREST_THRESHOLD};
+    let db = test_db();
+    let rows = [
+        (CONTEXT_THRESHOLD + 0.010, INTEREST_THRESHOLD - 0.020), // perched on both
+        (CONTEXT_THRESHOLD - 0.029, 0.95),                       // context only
+        (0.10, 0.05),                                            // neither
+    ];
+    for (i, (c, n)) in rows.iter().enumerate() {
+        let id = insert_test_item(&db, "hn", &format!("cliff-{i}"), &format!("item {i}"), "");
+        store_breakdown(
+            &db,
+            id,
+            &format!(r#"{{"breakdown":{{"context_score":{c},"interest_score":{n}}}}}"#),
+        );
+    }
+    let cliffs = super::compute_threshold_cliffs(&db, 100).unwrap();
+    assert_eq!(cliffs.sampled, 3);
+    assert_eq!(cliffs.near_context, 2);
+    assert_eq!(cliffs.near_interest, 1);
+    assert!((cliffs.share_interest() - 1.0 / 3.0).abs() < 1e-6);
+    assert_eq!(
+        super::compute_threshold_cliffs(&test_db(), 100)
+            .unwrap()
+            .share_context(),
+        0.0
+    );
+}
