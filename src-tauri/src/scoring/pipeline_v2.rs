@@ -2833,6 +2833,78 @@ pub(crate) fn score_item(
     // and it rewarded previously-engaged topics on items already known to
     // be ungrounded. Behavioral signals no longer carry scoring authority.
 
+    // ── Display-worthy dependency evidence ────────────────────────────
+    let advisory_ecosystems = extract_advisory_ecosystems(input.content);
+    let display_deps = display_worthy_deps(&raw.matched_deps, &advisory_ecosystems);
+    let matched_dep_names: Vec<String> = display_deps
+        .iter()
+        .map(|d| d.package_name.clone())
+        .collect();
+
+    // ── Security version evidence ─────────────────────────────────────
+    // Computed ONCE, here, before the fast path and the Signal verdict (v31)
+    // — and read again by the priority/applicability pass after signal
+    // classification. It used to live after the verdict, so a CONFIRMED
+    // not-affected advisory could be demoted to "watch" priority while its
+    // relevance stayed at 0.88 (live 2026-09-06: two Hono advisories fixed
+    // below the installed 4.13.3 ranked above grounded, AFFECTED items).
+    let is_security_source = matches!(input.source_type, "cve" | "osv");
+    let advisory_id = if is_security_source {
+        extract_advisory_id(input.title)
+    } else {
+        None
+    };
+    let fixed_version = if is_security_source {
+        extract_fixed_version(input.content)
+    } else {
+        None
+    };
+    let affected_versions = if is_security_source {
+        extract_affected_range(input.content)
+    } else {
+        None
+    };
+    // Version/path evidence comes from the strongest DISPLAY dep — showing the
+    // installed version of an uncorroborated alias hit was quietly dishonest.
+    let dep_path = display_deps.first().map(|dep| {
+        if dep.is_dev {
+            "dev-only".to_string()
+        } else if !dep.is_direct {
+            "transitive".to_string()
+        } else {
+            "direct".to_string()
+        }
+    });
+    let installed_version = display_deps.first().and_then(|d| d.version.clone());
+    // v29: the OSV mirror's STRUCTURED ranges decide first (introduced/fixed/
+    // last_affected, via the same matcher Preemption trusts); the text route
+    // is the fallback for advisories the mirror does not hold. Before this
+    // `is_version_affected` was NULL on 746 of 746 live security breakdowns
+    // (the cve source wrote no range and no fix), so a hono advisory fixed in
+    // 4.12.34 paged as Critical against an installed 4.13.3.
+    let is_version_affected = display_deps
+        .first()
+        .zip(installed_version.as_deref())
+        .and_then(|(dep, installed)| {
+            mirror_version_verdict(db, input, dep, installed, advisory_id.as_deref())
+        })
+        .or_else(|| {
+            check_version_affected(
+                installed_version.as_deref(),
+                affected_versions.as_deref(),
+                fixed_version.as_deref(),
+            )
+        });
+    // v31: a REGISTRY advisory row the graph grounds but whose installed
+    // version is CONFIRMED outside the affected range (at or past the fix)
+    // leaves Signal — the same tier as an ungrounded registry row (cap 0.35 +
+    // verdict gate, AD-037 rule 2): "a package you use had an advisory you
+    // already carry the fix for" is not this build's signal. Preemption keeps
+    // the row through the OSV matcher ("you are on a fixed version"). Only
+    // cve/osv rows extract ranges, so editorial coverage never carries a
+    // version verdict and the persona guards are structurally untouched.
+    let version_not_affected = registry_advisory && is_version_affected == Some(false);
+
     // ── Critical content fast-path ─────────────────────────────────────
     // Security advisories and breaking changes affecting user's actual
     // dependencies ALWAYS surface, regardless of relevance score.
@@ -2857,7 +2929,9 @@ pub(crate) fn score_item(
     let has_strong_dep_match = raw.dep_match_score
         >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD
         && grounding.strong;
-    let critical_fast_path = (is_security || is_breaking) && has_strong_dep_match;
+    // v31: a confirmed not-affected advisory never takes the floor.
+    let critical_fast_path =
+        (is_security || is_breaking) && has_strong_dep_match && !version_not_affected;
 
     // A CVE confirmed against the user's DIRECT (non-dev) dependency is the
     // flagship preemption case and the highest-confidence security signal — it
@@ -2951,14 +3025,17 @@ pub(crate) fn score_item(
             scoring_config::STALE_CONTENT_SUPERSEDED_CEILING
                 + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR,
         );
-        let commodity = match (commodity, superseded) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
-        };
-        match (commodity, ugc) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
-        }
+        // Confirmed not-affected registry advisory (v31): the registry-
+        // ungrounded tier, applied at the EXIT because a GROUNDED advisory is
+        // exempt from the Phase-8 commodity cap by design.
+        let not_affected = version_not_affected.then_some(
+            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_REGISTRY_UNGROUNDED
+                + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR,
+        );
+        [commodity, superseded, not_affected, ugc]
+            .into_iter()
+            .flatten()
+            .reduce(f32::min)
     };
     let combined_score = match score_ceiling {
         Some(ceiling) => combined_score.min(ceiling),
@@ -3006,10 +3083,14 @@ pub(crate) fn score_item(
     // security advisory are never feed-relevant. Both keep their capped score
     // for ranking/display; neither can reach the fast path (`ugc_capped`
     // excludes it, `security_ungrounded` negates `grounding.strong`).
+    // v31: a grounded registry advisory CONFIRMED not to affect the installed
+    // version is gated the same way (`version_not_affected` also negates the
+    // fast path); its capped score stays for ranking/display.
     let relevant = !ungrounded_registry_release
         && !superseded_release
         && !ugc_capped
         && !security_ungrounded
+        && !version_not_affected
         && ((critical_fast_path && !lang_mismatch)  // Critical items always relevant
             || (combined_score >= get_relevance_threshold()
                 && (signal_count >= min_signals
@@ -3042,14 +3123,6 @@ pub(crate) fn score_item(
         confidence_by_signal.insert("dependency".to_string(), raw.dep_match_score);
     }
 
-    // ── Display-worthy dependency evidence ────────────────────────────
-    let advisory_ecosystems = extract_advisory_ecosystems(input.content);
-    let display_deps = display_worthy_deps(&raw.matched_deps, &advisory_ecosystems);
-    let matched_dep_names: Vec<String> = display_deps
-        .iter()
-        .map(|d| d.package_name.clone())
-        .collect();
-
     // ── Signal classification ─────────────────────────────────────────
     let (sig_type, mut sig_priority, sig_action, sig_triggers, sig_horizon) = classify_signals(
         relevant,
@@ -3065,55 +3138,10 @@ pub(crate) fn score_item(
         db,
     );
 
-    // ── Security version evidence (extracted BEFORE necessity/applicability
-    //    so the version verdict can inform both) ───────────────────────
-    let is_security_source = matches!(input.source_type, "cve" | "osv");
-    let advisory_id = if is_security_source {
-        extract_advisory_id(input.title)
-    } else {
-        None
-    };
-    let fixed_version = if is_security_source {
-        extract_fixed_version(input.content)
-    } else {
-        None
-    };
-    let affected_versions = if is_security_source {
-        extract_affected_range(input.content)
-    } else {
-        None
-    };
-    // Version/path evidence comes from the strongest DISPLAY dep — showing the
-    // installed version of an uncorroborated alias hit was quietly dishonest.
-    let dep_path = display_deps.first().map(|dep| {
-        if dep.is_dev {
-            "dev-only".to_string()
-        } else if !dep.is_direct {
-            "transitive".to_string()
-        } else {
-            "direct".to_string()
-        }
-    });
-    let installed_version = display_deps.first().and_then(|d| d.version.clone());
-    // v29: the OSV mirror's STRUCTURED ranges decide first (introduced/fixed/
-    // last_affected, via the same matcher Preemption trusts); the text route
-    // is the fallback for advisories the mirror does not hold. Before this
-    // `is_version_affected` was NULL on 746 of 746 live security breakdowns
-    // (the cve source wrote no range and no fix), so a hono advisory fixed in
-    // 4.12.34 paged as Critical against an installed 4.13.3.
-    let is_version_affected = display_deps
-        .first()
-        .zip(installed_version.as_deref())
-        .and_then(|(dep, installed)| {
-            mirror_version_verdict(db, input, dep, installed, advisory_id.as_deref())
-        })
-        .or_else(|| {
-            check_version_affected(
-                installed_version.as_deref(),
-                affected_versions.as_deref(),
-                fixed_version.as_deref(),
-            )
-        });
+    // (The security version evidence — advisory_id / fixed_version /
+    // affected_versions / dep_path / installed_version / is_version_affected —
+    // is extracted BEFORE the fast path and the Signal verdict since v31, so
+    // the verdict above and the priority pass below read ONE computation.)
 
     // A CONFIRMED not-affected advisory (installed version outside the affected
     // range / at-or-past the fix) is awareness at most — never Critical/Alert.
@@ -5669,6 +5697,76 @@ mod tests {
         assert!(
             !result.relevant,
             "a registry row the dependency graph cannot ground is Preemption awareness, never a Signal item"
+        );
+    }
+
+    /// v31: a grounded REGISTRY advisory whose installed version is CONFIRMED
+    /// outside the affected range leaves Signal. Live 2026-09-06: two Hono
+    /// advisories with `is_version_affected = 0` (installed 4.13.3, fixes
+    /// below it) sat in the feed at 0.88–0.89 — priority demoted to "watch",
+    /// relevance untouched, ranked above grounded, AFFECTED items. Preemption
+    /// keeps the row ("you are on a fixed version"); the Signal verdict and
+    /// the exit ceiling read the ONE version verdict.
+    #[test]
+    fn grounded_advisory_confirmed_not_affected_is_capped_and_not_relevant() {
+        let db = crate::test_utils::test_db();
+        let mut ctx = fastpath_ctx(&[("tokio", "rust")]);
+        ctx.domain_profile = rust_domain_profile();
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let tags: Vec<String> = Vec::new();
+        let input = advisory_input(
+            "[CVE-2026-90001] tokio: task budget bypass allows unbounded blocking in multi-thread runtime",
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-90001",
+            "A crafted future can bypass the cooperative task budget in tokio's \
+             multi-thread scheduler, starving other tasks.\n\nSeverity: HIGH\n\
+             Affected: tokio (crates.io)\nAffected range: tokio (crates.io): >= 1.0.0, < 1.53.2\n\
+             Fixed in: 1.53.2\nCVSS: 7.5",
+            "cve",
+            &zero,
+            &tags,
+        );
+        let set_installed = |ctx: &mut crate::scoring::ScoringContext, version: &str| {
+            ctx.ace_ctx
+                .dependency_info
+                .get_mut("tokio")
+                .expect("tokio is installed")
+                .version = Some(version.to_string());
+        };
+
+        // Installed AT the fix: confirmed not affected.
+        set_installed(&mut ctx, "1.53.2");
+        let fixed = score_item(&input, &ctx, &db, &fastpath_options(), None);
+        let bd = fixed.score_breakdown.as_ref().expect("breakdown");
+        assert!(bd.strongly_grounded, "tokio IS a direct dependency");
+        assert_eq!(bd.is_version_affected, Some(false), "1.53.2 is at the fix");
+        let line = scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_REGISTRY_UNGROUNDED
+            + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR;
+        assert_eq!(
+            bd.score_ceiling,
+            Some(line),
+            "the exit ceiling records the gate for post-pipeline writers"
+        );
+        assert!(
+            fixed.top_score <= line + 1e-6,
+            "a confirmed not-affected advisory sits below the line (got {})",
+            fixed.top_score
+        );
+        assert!(!fixed.relevant, "and is verdict-gated out of Signal");
+
+        // The twin: installed BELOW the fix is affected and keeps the fast path.
+        set_installed(&mut ctx, "1.47.1");
+        let affected = score_item(&input, &ctx, &db, &fastpath_options(), None);
+        let bd = affected.score_breakdown.as_ref().expect("breakdown");
+        assert_eq!(
+            bd.is_version_affected,
+            Some(true),
+            "1.47.1 is inside the range"
+        );
+        assert_eq!(bd.score_ceiling, None, "no ceiling on an affected advisory");
+        assert!(
+            affected.relevant && affected.top_score >= get_relevance_threshold(),
+            "an affected direct-dependency advisory keeps the critical fast path (score {})",
+            affected.top_score
         );
     }
 

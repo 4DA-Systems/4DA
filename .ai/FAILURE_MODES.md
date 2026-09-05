@@ -555,3 +555,22 @@ relevance line, so one item flipping verdict flipped the gate.
 `FOURDA_REQUIRE_REAL_EMBEDDINGS=1`. Regenerate through the
 `generate-sim-fixtures` feature when the scenario text changes — never let
 CI embed.
+
+## FM: A same-version damper that survives the version bump keeps last pipeline's "why"
+
+**Observed 2026-09-06.** The persist boundary damps a re-score that moves less
+than 0.05 (keeps the old durable score, only SEEDS a missing explanation) —
+right for the 30-minute jitter it was built for. The v30 drain re-scored
+75,600 rows and stamped every one of them 30, but 74,547 explanation rows
+(98.6%) still carried a v27–v29 breakdown: a re-judgement that landed within
+0.05 of the old score took the damped path, so Score Autopsy showed the
+previous classifier's `discussion` on an item the current one calls
+`show_and_tell`, and the high-stakes monitor read `strongly_grounded` from
+rows the current pipeline never wrote.
+
+**The rule.** A damper, seed or keep path at the persist boundary is a
+SAME-VERSION tool. A write that crosses a `PIPELINE_VERSION` boundary is the
+re-judgement itself and writes everything: score, stamp, explanation. When
+adding any "keep the old value" path, ask what the version drain does with it
+and test it with a row stamped N-1
+(`test_version_change_bypasses_hysteresis_and_replaces_explanation`).

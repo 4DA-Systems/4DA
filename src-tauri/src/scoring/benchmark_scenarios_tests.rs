@@ -22,11 +22,12 @@ fn scenarios_parse_correctly() {
     let scenarios = load_scenarios();
     // 87 pipeline scenarios + the v29 verdict fence (12 pinned-verdict cases
     // from the 2026-09-04 live audit — ten false positives and two twins —
-    // category `verdict_fence`).
+    // category `verdict_fence`) + the v31 confirmed-not-affected twin
+    // (`vf_cve_grounded_not_affected`, 2026-09-06).
     assert_eq!(
         scenarios.len(),
-        99,
-        "Expected 99 scenarios, got {}",
+        100,
+        "Expected 100 scenarios, got {}",
         scenarios.len()
     );
     for s in &scenarios {

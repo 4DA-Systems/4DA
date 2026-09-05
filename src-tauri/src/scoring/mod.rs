@@ -31,6 +31,8 @@ mod gate;
 mod judge_agreement_live;
 #[cfg(test)]
 mod judge_benchmark;
+#[cfg(test)]
+mod judge_live_sample;
 mod keywords;
 pub(crate) mod necessity;
 mod pipeline_signals;
@@ -522,7 +524,29 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // on 46,863 of 74,298 live rows (63%), so no positive-form predicate is a
 // provable superset of item 1's reach. The whole corpus drains (5 minutes
 // live at v29).
-pub(crate) const PIPELINE_VERSION: i32 = 30;
+//
+// v31 (2026-09-06): the version drain re-judges, and a confirmed-not-affected
+// advisory leaves Signal.
+//   1. Persist boundary: `SCORE_WRITE_HYSTERESIS` no longer applies across a
+//      PIPELINE_VERSION change (db/scoring_queries.rs). After the v30 drain
+//      every row was stamped 30, but 74,547 of 75,600 explanation rows still
+//      carried a v27–v29 breakdown (the seed-only path) — "why" surfaces and
+//      the high-stakes monitor explained 98.6% of items with a previous
+//      pipeline's verdict. A version drain writes the new score and REPLACES
+//      the explanation; same-version churn is damped as before.
+//   2. A REGISTRY advisory row (osv / cve) the graph grounds but whose version
+//      verdict is CONFIRMED not affected (installed at or past the fix) is
+//      capped at the registry-ungrounded tier (0.35) and verdict-gated — live
+//      2026-09-06 two Hono advisories fixed below the installed 4.13.3 sat in
+//      the feed at 0.88–0.89 with priority already "watch". Preemption keeps
+//      the row. The verdict is computed ONCE, before the Signal verdict, and
+//      read again by the priority pass. AD-037 rule 4 amended.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS: item 1 needs every
+// row's explanation rewritten, so the predicate is "all rows". (Item 2 alone
+// would register as `source_type IN ('osv','cve')` — only those rows carry a
+// version verdict.)
+pub(crate) const PIPELINE_VERSION: i32 = 31;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

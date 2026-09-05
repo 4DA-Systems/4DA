@@ -18,7 +18,7 @@
 //!
 //! \`\`\`text
 //! cargo test --lib --features generate-sim-fixtures \
-//!     scoring::benchmark_calibration::fixtures::generate_scenario_embedding_fixtures \
+//!     scoring::benchmark_calibration::fixtures::generate::generate_scenario_embedding_fixtures \
 //!     -- --ignored --nocapture
 //! \`\`\`
 //!
@@ -33,9 +33,12 @@ const ITEM_FIXTURE: &[u8] = include_bytes!("fixtures/scenario_item_embeddings.bi
 const TOPIC_FIXTURE: &[u8] = include_bytes!("fixtures/scenario_topic_embeddings.bin");
 const MAGIC: &[u8; 4] = b"4DAE";
 
-/// The one command that refreshes both files.
+/// The one command that refreshes both files. The test lives in the nested
+/// `generate` module, so the path carries that segment — a filter without it
+/// matches nothing and reports "0 passed" while leaving the fixtures stale
+/// (2026-09-06: one run lost to exactly that).
 pub(super) const REGENERATE: &str = "cargo test --lib --features generate-sim-fixtures \
-     scoring::benchmark_calibration::fixtures::generate_scenario_embedding_fixtures \
+     scoring::benchmark_calibration::fixtures::generate::generate_scenario_embedding_fixtures \
      -- --ignored --nocapture";
 
 pub(super) type EmbeddingMaps = (HashMap<String, Vec<f32>>, HashMap<String, Vec<f32>>);
