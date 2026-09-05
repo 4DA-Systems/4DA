@@ -10,6 +10,7 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "get_scoring_stats",
     "cancel_analysis",
     "get_feedback_liveness",
+    "quit_app",
     "get_settings",
     "get_llm_usage",
     "set_llm_provider",

@@ -1201,6 +1201,7 @@
   "about.attributionLegitimacy": "这种人类指导、AI 实现的开发模式是软件工程中合法且日益标准化的方法。完整的 Git 历史作为此过程可验证、可外部审计的记录。",
   "about.copyright": "v{{version}} · © 2025–2026 4DA Systems",
   "about.tagline": "版权所有。以愿景构建，用 Claude 工程化。",
+  "about.quitApp": "Quit 4DA",
   "about.privacyPolicy": "隐私政策",
   "about.termsOfService": "服务条款",
   "about.frameworkSubtitle": "私密开发者情报的哲学",

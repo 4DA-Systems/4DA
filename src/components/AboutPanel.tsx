@@ -2,6 +2,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
+import { cmd } from '../lib/commands';
 import { LogoMarkSVG } from './geometry/LogoMarkSVG';
 
 const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
@@ -79,6 +80,18 @@ export function AboutPanel() {
             {t('about.viewFramework')}
           </button>
         </div>
+        {/* The one sanctioned quit outside the tray menu: window close only hides
+            the tray-resident app (exit guard), so this is the same app.exit(0)
+            the tray uses — no forced stop, no ghost tray icon. */}
+        <button
+          type="button"
+          onClick={() => {
+            void cmd('quit_app');
+          }}
+          className="mt-3 text-[10px] text-text-muted hover:text-text-secondary transition-colors underline underline-offset-2"
+        >
+          {t('about.quitApp')}
+        </button>
       </div>
 
       {showLicenses && (

@@ -320,6 +320,7 @@ pub(crate) mod project_inclusion;
 mod prompt_safety;
 pub mod provenance;
 pub mod query;
+mod quit_command;
 mod reconciler;
 pub(crate) mod runtime_paths;
 pub(crate) mod scheduler_gate;
@@ -842,6 +843,7 @@ pub fn run() {
             analysis::get_scoring_stats,
             analysis::cancel_analysis,
             feedback_liveness::get_feedback_liveness,
+            quit_command::quit_app,
             triage_audit_commands::measure_triage_recall,
             triage_audit_commands::get_scoring_coverage,
             triage_audit_commands::get_calibration_snapshot,

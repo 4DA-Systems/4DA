@@ -540,6 +540,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             let conn = ace.conn.lock();
                             conn.prepare(
                                 "SELECT topic FROM active_topics
+                                 -- privacy-egress-ok: local topic-source label in an on-device query
                                  WHERE source = 'file_content'
                                  AND last_seen > datetime('now', '-4 hours')
                                  AND embedding IS NULL
@@ -823,6 +824,30 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         job_started,
                         snapshot_error,
                     );
+
+                    // Phase 5c: threshold cliffs — how many recently scored items sit
+                    // within ±0.03 of an embedding axis's confirmation threshold. The
+                    // 2-signal gate is a cliff, so this is the pipeline's exposure to
+                    // embedding jitter. Read-only; logged so a threshold re-tune is
+                    // measured before it is attempted (live 2026-09-05: context 2.7%,
+                    // interest 12.7%).
+                    match crate::scoring::compute_threshold_cliffs(db, 5000) {
+                        Ok(c) if c.sampled > 0 => info!(
+                            target: "4da::calibration",
+                            sampled = c.sampled,
+                            near_context = c.near_context,
+                            near_interest = c.near_interest,
+                            context_share = c.share_context(),
+                            interest_share = c.share_interest(),
+                            "Threshold cliffs: items perched within 0.03 of a confirmation threshold"
+                        ),
+                        Ok(_) => {}
+                        Err(e) => tracing::debug!(
+                            target: "4da::calibration",
+                            error = %e,
+                            "Threshold cliff probe failed"
+                        ),
+                    }
 
                     // Phase 5b: dep-scoped high-stakes recall. Unlike the feedback metrics,
                     // this works at cold start — it needs the dependency graph, not feedback.

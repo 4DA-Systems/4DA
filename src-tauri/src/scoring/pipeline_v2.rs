@@ -1791,7 +1791,7 @@ fn apply_final_adjustments(
     sophistication_raw: f32,
     community_signal: f32,
     strongly_grounded: bool,
-    off_stack: bool,
+    registry_advisory: bool,
     ungrounded_registry_release: bool,
     stack_tool_listing: bool,
 ) -> f32 {
@@ -1812,7 +1812,7 @@ fn apply_final_adjustments(
         sophistication_raw,
         community_signal,
         strongly_grounded,
-        off_stack,
+        registry_advisory,
         ungrounded_registry_release,
     );
     // v29: a bare repo row for a tool the user already has (see
@@ -1823,6 +1823,16 @@ fn apply_final_adjustments(
     } else {
         capped
     }
+}
+
+/// A structured advisory row from a vulnerability registry (OSV mirrors GHSA;
+/// NVD for CVEs): one record about one package. Its only relevance evidence is
+/// whether that package is in the user's dependency graph — the ecosystem is
+/// not evidence (live 2026-09-05: axios x5, Orval x3, Hubuum x3 in a feed with
+/// none of them installed, all at the identical 0.46). Editorial security
+/// coverage (HN, RSS, Reddit, dev.to, …) is content and is decided by score.
+fn is_registry_advisory_source(source_type: &str) -> bool {
+    matches!(source_type, "osv" | "cve")
 }
 
 /// A GitHub trending row (`owner/repo (★N • Lang)`) whose `repo` names one
@@ -1883,7 +1893,7 @@ fn apply_commodity_ceiling(
     sophistication_raw: f32,
     community_signal: f32,
     strongly_grounded: bool,
-    off_stack: bool,
+    registry_advisory: bool,
     ungrounded_registry_release: bool,
 ) -> f32 {
     use crate::content_dna::ContentType;
@@ -1907,12 +1917,15 @@ fn apply_commodity_ceiling(
     // no bearing on this developer's build — awareness-only, never CORE.
     // Checked BEFORE the security exemption precisely because the advisory IS
     // a security pattern. In-stack advisories (strongly_grounded) fall through
-    // untouched. v29: an advisory OFF the user's stack (no stack, dependency,
-    // adjacent or interest match at all) is capped below the relevance line;
-    // one ON the stack keeps the awareness cap just above it.
+    // untouched. v30: a REGISTRY advisory row (osv / cve — one structured
+    // record about one package) that the graph cannot ground is capped BELOW
+    // the relevance line and verdict-gated in score_item, whatever the
+    // ecosystem; an EDITORIAL security story (HN, RSS, Reddit, …) is content,
+    // decided by score under the awareness cap. See the v30 note in
+    // scoring/mod.rs.
     if matches!(content_type, ContentType::SecurityAdvisory) && !strongly_grounded {
-        let cap = if off_stack {
-            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_OFFSTACK
+        let cap = if registry_advisory {
+            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_REGISTRY_UNGROUNDED
         } else {
             scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED
         };
@@ -2788,11 +2801,9 @@ pub(crate) fn score_item(
                 ((chrono::Utc::now() - *published).num_days().max(0) as f32) / DAYS_PER_MONTH;
             age_months >= scoring_config::STALE_CONTENT_SUPERSEDED_MONTHS
         });
-    // v29: "off the stack" for the ungrounded-advisory rules — no stack,
-    // dependency, adjacent-tech, interest or cross-cutting match at all. An
-    // empty profile reads as 1.0, so an unknown stack is never off-stack.
-    let off_stack =
-        raw.domain_relevance < scoring_config::COMMODITY_CEILING_SECURITY_OFFSTACK_DOMAIN_RELEVANCE;
+    // v30: the source class decides whether an ungrounded advisory is a
+    // registry row (gated) or an editorial story (decided by score).
+    let registry_advisory = is_registry_advisory_source(input.source_type);
     let stack_tool_listing =
         input.source_type == "github" && github_repo_row_is_stack_tool(input.title, ctx);
     let combined_score = apply_final_adjustments(
@@ -2804,7 +2815,7 @@ pub(crate) fn score_item(
         // Same grounding evidence the gate consumes — lets a dep-grounded
         // academic paper bypass its commodity ceiling.
         grounding.strong,
-        off_stack,
+        registry_advisory,
         ungrounded_registry_release,
         stack_tool_listing,
     );
@@ -2909,18 +2920,25 @@ pub(crate) fn score_item(
     let ugc_capped = !critical_fast_path
         && community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD
         && is_low_community_ugc_source(input.source_type);
-    // v29: an OFF-STACK ungrounded security advisory is capped BELOW the
-    // line (DSL 0.35 + 0.02) and, like the registry look-alike gate,
-    // categorically not feed-relevant — 20 of the 24 security items in the
-    // live feed matched no dependency, most of them off-stack (axios x9 for a
-    // user with no JavaScript). Preemption's OSV matcher still surfaces them
-    // as awareness. An ungrounded advisory ON the user's stack (a popular Rust
-    // crate, for a Rust developer) keeps the 0.44 awareness cap and is decided
-    // by score like any other item: the persona guards measured that gating it
-    // too dropped a Rust developer's "critical CVE in a popular Rust crate".
+    // v29 capped an ungrounded security advisory (a CVE/GHSA for a package NOT
+    // in the user's dependency graph) below the line and gated the verdict, but
+    // only OFF the user's stack (domain relevance < 0.50); one ON the stack
+    // kept a 0.44 "awareness" cap. Live at v29 (2026-09-05): 174 registry rows
+    // (cve 98, osv 76) scored at or above the line with only 17 grounded, 132
+    // of them at exactly 0.46 — a constant, not a signal; 16 of the 20 security
+    // items in the curated feed were that class (axios x5, Orval x3, Hubuum
+    // x3), 15 of 16 with no CVSS to rank by. v30: for a REGISTRY row the
+    // ecosystem is not evidence — its only relevance evidence is the dependency
+    // graph, which Preemption's OSV matcher already covers — so it is gated
+    // whatever the ecosystem. EDITORIAL security coverage (HN, RSS, Reddit…) is
+    // content and stays decided by score under the awareness cap: the persona
+    // guards (every security item editorial) measured that gating it too
+    // dropped python_ml recall to 0.286 (< 0.31) and devops_sre to 0.273
+    // (< 0.35) — a Kubernetes API-server RCE IS the SRE's signal. Operator
+    // decision 2026-09-04 ("off-stack advisories leave Signal"), sharpened.
     let security_ungrounded = content_type == crate::content_dna::ContentType::SecurityAdvisory
         && !grounding.strong
-        && off_stack;
+        && registry_advisory;
     let score_ceiling: Option<f32> = {
         let commodity = ungrounded_registry_release.then_some(
             scoring_config::COMMODITY_CEILING_REGISTRY_RELEASE_UNGROUNDED
@@ -4651,7 +4669,7 @@ mod tests {
             0.0,
             0.0,
             false,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4670,7 +4688,7 @@ mod tests {
             0.0,
             0.0,
             true,  // strongly grounded in the user's dependencies,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4681,7 +4699,7 @@ mod tests {
 
     const HIRING_TITLE: &str =
         "CircleCI is hiring Senior Software Engineer #golang #typescript #react";
-    const OFFSTACK_ADVISORY_TITLE: &str =
+    const UNGROUNDED_ADVISORY_TITLE: &str =
         "[GHSA-vjc7-jrh9-9j86] 9router has unauthenticated CRUD on /api/providers";
 
     #[test]
@@ -4695,7 +4713,7 @@ mod tests {
             0.0,
             0.0,
             false,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4716,7 +4734,7 @@ mod tests {
             0.9,
             1.0,
             true,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4727,48 +4745,53 @@ mod tests {
     }
 
     #[test]
-    fn off_stack_security_advisory_capped_below_core() {
+    fn ungrounded_security_advisory_capped_below_the_line() {
         // A CVE for a package NOT in the user's deps (9router/rama) must not ride
         // the security-pattern exemption to CORE.
         let capped = apply_commodity_ceiling(
             0.91,
-            OFFSTACK_ADVISORY_TITLE,
+            UNGROUNDED_ADVISORY_TITLE,
             &crate::content_dna::ContentType::SecurityAdvisory,
             0.5,
             0.0,
             false, // NOT in the user's dependency graph,
-            true,  // off_stack: no stack/dep/interest match at all
+            true,  // registry advisory row (osv): the graph is the only evidence
             false, // ungrounded_registry_release
         );
         assert_eq!(
             capped,
-            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_OFFSTACK,
-            "off-stack advisory must be capped below the relevance line"
+            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_REGISTRY_UNGROUNDED,
+            "an ungrounded registry row must be capped below the relevance line"
+        );
+        assert!(
+            capped + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR < get_relevance_threshold(),
+            "cap plus offset must stay under the relevance line"
         );
     }
 
     #[test]
-    fn on_stack_ungrounded_advisory_keeps_the_awareness_cap() {
-        // v29: a CVE for a popular crate the user does NOT depend on, in the
-        // user's own ecosystem, is awareness — capped at 0.44, not gated.
+    fn editorial_ungrounded_security_story_keeps_the_awareness_cap() {
+        // v30: a NEWS story about a vulnerability (HN / RSS) is content, not a
+        // registry row — capped at the awareness tier and decided by score.
         let capped = apply_commodity_ceiling(
             0.91,
-            "CVE-2024-1234: Critical vulnerability in popular Rust crate",
+            "Kubernetes API server vulnerability: Remote code execution",
             &crate::content_dna::ContentType::SecurityAdvisory,
             0.5,
             0.0,
             false, // not in the dependency graph
-            false, // but ON the stack (rust)
-            false,
+            false, // editorial source, not a registry row
+            false, // ungrounded_registry_release
         );
         assert_eq!(
             capped,
             scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED,
-            "on-stack ungrounded advisory keeps the awareness cap"
+            "editorial security coverage keeps the awareness cap"
         );
         assert!(
-            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_OFFSTACK
-                < scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED
+            scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_REGISTRY_UNGROUNDED
+                < scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED,
+            "a registry row without grounding ranks below an editorial story"
         );
     }
 
@@ -4789,7 +4812,7 @@ mod tests {
             0.9, // sophistication bypass must NOT apply
             1.0, // community bypass must NOT apply
             false,
-            false, // off_stack
+            false, // registry_advisory
             true,  // ungrounded_registry_release
         );
         assert_eq!(
@@ -4816,7 +4839,7 @@ mod tests {
             0.0,
             0.0,
             false,
-            false, // off_stack
+            false, // registry_advisory
             true,  // ungrounded_registry_release
         );
         assert_eq!(
@@ -4835,7 +4858,7 @@ mod tests {
             0.0,
             0.0,
             true,  // strongly grounded (subject ∈ user deps)
-            false, // off_stack
+            false, // registry_advisory
             false, // NOT ungrounded
         );
         assert_eq!(
@@ -4855,7 +4878,7 @@ mod tests {
             0.5,
             0.0,
             true,  // strongly grounded — axios IS a dependency,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(score, 0.91, "in-stack advisory must NOT be capped");
@@ -4872,7 +4895,7 @@ mod tests {
             0.9,
             0.0,
             false,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4891,7 +4914,7 @@ mod tests {
             0.0,
             1.0,
             false,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4911,7 +4934,7 @@ mod tests {
             0.0,
             0.0,
             false,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4929,7 +4952,7 @@ mod tests {
             0.0,
             0.0,
             false,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4948,7 +4971,7 @@ mod tests {
             0.0,
             scoring_config::COMMUNITY_SIGNAL_HIGH_THRESHOLD,
             false,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4967,7 +4990,7 @@ mod tests {
             0.5,
             0.0,
             false,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -4987,7 +5010,7 @@ mod tests {
             0.0,
             0.0,
             true,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(
@@ -5007,7 +5030,7 @@ mod tests {
             0.0,
             0.0,
             false,
-            false, // off_stack
+            false, // registry_advisory
             false, // ungrounded_registry_release
         );
         assert_eq!(score, 0.90, "non-commodity types must pass through");
@@ -5613,7 +5636,7 @@ mod tests {
     }
 
     #[test]
-    fn offstack_ungrounded_security_advisory_is_capped_below_the_line_and_not_relevant() {
+    fn ungrounded_security_advisory_is_capped_below_the_line_and_not_relevant() {
         let db = crate::test_utils::test_db();
         let mut ctx = fastpath_ctx(&[("tokio", "rust")]);
         ctx.domain_profile = rust_domain_profile();
@@ -5632,13 +5655,7 @@ mod tests {
         let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
         let bd = result.score_breakdown.as_ref().expect("breakdown");
         assert!(!bd.strongly_grounded, "axios is not in this user's graph");
-        assert!(
-            bd.domain_relevance
-                < scoring_config::COMMODITY_CEILING_SECURITY_OFFSTACK_DOMAIN_RELEVANCE,
-            "axios is off a Rust developer's stack (domain {})",
-            bd.domain_relevance
-        );
-        let line = scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_OFFSTACK
+        let line = scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_REGISTRY_UNGROUNDED
             + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR;
         assert!(
             line < get_relevance_threshold(),
@@ -5646,20 +5663,22 @@ mod tests {
         );
         assert!(
             result.top_score <= line + 1e-6,
-            "off-stack advisory must sit below the relevance line (got {}, line {line})",
+            "ungrounded advisory must sit below the relevance line (got {}, line {line})",
             result.top_score
         );
         assert!(
             !result.relevant,
-            "off-stack advisories are Preemption awareness, never Signal feed items"
+            "a registry row the dependency graph cannot ground is Preemption awareness, never a Signal item"
         );
     }
 
+    /// v30: for a REGISTRY row the ecosystem is not evidence. v29 kept an
+    /// ungrounded OSV row ON the user's stack (a Rust crate, for a Rust
+    /// developer) at a 0.44 awareness cap; live, 16 of the 20 feed security
+    /// items were exactly that class, all at the identical 0.46. The OSV
+    /// matcher covers the graph; editorial coverage is decided by score.
     #[test]
-    fn on_stack_ungrounded_security_advisory_is_not_verdict_gated() {
-        // The same shape for a package IN the user's ecosystem: no grounding,
-        // but the stack says it is theirs — the awareness cap applies and the
-        // verdict is decided by score, never by the off-stack gate.
+    fn on_ecosystem_ungrounded_security_advisory_is_gated_too() {
         let db = crate::test_utils::test_db();
         let mut ctx = fastpath_ctx(&[("tokio", "rust")]);
         ctx.domain_profile = rust_domain_profile();
@@ -5677,11 +5696,52 @@ mod tests {
         let bd = result.score_breakdown.as_ref().expect("breakdown");
         assert!(!bd.strongly_grounded, "rustls is not a dependency here");
         assert!(
-            bd.domain_relevance
-                >= scoring_config::COMMODITY_CEILING_SECURITY_OFFSTACK_DOMAIN_RELEVANCE,
-            "a Rust crate is on a Rust developer's stack (domain {})",
+            bd.domain_relevance >= 0.5,
+            "a Rust crate is on a Rust developer's stack (domain {}) — and that is not enough",
             bd.domain_relevance
         );
+        let line = scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_REGISTRY_UNGROUNDED
+            + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR;
+        assert!(
+            result.top_score <= line + 1e-6,
+            "the same cap holds on the user's own ecosystem (got {}, line {line})",
+            result.top_score
+        );
+        assert!(
+            !result.relevant,
+            "on-ecosystem is not in-graph: the verdict gate applies (score {})",
+            result.top_score
+        );
+    }
+
+    /// v30: the same vulnerability as a NEWS story (RSS / HN) is content — the
+    /// awareness cap bounds its rank and the score rule decides its verdict.
+    /// The persona guards measured the alternative: gating editorial coverage
+    /// too dropped python_ml recall to 0.286 and devops_sre to 0.273.
+    #[test]
+    fn editorial_security_story_is_capped_not_verdict_gated() {
+        let db = crate::test_utils::test_db();
+        let mut ctx = fastpath_ctx(&[("tokio", "rust")]);
+        ctx.domain_profile = rust_domain_profile();
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let tags: Vec<String> = Vec::new();
+        let input = advisory_input(
+            "CVE-2025-0001: Critical vulnerability in popular Rust crate rustls (certificate validation bypass)",
+            "https://example.com/blog/rustls-cve-2025-0001",
+            "A certificate validation flaw in rustls lets an attacker bypass verification. \
+             Users should upgrade. CVE-2025-0001, CVSS 9.1.",
+            "rss",
+            &zero,
+            &tags,
+        );
+        let result = score_item(&input, &ctx, &db, &fastpath_options(), None);
+        let bd = result.score_breakdown.as_ref().expect("breakdown");
+        assert_eq!(
+            bd.content_type.as_deref(),
+            Some("security_advisory"),
+            "the story classifies as a security advisory"
+        );
+        assert!(!bd.strongly_grounded, "rustls is not a dependency here");
         let awareness = scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_UNGROUNDED
             + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR;
         assert!(
@@ -5693,7 +5753,7 @@ mod tests {
         let by_score = result.top_score >= get_relevance_threshold();
         assert!(
             result.relevant || !by_score,
-            "an on-stack advisory above the line must not be verdict-gated (score {})",
+            "an editorial story above the line must not be verdict-gated (score {})",
             result.top_score
         );
     }

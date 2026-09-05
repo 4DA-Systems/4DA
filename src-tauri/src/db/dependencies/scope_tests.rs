@@ -234,3 +234,63 @@ fn alerts_record_the_audited_project_path_and_backfill_it() {
         .unwrap();
     assert_eq!(bytes.project_path.as_deref(), Some("d:/other"));
 }
+
+/// v30: excluded projects' rows are retired at startup (the walks skip the
+/// path, so nothing else ever revisits them), and alerts with no remaining
+/// dependency behind them go with them.
+#[test]
+fn excluded_project_rows_and_orphan_alerts_are_purged() {
+    let db = test_db();
+    let conn = db.conn.lock();
+    conn.execute_batch(
+        "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
+         VALUES ('c:/users/me/documents/navcal/vercel-workflow', 'rkyv', '0.7.45', 'rust', 0, 1, datetime('now'), datetime('now')),
+                ('d:/4da/src-tauri', 'bytes', '1.10.1', 'rust', 0, 0, datetime('now'), datetime('now'));
+         INSERT INTO project_dependencies (project_path, manifest_type, package_name, language)
+         VALUES ('c:/users/me/documents/navcal/vercel-workflow', 'cargo', 'rkyv', 'rust'),
+                ('d:/4da/src-tauri', 'cargo', 'tokio', 'rust');
+         INSERT INTO dependency_alerts (package_name, ecosystem, alert_type, severity, title, project_path)
+         VALUES ('rkyv', 'crates.io', 'cve', 'HIGH', 'rkyv unsound', NULL),
+                ('bytes', 'crates.io', 'cve', 'HIGH', 'bytes overflow', 'd:/4da/src-tauri'),
+                ('leftpad', 'npm', 'cve', 'LOW', 'never in the graph', NULL),
+                ('serde', 'crates.io', 'cve', 'LOW', 'stamped with the excluded path', 'c:/users/me/documents/navcal/vercel-workflow');",
+    )
+    .unwrap();
+    // Stored as the user typed it (backslashes, mixed case): comparison_form on both sides.
+    let excluded = vec![r"C:\Users\me\Documents\navcal\vercel-workflow".to_string()];
+    let counts = crate::db::purge_excluded_project_rows(&conn, &excluded).unwrap();
+    assert_eq!(
+        counts.user_dependencies, 1,
+        "the foreign clone's dependency row"
+    );
+    assert_eq!(
+        counts.project_dependencies, 1,
+        "the foreign clone's manifest row"
+    );
+    assert_eq!(
+        counts.alerts, 3,
+        "rkyv (now orphaned), leftpad (never in the graph), serde (excluded path)"
+    );
+    let left: Vec<String> = conn
+        .prepare("SELECT package_name FROM dependency_alerts ORDER BY package_name")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .filter_map(Result::ok)
+        .collect();
+    assert_eq!(
+        left,
+        vec!["bytes".to_string()],
+        "an alert with a live dependency behind it stays"
+    );
+    let kept: i64 = conn
+        .query_row("SELECT COUNT(*) FROM user_dependencies", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(kept, 1, "the user's own rows are untouched");
+    let none = crate::db::purge_excluded_project_rows(&conn, &[]).unwrap();
+    assert_eq!(
+        none.total(),
+        0,
+        "no exclusions, no work — orphans are not this function's job"
+    );
+}

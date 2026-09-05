@@ -178,19 +178,38 @@ pub(crate) fn compute_high_stakes_recall(
     let t = threshold as f64;
     let mut dep_matched_total = 0usize;
     let mut misscored = 0usize;
-    for (_, title, content, relevance) in &items {
-        let (matches, _) = match_dependencies(title, content, &[], &ctx.ace_ctx);
+    for row in &items {
+        // The pipeline's own grounding verdict when a breakdown is stored; the
+        // text matcher only for rows scored before breakdowns carried it.
         // Corroborated grounding only — the exact predicate the production
         // pipeline's Critical gate / evidence pool trust. `!matches.is_empty()`
         // admitted every >= 0.15-confidence substring coincidence ("sqlite3" in
         // a sqlite3-ruby release, "anthropic" in company news), which pinned
         // this metric at a permanent ~87% pseudo-miss-rate on live data and
         // made any real recall regression invisible inside the noise.
-        if is_strongly_grounded(&matches) {
-            dep_matched_total += 1;
-            if *relevance < t {
-                misscored += 1;
+        let grounded = match row.strongly_grounded {
+            Some(g) => g,
+            None => {
+                let (matches, _) = match_dependencies(&row.title, &row.content, &[], &ctx.ace_ctx);
+                is_strongly_grounded(&matches)
             }
+        };
+        if !grounded {
+            continue;
+        }
+        // A grounded advisory the pipeline has CONFIRMED does not affect the
+        // installed version (`is_version_affected == Some(false)`) scoring as
+        // noise is the pipeline doing its job, not a recall miss. Live
+        // 2026-09-05 the monitor paged "6 of 19 dep-matched advisories scored
+        // as noise" on exactly that class (hono advisories fixed below the
+        // installed 4.13.3), so the one alarm this monitor owns cried wolf on
+        // the day the version verdict started working.
+        if row.version_affected == Some(false) {
+            continue;
+        }
+        dep_matched_total += 1;
+        if row.relevance < t {
+            misscored += 1;
         }
     }
     let miss_rate = if dep_matched_total > 0 {
@@ -204,6 +223,64 @@ pub(crate) fn compute_high_stakes_recall(
         miss_rate,
         alert: miss_rate > HIGH_STAKES_MISS_ALERT_RATE,
     })
+}
+
+/// How many recently scored items sit within ±[`CLIFF_MARGIN`] of an embedding
+/// axis's confirmation threshold. The 2-signal gate is a cliff — an item that
+/// loses one confirmation falls from ~0.7 to <= 0.28 — so the share of items
+/// PERCHED on a threshold is the pipeline's exposure to embedding jitter.
+/// Measured live 2026-09-05 over 63,343 explanations: context 2.7%, interest
+/// 12.7% — the interest axis is the fragile one. Logged, never acted on
+/// automatically: a re-tune of either threshold is measured here first.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct ThresholdCliffs {
+    pub sampled: usize,
+    pub near_context: usize,
+    pub near_interest: usize,
+}
+
+impl ThresholdCliffs {
+    pub fn share_context(&self) -> f32 {
+        share(self.near_context, self.sampled)
+    }
+    pub fn share_interest(&self) -> f32 {
+        share(self.near_interest, self.sampled)
+    }
+}
+
+fn share(n: usize, total: usize) -> f32 {
+    if total == 0 {
+        0.0
+    } else {
+        n as f32 / total as f32
+    }
+}
+
+/// Half-width of the "perched" band around a confirmation threshold.
+pub(crate) const CLIFF_MARGIN: f32 = 0.03;
+
+/// Count the recent explanations perched on the context / interest thresholds.
+/// Bounded scan of the most recent `sample` explanations; read-only.
+pub(crate) fn compute_threshold_cliffs(
+    db: &Database,
+    sample: usize,
+) -> SqliteResult<ThresholdCliffs> {
+    let rows = db.get_recent_axis_scores(sample)?;
+    let mut out = ThresholdCliffs::default();
+    for (context, interest) in rows {
+        out.sampled += 1;
+        if context.is_some_and(|c| {
+            (c as f32 - crate::scoring_config::CONTEXT_THRESHOLD).abs() <= CLIFF_MARGIN
+        }) {
+            out.near_context += 1;
+        }
+        if interest.is_some_and(|i| {
+            (i as f32 - crate::scoring_config::INTEREST_THRESHOLD).abs() <= CLIFF_MARGIN
+        }) {
+            out.near_interest += 1;
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

@@ -1206,6 +1206,7 @@
   "about.attributionLegitimacy": "Ce modèle de développement dirigé par l'humain et implémenté par l'IA est une approche légitime et de plus en plus standard en ingénierie logicielle. L'historique git complet sert de registre vérifiable et auditable de l'extérieur de ce processus.",
   "about.copyright": "v{{version}} · © 2025–2026 4DA Systems",
   "about.tagline": "Tous droits réservés. Construit avec une vision, conçu avec Claude.",
+  "about.quitApp": "Quit 4DA",
   "about.privacyPolicy": "Politique de confidentialité",
   "about.termsOfService": "Conditions d'utilisation",
   "about.frameworkSubtitle": "Une philosophie pour l’intelligence privée des développeurs",

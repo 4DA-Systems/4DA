@@ -57,7 +57,8 @@ pub(crate) use ace_context::{get_ace_context, primary_project_dirs, ACEContext};
 pub(crate) use analyzer::{run_post_analysis_hooks, score_items_full};
 pub(crate) use calibration::calibrate_score;
 pub(crate) use calibration_monitor::{
-    compute_calibration_snapshot, compute_high_stakes_recall, CalibrationSnapshot, HighStakesRecall,
+    compute_calibration_snapshot, compute_high_stakes_recall, compute_threshold_cliffs,
+    CalibrationSnapshot, HighStakesRecall,
 };
 pub(crate) use composition::{enforce_composition_floors, FloorConfig};
 pub(crate) use context::{
@@ -479,11 +480,11 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 //      technology the user declared as an interest; dependency names come
 //      from the git-scoped set.
 //      Live cause of "rust scored off-stack for 86% of the corpus".
-//   5. Verdict gates: zero-engagement UGC (the 0.50 cap) and OFF-STACK
-//      ungrounded security advisories (new cap 0.35; on-stack ungrounded ones
-//      keep the 0.44 awareness cap) are categorically NOT feed-relevant, the
+//   5. Verdict gates: zero-engagement UGC (the 0.50 cap) and ungrounded
+//      security advisories (cap 0.35) are categorically NOT feed-relevant, the
 //      same shape as v18's registry gate. 128 feed items sat at exactly 0.50;
-//      20 of 24 feed security items matched no dependency.
+//      20 of 24 feed security items matched no dependency. (v29 keyed the gate
+//      on domain relevance; v30 keys it on source class — see below.)
 //   6. Security version verdict: the OSV mirror's structured ranges decide
 //      `is_version_affected` (it was NULL on 746/746 breakdowns); Critical and
 //      "Affects You" require a positive verdict; the cve writer now carries
@@ -499,7 +500,29 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 //
 // Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS: items 1-4 change the
 // confirmation gate's inputs for EVERY item. The whole corpus drains.
-pub(crate) const PIPELINE_VERSION: i32 = 29;
+//
+// v30 (2026-09-05): doctrine follow-through after the live v29 measurement.
+//   1. A REGISTRY advisory row (osv / cve) the dependency graph cannot ground is
+//      capped below the line (0.35) and verdict-gated, whatever the ecosystem.
+//      v29 gated only OFF-stack ones; live, 174 registry rows scored at or above
+//      the line with 17 grounded, 132 at exactly 0.46 — a constant, not a
+//      signal — and 16 of the 20 feed security items were that class (axios x5,
+//      Orval x3, Hubuum x3), 15 of 16 without a CVSS. EDITORIAL security
+//      stories (HN, RSS, …) stay content under the 0.44 awareness cap, decided
+//      by score: the persona guards measured that gating them too dropped
+//      python_ml recall to 0.286 (< 0.31) and devops_sre to 0.273 (< 0.35) — a
+//      Kubernetes API-server RCE IS the SRE's signal. Operator decision
+//      2026-09-04 ("off-stack advisories leave Signal"), sharpened by the
+//      guards. AD-037 amended.
+//   2. Showcase openers "how i built" / "how we built" / "building my" /
+//      "i shipped" / "we shipped" classify as ShowAndTell (a dev.to "How I
+//      Built …" sat in the feed at 0.872 as deep_dive; dev.to was 38% of it).
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS: `content_type` is NULL
+// on 46,863 of 74,298 live rows (63%), so no positive-form predicate is a
+// provable superset of item 1's reach. The whole corpus drains (5 minutes
+// live at v29).
+pub(crate) const PIPELINE_VERSION: i32 = 30;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

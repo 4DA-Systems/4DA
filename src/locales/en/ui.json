@@ -1281,6 +1281,7 @@
   "about.attributionLegitimacy": "This human-directed, AI-implemented development model is a legitimate and increasingly standard approach to software engineering. The complete git history serves as a verifiable, externally auditable record of this process.",
   "about.copyright": "v{{version}} · © 2025–2026 4DA Systems",
   "about.tagline": "All rights reserved. Built with vision, engineered with Claude.",
+  "about.quitApp": "Quit 4DA",
   "about.privacyPolicy": "Privacy Policy",
   "about.termsOfService": "Terms of Service",
   "about.frameworkSubtitle": "A Philosophy for Private Developer Intelligence",

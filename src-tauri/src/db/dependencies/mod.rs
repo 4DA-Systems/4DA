@@ -21,9 +21,9 @@ pub mod types;
 
 pub use hygiene::{
     project_path_missing_on_disk, prune_orphaned_project_dependencies,
-    purge_agent_infra_dependencies, purge_builtin_import_dependencies,
-    purge_non_project_intelligence, AgentInfraPurge, BuiltinImportPurge, NonProjectPurge,
-    OrphanedProjectPurge,
+    purge_agent_infra_dependencies, purge_builtin_import_dependencies, purge_excluded_project_rows,
+    purge_non_project_intelligence, AgentInfraPurge, BuiltinImportPurge, ExcludedPurge,
+    NonProjectPurge, OrphanedProjectPurge,
 };
 pub(crate) use queries::is_excluded_project_path;
 pub use types::{

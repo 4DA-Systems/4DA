@@ -2041,7 +2041,7 @@
       "score_max": 0.12,
       "should_be_relevant": false,
       "required_signals": [],
-      "notes": "Live 2026-09-04: nine axios advisories feed-relevant at exactly 0.46 (0.44 ceiling + 0.02 offset) for a user with no axios. Pinned false: OFF-STACK ungrounded advisories (no stack/dep/interest match) are capped at 0.35 and verdict-gated — an ungrounded advisory on the user's own stack keeps the 0.44 awareness cap; Preemption still surfaces them as awareness. Band measured 2026-09-04: zero-embedding 0.020, real-embedding 0.035. Band measured 2026-09-04: zero-embedding 0.020, real-embedding 0.035."
+      "notes": "Live 2026-09-04: nine axios advisories feed-relevant at exactly 0.46 (0.44 ceiling + 0.02 offset) for a user with no axios. Pinned false: a REGISTRY advisory row (osv/cve) the graph cannot ground is capped at 0.35 and verdict-gated whatever the ecosystem (v30; v29 keyed this on domain relevance and live 16 of 20 feed security items were on-ecosystem registry rows at the identical 0.46); editorial security stories stay under the 0.44 awareness cap; Preemption still surfaces registry rows as awareness. Band measured 2026-09-04: zero-embedding 0.020, real-embedding 0.035."
     }
   },
   {

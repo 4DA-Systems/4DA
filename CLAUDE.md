@@ -129,6 +129,15 @@ Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
   2026-08-31 alone). Use `pwsh scripts/stop-fourda.ps1` — it kills only
   instances launched from YOUR tree's `src-tauri/target/` and lists what it
   deliberately left running.
+- **Hooks are silent in fresh worktrees.** Husky's runtime shim `.husky/_` is written by
+  `pnpm install`'s `prepare` step, which `git worktree add` never runs — so in a new
+  agent worktree pre-commit/pre-push validation is skipped with no message at all.
+  Run `pnpm run hooks:ensure` (idempotent) in every new worktree before its first
+  commit. Three PRs reached CI on 2026-09-04 with gates the hooks would have caught.
+- **Stopping the dev app: use `quit_app`, not a kill.** Window close only HIDES the
+  tray-resident app (exit guard #501); only `app.exit(0)` exits. Invoke `quit_app`
+  (About panel button, or Victauri `invoke_command`) for a clean exit — a forced
+  stop skips `Drop` and leaves a ghost tray icon every time.
 - **Worktree base goes stale — and it reads as YOUR regression.** `main` moves fast
   (6 merges landed during one agent session). A worktree cut hours earlier still has
   the old `scripts/ghost-command-backlog.json`, `check-file-sizes.cjs` exceptions and

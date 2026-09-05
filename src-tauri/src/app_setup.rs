@@ -1126,6 +1126,31 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     }
                 }
 
+                // v30: rows under projects the user EXCLUDED from their stack.
+                // The lockfile and manifest walks skip excluded paths, so only
+                // startup can retire their rows (live 2026-09-05: 1,846 rows of an
+                // excluded foreign clone and 109 derived rkyv alerts survived the
+                // exclusion by a day). Details in db::purge_excluded_project_rows.
+                let user_excluded = crate::project_inclusion::user_excluded_paths();
+                match crate::db::purge_excluded_project_rows(&conn, &user_excluded) {
+                    Ok(counts) => {
+                        total_deleted += counts.total();
+                        if counts.total() > 0 {
+                            info!(
+                                target: "4da::startup",
+                                user_deps = counts.user_dependencies,
+                                project_deps = counts.project_dependencies,
+                                alerts = counts.alerts,
+                                excluded_paths = user_excluded.len(),
+                                "Startup cleanup: excluded-project dependency rows purged"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: excluded-project purge failed");
+                    }
+                }
+
                 // Self-heal the FULL project-inclusion policy (canonical predicate
                 // in project_inclusion): tier-1 agent-infra AND tier-2 non-project
                 // scaffolding (fixture trees, -placeholder dirs) across EVERY

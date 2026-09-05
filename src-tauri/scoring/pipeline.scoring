@@ -305,28 +305,28 @@ commodity_ceiling {
     # Ungrounded security advisories — a CVE/GHSA for a package NOT in the
     # developer's dependency graph (observed: 9router 0.91, rama 0.78 scoring
     # CORE though neither is a dependency). In-stack advisories
-    # (strongly_grounded) are exempt and surface at full score. An ungrounded
-    # advisory ON the user's stack (a popular Rust crate for a Rust developer,
-    # SQLite for a SQLite user) is ecosystem awareness: it keeps this cap,
-    # which with the +0.02 offset sits just above the 0.40 line, so it can
-    # surface when interest/ace confirm it but never outranks a grounded one.
+    # (strongly_grounded) are exempt and surface at full score. This cap is the
+    # AWARENESS tier for EDITORIAL security coverage (HN, RSS, Reddit, dev.to…):
+    # a Kubernetes API-server RCE for a DevOps engineer, a PyTorch pickle RCE
+    # for an ML developer — content, decided by score like any other story,
+    # never CORE without grounding. With the +0.02 offset it sits just above
+    # the 0.40 line, so it surfaces when interest/ace confirm it and never
+    # outranks a grounded advisory.
     security_advisory_ungrounded: 0.44   # [0.30, 0.55]
-    # v29 (2026-09-04): an ungrounded advisory OFF the user's stack (axios for
-    # a developer with no JavaScript; omnigent for one with no Python) is capped
-    # BELOW the 0.40 relevance line like registry_release_ungrounded, and the
-    # VERDICT is gated categorically in score_item. Live, 20 of the 24 security
-    # items in the curated feed matched no dependency and most were off-stack
-    # (axios x9 for a user with no axios). Off-stack advisories still rank in
-    # lists and still reach Preemption via the OSV matcher — the Signal feed
-    # is for the user's graph and ecosystem. Measured before this split
-    # (2026-09-04): gating every ungrounded advisory dropped a Rust developer's
-    # "critical vulnerability in a popular Rust crate" from the persona guard.
-    security_advisory_offstack: 0.35     # [0.20, 0.37]
-    # "Off the stack" = domain relevance below the lowest positive tier
-    # (compute_domain_relevance returns >= 0.50 for any stack, dependency,
-    # adjacent-tech, interest or cross-cutting match; 0.15/0.25 otherwise).
-    # An EMPTY profile scores 1.0, so an unknown stack is never "off-stack".
-    security_offstack_domain_relevance: 0.50   # [0.25, 0.70]
+    # v30 (2026-09-05): a REGISTRY advisory row (source osv / cve — one
+    # structured record about one package) that the graph cannot ground is
+    # capped BELOW the line and its VERDICT is gated in score_item, whatever
+    # the ecosystem. v29 gated only OFF-stack advisories (domain relevance
+    # < 0.50); live, 174 registry rows scored at or above the line with only
+    # 17 grounded, 132 of them at exactly 0.46 — a constant, not a signal —
+    # and 16 of the 20 feed security items were that class (axios x5, Orval
+    # x3, Hubuum x3), 15 of 16 with no CVSS to rank by. A registry row's only
+    # relevance evidence is the dependency graph, which Preemption's OSV
+    # matcher already covers. The persona guards (every security item there
+    # is editorial) measured that gating EVERY ungrounded advisory dropped
+    # python_ml recall to 0.286 (< 0.31) and devops_sre to 0.273 (< 0.35) —
+    # the source-class split keeps both. Operator decision 2026-09-04.
+    security_advisory_registry_ungrounded: 0.35   # [0.20, 0.37]
     # v29 (2026-09-04): a bare GitHub trending row whose repository IS one of
     # the user's own stack tools ("microsoft/TypeScript (★110139 • TypeScript)"
     # for a TypeScript developer). The user already has the tool; a star-count

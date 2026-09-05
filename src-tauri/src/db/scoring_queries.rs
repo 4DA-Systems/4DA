@@ -68,6 +68,24 @@ pub struct TriageAuditRow {
     pub relevance_score: Option<f64>,
 }
 
+/// One high-stakes item for the calibration monitor's dep-scoped recall check
+/// (Phase 5b), joined with the pipeline's own verdicts from the stored breakdown
+/// when one exists — the monitor prefers what the pipeline decided over
+/// re-deriving it from text.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HighStakesRow {
+    pub id: i64,
+    pub title: String,
+    pub content: String,
+    pub relevance: f64,
+    /// The scoring pipeline's corroborated grounding verdict (`strongly_grounded`
+    /// in the breakdown). `None` when no breakdown is stored.
+    pub strongly_grounded: Option<bool>,
+    /// The security version verdict: `Some(false)` means the installed version
+    /// is CONFIRMED outside the affected range. `None` = no verdict.
+    pub version_affected: Option<bool>,
+}
+
 impl Database {
     /// Rows for the relevance-triage recall audit (Phase 0 of the scoring funnel).
     /// Returns the exact fields the cheap gate reads (embedding + title/content +
@@ -257,26 +275,55 @@ impl Database {
     }
 
     /// Scored high-stakes items (security/breaking/CVE) for the calibration monitor's
-    /// dep-scoped recall check (Phase 5b). Returns (id, title, content, relevance_score)
-    /// so the caller can run the canonical dep matcher and find advisories that affect
-    /// the user's stack yet scored as noise — a concrete recall bug. Read-only.
-    pub fn get_scored_high_stakes_items(
-        &self,
-        limit: usize,
-    ) -> SqliteResult<Vec<(i64, String, String, f64)>> {
+    /// dep-scoped recall check (Phase 5b), each with the pipeline's stored grounding
+    /// and version verdicts (NULL when the item has no breakdown). One explanation
+    /// row per item (`scoring_explanations.source_item_id` is unique), so the join
+    /// cannot fan out. Read-only.
+    pub fn get_scored_high_stakes_items(&self, limit: usize) -> SqliteResult<Vec<HighStakesRow>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare_cached(
-            "SELECT id, title, content, relevance_score
-             FROM source_items
-             WHERE relevance_score IS NOT NULL
-               AND (cve_ids IS NOT NULL
-                    OR content_type IN ('security_advisory', 'breaking_change'))
-             ORDER BY created_at DESC
+            "SELECT s.id, s.title, s.content, s.relevance_score,
+                    json_extract(e.breakdown, '$.breakdown.strongly_grounded'),
+                    json_extract(e.breakdown, '$.breakdown.is_version_affected')
+             FROM source_items s
+             LEFT JOIN scoring_explanations e ON e.source_item_id = s.id
+             WHERE s.relevance_score IS NOT NULL
+               AND (s.cve_ids IS NOT NULL
+                    OR s.content_type IN ('security_advisory', 'breaking_change'))
+             ORDER BY s.created_at DESC
              LIMIT ?1",
         )?;
         let rows = stmt.query_map(params![limit as i64], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            let grounded: Option<i64> = row.get(4)?;
+            let affected: Option<i64> = row.get(5)?;
+            Ok(HighStakesRow {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                content: row.get(2)?,
+                relevance: row.get(3)?,
+                strongly_grounded: grounded.map(|v| v != 0),
+                version_affected: affected.map(|v| v != 0),
+            })
         })?;
+        rows.collect()
+    }
+
+    /// The two embedding axes (context, interest) of the most recently scored
+    /// explanations, for the threshold-cliff probe. NULL where a breakdown
+    /// predates the field. Read-only.
+    pub fn get_recent_axis_scores(
+        &self,
+        limit: usize,
+    ) -> SqliteResult<Vec<(Option<f64>, Option<f64>)>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT json_extract(breakdown, '$.breakdown.context_score'),
+                    json_extract(breakdown, '$.breakdown.interest_score')
+             FROM scoring_explanations
+             ORDER BY scored_at DESC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit as i64], |row| Ok((row.get(0)?, row.get(1)?)))?;
         rows.collect()
     }
 

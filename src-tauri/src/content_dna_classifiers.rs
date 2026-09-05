@@ -235,6 +235,14 @@ pub(super) fn is_show_and_tell(title: &str) -> bool {
         "i redesigned",
         "i remade",
         "i ported",
+        // v30: the narrated showcase. dev.to's "How I Built Drs Kart: Building a
+        // B2B Medical Equipment Marketplace" sat in the live feed at 0.872 as a
+        // deep_dive (long body) because only the bare "i built" was an opener.
+        "how i built",
+        "how we built",
+        "building my",
+        "i shipped",
+        "we shipped",
         "show hn",
         "launch hn",
     ];

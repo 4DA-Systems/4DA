@@ -696,4 +696,24 @@ mod tests {
             "no release multiplier for a repo listing (got {mult})"
         );
     }
+
+    /// v30: the narrated showcase ("How I Built …") is a show-and-tell, not a
+    /// deep dive — a long body used to win by default (live 2026-09-05: dev.to
+    /// "How I Built Drs Kart" at 0.872 as deep_dive).
+    #[test]
+    fn test_narrated_showcase_openers_are_show_and_tell() {
+        let long_body = "We started with a monorepo and a Postgres schema. ".repeat(60);
+        for title in [
+            "How I Built Drs Kart: Building a B2B Medical Equipment Marketplace with React",
+            "How we built our own feature-flag service on Postgres",
+            "Building my own Rust web framework in a weekend",
+            "I shipped a Tauri app in 30 days",
+        ] {
+            let (ct, _) = classify_content(title, &long_body);
+            assert_eq!(ct, ContentType::ShowAndTell, "{title}");
+        }
+        // A how-to is not a showcase.
+        let (ct, _) = classify_content("How to build a REST API in Rust", &long_body);
+        assert_ne!(ct, ContentType::ShowAndTell);
+    }
 }

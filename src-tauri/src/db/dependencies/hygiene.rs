@@ -38,6 +38,82 @@ impl AgentInfraPurge {
     }
 }
 
+/// Rows the dependency walks can no longer reach: everything under a project
+/// the user EXCLUDED from their stack, plus alerts whose package no remaining
+/// dependency row names.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ExcludedPurge {
+    pub user_dependencies: usize,
+    pub project_dependencies: usize,
+    pub alerts: usize,
+}
+
+impl ExcludedPurge {
+    pub fn total(&self) -> usize {
+        self.user_dependencies + self.project_dependencies + self.alerts
+    }
+}
+
+/// Retire the rows of projects the user has EXCLUDED from their stack.
+///
+/// The lockfile and manifest walks skip excluded paths, so nothing ever
+/// revisits their rows: on the live box (2026-09-05) the 1,846
+/// `user_dependencies` rows of an excluded foreign clone — and the 109 rkyv
+/// alerts derived from them — outlived the exclusion by a day. Every reader
+/// filters excluded paths, but a row no reader may use and no walk will prune
+/// still counts in "Your stack" totals and still feeds the audit denominator.
+///
+/// Alerts go in two passes: those stamped with an excluded `project_path`, then
+/// those whose package (case-insensitive) is named by NO remaining dependency
+/// row anywhere — an alert with no dependency behind it cannot affect the user.
+/// Alerts for packages still present somewhere are kept for the next scoped
+/// audit to re-evaluate. Same startup-cleanup precedent as the agent-infra
+/// purge below; the caller passes `project_inclusion::user_excluded_paths()`.
+pub fn purge_excluded_project_rows(
+    conn: &rusqlite::Connection,
+    excluded: &[String],
+) -> SqliteResult<ExcludedPurge> {
+    let mut out = ExcludedPurge::default();
+    if excluded.is_empty() {
+        return Ok(out);
+    }
+    let tx = conn.unchecked_transaction()?;
+    for table in [
+        "user_dependencies",
+        "project_dependencies",
+        "dependency_alerts",
+    ] {
+        let paths: Vec<String> = {
+            let mut stmt = tx.prepare(&format!(
+                "SELECT DISTINCT project_path FROM {table} WHERE project_path IS NOT NULL"
+            ))?;
+            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+            rows.filter_map(Result::ok)
+                .filter(|p| crate::project_inclusion::is_user_excluded(p, excluded))
+                .collect()
+        };
+        for path in paths {
+            let n = tx.execute(
+                &format!("DELETE FROM {table} WHERE project_path = ?1"),
+                params![path],
+            )?;
+            match table {
+                "user_dependencies" => out.user_dependencies += n,
+                "project_dependencies" => out.project_dependencies += n,
+                _ => out.alerts += n,
+            }
+        }
+    }
+    out.alerts += tx.execute(
+        "DELETE FROM dependency_alerts
+         WHERE LOWER(package_name) NOT IN (SELECT LOWER(package_name) FROM user_dependencies)
+           AND LOWER(package_name) NOT IN (SELECT LOWER(package_name) FROM project_dependencies)",
+        [],
+    )?;
+    tx.commit()?;
+    Ok(out)
+}
+
 /// Self-heal purge for dependency tables polluted by agent infrastructure.
 ///
 /// Mirrors the `project_dependencies` startup purge precedent (app_setup):
