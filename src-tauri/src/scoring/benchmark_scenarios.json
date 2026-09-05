@@ -2109,5 +2109,27 @@
       "required_signals": [],
       "notes": "Twin of vf_osv_offstack_axios: an advisory for a package the user DOES depend on, with the version evidence the cve writer now carries. Pinned true: security fast path on a strongly grounded direct dependency. Band measured 2026-09-04: zero-embedding 0.650, real-embedding 0.650. Band measured 2026-09-04: zero-embedding 0.650, real-embedding 0.650."
     }
+  },
+  {
+    "id": "vf_cve_grounded_not_affected",
+    "category": "verdict_fence",
+    "description": "CVE in a direct dependency whose installed version is already past the fix",
+    "item": {
+      "title": "[CVE-2026-90003] tokio: unbounded memory growth in broadcast channel receiver lag handling",
+      "content": "A slow broadcast receiver could make the channel retain every lagged value instead of dropping to the configured capacity, growing memory without bound.\n\nSeverity: HIGH\nAffected: tokio (crates.io)\nAffected range: tokio (crates.io): >= 1.0.0, < 1.38.1\nFixed in: 1.38.1\nCVSS: 7.5",
+      "source_type": "cve",
+      "tags_json": null,
+      "created_hours_ago": 2,
+      "source_id": null
+    },
+    "profile": "rust_developer",
+    "verdict_pinned": true,
+    "expected": {
+      "score_min": 0.3,
+      "score_max": 0.37,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Twin of vf_cve_direct_dep_affected: the same grounded direct dependency, but the profile's installed tokio 1.47.1 is past the 1.38.1 fix, so the version verdict is CONFIRMED not affected. Pinned false (v31): a grounded registry advisory confirmed not to affect the installed version is capped at the registry-ungrounded tier (0.35 + 0.02 offset) and verdict-gated — live 2026-09-06 two Hono advisories fixed below the installed 4.13.3 sat in the feed at 0.88; Preemption keeps the row as 'you are on a fixed version'. Band measured 2026-09-06: zero-embedding 0.370, real-embedding 0.370 (the exit ceiling in both modes; the twin stays 0.650 / relevant)."
+    }
   }
 ]

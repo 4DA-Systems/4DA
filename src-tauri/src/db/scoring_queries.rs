@@ -19,6 +19,10 @@ use super::{blob_to_embedding, parse_datetime, Database, StoredSourceItem};
 /// not information, and re-writing it churned every ranking surface daily.
 /// Deliberately BELOW the 0.10 churn-telemetry threshold: everything the
 /// damper eats was already invisible to the churn counters.
+///
+/// SAME-VERSION only (v31): a write that crosses a `PIPELINE_VERSION`
+/// boundary is the re-judgement itself and is never damped — see
+/// [`Database::persist_analysis_scores`].
 pub const SCORE_WRITE_HYSTERESIS: f64 = 0.05;
 
 /// THE shared ranked-read ORDER BY expression (audit 2026-08-23 §3.5, items
@@ -348,6 +352,18 @@ impl Database {
     /// are computed over the RAW deltas (what the scorer produced), with
     /// `suppressed_writes` recording how many the damper kept at the old value.
     ///
+    /// **A version drain is never damped (v31, 2026-09-06):** the damper is a
+    /// SAME-VERSION tool. When the row's stored `scored_pipeline_version`
+    /// differs from the current one, the write is the re-judgement a
+    /// `PIPELINE_VERSION` bump promises ("when the engine improves, it
+    /// re-judges everything it already holds"), so the new score is written
+    /// and the explanation REPLACED even inside the band. Live after the v30
+    /// drain: all 75,600 rows were stamped 30, but 74,547 explanation rows
+    /// (98.6%) still carried a v27–v29 breakdown through the seed-only path —
+    /// every "why" surface and the high-stakes monitor read a previous
+    /// pipeline's verdict. `version_rejudged` counts those writes in the churn
+    /// summary log line.
+    ///
     /// **`scored_at` (schema 111):** stamped `datetime('now')` UNCONDITIONALLY
     /// — hysteresis-suppressed writes included, like the version stamp. A
     /// suppressed write still means "re-evaluated now", and the rolling
@@ -405,11 +421,15 @@ impl Database {
         let mut max_down: f64 = 0.0;
         let mut sum_abs: f64 = 0.0;
         let mut suppressed: i64 = 0;
+        // Writes inside the band that were NOT damped because the row's
+        // version stamp changed (a version drain re-judges; v31).
+        let mut version_rejudged: i64 = 0;
         // (id, old, new) raw movers — sorted/truncated into `top_offenders`.
         let mut movers: Vec<(i64, f64, f64)> = Vec::new();
         {
-            let mut read_stmt =
-                tx.prepare_cached("SELECT relevance_score FROM source_items WHERE id = ?1")?;
+            let mut read_stmt = tx.prepare_cached(
+                "SELECT relevance_score, scored_pipeline_version FROM source_items WHERE id = ?1",
+            )?;
             let mut stmt = tx.prepare_cached(
                 "UPDATE source_items SET relevance_score = ?1, scored_pipeline_version = ?2, signal_type = ?3, signal_priority = ?4, scored_at = datetime('now') WHERE id = ?5",
             )?;
@@ -430,10 +450,16 @@ impl Database {
                  ON CONFLICT(source_item_id) DO NOTHING",
             )?;
             for (id, score, signal_type, signal_priority, breakdown_json) in scores {
-                // Old score first (same txn): NULL = first-ever score, not churn.
-                let old: Option<f64> = read_stmt
-                    .query_row(params![id], |r| r.get::<_, Option<f64>>(0))
-                    .unwrap_or(None);
+                // Old score + version stamp first (same txn): a NULL score is
+                // a first-ever score, not churn.
+                let (old, old_version): (Option<f64>, Option<i32>) = read_stmt
+                    .query_row(params![id], |r| {
+                        Ok((r.get::<_, Option<f64>>(0)?, r.get::<_, Option<i32>>(1)?))
+                    })
+                    .unwrap_or((None, None));
+                // The damper is a same-version tool: a row stamped by a
+                // previous pipeline is being re-judged, not jittering.
+                let version_changed = old_version != Some(crate::scoring::PIPELINE_VERSION);
                 let mut write_score = f64::from(*score);
                 let mut suppressed_this = false;
                 if let Some(old) = old {
@@ -451,10 +477,14 @@ impl Database {
                         movers.push((*id, old, write_score));
                     }
                     if delta.abs() < SCORE_WRITE_HYSTERESIS {
-                        // Keep the durable score; the stamp below still writes.
-                        suppressed += 1;
-                        write_score = old;
-                        suppressed_this = true;
+                        if version_changed {
+                            version_rejudged += 1;
+                        } else {
+                            // Keep the durable score; the stamp below still writes.
+                            suppressed += 1;
+                            write_score = old;
+                            suppressed_this = true;
+                        }
                     }
                 }
                 let updated = stmt.execute(params![
@@ -515,6 +545,7 @@ impl Database {
                     path,
                     rescored,
                     suppressed_writes = suppressed,
+                    version_rejudged,
                     top_movers = %top3,
                     "Score churn summary"
                 );

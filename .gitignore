@@ -115,6 +115,12 @@ src-tauri/data/digests/
 # OSV advisory cache (fetched at runtime, machine-local)
 data/osv-cache/
 
+# Corpus snapshots for live-verify runs (an online copy of 4da.db plus a
+# settings.json copy for the API key). Only NAMED data/ subdirectories are
+# ignored, so a new subdirectory here is tracked by default — 2026-09-06 a
+# snapshot dir carrying settings.json showed up as untracked.
+data/snapshots/
+
 # Startup watchdog markers (Sovereign Cold Boot — runtime state)
 data/.running
 data/.healthy

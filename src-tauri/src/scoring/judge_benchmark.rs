@@ -25,6 +25,10 @@
 //! against them. `judge_scenarios.json` adds cases written from live failures.
 //! As of v29 (2026-09-04): 99 + 28 = 127 cases, 49 relevant / 78 not — the
 //! v29 additions are the live 2026-09-04 feed false positives and their twins.
+//! v31 (2026-09-06) adds `vf_cve_grounded_not_affected` (128 cases, 79 not):
+//! its "not relevant" label rests on the installed VERSION, which the judge's
+//! context never carries, so the judge is expected to call it relevant — one
+//! structural false positive, not a discrimination regression.
 //!
 //! What it has already caught, in its first three runs:
 //!   * a truncated element discarding an entire paid-for batch of ten
@@ -96,7 +100,9 @@ use crate::llm_judgments::{
 /// The pipeline score every scenario is presented at. See the module docs: a
 /// fixed value keeps the benchmark measuring the JUDGE rather than the
 /// pipeline, and stops the expected range leaking the label into the prompt.
-const NEUTRAL_PIPELINE_SCORE: f64 = 0.50;
+/// Shared with `judge_live_sample`, which measures the PIPELINE against the
+/// judge and must not anchor the judge on the verdict being measured.
+pub(super) const NEUTRAL_PIPELINE_SCORE: f64 = 0.50;
 
 /// The judge-only corpus.
 ///
@@ -197,33 +203,35 @@ struct Outcome {
 }
 
 /// Confusion matrix for the relevance call, positive class = "relevant".
+/// `pub(super)`: `judge_live_sample` scores the pipeline's verdict against
+/// the judge's with the same arithmetic.
 #[derive(Default, Debug, Clone, Copy)]
-struct Matrix {
-    tp: u32,
-    fp: u32,
-    tn: u32,
-    fn_: u32,
+pub(super) struct Matrix {
+    pub(super) tp: u32,
+    pub(super) fp: u32,
+    pub(super) tn: u32,
+    pub(super) fn_: u32,
 }
 
 impl Matrix {
-    fn total(self) -> u32 {
+    pub(super) fn total(self) -> u32 {
         self.tp + self.fp + self.tn + self.fn_
     }
-    fn accuracy(self) -> f64 {
+    pub(super) fn accuracy(self) -> f64 {
         let t = self.total();
         if t == 0 {
             return 0.0;
         }
         f64::from(self.tp + self.tn) / f64::from(t)
     }
-    fn precision(self) -> f64 {
+    pub(super) fn precision(self) -> f64 {
         let d = self.tp + self.fp;
         if d == 0 {
             return 0.0;
         }
         f64::from(self.tp) / f64::from(d)
     }
-    fn recall(self) -> f64 {
+    pub(super) fn recall(self) -> f64 {
         let d = self.tp + self.fn_;
         if d == 0 {
             return 0.0;
@@ -240,7 +248,7 @@ impl Matrix {
     /// Matthews correlation coefficient. The headline number: it collapses to
     /// ~0 for a judge that just votes the majority class, which raw accuracy
     /// and raw agreement both reward.
-    fn mcc(self) -> f64 {
+    pub(super) fn mcc(self) -> f64 {
         let (tp, tn) = (f64::from(self.tp), f64::from(self.tn));
         let (fp, fn_) = (f64::from(self.fp), f64::from(self.fn_));
         let denom = ((tp + fp) * (tp + fn_) * (tn + fp) * (tn + fn_)).sqrt();

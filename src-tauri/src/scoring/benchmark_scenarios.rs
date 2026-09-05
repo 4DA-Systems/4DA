@@ -223,6 +223,16 @@ fn install_bench_dep(ace: &mut ace_context::ACEContext, name: &str, ecosystem: &
     ace.dependency_info.insert(name.to_string(), info);
 }
 
+/// Installed version for a benchmark dep — the lockfile evidence the security
+/// version verdict (`is_version_affected`, v29) reads. Only a dep a pinned
+/// scenario's verdict depends on carries one; everything else stays `None`,
+/// as a manifest-only dependency does in production.
+fn set_bench_dep_version(ace: &mut ace_context::ACEContext, name: &str, version: &str) {
+    if let Some(info) = ace.dependency_info.get_mut(name) {
+        info.version = Some(version.to_string());
+    }
+}
+
 fn rust_developer_ctx() -> ScoringContext {
     let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let interests = vec![
@@ -265,6 +275,10 @@ fn rust_developer_ctx() -> ScoringContext {
             ("reqwest", "rust"),
         ],
     );
+    // tokio's installed version: below vf_cve_direct_dep_affected's 1.53.2 fix
+    // (affected) and past vf_cve_grounded_not_affected's 1.38.1 fix (not
+    // affected) — the two pinned version verdicts on one dependency.
+    set_bench_dep_version(&mut ace, "tokio", "1.47.1");
     // Lockfile-only family children of the direct deps above, exactly as a
     // real serde/tokio user's Cargo.lock carries them (family rule, item 15).
     install_bench_transitive_deps(
