@@ -544,12 +544,16 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         let days_since = days_since_last_engagement(conn, &dep.package_name)?;
 
         // Classify severity. A security advisory only escalates the gap while
-        // the installed version is genuinely still inside its affected range.
+        // the installed version is genuinely still inside its affected range
+        // AND a registry advisory the linker bound to this dependency is among
+        // the citations — an editorial story naming the package is a citation,
+        // never proof of exposure (2026-09-06).
         let severity = classify_severity(
             &missed,
             days_since,
             &dep.package_name,
-            still_vulnerable(conn, &dep.package_name, dep.version.as_deref(), &paths),
+            still_vulnerable(conn, &dep.package_name, dep.version.as_deref(), &paths)
+                && grounded_security_advisory(&candidates, &dep.package_name),
         );
 
         if severity == GapSeverity::Low && days_since < 14 {
@@ -603,6 +607,41 @@ struct GapCandidate {
     /// applied once per (candidate, dependency) pair — lowercasing inside that
     /// loop allocated a fresh `String` millions of times per pass.
     title_lower: String,
+    /// Packages the dependency linker bound this item to with STRUCTURED
+    /// proof (registry subject / advisory `Affected:`), lowercased. A registry
+    /// advisory cites a dependency only through this list — live 2026-09-06,
+    /// `hmac` was CRITICAL off a PHP Phalcon CVE and `hono` HIGH off
+    /// `@hono/oauth-providers`, both on a title-word match.
+    linked_packages: Vec<String>,
+    /// The scoring pipeline's stored version verdict for this item:
+    /// `Some(false)` = the installed version is CONFIRMED not affected, so the
+    /// advisory is not a gap at all (`lettre` sat HIGH at its fixed version).
+    version_affected: Option<bool>,
+}
+
+/// A registry advisory row (osv / cve): its only honest link to a dependency
+/// is the linker's `Affected:` proof, never the title.
+fn is_advisory_row(c: &GapCandidate) -> bool {
+    matches!(c.item.source_type.as_str(), "osv" | "cve")
+}
+
+/// The linker bound this item to `dep_lower` with structured proof.
+fn linked_to(c: &GapCandidate, dep_lower: &str) -> bool {
+    let want = dep_lower.replace('_', "-");
+    c.linked_packages
+        .iter()
+        .any(|p| p.replace('_', "-") == want)
+}
+
+/// Whether ANY candidate is a registry advisory that the linker bound to this
+/// dependency and whose installed version is not confirmed clear — the only
+/// evidence that may escalate a gap to Critical. An editorial story that
+/// names the package is a citation, not proof of exposure.
+fn grounded_security_advisory(candidates: &[GapCandidate], package_name: &str) -> bool {
+    let dep_lower = package_name.to_lowercase();
+    candidates.iter().any(|c| {
+        is_advisory_row(c) && linked_to(c, &dep_lower) && c.version_affected != Some(false)
+    })
 }
 
 /// Load every unread, un-dismissed candidate item ONCE per detection pass.
@@ -618,8 +657,18 @@ struct GapCandidate {
 /// computed at ingestion by `content_dna` already lives; rows with a NULL
 /// `content_type` (legacy) pass through to the title-based fallback below.
 fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>> {
+    // Two scalar subqueries ride along: the linker's structured package links
+    // (registry subject / advisory `Affected:` only) and the scoring
+    // pipeline's stored version verdict for the row.
     let mut stmt = conn.prepare(
-        "SELECT si.id, si.title, si.url, si.source_type, si.created_at, si.content_type
+        "SELECT si.id, si.title, si.url, si.source_type, si.created_at, si.content_type,
+                (SELECT GROUP_CONCAT(LOWER(sid.package_name), ',')
+                   FROM source_item_dependencies sid
+                  WHERE sid.source_item_id = si.id
+                    AND sid.match_type IN ('exact_registry', 'advisory')),
+                (SELECT json_extract(se.breakdown, '$.breakdown.is_version_affected')
+                   FROM scoring_explanations se
+                  WHERE se.source_item_id = si.id)
              FROM source_items si
              LEFT JOIN feedback f ON f.source_item_id = si.id
              WHERE si.created_at >= datetime('now', '-30 days')
@@ -633,6 +682,8 @@ fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>>
     let candidates: Vec<GapCandidate> = stmt
         .query_map([], |row| {
             let title: String = row.get(1)?;
+            let linked: Option<String> = row.get(6)?;
+            let version_affected: Option<i64> = row.get(7)?;
             Ok(GapCandidate {
                 title_lower: title.to_lowercase(),
                 item: MissedItem {
@@ -643,6 +694,10 @@ fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>>
                     created_at: row.get(4)?,
                 },
                 content_type: row.get::<_, Option<String>>(5)?,
+                linked_packages: linked
+                    .map(|s| s.split(',').map(str::to_string).collect())
+                    .unwrap_or_default(),
+                version_affected: version_affected.map(|v| v != 0),
             })
         })?
         .filter_map(|r| match r {
@@ -673,6 +728,11 @@ fn keyword_misses_from(candidates: &[GapCandidate], package_name: &str) -> Vec<M
         // Cheap substring reject first; the boundary walk only runs on hits.
         .filter(|c| c.title_lower.contains(&dep_lower))
         .filter(|c| crate::utils::has_word_boundary_match_with_ext(&c.title_lower, &dep_lower))
+        // A resolved advisory (installed version confirmed not affected) is
+        // not a gap; a registry advisory cites a dependency only through the
+        // linker's `Affected:` proof, never a title word (2026-09-06).
+        .filter(|c| c.version_affected != Some(false))
+        .filter(|c| !is_advisory_row(c) || linked_to(c, &dep_lower))
         .filter(|c| seen_titles.insert(normalize_gap_title(&c.item.title)))
         // Title-based fallback only for legacy items without stored content_type
         .filter(|c| c.content_type.is_some() || !is_low_quality_signal(&c.item.title))
@@ -1680,17 +1740,148 @@ mod tests {
     // -----------------------------------------------------------------------
 
     fn cand(id: i64, title: &str, content_type: Option<&str>) -> GapCandidate {
+        // The historical fixtures are cve rows the linker had bound to `hono`
+        // / `next` (the names under test) — the shape a real advisory row has.
+        cand_from(id, title, "cve", &["hono", "next"], None)
+    }
+
+    fn cand_from(
+        id: i64,
+        title: &str,
+        source_type: &str,
+        linked: &[&str],
+        version_affected: Option<bool>,
+    ) -> GapCandidate {
         GapCandidate {
             title_lower: title.to_lowercase(),
             item: MissedItem {
                 item_id: id,
                 title: title.to_string(),
                 url: None,
-                source_type: "cve".to_string(),
+                source_type: source_type.to_string(),
                 created_at: "2026-08-12 01:34:41".to_string(),
             },
-            content_type: content_type.map(str::to_string),
+            content_type: None,
+            linked_packages: linked.iter().map(|s| s.to_string()).collect(),
+            version_affected,
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Citation grounding (2026-09-06 live audit): three of five knowledge gaps
+    // were wrong — `hmac` CRITICAL off a PHP Phalcon CVE and a Mastodon post,
+    // `hono` HIGH off `@hono/oauth-providers`, `lettre` HIGH while installed
+    // at the fixed version.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn a_registry_advisory_cites_a_dependency_only_through_the_linkers_proof() {
+        let candidates = vec![
+            // Names hmac in the title; the linker bound it to phalcon (PHP).
+            cand_from(
+                1,
+                "[CVE-2026-54736] Phalcon: Non-constant-time HMAC verification",
+                "cve",
+                &["phalcon"],
+                None,
+            ),
+            // Names hmac AND the linker bound it to hmac.
+            cand_from(
+                2,
+                "[RUSTSEC-2026-0100] hmac: timing leak in verify_slice",
+                "cve",
+                &["hmac"],
+                None,
+            ),
+            // An advisory about a namesake package (`@hono/oauth-providers`).
+            cand_from(
+                3,
+                "[GHSA-x] @hono/oauth-providers: token leak",
+                "osv",
+                &["hono/oauth-providers"],
+                None,
+            ),
+        ];
+        let ids: Vec<i64> = keyword_misses_from(&candidates, "hmac")
+            .iter()
+            .map(|m| m.item_id)
+            .collect();
+        assert_eq!(ids, vec![2], "only the linker-bound advisory cites hmac");
+        assert!(
+            keyword_misses_from(&candidates, "hono").is_empty(),
+            "@hono/oauth-providers is not hono"
+        );
+        assert!(grounded_security_advisory(&candidates, "hmac"));
+        assert!(!grounded_security_advisory(&candidates, "hono"));
+    }
+
+    #[test]
+    fn a_confirmed_not_affected_advisory_is_not_a_gap() {
+        let candidates = vec![
+            cand_from(
+                10,
+                "[CVE-2026-46428] lettre: header injection",
+                "cve",
+                &["lettre"],
+                Some(false),
+            ),
+            cand_from(
+                11,
+                "[CVE-2026-46429] lettre: SMTP smuggling",
+                "cve",
+                &["lettre"],
+                Some(true),
+            ),
+            cand_from(
+                12,
+                "[CVE-2026-46430] lettre: TLS downgrade",
+                "cve",
+                &["lettre"],
+                None,
+            ),
+        ];
+        let ids: Vec<i64> = keyword_misses_from(&candidates, "lettre")
+            .iter()
+            .map(|m| m.item_id)
+            .collect();
+        assert_eq!(ids, vec![11, 12], "the resolved advisory is not a gap");
+        assert!(grounded_security_advisory(&candidates, "lettre"));
+        let resolved_only = vec![cand_from(
+            10,
+            "[CVE-2026-46428] lettre: header injection",
+            "cve",
+            &["lettre"],
+            Some(false),
+        )];
+        assert!(
+            !grounded_security_advisory(&resolved_only, "lettre"),
+            "a resolved advisory never escalates a gap"
+        );
+    }
+
+    #[test]
+    fn an_editorial_security_story_is_a_citation_but_not_proof_of_exposure() {
+        let candidates = vec![cand_from(
+            20,
+            "Critical vulnerability found in axum",
+            "hackernews",
+            &[],
+            None,
+        )];
+        let missed = keyword_misses_from(&candidates, "axum");
+        assert_eq!(missed.len(), 1, "the story still cites axum");
+        assert!(
+            !grounded_security_advisory(&candidates, "axum"),
+            "a story is not a registry advisory"
+        );
+        // The call site ANDs `still_vulnerable` with the grounding check, so
+        // an ungrounded story reaches the classifier as "not proven exposed".
+        let severity = classify_severity(&missed, 20, "axum", false);
+        assert_ne!(
+            severity,
+            GapSeverity::Critical,
+            "without grounded proof a security story never makes a gap Critical"
+        );
     }
 
     #[test]

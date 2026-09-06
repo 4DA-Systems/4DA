@@ -189,10 +189,22 @@ pub fn build_upgrade_plan_with_drops(db: &Database) -> (Vec<EvidenceItem>, u32) 
     groups.sort_by_key(PackageGroup::sort_key);
 
     let now = chrono::Utc::now().timestamp_millis();
-    let mut items = Vec::with_capacity(groups.len());
+    // Maintenance notices (RustSec INFO unmaintained / deprecated: no fix, no
+    // CVSS) are not upgrade steps — live 2026-09-06, 14 of 30 plan items were
+    // "Upgrade gtk — clears 1 advisory" with nothing to upgrade to. They fold
+    // into ONE Watch item at the end of the plan.
+    let (informational, steps): (Vec<PackageGroup<'_>>, Vec<PackageGroup<'_>>) =
+        groups.into_iter().partition(|g| g.informational);
+    let mut candidates: Vec<EvidenceItem> = steps
+        .into_iter()
+        .map(|g| g.into_evidence_item(now))
+        .collect();
+    if !informational.is_empty() {
+        candidates.push(informational_item(informational, now));
+    }
+    let mut items = Vec::with_capacity(candidates.len());
     let mut drops = 0u32;
-    for g in groups {
-        let item = g.into_evidence_item(now);
+    for item in candidates {
         match super::validate::validate_item(&item) {
             Ok(()) => items.push(item),
             Err(e) => {
@@ -227,6 +239,13 @@ struct PackageGroup<'a> {
     /// Highest fixed version across the group's advisories (upgrading to it
     /// clears the most); `None` when no advisory has a fix yet.
     target_version: Option<String>,
+    /// At least one advisory names a fixed version — the only case in which
+    /// the step may say "Upgrade" (2026-09-06: 14 of 30 live plan items said
+    /// "Upgrade gtk — clears 1 advisory" with nothing to upgrade to).
+    has_fix: bool,
+    /// Every advisory is a maintenance notice (unmaintained / deprecated: no
+    /// fix, no CVSS). Folded into ONE Watch item, never an upgrade step.
+    informational: bool,
 }
 
 fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
@@ -256,10 +275,17 @@ fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
             projects.dedup();
 
             let any_confirmed = advisories.iter().any(|a| a.is_version_confirmed);
-            let fixable_now = advisories
-                .iter()
-                .flat_map(|a| a.dependency_instances.iter())
-                .any(|d| d.is_direct);
+            let target_version = highest_fixed_version(&advisories);
+            let has_fix = target_version.is_some();
+            // "Fixable now" needs something to bump TO: rsa's Marvin attack
+            // (no fix exists) read "Fixable now via a direct dependency bump"
+            // on the live plan (2026-09-06).
+            let fixable_now = has_fix
+                && advisories
+                    .iter()
+                    .flat_map(|a| a.dependency_instances.iter())
+                    .any(|d| d.is_direct);
+            let informational = !has_fix && advisories.iter().all(|a| is_informational(a));
             let instances_exist = advisories
                 .iter()
                 .any(|a| !a.dependency_instances.is_empty());
@@ -287,8 +313,6 @@ fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
                 base_urgency
             };
 
-            let target_version = highest_fixed_version(&advisories);
-
             PackageGroup {
                 package,
                 ecosystem_norm,
@@ -300,6 +324,8 @@ fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
                 urgency,
                 max_cvss,
                 target_version,
+                has_fix,
+                informational,
             }
         })
         .collect()
@@ -342,17 +368,33 @@ impl PackageGroup<'_> {
             .map(|v| format!(" to >= {v}"))
             .unwrap_or_default();
 
-        let title = clamp_title(format!(
-            "Upgrade {pkg}{target} — clears {n} {adv} across {m} {proj}",
-            pkg = self.package,
-            target = target_note,
-            n = n,
-            adv = plural(n, "advisory", "advisories"),
-            m = m,
-            proj = plural(m, "project", "projects"),
-        ));
+        // No fixed version anywhere in the group: the step must not say
+        // "Upgrade" — there is nothing to upgrade to. It stays an Alert at its
+        // CVSS urgency; the reader's move is to pin, patch or replace.
+        let title = clamp_title(if self.has_fix {
+            format!(
+                "Upgrade {pkg}{target} — clears {n} {adv} across {m} {proj}",
+                pkg = self.package,
+                target = target_note,
+                n = n,
+                adv = plural(n, "advisory", "advisories"),
+                m = m,
+                proj = plural(m, "project", "projects"),
+            )
+        } else {
+            format!(
+                "No fix published for {pkg} — {n} {adv} across {m} {proj}",
+                pkg = self.package,
+                n = n,
+                adv = plural(n, "advisory", "advisories"),
+                m = m,
+                proj = plural(m, "project", "projects"),
+            )
+        });
 
-        let scope_note = if self.fixable_now {
+        let scope_note = if !self.has_fix {
+            "No fix has been published — pin, patch, or replace; there is nothing to upgrade to yet"
+        } else if self.fixable_now {
             "Fixable now via a direct dependency bump"
         } else {
             "Fixed only upstream — awaits a parent-package update or lockfile refresh"
@@ -423,36 +465,22 @@ impl PackageGroup<'_> {
         });
 
         // Confidence: heuristic ranking; a shade higher when the fix is a direct
-        // bump the user controls. All groups here are version-confirmed.
-        let confidence_value = if self.fixable_now { 0.9 } else { 0.8 };
+        // bump the user controls, a shade lower when there is no fix to point
+        // at. All groups here are version-confirmed.
+        let confidence_value = if !self.has_fix {
+            0.7
+        } else if self.fixable_now {
+            0.9
+        } else {
+            0.8
+        };
 
-        let suggested_actions = vec![
-            Action {
-                action_id: "review_security".to_string(),
-                label: "Review advisories".to_string(),
-                description: format!(
-                    "Review the {n} {adv} affecting {pkg}",
-                    n = n,
-                    adv = plural(n, "advisory", "advisories"),
-                    pkg = self.package
-                ),
-            },
-            Action {
-                action_id: "view_source".to_string(),
-                label: "Open advisory".to_string(),
-                description: "Open the advisory source".to_string(),
-            },
-            Action {
-                action_id: "snooze_7d".to_string(),
-                label: "Snooze 7 days".to_string(),
-                description: "Hide this upgrade step for a week".to_string(),
-            },
-            Action {
-                action_id: "dismiss".to_string(),
-                label: "Dismiss".to_string(),
-                description: "Dismiss this upgrade step".to_string(),
-            },
-        ];
+        let suggested_actions = plan_actions(format!(
+            "Review the {n} {adv} affecting {pkg}",
+            n = n,
+            adv = plural(n, "advisory", "advisories"),
+            pkg = self.package
+        ));
 
         EvidenceItem {
             id: format!(
@@ -478,6 +506,150 @@ impl PackageGroup<'_> {
             expires_at: None,
         }
     }
+}
+
+/// ONE Watch-urgency item for every package whose advisories are all
+/// maintenance notices. The reader learns which of their dependencies are
+/// unmaintained and where, without fourteen "Upgrade X" steps that have no
+/// version to upgrade to (live 2026-09-06: gtk ×10, paste, proc-macro-error
+/// ×2, ttf-parser — Tauri's Linux GTK3 bindings and their transitive tail).
+fn informational_item(groups: Vec<PackageGroup<'_>>, now_millis: i64) -> EvidenceItem {
+    let k = groups.len();
+    let names: Vec<String> = groups.iter().map(|g| g.package.clone()).collect();
+    let mut projects: Vec<String> = groups
+        .iter()
+        .flat_map(|g| g.projects.iter().cloned())
+        .collect();
+    projects.sort();
+    projects.dedup();
+    let m = projects.len();
+
+    let listed: Vec<&str> = names.iter().take(3).map(String::as_str).collect();
+    let more = k.saturating_sub(listed.len());
+    let more_note = if more > 0 {
+        format!(" +{more} more")
+    } else {
+        String::new()
+    };
+    let title = clamp_title(format!(
+        "{k} unmaintained {dep} — no fix to apply ({list}{more_note})",
+        dep = plural(k, "dependency", "dependencies"),
+        list = listed.join(", "),
+    ));
+    let explanation = format!(
+        "{list} {carry} maintenance notices (unmaintained or deprecated), not vulnerabilities \
+         with a published fix. There is nothing to upgrade to; replace {them} when convenient. \
+         Installed across {m} {proj}.",
+        list = names.join(", "),
+        carry = if k == 1 { "carries" } else { "carry" },
+        them = if k == 1 { "it" } else { "them" },
+        proj = plural(m, "project", "projects"),
+    );
+
+    let mut evidence: Vec<EvidenceCitation> = groups
+        .iter()
+        .take(MAX_CITATIONS)
+        .filter_map(|g| g.advisories.first().map(|a| (g, a)))
+        .map(|(g, a)| EvidenceCitation {
+            source: "osv-advisory".to_string(),
+            title: truncate(&a.summary, 160),
+            url: a.source_url.clone(),
+            freshness_days: 0.0,
+            relevance_note: truncate(
+                &format!(
+                    "{}: no fixed version; installed {}",
+                    g.package,
+                    a.installed_version.as_deref().unwrap_or("version")
+                ),
+                200,
+            ),
+        })
+        .collect();
+    evidence.push(EvidenceCitation {
+        source: "project-scan".to_string(),
+        title: format!("Installed in {m} {}", plural(m, "project", "projects")),
+        url: None,
+        freshness_days: 0.0,
+        relevance_note: truncate(&format!("Affected projects: {}", projects.join(", ")), 200),
+    });
+
+    EvidenceItem {
+        id: "upgrade-plan:informational".to_string(),
+        kind: EvidenceKind::Alert,
+        title,
+        explanation,
+        confidence: Confidence::heuristic(0.8),
+        urgency: Urgency::Watch,
+        reversibility: None,
+        evidence,
+        evidence_total: None,
+        affected_projects: projects,
+        affected_deps: names,
+        suggested_actions: plan_actions(format!(
+            "Review the maintenance notices on {k} {dep}",
+            dep = plural(k, "dependency", "dependencies")
+        )),
+        precedents: Vec::new(),
+        refutation_condition: None,
+        lens_hints: LensHints::upgrade_plan(),
+        created_at: now_millis,
+        expires_at: None,
+    }
+}
+
+/// The plan's four informational actions (doctrine rule 5: none executes an
+/// upgrade). `review_description` names what "Review advisories" opens.
+fn plan_actions(review_description: String) -> Vec<Action> {
+    vec![
+        Action {
+            action_id: "review_security".to_string(),
+            label: "Review advisories".to_string(),
+            description: review_description,
+        },
+        Action {
+            action_id: "view_source".to_string(),
+            label: "Open advisory".to_string(),
+            description: "Open the advisory source".to_string(),
+        },
+        Action {
+            action_id: "snooze_7d".to_string(),
+            label: "Snooze 7 days".to_string(),
+            description: "Hide this upgrade step for a week".to_string(),
+        },
+        Action {
+            action_id: "dismiss".to_string(),
+            label: "Dismiss".to_string(),
+            description: "Dismiss this upgrade step".to_string(),
+        },
+    ]
+}
+
+/// Maintenance-notice vocabulary (RustSec INFO advisories, npm deprecations).
+const UNMAINTAINED_MARKERS: &[&str] = &[
+    "unmaintained",
+    "no longer maintained",
+    "not maintained",
+    "is deprecated",
+    "has been deprecated",
+    "deprecated crate",
+    "abandoned",
+    "archived",
+];
+
+/// A maintenance notice, not a vulnerability: no fixed version, no CVSS, and
+/// the advisory text says so. An unsound-code or no-fix VULNERABILITY (rsa's
+/// Marvin attack: CVSS 5.9, no fix) is NOT informational — it stays a step
+/// that reads "No fix published".
+fn is_informational(a: &MatchedAdvisory) -> bool {
+    let no_fix = a
+        .fixed_version
+        .as_deref()
+        .is_none_or(|v| v.trim().is_empty());
+    if !no_fix || a.cvss_score.is_some() {
+        return false;
+    }
+    let text = format!("{} {}", a.summary, a.details.as_deref().unwrap_or("")).to_lowercase();
+    UNMAINTAINED_MARKERS.iter().any(|m| text.contains(m))
 }
 
 // ---- helpers ----

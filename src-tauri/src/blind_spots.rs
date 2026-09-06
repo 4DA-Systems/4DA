@@ -183,6 +183,10 @@ struct DepSignalCoverage {
     days_since_last_signal: Option<u32>,
     /// Best match type seen: "exact_registry" > "advisory" > "title_heuristic"
     best_match_type: Option<String>,
+    /// Title-heuristic hits on an AMBIGUOUS name (`image`, `config`, `log`),
+    /// counted apart from `available` so one registry hit cannot let 460
+    /// "image" titles through as signals (live 2026-09-06).
+    weak: u32,
 }
 
 // ============================================================================
@@ -1083,7 +1087,17 @@ fn find_uncovered_deps(
             } else {
                 "title_heuristic"
             };
+            // An ambiguous name's title hits are weak evidence whatever else
+            // the dep has: they are counted apart, never as signals. Before
+            // this, one SID advisory row on `image` let every title containing
+            // "image" through — "58 security/breaking-change signals, 460 new
+            // releases" (2026-09-06).
+            let weak_hit = mt == "title_heuristic" && is_ambiguous_package_name(&name);
             let entry = coverage.entry(name).or_default();
+            if weak_hit {
+                entry.weak += 1;
+                continue;
+            }
             entry.available += 1;
             if interacted > 0 {
                 entry.interacted += 1;
@@ -1191,17 +1205,15 @@ fn find_uncovered_deps(
             continue;
         };
 
-        // ── Match-type gate: suppress ambiguous names with only title heuristic ──
-        // For deps with signals: check if the best match type is strong enough.
+        // ── Match-type gate: ambiguous names with only title-heuristic hits ──
         // Ambiguous names (common English words like "image", "config", "log")
         // require exact_registry or advisory proof — title LIKE matches are
-        // almost always false positives (e.g. "image" matching ImageMagick articles).
-        let best_mt = metrics
-            .best_match_type
-            .as_deref()
-            .unwrap_or("title_heuristic");
-        if metrics.available > 0
-            && best_mt == "title_heuristic"
+        // almost always false positives (e.g. "image" matching ImageMagick
+        // articles). Their title hits are tallied in `weak`, never in
+        // `available`, so a dep with ONLY weak hits is reported as a weak match
+        // and a dep with any qualified signal counts just those.
+        if metrics.available == 0
+            && metrics.weak > 0
             && is_ambiguous_package_name(&dep_info.package_name)
         {
             let display_name = format_dep_display_name(&dep_info.package_name, &dep_info.ecosystem);
@@ -1210,7 +1222,7 @@ fn find_uncovered_deps(
                 dep_type: dep_info.ecosystem.clone(),
                 projects_using: dep_info.projects.clone(),
                 days_since_last_signal: metrics.days_since_last_signal.unwrap_or(999),
-                available_signal_count: metrics.available.saturating_sub(metrics.interacted),
+                available_signal_count: metrics.weak,
                 risk_level: "low".to_string(),
                 match_type: "title_heuristic".to_string(),
                 coverage_reason: Some("weak_matches_only".to_string()),
@@ -1298,6 +1310,10 @@ fn find_uncovered_deps(
         if not_seen == 0 && days_since < 30 {
             continue;
         }
+        let best_mt = metrics
+            .best_match_type
+            .as_deref()
+            .unwrap_or("title_heuristic");
         let risk_level = classify_dep_risk(days_since, not_seen, dep_info.projects.len());
         uncovered.push(UncoveredDep {
             name: display_name,
@@ -2729,10 +2745,22 @@ fn count_signal_types_for_dep_conn(
     dep_name: &str,
 ) -> DepSignalBreakdown {
     let mut b = DepSignalBreakdown::default();
-    let sql = "SELECT content_type, COUNT(*) FROM source_items
-               WHERE title LIKE '%' || ?1 || '%'
-                 AND created_at >= datetime('now', '-30 days')
-               GROUP BY content_type";
+    // An ambiguous name counts only signals the linker bound to it with
+    // registry/advisory proof; a title LIKE on "image" is 460 releases of
+    // anything with an image in it (2026-09-06).
+    let sql = if is_ambiguous_package_name(dep_name) {
+        "SELECT si.content_type, COUNT(*) FROM source_items si
+         JOIN source_item_dependencies sid ON sid.source_item_id = si.id
+         WHERE LOWER(sid.package_name) = LOWER(?1)
+           AND sid.match_type IN ('exact_registry', 'advisory')
+           AND si.created_at >= datetime('now', '-30 days')
+         GROUP BY si.content_type"
+    } else {
+        "SELECT content_type, COUNT(*) FROM source_items
+         WHERE title LIKE '%' || ?1 || '%'
+           AND created_at >= datetime('now', '-30 days')
+         GROUP BY content_type"
+    };
     if let Ok(mut stmt) = conn.prepare(sql) {
         if let Ok(rows) = stmt.query_map(params![dep_name], |row| {
             Ok((row.get::<_, Option<String>>(0)?, row.get::<_, u32>(1)?))
@@ -2893,7 +2921,14 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         // urgent of two is the smaller one — use min() to mean "at least High"
         // (keeps Critical if the risk is already critical).
         Some(b) if b.security > 0 => Urgency::High.min(risk_level_to_urgency(&d.risk_level)),
-        Some(b) if b.releases > 0 || b.analyses > 0 => risk_level_to_urgency(&d.risk_level),
+        // Unread releases / analyses are Medium at most, and a single unread
+        // release is a Watch: live 2026-09-06, 43 of 87 coverage gaps were
+        // HIGH because one release of `@fontsource-variable/inter` or
+        // `react-dom` inherited the engagement-based risk level.
+        Some(b) if b.releases + b.analyses == 1 => Urgency::Watch,
+        Some(b) if b.releases > 0 || b.analyses > 0 => {
+            cap_urgency_at_medium(risk_level_to_urgency(&d.risk_level))
+        }
         Some(_) => cap_urgency_at_medium(risk_level_to_urgency(&d.risk_level)),
         None => risk_level_to_urgency(&d.risk_level),
     };
@@ -6083,6 +6118,153 @@ mod tests {
         assert!(
             !weak_matches.iter().any(|d| d.name.contains("image")),
             "SID advisory match should not be reported as weak"
+        );
+    }
+
+    /// 2026-09-06 live audit: `image (crates.io) — 58 security/breaking-change
+    /// signals, 460 new releases in 30 days`. One SID advisory row made the
+    /// best match type "advisory", and every title containing "image" then
+    /// counted as a signal. An ambiguous name counts qualified signals only —
+    /// in the coverage tally AND in the consequence breakdown.
+    #[test]
+    fn ambiguous_name_counts_only_qualified_signals() {
+        let conn = setup_test_db();
+        for (i, title) in [
+            "Docker image best practices for 2026",
+            "Generating an image with Stable Diffusion",
+            "Container image scanning in CI",
+        ]
+        .iter()
+        .enumerate()
+        {
+            insert_source_item_with_meta(
+                &conn,
+                title,
+                "hackernews",
+                Some("release_notes"),
+                0.7,
+                i as i64 + 1,
+            );
+        }
+        let advisory_id = insert_source_item_with_meta(
+            &conn,
+            "CVE-2026-5555 in image crate allows buffer overflow",
+            "osv",
+            Some("security_advisory"),
+            0.9,
+            2,
+        );
+        conn.execute(
+            "INSERT INTO source_item_dependencies
+                (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (?1, 'image', 'cargo', 'advisory', 0.90)",
+            params![advisory_id],
+        )
+        .unwrap();
+
+        let deps = vec![DepCoverage {
+            package_name: "image".to_string(),
+            ecosystem: "cargo".to_string(),
+            projects: vec!["/proj/myapp".to_string()],
+        }];
+        let (uncovered, weak) = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        let image = uncovered
+            .iter()
+            .find(|d| d.name.contains("image"))
+            .expect("the SID advisory keeps image uncovered");
+        assert_eq!(
+            image.available_signal_count, 1,
+            "three title hits on an ambiguous name are not signals"
+        );
+        assert!(!weak.iter().any(|d| d.name.contains("image")));
+
+        let b = count_signal_types_for_dep_conn(&conn, "image");
+        assert_eq!(b.security, 1);
+        assert_eq!(
+            b.releases, 0,
+            "docker / diffusion / container titles are not image releases"
+        );
+        // A non-ambiguous name keeps the title-based breakdown.
+        insert_source_item_with_meta(
+            &conn,
+            "axum 0.8.6 released",
+            "crates_io",
+            Some("release_notes"),
+            0.7,
+            1,
+        );
+        assert_eq!(count_signal_types_for_dep_conn(&conn, "axum").releases, 1);
+    }
+
+    /// 43 of 87 live coverage gaps were HIGH from a single unreviewed release
+    /// (`@fontsource-variable/inter — 1 new release unreviewed`): unread
+    /// releases inherited the engagement-based risk level. One unread release
+    /// is a Watch, several are Medium at most; a security signal keeps High.
+    #[test]
+    fn unread_releases_are_medium_at_most_and_one_release_is_a_watch() {
+        let mut dep = UncoveredDep {
+            name: "react-dom (npm)".to_string(),
+            dep_type: "npm".to_string(),
+            projects_using: vec!["/proj/a".into(), "/proj/b".into(), "/proj/c".into()],
+            days_since_last_signal: 40,
+            available_signal_count: 1,
+            risk_level: "high".to_string(),
+            match_type: "exact_registry".to_string(),
+            coverage_reason: None,
+            adapters_searched: vec![],
+            platform_active: true,
+        };
+
+        let conn = setup_test_db();
+        insert_source_item_with_meta(
+            &conn,
+            "react-dom 19.2.0 released",
+            "npm_registry",
+            Some("release_notes"),
+            0.7,
+            1,
+        );
+        super::test_support::install_test_conn(conn);
+        assert_eq!(
+            uncovered_dep_to_evidence_item(&dep).urgency,
+            crate::evidence::Urgency::Watch,
+            "one unread release is a Watch, whatever the risk level"
+        );
+
+        let conn = setup_test_db();
+        for i in 1..=3 {
+            insert_source_item_with_meta(
+                &conn,
+                &format!("react-dom 19.2.{i} released"),
+                "npm_registry",
+                Some("release_notes"),
+                0.7,
+                i,
+            );
+        }
+        super::test_support::install_test_conn(conn);
+        dep.available_signal_count = 3;
+        assert_eq!(
+            uncovered_dep_to_evidence_item(&dep).urgency,
+            crate::evidence::Urgency::Medium,
+            "several unread releases cap at Medium"
+        );
+
+        let conn = setup_test_db();
+        insert_source_item_with_meta(
+            &conn,
+            "react-dom: XSS in hydration (CVE-2026-1)",
+            "osv",
+            Some("security_advisory"),
+            0.9,
+            1,
+        );
+        super::test_support::install_test_conn(conn);
+        dep.available_signal_count = 1;
+        assert_eq!(
+            uncovered_dep_to_evidence_item(&dep).urgency,
+            crate::evidence::Urgency::High,
+            "a security signal keeps High"
         );
     }
 

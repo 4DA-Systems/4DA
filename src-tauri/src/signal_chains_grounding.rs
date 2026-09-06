@@ -78,6 +78,7 @@ pub(super) fn dependency_evidence(
     if hits.is_empty() {
         return DependencyEvidence::none();
     }
+    let linked = load_linked_item_ids(conn, &topic_lower);
 
     let mut qualifying_hits: HashSet<(String, bool)> = HashSet::new();
     let mut grounded_item_ids = HashSet::new();
@@ -87,22 +88,17 @@ pub(super) fn dependency_evidence(
 
     for hit in hits.iter().filter(|hit| !hit.is_dev) {
         let mut hit_qualifies = false;
-        for (id, title, _, timestamp, content) in topic_items {
-            let title_lower = title.to_lowercase();
-            let content_lower = content.to_lowercase();
-            let language = match hit.language.trim() {
-                "" => None,
-                lang => Some(lang),
-            };
-            if !crate::package_ambiguity::has_word_boundary_match(&title_lower, &topic_lower) {
-                continue;
-            }
-            if !crate::package_ambiguity::dep_grounded_match_for_ecosystem(
-                &title_lower,
-                &content_lower,
-                &topic_lower,
-                language,
-            ) {
+        for (id, title, source_type, timestamp, content) in topic_items {
+            // Item-level STRUCTURED proof only (2026-09-06 live audit): a
+            // linker row of registry/advisory kind, or the same proof read
+            // off the item itself. A bare title word never grounds — `which`
+            // grounded on "Which app should I use?", `openai` on a Reuters
+            // legal story, `typescript` on a calendar library, `axum` and
+            // `tauri` on their own plugins' release rows, every one a
+            // medium-urgency "learning" chain on Preemption.
+            if !linked.contains(id)
+                && !item_is_about_package(source_type, title, content, &topic_lower)
+            {
                 continue;
             }
 
@@ -135,6 +131,56 @@ pub(super) fn dependency_evidence(
         breaking_signal,
         grounded_item_ids,
     }
+}
+
+/// Items the dependency linker has already bound to the package with
+/// STRUCTURED proof — a registry row whose subject is the package
+/// (`exact_registry`) or an advisory naming it in `Affected:` (`advisory`).
+/// Title-heuristic links are deliberately excluded: they are the bare title
+/// words this policy exists to reject. Empty when the table does not exist
+/// (older schemas, hermetic tests).
+fn load_linked_item_ids(conn: &rusqlite::Connection, topic_lower: &str) -> HashSet<i64> {
+    if !table_exists(conn, "source_item_dependencies") {
+        return HashSet::new();
+    }
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT source_item_id FROM source_item_dependencies
+         WHERE LOWER(package_name) = ?1
+           AND match_type IN ('exact_registry', 'advisory')",
+    ) else {
+        return HashSet::new();
+    };
+    let Ok(rows) = stmt.query_map(params![topic_lower], |row| row.get::<_, i64>(0)) else {
+        return HashSet::new();
+    };
+    rows.filter_map(std::result::Result::ok).collect()
+}
+
+/// The same proof computed from the item itself, for rows the linker has not
+/// visited yet (it runs after each fetch and links known project deps only):
+/// a registry row whose subject IS the package, or an osv/cve row whose
+/// `Affected:` line names it. Editorial sources never qualify here.
+fn item_is_about_package(source_type: &str, title: &str, content: &str, topic_lower: &str) -> bool {
+    let st = source_type.to_lowercase();
+    if crate::dep_linker::is_registry_source(&st) {
+        return registry_subject_matches(title, topic_lower);
+    }
+    matches!(st.as_str(), "osv" | "cve")
+        && crate::dep_linker::advisory_affected_package_match(content, topic_lower)
+}
+
+/// Registry titles are "<registry>: <package> v<version>" (crates.io, npm,
+/// PyPI, Go). The subject is the first token after the registry prefix; a
+/// release OF `axum-extra` is not a release OF `axum`.
+fn registry_subject_matches(title: &str, topic_lower: &str) -> bool {
+    let lower = title.to_lowercase();
+    let body = lower
+        .split_once(':')
+        .map_or(lower.as_str(), |(_, rest)| rest.trim_start());
+    let Some(subject) = body.split_whitespace().next() else {
+        return false;
+    };
+    subject.replace('_', "-") == topic_lower.replace('_', "-")
 }
 
 impl DependencyEvidence {

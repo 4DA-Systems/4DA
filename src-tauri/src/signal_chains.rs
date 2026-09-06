@@ -188,6 +188,10 @@ fn detect_chains_from_items(
         // on its own, mint a "critical" alert. A chain only earns critical/alert urgency
         // (and full confidence) when it actually touches one of the user's installed
         // dependencies. Otherwise it is ecosystem awareness, not a personal threat.
+        // "Touches" is item-level STRUCTURED proof — a registry row whose subject is
+        // the package, an advisory naming it in `Affected:`, or a linker row of either
+        // kind; a bare title word never grounds (2026-09-06: `which`, `openai`,
+        // `typescript` chains on Preemption).
         let dep_evidence = dependency_evidence(conn, topic, topic_items_list);
         let dep_match = dep_evidence.score;
         let has_dep = dep_match > 0.0;
