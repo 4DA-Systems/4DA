@@ -211,16 +211,16 @@ where
 }
 
 /// How many selection slots the fresh judge lane cedes to the pending-verdict
-/// drain this cycle: the backlog size, capped at the drain's own slice
-/// (`llm_judge::drain::DRAIN_SLICE` = 20% of the 40-item selection). Pure so
-/// the carve-out is unit-testable.
+/// drain this cycle: the backlog size, capped at the drain's own slice for
+/// that backlog (`llm_judge::drain::drain_slice` — 20% of the 40-item
+/// selection, surging to 60% while the backlog is large). Pure so the
+/// carve-out is unit-testable and cannot drift from the drain's take.
 pub(crate) fn drain_reserve(pending_backlog: i64) -> usize {
     if pending_backlog <= 0 {
         return 0;
     }
-    usize::try_from(pending_backlog)
-        .unwrap_or(usize::MAX)
-        .min(crate::llm_judge::drain::DRAIN_SLICE)
+    let backlog = usize::try_from(pending_backlog).unwrap_or(usize::MAX);
+    backlog.min(crate::llm_judge::drain::drain_slice(backlog))
 }
 
 /// Evaluate a batch of source items and store judgments.

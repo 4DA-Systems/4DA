@@ -604,17 +604,30 @@ async fn post_cycle_runs_demotions_without_llm_calls() {
 // ============================================================================
 
 /// The fresh judge lane's selection shrinks by exactly the drain's slice —
-/// bounded by the real backlog, never more than DRAIN_SLICE, and zero when
-/// nothing is pending (a healthy instance keeps its full selection).
+/// bounded by the real backlog, never more than the drain takes for that
+/// backlog, and zero when nothing is pending (a healthy instance keeps its
+/// full selection). The reserve MIRRORS `drain_slice`, so the surge (v32
+/// follow-up) is carved out of the same envelope rather than added on top.
 #[test]
 fn drain_reserve_is_backlog_bounded_and_capped() {
+    use crate::llm_judge::drain::{DRAIN_SLICE, DRAIN_SURGE_BACKLOG, DRAIN_SURGE_SLICE};
     assert_eq!(drain_reserve(0), 0, "no backlog, no carve-out");
     assert_eq!(drain_reserve(-1), 0, "defensive: negative counts");
     assert_eq!(drain_reserve(3), 3, "small backlog reserves only itself");
     assert_eq!(
-        drain_reserve(175),
-        crate::llm_judge::drain::DRAIN_SLICE,
-        "the live-audit backlog caps at the 20% slice"
+        drain_reserve(i64::try_from(DRAIN_SURGE_BACKLOG).unwrap() - 1),
+        DRAIN_SLICE,
+        "below the surge line the 20% slice holds"
+    );
+    assert_eq!(
+        drain_reserve(i64::try_from(DRAIN_SURGE_BACKLOG).unwrap()),
+        DRAIN_SURGE_SLICE,
+        "at the surge line the fresh lane cedes the surge slice"
+    );
+    assert_eq!(
+        drain_reserve(756),
+        DRAIN_SURGE_SLICE,
+        "the post-v32 backlog (756 deferred promotions) surges"
     );
 }
 
