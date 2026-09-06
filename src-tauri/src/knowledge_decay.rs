@@ -1065,9 +1065,16 @@ fn classify_severity(
     // A security advisory only escalates while the install is still exposed.
     // An already-patched dependency can still be worth reading about, so the
     // gap survives at its unweighted tier — it just stops shouting.
+    // Consequence, not volume, decides the tiers above Medium: a security or
+    // breaking citation is High; any number of discussions and version
+    // mentions caps at Medium. Live 2026-09-06, `stripe` reached High on five
+    // editorial mentions plus a mastodon post about ANOTHER product's release
+    // ("onecli v2.5.0 — Added Slack Stripe AWS billing fixes"), multiplied by
+    // the never-engaged ×1.5 factor — unread volume masquerading as urgency,
+    // the same class Blind Spots caps at Medium.
     if has_security && still_vulnerable {
         GapSeverity::Critical
-    } else if has_breaking || gap_score >= 5.0 {
+    } else if has_security || has_breaking {
         GapSeverity::High
     } else if gap_score >= 2.0 || days_since > 14 {
         GapSeverity::Medium
@@ -1856,6 +1863,55 @@ mod tests {
         assert!(
             !grounded_security_advisory(&resolved_only, "lettre"),
             "a resolved advisory never escalates a gap"
+        );
+    }
+
+    /// Consequence, not volume, decides the tiers above Medium. Five
+    /// discussions and a "version update" that is really another product's
+    /// release note, on a never-engaged dependency, used to reach High
+    /// (5 × 0.5 + 1.5 = 3.5, × 1.5 = 5.25 ≥ 5.0) — the live `stripe` gap.
+    #[test]
+    fn discussion_volume_never_makes_a_gap_high() {
+        let missed = |titles: &[&str]| -> Vec<MissedItem> {
+            titles
+                .iter()
+                .enumerate()
+                .map(|(i, t)| MissedItem {
+                    item_id: i as i64 + 1,
+                    title: (*t).to_string(),
+                    url: None,
+                    source_type: "devto".to_string(),
+                    created_at: "2026-09-04 00:00:00".to_string(),
+                })
+                .collect()
+        };
+        let volume = missed(&[
+            "Your AI builder shipped the Stripe code in an afternoon",
+            "How I built an AI Line Art SaaS with Next.js and Stripe credits",
+            "What a New Stripe Account Can't Do Yet",
+            "npm: stripe v22.6.1",
+            "New updates 3 Sept: onecli v2.5.0 — Added Slack Stripe AWS billing fixes",
+        ]);
+        assert_eq!(
+            classify_severity(&volume, 999, "stripe", true),
+            GapSeverity::Medium,
+            "unread volume on a never-engaged dependency caps at Medium"
+        );
+        let breaking = missed(&["Stripe API breaking changes in the 2026 release"]);
+        assert_eq!(
+            classify_severity(&breaking, 10, "stripe", true),
+            GapSeverity::High,
+            "a breaking-change citation is High on its own"
+        );
+        let advisory = missed(&["[CVE-2026-1] stripe: webhook signature bypass vulnerability"]);
+        assert_eq!(
+            classify_severity(&advisory, 10, "stripe", false),
+            GapSeverity::High,
+            "a security citation on a patched install is High, never Critical"
+        );
+        assert_eq!(
+            classify_severity(&advisory, 10, "stripe", true),
+            GapSeverity::Critical
         );
     }
 
