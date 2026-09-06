@@ -2745,34 +2745,58 @@ fn count_signal_types_for_dep_conn(
     dep_name: &str,
 ) -> DepSignalBreakdown {
     let mut b = DepSignalBreakdown::default();
-    // An ambiguous name counts only signals the linker bound to it with
-    // registry/advisory proof; a title LIKE on "image" is 460 releases of
-    // anything with an image in it (2026-09-06).
-    let sql = if is_ambiguous_package_name(dep_name) {
-        "SELECT si.content_type, COUNT(*) FROM source_items si
-         JOIN source_item_dependencies sid ON sid.source_item_id = si.id
-         WHERE LOWER(sid.package_name) = LOWER(?1)
-           AND sid.match_type IN ('exact_registry', 'advisory')
-           AND si.created_at >= datetime('now', '-30 days')
-         GROUP BY si.content_type"
-    } else {
-        "SELECT content_type, COUNT(*) FROM source_items
-         WHERE title LIKE '%' || ?1 || '%'
-           AND created_at >= datetime('now', '-30 days')
-         GROUP BY content_type"
+    let dep_lower = dep_name.to_lowercase();
+    let ambiguous = is_ambiguous_package_name(dep_name);
+    // Candidates: everything the linker bound to this package with
+    // registry/advisory proof, plus title substring hits — re-checked below.
+    // The bare `title LIKE '%name%'` this replaced counted five Next.js
+    // advisories, "how Google reacted" and a post about neoliberalism as
+    // ten react security signals, Electron's "honors" as a hono advisory and
+    // four silverstripe CVEs as stripe's (2026-09-06).
+    let sql = "SELECT si.title, si.content_type, si.source_type,
+                      EXISTS(SELECT 1 FROM source_item_dependencies sid
+                              WHERE sid.source_item_id = si.id
+                                AND LOWER(sid.package_name) = LOWER(?1)
+                                AND sid.match_type IN ('exact_registry', 'advisory')) AS linked
+               FROM source_items si
+               WHERE si.created_at >= datetime('now', '-30 days')
+                 AND (si.title LIKE '%' || ?1 || '%'
+                      OR EXISTS(SELECT 1 FROM source_item_dependencies sid2
+                                 WHERE sid2.source_item_id = si.id
+                                   AND LOWER(sid2.package_name) = LOWER(?1)
+                                   AND sid2.match_type IN ('exact_registry', 'advisory')))";
+    let Ok(mut stmt) = conn.prepare(sql) else {
+        return b;
     };
-    if let Ok(mut stmt) = conn.prepare(sql) {
-        if let Ok(rows) = stmt.query_map(params![dep_name], |row| {
-            Ok((row.get::<_, Option<String>>(0)?, row.get::<_, u32>(1)?))
-        }) {
-            for row in rows.flatten() {
-                match row.0.as_deref() {
-                    Some("release_notes") | Some("platform_update") => b.releases += row.1,
-                    Some("expert_analysis") | Some("deep_dive") => b.analyses += row.1,
-                    Some("security_advisory") | Some("breaking_change") => b.security += row.1,
-                    _ => b.other += row.1,
-                }
-            }
+    let Ok(rows) = stmt.query_map(params![dep_name], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, Option<String>>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, i64>(3)? != 0,
+        ))
+    }) else {
+        return b;
+    };
+    for (title, content_type, source_type, linked) in rows.flatten() {
+        // A linker row is proof. Without one: an advisory row (osv / cve)
+        // never counts on its title — its `Affected:` line is the only honest
+        // link and the linker already read it; an ambiguous name never counts
+        // on its title; anything else needs the dependency name as a WHOLE
+        // word — "silverstripe" is not stripe, "honors" is not hono,
+        // "reacted" is not react.
+        let qualifies = linked
+            || (!matches!(source_type.as_str(), "osv" | "cve")
+                && !ambiguous
+                && has_word_boundary_match(&title.to_lowercase(), &dep_lower));
+        if !qualifies {
+            continue;
+        }
+        match content_type.as_deref() {
+            Some("release_notes") | Some("platform_update") => b.releases += 1,
+            Some("expert_analysis") | Some("deep_dive") => b.analyses += 1,
+            Some("security_advisory") | Some("breaking_change") => b.security += 1,
+            _ => b.other += 1,
         }
     }
     b
@@ -4447,6 +4471,15 @@ mod tests {
             [],
         )
         .expect("seed security signal");
+        // An advisory row counts only through the linker's `Affected:` proof
+        // (the shape every real cve/osv row has once the linker has run).
+        conn.execute(
+            "INSERT INTO source_item_dependencies
+                (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (?1, 'tokio', 'cargo', 'advisory', 0.90)",
+            params![conn.last_insert_rowid()],
+        )
+        .expect("link seeded advisory");
         super::test_support::install_test_conn(conn);
     }
 
@@ -6196,6 +6229,119 @@ mod tests {
         assert_eq!(count_signal_types_for_dep_conn(&conn, "axum").releases, 1);
     }
 
+    /// The consequence breakdown behind a gap's urgency and title counted by
+    /// bare substring (2026-09-06 live, after #618): "react — 10 security
+    /// signals" were five Next.js advisories, "how Google reacted" and a post
+    /// about neoliberalism; "hono — 5" included Electron's "honors" and
+    /// `@hono/oauth-providers`; all four "stripe" signals were silverstripe.
+    /// Advisory rows count only through the linker's `Affected:` proof;
+    /// everything else needs the name as a whole word.
+    #[test]
+    fn breakdown_counts_whole_word_and_linked_signals_only() {
+        let conn = setup_test_db();
+        insert_source_item_with_meta(
+            &conn,
+            "[CVE-2026-54721] silverstripe/userforms vulnerable to remote code execution",
+            "cve",
+            Some("security_advisory"),
+            0.8,
+            1,
+        );
+        insert_source_item_with_meta(
+            &conn,
+            "[CVE-2026-70610] Electron: contextBridge object copy honors prototype setters",
+            "cve",
+            Some("security_advisory"),
+            0.8,
+            1,
+        );
+        let hono_cve = insert_source_item_with_meta(
+            &conn,
+            "[CVE-2026-71850] Hono: memo() retains SSR output across requests",
+            "cve",
+            Some("security_advisory"),
+            0.9,
+            2,
+        );
+        conn.execute(
+            "INSERT INTO source_item_dependencies
+                (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (?1, 'hono', 'npm', 'advisory', 0.90)",
+            params![hono_cve],
+        )
+        .unwrap();
+        insert_source_item_with_meta(
+            &conn,
+            "[CVE-2026-81888] @hono/oauth-providers: OAuth state check fails open",
+            "cve",
+            Some("security_advisory"),
+            0.9,
+            3,
+        );
+        insert_source_item_with_meta(
+            &conn,
+            "I found an SSRF in Google's official AI tooling, and how Google reacted",
+            "hackernews",
+            Some("security_advisory"),
+            0.7,
+            1,
+        );
+        insert_source_item_with_meta(
+            &conn,
+            "[GHSA-9qr9-h5gf-34mp] next: Next.js is vulnerable to RCE in React flight protocol",
+            "osv",
+            Some("security_advisory"),
+            0.9,
+            1,
+        );
+        insert_source_item_with_meta(
+            &conn,
+            "npm: react v19.2.8",
+            "npm_registry",
+            Some("release_notes"),
+            0.7,
+            1,
+        );
+        insert_source_item_with_meta(
+            &conn,
+            "React Server Components explained: a deep dive",
+            "devto",
+            Some("deep_dive"),
+            0.7,
+            1,
+        );
+
+        let stripe = count_signal_types_for_dep_conn(&conn, "stripe");
+        assert_eq!(
+            (
+                stripe.security,
+                stripe.releases,
+                stripe.analyses,
+                stripe.other
+            ),
+            (0, 0, 0, 0),
+            "silverstripe is not stripe"
+        );
+        let hono = count_signal_types_for_dep_conn(&conn, "hono");
+        assert_eq!(
+            hono.security, 1,
+            "only the linker-bound Hono CVE counts — not 'honors', not @hono/oauth-providers"
+        );
+        let react = count_signal_types_for_dep_conn(&conn, "react");
+        assert_eq!(
+            react.security, 0,
+            "'reacted' and an unlinked Next.js advisory are not react security signals"
+        );
+        assert_eq!(
+            react.releases, 1,
+            "the registry release counts by whole word"
+        );
+        assert_eq!(
+            react.analyses, 1,
+            "an editorial deep-dive counts by whole word"
+        );
+    }
+
     /// 43 of 87 live coverage gaps were HIGH from a single unreviewed release
     /// (`@fontsource-variable/inter — 1 new release unreviewed`): unread
     /// releases inherited the engagement-based risk level. One unread release
@@ -6251,7 +6397,7 @@ mod tests {
         );
 
         let conn = setup_test_db();
-        insert_source_item_with_meta(
+        let advisory = insert_source_item_with_meta(
             &conn,
             "react-dom: XSS in hydration (CVE-2026-1)",
             "osv",
@@ -6259,6 +6405,13 @@ mod tests {
             0.9,
             1,
         );
+        conn.execute(
+            "INSERT INTO source_item_dependencies
+                (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (?1, 'react-dom', 'npm', 'advisory', 0.90)",
+            params![advisory],
+        )
+        .unwrap();
         super::test_support::install_test_conn(conn);
         dep.available_signal_count = 1;
         assert_eq!(
