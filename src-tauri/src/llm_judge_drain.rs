@@ -26,10 +26,14 @@
 //!    A clear REJECT (relevance below the main lane's measured 0.30 line)
 //!    resolves the flip as a real `llm_reject` demotion; a clearly RELEVANT
 //!    read that disputes a pending demote clears the marker (the standing
-//!    curated verdict is re-affirmed); the mid-band shrug escalates the
-//!    marker's attempt count and waits for the next cycle. Relevance-keyed
-//!    on purpose — see [`resolve_action`] for the live measurement that
-//!    rules out a confidence gate.
+//!    curated verdict is re-affirmed); a clearly RELEVANT read that CONFIRMS
+//!    a pending promote applies it through the persist boundary, twin-checked
+//!    (v32 — the risen-verdict lane, `Database::promote_risen_verdicts`,
+//!    defers a superseded pipeline's rejection here for exactly this second
+//!    opinion); the mid-band shrug escalates the marker's attempt count and
+//!    waits for the next cycle. Relevance-keyed on purpose — see
+//!    [`resolve_action`] for the live measurement that rules out a
+//!    confidence gate.
 //!
 //! Deliberately untouched: the serendipity paths
 //! (`scoring::dedup::compute_serendipity_candidates`, the deep-scan 0.45
@@ -86,6 +90,9 @@ enum DrainAction {
     /// Real verdict the other way, against a pending DEMOTE: the standing
     /// curated verdict is re-affirmed, the deferred flip dies.
     ClearPending,
+    /// Real RELEVANT verdict confirming a pending PROMOTE (v32): the flip
+    /// applies through the persist boundary — after the twin check.
+    Promote,
     /// No usable evidence this visit — count it and wait for the next cycle.
     Escalate,
 }
@@ -100,6 +107,9 @@ pub(crate) struct DrainSummary {
     pub reused: usize,
     pub demoted: usize,
     pub confirmed: usize,
+    /// Pending promotions a relevant read confirmed (v32) — includes the
+    /// twins written `duplicate_curated` instead of promoted.
+    pub promoted: usize,
     pub escalated: usize,
     pub exhausted: usize,
     pub corrupt_cleared: usize,
@@ -293,6 +303,7 @@ async fn run_drain_with(
 
     // ── B3: apply, from whichever lane produced the reading ─────────────
     let mut demote: Vec<(i64, bool, VerdictSource, Option<VerdictReason>)> = Vec::new();
+    let mut promote: Vec<(i64, bool, VerdictSource, Option<VerdictReason>)> = Vec::new();
     let mut clear: Vec<i64> = Vec::new();
     let mut escalate: Vec<i64> = Vec::new();
     for row in &slice {
@@ -308,6 +319,23 @@ async fn run_drain_with(
                 Some(VerdictReason::LlmReject),
             )),
             DrainAction::ClearPending => clear.push(row.id),
+            // A confirmed promotion is an UNREASONED write in the pending
+            // direction, which the boundary applies as the agreeing second
+            // run. Twin-checked first: the story may have been curated under
+            // another id while this flip waited (the original keeps the slot).
+            DrainAction::Promote => match db.curated_twin_of_item(row.id) {
+                Ok(Some(_)) => promote.push((
+                    row.id,
+                    false,
+                    VerdictSource::Score,
+                    Some(VerdictReason::DuplicateCurated),
+                )),
+                Ok(None) => promote.push((row.id, true, VerdictSource::Score, None)),
+                Err(e) => {
+                    warn!(target: "4da::verdict_drain", error = %e, item_id = row.id, "Drain twin check failed — promotion left pending");
+                    escalate.push(row.id);
+                }
+            },
             DrainAction::Escalate => escalate.push(row.id),
         }
     }
@@ -315,6 +343,10 @@ async fn run_drain_with(
     match db.persist_feed_verdicts_with_reasons(&demote, crate::scoring::PIPELINE_VERSION) {
         Ok(n) => summary.demoted = n,
         Err(e) => warn!(target: "4da::verdict_drain", error = %e, "Drain demotions failed"),
+    }
+    match db.persist_feed_verdicts_with_reasons(&promote, crate::scoring::PIPELINE_VERSION) {
+        Ok(n) => summary.promoted = n,
+        Err(e) => warn!(target: "4da::verdict_drain", error = %e, "Drain promotions failed"),
     }
     match db.clear_pending_markers(&clear) {
         Ok(n) => summary.confirmed = n,
@@ -383,16 +415,28 @@ fn parse_stored_utc(raw: &str) -> Option<chrono::DateTime<chrono::Utc>> {
 ///   whichever direction was pending.
 /// - `relevance >= CONFIRM_RELEVANCE_MIN` AND the pending flip was a DEMOTE →
 ///   the flip is disputed; the standing curated verdict survives and the
-///   marker dies. A pending PROMOTE never resolves upward here — promotion
-///   needs a full run's dedup/diversity/rerank context — so a relevant read
-///   on one merely escalates (and the attempt/age budget resolves it).
-/// - The mid-band shrug → escalate.
+///   marker dies.
+/// - `relevance >= CONFIRM_RELEVANCE_MIN` AND the pending flip was a PROMOTE →
+///   the flip is confirmed (v32). Before v32 a pending promote never resolved
+///   upward here ("promotion needs a full run's dedup/diversity/rerank
+///   context") and merely escalated until the attempt/age budget rejected it
+///   — which, once the risen-verdict lane started deferring superseded
+///   rejections here on purpose, would have made every one of them a
+///   `pending_retries_exhausted` after eight visits. The judge IS the
+///   batch-independent second opinion (MCC 0.728 vs labels, 2026-09-02);
+///   dedup is re-applied at the boundary by the twin check.
+/// - The mid-band shrug → escalate. A corrupt marker (direction unknown)
+///   never resolves upward.
 fn resolve_action(pending_direction: Option<bool>, relevance: f64) -> DrainAction {
     if relevance < crate::llm_judgments::DEMOTION_RELEVANCE_BELOW {
         return DrainAction::Demote;
     }
-    if relevance >= CONFIRM_RELEVANCE_MIN && pending_direction == Some(false) {
-        return DrainAction::ClearPending;
+    if relevance >= CONFIRM_RELEVANCE_MIN {
+        match pending_direction {
+            Some(false) => return DrainAction::ClearPending,
+            Some(true) => return DrainAction::Promote,
+            None => {}
+        }
     }
     DrainAction::Escalate
 }
@@ -411,6 +455,7 @@ fn log_summary(db: &Database, summary: &DrainSummary) {
             reused = summary.reused,
             demoted = summary.demoted,
             confirmed = summary.confirmed,
+            promoted = summary.promoted,
             escalated = summary.escalated,
             exhausted = summary.exhausted,
             corrupt_cleared = summary.corrupt_cleared,

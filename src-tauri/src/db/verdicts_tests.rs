@@ -6,6 +6,7 @@
 //! pins one way that boundary can be got wrong.
 
 use super::*;
+use crate::db::RisenPromotion;
 use crate::test_utils::{insert_test_item, test_db};
 
 /// Read the persisted verdict triple for an item.
@@ -1166,4 +1167,299 @@ fn twin_rule_is_stable_under_a_full_redrain() {
         Some(first),
         "the later copy yields to the first"
     );
+}
+
+// ===========================================================================
+// Risen-verdict promotion (v32, 2026-09-06 live audit)
+//
+// Every pass above is demote-only. After the v31 drain 915 rows scored at or
+// above the line with no relevant verdict — the lane in the other direction.
+// ===========================================================================
+
+/// The headline class: rows the current brain scores above the line that
+/// were never judged. A first verdict applies immediately through the
+/// boundary; below the line, or scored by a superseded brain, nothing moves;
+/// the promoted row leaves the working set.
+#[test]
+fn risen_first_verdicts_apply_immediately() {
+    let db = test_db();
+    let never = insert_test_item(
+        &db,
+        "hackernews",
+        "rp1",
+        "Protecting the Rust standard library",
+        "body",
+    );
+    let below = insert_test_item(&db, "hackernews", "rp2", "Below the line", "body");
+    let old_brain = insert_test_item(&db, "hackernews", "rp3", "Scored by an older brain", "body");
+    set_live_score(&db, never, 0.89, 32);
+    set_live_score(&db, below, 0.39, 32);
+    set_live_score(&db, old_brain, 0.90, 31);
+
+    let out = db.promote_risen_verdicts(32, 0.40, 100).unwrap();
+    assert_eq!(
+        out,
+        RisenPromotion {
+            candidates: 1,
+            promoted: 1,
+            deferred: 0,
+            twins: 0
+        }
+    );
+    assert_eq!(
+        verdict_of(&db, never),
+        (Some(1), Some(32), Some("score".into()))
+    );
+    assert_eq!(
+        pending_of(&db, never),
+        None,
+        "a first verdict is not a flip"
+    );
+    assert_eq!(
+        verdict_of(&db, below).0,
+        None,
+        "below the line stays unjudged"
+    );
+    assert_eq!(
+        verdict_of(&db, old_brain).0,
+        None,
+        "a superseded brain's score is not evidence"
+    );
+    assert_eq!(
+        db.promote_risen_verdicts(32, 0.40, 100).unwrap().candidates,
+        0,
+        "the promoted row leaves the working set — the pass converges"
+    );
+}
+
+/// A rejection a SUPERSEDED pipeline wrote — stale_version, score_sunk, or
+/// unreasoned — is an unreasoned flip against a standing verdict: deferred
+/// into the pending marker for the judge drain, the standing row untouched.
+/// The judge agreeing then applies it through the same boundary.
+#[test]
+fn risen_superseded_rejections_defer_to_the_judge() {
+    let db = test_db();
+    let stale = insert_test_item(&db, "hackernews", "rs1", "Announcing Rust 1.98.0", "body");
+    let sunk = insert_test_item(&db, "hackernews", "rs2", "Sunk at v27", "body");
+    let plain = insert_test_item(&db, "hackernews", "rs3", "Rejected by v30", "body");
+    // stale_version demotion written by v30.
+    db.persist_feed_verdicts(&[(stale, true, VerdictSource::Score)], 29)
+        .unwrap();
+    db.reconcile_feed_verdicts(&[stale], &[], 30).unwrap();
+    // score_sunk_in_version under v27.
+    db.persist_feed_verdicts(&[(sunk, true, VerdictSource::Score)], 27)
+        .unwrap();
+    set_live_score(&db, sunk, 0.10, 27);
+    assert_eq!(db.demote_sunk_verdicts(27, 0.37).unwrap(), 1);
+    // Unreasoned rejection by v30.
+    db.persist_feed_verdicts(&[(plain, false, VerdictSource::Score)], 30)
+        .unwrap();
+    for id in [stale, sunk, plain] {
+        set_live_score(&db, id, 0.90, 32);
+    }
+
+    let out = db.promote_risen_verdicts(32, 0.40, 100).unwrap();
+    assert_eq!(
+        out,
+        RisenPromotion {
+            candidates: 3,
+            promoted: 0,
+            deferred: 3,
+            twins: 0
+        }
+    );
+    for id in [stale, sunk, plain] {
+        assert_eq!(
+            verdict_of(&db, id).0,
+            Some(0),
+            "the standing rejection is untouched while the flip waits"
+        );
+        let marker = pending_of(&db, id).expect("flip deferred");
+        assert!(
+            marker.starts_with("1@"),
+            "pending direction is PROMOTE, got {marker}"
+        );
+    }
+    assert_eq!(
+        db.promote_risen_verdicts(32, 0.40, 100).unwrap().candidates,
+        0,
+        "a pending row belongs to the judge drain now"
+    );
+    // The judge agrees: the flip applies and the marker clears.
+    db.persist_feed_verdicts(&[(stale, true, VerdictSource::Score)], 32)
+        .unwrap();
+    assert_eq!(
+        verdict_of(&db, stale),
+        (Some(1), Some(32), Some("score".into()))
+    );
+    assert_eq!(pending_of(&db, stale), None);
+    assert_eq!(
+        reason_of(&db, stale),
+        None,
+        "a fresh verdict clears the old reason"
+    );
+}
+
+/// The current brain's own judgments are never second-guessed: an
+/// llm_reject, a duplicate_curated, a current-version rejection, a
+/// non-score provenance, and a row already carrying a pending flip are
+/// not candidates whatever their score.
+#[test]
+fn risen_pass_never_overrules_the_current_brain() {
+    let db = test_db();
+    let judged = insert_test_item(&db, "hackernews", "rn1", "LLM rejected", "body");
+    let twin = insert_test_item(&db, "hackernews", "rn2", "Duplicate", "body");
+    let current = insert_test_item(&db, "hackernews", "rn3", "Rejected by v32", "body");
+    let lucky = insert_test_item(&db, "hackernews", "rn4", "Serendipity provenance", "body");
+    let pending = insert_test_item(&db, "hackernews", "rn5", "Already pending", "body");
+    db.persist_feed_verdicts_with_reasons(
+        &[(
+            judged,
+            false,
+            VerdictSource::Score,
+            Some(VerdictReason::LlmReject),
+        )],
+        30,
+    )
+    .unwrap();
+    db.persist_feed_verdicts_with_reasons(
+        &[(
+            twin,
+            false,
+            VerdictSource::Score,
+            Some(VerdictReason::DuplicateCurated),
+        )],
+        30,
+    )
+    .unwrap();
+    db.persist_feed_verdicts(&[(current, false, VerdictSource::Score)], 32)
+        .unwrap();
+    db.persist_feed_verdicts(&[(lucky, false, VerdictSource::Serendipity)], 30)
+        .unwrap();
+    db.persist_feed_verdicts(&[(pending, false, VerdictSource::Score)], 30)
+        .unwrap();
+    set_raw_marker(&db, pending, "1@2026-09-01T00:00:00+00:00");
+    for id in [judged, twin, current, lucky, pending] {
+        set_live_score(&db, id, 0.95, 32);
+    }
+
+    let out = db.promote_risen_verdicts(32, 0.40, 100).unwrap();
+    assert_eq!(out.candidates, 0, "{out:?}");
+    for id in [judged, twin, current, lucky, pending] {
+        assert_eq!(verdict_of(&db, id).0, Some(0));
+    }
+}
+
+/// A risen row that is a twin of a story the feed already holds is written
+/// duplicate_curated, not promoted. Among the risen, id order applies: the
+/// earliest copy wins the slot and the later copy sees it.
+#[test]
+fn risen_twins_yield_to_the_curated_original() {
+    let db = test_db();
+    let original = insert_test_item(
+        &db,
+        "hackernews",
+        "rt1",
+        "A 2026 survey of Rust GUI libraries",
+        "body",
+    );
+    let copy = insert_test_item(
+        &db,
+        "reddit",
+        "rt2",
+        "A 2026 survey of Rust GUI libraries",
+        "body",
+    );
+    let fresh_a = insert_test_item(
+        &db,
+        "lobsters",
+        "rt3",
+        "Bun 1.4 Rust rewrite is not looking good",
+        "body",
+    );
+    let fresh_b = insert_test_item(
+        &db,
+        "hackernews",
+        "rt4",
+        "Bun 1.4 Rust rewrite is not looking good",
+        "body",
+    );
+    db.persist_feed_verdicts(&[(original, true, VerdictSource::Score)], 32)
+        .unwrap();
+    for id in [copy, fresh_a, fresh_b] {
+        set_live_score(&db, id, 0.80, 32);
+    }
+
+    let out = db.promote_risen_verdicts(32, 0.40, 100).unwrap();
+    assert_eq!(
+        out,
+        RisenPromotion {
+            candidates: 3,
+            promoted: 1,
+            deferred: 0,
+            twins: 2
+        }
+    );
+    assert_eq!(verdict_of(&db, copy).0, Some(0));
+    assert_eq!(reason_of(&db, copy), Some("duplicate_curated".into()));
+    assert_eq!(
+        verdict_of(&db, fresh_a).0,
+        Some(1),
+        "the earliest copy takes the slot"
+    );
+    assert_eq!(verdict_of(&db, fresh_b).0, Some(0));
+    assert_eq!(reason_of(&db, fresh_b), Some("duplicate_curated".into()));
+    assert_eq!(
+        db.curated_twin_of_item(fresh_b).unwrap(),
+        Some(fresh_a),
+        "the id-keyed lookup the judge drain uses agrees"
+    );
+    assert_eq!(db.curated_twin_of_item(fresh_a).unwrap(), None);
+    assert_eq!(db.curated_twin_of_item(999_999).unwrap(), None);
+}
+
+/// The standing feed's own twins — curated before the boundary wrote
+/// duplicate_curated — are retired on the same cadence; the earliest keeps
+/// the slot and the sweep converges.
+#[test]
+fn curated_twins_in_the_standing_feed_are_retired() {
+    let db = test_db();
+    let a = insert_test_item(
+        &db,
+        "hackernews",
+        "ct1",
+        "A 2026 survey of Rust GUI libraries",
+        "body",
+    );
+    let b = insert_test_item(
+        &db,
+        "reddit",
+        "ct2",
+        "A 2026 survey of Rust GUI libraries",
+        "body",
+    );
+    let c = insert_test_item(
+        &db,
+        "lobsters",
+        "ct3",
+        "A 2026 survey of Rust GUI libraries",
+        "body",
+    );
+    let other = insert_test_item(&db, "hackernews", "ct4", "Unrelated story", "body");
+    for id in [a, b, c, other] {
+        db.persist_feed_verdicts(&[(id, true, VerdictSource::Score)], 31)
+            .unwrap();
+    }
+
+    assert_eq!(db.demote_curated_twins(32).unwrap(), 2);
+    assert_eq!(
+        verdict_of(&db, a).0,
+        Some(1),
+        "the first copy keeps the slot"
+    );
+    assert_eq!(verdict_of(&db, b).0, Some(0));
+    assert_eq!(verdict_of(&db, c).0, Some(0));
+    assert_eq!(reason_of(&db, c), Some("duplicate_curated".into()));
+    assert_eq!(verdict_of(&db, other).0, Some(1));
+    assert_eq!(db.demote_curated_twins(32).unwrap(), 0, "converges");
 }

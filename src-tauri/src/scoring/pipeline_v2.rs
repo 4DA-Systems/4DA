@@ -33,23 +33,38 @@ use super::*;
 // Security evidence extraction helpers
 // ============================================================================
 
-/// Extract advisory ID (GHSA-xxxx-yyyy-zzzz or CVE-2025-XXXXX) from title text.
+/// Advisory-id prefixes an item title can carry. Order is precedence when a
+/// title names several (a cve row may carry both its CVE and its GHSA id).
+const ADVISORY_ID_PREFIXES: &[&str] = &["GHSA-", "CVE-", "RUSTSEC-", "PYSEC-", "GO-", "OSV-"];
+
+/// Extract the advisory id from a title — `GHSA-xxxx-yyyy-zzzz`, `CVE-2025-N`,
+/// `RUSTSEC-2026-N`, `PYSEC-2025-N`, `GO-2026-N` or `OSV-2026-N`.
+///
+/// The OSV mirror is keyed by this id, so a prefix this function does not
+/// know means the structured ranges are never consulted. v32: only GHSA-/CVE-
+/// were recognised, so every RUSTSEC-titled cve row fell to the text route —
+/// live 2026-09-06, four grounded tokio rows scored 0.88–0.90 with verdict
+/// `unknown` while their GHSA-titled twins resolved to not-affected.
 fn extract_advisory_id(title: &str) -> Option<String> {
-    // Try GHSA pattern
-    if let Some(start) = title.find("GHSA-") {
-        let rest = &title[start..];
-        let end = rest
-            .find(|c: char| c == ']' || c == ' ' || c == ')')
-            .unwrap_or(rest.len());
-        return Some(rest[..end].to_string());
-    }
-    // Try CVE pattern
-    if let Some(start) = title.find("CVE-") {
-        let rest = &title[start..];
-        let end = rest
-            .find(|c: char| c == ']' || c == ' ' || c == ')')
-            .unwrap_or(rest.len());
-        return Some(rest[..end].to_string());
+    for prefix in ADVISORY_ID_PREFIXES {
+        for (start, _) in title.match_indices(prefix) {
+            let rest = &title[start..];
+            let end = rest
+                .find(|c: char| matches!(c, ']' | ' ' | ')' | ',' | ':' | ';'))
+                .unwrap_or(rest.len());
+            let candidate = &rest[..end];
+            let body = &candidate[prefix.len()..];
+            // Every non-GHSA id is `PREFIX-<year>-<n>`: a digit must follow
+            // the prefix, so "GO-TO" or "OSV-based" in prose is never an id.
+            let plausible = if *prefix == "GHSA-" {
+                !body.is_empty()
+            } else {
+                body.starts_with(|c: char| c.is_ascii_digit())
+            };
+            if plausible {
+                return Some(candidate.to_string());
+            }
+        }
     }
     None
 }
@@ -187,6 +202,24 @@ fn mirror_version_verdict(
     confirmed.then_some(affected)
 }
 
+/// Parse a `Fixed in:` value — one version, or RustSec's comma-separated
+/// one-per-branch list ("1.18.5, 1.20.4, 1.24.2"). A leading `v` is
+/// tolerated. `None` when ANY token fails to parse: a half-read list would
+/// silently drop the branch that decides the verdict.
+fn parse_fixed_versions(fixed: &str) -> Option<Vec<semver::Version>> {
+    let tokens: Vec<&str> = fixed
+        .split(|c: char| c == ',' || c == ';' || c.is_whitespace())
+        .filter(|t| !t.is_empty())
+        .collect();
+    if tokens.is_empty() {
+        return None;
+    }
+    tokens
+        .iter()
+        .map(|t| semver::Version::parse(t.trim_start_matches(|c: char| c == 'v' || c == 'V')).ok())
+        .collect()
+}
+
 /// Check if installed_version falls within the affected range.
 /// Supports patterns like "< 3.0.1", "<= 2.8.0", ">= 1.0 < 3.0".
 /// Returns None if either input is missing or unparseable.
@@ -198,10 +231,19 @@ fn check_version_affected(
     let inst_str = installed?;
     let inst = semver::Version::parse(inst_str).ok()?;
 
-    // If we have a fixed version, simple check: affected if installed < fixed
-    if let Some(fix_str) = fixed {
-        if let Ok(fix) = semver::Version::parse(fix_str) {
-            return Some(inst < fix);
+    // The fix list decides when it can: at or past EVERY fix is not affected,
+    // below every fix is affected. Between two fixes (a 1.19.x install against
+    // fixes for the 1.18 / 1.20 / 1.24 branches) the text route cannot tell
+    // which branch the install is on, so it falls through to the range. v32:
+    // a multi-fix list used to fail the single parse and fall through to a
+    // range the cve source never writes — verdict `unknown` on every
+    // RustSec-style advisory.
+    if let Some(fixes) = fixed.and_then(parse_fixed_versions) {
+        if fixes.iter().all(|fix| inst >= *fix) {
+            return Some(false);
+        }
+        if fixes.iter().all(|fix| inst < *fix) {
+            return Some(true);
         }
     }
 
@@ -3209,6 +3251,7 @@ pub(crate) fn score_item(
         content_type: Some(content_type.slug().to_string()),
         strongly_grounded: grounding.strong,
         version_affected: is_version_affected,
+        registry_advisory,
     };
     let mut necessity_result = necessity::compute_necessity(&necessity_inputs);
 
@@ -3280,6 +3323,7 @@ pub(crate) fn score_item(
             fixed_version: fixed_version.as_deref(),
             installed_version: installed_version.as_deref(),
             via_registry_subject: grounding.via_registry_subject,
+            registry_advisory,
         });
     let explanation = if relevant || combined_score >= 0.3 {
         explanation_chain::render_subtitle(&explanation_factors)
@@ -4403,6 +4447,93 @@ mod tests {
             check_version_affected(Some("2.0.0"), Some(">= 3.0.0"), Some("2.5.0")),
             Some(true),
         );
+    }
+
+    /// v32: RustSec advisories list one fix per maintained branch
+    /// ("Fixed in: 1.18.5, 1.20.4, 1.24.2"). At or past EVERY fix is not
+    /// affected; below every fix is affected; between two fixes the text
+    /// route cannot tell which branch applies and stays unknown (a parseable
+    /// range still decides).
+    #[test]
+    fn check_version_affected_multi_fix_list() {
+        let fixes = Some("1.18.5, 1.20.4, 1.24.2");
+        assert_eq!(
+            check_version_affected(Some("1.53.1"), None, fixes),
+            Some(false)
+        );
+        assert_eq!(
+            check_version_affected(Some("1.24.2"), None, fixes),
+            Some(false)
+        );
+        assert_eq!(
+            check_version_affected(Some("1.10.0"), None, fixes),
+            Some(true)
+        );
+        assert_eq!(check_version_affected(Some("1.19.0"), None, fixes), None);
+        assert_eq!(
+            check_version_affected(Some("1.19.0"), Some(">= 1.19.0, < 1.20.4"), fixes),
+            Some(true)
+        );
+        // A `v` prefix is tolerated; an unparseable token leaves the list unread.
+        assert_eq!(
+            check_version_affected(Some("2.0.0"), None, Some("v1.2.3")),
+            Some(false)
+        );
+        assert_eq!(
+            check_version_affected(Some("2.0.0"), None, Some("next release")),
+            None
+        );
+    }
+
+    /// v32: the OSV mirror is keyed by the id in the title. RUSTSEC-/PYSEC-/
+    /// GO-/OSV- ids were invisible to it, so a RUSTSEC-titled cve row never
+    /// reached the structured ranges (four grounded tokio rows at verdict
+    /// unknown while their GHSA-titled twins resolved to not-affected).
+    #[test]
+    fn extract_advisory_id_knows_every_registry_prefix() {
+        assert_eq!(
+            extract_advisory_id("[RUSTSEC-2026-0007] tokio: broadcast channel"),
+            Some("RUSTSEC-2026-0007".into())
+        );
+        assert_eq!(
+            extract_advisory_id("RUSTSEC-2026-0007: tokio broadcast"),
+            Some("RUSTSEC-2026-0007".into())
+        );
+        assert_eq!(
+            extract_advisory_id("[PYSEC-2025-12] requests"),
+            Some("PYSEC-2025-12".into())
+        );
+        assert_eq!(
+            extract_advisory_id("GO-2026-3456 in golang.org/x/net"),
+            Some("GO-2026-3456".into())
+        );
+        assert_eq!(
+            extract_advisory_id("[OSV-2026-100] something"),
+            Some("OSV-2026-100".into())
+        );
+        assert_eq!(
+            extract_advisory_id("[GHSA-xj6q-8x83-jv6g] axios"),
+            Some("GHSA-xj6q-8x83-jv6g".into())
+        );
+        assert_eq!(
+            extract_advisory_id("CVE-2026-1234, CVE-2026-1235"),
+            Some("CVE-2026-1234".into())
+        );
+        // GHSA outranks CVE when both appear, as before.
+        assert_eq!(
+            extract_advisory_id("CVE-2026-1 (GHSA-aaaa-bbbb-cccc)"),
+            Some("GHSA-aaaa-bbbb-cccc".into())
+        );
+        // A prefix inside prose is not an id; a later real id still is.
+        assert_eq!(
+            extract_advisory_id("GO-TO statements considered harmful"),
+            None
+        );
+        assert_eq!(
+            extract_advisory_id("GO-TO considered harmful (GO-2026-1)"),
+            Some("GO-2026-1".into())
+        );
+        assert_eq!(extract_advisory_id("No advisory here"), None);
     }
 
     // ========================================================================

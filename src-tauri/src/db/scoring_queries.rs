@@ -430,8 +430,24 @@ impl Database {
             let mut read_stmt = tx.prepare_cached(
                 "SELECT relevance_score, scored_pipeline_version FROM source_items WHERE id = ?1",
             )?;
+            // v32: a version-changed write also CLEARS the rank columns. The
+            // rank is the batch layer's ordering of a superseded brain's
+            // evidence and carries no epoch stamp of its own; left standing,
+            // `RANKED_ORDER_EXPR` ordered MCP, briefing candidates and search
+            // by it (live 2026-09-06: 285 of 317 feed ranks predated the v31
+            // score, 12 inflated by up to +0.37). The fallback to the fresh
+            // evidence score is the honest order until the batch re-ranks.
             let mut stmt = tx.prepare_cached(
-                "UPDATE source_items SET relevance_score = ?1, scored_pipeline_version = ?2, signal_type = ?3, signal_priority = ?4, scored_at = datetime('now') WHERE id = ?5",
+                "UPDATE source_items
+                 SET relevance_score = ?1,
+                     scored_pipeline_version = ?2,
+                     signal_type = ?3,
+                     signal_priority = ?4,
+                     scored_at = datetime('now'),
+                     rank_score = CASE WHEN ?6 THEN NULL ELSE rank_score END,
+                     rank_factors = CASE WHEN ?6 THEN NULL ELSE rank_factors END,
+                     rank_scored_at = CASE WHEN ?6 THEN NULL ELSE rank_scored_at END
+                 WHERE id = ?5",
             )?;
             // A score-changing write REPLACES: the newest evaluation explains
             // the new durable score.
@@ -492,7 +508,8 @@ impl Database {
                     crate::scoring::PIPELINE_VERSION,
                     signal_type,
                     signal_priority,
-                    id
+                    id,
+                    version_changed
                 ])?;
                 count += 1;
                 // Explanation lane (schema 115): every persisted score gets a

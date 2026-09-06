@@ -30,6 +30,7 @@ mod sources;
 #[cfg(test)]
 mod stress_tests;
 mod verdicts;
+mod verdicts_promotion;
 
 pub use cache::*;
 pub use dep_snapshots::*;
@@ -42,6 +43,7 @@ pub use scoring_explanations::*;
 pub use scoring_queries::*;
 pub use sources::*;
 pub use verdicts::*;
+pub use verdicts_promotion::*;
 
 use chrono::{DateTime, Utc};
 use parking_lot::Mutex;

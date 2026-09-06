@@ -61,6 +61,11 @@ pub(crate) struct NecessityInputs {
     /// dep-match urgency tier — the OSV backfill floods decades of historical,
     /// long-fixed advisories per package.
     pub version_affected: Option<bool>,
+    /// The row IS a registry advisory (osv / cve source). An editorial story
+    /// that merely names a dependency (HN, RSS, a Mastodon post) is not
+    /// evidence that the dependency is affected, and the reason must not say
+    /// it is (v32).
+    pub registry_advisory: bool,
 }
 
 /// Result of necessity computation
@@ -313,9 +318,19 @@ fn try_security_path(
             "medium" => (0.60, Urgency::Awareness),
             _ => (0.50, Urgency::Awareness),
         };
+        // The verb is evidence. A REGISTRY advisory row IS the advisory, so
+        // it "affects" the dependency it names. An editorial story that only
+        // mentions the package (an npm-worm write-up whose title contains
+        // "React Query Codegen") merely NAMES it — the reason must not claim
+        // the dependency is affected (v32).
+        let reason = if inputs.registry_advisory {
+            format!("Security vulnerability affects {dep_names}")
+        } else {
+            format!("Security story names your dependency {dep_names}")
+        };
         Some((
             score,
-            format!("Security vulnerability affects {dep_names}"),
+            reason,
             NecessityCategory::SecurityVulnerability,
             urgency,
         ))

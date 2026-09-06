@@ -783,6 +783,9 @@ impl Database {
     }
 }
 
+// The promotion lane (the `feed_relevant` path in the OTHER direction, v32)
+// lives in `verdicts_promotion.rs` — this file sat at its size ceiling.
+
 #[cfg(test)]
 #[path = "verdicts_tests.rs"]
 mod tests;

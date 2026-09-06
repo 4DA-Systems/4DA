@@ -34,6 +34,15 @@ pub(crate) struct VerdictReconciliation {
     /// demote line (`threshold − SCORE_SUNK_EPSILON`) — the 2026-08-23 audit's
     /// "immortal within a version" class. Reason: `score_sunk_in_version`.
     pub sunk_demoted: usize,
+    /// v32: never-judged items whose current-version score clears the line —
+    /// given their first verdict this batch.
+    pub promoted: usize,
+    /// v32: items a superseded pipeline rejected whose current-version score
+    /// clears the line — deferred to the judge drain as an unreasoned flip.
+    pub deferred_promotions: usize,
+    /// v32: later copies of a story the feed already held, demoted
+    /// `duplicate_curated` (both from the standing feed and among the risen).
+    pub twin_demoted: usize,
 }
 
 impl VerdictReconciliation {
@@ -49,6 +58,12 @@ impl VerdictReconciliation {
 /// clears a full post-bump backlog in a single cycle while still capping the
 /// transaction if the curated set ever grows.
 const VERDICT_RECONCILE_BUDGET: usize = 500;
+
+/// Risen items promoted per cycle (v32). The post-v31 backlog was 915 rows
+/// live; at this budget it clears in five cycles, and each deferred flip
+/// still has to pass the judge drain, which adjudicates a handful per cycle —
+/// the promotion lane must not outrun the second opinion it relies on.
+const RISEN_PROMOTE_BUDGET: usize = 200;
 
 /// Re-judge curated items whose verdict a superseded `PIPELINE_VERSION`
 /// decided, and DEMOTE the ones the current pipeline rejects.
@@ -129,26 +144,57 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
         );
     }
 
+    // v32: the lane in the OTHER direction. Every pass in this file could only
+    // remove; the drain persists scores only; the cycle re-verdicts only what
+    // it selects. So a row the current brain scores above the line with no
+    // verdict — or a rejection a superseded brain wrote — stayed out of the
+    // feed forever (915 such rows live after the v31 drain). Twins first, so a
+    // story the feed already holds is not promoted a second time under a new
+    // id; then the risen set, through the persist boundary (first verdicts
+    // apply, flips against a standing rejection defer to the judge drain).
+    let twins = db
+        .demote_curated_twins(scoring::PIPELINE_VERSION)
+        .map_err(|e| format!("Failed to demote curated twins: {e}"))?;
+    let risen = db
+        .promote_risen_verdicts(
+            scoring::PIPELINE_VERSION,
+            crate::get_relevance_threshold(),
+            RISEN_PROMOTE_BUDGET,
+        )
+        .map_err(|e| format!("Failed to promote risen verdicts: {e}"))?;
+    if twins > 0 || risen.candidates > 0 {
+        info!(
+            target: "4da::verdicts",
+            twins_demoted = twins + risen.twins,
+            candidates = risen.candidates,
+            promoted = risen.promoted,
+            deferred = risen.deferred,
+            version = scoring::PIPELINE_VERSION,
+            "Risen sweep: current-version scores above the line re-enter the verdict lane"
+        );
+    }
+    let base = VerdictReconciliation {
+        sunk_demoted: sunk,
+        promoted: risen.promoted,
+        deferred_promotions: risen.deferred,
+        twin_demoted: twins + risen.twins,
+        ..VerdictReconciliation::default()
+    };
+
     // Cheap indexed probe next: this runs on EVERY analysis cycle forever, so
     // the idle path must cost ~0 and must not build a scoring context.
     let stale = db
         .count_stale_verdicts(scoring::PIPELINE_VERSION)
         .map_err(|e| format!("Failed to probe stale verdicts: {e}"))?;
     if stale == 0 {
-        return Ok(VerdictReconciliation {
-            sunk_demoted: sunk,
-            ..VerdictReconciliation::default()
-        });
+        return Ok(base);
     }
 
     let items = db
         .get_stale_verdict_items(scoring::PIPELINE_VERSION, budget)
         .map_err(|e| format!("Failed to load stale-verdict items: {e}"))?;
     if items.is_empty() {
-        return Ok(VerdictReconciliation {
-            sunk_demoted: sunk,
-            ..VerdictReconciliation::default()
-        });
+        return Ok(base);
     }
 
     let ctx = scoring::build_scoring_context_with_timeout(db, "reconcile_verdicts").await?;
@@ -203,7 +249,7 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
         demoted: demote.len(),
         confirmed: confirm.len(),
         remaining: (stale - items.len() as i64).max(0),
-        sunk_demoted: sunk,
+        ..base
     };
     if let Err(e) = db.reconcile_feed_verdicts(&demote, &confirm, scoring::PIPELINE_VERSION) {
         // Unlike epoch promotion (where failure just means a slower drain), a

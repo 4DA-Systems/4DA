@@ -238,6 +238,73 @@ fn count_stale_scored_items_mirrors_drain_predicate() {
     assert_eq!(db.count_stale_scored_items(v - 1).unwrap(), 0);
 }
 
+/// v32: a version-changed evidence write clears the rank columns — a rank
+/// computed by a superseded brain never orders a re-judged item
+/// (`RANKED_ORDER_EXPR` falls back to the fresh evidence score). The
+/// same-version write below pins the other half: it leaves the rank alone.
+#[test]
+fn version_change_clears_a_superseded_rank() {
+    let db = test_db();
+    let item = insert_test_item(&db, "hackernews", "rk2", "Ranked, then re-judged", "x");
+    let current = crate::scoring::PIPELINE_VERSION;
+    db.persist_analysis_scores(&[(item, 0.60, None, None, None)], "analysis")
+        .unwrap();
+    db.persist_rank_scores(&[(item, 0.85, Some(r#"{"ce":0.25}"#.into()))])
+        .unwrap();
+    // Roll the stamp back one version: the next evidence write is a drain.
+    {
+        let conn = db.conn.lock();
+        conn.execute(
+            "UPDATE source_items SET scored_pipeline_version = ?2 WHERE id = ?1",
+            params![item, current - 1],
+        )
+        .unwrap();
+    }
+    db.persist_analysis_scores(&[(item, 0.61, None, None, None)], "backfill")
+        .unwrap();
+
+    let read = |db: &Database| -> (
+        Option<f64>,
+        i64,
+        Option<f64>,
+        Option<String>,
+        Option<String>,
+    ) {
+        let conn = db.conn.lock();
+        conn.query_row(
+            "SELECT relevance_score, scored_pipeline_version, rank_score, rank_factors,
+                    rank_scored_at
+             FROM source_items WHERE id = ?1",
+            params![item],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        )
+        .unwrap()
+    };
+    let (score, version, rank, factors, ranked_at) = read(&db);
+    assert!(
+        (score.unwrap() - 0.61).abs() < 1e-6,
+        "a version drain writes through the damper"
+    );
+    assert_eq!(version, i64::from(current), "stamp advanced");
+    assert_eq!(
+        rank, None,
+        "a superseded brain's rank never orders a re-judged item"
+    );
+    assert_eq!(factors, None, "rank provenance cleared with the rank");
+    assert_eq!(ranked_at, None, "rank stamp cleared with the rank");
+
+    // Same-version follow-up: the batch re-ranks, then a churn write keeps it.
+    db.persist_rank_scores(&[(item, 0.70, None)]).unwrap();
+    db.persist_analysis_scores(&[(item, 0.62, None, None, None)], "analysis")
+        .unwrap();
+    let (_, _, rank2, _, ranked_at2) = read(&db);
+    assert!(
+        (rank2.unwrap() - 0.70).abs() < 1e-6,
+        "a same-version evidence write leaves the rank alone"
+    );
+    assert!(ranked_at2.is_some());
+}
+
 /// Items 12+26: the rank write is fully separate from the evidence write.
 /// `persist_rank_scores` touches ONLY the three rank columns — never
 /// `relevance_score`, `scored_pipeline_version`, the signal columns, or

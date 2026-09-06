@@ -502,6 +502,22 @@
 - **Date:** 2026-09-04
 - **Status:** Final
 
+### AD-038: Every Materialized Verdict Converges in Both Directions, and the Verb Is Evidence
+
+- **Decision:** PIPELINE_VERSION 32 (2026-09-06), from the post-v31 surface-reliability audit (`.claude/plans/surface-reliability-verification-2026-09-06.md`). Four rules:
+  1. **A repair lane that can only demote is half a lane.** `feed_relevant` now has a promotion path on the reconcile cadence (`Database::promote_risen_verdicts`): a row the CURRENT pipeline scores at or above the line with no verdict gets its first verdict; a row a SUPERSEDED pipeline rejected (`stale_version`, `score_sunk_in_version`, or unreasoned) is written as an unreasoned flip, which the persist boundary defers to `feed_verdict_pending` for the LLM judge drain to adjudicate. Reasoned rejections by the current brain (`llm_reject`, `duplicate_curated`, `pending_retries_exhausted`), current-version verdicts, non-score provenance and rows with a pending flip are never candidates. `demote_curated_twins` retires later copies of a story the feed already holds; the earliest keeps the slot.
+  2. **Derived state with no epoch stamp is invalidated by the write that supersedes its inputs.** A version-changed evidence write clears `rank_score` / `rank_factors` / `rank_scored_at`; `RANKED_ORDER_EXPR`'s fallback to the fresh evidence score is the honest order until the batch re-ranks.
+  3. **The verb is evidence.** Only a REGISTRY advisory row (osv / cve) may say a dependency is "affected". An editorial item that names the package reads "Security story names your dependency X" in both the explanation chain and the necessity reason. Necessity, urgency and score are unchanged by the verb.
+  4. **An id table is complete when it covers what the sources write.** `extract_advisory_id` recognises GHSA-, CVE-, RUSTSEC-, PYSEC-, GO- and OSV- ids (a digit must follow every non-GHSA prefix), and the text fallback parses RustSec's per-branch `Fixed in:` list: at or past every fix is not affected, below every fix is affected, between is unknown.
+- **Rationale:** Measured live 2026-09-06 after the v31 drain (76,061 items, 317 feed rows): 915 rows scored ≥ 0.40 held no relevant verdict (178 never judged, 331 `stale_version`, 137 `score_sunk_in_version`, 269 unreasoned — 721 of them from a superseded version), including "Announcing Rust 1.98.0" at 0.90 and four grounded tokio advisories at 0.88–0.90; 285 of 317 feed ranks predated the v31 score, 12 inflated by up to +0.37; those four tokio rows were RUSTSEC-titled and so never reached the OSV mirror, and their `Fixed in: 1.18.5, 1.20.4, 1.24.2` defeated the single-version parse, while Preemption's matcher already knew the installed 1.53.1 was clear; "Security advisory affects react in d:/4da" was rendered for an npm-worm story whose only link to react was "React Query Codegen" in its title; two stories held five feed slots between them; and every headless drain left the startup watchdog's running marker behind, so the next GUI start reported a crash that never happened.
+- **Considered:**
+  - *Promoting risen rejections immediately with a new reason code:* Rejected — the demote-only doctrine (AD-Phase-101) exists because promotion is not a per-item decision. Deferring the flip to the judge drain gives it the batch-independent second opinion the doctrine asks for (judge MCC 0.728 vs labels, 2026-09-02), and a never-judged row is a FIRST verdict, which the boundary already applies immediately.
+  - *A full curation re-run over the risen set:* Rejected — it would rebuild the scoring context on every cycle for a set that is empty in steady state; the promotion pass is SQL plus the twin check.
+  - *Stamping the rank with its own epoch instead of clearing it:* Rejected — the rank is a batch-layer ordering of the evidence and has no meaning across a re-judgement; a stale-but-stamped rank would still need a consumer-side filter on every ranked surface.
+  - *Registering v32 as a scoped epoch:* Rejected — rank staleness is corpus-wide and the verb change touches every security-factor row whatever its source; no positive-form predicate covers either.
+- **Date:** 2026-09-06
+- **Status:** Final
+
 ---
 
 ## Decision Template

@@ -546,7 +546,37 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // row's explanation rewritten, so the predicate is "all rows". (Item 2 alone
 // would register as `source_type IN ('osv','cve')` — only those rows carry a
 // version verdict.)
-pub(crate) const PIPELINE_VERSION: i32 = 31;
+//
+// v32 (2026-09-06): the surfaces converge on the current brain (live
+// reliability audit after v31, session c7c16712).
+//   1. Advisory ids: `extract_advisory_id` recognises RUSTSEC-/PYSEC-/GO-/OSV-
+//      as well as GHSA-/CVE-, and the text route parses a comma-separated
+//      `Fixed in:` list (at or past EVERY fix → not affected; below every fix
+//      → affected; between → unknown). Four grounded tokio RUSTSEC rows sat at
+//      0.88–0.90 with verdict `unknown` while their GHSA-titled twins resolved
+//      to not-affected and Preemption already knew 1.53.1 was clear.
+//   2. The verb is evidence: a NON-registry item's security factor reads
+//      "Security story names your dependency X" (necessity: "Security story
+//      names …"); "affects" is reserved for registry advisory rows. An
+//      npm-worm story rendered "Security advisory affects react in d:/4da"
+//      off the words "React Query Codegen" in its title.
+//   3. Persist boundary: a version-changed evidence write clears
+//      rank_score / rank_factors / rank_scored_at. 285 of 317 feed ranks
+//      predated the v31 score and `RANKED_ORDER_EXPR` ordered MCP, briefing
+//      candidates and search by a superseded brain's rank.
+//   4. Verdict lane (no score change): `promote_risen_verdicts` runs on the
+//      reconcile cadence — a current-version score at or above the line with
+//      no verdict gets its first verdict, one a superseded pipeline rejected
+//      is deferred to the judge drain as an unreasoned flip, and
+//      `demote_curated_twins` retires later copies of a story the feed holds.
+//      915 rows sat above the line with no relevant verdict after v31.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS: item 3 fires only on a
+// version-changed write and the stale ranks are corpus-wide, and item 2
+// rewrites the explanation of every security-factor row whatever its source
+// — no positive-form predicate covers either. The whole corpus drains
+// (5 minutes live at v31).
+pub(crate) const PIPELINE_VERSION: i32 = 32;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

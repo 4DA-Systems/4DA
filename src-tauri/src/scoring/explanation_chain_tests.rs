@@ -28,6 +28,7 @@ struct Fixture {
     fixed_version: Option<String>,
     installed_version: Option<String>,
     via_registry_subject: bool,
+    registry_advisory: bool,
 }
 
 impl Default for Fixture {
@@ -57,6 +58,7 @@ impl Default for Fixture {
             fixed_version: None,
             installed_version: None,
             via_registry_subject: false,
+            registry_advisory: false,
         }
     }
 }
@@ -88,6 +90,7 @@ impl Fixture {
             fixed_version: self.fixed_version.as_deref(),
             installed_version: self.installed_version.as_deref(),
             via_registry_subject: self.via_registry_subject,
+            registry_advisory: self.registry_advisory,
         }
     }
 
@@ -749,6 +752,7 @@ fn short_source_path_keeps_the_last_two_segments() {
 fn security_factor_names_the_project_that_declares_the_dependency() {
     let mut f = Fixture::default();
     f.is_security = true;
+    f.registry_advisory = true;
     f.necessity_score = 0.95;
     f.advisory_id = Some("GHSA-xj6q-8x83-jv6g".to_string());
     f.cvss_score = Some(9.1);
@@ -787,6 +791,7 @@ fn security_factor_keeps_its_old_wording_when_provenance_is_unknown() {
     // project, and must read exactly as they did before.
     let mut f = Fixture::default();
     f.is_security = true;
+    f.registry_advisory = true;
     f.necessity_score = 0.95;
     f.advisory_id = Some("GHSA-aaaa-bbbb-cccc".to_string());
     f.cvss_score = Some(9.1);
@@ -801,6 +806,45 @@ fn security_factor_keeps_its_old_wording_when_provenance_is_unknown() {
     assert_eq!(
         sec.display, "Security advisory affects your dependency lodash",
         "unknown provenance falls back cleanly"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The verb is evidence (2026-09-06 live Signal audit, v32)
+//
+// "Security advisory affects react in d:/4da" was rendered for an npm-worm
+// STORY (a text item) whose only link to react was "React Query Codegen" in
+// its title. Only a registry advisory row can claim the dependency is
+// affected; a story that names the package gets the honest verb.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn an_editorial_security_story_names_the_dependency_instead_of_affecting_it() {
+    let mut f = Fixture::default();
+    f.is_security = true;
+    f.registry_advisory = false;
+    f.necessity_score = 0.85;
+    f.display_deps = vec![dep_in("react", "d:/4da")];
+    f.dep_match_score = 0.9;
+
+    let chain = f.build();
+    let sec = chain
+        .iter()
+        .find(|c| c.kind == crate::FactorKind::SecurityAdvisory)
+        .expect("security factor must be emitted");
+    assert_eq!(sec.display, "Security story names react in d:/4da");
+
+    f.display_deps = vec![dep("react", 0.9, true, Some("19.0.0"))]; // no project_paths
+    let chain = f.build();
+    let sec = chain
+        .iter()
+        .find(|c| c.kind == crate::FactorKind::SecurityAdvisory)
+        .expect("security factor must be emitted");
+    assert_eq!(sec.display, "Security story names your dependency react");
+    assert!(
+        !sec.display.contains("affects"),
+        "a story is not evidence of impact: {}",
+        sec.display
     );
 }
 
