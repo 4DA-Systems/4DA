@@ -1904,6 +1904,11 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'translate_content',
   'translate_content_batch',
   'get_embedding_model_info',
+  // LLM triage of the surfaced dependency set. Live 2026-09-07: the backend
+  // answered ok after 35,085 ms, the 30 s default had already rejected, and
+  // Blind Spots showed "Assessment failed — try again" over a result the
+  // backend had cached (IPC log: assess_blind_spots_with_ai ok 35085 ms).
+  'assess_blind_spots_with_ai',
 ]);
 
 class CommandTimeoutError extends Error {
