@@ -56,7 +56,9 @@ pub fn ranked_order_expr(alias: &str) -> String {
 /// [`crate::db::bounded_breakdown_json`] — `None` means "no breakdown to
 /// persist" (the scorer produced none, or serialization failed), never an
 /// error. It rides the score write into `scoring_explanations` (schema 115)
-/// in the same transaction.
+/// in the same transaction, and its `breakdown.content_type` is written to
+/// `source_items.content_type` on the same row (schema 119): the column is
+/// the SCORER's classification, not the ingest default.
 pub type ScorePersistRow = (i64, f32, Option<String>, Option<String>, Option<String>);
 
 /// Row for the relevance-triage recall audit (Phase 0 of the scoring funnel).
@@ -437,6 +439,17 @@ impl Database {
             // by it (live 2026-09-06: 285 of 317 feed ranks predated the v31
             // score, 12 inflated by up to +0.37). The fallback to the fresh
             // evidence score is the honest order until the batch re-ranks.
+            //
+            // `content_type` follows the breakdown (schema 119). Until now the
+            // column was written at ingest only — feed-declared on curated
+            // feeds, NULL for every generic source — while the classification
+            // every multiplier actually applied lived only inside the
+            // explanation envelope (live 2026-09-07: NULL on 509 of 609 feed
+            // rows, so the epochs predicate and the knowledge-gap exclusions
+            // read "unclassified" for 84% of the feed). The classifier is a
+            // pure function of title/content/source, so it does not wobble
+            // with the score and is written on suppressed writes too; a row
+            // without a breakdown keeps whatever it had.
             let mut stmt = tx.prepare_cached(
                 "UPDATE source_items
                  SET relevance_score = ?1,
@@ -446,7 +459,11 @@ impl Database {
                      scored_at = datetime('now'),
                      rank_score = CASE WHEN ?6 THEN NULL ELSE rank_score END,
                      rank_factors = CASE WHEN ?6 THEN NULL ELSE rank_factors END,
-                     rank_scored_at = CASE WHEN ?6 THEN NULL ELSE rank_scored_at END
+                     rank_scored_at = CASE WHEN ?6 THEN NULL ELSE rank_scored_at END,
+                     content_type = COALESCE(
+                         CASE WHEN ?7 IS NOT NULL AND json_valid(?7)
+                              THEN json_extract(?7, '$.breakdown.content_type') END,
+                         content_type)
                  WHERE id = ?5",
             )?;
             // A score-changing write REPLACES: the newest evaluation explains
@@ -509,7 +526,8 @@ impl Database {
                     signal_type,
                     signal_priority,
                     id,
-                    version_changed
+                    version_changed,
+                    breakdown_json
                 ])?;
                 count += 1;
                 // Explanation lane (schema 115): every persisted score gets a

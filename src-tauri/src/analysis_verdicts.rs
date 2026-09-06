@@ -20,6 +20,7 @@ use crate::analysis::signal_classifier;
 use crate::error::Result;
 use crate::get_database;
 use crate::scoring::{self, ScoringInput, ScoringOptions};
+use crate::types::SourceRelevance;
 
 /// Outcome of one verdict-reconciliation batch.
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -295,5 +296,222 @@ pub(crate) async fn reconcile_stale_verdicts_logged() -> VerdictReconciliation {
             );
             VerdictReconciliation::default()
         }
+    }
+}
+
+/// `excluded_by` prefix a durable-verdict demotion writes on a display row.
+/// Namespaced like `brief:` so it can be expired by this pass alone — user
+/// and anti-topic exclusions are never touched.
+const VERDICT_EXCLUSION_PREFIX: &str = "verdict:";
+
+/// Outcome of [`converge_display_on_durable_verdicts`].
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct DisplayConvergence {
+    /// Display rows the cycle called relevant that the durable verdict rejects.
+    pub demoted: usize,
+    /// Rows a previous pass demoted whose durable verdict no longer rejects them.
+    pub restored: usize,
+}
+
+fn is_verdict_exclusion(r: &SourceRelevance) -> bool {
+    r.excluded
+        && r.excluded_by
+            .as_deref()
+            .is_some_and(|e| e.starts_with(VERDICT_EXCLUSION_PREFIX))
+}
+
+/// Converge the cycle's DISPLAY set on the durable verdict — demote-only.
+///
+/// `persist_cycle_results` writes the cycle's `relevant` flags through the
+/// verdict persist boundary, and that boundary can decline them: an
+/// unreasoned flip against a standing rejection is deferred, a cross-cycle
+/// twin is written `duplicate_curated`, and the judge drain / reconciliation
+/// passes rewrite verdicts between cycles. The in-memory results never heard
+/// any of that, so every surface reading them — the Brief's review queue, the
+/// free brief, the morning-briefing candidates, the header counts — showed
+/// items the feed had already rejected (live 2026-09-07: "Rust has become a
+/// spiritual experience", `llm_reject` at v32, second in the review queue at
+/// 0.90). The Signal feed reads `feed_relevant` and was right.
+///
+/// Same doctrine as [`reconcile_stale_verdicts_cycle`]: a durable REJECTION
+/// demotes the display row (`relevant = false`, `excluded_by = "verdict:…"`,
+/// so `extract_near_misses` and the free brief skip it exactly as they skip a
+/// brief rejection); a durable ACCEPT never promotes — promotion is the batch
+/// decision the cycle already made — except to lift a demotion THIS pass
+/// wrote once the durable verdict stops rejecting the row (a deferred flip
+/// the next run confirmed, a judge promotion). Rows with no durable verdict
+/// and rows excluded for any other reason are left alone.
+pub(crate) fn converge_display_on_durable_verdicts(
+    db: &crate::db::Database,
+    results: &mut [SourceRelevance],
+) -> DisplayConvergence {
+    let candidates: Vec<i64> = results
+        .iter()
+        .filter(|r| (r.relevant && !r.excluded) || is_verdict_exclusion(r))
+        .map(|r| r.id as i64)
+        .collect();
+    if candidates.is_empty() {
+        return DisplayConvergence::default();
+    }
+    let rejected = match db.durable_rejections(&candidates) {
+        Ok(map) => map,
+        Err(e) => {
+            warn!(
+                target: "4da::verdicts",
+                error = %e,
+                "Durable-verdict probe failed — display set left as the cycle scored it"
+            );
+            return DisplayConvergence::default();
+        }
+    };
+    // `rejected` only ever holds candidate ids, so a hit is either a display
+    // row to demote or a held row whose reason is refreshed.
+    let mut outcome = DisplayConvergence::default();
+    for r in results.iter_mut() {
+        let held = is_verdict_exclusion(r);
+        match rejected.get(&(r.id as i64)) {
+            Some(reason) => {
+                r.relevant = false;
+                r.excluded = true;
+                r.excluded_by = Some(format!(
+                    "{VERDICT_EXCLUSION_PREFIX}{}",
+                    reason.as_deref().unwrap_or("not_curated")
+                ));
+                if !held {
+                    outcome.demoted += 1;
+                }
+            }
+            None if held => {
+                r.relevant = true;
+                r.excluded = false;
+                r.excluded_by = None;
+                outcome.restored += 1;
+            }
+            None => {}
+        }
+    }
+    outcome
+}
+
+#[cfg(test)]
+mod display_convergence_tests {
+    use super::*;
+    use crate::test_utils::{insert_test_item, test_db};
+
+    fn scored(id: i64, score: f32) -> SourceRelevance {
+        serde_json::from_value(serde_json::json!({
+            "id": id,
+            "title": format!("item {id}"),
+            "url": null,
+            "top_score": score,
+            "matches": [],
+            "relevant": true,
+        }))
+        .expect("minimal SourceRelevance deserializes")
+    }
+
+    fn set_verdict(db: &crate::db::Database, id: i64, relevant: i64, reason: Option<&str>) {
+        db.conn
+            .lock()
+            .execute(
+                "UPDATE source_items SET feed_relevant = ?1, feed_verdict_reason = ?2 WHERE id = ?3",
+                rusqlite::params![relevant, reason, id],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn durable_rejection_demotes_the_display_row_and_nothing_else() {
+        let db = test_db();
+        let rejected = insert_test_item(
+            &db,
+            "reddit",
+            "dc1",
+            "Rust has become a spiritual experience",
+            "opinion",
+        );
+        let curated = insert_test_item(&db, "rss", "dc2", "Announcing Rust 1.98", "release");
+        let unjudged = insert_test_item(&db, "hackernews", "dc3", "fresh item", "new");
+        set_verdict(&db, rejected, 0, Some("llm_reject"));
+        set_verdict(&db, curated, 1, None);
+        let mut results = vec![
+            scored(rejected, 0.90),
+            scored(curated, 0.80),
+            scored(unjudged, 0.70),
+        ];
+
+        let outcome = converge_display_on_durable_verdicts(&db, &mut results);
+
+        assert_eq!(
+            outcome,
+            DisplayConvergence {
+                demoted: 1,
+                restored: 0
+            }
+        );
+        assert!(!results[0].relevant && results[0].excluded);
+        assert_eq!(
+            results[0].excluded_by.as_deref(),
+            Some("verdict:llm_reject")
+        );
+        assert!(
+            results[1].relevant && !results[1].excluded,
+            "a durable accept is left as the cycle scored it"
+        );
+        assert!(
+            results[2].relevant && !results[2].excluded,
+            "a never-judged row has nothing durable to converge on"
+        );
+        let near_misses = crate::types::extract_near_misses(&results).unwrap_or_default();
+        assert!(
+            near_misses.iter().all(|r| r.id != rejected as u64),
+            "a judge rejection is not a near miss"
+        );
+    }
+
+    #[test]
+    fn unreasoned_rejection_reads_as_not_curated_and_lifts_when_the_verdict_flips() {
+        let db = test_db();
+        let id = insert_test_item(&db, "devto", "dc4", "deferred flip", "body");
+        set_verdict(&db, id, 0, None);
+        let mut results = vec![scored(id, 0.75)];
+
+        let first = converge_display_on_durable_verdicts(&db, &mut results);
+        assert_eq!(first.demoted, 1);
+        assert_eq!(
+            results[0].excluded_by.as_deref(),
+            Some("verdict:not_curated")
+        );
+
+        // The next run confirms the flip: the durable verdict accepts the row,
+        // so the demotion THIS pass wrote is lifted — and only this pass's.
+        set_verdict(&db, id, 1, None);
+        let second = converge_display_on_durable_verdicts(&db, &mut results);
+        assert_eq!(
+            second,
+            DisplayConvergence {
+                demoted: 0,
+                restored: 1
+            }
+        );
+        assert!(results[0].relevant && !results[0].excluded);
+        assert!(results[0].excluded_by.is_none());
+    }
+
+    #[test]
+    fn other_exclusions_are_never_touched() {
+        let db = test_db();
+        let id = insert_test_item(&db, "hackernews", "dc5", "user-excluded", "body");
+        set_verdict(&db, id, 1, None);
+        let mut results = vec![scored(id, 0.75)];
+        results[0].relevant = false;
+        results[0].excluded = true;
+        results[0].excluded_by = Some("anti-topic:crypto".to_string());
+
+        let outcome = converge_display_on_durable_verdicts(&db, &mut results);
+
+        assert_eq!(outcome, DisplayConvergence::default());
+        assert!(!results[0].relevant && results[0].excluded);
+        assert_eq!(results[0].excluded_by.as_deref(), Some("anti-topic:crypto"));
     }
 }

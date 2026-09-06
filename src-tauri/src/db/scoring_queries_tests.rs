@@ -496,3 +496,46 @@ fn fresh_durable_score_probe_honors_the_age_escape_hatch() {
     );
     assert!(db.ids_with_fresh_durable_scores(&[], 7).unwrap().is_empty());
 }
+
+/// Schema 119: `content_type` follows the breakdown at persist time. NULL at
+/// ingest for a generic source, the column takes the scorer's classification
+/// with the first score, keeps it on a write without a breakdown, and is
+/// superseded when the scorer reclassifies.
+#[test]
+fn content_type_follows_the_breakdown_at_persist() {
+    let db = test_db();
+    let id = insert_test_item(&db, "reddit", "ct1", "classified at score time", "x");
+    let stored = |db: &Database| -> Option<String> {
+        db.conn
+            .lock()
+            .query_row(
+                "SELECT content_type FROM source_items WHERE id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(stored(&db), None, "a generic source ingests unclassified");
+
+    let deep_dive = r#"{"score":0.7,"breakdown":{"content_type":"deep_dive"}}"#.to_string();
+    db.persist_analysis_scores(&[(id, 0.7, None, None, Some(deep_dive))], "analysis")
+        .unwrap();
+    assert_eq!(stored(&db).as_deref(), Some("deep_dive"));
+
+    db.persist_analysis_scores(&[(id, 0.2, None, None, None)], "analysis")
+        .unwrap();
+    assert_eq!(
+        stored(&db).as_deref(),
+        Some("deep_dive"),
+        "a write without a breakdown keeps the classification"
+    );
+
+    let discussion = r#"{"score":0.9,"breakdown":{"content_type":"discussion"}}"#.to_string();
+    db.persist_analysis_scores(&[(id, 0.9, None, None, Some(discussion))], "analysis")
+        .unwrap();
+    assert_eq!(
+        stored(&db).as_deref(),
+        Some("discussion"),
+        "the scorer's reclassification supersedes the stored value"
+    );
+}
