@@ -21,8 +21,10 @@
 //!    standing 0 — **never promote without a real verdict**. Corrupt markers
 //!    are cleared (Phase-109 doctrine: rewritten, never trusted).
 //! 2. **Re-judge slice** — up to [`DRAIN_SLICE`] of the oldest still-pending
-//!    items (20% of the fresh judge lane's 40-item selection) get one cheap
-//!    LLM read on the judge sibling model ([`crate::llm_judge::judge_provider`]).
+//!    items (20% of the fresh judge lane's 40-item selection; [`drain_slice`]
+//!    surges to [`DRAIN_SURGE_SLICE`] while the backlog is large) get one
+//!    cheap LLM read on the judge sibling model
+//!    ([`crate::llm_judge::judge_provider`]), one `DRAIN_SLICE` chunk per call.
 //!    A clear REJECT (relevance below the main lane's measured 0.30 line)
 //!    resolves the flip as a real `llm_reject` demotion; a clearly RELEVANT
 //!    read that disputes a pending demote clears the marker (the standing
@@ -57,6 +59,30 @@ use crate::settings::LLMProvider;
 /// judge volume stays constant. Runs on the cheap sibling model behind the
 /// same budget gates as every other judge call.
 pub(crate) const DRAIN_SLICE: usize = 8;
+
+/// Surge slice (v32 follow-up, 2026-09-06): the risen-verdict lane deferred
+/// 756 promotions into the backlog in its first passes after the v32 drain,
+/// only one of which had a reusable ingest judgment — at eight reads per
+/// 30-minute cycle that is two days before "yesterday's noise becomes
+/// tomorrow's signal" converges. While the backlog is at or above
+/// [`DRAIN_SURGE_BACKLOG`] the drain takes this many per cycle (60% of the
+/// 40-item judge envelope, still INSIDE it — the fresh lane cedes the same
+/// number of slots via `llm_judgments::drain_reserve`), and drops back to
+/// [`DRAIN_SLICE`] once the backlog is small again. Calls stay one
+/// `DRAIN_SLICE` chunk each, so a truncated reply costs at most one chunk.
+pub(crate) const DRAIN_SURGE_SLICE: usize = 24;
+
+/// Backlog size at which the surge slice applies.
+pub(crate) const DRAIN_SURGE_BACKLOG: usize = 64;
+
+/// Items the drain re-judges this cycle for a backlog of `backlog` markers.
+pub(crate) fn drain_slice(backlog: usize) -> usize {
+    if backlog >= DRAIN_SURGE_BACKLOG {
+        DRAIN_SURGE_SLICE
+    } else {
+        DRAIN_SLICE
+    }
+}
 
 /// Drain visits a marker may consume before it resolves terminally…
 pub(crate) const MAX_DRAIN_ATTEMPTS: u32 = 8;
@@ -211,7 +237,7 @@ async fn run_drain_with(
             // another call on them cannot change anything.
             r.marker.is_some_and(|m| m.attempts < MAX_DRAIN_ATTEMPTS)
         })
-        .take(DRAIN_SLICE)
+        .take(drain_slice(backlog.len()))
         .collect();
     if slice.is_empty() {
         log_summary(db, &summary);
@@ -247,48 +273,53 @@ async fn run_drain_with(
         if llm_limit_reached {
             summary.skipped = Some("llm_budget_reached");
         } else if let Some(provider) = provider {
-            let ids: Vec<i64> = needs_llm.iter().map(|r| r.id).collect();
-            match load_items(db, &ids) {
-                Ok(items) => {
-                    let model_name = provider.model.clone();
-                    let client = LLMClient::with_purpose(provider, "verdict_drain");
-                    match judge_items(&client, &items).await {
-                        Ok(judgments) => {
-                            for row in &needs_llm {
-                                let Some(judged) = judgments.iter().find(|j| j.id == Some(row.id))
-                                else {
-                                    // The model dropped this item from its
-                                    // reply: no evidence, no attempt consumed.
-                                    continue;
-                                };
-                                summary.judged += 1;
-                                let relevance = judged.relevance.unwrap_or(0.0).clamp(0.0, 1.0);
-                                let confidence = judged.confidence.unwrap_or(0.0).clamp(0.0, 1.0);
-                                if let Err(e) = db.upsert_llm_judgment(
-                                    row.id,
-                                    relevance,
-                                    judged.reason.as_deref().unwrap_or_default(),
-                                    None,
-                                    confidence,
-                                    &model_name,
-                                    DRAIN_PROMPT_VERSION,
-                                ) {
-                                    warn!(target: "4da::verdict_drain", error = %e, item_id = row.id, "Failed to store drain judgment");
-                                }
-                                relevance_by_id.insert(row.id, relevance);
+            let model_name = provider.model.clone();
+            let client = LLMClient::with_purpose(provider, "verdict_drain");
+            // One call per DRAIN_SLICE items — the size every call had before
+            // the surge slice existed. A truncated or malformed reply then
+            // costs at most one chunk's evidence, never the whole pass.
+            for chunk in needs_llm.chunks(DRAIN_SLICE) {
+                let ids: Vec<i64> = chunk.iter().map(|r| r.id).collect();
+                let items = match load_items(db, &ids) {
+                    Ok(items) => items,
+                    Err(e) => {
+                        warn!(target: "4da::verdict_drain", error = %e, "Failed to load drain items");
+                        continue;
+                    }
+                };
+                match judge_items(&client, &items).await {
+                    Ok(judgments) => {
+                        for row in chunk {
+                            let Some(judged) = judgments.iter().find(|j| j.id == Some(row.id))
+                            else {
+                                // The model dropped this item from its
+                                // reply: no evidence, no attempt consumed.
+                                continue;
+                            };
+                            summary.judged += 1;
+                            let relevance = judged.relevance.unwrap_or(0.0).clamp(0.0, 1.0);
+                            let confidence = judged.confidence.unwrap_or(0.0).clamp(0.0, 1.0);
+                            if let Err(e) = db.upsert_llm_judgment(
+                                row.id,
+                                relevance,
+                                judged.reason.as_deref().unwrap_or_default(),
+                                None,
+                                confidence,
+                                &model_name,
+                                DRAIN_PROMPT_VERSION,
+                            ) {
+                                warn!(target: "4da::verdict_drain", error = %e, item_id = row.id, "Failed to store drain judgment");
                             }
-                        }
-                        Err(e) => {
-                            // A failed call consumes no attempt: no evidence
-                            // was obtained, so those markers are left exactly
-                            // as found for the next cycle. Anything B1 already
-                            // resolved still applies below.
-                            warn!(target: "4da::verdict_drain", error = %e, "Drain re-judgment call failed — no attempts consumed");
+                            relevance_by_id.insert(row.id, relevance);
                         }
                     }
-                }
-                Err(e) => {
-                    warn!(target: "4da::verdict_drain", error = %e, "Failed to load drain items");
+                    Err(e) => {
+                        // A failed call consumes no attempt: no evidence
+                        // was obtained, so those markers are left exactly
+                        // as found for the next cycle. Anything B1 already
+                        // resolved still applies below.
+                        warn!(target: "4da::verdict_drain", error = %e, "Drain re-judgment call failed — no attempts consumed");
+                    }
                 }
             }
         } else {

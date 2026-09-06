@@ -57,6 +57,30 @@ fn pending_of(db: &Database, id: i64) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
+// drain_slice — the per-cycle take, surging on a real backlog (v32 follow-up)
+// ---------------------------------------------------------------------------
+
+/// Eight per cycle is the steady-state carve-out; 756 deferred promotions
+/// after the v32 drain would have taken two days at that rate. At or above
+/// the surge line the drain takes the surge slice; below it, the base slice.
+#[test]
+fn drain_slice_surges_only_on_a_real_backlog() {
+    assert_eq!(drain_slice(0), DRAIN_SLICE);
+    assert_eq!(drain_slice(DRAIN_SURGE_BACKLOG - 1), DRAIN_SLICE);
+    assert_eq!(drain_slice(DRAIN_SURGE_BACKLOG), DRAIN_SURGE_SLICE);
+    assert_eq!(drain_slice(756), DRAIN_SURGE_SLICE);
+    assert!(
+        DRAIN_SURGE_SLICE < crate::llm_judgments::BATCH_SIZE * 4,
+        "the surge stays inside the 40-item judge envelope"
+    );
+    assert_eq!(
+        DRAIN_SURGE_SLICE % DRAIN_SLICE,
+        0,
+        "the surge is whole DRAIN_SLICE chunks — one call each"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // resolve_action — the per-judgment decision table
 // ---------------------------------------------------------------------------
 
