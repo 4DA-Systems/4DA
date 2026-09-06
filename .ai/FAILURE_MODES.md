@@ -639,3 +639,32 @@ this in v18/v29 (`is_strong_grounding_match`) and every other surface must
 use the same standard. When a surface counts or grounds by name, list the
 sources it accepts and ask which of them can say the package's name without
 being about the package.
+
+## FM: A display surface that reads the cycle's in-memory results ignores the durable verdict
+
+**Observed 2026-09-07.** "Rust has become a spiritual experience" (r/rust,
+evidence 0.90) sat second in the Brief's review queue and led the free brief
+while its row carried `feed_relevant = 0`, `feed_verdict_reason = llm_reject`
+at v32 — the judge had rejected it and the Signal feed, which reads the
+column, never showed it. The cycle's `SourceRelevance::relevant` is written
+through the verdict persist boundary, and that boundary can decline it (an
+unreasoned flip against a standing rejection is deferred; a cross-cycle twin
+is written `duplicate_curated`) while the judge drain and the reconciliation
+passes rewrite verdicts between cycles. Nothing carried any of that back to
+`AnalysisState::results`, so every score-only surface — the review queue,
+`generate_free_briefing`, the morning-briefing candidates, the "to review"
+count — answered from the scorer's first opinion. Same session: the stored
+`content_type` column was NULL on 509 of 609 feed rows because only ingest
+ever wrote it, while the classification every multiplier used lived in the
+breakdown; the epochs predicate and the knowledge-gap exclusions were
+reading "unclassified" for 84% of the feed.
+
+**The rule.** A durable column the feed decides on is the answer for EVERY
+surface, not only the one that queries it. When a cycle produces an
+in-memory value that ALSO exists durably, converge the in-memory copy on the
+durable one before it reaches display state (demote-only, like verdict
+reconciliation), and when the scorer computes a classification that a
+column stores, write the column at score time — a column that only ingest
+fills is stale from the first re-score. Before trusting a display list,
+query the durable column for its top rows: the list must not show what the
+column rejects.

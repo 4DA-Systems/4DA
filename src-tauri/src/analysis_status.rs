@@ -333,7 +333,7 @@ async fn analyze_cached_content_inner(
     // ran. Diffed around the cycle because the full-pass path drops the
     // `RerankOutcome` inside `score_items_full`; see `judged_for_run`.
     let passes_before = analysis_rerank::applied_rerank_passes();
-    let cycle = analyze_cached_content_inner_impl(app, run).await?;
+    let mut cycle = analyze_cached_content_inner_impl(app, run).await?;
     let judged = judged_for_run(
         run.llm_rerank,
         passes_before,
@@ -366,6 +366,27 @@ async fn analyze_cached_content_inner(
     // headless path reaches) means the guard converges on end-user machines
     // without an operator-run drain. No-op probe when nothing is stale.
     crate::analysis_verdicts::reconcile_stale_verdicts_logged().await;
+
+    // The DISPLAY set follows the durable verdict — demote-only. The persist
+    // boundary above may have declined the cycle's `relevant` flags (deferred
+    // flips, cross-cycle twins) and the judge drain / reconciliation rewrite
+    // verdicts between cycles; every score-only surface reads `cycle.results`
+    // (review queue, free brief, header counts), so it must carry the same
+    // answer the Signal feed gives. On a differential run this covers the
+    // carried-over display rows too — exactly the ones the persist slice
+    // above deliberately does not re-write.
+    if let Ok(db) = get_database() {
+        let converged =
+            crate::analysis_verdicts::converge_display_on_durable_verdicts(db, &mut cycle.results);
+        if converged.demoted > 0 || converged.restored > 0 {
+            info!(
+                target: "4da::verdicts",
+                demoted = converged.demoted,
+                restored = converged.restored,
+                "Display set converged on the durable verdict"
+            );
+        }
+    }
 
     // Stale-SCORE drain, beside the cycle rather than inside its batch.
     // Background / headless cycles carry it; a foreground click does not, so a

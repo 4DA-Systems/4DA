@@ -429,6 +429,36 @@ impl Database {
         Ok(count)
     }
 
+    /// Items among `ids` whose DURABLE verdict is "not curated"
+    /// (`feed_relevant = 0`), keyed to the reason on the row — `None` for an
+    /// unreasoned score verdict. Read AFTER the cycle's persist boundary, so
+    /// a flip the boundary deferred (`feed_verdict_pending`) reads as the
+    /// standing rejection it left in place. Never-judged rows (NULL) are
+    /// absent: nothing durable disagrees with the cycle about them. Feeds
+    /// `analysis_verdicts::converge_display_on_durable_verdicts`.
+    pub fn durable_rejections(
+        &self,
+        ids: &[i64],
+    ) -> SqliteResult<std::collections::HashMap<i64, Option<String>>> {
+        let mut rejected = std::collections::HashMap::new();
+        if ids.is_empty() {
+            return Ok(rejected);
+        }
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT feed_verdict_reason FROM source_items WHERE id = ?1 AND feed_relevant = 0",
+        )?;
+        for id in ids {
+            if let Some(reason) = stmt
+                .query_row(params![id], |r| r.get::<_, Option<String>>(0))
+                .optional()?
+            {
+                rejected.insert(*id, reason);
+            }
+        }
+        Ok(rejected)
+    }
+
     /// The id of an ALREADY-curated item that is the same story as
     /// (`url`, `title`) — same canonical URL (tracking params stripped) or
     /// same normalized title — excluding `id` itself. `None` when the story

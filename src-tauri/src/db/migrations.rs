@@ -1430,7 +1430,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 118;
+        const TARGET_VERSION: i64 = 119;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5504,6 +5504,49 @@ impl Database {
                 )?;
             }
 
+            // Phase 119: `source_items.content_type` becomes the SCORER's
+            // classification. The column was only ever written at ingest —
+            // the feed-declared type on curated feeds, NULL for every generic
+            // source — while the classification every multiplier actually
+            // applied lived only in the `scoring_explanations` breakdown.
+            // Live 2026-09-07: NULL on 509 of 609 feed rows, so the epochs
+            // predicate, the knowledge-gap candidate exclusions and every
+            // ad-hoc query read "unclassified" for 84% of the feed.
+            // `persist_analysis_scores` now writes it with every score; this
+            // backfills the standing rows from their durable breakdown. Rows
+            // whose breakdown carries no classification keep the ingest
+            // value. Data rewrite only, no schema change.
+            if current_version < 119 {
+                Self::run_versioned_migration(
+                    &conn,
+                    118,
+                    119,
+                    "Phase 119: backfill source_items.content_type from the scoring breakdown",
+                    |c| {
+                        let updated = c.execute(
+                            "UPDATE source_items
+                             SET content_type = (
+                                 SELECT json_extract(e.breakdown, '$.breakdown.content_type')
+                                 FROM scoring_explanations e
+                                 WHERE e.source_item_id = source_items.id
+                             )
+                             WHERE id IN (
+                                 SELECT source_item_id FROM scoring_explanations
+                                 WHERE json_valid(breakdown)
+                                   AND json_extract(breakdown, '$.breakdown.content_type') IS NOT NULL
+                             )",
+                            [],
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            updated,
+                            "Phase 119: content_type backfilled from the durable scoring breakdown"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -7132,6 +7175,64 @@ mod tests {
         assert_eq!(
             survivors, 1,
             "re-running the migration must not drop existing rows"
+        );
+    }
+
+    /// Phase 119 backfills `source_items.content_type` from the durable
+    /// breakdown. A row whose breakdown carries no classification keeps the
+    /// ingest-time value; the scorer's classification supersedes it otherwise.
+    #[test]
+    fn test_phase_119_content_type_backfill() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
+            .unwrap();
+        assert!(version >= 119, "schema_version >= 119; got {version}");
+
+        conn.execute_batch(
+            "INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding)
+                 VALUES ('reddit', 'p119a', 'classified by the scorer', 'x', 'h119a', x'00');
+             INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+                 VALUES (last_insert_rowid(), 32, '{\"score\":0.7,\"breakdown\":{\"content_type\":\"deep_dive\"}}');
+             INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding, content_type)
+                 VALUES ('rss', 'p119b', 'declared at ingest', 'x', 'h119b', x'00', 'release_notes');
+             INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+                 VALUES (last_insert_rowid(), 32, '{\"score\":0.7,\"breakdown\":{}}');
+             INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding, content_type)
+                 VALUES ('rss', 'p119c', 'reclassified', 'x', 'h119c', x'00', 'release_notes');
+             INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+                 VALUES (last_insert_rowid(), 32, '{\"score\":0.7,\"breakdown\":{\"content_type\":\"discussion\"}}');
+             UPDATE schema_version SET version = 118;",
+        )
+        .expect("seed three rows and wind back to v118");
+        drop(conn);
+        db.migrate().expect("re-running phase 119");
+        let conn = db.conn.lock();
+
+        let stored = |source_id: &str| -> Option<String> {
+            conn.query_row(
+                "SELECT content_type FROM source_items WHERE source_id = ?1",
+                [source_id],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            stored("p119a").as_deref(),
+            Some("deep_dive"),
+            "a NULL column takes the breakdown's classification"
+        );
+        assert_eq!(
+            stored("p119b").as_deref(),
+            Some("release_notes"),
+            "a breakdown without a classification leaves the ingest value alone"
+        );
+        assert_eq!(
+            stored("p119c").as_deref(),
+            Some("discussion"),
+            "the scorer's classification supersedes the ingest default"
         );
     }
 
