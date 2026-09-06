@@ -617,3 +617,25 @@ feed it: when a source is added or widened, grep the corpus for the id shapes
 it actually writes (`SELECT DISTINCT substr(title, 1, 8) …`) and pin each one
 in the extractor's test. A verdict that is `unknown` on a row the graph
 grounds is a finding, not a null — count them after every drain.
+
+## FM: A grounding rule that accepts a title word grounds the wrong package
+
+**Observed 2026-09-06.** Signal-chain grounding accepted any word-boundary
+title hit on two items across two days: `which` (a transitive npm dep)
+verified a Preemption chain off "Which app should I use?" and "Ask HN: Which
+repos are worth reading?"; `openai` off a Reuters legal story; `typescript`
+off a calendar library; `axum` and `tauri` off their own plugins' release
+rows. Knowledge gaps did the same one surface over — `hmac` CRITICAL off a
+PHP Phalcon CVE, `hono` HIGH off `@hono/oauth-providers` — and the Blind
+Spots tally let one SID advisory row on `image` turn 460 titles containing
+"image" into releases. Every case was well corroborated, multi-day and about
+an installed dependency; none was about the package.
+
+**The rule.** A dependency is grounded by STRUCTURED proof only: the linker's
+`exact_registry` / `advisory` row, a registry title whose subject is the
+package, or an advisory `Affected:` line naming it. Text with package
+vocabulary around a name is a citation, never proof; the scoring feed learned
+this in v18/v29 (`is_strong_grounding_match`) and every other surface must
+use the same standard. When a surface counts or grounds by name, list the
+sources it accepts and ask which of them can say the package's name without
+being about the package.

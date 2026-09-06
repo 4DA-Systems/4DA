@@ -750,8 +750,10 @@ fn advisory_affected_status(content: &str, dep_name: &str) -> AffectedStatus {
     }
 }
 
-/// Bool convenience for evidence text generation.
-fn advisory_affected_package_match(content: &str, dep_name: &str) -> bool {
+/// Bool convenience for evidence text generation. `pub(crate)`: signal-chain
+/// grounding reads the same `Affected:` proof off rows the linker has not
+/// visited yet.
+pub(crate) fn advisory_affected_package_match(content: &str, dep_name: &str) -> bool {
     matches!(
         advisory_affected_status(content, dep_name),
         AffectedStatus::Matched

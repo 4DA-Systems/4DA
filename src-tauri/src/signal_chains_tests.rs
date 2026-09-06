@@ -35,6 +35,13 @@ fn chain_detection_db() -> Connection {
             is_dev INTEGER DEFAULT 0,
             is_direct INTEGER DEFAULT 1
         );
+        CREATE TABLE source_item_dependencies (
+            source_item_id INTEGER NOT NULL,
+            package_name TEXT NOT NULL,
+            ecosystem TEXT DEFAULT '',
+            match_type TEXT NOT NULL,
+            confidence REAL DEFAULT 0.5
+        );
         CREATE TABLE temporal_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             event_type TEXT NOT NULL,
@@ -109,6 +116,19 @@ fn insert_chain_test_item(
         ],
     )
     .expect("insert chain test item");
+}
+
+/// Bind an item to a package the way the dependency linker does. Chain
+/// grounding takes STRUCTURED proof only — a registry-subject or advisory
+/// link, or the same proof read off the item itself; a bare title word never
+/// grounds (2026-09-06 live audit).
+fn link_item(conn: &Connection, source_id: &str, package: &str, match_type: &str) {
+    conn.execute(
+        "INSERT INTO source_item_dependencies (source_item_id, package_name, match_type, confidence)
+         SELECT id, ?2, ?3, 0.9 FROM source_items WHERE source_id = ?1",
+        params![source_id, package, match_type],
+    )
+    .expect("link chain test item");
 }
 
 /// The anchor must separate days at EVERY hour — including the ten minutes after
@@ -250,6 +270,8 @@ fn detect_chains_samples_across_days_not_only_latest_two_hundred_items() {
         "-10 minutes",
         1.0,
     );
+    link_item(&conn, "tokio-yesterday", "tokio", "exact_registry");
+    link_item(&conn, "tokio-today", "tokio", "advisory");
 
     // This mirrors the live failure: the old newest-200 query would look only
     // at this same-day burst and reject every topic because no candidate could
@@ -351,7 +373,7 @@ fn strict_proof_dependency_topic_is_not_verified_without_ecosystem_context() {
 }
 
 #[test]
-fn strict_proof_dependency_topic_can_be_verified_with_ecosystem_context() {
+fn strict_proof_dependency_topic_can_be_verified_with_linker_proof() {
     let conn = chain_detection_db();
     conn.execute(
         "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('image', 'rust')",
@@ -377,12 +399,14 @@ fn strict_proof_dependency_topic_can_be_verified_with_ecosystem_context() {
         "-10 minutes",
         1.0,
     );
+    link_item(&conn, "image-crate-yesterday", "image", "exact_registry");
+    link_item(&conn, "image-crate-today", "image", "advisory");
 
     let chains = detect_chains(&conn).expect("detect chains");
     let image = chains
         .iter()
         .find(|c| c.verified_dep.as_deref() == Some("image"))
-        .expect("image crate chain should be verified with rust ecosystem proof");
+        .expect("image crate chain should be verified with the linker's structured proof");
 
     assert_eq!(image.overall_priority, "critical");
     assert!(image.confidence > UNGROUNDED_CONFIDENCE_CAP);
@@ -415,6 +439,8 @@ fn verified_dep_chain_filters_ungrounded_security_link() {
         "-1 day",
         1.0,
     );
+    link_item(&conn, "image-maintenance", "image", "exact_registry");
+    link_item(&conn, "image-docs", "image", "exact_registry");
     insert_chain_test_item(
         &conn,
         "image-unrelated-exploit",
@@ -542,6 +568,13 @@ fn verified_dep_chain_displays_only_grounded_links() {
         "-1 day",
         1.0,
     );
+    link_item(
+        &conn,
+        "express-package-release",
+        "express",
+        "exact_registry",
+    );
+    link_item(&conn, "express-package-security", "express", "advisory");
 
     let chains = detect_chains(&conn).expect("detect chains");
     let express = chains
@@ -579,6 +612,12 @@ fn critical_verified_chain_keeps_security_link_when_truncated() {
             &format!("-{} days", 6 - i),
             1.0,
         );
+        link_item(
+            &conn,
+            &format!("next-learning-{i}"),
+            "next",
+            "exact_registry",
+        );
     }
     insert_chain_test_item(
         &conn,
@@ -589,6 +628,7 @@ fn critical_verified_chain_keeps_security_link_when_truncated() {
         "-10 minutes",
         1.0,
     );
+    link_item(&conn, "next-security", "next", "advisory");
 
     let chains = detect_chains(&conn).expect("detect chains");
     let next = chains
@@ -604,6 +644,136 @@ fn critical_verified_chain_keeps_security_link_when_truncated() {
             .any(|link| link.signal_type == "security_alert"),
         "critical chain display must retain the grounded security link"
     );
+}
+
+/// 2026-09-06 live audit: five signal-chain alerts on Preemption were grounded
+/// by nothing but a title word — `which` (a transitive npm dep) on "Which app
+/// should I use?", `openai` on a Reuters legal story, `typescript` on a
+/// calendar library. Well corroborated, multi-day, an installed dependency,
+/// package vocabulary all around — and not about the package. Text never
+/// grounds; the chain still exists as awareness, capped and unverified.
+#[test]
+fn bare_title_words_never_ground_a_dependency_chain() {
+    let conn = chain_detection_db();
+    conn.execute(
+        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('tokio', 'rust')",
+        [],
+    )
+    .expect("insert dependency");
+
+    // Four editorial items across four days, one with a security keyword —
+    // the same corroborated shape the `image` awareness test uses, so the
+    // chain clears the confidence floor and exists at all. Before 2026-09-06
+    // every one of these grounded on its title word and the chain came out
+    // "critical" with `verified_dep = tokio`.
+    insert_chain_test_item(
+        &conn,
+        "tokio-benchmarks",
+        "hackernews",
+        "Tokio vs async-std: 2026 benchmarks",
+        "rust async runtime comparison, cargo crate benchmarks",
+        "-3 days",
+        1.0,
+    );
+    insert_chain_test_item(
+        &conn,
+        "tokio-choice",
+        "reddit",
+        "Why we chose Tokio for our runtime",
+        "rust crate selection notes, cargo workspace",
+        "-2 days",
+        1.0,
+    );
+    insert_chain_test_item(
+        &conn,
+        "tokio-report",
+        "hackernews",
+        "Tokio vulnerability report spreads on social media",
+        "rust crate security discussion, cargo ecosystem chatter",
+        "-1 day",
+        1.0,
+    );
+    insert_chain_test_item(
+        &conn,
+        "tokio-channels",
+        "lobsters",
+        "Tokio channels explained",
+        "rust crate tutorial on the tokio crate's mpsc",
+        "-10 minutes",
+        1.0,
+    );
+
+    let chains = detect_chains(&conn).expect("detect chains");
+    let tokio = chains
+        .iter()
+        .find(|c| c.chain_name.starts_with("tokio signal chain"))
+        .expect("the awareness chain still exists");
+    assert_eq!(
+        tokio.verified_dep, None,
+        "four editorial mentions with crate vocabulary are not proof"
+    );
+    assert_eq!(
+        tokio.overall_priority, "watch",
+        "a keyword-inferred security signal without grounding never mints critical"
+    );
+    assert!(tokio.confidence <= UNGROUNDED_CONFIDENCE_CAP + f64::EPSILON);
+}
+
+/// The proof the linker writes can also be read off the row itself, so a
+/// chain does not wait for the post-fetch linker pass: a registry row whose
+/// subject is the package and an advisory naming it in `Affected:` ground
+/// without any `source_item_dependencies` row. A release OF a sibling crate
+/// (`tokio-util`) is not a release OF `tokio`.
+#[test]
+fn registry_subject_and_affected_line_ground_without_linker_rows() {
+    let conn = chain_detection_db();
+    conn.execute(
+        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('tokio', 'rust')",
+        [],
+    )
+    .expect("insert dependency");
+
+    insert_chain_test_item(
+        &conn,
+        "tokio-release",
+        "crates_io",
+        "crates.io: tokio v1.40.1",
+        "tokio 1.40.1 published to crates.io",
+        "-2 days",
+        1.0,
+    );
+    insert_chain_test_item(
+        &conn,
+        "tokio-util-release",
+        "crates_io",
+        "crates.io: tokio-util v0.7.13",
+        "tokio-util 0.7.13 published to crates.io; tokio ecosystem",
+        "-1 day",
+        1.0,
+    );
+    insert_chain_test_item(
+        &conn,
+        "tokio-advisory",
+        "cve",
+        "RUSTSEC-2026-0007 vulnerability in tokio broadcast channel",
+        "Severity: HIGH\nAffected: tokio (crates.io)\nFixed in: 1.40.2",
+        "-10 minutes",
+        1.0,
+    );
+
+    let chains = detect_chains(&conn).expect("detect chains");
+    let tokio = chains
+        .iter()
+        .find(|c| c.verified_dep.as_deref() == Some("tokio"))
+        .expect("registry subject + Affected: line verify tokio without linker rows");
+    assert_eq!(tokio.overall_priority, "critical");
+    assert_eq!(
+        tokio.links.len(),
+        2,
+        "the tokio-util release is not about tokio: {:?}",
+        tokio.links.iter().map(|l| &l.title).collect::<Vec<_>>()
+    );
+    assert!(tokio.links.iter().all(|l| !l.title.contains("tokio-util")));
 }
 
 #[test]
@@ -633,6 +803,8 @@ fn detect_and_record_chains_persists_temporal_signal_chain_rows() {
         "-10 minutes",
         1.0,
     );
+    link_item(&conn, "tokio-yesterday", "tokio", "exact_registry");
+    link_item(&conn, "tokio-today", "tokio", "advisory");
 
     let chains = detect_and_record_chains(&conn).expect("detect and persist");
     assert_eq!(chains.len(), 1);
@@ -691,6 +863,8 @@ fn detect_and_record_chains_replaces_stale_signal_chain_snapshot() {
         "-10 minutes",
         1.0,
     );
+    link_item(&conn, "tokio-yesterday", "tokio", "exact_registry");
+    link_item(&conn, "tokio-today", "tokio", "advisory");
 
     detect_and_record_chains(&conn).expect("detect and persist");
 

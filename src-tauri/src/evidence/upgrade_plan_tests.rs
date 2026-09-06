@@ -35,6 +35,35 @@ fn advisory(db: &Database, id: &str, package: &str, ecosystem: &str, fixed: &str
     .unwrap();
 }
 
+/// Store an advisory with NO fixed version: `introduced: 0` and nothing else,
+/// which the matcher reads as "every version affected" (version-confirmed).
+/// `cvss = None` with a maintenance-notice summary is the RustSec INFO shape.
+fn advisory_no_fix(
+    db: &Database,
+    id: &str,
+    package: &str,
+    ecosystem: &str,
+    summary: &str,
+    cvss: Option<f64>,
+) {
+    db.upsert_osv_advisory(
+        id,
+        summary,
+        None,
+        package,
+        ecosystem,
+        Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"}]}]"#),
+        None,
+        cvss.map(|_| "CVSS_V3"),
+        cvss,
+        Some(&format!("https://osv.dev/{id}")),
+        Some("2026-01-01T00:00:00Z"),
+        None,
+        None,
+    )
+    .unwrap();
+}
+
 #[test]
 fn cold_start_empty_db_yields_empty_plan() {
     let db = test_db();
@@ -86,6 +115,144 @@ fn confirmed_vuln_produces_a_valid_plan_step() {
         step.confidence.provenance,
         crate::evidence::ConfidenceProvenance::Heuristic
     ));
+}
+
+// ---------------------------------------------------------------------------
+// No fix, no "Upgrade" (2026-09-06 live Preemption audit): 14 of 30 plan
+// items were RustSec maintenance notices rendered "Upgrade gtk — clears 1
+// advisory" with no version, and rsa's Marvin attack (no fix exists) read
+// "Fixable now via a direct dependency bump".
+// ---------------------------------------------------------------------------
+
+#[test]
+fn unmaintained_notices_group_into_one_watch_item() {
+    let db = test_db();
+    db.store_dependency("/proj/a", "gtk", Some("0.18.1"), "npm", false, None)
+        .unwrap();
+    db.store_dependency("/proj/b", "paste", Some("1.0.15"), "npm", false, None)
+        .unwrap();
+    advisory_no_fix(
+        &db,
+        "RUSTSEC-2024-0413",
+        "gtk",
+        "npm",
+        "gtk is unmaintained",
+        None,
+    );
+    advisory_no_fix(
+        &db,
+        "RUSTSEC-2024-0436",
+        "paste",
+        "npm",
+        "paste - no longer maintained",
+        None,
+    );
+
+    let plan = build_upgrade_plan(&db);
+    assert_eq!(
+        plan.len(),
+        1,
+        "two maintenance notices fold into ONE item: {:?}",
+        plan.iter().map(|i| &i.title).collect::<Vec<_>>()
+    );
+    let item = &plan[0];
+    validate_item(item).expect("grouped item must pass validate_item");
+    assert_eq!(item.id, "upgrade-plan:informational");
+    assert_eq!(item.urgency, Urgency::Watch);
+    assert!(
+        item.title.starts_with("2 unmaintained dependencies"),
+        "title: {}",
+        item.title
+    );
+    assert!(
+        !item.title.contains("Upgrade"),
+        "nothing to upgrade to: {}",
+        item.title
+    );
+    assert_eq!(item.affected_deps, vec!["gtk", "paste"]);
+    assert_eq!(item.affected_projects, vec!["/proj/a", "/proj/b"]);
+    assert!(item.lens_hints.upgrade_plan);
+    assert!(
+        item.explanation.contains("nothing to upgrade to"),
+        "explanation: {}",
+        item.explanation
+    );
+}
+
+#[test]
+fn a_vulnerability_without_a_fix_is_not_an_upgrade_step() {
+    let db = test_db();
+    db.store_dependency("/proj/a", "rsa", Some("0.9.6"), "npm", false, None)
+        .unwrap();
+    advisory_no_fix(
+        &db,
+        "RUSTSEC-2023-0071",
+        "rsa",
+        "npm",
+        "Marvin Attack: potential key recovery through timing sidechannels",
+        Some(5.9),
+    );
+
+    let plan = build_upgrade_plan(&db);
+    assert_eq!(plan.len(), 1);
+    let step = &plan[0];
+    validate_item(step).expect("no-fix step must pass validate_item");
+    assert!(
+        step.title.starts_with("No fix published for rsa"),
+        "title: {}",
+        step.title
+    );
+    assert!(!step.title.contains("Upgrade"), "title: {}", step.title);
+    assert!(
+        step.explanation.contains("No fix has been published"),
+        "explanation: {}",
+        step.explanation
+    );
+    assert!(
+        !step.explanation.contains("Fixable now"),
+        "a direct dep with no fix is not fixable now: {}",
+        step.explanation
+    );
+    assert_eq!(
+        step.urgency,
+        Urgency::Medium,
+        "CVSS 5.9 -> Medium, unchanged"
+    );
+    assert_ne!(
+        step.id, "upgrade-plan:informational",
+        "a vulnerability is never folded into the maintenance group"
+    );
+}
+
+#[test]
+fn a_fixed_and_an_unfixed_advisory_on_one_package_still_upgrade() {
+    let db = test_db();
+    db.store_dependency("/proj/a", "foo", Some("1.0.0"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-foo-1", "foo", "npm", "2.0.0", 7.5);
+    advisory_no_fix(
+        &db,
+        "GHSA-foo-2",
+        "foo",
+        "npm",
+        "Unsound handling in foo",
+        Some(4.0),
+    );
+
+    let plan = build_upgrade_plan(&db);
+    assert_eq!(plan.len(), 1);
+    let step = &plan[0];
+    assert!(
+        step.title.starts_with("Upgrade foo to >= 2.0.0"),
+        "the fix that exists is the step: {}",
+        step.title
+    );
+    assert!(step.title.contains("clears 2 advisories"), "{}", step.title);
+    assert!(
+        step.explanation.contains("Fixable now"),
+        "{}",
+        step.explanation
+    );
 }
 
 #[test]
