@@ -574,3 +574,46 @@ re-judgement itself and writes everything: score, stamp, explanation. When
 adding any "keep the old value" path, ask what the version drain does with it
 and test it with a row stamped N-1
 (`test_version_change_bypasses_hysteresis_and_replaces_explanation`).
+
+## FM: A repair lane that can only demote leaves "yesterday's noise becomes tomorrow's signal" half true
+
+**Observed 2026-09-06.** After the v31 drain re-judged all 76,061 items, 915
+rows scored at or above the 0.40 line held no relevant verdict: 178 never
+judged, 331 demoted `stale_version` by an older pipeline, 137
+`score_sunk_in_version` under an older pipeline, 269 unreasoned rejections
+from an older version — "Announcing Rust 1.98.0" at 0.90, four grounded tokio
+advisories at 0.88–0.90. Every verdict pass (stale reconcile, sunk sweep, LLM
+judge, pending drain) was demote-only by doctrine, the drain persists scores
+only, and the analysis cycle re-verdicts only the recency-bounded set it
+selects. Scores converged; the verdict the user sees did not. The same class
+one column over: `rank_score` carried no epoch stamp, so 285 of 317 feed
+ranks predated the v31 score and `RANKED_ORDER_EXPR` ordered the durable
+surfaces by a superseded brain.
+
+**The rule.** Every materialized verdict needs a path in BOTH directions that
+converges on the current brain's judgment — or a written reason why one
+direction is impossible. Demote-only is a safety property of a pass, not of
+the system: pair it with a promotion lane through the same persist boundary
+(`Database::promote_risen_verdicts`: first verdicts apply, flips against a
+standing rejection defer to the judge drain). Derived state with no epoch
+stamp of its own is invalidated by the write that supersedes its inputs
+(`persist_analysis_scores` clears the rank on a version change). When adding a
+repair pass, list the states it can never reach and count the live rows
+sitting in them.
+
+## FM: A prefix table that names two id families silently drops the third
+
+**Observed 2026-09-06.** `extract_advisory_id` knew `GHSA-` and `CVE-`. The
+cve source also ingests RustSec advisories titled `RUSTSEC-2026-N`, so those
+rows never reached the OSV mirror's structured ranges, and their text
+fallback could not parse RustSec's per-branch `Fixed in: 1.18.5, 1.20.4,
+1.24.2` either. Four grounded tokio rows scored 0.88–0.90 with verdict
+`unknown` while their GHSA-titled twins resolved to not-affected — and
+Preemption, using the matcher directly, already said the installed 1.53.1 was
+clear. Two surfaces, two answers, one dependency.
+
+**The rule.** An id or format table is only as complete as the sources that
+feed it: when a source is added or widened, grep the corpus for the id shapes
+it actually writes (`SELECT DISTINCT substr(title, 1, 8) …`) and pin each one
+in the extractor's test. A verdict that is `unknown` on a row the graph
+grounds is a finding, not a null — count them after every drain.

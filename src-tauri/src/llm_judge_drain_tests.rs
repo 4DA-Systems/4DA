@@ -69,12 +69,13 @@ fn clear_reject_demotes_regardless_of_direction() {
 }
 
 /// A clearly RELEVANT read kills a pending DEMOTE (standing curated verdict
-/// re-affirmed) but must never resolve a pending PROMOTE — promotion needs a
-/// full run's context, so that read only escalates.
+/// re-affirmed) and CONFIRMS a pending PROMOTE (v32 — the risen-verdict lane
+/// defers superseded rejections here for exactly this second opinion). A
+/// corrupt marker has no direction and never resolves upward.
 #[test]
-fn relevant_read_clears_only_pending_demotes() {
+fn relevant_read_resolves_by_pending_direction() {
     assert_eq!(resolve_action(Some(false), 0.8), DrainAction::ClearPending);
-    assert_eq!(resolve_action(Some(true), 0.8), DrainAction::Escalate);
+    assert_eq!(resolve_action(Some(true), 0.8), DrainAction::Promote);
     assert_eq!(resolve_action(None, 0.8), DrainAction::Escalate);
 }
 
@@ -368,6 +369,62 @@ async fn fresh_ingest_judgment_resolves_without_an_llm_call() {
     let (relevant, _, reason) = verdict_of(&db, id);
     assert_eq!(relevant, Some(0));
     assert_eq!(reason.as_deref(), Some("llm_reject"));
+}
+
+/// v32: a pending PROMOTE (the risen-verdict lane deferring a superseded
+/// pipeline's rejection) that a fresh, relevant ingest-lane judgment confirms
+/// applies through the persist boundary — unless the story is already
+/// curated under another id, in which case it is written duplicate_curated
+/// and the original keeps the slot. Before v32 this read only escalated, so
+/// every deferred promotion would have died as `pending_retries_exhausted`.
+#[tokio::test]
+async fn confirmed_pending_promotion_applies_twin_checked() {
+    let db = test_db();
+    let risen = insert_test_item(&db, "hackernews", "prom1", "Announcing Rust 1.98.0", "body");
+    let original = insert_test_item(&db, "hackernews", "prom2", "Bun 1.4 Rust rewrite", "body");
+    let twin = insert_test_item(&db, "lobsters", "prom3", "Bun 1.4 Rust rewrite", "body");
+    // Both were rejected by an older pipeline; the original's story is curated.
+    db.persist_feed_verdicts(
+        &[
+            (risen, false, VerdictSource::Score),
+            (twin, false, VerdictSource::Score),
+        ],
+        30,
+    )
+    .unwrap();
+    db.persist_feed_verdicts(&[(original, true, VerdictSource::Score)], 32)
+        .unwrap();
+    set_marker(&db, risen, true, 2, 1);
+    set_marker(&db, twin, true, 2, 1);
+    for id in [risen, twin] {
+        store_judgment_at(
+            &db,
+            id,
+            0.85,
+            crate::llm_judgments::PROMPT_VERSION,
+            &sqlite_stamp(0),
+        );
+    }
+
+    let summary = run_drain_with(&db, true, None).await;
+
+    assert_eq!(summary.reused, 2, "both stored judgments are reused");
+    assert_eq!(summary.judged, 0, "no LLM judgment may be bought");
+    assert_eq!(
+        summary.promoted, 2,
+        "both promotions resolved (one as a twin)"
+    );
+    assert_eq!(summary.demoted, 0);
+    assert_eq!(summary.escalated, 0);
+    let (relevant, source, reason) = verdict_of(&db, risen);
+    assert_eq!(relevant, Some(1), "the confirmed flip applied");
+    assert_eq!(source.as_deref(), Some("score"));
+    assert_eq!(reason, None);
+    assert_eq!(pending_of(&db, risen), None, "marker cleared by the apply");
+    let (relevant, _, reason) = verdict_of(&db, twin);
+    assert_eq!(relevant, Some(0), "a curated twin keeps the slot");
+    assert_eq!(reason.as_deref(), Some("duplicate_curated"));
+    assert_eq!(pending_of(&db, twin), None);
 }
 
 /// Circularity guard. A `drain_v1` row is this lane's OWN earlier output.

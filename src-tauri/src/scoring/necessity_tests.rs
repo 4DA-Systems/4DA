@@ -20,7 +20,34 @@ fn default_inputs() -> NecessityInputs {
         content_type: None,
         strongly_grounded: false,
         version_affected: None,
+        registry_advisory: false,
     }
+}
+
+/// v32: the reason's verb is evidence. A registry advisory "affects" the
+/// dependency; an editorial story only "names" it — the Shai-Hulud npm-worm
+/// story rendered "affects react" off the words "React Query Codegen".
+#[test]
+fn test_security_reason_verb_follows_the_source() {
+    let inputs = |registry_advisory: bool| NecessityInputs {
+        dep_match_score: 0.7,
+        matched_deps: vec!["react".to_string()],
+        signal_type: Some("security_alert".to_string()),
+        cve_severity: Some("HIGH".to_string()),
+        strongly_grounded: true,
+        registry_advisory,
+        ..default_inputs()
+    };
+    let advisory = compute_necessity(&inputs(true));
+    assert_eq!(advisory.reason, "Security vulnerability affects react");
+    let story = compute_necessity(&inputs(false));
+    assert_eq!(story.reason, "Security story names your dependency react");
+    assert!(
+        (story.score - advisory.score).abs() < f32::EPSILON,
+        "the verb changes, the necessity does not: {} vs {}",
+        story.score,
+        advisory.score
+    );
 }
 
 #[test]

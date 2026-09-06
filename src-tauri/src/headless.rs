@@ -122,6 +122,7 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
         Ok(app) => app,
         Err(e) => {
             error!(target: "4da::headless", error = %e, "Failed to build headless Tauri app");
+            crate::startup_watchdog::mark_clean_shutdown();
             std::process::exit(2);
         }
     };
@@ -172,6 +173,12 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
 
     // Hold `app` until all work is done, then exit explicitly — there is no event loop to spin.
     drop(app);
+    // A controlled exit is not a crash. The pre-Tauri init armed the startup
+    // watchdog, and `process::exit` skips the GUI's exit handler that clears
+    // its running marker — so every headless drain made the NEXT GUI start
+    // report "Previous session exited uncleanly" (2026-09-06, after the v30
+    // and v31 drains) and flag crash recovery to the frontend.
+    crate::startup_watchdog::mark_clean_shutdown();
     std::process::exit(code);
 }
 

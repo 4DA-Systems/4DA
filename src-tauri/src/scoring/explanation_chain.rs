@@ -70,6 +70,13 @@ pub(crate) struct ChainInputs<'a> {
     /// The grounding verdict came from the registry-subject route: the item is
     /// a release OF the user's dependency (subject match), not a text mention.
     pub via_registry_subject: bool,
+    /// The item is a REGISTRY advisory row (osv / cve) — the advisory itself,
+    /// not a story that names the package. Decides the security factor's
+    /// verb: an advisory "affects" the dependency; an editorial story only
+    /// "names" it. v32 — "Security advisory affects react in d:/4da" was
+    /// rendered for an npm-worm story whose only link to react was the words
+    /// "React Query Codegen" in its title.
+    pub registry_advisory: bool,
 }
 
 /// Word-boundary-aware topic match (same rule the score path applies): the
@@ -189,12 +196,22 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
                 .display_deps
                 .first()
                 .and_then(|d| super::dependencies::project_label(&d.project_paths));
-            let display = match (named_dep, dep_location.as_deref()) {
-                (Some(dep), Some(location)) => {
+            // The verb is evidence: a registry advisory AFFECTS the
+            // dependency it is about; an editorial story merely NAMES it.
+            let display = match (named_dep, dep_location.as_deref(), inp.registry_advisory) {
+                (Some(dep), Some(location), true) => {
                     format!("Security advisory affects {dep} in {location}")
                 }
-                (Some(dep), None) => format!("Security advisory affects your dependency {dep}"),
-                (None, _) => match inp.advisory_id.map(str::trim).filter(|s| !s.is_empty()) {
+                (Some(dep), None, true) => {
+                    format!("Security advisory affects your dependency {dep}")
+                }
+                (Some(dep), Some(location), false) => {
+                    format!("Security story names {dep} in {location}")
+                }
+                (Some(dep), None, false) => {
+                    format!("Security story names your dependency {dep}")
+                }
+                (None, _, _) => match inp.advisory_id.map(str::trim).filter(|s| !s.is_empty()) {
                     Some(id) => format!("Security advisory {id}"),
                     None => String::new(),
                 },
