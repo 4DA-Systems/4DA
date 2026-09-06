@@ -577,7 +577,27 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         });
     }
 
-    // Sort by severity (critical first)
+    let gaps = finalize_gaps(gaps);
+    info!(
+        target: "4da::knowledge_decay",
+        gaps = gaps.len(),
+        elapsed_ms = start.elapsed().as_millis() as u64,
+        "Knowledge gap detection complete"
+    );
+    Ok(gaps)
+}
+
+/// Keep the substantive gaps, rank them, cap at 10 — in THAT order.
+///
+/// The cap used to come first and the substantive filter (in the command)
+/// second. While a couple of gaps were High that was invisible; the moment
+/// every gap sat at Medium (2026-09-06, after #620 made volume cap at
+/// Medium) the ten slots filled with discussion-only gaps, the command then
+/// dropped all ten as non-substantive, and the surface went empty while
+/// `jsonwebtoken`'s unread authorization-bypass advisory sat in slot eleven.
+fn finalize_gaps(mut gaps: Vec<KnowledgeGap>) -> Vec<KnowledgeGap> {
+    gaps.retain(gap_is_substantive);
+    // Severity first (critical first), then the longest-neglected.
     gaps.sort_by(|a, b| {
         severity_rank(&a.gap_severity)
             .cmp(&severity_rank(&b.gap_severity))
@@ -586,16 +606,9 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
                     .cmp(&a.days_since_last_engagement),
             )
     });
-
     // Cap at 10 gaps — quality over quantity
     gaps.truncate(10);
-    info!(
-        target: "4da::knowledge_decay",
-        gaps = gaps.len(),
-        elapsed_ms = start.elapsed().as_millis() as u64,
-        "Knowledge gap detection complete"
-    );
-    Ok(gaps)
+    gaps
 }
 
 /// One unread item eligible to become a missed signal, with its title
@@ -1032,10 +1045,13 @@ fn classify_severity(
 ) -> GapSeverity {
     let dep_lower = dep_name.to_lowercase();
 
+    // The same classifier the weights and the substantive filter use — the
+    // old ad-hoc list knew "cve" but not "ghsa", so `[GHSA-h395-gr6q-cpjc]
+    // jsonwebtoken: … authorization bypass` was never a security citation
+    // here while it weighed 3.0 two lines down (2026-09-06).
     let has_security = missed.iter().any(|item| {
         let title_lower = item.title.to_lowercase();
-        (title_lower.contains("cve")
-            || title_lower.contains("vulnerability")
+        (classify_missed_item(&item.title) == "security advisory"
             || title_lower.contains("security")
             || title_lower.contains("exploit"))
             && title_lower.contains(&dep_lower)
@@ -1118,7 +1134,12 @@ fn truncate_gap_note(s: &str) -> String {
 
 fn classify_missed_item(title: &str) -> &'static str {
     let lower = title.to_lowercase();
-    if lower.contains("cve") || lower.contains("ghsa") || lower.contains("vulnerability") {
+    if lower.contains("cve")
+        || lower.contains("ghsa")
+        || lower.contains("rustsec")
+        || lower.contains("pysec")
+        || lower.contains("vulnerability")
+    {
         "security advisory"
     } else if lower.contains("breaking") || lower.contains("deprecated") || lower.contains("eol") {
         "breaking change"
@@ -1538,6 +1559,81 @@ mod tests {
         assert_eq!(item.kind, crate::evidence::EvidenceKind::Gap);
     }
 
+    /// 2026-09-06: the ten-gap cap ran BEFORE the substantive filter. With
+    /// every gap at Medium the cap filled with discussion-only gaps, the
+    /// command dropped all ten, and the surface went empty while the
+    /// jsonwebtoken authorization-bypass advisory sat in slot eleven.
+    #[test]
+    fn finalize_gaps_keeps_substantive_gaps_over_louder_noise() {
+        let discussion_gap = |i: usize| KnowledgeGap {
+            dependency: format!("chatter-{i}"),
+            version: None,
+            project_path: "/proj/a".to_string(),
+            missed_items: vec![MissedItem {
+                item_id: i as i64,
+                title: format!("Why we chose chatter-{i} for our side project"),
+                url: None,
+                source_type: "devto".to_string(),
+                created_at: "2026-09-04 00:00:00".to_string(),
+            }],
+            gap_severity: GapSeverity::Medium,
+            days_since_last_engagement: 999,
+        };
+        let mut gaps: Vec<KnowledgeGap> = (0..12).map(discussion_gap).collect();
+        gaps.push(KnowledgeGap {
+            dependency: "jsonwebtoken".to_string(),
+            version: Some("9.3.1".to_string()),
+            project_path: "d:/4da/relay".to_string(),
+            missed_items: vec![MissedItem {
+                item_id: 71038,
+                title: "[GHSA-h395-gr6q-cpjc] jsonwebtoken: Type Confusion leads to authorization bypass"
+                    .to_string(),
+                url: None,
+                source_type: "osv".to_string(),
+                created_at: "2026-09-04 03:08:44".to_string(),
+            }],
+            gap_severity: GapSeverity::Medium,
+            days_since_last_engagement: 999,
+        });
+
+        let kept = finalize_gaps(gaps);
+        assert_eq!(
+            kept.len(),
+            1,
+            "discussion-only gaps ship silent, whatever their rank"
+        );
+        assert_eq!(kept[0].dependency, "jsonwebtoken");
+    }
+
+    /// A GHSA-, RUSTSEC- or PYSEC-titled advisory is a security citation for
+    /// the tier decision, exactly as it is for the weights.
+    #[test]
+    fn registry_prefixed_advisories_are_security_citations() {
+        for title in [
+            "[GHSA-h395-gr6q-cpjc] jsonwebtoken: Type Confusion leads to authorization bypass",
+            "[RUSTSEC-2026-0007] jsonwebtoken: header parsing panic",
+            "[PYSEC-2026-12] jsonwebtoken: algorithm confusion",
+        ] {
+            let missed = vec![MissedItem {
+                item_id: 1,
+                title: title.to_string(),
+                url: None,
+                source_type: "osv".to_string(),
+                created_at: "2026-09-04 00:00:00".to_string(),
+            }];
+            assert_eq!(
+                classify_severity(&missed, 999, "jsonwebtoken", false),
+                GapSeverity::High,
+                "{title}: an unread advisory is High even when the install is patched"
+            );
+            assert_eq!(
+                classify_severity(&missed, 999, "jsonwebtoken", true),
+                GapSeverity::Critical,
+                "{title}: and Critical while still exposed"
+            );
+        }
+    }
+
     #[test]
     fn gap_is_substantive_requires_actionable_consequence() {
         // sample_gap carries a CVE + a release → substantive (surfaces).
@@ -1749,7 +1845,9 @@ mod tests {
     fn cand(id: i64, title: &str, content_type: Option<&str>) -> GapCandidate {
         // The historical fixtures are cve rows the linker had bound to `hono`
         // / `next` (the names under test) — the shape a real advisory row has.
-        cand_from(id, title, "cve", &["hono", "next"], None)
+        let mut candidate = cand_from(id, title, "cve", &["hono", "next"], None);
+        candidate.content_type = content_type.map(str::to_string);
+        candidate
     }
 
     fn cand_from(
